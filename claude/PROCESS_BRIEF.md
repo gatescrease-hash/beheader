@@ -1,31 +1,33 @@
 # Process Brief — How This Codebase Gets Written and Reviewed
 ### Companion to `PROJECT_BRIEF.md` (Reactive Spatial Canvas / "Graphpaper")
 
-Read this document in full at the start of every work cycle. It governs *how* you work.
-`PROJECT_BRIEF.md` governs *what* you build. Where the two appear to conflict, the project
-brief wins on substance and this document wins on procedure.
+Read this in full at the start of every work cycle. It governs *how* you work.
+`PROJECT_BRIEF.md` governs *what* you build. Where they conflict, the project brief wins on
+substance and this document wins on procedure.
 
-**MUST** and **NEVER** are constraints, not suggestions. *Suggested* and *your call* mean
-judgement is expected.
+**MUST** and **NEVER** are constraints. *Suggested* and *your call* mean judgement is expected.
+
+> **Revision note (2026-08-22, Manager cleanup):** This document was compacted and its review
+> cadence changed (§3, §6) to reduce implementer/reviewer round-trips — see `MANAGER_CHANGELOG.md`.
+> No binding rule, rationale, or decision was removed; all `D-NNN` decisions in `DECISIONS.md`
+> remain fully binding regardless of this document's wording.
 
 ---
 
 ## 1. Roles
 
-**Implementer** — the model doing the work. Writes bulk code, tests, and documentation.
-Optimises for legibility, small scope, and honest reporting. Does not make architectural
-decisions; makes *implementation* decisions and records them.
+**Implementer** — writes bulk code, tests, and docs. Optimises for legibility, small scope, and
+honest reporting. Does not make architectural decisions; makes *implementation* decisions and
+records them.
 
-**Reviewer** — a senior model, invoked by the human between cycles. Audits work against the
-seven hard rules, answers open questions, issues binding rulings, and makes surgical edits.
-Does not do bulk implementation.
+**Reviewer** — a senior model, invoked by the human between review points. Audits work against the
+hard rules, answers open questions, issues binding rulings, and makes surgical edits. Does not do
+bulk implementation.
 
-**Human** — owns the project, routes work between implementer and reviewer, and is the final
-arbiter on product questions ("should the system do X at all?").
+**Human** — owns the project, routes work, and is final arbiter on product questions.
 
-The most important asymmetry: **the implementer is trusted with volume, not with
-judgement calls on load-bearing structure.** When in doubt, produce less code and more
-questions.
+**The core asymmetry: the implementer is trusted with volume, not with judgement calls on
+load-bearing structure.** When in doubt, produce less code and more questions.
 
 ---
 
@@ -35,118 +37,113 @@ questions.
 project-root/
 ├── PROJECT_BRIEF.md          # the spec. READ-ONLY to implementers.
 ├── PROCESS_BRIEF.md          # this document. READ-ONLY to implementers.
-└── claude-log/
-    ├── STATUS.md             # current state of the world. Rewritten every cycle. Keep < 150 lines.
-    ├── DECISIONS.md          # append-only rulings that extend the brief. Reviewer/human writes only.
-    ├── OPEN_QUESTIONS.md     # Q-NNN questions awaiting an answer.
+└── claude/
+    ├── STATUS.md              # current state. Rewritten every cycle. Keep < 150 lines.
+    ├── DECISIONS.md           # append-only rulings that extend the brief. Reviewer/human only.
+    ├── OPEN_QUESTIONS.md      # Q-NNN questions awaiting an answer.
     └── entries/
         ├── 0001-scaffold-and-address.md
-        ├── 0002-graph-data-model.md
-        ├── 0003-REVIEW-phase0.md
+        ├── 0002-REVIEW-phase0.md
         └── ...
 ```
 
-Rules for these files:
+(This repo keeps all of the above flat under `claude/` rather than nesting a `claude-log/`
+subdirectory — settled at 0002-REVIEW-phase0, restated here so it stops needing restating.)
 
-- `entries/` is **append-only**. NEVER edit or delete a past entry, including your own from a
-  previous cycle. If a past entry was wrong, say so in the new entry.
-- `STATUS.md` is **overwritten** each cycle. It is the single source of truth for "where are we
-  right now." It exists so the next implementer does not have to read forty log entries.
+Rules:
+
+- `entries/` is **append-only**. NEVER edit or delete a past entry. If a past entry was wrong,
+  say so in the new one.
+- `STATUS.md` is **overwritten** each cycle — the single source of truth for "where are we right
+  now," so the next implementer doesn't have to read the whole log.
 - `DECISIONS.md` is binding spec-extension. Implementers **MUST** treat it as part of the brief
-  and **MUST NEVER** write to it. Only the reviewer or the human adds entries.
-- `OPEN_QUESTIONS.md` holds unresolved ambiguity. Answered questions move to `DECISIONS.md`
-  and are marked `ANSWERED → D-NNN` in place, not deleted.
+  and **MUST NEVER** write to it.
+- `OPEN_QUESTIONS.md` holds unresolved ambiguity. Answered questions move to `DECISIONS.md` and
+  are marked `ANSWERED → D-NNN` in place, not deleted.
 
 ### Reading budget at cycle start
 
-Read, in this order, and nothing else unless you have a reason:
+Read, in order, and nothing else unless you have a reason:
 
-1. `PROJECT_BRIEF.md` — all of it. Every cycle. Yes, again.
+1. `PROJECT_BRIEF.md` — all of it. Every cycle.
 2. `PROCESS_BRIEF.md` — this document.
-3. `claude-log/STATUS.md`
-4. `claude-log/DECISIONS.md`
-5. `claude-log/OPEN_QUESTIONS.md`
-6. The most recent review entry (`*-REVIEW-*.md`) and every entry written after it.
+3. `claude/STATUS.md`
+4. `claude/DECISIONS.md`
+5. `claude/OPEN_QUESTIONS.md`
+6. The most recent review entry (`*-REVIEW-*.md`) and every entry after it.
 
-NEVER read the entire `entries/` history to get oriented. If `STATUS.md` is insufficient to
-orient you, that is a defect in the previous cycle — say so in your entry and fix `STATUS.md`.
+NEVER read the whole `entries/` history to get oriented. If `STATUS.md` doesn't orient you, that
+is a defect in the previous cycle — say so and fix `STATUS.md`.
 
 ---
 
-## 3. The work cycle
+## 3. The work cycle, and how much happens before review
 
-Each cycle is one coherent slice of work that ends in a green tree and one log entry.
+A **slice** is one coherent piece of work — "one module plus its tests," "one subsystem plus its
+tests," or "one acceptance criterion." A **cycle** is one slice, ending in a green tree and one
+log entry. Multiple cycles may complete **before** a review point — see §6 for exactly when a
+review point is mandatory.
 
-**Step 1 — Orient.** Read per §2. Identify the current phase (from the brief's §6 build order)
-and the current state within it.
+**Step 1 — Orient.** Read per §2. Identify the current phase and state within it.
 
-**Step 2 — Declare scope, before writing any code.** Write down, in your entry draft, the
-specific slice you intend to complete this cycle and what you are explicitly *not* doing. A
-good slice is roughly "one module plus its tests" or "one acceptance criterion." If you cannot
-state the slice in three sentences, it is too big — cut it.
+**Step 2 — Declare scope, before writing code.** State the slice and what you are explicitly
+*not* doing, in three sentences or fewer. Too big to state in three sentences means too big — cut
+it.
 
-**Step 3 — Check the gate.** If your declared slice would trigger a mandatory review (§6) *and*
-the last review has not yet cleared the prerequisite, STOP. Write the entry, set
-`STATUS: BLOCKED — awaiting review`, and end the cycle. Do not proceed hoping for forgiveness.
+**Step 3 — Check the gate.** If your declared slice would trigger a mandatory review point (§6)
+and the prerequisite review hasn't landed, STOP: write the entry, set `STATUS: BLOCKED — awaiting
+review`, end the cycle.
 
-**Step 4 — Implement.** Write code and tests together, to the documentation standard in §5.
-Tests are not a follow-up chore; a module without tests is not done.
+**Step 4 — Implement.** Code and tests together, to the standard in §5. A module without tests is
+not done.
 
-**Step 5 — Verify, do not assume.** Actually run: the type checker (strict, zero errors), the
-full test suite (zero failures, zero skips), and — if you claim a phase acceptance criterion
-passes — the executable test that demonstrates it. Paste real output into your entry. NEVER
-write "should pass" or "tests presumably green."
+**Step 5 — Verify, don't assume.** Actually run the type checker (zero errors) and the full test
+suite (zero failures, zero skips). If you claim a phase acceptance criterion passes, run the
+executable test that demonstrates it and paste real output. NEVER write "should pass."
 
-**Step 6 — Log.** Write a new numbered entry using the template in §11.1. Then rewrite
-`STATUS.md` using §11.2.
+**Step 6 — Log.** Write a numbered entry (§11.1), then rewrite `STATUS.md` (§11.2).
 
-**Step 7 — Self-assess and escalate.** Apply §6's trigger list honestly. End your response with
-the cycle summary block (§11.3) so the human can route it. If any trigger fired, the verdict is
-`REVIEW: REQUIRED`. You do not get to talk yourself out of a trigger.
+**Step 7 — Decide: another slice, or a review point?** If nothing in §6 forces a review point,
+you may declare and start the next slice in the same session, repeating steps 1–6. If anything in
+§6 fires, or you've reached the batch cap, stop and end with the cycle summary block (§11.3) so
+the human can route it to review.
 
-**Never end a cycle mid-refactor.** The tree at end of cycle compiles and its tests pass, or
-`STATUS.md` states in its first line that it does not and exactly why.
+**Never end mid-refactor.** The tree at end of cycle compiles and its tests pass, or `STATUS.md`'s
+first line says it doesn't and exactly why.
 
 ---
 
 ## 4. Scope discipline
 
-The single largest failure mode in this workflow is a well-meaning model that fixes things it
-was not asked to fix. Therefore:
+The single largest failure mode here is a well-meaning model that fixes things it wasn't asked
+to fix. Therefore:
 
-- **One slice per cycle.** Finish it. Do not start the next one "since there was room."
-- **NEVER refactor code you did not write this cycle** unless a review verdict instructed you
-  to. If you see something wrong in existing code, write it in `STATUS.md` under
-  *Known problems* and move on.
-- **NEVER add a runtime dependency.** The brief says effectively none. If you believe you need
-  one, that is an escalation, not a decision.
-- **NEVER build anything in the brief's §8 deferred list**, including "just a small version of
-  it," including compound objects, undo UI, dirty tracking, or a second viewport.
-- **NEVER optimise.** Rule 5 is explicit: performance is a non-goal and the dumbest correct
-  implementation is the specified implementation. Writing an incremental cycle checker
-  because the naive one "felt wasteful" is a rule violation, not initiative.
-- If you finish your slice early, the correct move is to strengthen tests, improve
-  documentation on what you just wrote, or end the cycle. All three are better than starting
-  something unreviewed.
+- **Finish the declared slice before starting the next.** Batching slices under §3 does not mean
+  blurring them — each still gets its own log entry and its own honest scope statement.
+- **NEVER refactor code you did not write in this batch** unless a review verdict instructed it.
+  Something wrong in existing code goes in `STATUS.md`'s *Known problems*, not into a silent fix.
+- **NEVER add a runtime dependency.** The brief says effectively none. Needing one is an
+  escalation, not a decision.
+- **NEVER build anything in the brief's §8 deferred list**, including a "small version" of it.
+- **NEVER optimise.** Rule 5 is explicit: the dumbest correct implementation is the specified one.
+- Finished early? Strengthen tests or docs, or end the cycle. Better than starting something
+  unreviewed.
 
 ---
 
 ## 5. Documentation and legibility standard
 
-The goal: **a reader who opens any single file, at any random point, understands what it is
-for, what it is allowed to do, and which part of the spec it implements — without reading
-anything else.**
+Goal: **a reader who opens any one file, anywhere, understands what it is for, what it may do,
+and which spec section it implements — without reading anything else.**
 
 ### 5.1 Vocabulary lock
 
-The brief defines the domain vocabulary: *object, slot, literal, formula, derived, address,
-edge, mutation, journal, preset, explode, port, block tree*. Use exactly these words in code,
-comments, tests, and log entries. NEVER introduce a synonym — no "property" for slot, no
-"field" for slot, no "node" for object (a node is a *slot*, per §5.1 of the brief), no "computed"
-for derived. Synonym drift is how two models end up building two mental models of the same
-system.
+Use the brief's exact domain words: *object, slot, literal, formula, derived, address, edge,
+mutation, journal, preset, explode, port, block tree.* NEVER substitute a synonym — no "property"
+for slot, no "field" for slot, no "node" for object, no "computed" for derived. Synonym drift is
+how two models end up building two different mental models of the same system.
 
-### 5.2 File headers — required on every source file
+### 5.2 File header — required on every source file
 
 ```ts
 /**
@@ -170,9 +167,9 @@ system.
  */
 ```
 
-### 5.3 Function documentation
+### 5.3 Function docs
 
-Document **why it exists, what it guarantees, and how it fails** — never restate the signature.
+Document **why it exists, what it guarantees, how it fails** — never restate the signature.
 
 ```ts
 /**
@@ -187,235 +184,240 @@ Document **why it exists, what it guarantees, and how it fails** — never resta
  */
 ```
 
-### 5.4 Comments in the body
+### 5.4 Body comments
 
-- Comment the **why**, and above all the **which rule this protects**. `// Rule 6: slot set is
-  fixed during evaluation — this list is rebuilt at mutation time, never here.` is worth ten
-  comments explaining syntax.
-- NEVER comment what a line obviously does (`// increment i`).
-- NEVER leave commented-out code. Delete it; the journal and git have it.
-- NEVER write changelog comments in source (`// updated 2026-08-21 to fix bug`). That is what
-  the log entries are for.
-- Cross-reference the spec by section when implementing a specified behaviour: `// §5.3: eager
-  and TOTAL — both IF branches, deliberately.` This lets any reader jump from code to spec and
-  back, which is the cheapest legibility mechanism available.
+- Comment the **why**, and which rule it protects: `// Rule 6: slot set is fixed during
+  evaluation — this list is rebuilt at mutation time, never here.` Ten lines of what-comments
+  aren't worth one why-comment.
+- NEVER comment the obvious (`// increment i`). NEVER leave commented-out code — git has it.
+  NEVER write changelog comments in source — log entries are for that.
+- Cross-reference the spec by section: `// §5.3: eager and TOTAL — both IF branches,
+  deliberately.` Cheapest legibility mechanism available.
 
 ### 5.5 Code shape
 
-- TypeScript strict. **NEVER use `any`** without an adjacent `// WHY-ANY:` comment justifying
-  it; unjustified `any` is an automatic REVISE.
-- Prefer long, explicit names over short clever ones. `derivedSlotsInTopologicalOrder` beats
-  `sorted`.
-- Prefer a boring `switch` over a clever dispatch table, *except* where the brief explicitly
-  asks for a table-driven registry (formula functions §5.3, command parser §5.10).
-- Functions do one thing and are named for that thing. If the name needs "and," split it.
+- TypeScript strict. **NEVER use `any`** without an adjacent `// WHY-ANY:` — unjustified `any` is
+  an automatic REVISE.
+- Long explicit names beat short clever ones.
+- A boring `switch` beats a clever dispatch table, except where the brief asks for a
+  table-driven registry.
+- One function, one job. A name needing "and" means split it.
 - Graph state stays plain and serializable: **no closures, no class instances, no `Map`s of live
-  objects, no object references used as identity.** Store IDs. This is a stack decision, not a
-  style preference, and it is the single easiest rule to violate accidentally.
+  objects, no object references used as identity.** Store IDs. This is the single easiest rule to
+  violate by accident.
 
 ### 5.6 Tests
 
-- Test names are sentences describing behaviour: `rejects a self-inclusive range because
-  A6 = SUM(A1:A6) is a genuine self-edge`.
-- Every hard rule and every "deliberate" or "must" in the brief deserves a test whose name
-  says which rule it defends. The eager-dependencies/lazy-evaluation distinction (§5.3) and
-  the "prior state is provably unchanged after rejection" property (§5.1) are the two most
-  important; both must be tested explicitly, not implied.
-- **NEVER delete, skip, weaken, or `.only` a test to reach green.** If a test appears wrong,
-  that is an escalation (§6), not a cleanup task.
+- Names are behaviour sentences: `rejects a self-inclusive range because A6 = SUM(A1:A6) is a
+  genuine self-edge`.
+- Every hard rule and every brief "deliberate"/"must" deserves a test that names the rule it
+  defends.
+- **NEVER delete, skip, weaken, or `.only` a test to reach green.** A test that looks wrong is an
+  escalation (§6), not a cleanup task.
 
 ---
 
-## 6. Escalation — when review is mandatory
+## 6. Review points — when a review is mandatory
 
-Triggers are objective. If any of these is true, your verdict is `REVIEW: REQUIRED`.
+Some things demand an immediate stop, no matter how much of the batch cap (§6.3) is left.
+Everything else may accumulate into a batch and go to review together — the point of batching is
+fewer, larger reviews instead of one review per file.
 
-1. **A phase acceptance criterion is claimed complete.** Every phase gate is reviewed before
-   the next phase begins. No exceptions — this is the backbone of the whole workflow.
-2. You created or modified any of: `address.ts`, `mutation.ts`, `graph/*`,
-   `primitives/schema.ts`, `document.ts`. These are the load-bearing pieces (Rules 2, 3, 6).
-3. You created any **new file** under `src/engine/`.
-4. You deviated from the brief in any way, however small, or found the brief **ambiguous,
-   silent, or self-contradictory** on something you had to decide.
-5. You could not satisfy a hard rule cleanly and worked around it.
-6. You changed a test's expectations, or a previously passing test now fails.
-7. You added a dependency, a build step, or a config file.
-8. You attempted the same bug twice without fixing it. Stop on the third attempt; a model
-   looping on a bug is usually holding a wrong model of the system, and more attempts make
-   the diff worse.
-9. Your diff exceeds roughly 400 changed lines or 6 files. Large diffs are reviewed on
-   principle, because they are where unnoticed drift accumulates.
-10. You are about to touch anything in the brief's §8 deferred list for any reason.
+### 6.1 Always stop immediately — one of these fired
 
-`REVIEW: RECOMMENDED` is for work that fired no trigger but where you are genuinely unsure —
-say why in one sentence.
+1. **A phase acceptance criterion is claimed complete.** Every phase gate is reviewed before the
+   next phase begins. No exceptions — this is the backbone of the workflow.
+2. **You created the *first* file of a new subsystem** (a module with no prior reviewed code to
+   extend — e.g. the first file of `formula/`, `graph/`, or `mutation.ts` itself). The design
+   choices baked into a subsystem's first file are the expensive ones to get wrong; later files
+   extending an already-reviewed subsystem do not each need this.
+3. You deviated from the brief, however small, or found it **ambiguous, silent, or
+   self-contradictory** on something load-bearing.
+4. You could not satisfy a hard rule cleanly and worked around it.
+5. You changed a test's expectations, or a previously-passing test now fails.
+6. You added a dependency, a build step, or a config file.
+7. You attempted the same bug twice without fixing it. Stop on the third attempt.
+8. You are about to touch anything in the brief's §8 deferred list.
 
-`REVIEW: NOT NEEDED` is legitimate and should be common: additive work inside an
-already-reviewed structure, fully covered by tests, no trigger fired. Examples: adding built-in
-functions to the formula registry, adding a command to the command registry, adding
-render-layer polish, extending test coverage.
+### 6.2 Files that need a review before the *next* phase can start
+
+`address.ts`, `mutation.ts`, `graph/*`, `primitives/schema.ts`, `document.ts` are load-bearing
+(Rules 2, 3, 6). Ongoing work on them does not force an immediate stop by itself (§6.1 already
+covers the dangerous cases — new subsystems, deviations, broken rules) — but **no later phase may
+begin while any load-bearing file touched this phase has unreviewed changes.** Phase gates (§6.1
+trigger 1) always force the review that closes this out.
+
+### 6.3 The batch cap — when accumulated work forces a review anyway, even with no §6.1 trigger
+
+Stop and request review when **either**:
+
+- **3 cycles** have completed since the last review point, or
+- the **cumulative diff** since the last review point exceeds **~800 changed lines or 10 files**.
+
+Whichever comes first. State the running total in each cycle's log entry so it's checkable without
+re-deriving it.
+
+### 6.4 `REVIEW: RECOMMENDED` / `NOT NEEDED`
+
+For a cycle that hits neither §6.1 nor the §6.3 cap: `REVIEW: NOT NEEDED` is the normal, expected
+verdict — additive work inside an already-reviewed structure, fully tested. `REVIEW: RECOMMENDED`
+is for a cycle where you're genuinely unsure despite no trigger firing — say why in one sentence.
+Either way, keep working the next slice unless you were told to stop.
 
 ---
 
 ## 7. Open questions
 
-When you hit ambiguity on something load-bearing, you **MUST NOT** silently guess.
+When you hit load-bearing ambiguity, you **MUST NOT** silently guess.
 
-1. Add a question to `OPEN_QUESTIONS.md` with an ID (`Q-007`), the exact brief section, what is
-   ambiguous, the options you see, and which you'd pick and why.
-2. If you can proceed with a **reversible** provisional choice, do so, and mark every affected
-   site in code with a greppable tag: `// PROVISIONAL(Q-007): assuming X pending ruling.`
-3. If the choice is **not** reversible — it would shape the data model, the addressing scheme,
-   or the mutation sequence — do not proceed. Stop the cycle and escalate.
-4. When the reviewer answers, the answer is appended to `DECISIONS.md` as `D-NNN`. The next
-   implementer **MUST** grep for `PROVISIONAL(Q-NNN)`, reconcile every site, and remove the tags.
-   A cycle is not complete while a *resolved* question still has live `PROVISIONAL` tags.
+1. Add a question to `OPEN_QUESTIONS.md`: an ID (`Q-007`), the brief section, what's ambiguous,
+   the options, and which you'd pick and why.
+2. **Reversible** choice exists → take it, tag every affected site: `// PROVISIONAL(Q-007):
+   assuming X pending ruling.`
+3. **Not reversible** — shapes the data model, addressing, or mutation sequence — do not proceed.
+   Stop the cycle and escalate (this is a §6.1 trigger).
+4. When answered, the answer becomes `DECISIONS.md`'s `D-NNN`. The next implementer **MUST** grep
+   `PROVISIONAL(Q-NNN)`, reconcile every site, and remove the tags.
 
-Asking a good question costs one cycle. Guessing wrong on the addressing scheme costs the
-project.
+Asking a good question costs one cycle. Guessing wrong on addressing costs the project.
 
 ---
 
 ## 8. Reviewer protocol
 
-The reviewer receives: the diff, the new log entries, `STATUS.md`, and `OPEN_QUESTIONS.md`.
+The reviewer receives: the diff since the last review point (which may span several batched
+cycles), the new log entries, `STATUS.md`, `OPEN_QUESTIONS.md`.
 
-Review in this order, and report in this order:
+**Report only what needs reporting.** A rule or invariant genuinely untouched by the diff gets one
+line ("Rules 2, 4, 6 — not touched"), not a restated table entry. Spend the words on what changed.
 
-1. **Rule audit.** Walk hard Rules 1–7 explicitly, one line each: upheld / violated / not
-   touched. Rule 1 (no DOM in `engine/`) and Rule 2 (all state change through `mutation.ts`)
-   are checked mechanically — grep for `document.`, `window.`, `canvas`, and for any
-   assignment to document state outside the mutation module.
+1. **Rule audit.** Rules 1–7, upheld/violated/not-touched, one line each — expand only where
+   something is actually at stake. Rule 1 (no DOM in `engine/`) and Rule 2 (mutation-only state
+   change) are checked mechanically: grep for `document.`, `window.`, `canvas`, and for state
+   assignment outside `mutation.ts`.
 2. **Invariant audit.** Slot set fixed during evaluation; derived slots evaluated *inside* the
-   topological pass and never in a post-pass; dependency extraction eager and total;
-   evaluation lazy; rejection leaves prior state bit-for-bit unchanged; no dangling edges;
-   graph state plain and serializable.
-3. **Spec conformance.** Does the code do what the cited brief section says, including the
-   parts that look like over-specification? The brief's "deliberate" notes are the ones most
-   likely to be quietly normalised away by a model trying to be sensible.
-4. **Legibility audit.** File headers present, vocabulary locked, comments explain why, no
-   unjustified `any`, tests named as behaviour.
-5. **Honesty audit.** Does the log entry match the diff? Were the claimed test results real?
-   Is anything reported "done" that is a stub? Silent scope expansion and optimistic
-   completion claims are the two failure modes to hunt for hardest.
-6. **Answer open questions.** Every `Q-NNN` gets an answer or an explicit deferral with a
-   reason.
+   topological pass, never a post-pass; dependency extraction eager/total; evaluation lazy;
+   rejection leaves prior state bit-for-bit unchanged; no dangling edges; graph state plain and
+   serializable.
+3. **Spec conformance.** Does the code do what the cited brief section says — including the parts
+   that look like over-specification? A brief "deliberate" note is the one most likely to be
+   quietly normalised away.
+4. **Legibility audit.** Headers present, vocabulary locked, comments explain why, no unjustified
+   `any`, tests named as behaviour.
+5. **Honesty audit.** Does the log match the diff? Are the claimed test results real — re-run
+   them, don't just read them. Report a match in one line; only narrate a discrepancy. Hunt hardest
+   for silent scope expansion and optimistic completion claims.
+6. **Answer open questions.** Every `Q-NNN` gets an answer or an explicit, reasoned deferral.
 
-**Verdict vocabulary** — one of:
+**Verdicts:**
 
-- `ACCEPT` — proceed to next slice.
-- `ACCEPT WITH EDITS` — reviewer made surgical edits; each edit is listed with a one-line
-  rationale so the next implementer learns the pattern.
-- `REVISE` — returned with a numbered, specific fix list. Never "clean this up."
-- `REVERT` — the slice is structurally wrong; discard and re-approach per attached direction.
+- `ACCEPT` — proceed.
+- `ACCEPT WITH EDITS` — reviewer made small, explained edits.
+- `REVISE` — a numbered, specific fix list. Never "clean this up."
+- `REVERT` — structurally wrong; discard, re-approach per attached direction.
 
 **Reviewer obligations:**
 
-- Edits MUST be small and explained. The reviewer NEVER silently rewrites a module — that
-  destroys the log's value as an accurate history and teaches the implementer nothing.
-- Any misunderstanding that could recur MUST become a `DECISIONS.md` entry, not just a code
-  fix. Fixing the code fixes one cycle; writing the ruling fixes every future cycle.
-- The reviewer writes its own log entry (`entries/NNNN-REVIEW-<phase>.md`) containing the rule
-  audit, the verdict, the edit list, and the answered questions.
-- The reviewer MUST NOT expand scope either. If the brief is wrong, say so to the human;
-  do not amend the product design mid-review.
+- Edits are small and explained. NEVER silently rewrite a module — that destroys the log's value
+  and teaches the implementer nothing.
+- A recurring misunderstanding becomes a `DECISIONS.md` entry, not just a code fix. The ruling
+  fixes every future cycle; the code fix fixes only this one.
+- Write your own log entry (`entries/NNNN-REVIEW-<phase>.md`): rule audit, verdict, edit list,
+  answered questions.
+- Do not expand scope. If the brief is wrong, say so to the human — don't amend the design
+  mid-review.
 
 ---
 
 ## 9. Forbidden moves
 
-These are the specific ways this project fails. Each has been observed in this class of work.
+Each of these has been observed in this class of work.
 
-- **NEVER** reach for a canvas, DOM API, or `render/*` import inside `engine/` — including for
-  text measurement. Inject the `TextMeasurer` interface (Rule 1).
-- **NEVER** add a `recompute()` pass for derived slots. They are evaluated inside the
-  topological pass. A post-pass makes every formula reading a derived value permanently one
-  step stale, and the bug looks like flaky reactivity.
-- **NEVER** make `extractDependencies` lazy or branch-aware "to avoid unnecessary edges." It is
-  eager and total across both `IF` branches by design (§5.3). A cycle found in an untaken
-  branch is a real cycle and is correctly rejected.
+- **NEVER** reach for a canvas, DOM API, or `render/*` import inside `engine/`, including for text
+  measurement — inject `TextMeasurer` (Rule 1).
+- **NEVER** add a `recompute()` pass for derived slots. They evaluate inside the topological pass;
+  a post-pass makes every reader of a derived value permanently one step stale, and it looks like
+  flaky reactivity.
+- **NEVER** make `extractDependencies` lazy or branch-aware. It is eager and total across both
+  `IF` branches by design (§5.3). A cycle in an untaken branch is a real cycle.
 - **NEVER** write a second expression evaluator for text (Rule 4).
-- **NEVER** mutate document state outside `mutation.ts`, including "just for the drag preview"
-  (Rule 2, §5.9).
-- **NEVER** hand-maintain the edge set. Edges are re-derived from stored ASTs and schema
-  declarations on every mutation.
+- **NEVER** mutate document state outside `mutation.ts`, "just for the drag preview" included
+  (Rule 2).
+- **NEVER** hand-maintain the edge set — re-derive from stored ASTs and schema on every mutation.
 - **NEVER** silently drop an edge or leave a reference pointing at a removed slot. Reject or
-  repair — there is no third option (§5.1.1).
-- **NEVER** introduce a `#CYCLE` value. Cycles are rejected at mutation time and never enter
-  the graph as state.
-- **NEVER** report a stub, a `TODO`, or an untested path as complete.
-- **NEVER** claim an acceptance criterion passes without an executable test demonstrating it.
+  repair; there is no third option (§5.1.1).
+- **NEVER** introduce a `#CYCLE` value. Cycles are rejected at mutation time, never state.
+- **NEVER** report a stub, `TODO`, or untested path as complete, or claim a criterion passes
+  without an executable test.
 - **NEVER** weaken a test to reach green.
 - **NEVER** build a substitute for compound objects/containers. Phase 7 is hand-wired
   deliberately.
 
 ---
 
-## 10. Self-check before you write the log entry
+## 10. Self-check before writing the log entry
 
-Answer each honestly. Any "no" that is not explained in the entry is a defect.
+Any "no" not explained in the entry is a defect.
 
-- [ ] Did I do only my declared slice?
-- [ ] Does `tsc --strict` report zero errors, and did I actually run it?
-- [ ] Do all tests pass, with zero skipped and zero `.only`, and did I actually run them?
-- [ ] Is every new engine file free of DOM/canvas/render imports?
+- [ ] Did I do only my declared slice(s)?
+- [ ] Zero `tsc --strict` errors — did I actually run it?
+- [ ] All tests pass, zero skipped, zero `.only` — did I actually run them?
+- [ ] Every new engine file free of DOM/canvas/render imports?
 - [ ] Does all state change flow through `mutation.ts`?
-- [ ] Is all graph state plain, serializable, ID-referenced — no closures, class instances,
-      or live-object `Map`s?
-- [ ] Does every new file have a header stating layer, allowed imports, and brief section?
-- [ ] Did I use the locked vocabulary everywhere?
-- [ ] Is every `any` justified with `// WHY-ANY:`?
-- [ ] Did I leave any `PROVISIONAL(Q-NNN)` tag whose question is already answered?
-- [ ] Does my log entry describe what I *actually* did, including what I got wrong?
-- [ ] Did I apply §6's triggers honestly rather than by how confident I feel?
+- [ ] Graph state plain, serializable, ID-referenced — no closures/class instances/live `Map`s?
+- [ ] Every new file has a header stating layer, allowed imports, brief section?
+- [ ] Locked vocabulary used everywhere?
+- [ ] Every `any` justified with `// WHY-ANY:`?
+- [ ] Any `PROVISIONAL(Q-NNN)` tag whose question is already answered?
+- [ ] Does the entry describe what I actually did, including what I got wrong?
+- [ ] Did I apply §6 honestly, not by how confident I feel?
+- [ ] If batching (§3), is the running cycle-count/diff-size toward the §6.3 cap stated?
 
 ---
 
 ## 11. Templates
 
-### 11.1 Log entry — `claude-log/entries/NNNN-<slug>.md`
+### 11.1 Log entry — `claude/entries/NNNN-<slug>.md`
 
 ```markdown
 # NNNN — <short title>
 Date: <date>   Phase: <n>   Model: <model name>
 Previous entry: NNNN-<slug>   Last review: NNNN-REVIEW-<phase> (verdict: ACCEPT)
+Batch: cycle <k> of up to 3 since last review; ~<n> lines / <n> files changed so far.
 
 ## Declared scope
-What I set out to do this cycle, in three sentences or fewer.
+Three sentences or fewer.
 
 ## Explicitly not in scope
-Things I noticed but deliberately did not touch.
+Things noticed but deliberately not touched.
 
 ## What I did
-Concrete, file by file. Name the brief sections implemented.
-- `src/engine/address.ts` — new. Implements §5.2 ...
-- `src/engine/graph/node.ts` — added the three slot kinds ...
+File by file. Name the brief sections implemented.
 
 ## Decisions I made
-Implementation-level choices and why. Anything a future reader would otherwise
-wonder about. If it was load-bearing, it should have been a question instead.
+Implementation-level choices and why.
 
 ## Verification (real output)
 $ npx tsc --noEmit
 <paste>
 $ npm test
-<paste — include the pass/fail counts>
+<paste — pass/fail counts>
 
 ## Acceptance criteria status
-Phase N criterion: <quoted from brief> — PASSING / NOT YET / N/A
-Demonstrated by: `test/xyz.test.ts::<test name>`
+Phase N criterion: <quoted> — PASSING / NOT YET / N/A. Demonstrated by: <test>.
 
 ## Where I got stuck / what is unfinished
-Be specific and unflattering. This is the most valuable section in the file.
+Specific and unflattering — the most valuable section in the file.
 
 ## Open questions raised
-Q-007 — <one line>. Provisional choice: <x>. Tagged at: <files>.
+Q-007 — one line. Provisional choice: X. Tagged at: <files>.
 
-## Escalation triggers fired
-List them by §6 number, or "none".
+## Review point
+Fired: <§6.1 items, or "none — batching"> . If none: cycles since last review <k>/3, diff
+<n> lines / <n> files (cap 800/10).
 ```
 
-### 11.2 `claude-log/STATUS.md` — rewritten every cycle
+### 11.2 `claude/STATUS.md` — rewritten every cycle
 
 ```markdown
 # STATUS — as of entry NNNN
@@ -424,29 +426,29 @@ STATE: GREEN (compiles, all tests pass) | BLOCKED — awaiting review | RED — 
 
 Current phase: N — <name>
 Phase N acceptance criterion: <quoted> — <passing / partial / not started>
-Last review: NNNN-REVIEW-<phase>, verdict <verdict>
+Last review point: NNNN-REVIEW-<phase>, verdict <verdict>
+Cycles since last review: <k>/3 · diff since last review: <n> lines / <n> files (cap 800/10)
 
 ## Built and reviewed
-- address.ts (§5.2) — complete, reviewed at 0003
 - ...
 
-## Built, not yet reviewed
+## Built this batch, not yet reviewed
 - ...
 
 ## Not started
 - ...
 
 ## Next slice (recommended)
-One paragraph. What the next implementer should do first, and why that one.
+One paragraph.
 
 ## Known problems
-Things observed but out of scope. Each with a file and a one-line description.
+Observed, out of scope. File + one line each.
 
 ## Live PROVISIONAL tags
 Q-007 → src/engine/formula/deps.ts, src/engine/mutation.ts
 
 ## Gotchas for the next model
-Non-obvious things that cost this cycle time. Be generous here.
+Non-obvious things that cost this cycle time.
 ```
 
 ### 11.3 Cycle summary block — end of your response to the human
@@ -457,7 +459,7 @@ Slice: <one line>
 Files: <n> changed (<list>)
 Tests: <passing>/<total>, 0 skipped   Typecheck: clean
 Phase N criterion: <status>
-Triggers fired: <§6 numbers or "none">
+Review point: <§6.1 trigger(s) fired, or "none — batch k/3, diff n/800">
 Open questions: <Q-NNN list or "none">
 REVIEW: REQUIRED | RECOMMENDED | NOT NEEDED
 Reason: <one line>
@@ -472,7 +474,7 @@ Questions for reviewer:
 Raised: entry NNNN   Brief section: §5.4   Status: OPEN
 Ambiguity: <what the brief does not settle>
 Options: (a) ... (b) ...
-My recommendation: (a), because ...
+Recommendation: (a), because ...
 Reversible? yes/no. Provisional choice taken: yes/no. Tagged at: <files>
 ```
 
@@ -492,21 +494,18 @@ Reconciliation required: grep PROVISIONAL(Q-007) and resolve.
 
 The brief's §6 acceptance criteria are the contract. For each phase:
 
-1. The criterion **MUST** be expressed as one or more executable tests before the phase is
-   claimed complete. A criterion demonstrated only by a screenshot, a description, or manual
-   fiddling is not demonstrated. Where the criterion is inherently visual (Phase 3's
-   pan/zoom/drag, Phase 7's road network), test the engine-side consequence — that dragging
-   emits the expected per-component mutations and that the resulting slot values are correct —
-   and describe the manual check separately and honestly.
-2. The implementer reports the gate as `REVIEW: REQUIRED`.
+1. The criterion **MUST** be expressed as executable test(s) before the phase is claimed
+   complete. A criterion shown only by screenshot, description, or manual fiddling isn't shown.
+   Where the criterion is inherently visual, test the engine-side consequence and describe the
+   manual check separately and honestly.
+2. The implementer reports the gate as `REVIEW: REQUIRED` — a phase gate is always a §6.1 trigger,
+   never something a batch can absorb.
 3. The reviewer runs the rule audit and either opens the next phase or issues `REVISE`.
-4. The next phase does not begin before the gate clears. Rule: *do not start a phase before its
-   predecessor's criterion passes.*
+4. The next phase does not begin before the gate clears.
 
-Phase 0 is the highest-leverage gate in the project. Do not rush it, and expect the reviewer to
-be strictest there: address resolution, the three slot kinds, transactional rollback, and
-derived-slot participation in the topological pass are the four things that everything later
-either rests on or breaks against.
+Phase 0 is the highest-leverage gate: address resolution, the three slot kinds, transactional
+rollback, and derived-slot participation in the topological pass are what everything later either
+rests on or breaks against. Expect it to be reviewed strictly even under the batching in §6.3.
 
 ---
 
@@ -519,6 +518,6 @@ Where this document is silent, prefer, in order:
 3. Whatever is easiest to delete later.
 4. Whatever generates a question instead of a commitment.
 
-And the standing bias for this workflow: **an honest, unfinished cycle with a clear log is
-worth more than a polished cycle that misreports itself.** The log is the only continuity this
-project has. Protect its accuracy above your own apparent productivity.
+Standing bias: **an honest, unfinished cycle with a clear log is worth more than a polished cycle
+that misreports itself.** The log is the project's only continuity. Protect its accuracy above
+your own apparent productivity.

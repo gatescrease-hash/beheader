@@ -4,64 +4,41 @@ Unresolved ambiguity in `PROJECT_BRIEF.md`. Raise one here rather than guessing 
 the brief is silent, ambiguous, or self-contradictory on something load-bearing.
 
 Procedure is in `PROCESS_BRIEF.md` §7. In short: write the question, take a **reversible**
-provisional choice if one exists (and tag it `// PROVISIONAL(Q-NNN)` at every affected
-site), stop the cycle if the choice is not reversible. Answered questions are marked
-`ANSWERED → D-NNN` in place here and are never deleted.
+provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affected site), stop
+the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
+place here and are never deleted.
 
 Next free ID: **Q-006**
+
+> **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
+> recommendation, reversibility call, and reviewer note is preserved in substance. Full original
+> wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
 
 ---
 
 ## Q-005 — What does `formula/ast.ts` contain before Phase 1 builds the real grammar?
-Raised: entry 0005 (implementer)   Brief section: §5.1, §5.3, §6 (Phase 0)   Status: OPEN
-Blocks: nothing further this cycle — a provisional choice was taken. Revisit when Phase 1
-(formula engine) begins.
+Raised: entry 0005   Brief section: §5.1, §5.3, §6 (Phase 0)   Status: OPEN (approved provisional)
+Blocks: nothing this cycle — revisit when Phase 1 (formula engine) begins.
 
-Ambiguity: Phase 0's `graph/*` data model needs a `FormulaSlot` to hold *something* — its
-formula's AST — but `formula/ast.ts` (and the rest of `formula/*`) is explicitly Phase 1
-(§6's build order: `formula/*` comes after `graph/*`/`mutation.ts`/`document.ts`). The brief
-doesn't say what, if anything, Phase 0 should assume the AST shape is. What Phase 0's own test
-fixture actually needs is narrow: the `add` object's "two formula input slots" (§6) are
-**bindings** — §5.1 defines a binding as "just the degenerate formula `= other.slot`" — not
-arbitrary arithmetic. So the graph mechanism can be exercised with a minimal AST that
-represents only a bare reference.
+Ambiguity: Phase 0's `graph/*` needs a `FormulaSlot` to hold *something*, but `formula/ast.ts` is
+explicitly Phase 1 work. What Phase 0's own fixture needs is narrow: the `add` object's two
+formula input slots are **bindings** — §5.1 defines a binding as "the degenerate formula `=
+other.slot`" — not arbitrary arithmetic.
 
-Options:
-  (a) Define `FormulaAst` now as a one-variant discriminated union (`ReferenceNode` only,
-      `{ type: "reference", address: Address }`) in `formula/ast.ts`, documented as a Phase 0
-      stand-in that Phase 1 *widens* (adds `BinaryOp`/`Literal`/`FunctionCall`/... variants to
-      the union) rather than replaces.
-  (b) Give `FormulaSlot.ast` an opaque/unknown type in Phase 0 and defer any real shape to
-      Phase 1, with `graph/eval.ts` unable to do anything with formula slots until then.
-  (c) Skip formula slots entirely in Phase 0's graph model; add the `formula` slot kind only
-      when Phase 1 lands.
+Options: (a) a one-variant `FormulaAst` (`{ type: "reference", address: Address }`), documented as
+a Phase 0 stand-in Phase 1 *widens*, never replaces. (b) leave `FormulaSlot.ast` opaque until
+Phase 1. (c) skip formula slots in Phase 0 entirely.
 
-My recommendation: (a). (b) makes `FormulaSlot` nearly useless for the eval/mutation cycles
-that come next in Phase 0 and pushes the same decision one cycle later, unresolved. (c)
-contradicts §5.1, which specifies `formula` as one of exactly three slot kinds from the start,
-and the brief's own Phase 0 fixture explicitly requires formula slots (the `add` object's
-inputs). (a) is minimal, grounded directly in §5.1's own definition of what a binding is (not
-an invented grammar), and it composes forward — a union gains variants, it doesn't get
-restructured.
+Recommendation: (a). (b) makes `FormulaSlot` useless for Phase 0's own eval/mutation work. (c)
+contradicts §5.1's three slot kinds and §6's fixture, which needs formula slots. (a) composes
+forward — a union gains variants, it isn't restructured.
 
-Reversible? Yes. Widening a discriminated union is additive; nothing downstream needs to
-change shape when Phase 1 adds more `FormulaAst` variants, only when/if it ever needed to
-*remove or restructure* `ReferenceNode`, which nothing in §5.3's grammar suggests.
-Provisional choice taken: yes, (a). Tagged at: `src/engine/formula/ast.ts`.
+Reversible? Yes. Provisional choice taken: (a). Tagged at `src/engine/formula/ast.ts`.
 
-> Reviewer note (0006-REVIEW-phase0): **provisional choice (a) APPROVED — proceed on it.**
-> The question stays OPEN because it only truly resolves when Phase 1 builds the real grammar,
-> but the implementer should not treat it as a live risk in the meantime. Reasoning: §6's
-> Phase 0 fixture explicitly requires formula slots (the `add` node's "two formula input
-> slots"), so `FormulaSlot` must exist and must hold *something* — deferring would have meant
-> either a useless `FormulaSlot` or skipping a slot kind §5.1 mandates from the start. And
-> `ReferenceNode` is not an invented grammar: §5.1 defines a binding as "just the degenerate
-> formula `= other.slot`", so a bare-reference AST is the brief's own construct.
->
-> Binding constraint on Phase 1: **widen this union, do not replace it.** A binding must stay
-> representable as a bare reference under the full §5.3 grammar, so nothing built against
-> `FormulaAst` in Phase 0 changes shape. Remove the `PROVISIONAL(Q-005)` tags at that point
-> and mark this question `ANSWERED` then.
+> Reviewer note (0006-REVIEW-phase0): **(a) APPROVED.** Stays OPEN only because it fully resolves
+> once Phase 1 builds the real grammar. Binding constraint: **Phase 1 widens this union, never
+> replaces it** — a binding must stay representable as a bare reference under the full §5.3
+> grammar. Remove `PROVISIONAL(Q-005)` tags and mark ANSWERED when Phase 1 lands.
 
 ---
 
@@ -69,132 +46,79 @@ Provisional choice taken: yes, (a). Tagged at: `src/engine/formula/ast.ts`.
 Raised: entry 0004-REVIEW-phase0 (reviewer)   Brief section: §5.4, §5.2   Status: OPEN
 Blocks: Phase 2 (table primitive). Not needed before then.
 
-Ambiguity: §5.4 specifies "A1-style addressing scoped to the table" and every cell reference
-the brief writes is uppercase (`A1`, `B2`, `C3`, `A1:B4`). It does not say whether a user may
-type `table_x.a1`, and §5.2's case-insensitivity rule is stated for *object names*, not for
-path segments. Spreadsheets conventionally accept lowercase and normalise it to uppercase.
+Ambiguity: §5.4 says "A1-style addressing"; every cell ref the brief writes is uppercase. It
+doesn't say whether `table_x.a1` is legal, and §5.2's case-insensitivity rule is stated for
+*object names*, not path segments. Accepting lowercase *without* normalising would store
+`cells.a1` and `cells.A1` as two distinct slots for one cell — two sources of truth, which §5.1
+doesn't tolerate.
 
-The trap: accepting lowercase *without* normalising stores `cells.a1` and `cells.A1` as two
-distinct graph slots for what the user sees as one cell — two sources of truth for one value,
-which §5.1's single-source-of-truth model does not tolerate.
+Options: (a) uppercase only — a lowercase ref simply isn't a cell reference. (b) accept both,
+normalise to uppercase at parse time. (c) accept both, store as written — **rejected outright**,
+this is the two-slots bug.
 
-Options:
-  (a) Uppercase only. `table_x.a1` is not a cell reference and fails slot validation later.
-  (b) Accept both, normalise to uppercase at parse time. One stored slot per cell.
-  (c) Accept both, store as written. **Rejected outright** — this is the two-slots bug above.
+Recommendation: (b) eventually — it's what a user expects — but it's a table-primitive decision
+(belongs with range parsing generally), so Phase 2 should settle it holistically.
 
-My recommendation: (b) eventually, and it is what a user will expect. But it is a
-table-primitive decision (it belongs with cell-reference parsing generally, including ranges
-like `a1:b4`), not an addressing one, so Phase 2 should settle it holistically rather than
-`address.ts` committing to it now.
-
-Reversible? Yes, and deliberately made so. **Current behaviour is (a)** — see D-008. That was
-chosen precisely because it is the forward-safe interim: every ref the brief writes is
-uppercase, so moving to (b) later is purely additive and migrates no already-stored data,
-whereas (c) would require rewriting stored slot paths.
-Provisional choice taken: (a), pinned by test rather than by a `PROVISIONAL` tag —
-`address.test.ts::does not map a lowercase cell ref, pending Q-004 on case normalisation`.
-Tagged at: `src/engine/address.ts` (`CELL_REFERENCE_PATTERN` doc comment).
+Reversible? Yes, deliberately. **Current behaviour is (a)** (D-008) — the forward-safe interim,
+since moving to (b) later is purely additive. Pinned by test rather than a `PROVISIONAL` tag:
+`address.test.ts::does not map a lowercase cell ref, pending Q-004`. Tagged at
+`src/engine/address.ts` (`CELL_REFERENCE_PATTERN` doc comment).
 
 ---
 
 ## Q-001 — What does `unlink` store when the last computed value is not a plain scalar?
-Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.10, §5.1
-Status: OPEN — **deferral reaffirmed at 0002-REVIEW-phase0**
+Raised: entry 0000 (reviewer)   Brief section: §5.10, §5.1
+Status: OPEN — deferral reaffirmed at 0002-REVIEW-phase0
 Blocks: Phase 3 (`unlink` command). Not needed before then.
 
-> Reviewer note (0002-REVIEW-phase0): deliberately NOT ruled on. This is a Phase 3
-> command-surface question, it is reversible (one branch in one command handler), and nothing
-> in Phase 0 or Phase 1 depends on it. Ruling now would commit the project to a UX behaviour
-> before there is a command line to feel it against. **If Phase 3 arrives before the next
-> review, take the recommendation below — option (a) — as a PROVISIONAL choice under D-004
-> rather than blocking the cycle.**
+> Reviewer note (0002-REVIEW-phase0): deliberately not ruled — Phase 3 command-surface question,
+> reversible, nothing in Phase 0/1 depends on it. If Phase 3 arrives before the next review, take
+> the recommendation below as a `PROVISIONAL` choice under D-004 rather than blocking.
 
-Ambiguity: `unlink polygon_1.origin.x` is specified as "revert to literal, keeping last
-computed value." The brief does not say what happens when that last computed value is an
-`ErrorValue` (the formula was broken at the moment of unlinking), or a `Point` / `Point[]`
-(structurally possible, since those are in the `Value` union and a slot could hold one).
+Ambiguity: `unlink polygon_1.origin.x` is specified as "revert to literal, keeping last computed
+value." Undefined for an `ErrorValue` (formula was broken at unlink time) or a `Point`/`Point[]`.
 
-Options:
-  (a) Store whatever the value was, errors included — an unlinked slot can hold a literal
-      `#REF`, which the user then overwrites with `set`.
-  (b) Store the value if it is a scalar; substitute the schema default if it is an error.
-  (c) Reject the unlink when the current value is an error, telling the user to fix or
-      delete the formula first.
+Options: (a) store whatever the value was, errors included. (b) substitute the schema default if
+it's an error. (c) reject the unlink when the value is currently an error.
 
-My recommendation: (a). It is the least surprising and the least clever — the value the
-user was looking at is the value they keep. An `ErrorValue` in the graph is legitimate
-state per §5.1, so storing one as a literal does not violate anything, and the error badge
-keeps it visible. (b) silently changes a value the user can see on screen, and (c) makes
-`unlink` fail exactly when the user most wants to use it.
+Recommendation: (a) — least surprising: the value the user was looking at is the value they keep.
+An `ErrorValue` in the graph is already legitimate state (§5.1). (b) silently changes a visible
+value; (c) fails exactly when the user most wants `unlink`.
 
-Reversible? Yes — this is a single branch inside one command handler.
-Provisional choice taken: not yet (Phase 3 has not begun). Tagged at: —
+Reversible? Yes — one branch in one command handler. Provisional choice taken: not yet (Phase 3
+hasn't begun).
 
 ---
 
 ## Q-002 — Does `set` on a formula slot implicitly unlink, or is it rejected?
-Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.10, §5.1
-Status: OPEN — **deferral reaffirmed at 0002-REVIEW-phase0**
+Raised: entry 0000 (reviewer)   Brief section: §5.10, §5.1
+Status: OPEN — deferral reaffirmed at 0002-REVIEW-phase0
 Blocks: Phase 3 (`set` command). Not needed before then.
 
-> Reviewer note (0002-REVIEW-phase0): deliberately NOT ruled on, same reasoning as Q-001 —
-> Phase 3, reversible, nothing upstream depends on it. **If Phase 3 arrives before the next
-> review, take the recommendation below — option (a), reject and name what drives the slot —
-> as a PROVISIONAL choice under D-004 rather than blocking.** Note it is already consistent
-> with §5.9's per-component drag rule, so (a) is the low-risk default.
+> Reviewer note (0002-REVIEW-phase0): same reasoning as Q-001. If Phase 3 arrives first, take
+> option (a) below as `PROVISIONAL` rather than blocking — already consistent with §5.9's
+> per-component drag rule, so it's the low-risk default.
 
-Ambiguity: `set polygon_1.radius 42` writes a literal. `link` converts a slot from literal
-to formula and `unlink` converts it back. The brief does not say what `set` does when the
-target is *already* a formula slot. It does say `set` on a **derived** slot is rejected —
-that part is settled.
+Ambiguity: `set polygon_1.radius 42` writes a literal; `set` on a **derived** slot is rejected
+(settled). Undefined: what `set` does when the target is already a **formula** slot.
 
-Options:
-  (a) Reject: "radius is driven by table_x.A1; unlink first." Consistent with the drag
-      behaviour in §5.9, which refuses to write a bound component and says so.
-  (b) Implicitly unlink then set. Convenient, one step instead of two.
+Options: (a) reject — "radius is driven by table_x.A1; unlink first," matching §5.9's drag
+behaviour. (b) implicitly unlink then set.
 
-My recommendation: (a). §5.9 establishes the house behaviour for "you tried to write
-something that is driven by something else" — refuse, and say what drives it. `set` should
-match, or the system teaches two different lessons about single-source-of-truth depending
-on whether the user reached for the mouse or the keyboard. (b) also destroys a formula the
-user may have spent effort on, with no undo built (§8).
+Recommendation: (a) — §5.9 already establishes "refuse, and say what drives it" for writes to a
+driven slot; `set` should teach the same lesson the mouse does. (b) also destroys a formula with
+no undo built.
 
-Reversible? Yes — one branch in one command handler.
-Provisional choice taken: not yet (Phase 3 has not begun). Tagged at: —
+Reversible? Yes — one branch in one command handler. Provisional choice taken: not yet (Phase 3
+hasn't begun).
 
 ---
 
 ## Q-003 — Does `explode` preserve the object's ID and name?
-Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.5, §5.2
+Raised: entry 0000 (reviewer)   Brief section: §5.5, §5.2
 Status: **ANSWERED → D-007** (ruled at entry 0002-REVIEW-phase0)
-Blocks: nothing further. **Load-bearing — was correctly escalated rather than guessed.**
 
-> Ruling (D-007): option (a). `explode` mutates the object in place — same ID, same name, the
-> `type` field changes. Object `type` is mutable state and schema lookup must read the
-> object's *current* type. See D-007 for the full rationale, which adds a third argument the
-> analysis below did not make: §5.5's `force` flag on explode is only meaningful if the object
-> survives and merely loses *some* slots.
-
-Ambiguity: §5.5 describes `explode` as "an object-type change, so the schema swaps too."
-It also states that `vertices` survives explode, "merely re-sourced from the new literal
-vertex slots," and that "anything downstream reading `vertices` is therefore unaffected."
-That guarantee only holds if the object keeps its identity — if explode were implemented
-as delete-plus-create, the new object gets a fresh ID under D-002 and every stored AST
-pointing at `obj_7.vertices` would break, contradicting the stated payoff.
-
-Options:
-  (a) Explode mutates the object in place: same ID, same name, `type` field changes, the
-      parameter slots are removed and per-vertex literal slots are added.
-  (b) Explode replaces the object and rewrites inbound references to the new ID.
-
-My recommendation: (a), strongly. It is what §5.5's "vertices survives" language implies,
-and (b) requires a whole reference-rewriting pass that exists nowhere else in the design
-(the only rewriting pass specified is table reference adjustment, §5.4). Note (a) means
-object type is mutable state on the object, which is worth writing down explicitly in
-`node.ts` because it is otherwise a surprising thing to discover.
-
-Reversible? **No.** This shapes the object data model and the mutation's structure. Per
-PROCESS_BRIEF §7.3, do not take a provisional choice — escalate before implementing
-`explode`.
-Provisional choice taken: no. Tagged at: —
+Ambiguity: §5.5 says `vertices` survives explode "re-sourced," and that "anything downstream
+reading `vertices` is unaffected" — which only holds if the object keeps its identity.
+Non-reversible: shapes the data model, so this was correctly escalated rather than guessed.
+See D-007 for the full ruling and rationale.
