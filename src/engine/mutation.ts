@@ -571,7 +571,11 @@ function applyOperation(objects: readonly GraphObject[], operation: Operation): 
     }
     return {
       ...object,
-      slots: { ...object.slots, [slotKey(operation.address.path)]: operation.slot },
+      // D-024: the caller's own `Slot` object never enters committed state by
+      // reference. Cloning here is what makes "nothing outside mutation.ts
+      // mutates graph state" (Rule 2) structural rather than dependent on
+      // every caller leaving its payload alone after the call.
+      slots: { ...object.slots, [slotKey(operation.address.path)]: deepClone(operation.slot) },
     };
   });
 }
@@ -664,12 +668,18 @@ export function mutate(
     return { ok: false, message: "a mutation batch must contain at least one operation" };
   }
 
-  const missingTargetMessages = operations
-    .filter((operation) => findObjectById(operation.address.objectId, objects) === undefined)
-    .map(
-      (operation) =>
-        `no object exists to apply this operation to — target slot "${slotKey(operation.address.path)}" names no real object (D-021)`,
-    );
+  const missingTargetMessages = operations.flatMap((operation, index) =>
+    findObjectById(operation.address.objectId, objects) === undefined
+      ? [
+          // D-023: the object id appears here, LABELLED as an id, because no
+          // name exists to print — the whole rejection is that nothing
+          // resolves. Naming only the slot path made two different missing
+          // objects produce the same sentence twice.
+          `operation ${index + 1} of ${operations.length} targets slot "${slotKey(operation.address.path)}" ` +
+            `on object id "${operation.address.objectId}", which does not exist in this document (D-021)`,
+        ]
+      : [],
+  );
   if (missingTargetMessages.length > 0) {
     return { ok: false, message: missingTargetMessages.join("; ") };
   }
@@ -689,7 +699,10 @@ export function mutate(
   return {
     ok: true,
     objects: result.objects,
-    journal: [...journal, { operations }],
+    // D-024: the journal is append-only history, so it stores its OWN copy —
+    // a caller who reuses or edits the array it passed in must not be able to
+    // rewrite what this call recorded.
+    journal: [...journal, { operations: deepClone([...operations]) }],
   };
 }
 

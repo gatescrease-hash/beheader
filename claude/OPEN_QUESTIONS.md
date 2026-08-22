@@ -41,8 +41,13 @@ it wants the human's product call, not an implementer's.
 
 Reversible? Yes at present — D-019 binds the step-1 clone to be faithful either way, and nothing
 in the tree produces a non-finite value except a hand-written literal. Provisional choice taken:
-no. Tagged at: nothing yet — `mutation.ts`'s `cloneObjects` doc comment should point here when
-D-019 is implemented.
+no. Tagged at: `mutation.ts`'s `cloneObjects` doc comment, which points here (added when D-019 was
+implemented at cycle 0019).
+
+> Reviewer note (0021-REVIEW-phase0): the scope is wider than slot values. §5.11 puts **the
+> mutation journal in the serialized document**, and a `MutationJournalEntry` holds `Operation`s
+> whose `Slot` payloads carry the same `Value` union. So whatever this question settles applies to
+> the journal too, not only to the object list — answer it once, for both.
 
 ---
 

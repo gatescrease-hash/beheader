@@ -599,9 +599,10 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      // D-015: no raw internal objectId leaked into the message.
-      expect(result.message).not.toContain("obj_404");
-      expect(result.message).toContain("value"); // names the target slot path instead
+      // D-023 (0021-REVIEW): the id IS named, labelled as an id, because the
+      // rejection is precisely that it resolves to no name.
+      expect(result.message).toContain(`object id "obj_404"`);
+      expect(result.message).toContain(`slot "value"`);
     }
     expect(initial).toEqual(snapshotObjectsBefore);
     expect(priorJournal).toEqual([]); // unchanged — nothing was journalled
@@ -693,10 +694,16 @@ describe("mutate — D-020: the batch form (0018-REVIEW-phase0, fix 5)", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).not.toContain("obj_404");
-      expect(result.message).not.toContain("obj_405");
-      expect(result.message).toContain("value"); // firstMissing's target slot path
-      expect(result.message).toContain("x.y"); // secondMissing's target slot path
+      // D-023 (0021-REVIEW): the two offending operations must be tellable
+      // APART. Naming only the slot path printed the same sentence twice
+      // whenever two missing objects shared a path.
+      expect(result.message).toContain(`operation 1 of 3`);
+      expect(result.message).toContain(`operation 3 of 3`);
+      expect(result.message).toContain(`object id "obj_404"`);
+      expect(result.message).toContain(`object id "obj_405"`);
+      expect(result.message).toContain(`slot "value"`); // firstMissing's target slot path
+      expect(result.message).toContain(`slot "x.y"`); // secondMissing's target slot path
+      expect(result.message).not.toContain("operation 2 of 3"); // the fine one is not blamed
     }
   });
 });
@@ -857,3 +864,36 @@ describe("mutate — D-019: the step-1 clone preserves every member of Value, no
   });
 });
 
+describe("mutate — D-024: nothing the caller hands mutate enters committed state or the journal by reference", () => {
+  it("clones the operation's own Slot into committed state, so two operations sharing one payload do not share one committed slot", () => {
+    const initial = [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
+    const sharedPayload: Slot = { kind: "literal", value: 7 };
+    const operations: Operation[] = [
+      { kind: "setSlot", address: addr("obj_1", "value"), slot: sharedPayload },
+      { kind: "setSlot", address: addr("obj_2", "value"), slot: sharedPayload },
+    ];
+
+    const result = mutate(initial, operations, []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const first = result.objects[0]?.slots["value"];
+    const second = result.objects[1]?.slots["value"];
+    expect(first).toEqual({ kind: "literal", value: 7 });
+    expect(first).not.toBe(sharedPayload); // committed state holds its own copy
+    expect(first).not.toBe(second); // and two slots are two objects, not one aliased twice
+  });
+
+  it("stores the journal's own copy of the batch, so the caller's array cannot rewrite recorded history", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const operations: Operation[] = [{ kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 5 } }];
+
+    const result = mutate(initial, operations, []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.journal[0]?.operations).toEqual(operations);
+    expect(result.journal[0]?.operations).not.toBe(operations);
+    expect(result.journal[0]?.operations[0]).not.toBe(operations[0]);
+  });
+});

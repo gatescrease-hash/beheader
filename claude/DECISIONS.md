@@ -416,3 +416,51 @@ Rationale: the implementer identified the tension precisely, took the reversible
 disclosed it in full rather than quietly widening D-015 — the right move. The gap was not the
 choice but its durability: the correctness argument lives in a doc comment, and doc comments do
 not fail a test run.
+
+---
+
+## D-023 — When an address's object cannot be resolved, the failure message names the raw id, LABELLED as an id
+Ruled: entry 0021-REVIEW-phase0 (reviewer finding, cycle 0019)   Binding on: `mutation.ts`, and
+every future rejection message about an unresolvable object
+
+D-015 forbids leaking the identity layer into a user-facing string **where a name exists**. It does
+not apply when the whole content of the rejection is that nothing resolves: there is no name to
+print, and suppressing the id leaves a message with no diagnostic content at all. Such a message
+MUST name the id, marked as an id (`object id "obj_404"`), never formatted to look like a name
+(`obj_404.value`), and — in a batch — MUST identify which operation is being blamed.
+
+D-015 is otherwise unchanged and still binds everywhere a name IS available: `formatAddress` for
+every slot mention, never `addressKey`.
+
+Rationale: verified by probe at 0021-REVIEW. `mutate([setSlot obj_404.value, setSlot obj_405.value])`
+returned `...target slot "value" names no real object (D-021); ...target slot "value" names no real
+object (D-021)` — the same sentence twice, for two different missing objects. Cycle 0020's own
+reason for naming every offending operation ("a document load with several bad references benefits
+from seeing all of them at once") is defeated by a message that cannot tell them apart, and §5.1
+step 6 asks for a **human-readable** failure. `address.ts`'s `formatAddress` already states the raw
+id in its own `AddressError` for exactly this case, so this also removes an asymmetry the previous
+STATUS recorded as merely "disclosed".
+
+---
+
+## D-024 — Nothing the caller hands `mutate` enters committed state or the journal by reference
+Ruled: entry 0021-REVIEW-phase0 (reviewer finding, cycles 0017-0020)   Binding on: `mutation.ts`,
+`document.ts`, every future operation kind
+
+`mutate` MUST deep-clone an operation's payload before it becomes committed graph state, and MUST
+store the journal's own copy of the operation list. After a call returns, no object reachable from
+the committed `objects` or from `journal` may be reachable from anything the caller passed in.
+
+Rationale: verified by probe at 0021-REVIEW. Committed state held the caller's own `Slot` object
+(`committed.slots.value === callerPayload` was `true`), two operations sharing one payload produced
+two committed slots that were **the same object**, and the journal entry held the caller's live
+array. Nothing is broken today — every field is `readonly`, so no caller can legally mutate them —
+but that is the same "holds by everyone else's discipline rather than structurally" reasoning this
+project has now ruled against twice (0017's own clone argument, upheld; D-019). Rule 2 says nothing
+outside `mutation.ts` mutates graph state, and Rule 5's staging exists so committed and prior state
+share nothing; a payload injected un-cloned reopens the boundary the clone was added to close, on
+the other side. The journal is the sharper half: it is specified append-only, and a caller reusing
+its own array could otherwise rewrite what a past call recorded.
+
+Applied by the reviewer at 0021-REVIEW (two lines, both mutation-checked). The general rule binds
+future operation kinds, which will carry larger payloads than one `Slot`.
