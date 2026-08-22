@@ -1,6 +1,7 @@
-# STATUS — as of entry 0006-REVIEW-phase0
+# STATUS — as of entry 0007-primitives-schema
 
-STATE: GREEN (compiles under both tsconfigs, all tests pass)
+STATE: BLOCKED — awaiting review (0007 fired escalation triggers §6.2/§6.3/§6.9;
+tree itself is GREEN — compiles under both tsconfigs, all tests pass)
 
 Current phase: 0 — Graph core (headless, no pixels)
 Phase 0 acceptance criterion (quoted from PROJECT_BRIEF §6):
@@ -8,11 +9,14 @@ Phase 0 acceptance criterion (quoted from PROJECT_BRIEF §6):
 > in correct topological order *including through derived slots*; a cycle is rejected with
 > the offending slots named **and prior state is provably unchanged**; deleting a slot with
 > dependents is rejected; and a document round-trips to JSON and back identically.
-Status: partial. Addressing and the slot/object/edge data model are complete and reviewed.
-**Nothing propagates, evaluates, or mutates yet** — that is exactly what the criterion needs
-and what the remaining Phase 0 modules provide.
+Status: partial. Addressing, the slot/object/edge data model, and the derived-slot
+declaration mechanism are complete. **Nothing propagates, evaluates, or mutates
+yet** — that needs `graph/cycles.ts`, `graph/eval.ts`, and `mutation.ts`, none of
+which exist.
 
-Last review: **0006-REVIEW-phase0, verdict ACCEPT** (no edits). `primitives/schema.ts` may begin.
+Last review: **0006-REVIEW-phase0, verdict ACCEPT** (no edits; cleared
+`primitives/schema.ts` to begin). **Cycle 0007 (this one) is unreviewed —
+awaiting review before `graph/cycles.ts`/`graph/eval.ts` begins.**
 
 ## Built and reviewed
 - Project scaffold: `package.json`, `tsconfig.json` (strict), `tsconfig.engine.json`
@@ -29,34 +33,39 @@ Last review: **0006-REVIEW-phase0, verdict ACCEPT** (no edits). `primitives/sche
   replaces it.
 
 ## Built, not yet reviewed
-Nothing. The tree is fully reviewed as of 0006.
+- `src/engine/primitives/schema.ts` + tests (§5.1) — 16 tests, entry 0007. The
+  derived-slot declaration mechanism: `DerivedSlotDependencies` (`static`/
+  `dynamic`), `DerivedSlotCompute`, `DerivedSlotSchema`, `ObjectSchema`,
+  `derivedSlotDependencyAddresses`, `getObjectSchema`, `findDerivedSlotSchema`.
+  Real entries for `value` (empty `derivedSlots`) and `add` (`out.result`,
+  depending on `in.a`/`in.b`, matching the fixture already in
+  `graph/node.test.ts`). No entries yet for the eight product primitives — see
+  "Not started" below. Deliberately does NOT declare a type's full slot set
+  (literal/formula slots + default kinds) — only derived slots, per §5.1's
+  quoted sentence and STATUS's prior "Next slice" framing; flagged in the file's
+  "NOT DONE HERE" for whoever builds `mutation.ts`'s object-creation path.
 
 ## Not started
 In brief §7 order, remaining:
-1. `src/engine/primitives/schema.ts` (derived-slot declaration mechanism) — **next**
-2. `src/engine/graph/cycles.ts` (naive DFS) + `src/engine/graph/eval.ts` (naive full topo
-   re-eval over all three slot kinds, derived slots inline, **no post-pass**)
-3. `src/engine/mutation.ts` (clone / validate / commit + journal)
-4. `src/engine/document.ts` round-trip test (including `nextObjectId`, D-002)
+1. `src/engine/graph/cycles.ts` (naive DFS) + `src/engine/graph/eval.ts` (naive full topo
+   re-eval over all three slot kinds, derived slots inline, **no post-pass**) — **next**
+2. `src/engine/mutation.ts` (clone / validate / commit + journal)
+3. `src/engine/document.ts` round-trip test (including `nextObjectId`, D-002)
 
 Then Phase 1 (formula engine). Do not start before Phase 0's criterion passes and is reviewed.
 
 ## Next slice (recommended)
 
-`src/engine/primitives/schema.ts` — §5.1's "Each object type's schema declares, for every
-derived slot: its address path, its dependencies, and its compute function."
-
-Five binding constraints from review:
-- **D-011** — provide real schema entries for `value` and `add`. `add` needs a genuine derived
-  `out.result`; it is the fixture PROJECT_BRIEF §6 uses to prove derived slots evaluate inside
-  the topological pass. Do not treat the fixture types as second-class.
-- **D-010** — declare slots by **path** (`["cells","A1"]`), never by a hand-built key string.
-- **Support the dynamic dependency form**, not just static lists. §5.1 names two cases that
-  require it (`text.resolvedContent`, `script.out.*`). Dynamic dependency functions are
-  evaluated during edge derivation, never during evaluation — that is what keeps Rule 6 true.
-- **No `recompute()` phase, ever.** Derived slots are evaluated *inside* the topological pass.
-  A post-pass makes every formula reading a derived value permanently one step stale.
-- **D-008's lesson** — test the unspecified cases, not just the brief's examples.
+Do not start `graph/cycles.ts`/`graph/eval.ts` until 0007 is reviewed — cycles.ts
+and eval.ts are exactly the two modules that consume `schema.ts`'s
+`derivedSlotDependencyAddresses`/`getObjectSchema`, so a reviewer finding here
+would otherwise need to be threaded through code already written against it.
+Once reviewed: `graph/cycles.ts` (naive DFS over an `Edge[]`, naming every slot
+in a detected cycle per §5.1 step 5) and `graph/eval.ts` (topological sort +
+evaluate all three slot kinds — literal returns its value, formula evaluates
+its AST via `formula/ast.ts`'s `ReferenceNode` only, derived calls its schema's
+`compute` — with derived slots evaluated *inside* the pass, never in a
+post-pass, per §5.1 and PROCESS_BRIEF §9's forbidden-moves list).
 
 ## Known problems
 - **L-6** — `TABLE_TYPE`'s `: ObjectType` annotation widens it from the literal `"table"`. No
@@ -68,7 +77,15 @@ Five binding constraints from review:
   derived values are never serialized. Load must construct derived slots with a placeholder
   (`null` is the obvious choice) before the evaluation pass. Make it explicit when you get there.
 - The table/`cells` mapping in `address.ts` is still hardcoded — move it onto the schema
-  registry once `schema.ts` can express slot families (D-005 §4, D-009).
+  registry once `schema.ts` can express slot families (D-005 §4, D-009). Now that
+  `schema.ts` exists, this is concretely doable but was NOT done at 0007 (out of
+  declared scope for that cycle — it only built the derived-slot mechanism, not a
+  slot-family mechanism table addressing would need).
+- **0007's under-specified corner (not chased further, see entry 0007)** — `add`'s
+  compute function does not distinguish a literal `null` input from any other
+  non-number, non-error input; both fall into `#TYPE`. Untested beyond "does not
+  throw." Nothing currently writes `null` into `in.a`/`in.b`, so this is latent,
+  not live.
 - `npm run typecheck` does not cover config files themselves. Low severity, unchanged.
 - `npm audit`: 5 vulnerabilities in dev deps, not runtime. Out of scope.
 - **SETTLED, do not re-raise:** the flat `claude/` layout (0002-REVIEW); extracting the shared
@@ -83,6 +100,7 @@ Five binding constraints from review:
 
 Open questions: **Q-001, Q-002** (Phase 3, deferred). **Q-004** (Phase 2, cell-ref case
 normalisation). **Q-005** (Phase 1, provisional choice approved). **Q-003** ANSWERED → D-007.
+None raised at 0007.
 
 ## Gotchas for the next model
 
@@ -103,7 +121,17 @@ normalisation). **Q-005** (Phase 1, provisional choice approved). **Q-003** ANSW
 - **`explode` sets type to `polyline`** (D-012). An object named `polygon_1` with type
   `polyline` afterwards is correct — do not "fix" it by renaming.
 - `resolveSlot` returns `undefined` on a miss, not an `ErrorValue`. Turning that into `#REF` is
-  the caller's job.
+  the caller's job. **`schema.ts` follows the same convention**: `getObjectSchema` /
+  `findDerivedSlotSchema` return `undefined` for "nothing declared here," not an error shape.
+- **New (0007): `derivedSlotDependencyAddresses` is the ONLY place a schema's static
+  dependency paths become full `Address`es (paired with the object's own id), or a
+  dynamic resolver gets called.** `graph/eval.ts`'s edge-derivation step should call
+  this once per derived slot per object, at step 3 of the mutation loop — never
+  from inside the topological evaluation pass itself (Rule 6).
+- **New (0007): `add`'s slot names are `in.a`/`in.b`/`out.result`**, matching the
+  `graph/node.test.ts` fixture from cycle 0005. Don't rename them to something
+  else without updating that fixture too — they are the same object shape in
+  two files.
 - Node.js and Git are installed (LTS / 2.55, via winget). Each PowerShell tool call is a fresh
   process — re-derive `$env:Path` from the Machine/User environment variables if they seem
-  missing.
+  missing (`$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")`). The Bash tool's `npm` is not on PATH at all — use PowerShell for `npm`/`npx`.

@@ -1,0 +1,160 @@
+/**
+ * schema.test.ts — Tests for the derived-slot declaration mechanism (§5.1).
+ *
+ * Colocated with schema.ts per D-001. Phase 0 does not yet have graph/eval.ts,
+ * so these tests exercise the schema mechanism directly — calling a declared
+ * `compute` function by hand with a fake `read`, rather than through a real
+ * topological evaluation pass, which does not exist yet.
+ */
+import { describe, expect, it } from "vitest";
+import type { Address } from "../address.ts";
+import type { GraphObject, Value } from "../graph/node.ts";
+import {
+  derivedSlotDependencyAddresses,
+  findDerivedSlotSchema,
+  getObjectSchema,
+  type DerivedSlotDependencies,
+} from "./schema.ts";
+
+describe("getObjectSchema", () => {
+  it("returns a real entry for 'value', with no derived slots (§6: one literal numeric slot)", () => {
+    const schema = getObjectSchema("value");
+    expect(schema).toBeDefined();
+    expect(schema?.derivedSlots).toEqual([]);
+  });
+
+  it("returns a real entry for 'add', with exactly one derived slot: out.result", () => {
+    const schema = getObjectSchema("add");
+    expect(schema).toBeDefined();
+    expect(schema?.derivedSlots).toHaveLength(1);
+    expect(schema?.derivedSlots[0]?.path).toEqual(["out", "result"]);
+  });
+
+  // D-008's lesson: test the unspecified cases, not just the brief's examples.
+  // Every non-fixture ObjectType has no schema yet (file header) — this must be
+  // an honest `undefined`, not a placeholder that would silently pass a future
+  // validation check.
+  it("returns undefined for an ObjectType with no schema entry yet", () => {
+    expect(getObjectSchema("circle")).toBeUndefined();
+    expect(getObjectSchema("polygon")).toBeUndefined();
+    expect(getObjectSchema("table")).toBeUndefined();
+    expect(getObjectSchema("script")).toBeUndefined();
+  });
+});
+
+describe("findDerivedSlotSchema", () => {
+  it("finds 'add's out.result by path, matching structurally rather than by array reference (D-010)", () => {
+    const freshlyBuiltPath = ["out", "result"]; // deliberately not the schema's own array instance
+    const entry = findDerivedSlotSchema("add", freshlyBuiltPath);
+    expect(entry).toBeDefined();
+    expect(entry?.path).toEqual(["out", "result"]);
+  });
+
+  it("returns undefined for a path on 'add' that is NOT a derived slot (in.a is formula, not derived)", () => {
+    expect(findDerivedSlotSchema("add", ["in", "a"])).toBeUndefined();
+  });
+
+  it("returns undefined for a type with no schema at all", () => {
+    expect(findDerivedSlotSchema("circle", ["centroid", "x"])).toBeUndefined();
+  });
+
+  it("returns undefined for 'value', which has no derived slots", () => {
+    expect(findDerivedSlotSchema("value", ["value"])).toBeUndefined();
+  });
+});
+
+describe("derivedSlotDependencyAddresses", () => {
+  const addObject: GraphObject = {
+    id: "obj_2",
+    name: "add_1",
+    type: "add",
+    slots: {
+      "in.a": { kind: "literal", value: 10 },
+      "in.b": { kind: "literal", value: 5 },
+      "out.result": { kind: "derived", value: 15 },
+    },
+  };
+
+  it("pairs each static dependency path with the object's own id (§5.1: 'within the same object')", () => {
+    const outResult = getObjectSchema("add")?.derivedSlots[0];
+    if (outResult === undefined) {
+      throw new Error("test setup: expected add's out.result schema entry to exist");
+    }
+    const addresses = derivedSlotDependencyAddresses(addObject, outResult.dependencies);
+    expect(addresses).toEqual([
+      { objectId: "obj_2", path: ["in", "a"] },
+      { objectId: "obj_2", path: ["in", "b"] },
+    ] satisfies readonly Address[]);
+  });
+
+  it("calls the resolver against the object's current state for a dynamic dependency, without touching the same-object pairing path", () => {
+    const dynamicDependency: DerivedSlotDependencies = {
+      kind: "dynamic",
+      resolve: (object) => [{ objectId: "elsewhere_obj", path: [object.type, "whatever"] }],
+    };
+    const addresses = derivedSlotDependencyAddresses(addObject, dynamicDependency);
+    expect(addresses).toEqual([{ objectId: "elsewhere_obj", path: ["add", "whatever"] }]);
+  });
+});
+
+describe("add's out.result compute function", () => {
+  // graph/eval.ts does not exist yet — these tests call `compute` directly with
+  // a fake `read`, standing in for "this slot's dependencies already evaluated
+  // earlier in the same topological pass" (§5.1).
+  const computeAdd = getObjectSchema("add")?.derivedSlots[0]?.compute;
+  if (computeAdd === undefined) {
+    throw new Error("test setup: expected add's out.result schema entry to exist");
+  }
+
+  const addObject: GraphObject = {
+    id: "obj_2",
+    name: "add_1",
+    type: "add",
+    slots: {
+      "in.a": { kind: "literal", value: 10 },
+      "in.b": { kind: "literal", value: 5 },
+      "out.result": { kind: "derived", value: 0 },
+    },
+  };
+
+  function readFrom(values: Record<string, Value>) {
+    return (address: Address): Value | undefined => values[address.path.join(".")];
+  }
+
+  it("sums two numeric inputs", () => {
+    const result = computeAdd(addObject, readFrom({ "in.a": 10, "in.b": 5 }));
+    expect(result).toBe(15);
+  });
+
+  it("propagates an ErrorValue from in.a unchanged, rather than manufacturing a new error (§5.1: errors propagate)", () => {
+    const upstreamError = { error: "#DIV0", message: "upstream division by zero" } as const;
+    const result = computeAdd(addObject, readFrom({ "in.a": upstreamError, "in.b": 5 }));
+    expect(result).toEqual(upstreamError);
+  });
+
+  it("propagates an ErrorValue from in.b unchanged when in.a is fine", () => {
+    const upstreamError = { error: "#PARSE", message: "upstream parse error" } as const;
+    const result = computeAdd(addObject, readFrom({ "in.a": 10, "in.b": upstreamError }));
+    expect(result).toEqual(upstreamError);
+  });
+
+  it("returns #TYPE, never throws, when an input is a non-error non-number value", () => {
+    const result = computeAdd(addObject, readFrom({ "in.a": "not a number", "in.b": 5 }));
+    expect(result).toMatchObject({ error: "#TYPE" });
+  });
+
+  it("returns #TYPE for a boolean input", () => {
+    const result = computeAdd(addObject, readFrom({ "in.a": true, "in.b": 5 }));
+    expect(result).toMatchObject({ error: "#TYPE" });
+  });
+
+  it("returns #REF, never throws, when a dependency did not resolve at all (read returns undefined)", () => {
+    const result = computeAdd(addObject, readFrom({ "in.a": 10 })); // in.b missing entirely
+    expect(result).toMatchObject({ error: "#REF" });
+  });
+
+  it("never throws for any of the above inputs", () => {
+    expect(() => computeAdd(addObject, readFrom({}))).not.toThrow();
+    expect(() => computeAdd(addObject, readFrom({ "in.a": null, "in.b": null }))).not.toThrow();
+  });
+});
