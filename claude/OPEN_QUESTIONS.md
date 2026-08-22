@@ -49,6 +49,20 @@ change shape when Phase 1 adds more `FormulaAst` variants, only when/if it ever 
 *remove or restructure* `ReferenceNode`, which nothing in §5.3's grammar suggests.
 Provisional choice taken: yes, (a). Tagged at: `src/engine/formula/ast.ts`.
 
+> Reviewer note (0006-REVIEW-phase0): **provisional choice (a) APPROVED — proceed on it.**
+> The question stays OPEN because it only truly resolves when Phase 1 builds the real grammar,
+> but the implementer should not treat it as a live risk in the meantime. Reasoning: §6's
+> Phase 0 fixture explicitly requires formula slots (the `add` node's "two formula input
+> slots"), so `FormulaSlot` must exist and must hold *something* — deferring would have meant
+> either a useless `FormulaSlot` or skipping a slot kind §5.1 mandates from the start. And
+> `ReferenceNode` is not an invented grammar: §5.1 defines a binding as "just the degenerate
+> formula `= other.slot`", so a bare-reference AST is the brief's own construct.
+>
+> Binding constraint on Phase 1: **widen this union, do not replace it.** A binding must stay
+> representable as a bare reference under the full §5.3 grammar, so nothing built against
+> `FormulaAst` in Phase 0 changes shape. Remove the `PROVISIONAL(Q-005)` tags at that point
+> and mark this question `ANSWERED` then.
+
 ---
 
 ## Q-004 — Are lowercase cell references accepted, and if so are they normalised?

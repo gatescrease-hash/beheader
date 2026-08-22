@@ -217,3 +217,66 @@ Rationale: `AddressableObject.type` is currently `string`, so a typo (`"tabel"`)
 disables the D-005 mapping with no error anywhere. A union type makes that a compile error.
 The constant is duplicated in exactly one place today, which is the cheapest possible moment
 to rule that it must not be duplicated in two.
+
+---
+
+## D-010 — Slot keys are produced ONLY by `slotKey()`, never hand-built
+Answers: (reviewer finding, cycle 0005)   Ruled: entry 0006-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: a key into `GraphObject.slots` MUST only ever be produced by `graph/node.ts`'s
+`slotKey(path)`. No module may build one by string concatenation, template literal, or a
+literal like `"cells.A1"` written inline — including in mutation.ts when it constructs an
+object's initial slot set, and including in `primitives/schema.ts` when it declares which
+slots a type has. Schema declarations name slots by **path** (`["cells","A1"]`), and the key
+is derived. Test fixtures are the one tolerated exception, and only for readability.
+
+Rationale: this is the exact same invariant `address.ts` already carries for address strings
+("Address strings are only ever produced by formatAddress(); never concatenated ad hoc"), and
+it protects the same thing. `slotKey`'s collision-freedom argument depends on path segments
+never containing `.` — which `address.ts`'s `PATH_SEGMENT_PATTERN` guarantees for paths that
+came through `parseAddress`, but nothing guarantees for a hand-built key. A hand-built
+`"a.b"` and a real path `["a","b"]` produce the same key and would silently alias two
+different slots into one. Cycle 0005 asserts this invariant in `node.ts`'s header but nothing
+enforces it; this ruling closes the gap by discipline, which is the cheap half of the fix.
+
+---
+
+## D-011 — `ObjectType` includes the Phase 0 fixture types; command reachability is a command-layer concern
+Answers: implementer question 1, cycle 0005   Ruled: entry 0006-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: `value` and `add` stay in `ObjectType` alongside the eight product primitives.
+`primitives/schema.ts` MUST provide real schema entries for both — `add` in particular needs
+a genuine derived `out.result` slot, because PROJECT_BRIEF §6 designates it as *the* fixture
+that exercises the derived-slot mechanism before geometry exists. Whether a type can be
+created from the command line is decided solely by §5.10's command registry, which simply has
+no entry for `value` or `add`; it is not a property of the data model and MUST NOT be
+expressed by excluding them from `ObjectType`.
+
+Rationale: the alternative (a separate fixture-only union) forces every consumer keyed on
+object type — the schema registry above all — to handle two unions and to convert between
+them, which is more machinery than the problem deserves. It would also make the Phase 0
+fixtures second-class exactly where the brief wants them load-bearing: §6's acceptance
+criterion is demonstrated *through* them. Keeping one union means the `add` node's derived
+slot is evaluated by the same code path as `polygon_1.centroid.x` will be, which is the whole
+point of the fixture.
+
+---
+
+## D-012 — `explode` changes a preset's type to `polyline`; there is no separate "path" type
+Answers: implementer question 2, cycle 0005   Ruled: entry 0006-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: the editable-path object type is `polyline`. `explode` sets the object's `type` to
+`polyline` (keeping its id and name, per D-007). No separate `path` / `editablePath` type is
+introduced.
+
+Note the consequence and do NOT "fix" it: after `explode polygon_1`, the document holds an
+object still **named** `polygon_1` whose **type** is `polyline`. That is correct and required
+— D-007 preserves the name precisely so that stored addresses keep displaying the name the
+user chose. Renaming on explode would surprise the user and buy nothing (stored addresses are
+ID-based and would not break either way).
+
+Rationale: §5.5 introduces editable paths as "**Editable paths** (polyline, or any exploded
+preset)" — one category, one slot exposure (per-vertex literal slots plus a derived
+`vertices`). A separate type would be a second entry in the schema registry with a schema
+identical to `polyline`'s, which is duplication the brief never asks for and which Rule 5's
+"dumbest correct implementation" argues against.
