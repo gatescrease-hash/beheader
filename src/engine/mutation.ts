@@ -1,11 +1,13 @@
 /**
  * mutation.ts — THE single transactional channel for state change (PROJECT_BRIEF
- * Rule 2). Three things exist so far: edge derivation (§5.1 mutation-loop step
- * 3, cycle 0013), integrity validation (step 4, §5.1.1, cycle 0015), and — as
- * of this cycle — `deriveValidateAndEvaluate`, which composes those two with
- * the already-built `detectCycle` (step 5, `graph/cycles.ts`) and `evaluate`
- * (step 7, `graph/eval.ts`) into one sequence. All of this is deliberately
- * still short of the full 8-step loop — see WHAT THIS IS and NOT DONE HERE.
+ * Rule 2). Edge derivation (§5.1 step 3, cycle 0013), integrity validation
+ * (step 4, §5.1.1, cycle 0015), and their composition with the already-built
+ * `detectCycle` (step 5) and `evaluate` (step 7) into `deriveValidateAndEvaluate`
+ * (cycle 0016) all exist already. As of THIS cycle, `mutate(objects, operation,
+ * journal)` wraps that composition with the remaining steps — stage/clone
+ * (step 1), apply one operation (step 2), discard-on-reject (step 6), and
+ * commit + journal (step 8) — making this file's public surface the FULL
+ * §5.1 mutation loop for the one operation kind built so far. See WHAT THIS IS.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -13,11 +15,16 @@
  * and step 4 / §5.1.1 ("Validate integrity. Reject if any formula references a
  * slot that does not exist, or if the mutation would delete a slot that still
  * has inbound dependents without repairing them."), plus **D-017 part 2**,
- * closed at cycle 0015 (see WHAT THIS IS, `validateIntegrity`). This cycle
- * additionally composes step 5 ("Validate acyclicity. Full DFS over the whole
- * graph. Reject on cycle, naming every slot in the cycle.") and step 7
- * ("Evaluate. Topologically sort all slots and evaluate every one...") with
- * the two above, in `deriveValidateAndEvaluate` — see WHAT THIS IS.
+ * closed at cycle 0015 (see WHAT THIS IS, `validateIntegrity`); step 5
+ * ("Validate acyclicity... reject on cycle, naming every slot in the cycle.")
+ * and step 7 ("Evaluate...") composed at cycle 0016 in `deriveValidateAndEvaluate`.
+ * THIS cycle additionally implements step 1 ("Stage. Deep-clone the current
+ * document state."), step 2 ("Apply the mutation to the clone."), step 6 ("On
+ * rejection: discard the clone entirely... Prior state is untouched."), and
+ * step 8 ("Commit. Swap the clone in... append the mutation to the journal"),
+ * plus Rule 2's journal requirement ("the mutation API MUST record an
+ * append-only journal of committed mutations from day one") — see WHAT THIS IS,
+ * `mutate`.
  * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
  * trigger-3 (new engine file).
  * LAYER: engine (pure). May import: engine/* only.
@@ -171,15 +178,46 @@
  *     corrupted by, because this function was never given write access to it.
  *   - Never throws, matching every function it composes.
  *
+ * `mutate(objects, operation, journal)` — §5.1 steps 1, 2, 6, 8, wrapping
+ * `deriveValidateAndEvaluate` (steps 3-5, 7). See its own doc comment for the
+ * full sequence. One operation kind exists so far: `SetSlotOperation`
+ * (`{ kind: "setSlot", address, slot }`), the minimal primitive underneath
+ * what §5.10's `link`/`unlink`/`set` commands will eventually call — building
+ * those commands themselves is Phase 3's job (§5.10), not this cycle's.
+ *
+ * INVARIANTS UPHELD HERE (mutate)
+ *   - Implements Rule 5's staging mechanism literally: `cloneObjects` performs
+ *     a real deep clone (JSON round-trip — see its own doc comment for why
+ *     that is a legitimate clone here) before `applyOperation` ever runs, so
+ *     "applying to the clone" (§5.1 step 2) never touches the caller's
+ *     original `objects` reference even in principle, not merely by the
+ *     accident of every downstream function already being pure.
+ *   - On rejection, returns `deriveValidateAndEvaluate`'s own `{ ok: false,
+ *     message }` untouched (step 6: "discard the clone entirely... return a
+ *     failure"). `objects` and `journal` are both simply never reassigned —
+ *     the caller's references are exactly what they were before the call.
+ *   - On success, appends exactly one `MutationJournalEntry` (the applied
+ *     `Operation`) to `journal` (Rule 2, "from day one") and returns the
+ *     evaluated result as the new state (step 8's "swap in"). This file does
+ *     not itself hold "the current document" between calls — see NOT DONE
+ *     HERE — so "commit" here means "return the new state for whichever
+ *     caller owns it to adopt," not an internal assignment.
+ *   - Never throws, matching every function it composes.
+ *
  * NOT DONE HERE (the rest of `mutation.ts`, later cycles)
- *   - Stage (clone), apply an operation, commit + journal — §5.1 steps 1, 2,
- *     6, 8. `deriveValidateAndEvaluate` is handed a candidate post-apply
- *     object list; it does not produce one, and its `ok: true` result is not
- *     committed anywhere by this file.
- *   - The batch mutation form (§5.1, required from day one).
- *   - Any operation shape (`setLiteral`, `link`, object creation/deletion) —
- *     this file only derives edges and validates whatever `GraphObject[]` it
- *     is handed; it does not produce or apply one.
+ *   - Holding "the current document" as persistent state across calls —
+ *     Rule 2 forbids exactly that ("no closures... stored inside graph
+ *     state"): `mutate` is a pure function of its three arguments, and
+ *     whatever calls it (a future `document.ts`, or a command handler) owns
+ *     the current `objects`/`journal` pair and decides what to do with a
+ *     rejection.
+ *   - The batch mutation form (§5.1, required from day one, before any UI
+ *     needs it) — applying N operations to ONE clone, validating and
+ *     evaluating once. `mutate` here still applies exactly one `Operation`.
+ *   - Any operation kind beyond `SetSlotOperation` (object creation/deletion,
+ *     `explode`, vertex add/remove, table resize) — those belong to the
+ *     phases that introduce the state they touch (Phase 2-6), same stance
+ *     `primitives/schema.ts` already takes on its own per-type entries.
  *   - The slot-deletion REPAIR path (§5.1.1's second legal option, rewriting
  *     inbound references to `#REF`) — Phase 0 has no type that uses it (only
  *     table row/column deletion does, Phase 2/4), so `validateIntegrity`'s
@@ -188,13 +226,15 @@
  *   - Range expansion (`A1:B4` → concrete cell dependencies, §5.3) and
  *     reference adjustment on table resize (§5.4) — both Phase 2/4 concerns,
  *     irrelevant while `formula/ast.ts` has only `ReferenceNode`.
+ *   - Undo itself (only the journal DATA this stores it for, per Rule 2 and
+ *     PROJECT_BRIEF §8's deferred list, which defers the undo/redo UI only).
  */
 import { formatAddress, isAddressError, type Address } from "./address.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/schema.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { resolveSlot, slotKey, type GraphObject } from "./graph/node.ts";
+import { resolveSlot, slotKey, type GraphObject, type Slot } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -370,6 +410,134 @@ function formatCycleRejection(cycle: readonly Address[], objects: readonly Graph
   const first = names[0];
   const chain = first === undefined ? names.join(" → ") : [...names, first].join(" → ");
   return `cyclic dependency: ${chain}`;
+}
+
+/**
+ * Replaces the slot at `address` with `slot`, leaving every other slot on
+ * every other object untouched (§5.10's future `link`/`unlink`/`set`
+ * commands are all, at bottom, "put a new Slot at this address" — this is
+ * that one primitive, not any of those commands themselves).
+ *
+ * One variant today (mirroring `formula/ast.ts`'s `FormulaAst`, Q-005: a
+ * single-variant union Phase 3 WIDENS with more operation kinds, never
+ * restructures) — see the file header's NOT DONE HERE for what is
+ * deliberately absent.
+ */
+export interface SetSlotOperation {
+  readonly kind: "setSlot";
+  readonly address: Address;
+  readonly slot: Slot;
+}
+
+/** The full set of operations `mutate` can apply. One variant so far — see `SetSlotOperation`. */
+export type Operation = SetSlotOperation;
+
+/**
+ * §5.1 step 1: "Stage. Deep-clone the current document state." A JSON
+ * round-trip is a legitimate deep clone specifically BECAUSE graph state is
+ * required to be plain and JSON-serializable (PROJECT_BRIEF §2: "No
+ * closures, functions, class instances, or Maps of live objects stored
+ * inside graph state") — the exact property §5.11's `document.ts` will rely
+ * on for save/load. Never mutates `objects`; the clone shares no reference
+ * with anything the caller holds.
+ */
+function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
+  return JSON.parse(JSON.stringify(objects)) as GraphObject[];
+}
+
+/**
+ * §5.1 step 2: "Apply the mutation to the clone." Takes an ALREADY-CLONED
+ * `objects` (see `cloneObjects`) and returns a NEW array reflecting
+ * `operation`'s effect — every object this project's other engine files
+ * apply the same "return new data, never mutate a field in place" discipline
+ * to (Rule 2; every field on `GraphObject`/`Slot` is `readonly`, so in-place
+ * mutation is not even type-legal here without an unjustified cast).
+ *
+ * `setSlot`: replaces whatever is at `operation.address` with
+ * `operation.slot` wholesale — no merge, no partial update. An address whose
+ * `objectId` names no object in `objects` is a no-op (this function does not
+ * reject; an operation referencing a missing object is trusted input from
+ * whichever future command layer builds one — see the file header's NOT
+ * DONE HERE). A dangling `operation.slot` (e.g. a formula whose reference
+ * does not exist) is exactly what `validateIntegrity`'s dangling-reference
+ * check (already composed into `deriveValidateAndEvaluate`, called right
+ * after this) exists to catch — this function does not duplicate that check.
+ */
+function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
+  return objects.map((object) => {
+    if (object.id !== operation.address.objectId) {
+      return object;
+    }
+    return {
+      ...object,
+      slots: { ...object.slots, [slotKey(operation.address.path)]: operation.slot },
+    };
+  });
+}
+
+/**
+ * One committed mutation (Rule 2: "the mutation API MUST record an
+ * append-only journal of committed mutations from day one so that it can be
+ * [undone later]"). Records only the `Operation` that was applied — enough
+ * to replay or, eventually, invert a mutation; PROJECT_BRIEF §8 defers only
+ * the undo/redo UI, not this data. No timestamp or other metadata yet: add
+ * it when something concrete needs it (same stance `primitives/schema.ts`
+ * takes on widening its own declarations).
+ */
+export interface MutationJournalEntry {
+  readonly operation: Operation;
+}
+
+/**
+ * The result of `mutate` (§5.1's full loop for one operation). `ok: false`
+ * mirrors `deriveValidateAndEvaluate`'s own rejection shape exactly — see
+ * `mutate`'s doc comment for why `objects`/`journal` need no separate
+ * "unchanged" field: the caller's own references already are unchanged.
+ * `ok: true` carries the new committed `objects` (step 7's evaluated result)
+ * and `journal` (with exactly one new entry appended, step 8).
+ */
+export type MutationResult =
+  | { readonly ok: true; readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * §5.1's full mutation loop for the one `Operation` kind built so far: stage
+ * (step 1, `cloneObjects`) → apply (step 2, `applyOperation`) → derive edges,
+ * validate integrity, validate acyclicity, evaluate (steps 3-5 and 7,
+ * `deriveValidateAndEvaluate`) → on rejection, discard the clone and return
+ * the failure untouched (step 6) → on success, append to the journal and
+ * return the new state (step 8).
+ *
+ * Why staging matters even though every function downstream is already pure
+ * (so `objects` was never going to be mutated regardless): Rule 5 asks for
+ * this literally ("implement staging by deep-cloning the document state"),
+ * and doing it for real — rather than relying on "nothing downstream
+ * mutates anything" holding by convention forever — is what makes "prior
+ * state provably unchanged" (§6, D-016) a structural guarantee of THIS
+ * function's own shape, not an accident of every other file's discipline.
+ *
+ * Never throws. Never mutates `objects` or `journal` — a rejection returns
+ * without ever assigning either back to anything; both are exactly the
+ * references the caller passed in.
+ */
+export function mutate(
+  objects: readonly GraphObject[],
+  operation: Operation,
+  journal: readonly MutationJournalEntry[],
+): MutationResult {
+  const staged = cloneObjects(objects);
+  const candidate = applyOperation(staged, operation);
+
+  const result = deriveValidateAndEvaluate(candidate);
+  if (!result.ok) {
+    return result; // step 6: `objects`/`journal` were never touched.
+  }
+
+  return {
+    ok: true,
+    objects: result.objects,
+    journal: [...journal, { operation }],
+  };
 }
 
 /**

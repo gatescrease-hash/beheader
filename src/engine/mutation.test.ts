@@ -1,9 +1,10 @@
 /**
- * mutation.test.ts — Tests for edge derivation (§5.1 mutation-loop step 3).
+ * mutation.test.ts — Tests for `mutation.ts`'s full §5.1 loop: edge derivation
+ * (step 3), integrity validation (step 4), their composition with acyclicity
+ * validation and evaluation (steps 5, 7) into `deriveValidateAndEvaluate`, and
+ * — as of cycle 0017 — `mutate` itself (steps 1, 2, 6, 8, wrapping the above).
  *
- * Colocated with mutation.ts per D-001. The rest of `mutation.ts` (stage,
- * apply, validate, evaluate, commit) does not exist yet — see that file's
- * header — so these tests build `GraphObject[]` fixtures by hand, the same
+ * Colocated with mutation.ts per D-001. Fixtures are built by hand, the same
  * convention `graph/eval.test.ts` and `graph/cycles.test.ts` use.
  */
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,14 @@ import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
 import type { GraphObject, Slot } from "./graph/node.ts";
-import { deriveEdges, deriveValidateAndEvaluate, validateIntegrity } from "./mutation.ts";
+import {
+  deriveEdges,
+  deriveValidateAndEvaluate,
+  mutate,
+  validateIntegrity,
+  type MutationJournalEntry,
+  type Operation,
+} from "./mutation.ts";
 
 /** Matches graph/eval.test.ts's / graph/cycles.test.ts's own shorthand. */
 function addr(objectId: string, ...path: readonly string[]): Address {
@@ -446,5 +454,131 @@ describe("deriveValidateAndEvaluate — composing deriveEdges -> validateIntegri
     expect(() => deriveValidateAndEvaluate([addWithUndeclaredSlot(addr("obj_1", "value"))])).not.toThrow();
     expect(() => deriveValidateAndEvaluate([])).not.toThrow();
     expect(deriveValidateAndEvaluate([])).toEqual({ ok: true, objects: [] });
+  });
+});
+
+describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, commit+journal)", () => {
+  it("mutates a value's literal and watches it propagate through a derived slot, appending one journal entry (PROJECT_BRIEF §6)", () => {
+    const initial = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "value"),
+      slot: { kind: "literal", value: 100 },
+    };
+
+    const result = mutate(initial, operation, []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const add1 = result.objects.find((object) => object.id === "obj_3");
+      expect(add1?.slots["out.result"]).toEqual({ kind: "derived", value: 104 }); // 100 + 4
+      expect(result.journal).toEqual([{ operation }]);
+    }
+  });
+
+  it("rejects a mutation that would introduce a cycle, naming every slot in it (PROJECT_BRIEF §6)", () => {
+    const initial: GraphObject[] = [
+      {
+        id: "obj_1",
+        name: "add_1",
+        type: "add",
+        slots: {
+          "in.a": { kind: "literal", value: 1 },
+          "in.b": { kind: "literal", value: 2 },
+          "out.result": { kind: "derived", value: null },
+        },
+      },
+    ];
+    // Rebinds in.a to read the object's OWN out.result — a genuine self-cycle
+    // (in.a <-> out.result), exactly like 0016's standalone detectCycle test,
+    // but reached here through the real mutate() entry point.
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "in", "a"),
+      slot: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "out", "result") }, value: null },
+    };
+
+    const result = mutate(initial, operation, []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+      expect(result.message).toContain("add_1.out.result");
+    }
+  });
+
+  it("leaves the caller's objects and journal provably unchanged when a mutation is rejected (PROJECT_BRIEF §6, D-016)", () => {
+    // D-016: a rejection test that only checks the return shape proves
+    // nothing about state — this one deep-compares a pre-call snapshot
+    // against the caller's own references AFTER the call, not just the
+    // result. See this cycle's log entry for the two mutation-test runs that
+    // confirm this check is real, not just shaped like one.
+    const initial: GraphObject[] = [
+      {
+        id: "obj_1",
+        name: "add_1",
+        type: "add",
+        slots: {
+          "in.a": { kind: "literal", value: 1 },
+          "in.b": { kind: "literal", value: 2 },
+          "out.result": { kind: "derived", value: null },
+        },
+      },
+    ];
+    const priorJournal: MutationJournalEntry[] = [];
+    const snapshotObjectsBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const snapshotJournalBefore = JSON.parse(JSON.stringify(priorJournal)) as unknown;
+
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "in", "a"),
+      slot: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "out", "result") }, value: null },
+    };
+
+    const result = mutate(initial, operation, priorJournal);
+
+    expect(result.ok).toBe(false); // this mutation is the same genuine cycle as the test above
+    expect(initial).toEqual(snapshotObjectsBefore);
+    expect(priorJournal).toEqual(snapshotJournalBefore);
+  });
+
+  it("rejects a dangling reference before ever evaluating, leaving prior state unchanged", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "value"),
+      // obj_1 only has a "value" nonDerivedSlotPath — this rewrites it to a
+      // formula slot reading a nonexistent object, matching PROJECT_BRIEF
+      // §5.1.1's "any formula references a slot that does not exist."
+      slot: { kind: "formula", ast: { type: "reference", address: addr("obj_999", "value") }, value: null },
+    };
+
+    const result = mutate(initial, operation, []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("never throws, for an accepted mutation, a rejected one, or an operation naming a nonexistent object (a no-op, per applyOperation's own contract)", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const acceptedOp: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 2 } };
+    const rejectingOp: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "value"),
+      slot: { kind: "formula", ast: { type: "reference", address: addr("obj_999", "value") }, value: null },
+    };
+    const noOtherObjectOp: Operation = { kind: "setSlot", address: addr("obj_404", "value"), slot: { kind: "literal", value: 9 } };
+
+    expect(() => mutate(initial, acceptedOp, [])).not.toThrow();
+    expect(() => mutate(initial, rejectingOp, [])).not.toThrow();
+    expect(mutate(initial, noOtherObjectOp, [])).toEqual({ ok: true, objects: initial, journal: [{ operation: noOtherObjectOp }] });
   });
 });
