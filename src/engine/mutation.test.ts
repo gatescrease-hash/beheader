@@ -582,3 +582,83 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     expect(mutate(initial, noOtherObjectOp, [])).toEqual({ ok: true, objects: initial, journal: [{ operation: noOtherObjectOp }] });
   });
 });
+
+/**
+ * KNOWN GAPS — pinned by 0018-REVIEW, not endorsed by it.
+ *
+ * Each test below asserts what the code does TODAY, which is in each case
+ * what PROJECT_BRIEF says it must NOT do. They exist so the gap is executable
+ * rather than prose (same device 0014-REVIEW used for D-017's gap), and each
+ * one is to be REPLACED — not deleted — by the rejection test its ruling
+ * requires, in the cycle that closes it. A green run here is not good news.
+ */
+describe("KNOWN GAPS pinned by 0018-REVIEW", () => {
+  it("D-018: accepts a document whose object is MISSING its schema-declared derived slot, leaving two edges pointing at a slot that does not exist", () => {
+    // Exactly the shape a §5.11 load produces: DerivedSlot.value is not
+    // serialized, so a naive load hands mutation.ts an `add` with no
+    // out.result at all. §5.1.1's invariant ("an edge must never point at a
+    // slot that no longer exists") is broken here and nothing reports it.
+    const missingDerivedSlot: GraphObject = {
+      id: "obj_3",
+      name: "add_1",
+      type: "add",
+      slots: {
+        "in.a": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+        "in.b": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+      },
+    };
+    const objects = [valueObject("obj_1", "value_1", 3), missingDerivedSlot];
+
+    const edges = deriveEdges(objects);
+    expect(edges.filter((edge) => addressKey(edge.dependentSlot) === "obj_3::out.result")).toHaveLength(2);
+
+    expect(validateIntegrity(objects, edges)).toEqual({ ok: true }); // WRONG per D-018 — must reject
+    expect(deriveValidateAndEvaluate(objects).ok).toBe(true); // WRONG per D-018 — must reject
+  });
+
+  it("D-018: accepts a setSlot that overwrites a DERIVED slot with a literal, freezing it forever", () => {
+    // §5.1: "`derived` is fixed by schema and can never be converted;
+    // attempting to `link` or `set` a derived slot is rejected." Rule 2 makes
+    // mutation.ts the only place that rejection can live — a command-layer
+    // check would be bypassed by every drag and every document load.
+    const objects = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_3", "out", "result"),
+      slot: { kind: "literal", value: 999 },
+    };
+
+    const result = mutate(objects, operation, []);
+
+    expect(result.ok).toBe(true); // WRONG per D-018 — must reject
+    if (result.ok) {
+      expect(result.objects.find((object) => object.id === "obj_3")?.slots["out.result"]).toEqual({
+        kind: "literal",
+        value: 999, // no longer derived from in.a/in.b at all, and nothing said so
+      });
+    }
+  });
+
+  it("D-019: silently rewrites a committed literal Infinity to null on the NEXT, unrelated mutation", () => {
+    // Rule 2: a mutation "either fully commits or leaves prior state
+    // bit-for-bit untouched". Here the second mutation commits a change to a
+    // slot it never named, because step 1's JSON-round-trip clone cannot
+    // represent every member of `Value`'s own `number` arm.
+    const start = [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
+
+    const first = mutate(start, { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 1e999 } }, []);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.objects[0]?.slots["value"]).toEqual({ kind: "literal", value: Number.POSITIVE_INFINITY });
+
+    // A mutation naming only obj_2 — obj_1 is not mentioned anywhere in it.
+    const second = mutate(first.objects, { kind: "setSlot", address: addr("obj_2", "value"), slot: { kind: "literal", value: 7 } }, first.journal);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.objects[0]?.slots["value"]).toEqual({ kind: "literal", value: null }); // WRONG per D-019 — must still be Infinity
+  });
+});

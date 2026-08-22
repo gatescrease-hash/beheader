@@ -8,11 +8,41 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-006**
+Next free ID: **Q-007**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-006 — Is a non-finite number (`NaN`, `Infinity`, `-Infinity`) legal document state?
+Raised: entry 0018-REVIEW-phase0 (reviewer)   Brief section: §5.1 (`Value`), §5.11, §6 clause 4
+Status: OPEN
+Blocks: Phase 0 clause 4 — answer this before `document.ts`'s round-trip test is written.
+
+Ambiguity: `Value`'s `number` arm admits all three, and they are reachable today with nothing but
+literals — `add`'s compute over two `1e308` literals yields `Infinity`, and `set x 1e999` parses
+to one directly. But §6 clause 4 requires a document to "round-trip to JSON and back
+**identically**", and JSON has no representation for any of them. The brief never says which side
+gives.
+
+Options: (a) legal state — `document.ts` encodes them explicitly on save and decodes on load,
+keeping `Value` as written. (b) illegal — `mutation.ts` rejects a literal that is not finite, and
+every compute maps a non-finite result to an `ErrorValue` (`#TYPE`; §5.1 fixes the `ErrorCode`
+union, so no new code). (c) legal but not persisted — **rejected outright**, it makes clause 4
+false by construction.
+
+Recommendation: (b). It is the smaller change, it keeps the serialized format plain JSON (§5.11,
+Rule 5), and §5.1 already establishes that an `ErrorValue` in the graph is legitimate state rather
+than a reason to reject. (a) means the on-disk format stops being plain JSON at exactly the point
+§5.11 says it is. But this touches the value vocabulary and the visible behaviour of overflow, so
+it wants the human's product call, not an implementer's.
+
+Reversible? Yes at present — D-019 binds the step-1 clone to be faithful either way, and nothing
+in the tree produces a non-finite value except a hand-written literal. Provisional choice taken:
+no. Tagged at: nothing yet — `mutation.ts`'s `cloneObjects` doc comment should point here when
+D-019 is implemented.
 
 ---
 

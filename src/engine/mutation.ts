@@ -121,9 +121,13 @@
  *      type carries no formula slots yet.
  *   2. **Dangling references** (§5.1.1's stated wording: "any formula
  *      references a slot that does not exist"). For every edge, its
- *      `sourceSlot` must `resolveSlot` (`graph/node.ts`) against `objects`;
- *      `dependentSlot` never needs checking here because `deriveEdges` only
- *      ever builds one from a real, currently-iterated object. This ONE check
+ *      `sourceSlot` must `resolveSlot` (`graph/node.ts`) against `objects`.
+ *      `dependentSlot` is NOT checked, and that is a KNOWN GAP rather than a
+ *      proof — see D-018. The guarantee holds for `deriveEdges`'s source 1 (a
+ *      formula slot it looked up and found before emitting the edge) but NOT
+ *      for its source 2: a derived slot's `dependentSlot` path comes from the
+ *      SCHEMA, so an object missing its own declared derived slot yields an
+ *      edge pointing at nothing and this check stays silent. This ONE check
  *      is both halves of §5.1.1's step-4 sentence at once: a plain bad
  *      reference (a formula typo'd at an object that never existed) and "the
  *      mutation would delete a slot that still has inbound dependents" are
@@ -396,11 +400,10 @@ export function deriveValidateAndEvaluate(objects: readonly GraphObject[]): Grap
  * `detectCycle`'s contract guarantees every address in `cycle` already
  * resolves: `validateIntegrity`'s dangling-reference check, which
  * `deriveValidateAndEvaluate` runs immediately before ever calling
- * `detectCycle`, already confirmed every edge's `sourceSlot` resolves, and
- * every `dependentSlot` is one `deriveEdges` only ever builds from a real,
- * currently-iterated object. `formatAddress`'s `AddressError` arm is handled
- * anyway rather than assumed away, matching this module's own never-throws
- * discipline.
+ * `detectCycle`, already confirmed every edge's `sourceSlot` resolves.
+ * `dependentSlot` carries no such guarantee (D-018), so `formatAddress`'s
+ * `AddressError` arm is handled here for real rather than assumed away —
+ * matching this module's own never-throws discipline either way.
  */
 function formatCycleRejection(cycle: readonly Address[], objects: readonly GraphObject[]): string {
   const names = cycle.map((address) => {
@@ -603,9 +606,13 @@ function describeUndeclaredSlot(object: GraphObject, key: string): string {
 
 /**
  * §5.1.1: "any formula references a slot that does not exist." Checks every
- * edge's `sourceSlot` against `resolveSlot` (`graph/node.ts`) — `dependentSlot`
- * never needs the same check here, because `deriveEdges` only ever builds one
- * from a real, currently-iterated object (see that function above).
+ * edge's `sourceSlot` against `resolveSlot` (`graph/node.ts`). `dependentSlot`
+ * is deliberately NOT checked here — but the reason this file recorded until
+ * 0018-REVIEW ("deriveEdges only ever builds one from a real,
+ * currently-iterated object") was WRONG, and is exactly what hid D-018: true
+ * of `deriveEdges`'s source 1, false of its source 2, whose `dependentSlot`
+ * path comes from the schema and is never checked against the object.
+ * Closing that is D-018's job, in the check above — not here.
  *
  * Also covers §5.1.1's other clause ("the mutation would delete a slot that
  * still has inbound dependents without repairing them") for free: deleting a

@@ -292,3 +292,127 @@ Forward note for Phase 4: `nonDerivedSlotPaths` is a fixed list and cannot expre
 **do not extend `nonDerivedSlotPaths` to tables**; Phase 4 must revisit the mechanism, and part
 2's check is what will announce that need loudly instead of as a table that silently never
 recalculates.
+
+---
+
+## D-018 — Schema↔slot reconciliation is TWO-WAY; step 4 MUST check both directions
+Ruled: entry 0018-REVIEW-phase0 (reviewer finding, cycles 0015-0017) — Answers: implementer
+question 2 of cycle 0015 (in part). Binding on `mutation.ts` step 4, `document.ts`, every future
+operation kind.
+
+D-017 required step 4 to reject a slot the schema does not declare. That is one direction only.
+`validateIntegrity` MUST also reject the other direction:
+
+1. **Every schema-declared derived path MUST carry a `derived`-kind slot on the object.** An
+   object missing its own declared derived slot makes `deriveEdges` emit edges whose
+   `dependentSlot` names nothing — a dangling edge, which §5.1.1 calls absolutely forbidden.
+2. **A slot at a schema-declared derived path MUST be `derived` kind**, and a slot at a
+   `nonDerivedSlotPaths` path MUST NOT be `derived` kind. §5.1: "`derived` is fixed by schema and
+   can never be converted; attempting to `link` or `set` a derived slot is rejected."
+
+Both messages name the offending slot the same way check 1 already does.
+
+Rationale: verified by probe at 0018-REVIEW. (1) An `add` object with no `out.result` produced two
+edges pointing at a nonexistent slot; `validateIntegrity` returned `{ ok: true }` and the whole
+mutation was accepted. This is the exact shape a §5.11 load produces, because `DerivedSlot.value`
+is never serialized — so `document.ts`, the very next slice, is where it lands. (2) A `setSlot`
+writing `{ kind: "literal", value: 999 }` over `add_1.out.result` was accepted; the slot is then
+frozen at 999 forever while `deriveEdges` keeps emitting edges into it, and nothing says so. Both
+are D-017's own failure class — schema and object disagreeing silently — reached from the other
+side. `mutation.ts` is the only legal place for the §5.1 rejection (Rule 2): a check in §5.10's
+command layer would be bypassed by dragging and by document loading.
+
+Reconciliation required: replace the two `KNOWN GAPS pinned by 0018-REVIEW` tests naming D-018 in
+`mutation.test.ts` with the rejection tests this ruling requires. Pinning `graph/eval.ts`'s L-13
+stale-edge branch (0014-REVIEW constraint 8, still open) is the same work: case 1 reaches it.
+
+---
+
+## D-019 — The step-1 clone MUST preserve every member of `Value`; a JSON round-trip does not
+Ruled: entry 0018-REVIEW-phase0 (reviewer finding, cycle 0017)   Binding on: `mutation.ts` step 1
+
+`cloneObjects` MUST return state deep-equal to its input for every value `Value` admits. A
+`JSON.parse(JSON.stringify(x))` clone does not: `NaN`, `Infinity`, and `-Infinity` are members of
+`Value`'s `number` arm and all three come back as `null`. Replace it with an explicit recursive
+clone over the plain data PROJECT_BRIEF §2 already guarantees (Rule 5: the dumbest correct
+implementation, not the shortest one). `structuredClone` remains unavailable under D-006.
+
+Rationale: verified by probe at 0018-REVIEW, through the real `mutate` entry point only, in two
+mutations. `set value_1.value 1e999` commits `Infinity`. A second mutation naming only `value_2`
+then commits `value_1.value = null` — a slot that operation never mentioned, a change no journal
+entry records. That is Rule 2's central promise ("either fully commits or leaves prior state
+bit-for-bit untouched") failing on the ACCEPT path, which is worse than failing on the reject path
+0017 tested so carefully. Note that 0017's mutation-testing could not have caught this: it probed
+whether the clone was load-bearing, not whether it was faithful.
+
+Whether a non-finite number is legal *document* state at all is a separate, unsettled question —
+see Q-006. This ruling binds the clone regardless of how Q-006 lands: a clone must clone.
+
+Reconciliation required: replace the `KNOWN GAPS pinned by 0018-REVIEW` test naming D-019 in
+`mutation.test.ts` with a fidelity test over every member of `Value`.
+
+---
+
+## D-020 — The batch form lands before `document.ts`; one committed batch is ONE journal entry
+Ruled: entry 0018-REVIEW-phase0   Binding on: `mutation.ts`, `document.ts`
+
+§5.1 states the batch form as **required**, and "Document loading MUST use a batch." It has now
+been deferred by three consecutive cycles (0016, 0017, and 0014-REVIEW's carried constraint 7).
+It MUST land before `document.ts` begins.
+
+Shape: `mutate` accepts a **list** of operations applied to ONE clone, validated and evaluated
+ONCE, committing all-or-nothing. Do not add a second entry point beside the single-operation form
+— widen the existing one (the same "widen, never restructure" stance Q-005 set for `FormulaAst`).
+A committed batch appends exactly **one** `MutationJournalEntry`, holding the operation LIST: the
+journal records committed *mutations*, a batch is one transaction, so one entry is what an
+eventual undo must invert.
+
+Rationale: the batch form is not a performance optimisation (Rule 5 would forbid one) — it is the
+transactional boundary. Loading a document one operation at a time makes every intermediate state
+a separately-validated document, and intermediate states during a load are routinely invalid
+(object B not yet created when object A's formula references it). Building `document.ts` on the
+single-operation form would therefore either reject legitimate documents or need its own
+validation bypass, which Rule 2 forbids.
+
+---
+
+## D-021 — An operation whose target does not exist is REJECTED, never a silent no-op
+Ruled: entry 0018-REVIEW-phase0 — Answers: implementer question 2 of cycle 0017
+
+`mutate` MUST reject an `Operation` whose `address.objectId` names no object in `objects`, with a
+human-readable message, taking the §5.1 step 6 path. It MUST NOT apply nothing, return `ok: true`,
+and append a journal entry.
+
+Rationale: Rule 2 requires the journal to record **committed mutations** so undo can be built on
+it. An entry for an operation that changed nothing is a false record of history — and it is
+indistinguishable, later, from one that did change something. Rejecting also matches how every
+other bad address in this file is already treated (§5.1.1's dangling-reference check) rather than
+inventing a second policy for the write side of the same problem. "Trusted input from a future
+command layer" is not available as a reason: Rule 2 routes dragging and document loading through
+here too, and neither is a command line.
+
+Reconciliation required: `mutation.test.ts`'s "never throws... (a no-op, per applyOperation's own
+contract)" test asserts the current behaviour and MUST change. This ruling is the authorisation
+for that changed expectation (PROCESS_BRIEF §6.1 trigger 5); say so in the cycle's log entry.
+
+---
+
+## D-022 — `describeUndeclaredSlot`'s raw-key naming is an approved, BOUNDED exception
+Ruled: entry 0018-REVIEW-phase0 — Answers: implementer question 1 of cycle 0015
+
+Naming a slot that no schema declares may use `object.name + "." + key` rather than
+`formatAddress`, because an undeclared slot has no `Address` to format — D-010's "declare it
+schema-side" escape hatch cannot apply by construction. This is the ONLY sanctioned exception to
+D-015's "every user-facing slot mention goes through `formatAddress`"; it is confined to
+`mutation.ts`'s `describeUndeclaredSlot` and MUST NOT be copied elsewhere.
+
+The exception is bounded by a claim that must stay true: for every type whose schema is
+registered, the string produced is identical to `formatAddress`'s. That holds today only because
+no registered type uses D-005's surface↔stored mapping. **Pin it with a test** comparing the two
+for every registered type, so the day a table gets a schema entry the divergence fails loudly
+instead of shipping a wrong name.
+
+Rationale: the implementer identified the tension precisely, took the reversible option, and
+disclosed it in full rather than quietly widening D-015 — the right move. The gap was not the
+choice but its durability: the correctness argument lives in a doc comment, and doc comments do
+not fail a test run.
