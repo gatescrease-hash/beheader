@@ -13,8 +13,16 @@ Next free ID: **Q-004**
 ---
 
 ## Q-001 — What does `unlink` store when the last computed value is not a plain scalar?
-Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.10, §5.1   Status: OPEN
+Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.10, §5.1
+Status: OPEN — **deferral reaffirmed at 0002-REVIEW-phase0**
 Blocks: Phase 3 (`unlink` command). Not needed before then.
+
+> Reviewer note (0002-REVIEW-phase0): deliberately NOT ruled on. This is a Phase 3
+> command-surface question, it is reversible (one branch in one command handler), and nothing
+> in Phase 0 or Phase 1 depends on it. Ruling now would commit the project to a UX behaviour
+> before there is a command line to feel it against. **If Phase 3 arrives before the next
+> review, take the recommendation below — option (a) — as a PROVISIONAL choice under D-004
+> rather than blocking the cycle.**
 
 Ambiguity: `unlink polygon_1.origin.x` is specified as "revert to literal, keeping last
 computed value." The brief does not say what happens when that last computed value is an
@@ -40,8 +48,15 @@ Provisional choice taken: not yet (Phase 3 has not begun). Tagged at: —
 ---
 
 ## Q-002 — Does `set` on a formula slot implicitly unlink, or is it rejected?
-Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.10, §5.1   Status: OPEN
+Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.10, §5.1
+Status: OPEN — **deferral reaffirmed at 0002-REVIEW-phase0**
 Blocks: Phase 3 (`set` command). Not needed before then.
+
+> Reviewer note (0002-REVIEW-phase0): deliberately NOT ruled on, same reasoning as Q-001 —
+> Phase 3, reversible, nothing upstream depends on it. **If Phase 3 arrives before the next
+> review, take the recommendation below — option (a), reject and name what drives the slot —
+> as a PROVISIONAL choice under D-004 rather than blocking.** Note it is already consistent
+> with §5.9's per-component drag rule, so (a) is the low-risk default.
 
 Ambiguity: `set polygon_1.radius 42` writes a literal. `link` converts a slot from literal
 to formula and `unlink` converts it back. The brief does not say what `set` does when the
@@ -65,8 +80,15 @@ Provisional choice taken: not yet (Phase 3 has not begun). Tagged at: —
 ---
 
 ## Q-003 — Does `explode` preserve the object's ID and name?
-Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.5, §5.2   Status: OPEN
-Blocks: Phase 3 (`explode` command). **Load-bearing — do not settle by implementation.**
+Raised: entry 0000 (reviewer, pre-identified)   Brief section: §5.5, §5.2
+Status: **ANSWERED → D-007** (ruled at entry 0002-REVIEW-phase0)
+Blocks: nothing further. **Load-bearing — was correctly escalated rather than guessed.**
+
+> Ruling (D-007): option (a). `explode` mutates the object in place — same ID, same name, the
+> `type` field changes. Object `type` is mutable state and schema lookup must read the
+> object's *current* type. See D-007 for the full rationale, which adds a third argument the
+> analysis below did not make: §5.5's `force` flag on explode is only meaningful if the object
+> survives and merely loses *some* slots.
 
 Ambiguity: §5.5 describes `explode` as "an object-type change, so the schema swaps too."
 It also states that `vertices` survives explode, "merely re-sourced from the new literal
