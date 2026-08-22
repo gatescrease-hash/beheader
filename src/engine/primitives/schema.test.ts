@@ -30,6 +30,21 @@ describe("getObjectSchema", () => {
     expect(schema?.derivedSlots[0]?.path).toEqual(["out", "result"]);
   });
 
+  // nonDerivedSlotPaths added this cycle (mutation.ts's deriveEdges) — the
+  // full set of paths a type's literal/formula slots occupy, PATHS only (see
+  // schema.ts's header: not a default-kind declaration).
+  it("declares 'value's one non-derived slot path", () => {
+    expect(getObjectSchema("value")?.nonDerivedSlotPaths).toEqual([["value"]]);
+  });
+
+  it("declares 'add's two non-derived slot paths (in.a, in.b) — NOT out.result, which is derived", () => {
+    const paths = getObjectSchema("add")?.nonDerivedSlotPaths;
+    expect(paths).toEqual([
+      ["in", "a"],
+      ["in", "b"],
+    ]);
+  });
+
   // D-008's lesson: test the unspecified cases, not just the brief's examples.
   // Every non-fixture ObjectType has no schema yet (file header) — this must be
   // an honest `undefined`, not a placeholder that would silently pass a future

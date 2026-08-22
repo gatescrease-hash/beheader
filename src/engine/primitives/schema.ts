@@ -9,26 +9,31 @@
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   The registry a future `graph/eval.ts` and `mutation.ts` will read to know, for
- *   a given object TYPE, which of its slots are `derived` and how to compute each
- *   one: its stored path, the other slots it reads, and the function that produces
- *   its value. This file does not itself derive edges or evaluate anything — see
- *   NOT DONE HERE.
+ *   The registry `graph/eval.ts` and `mutation.ts` read to know, for a given
+ *   object TYPE: which of its slots are `derived` and how to compute each one
+ *   (its stored path, the other slots it reads, and the compute function), and
+ *   — as of this cycle — the full set of paths its NON-derived (`literal`/
+ *   `formula`) slots occupy (`nonDerivedSlotPaths`). This file does not itself
+ *   derive edges or evaluate anything — see NOT DONE HERE.
  *
  *   Scope, deliberately narrow: this cycle covers exactly the two Phase 0 fixture
- *   types PROJECT_BRIEF §6 names — `value` (no derived slots at all) and `add`
- *   (one derived `out.result`, reading two formula input slots `in.a`/`in.b`),
- *   per D-011. The other eight `ObjectType` members (`circle`, `polygon`, ...) do
- *   not have schema entries yet; `getObjectSchema` returns `undefined` for them,
- *   honestly, rather than a placeholder. Their schemas belong to the phases that
- *   introduce them (Phase 3 geometry, Phase 4 table, Phase 5 text, Phase 6
- *   script/image) — building them now would be building ahead of the brief's
- *   §6 build order.
+ *   types PROJECT_BRIEF §6 names — `value` (one non-derived slot, no derived
+ *   slots at all) and `add` (two non-derived input slots, one derived
+ *   `out.result` reading both), per D-011. The other eight `ObjectType` members
+ *   (`circle`, `polygon`, ...) do not have schema entries yet; `getObjectSchema`
+ *   returns `undefined` for them, honestly, rather than a placeholder. Their
+ *   schemas belong to the phases that introduce them (Phase 3 geometry, Phase 4
+ *   table, Phase 5 text, Phase 6 script/image) — building them now would be
+ *   building ahead of the brief's §6 build order.
  *
  * INVARIANTS UPHELD HERE
- *   - Derived slots are declared by PATH (`["out", "result"]`), never by a
- *     hand-built key string (D-010). `findDerivedSlotSchema` compares paths via
- *     `slotKey`, the one sanctioned way to turn a path into a comparable key.
+ *   - Derived slots, and now `nonDerivedSlotPaths`, are declared by PATH
+ *     (`["out", "result"]`), never by a hand-built key string (D-010).
+ *     `findDerivedSlotSchema` compares paths via `slotKey`, the one sanctioned
+ *     way to turn a path into a comparable key — `mutation.ts`'s edge derivation
+ *     does the same over `nonDerivedSlotPaths` (see its header): this is the
+ *     mechanism that lets it recover a formula slot's OWN address without ever
+ *     inverting a `GraphObject.slots` key, which has no sanctioned inverse.
  *   - Dependencies may be `static` (a fixed list of paths within the SAME object,
  *     §5.1's example: "centroid ← vertices") or `dynamic` (a function of the
  *     object's current state). Both forms are expressible here even though
@@ -56,15 +61,19 @@
  *     (§5.1: "Errors must never throw across the evaluation loop").
  *
  * NOT DONE HERE
- *   - Declaring an object type's FULL slot set (its literal/formula slots and
- *     their default kinds). §5.1 does describe schemas as declaring a slot's
- *     "default kind," but the concrete need for that — object CREATION — belongs
- *     to `mutation.ts`, not built yet. Widen this file when that need is concrete
- *     rather than speculatively now.
- *   - Deriving edges from these declarations into an actual `Edge[]` (mutation.ts
- *     step 3), detecting cycles (graph/cycles.ts), or topological evaluation
- *     (graph/eval.ts) — none exist yet. This file only declares the per-type
- *     data `graph/eval.ts` will consume.
+ *   - Declaring an object type's default KIND per slot (literal vs. formula) or
+ *     its creation-time default value. `ObjectSchema.nonDerivedSlotPaths` (added
+ *     this cycle, for `mutation.ts`'s edge derivation — see below) is only the
+ *     PATH half of that: which paths exist, not what they default to. §5.1 does
+ *     describe schemas as declaring a slot's "default kind," but the concrete
+ *     need for THAT — object CREATION — still belongs to a future `mutation.ts`
+ *     cycle. Widen this file again when that need is concrete, same principle
+ *     as this cycle's own widening.
+ *   - Deriving an actual `Edge[]` from these declarations (that is
+ *     `mutation.ts`'s `deriveEdges`, which consumes this file — see its header
+ *     for why `nonDerivedSlotPaths` had to be added here rather than solved by
+ *     inverting a `GraphObject.slots` key), detecting cycles (graph/cycles.ts),
+ *     or topological evaluation (graph/eval.ts).
  *   - Any geometry/table/text/script/image schema entries (Phases 3, 4, 5, 6).
  */
 import type { Address } from "../address.ts";
@@ -125,9 +134,24 @@ export interface DerivedSlotSchema {
   readonly compute: DerivedSlotCompute;
 }
 
-/** Everything a given `ObjectType` declares about its derived slots. */
+/**
+ * Everything a given `ObjectType` declares about its slots.
+ *
+ * `nonDerivedSlotPaths` — added this cycle, for `mutation.ts`'s edge
+ * derivation — is the full set of paths this type's `literal`/`formula`
+ * slots occupy. It is PATHS only, not a default-kind declaration: §5.1 says
+ * literal and formula slots are interchangeable at runtime (`link`/`unlink`),
+ * so which of the two a given path currently holds is read from the object's
+ * actual `slots`, never from this list. What this list answers is narrower and
+ * purely structural: "does this type have a bindable slot at this path at
+ * all" — exactly what `deriveEdges` needs to recover a formula slot's OWN
+ * address (see `mutation.ts`'s header for why that need can't be met any
+ * other way). Object CREATION (a slot's default kind/value) is a separate,
+ * NOT-YET-BUILT concern — see the file header's NOT DONE HERE.
+ */
 export interface ObjectSchema {
   readonly type: ObjectType;
+  readonly nonDerivedSlotPaths: readonly (readonly string[])[];
   readonly derivedSlots: readonly DerivedSlotSchema[];
 }
 
@@ -164,13 +188,19 @@ export function derivedSlotDependencyAddresses(
 // Registry (D-011: real entries for the Phase 0 fixture types only)
 // ---------------------------------------------------------------------------
 
+/** Path constant for `value`'s one non-derived slot. */
+const VALUE_VALUE_PATH: readonly string[] = ["value"];
+
 /**
  * `value` (PROJECT_BRIEF §6): "a trivial `value` object (one literal numeric
- * slot)". That one slot is `literal`, not `derived` — this file has nothing to
- * declare for it. `derivedSlots` is genuinely empty, not a placeholder.
+ * slot)". That one slot is `literal`-by-default (§5.1: interchangeable with
+ * `formula` at runtime) — this file declares its PATH via `nonDerivedSlotPaths`
+ * but has nothing to declare under `derivedSlots`, which is genuinely empty,
+ * not a placeholder.
  */
 const VALUE_SCHEMA: ObjectSchema = {
   type: "value",
+  nonDerivedSlotPaths: [VALUE_VALUE_PATH],
   derivedSlots: [],
 };
 
@@ -195,6 +225,7 @@ const ADD_OUT_RESULT_PATH: readonly string[] = ["out", "result"];
  */
 const ADD_SCHEMA: ObjectSchema = {
   type: "add",
+  nonDerivedSlotPaths: [ADD_IN_A_PATH, ADD_IN_B_PATH],
   derivedSlots: [
     {
       path: ADD_OUT_RESULT_PATH,
