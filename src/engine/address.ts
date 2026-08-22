@@ -17,16 +17,34 @@
  *   this module does not own. This mirrors the eventual shape: the resolver reads
  *   document state, it does not own it (STATUS.md gotcha, cycle 0000).
  *
+ *   The path a user types and the path a slot is stored under are NOT always the
+ *   same string (D-005). The one case specified so far: a table cell is written as
+ *   `table_x.A1` but stored as `path: ["cells", "A1"]`, because §5.4 says "each cell
+ *   is a slot" and that slot lives under the table's `cells` family, not bare at the
+ *   object's root (§5.2's own address table states this explicitly, and §5.1 names
+ *   the slot `cells.A1`, not `A1`). `parseAddress`/`formatAddress` apply that mapping
+ *   by object `type` — see `toStoredPath`/`toSurfacePath` below. This is a stand-in
+ *   for `primitives/schema.ts`, which does not exist yet: when it lands, the mapping
+ *   should be driven by the schema's slot declarations rather than a hardcoded
+ *   type check here, but the *contract* (surface string vs. stored path can differ)
+ *   is settled now and must not be re-litigated per-object-type later.
+ *
  * INVARIANTS UPHELD HERE
  *   - A stored Address NEVER contains a user-facing name — it is `{ objectId, path }`
  *     only. Renaming an object never touches a stored Address.
  *   - Address strings are only ever produced by formatAddress(); never concatenated
  *     ad hoc elsewhere.
+ *   - `formatAddress` is the exact inverse of `parseAddress`: for every address form
+ *     specified in §5.2's table, `formatAddress(parseAddress(s, os), os) === s`.
  *
  * NOT DONE HERE
- *   - Validating that `path` names a slot that actually exists on the object's schema.
- *     `primitives/schema.ts` does not exist yet; that check is layered on top of
- *     parseAddress in a later cycle, per §5.1's mutation-loop step 4.
+ *   - Validating that `path` names a slot that actually exists on the object's schema
+ *     (e.g. that `A1` is within the table's current bounds, or that `origin` is a
+ *     real slot on this object's type). `primitives/schema.ts` does not exist yet;
+ *     that check is layered on top of parseAddress in a later cycle, per §5.1's
+ *     mutation-loop step 4. What IS done here (D-005) is narrower and structural:
+ *     mapping a known type's surface path shape to its stored path shape, not
+ *     verifying the resulting slot exists.
  *   - Bare cell references (`A1`) legal only inside table cell formulas (§5.3). That
  *     context-sensitive grammar belongs to formula/deps.ts, which calls into this
  *     module for the non-bare case.
@@ -34,10 +52,15 @@
  *     graph/cycles.ts, mutation.ts).
  */
 
-/** The minimal shape address resolution needs from an object: its ID and current name. */
+/**
+ * The minimal shape address resolution needs from an object: its ID, current name,
+ * and type. `type` was added under D-005 — resolving a table's bare cell reference
+ * to its stored `cells.*` path requires knowing the object is a table.
+ */
 export interface AddressableObject {
   readonly id: string;
   readonly name: string;
+  readonly type: string;
 }
 
 /**
@@ -62,6 +85,16 @@ export interface AddressError {
 
 /** A name-validity or name-availability check that did not throw either way. */
 export type NameCheckResult = { readonly ok: true } | { readonly ok: false; readonly message: string };
+
+/**
+ * Narrows a `parseAddress`/`formatAddress` result to its `AddressError` arm. Exists
+ * so callers (including tests) can discriminate `Address | AddressError` and
+ * `string | AddressError` without an `as` cast — a cast would silently accept a
+ * result of the wrong shape instead of catching it (L-2, 0002-REVIEW-phase0).
+ */
+export function isAddressError(value: unknown): value is AddressError {
+  return typeof value === "object" && value !== null && "error" in value;
+}
 
 /**
  * Naming grammar (§5.2): starts with a letter or underscore, followed by any number
@@ -158,7 +191,8 @@ export function checkNameAvailable(
  */
 export function generateDefaultName(typePrefix: string, objects: readonly AddressableObject[]): string {
   let n = 1;
-  // eslint-disable-next-line no-constant-condition -- terminates: n grows, name space is infinite.
+  // Terminates: n grows on every iteration and the name space is infinite, so a
+  // free candidate always exists eventually.
   while (true) {
     const candidate = `${typePrefix}_${n}`;
     if (!isNameTaken(candidate, objects)) {
@@ -169,17 +203,57 @@ export function generateDefaultName(typePrefix: string, objects: readonly Addres
 }
 
 /**
+ * The one object type (so far) whose stored slot path differs from what the user
+ * types. §5.4: "each cell is a slot" under the table's `cells` family; §5.2's
+ * address table and §5.1's slot list both show `table_x.A1` stored as
+ * `["cells", "A1"]`. See D-005 and the file header's WHAT THIS IS.
+ */
+const TABLE_TYPE = "table";
+const TABLE_CELL_PATH_PREFIX = "cells";
+
+/**
+ * Maps a user-typed path to the path a slot is actually stored under (D-005).
+ * Identity for every type except `table`, where a single bare segment (`A1`) is
+ * shorthand for a `cells.*` slot. A table path that already has 2+ segments is left
+ * alone — this covers the (unspecified but harmless) case of a user typing the
+ * stored form directly, e.g. `table_x.cells.A1`, without double-prefixing it.
+ */
+function toStoredPath(type: string, surfacePath: readonly string[]): readonly string[] {
+  if (type === TABLE_TYPE && surfacePath.length === 1) {
+    return [TABLE_CELL_PATH_PREFIX, ...surfacePath];
+  }
+  return surfacePath;
+}
+
+/**
+ * The exact inverse of toStoredPath: strips the `cells` prefix a table's stored
+ * path carries, so formatAddress prints the short form the user actually typed
+ * (`table_x.A1`, never `table_x.cells.A1`). Identity for every other case.
+ */
+function toSurfacePath(type: string, storedPath: readonly string[]): readonly string[] {
+  if (type === TABLE_TYPE && storedPath.length === 2 && storedPath[0] === TABLE_CELL_PATH_PREFIX) {
+    const cellRef = storedPath[1];
+    if (cellRef !== undefined) {
+      return [cellRef];
+    }
+  }
+  return storedPath;
+}
+
+/**
  * Parses a user-written address string (`table_x.A1`, `polygon_1.origin.x`) into a
- * stored Address — resolving the leading name to an object ID (§5.2). This is the
- * only place a name is ever turned into an Address; every other consumer of
- * addresses (formulas, bindings, script ports) MUST funnel through here.
+ * stored Address — resolving the leading name to an object ID (§5.2) and mapping
+ * the typed path to the slot's actual stored path (D-005). This is the only place a
+ * name is ever turned into an Address; every other consumer of addresses (formulas,
+ * bindings, script ports) MUST funnel through here.
  *
  * Rejects: an empty or malformed string (no path segment, empty segment, a path
  * segment outside PATH_SEGMENT_PATTERN), or a name that does not resolve to any
  * object. Returns a `#REF`-shaped AddressError; NEVER throws — callers that reach
  * this from inside the evaluation loop must not have it unwind (§5.1).
  *
- * Does NOT validate that `path` names a real slot on the resolved object's schema —
+ * Does NOT validate that the resulting stored path names a real slot on the
+ * resolved object's schema (e.g. that `A1` is within the table's current bounds) —
  * see NOT DONE HERE above. A caller that needs that stronger guarantee layers it on
  * top of a successful result from this function.
  */
@@ -200,6 +274,8 @@ export function parseAddress(input: string, objects: readonly AddressableObject[
     };
   }
 
+  // Safe: `segments.length >= 2` and no segment is empty (both checked above), so
+  // there is always at least one name segment followed by at least one path segment.
   const [namePart, ...pathParts] = segments as [string, ...string[]];
   const badSegment = pathParts.find((segment) => !PATH_SEGMENT_PATTERN.test(segment));
   if (badSegment !== undefined) {
@@ -209,18 +285,24 @@ export function parseAddress(input: string, objects: readonly AddressableObject[
     };
   }
 
+  // Deliberately not pre-checked against NAME_PATTERN: no object can exist with an
+  // invalid name (checkNameAvailable is the only gate that creates/renames one), so
+  // an ungrammatical namePart simply fails lookup below and reports as "no object
+  // named" — one failure path instead of two, at the cost of a slightly imprecise
+  // message for that one case. (L-4, 0002-REVIEW-phase0.)
   const object = findObjectByName(namePart, objects);
   if (object === undefined) {
     return { error: "#REF", message: `no object named "${namePart}"` };
   }
 
-  return { objectId: object.id, path: pathParts };
+  return { objectId: object.id, path: toStoredPath(object.type, pathParts) };
 }
 
 /**
  * Formats a stored Address back into the string a user should see, by resolving the
- * ID to that object's *current* name (§5.2). This is why renaming is free: the
- * stored Address never changes, only what formatAddress prints for it does.
+ * ID to that object's *current* name (§5.2) and mapping the stored path back to its
+ * surface form (D-005) — the exact inverse of parseAddress. This is why renaming is
+ * free: the stored Address never changes, only what formatAddress prints for it does.
  *
  * Rejects: an Address whose objectId no longer resolves to any object (the object
  * was deleted out from under a stale reference somewhere the deletion logic missed —
@@ -232,5 +314,5 @@ export function formatAddress(address: Address, objects: readonly AddressableObj
   if (object === undefined) {
     return { error: "#REF", message: `no object with id "${address.objectId}"` };
   }
-  return [object.name, ...address.path].join(".");
+  return [object.name, ...toSurfacePath(object.type, address.path)].join(".");
 }
