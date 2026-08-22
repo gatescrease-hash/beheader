@@ -1,8 +1,10 @@
 /**
  * mutation.test.ts — Tests for `mutation.ts`'s full §5.1 loop: edge derivation
- * (step 3), integrity validation (step 4), their composition with acyclicity
+ * (step 3), integrity validation (step 4, including cycle 0019's D-018
+ * schema/slot reconciliation checks), their composition with acyclicity
  * validation and evaluation (steps 5, 7) into `deriveValidateAndEvaluate`, and
- * — as of cycle 0017 — `mutate` itself (steps 1, 2, 6, 8, wrapping the above).
+ * `mutate` itself (steps 1, 2, 6, 8, wrapping the above — cycle 0017, with
+ * cycle 0019 closing D-019's clone-fidelity gap and D-021's no-op gap).
  *
  * Colocated with mutation.ts per D-001. Fixtures are built by hand, the same
  * convention `graph/eval.test.ts` and `graph/cycles.test.ts` use.
@@ -567,7 +569,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     expect(initial).toEqual(snapshotBefore);
   });
 
-  it("never throws, for an accepted mutation, a rejected one, or an operation naming a nonexistent object (a no-op, per applyOperation's own contract)", () => {
+  it("never throws, for an accepted mutation, a rejected one, or an operation naming a nonexistent object", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const acceptedOp: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 2 } };
     const rejectingOp: Operation = {
@@ -579,25 +581,36 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
 
     expect(() => mutate(initial, acceptedOp, [])).not.toThrow();
     expect(() => mutate(initial, rejectingOp, [])).not.toThrow();
-    expect(mutate(initial, noOtherObjectOp, [])).toEqual({ ok: true, objects: initial, journal: [{ operation: noOtherObjectOp }] });
+    expect(() => mutate(initial, noOtherObjectOp, [])).not.toThrow();
+  });
+
+  it("rejects an operation naming a nonexistent object, rather than applying nothing and journalling a false record (D-021)", () => {
+    // D-021 (0018-REVIEW-phase0), answering cycle 0017's own open question:
+    // a "no-op" acceptance would append a journal entry for an operation that
+    // changed nothing — indistinguishable, later, from one that did.
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const priorJournal: MutationJournalEntry[] = [];
+    const snapshotObjectsBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const operation: Operation = { kind: "setSlot", address: addr("obj_404", "value"), slot: { kind: "literal", value: 9 } };
+
+    const result = mutate(initial, operation, priorJournal);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // D-015: no raw internal objectId leaked into the message.
+      expect(result.message).not.toContain("obj_404");
+      expect(result.message).toContain("value"); // names the target slot path instead
+    }
+    expect(initial).toEqual(snapshotObjectsBefore);
+    expect(priorJournal).toEqual([]); // unchanged — nothing was journalled
   });
 });
 
-/**
- * KNOWN GAPS — pinned by 0018-REVIEW, not endorsed by it.
- *
- * Each test below asserts what the code does TODAY, which is in each case
- * what PROJECT_BRIEF says it must NOT do. They exist so the gap is executable
- * rather than prose (same device 0014-REVIEW used for D-017's gap), and each
- * one is to be REPLACED — not deleted — by the rejection test its ruling
- * requires, in the cycle that closes it. A green run here is not good news.
- */
-describe("KNOWN GAPS pinned by 0018-REVIEW", () => {
-  it("D-018: accepts a document whose object is MISSING its schema-declared derived slot, leaving two edges pointing at a slot that does not exist", () => {
-    // Exactly the shape a §5.11 load produces: DerivedSlot.value is not
+describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (0018-REVIEW-phase0)", () => {
+  it("rejects an object MISSING its schema-declared derived slot, naming it (D-018 part 1)", () => {
+    // Exactly the shape a §5.11 load produces: DerivedSlot.value is never
     // serialized, so a naive load hands mutation.ts an `add` with no
-    // out.result at all. §5.1.1's invariant ("an edge must never point at a
-    // slot that no longer exists") is broken here and nothing reports it.
+    // out.result at all.
     const missingDerivedSlot: GraphObject = {
       id: "obj_3",
       name: "add_1",
@@ -605,27 +618,79 @@ describe("KNOWN GAPS pinned by 0018-REVIEW", () => {
       slots: {
         "in.a": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
         "in.b": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+        // out.result entirely absent.
       },
     };
     const objects = [valueObject("obj_1", "value_1", 3), missingDerivedSlot];
-
     const edges = deriveEdges(objects);
+    // The hazard D-018 exists to close: deriveEdges still emits two edges
+    // pointing at a slot that does not exist.
     expect(edges.filter((edge) => addressKey(edge.dependentSlot) === "obj_3::out.result")).toHaveLength(2);
 
-    expect(validateIntegrity(objects, edges)).toEqual({ ok: true }); // WRONG per D-018 — must reject
-    expect(deriveValidateAndEvaluate(objects).ok).toBe(true); // WRONG per D-018 — must reject
+    const result = validateIntegrity(objects, edges);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.out.result");
+    }
+    expect(deriveValidateAndEvaluate(objects).ok).toBe(false);
   });
 
-  it("D-018: accepts a setSlot that overwrites a DERIVED slot with a literal, freezing it forever", () => {
-    // §5.1: "`derived` is fixed by schema and can never be converted;
-    // attempting to `link` or `set` a derived slot is rejected." Rule 2 makes
-    // mutation.ts the only place that rejection can live — a command-layer
-    // check would be bypassed by every drag and every document load.
+  it("rejects a slot whose kind disagrees with its schema-declared position: non-derived at a derived path (D-018 part 2)", () => {
+    const objects: GraphObject[] = [
+      {
+        id: "obj_3",
+        name: "add_1",
+        type: "add",
+        slots: {
+          "in.a": { kind: "literal", value: 1 },
+          "in.b": { kind: "literal", value: 2 },
+          "out.result": { kind: "literal", value: 999 }, // wrong kind at a schema-declared derived path
+        },
+      },
+    ];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.out.result");
+    }
+  });
+
+  it("rejects a slot whose kind disagrees with its schema-declared position: derived at a non-derived path (D-018 part 2)", () => {
+    const objects: GraphObject[] = [
+      {
+        id: "obj_3",
+        name: "add_1",
+        type: "add",
+        slots: {
+          "in.a": { kind: "derived", value: null }, // wrong kind — a nonDerivedSlotPaths entry
+          "in.b": { kind: "literal", value: 2 },
+          "out.result": { kind: "derived", value: null },
+        },
+      },
+    ];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+    }
+  });
+
+  it("rejects, via the real mutate() entry point, a setSlot that would overwrite a DERIVED slot with a literal (D-018 part 2)", () => {
+    // §5.1: "derived is fixed by schema and can never be converted; attempting
+    // to link or set a derived slot is rejected." Rule 2 makes mutation.ts the
+    // only place that rejection can live.
     const objects = [
       valueObject("obj_1", "value_1", 3),
       valueObject("obj_2", "value_2", 4),
       addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
     ];
+    const snapshotBefore = JSON.parse(JSON.stringify(objects)) as unknown;
     const operation: Operation = {
       kind: "setSlot",
       address: addr("obj_3", "out", "result"),
@@ -634,31 +699,66 @@ describe("KNOWN GAPS pinned by 0018-REVIEW", () => {
 
     const result = mutate(objects, operation, []);
 
-    expect(result.ok).toBe(true); // WRONG per D-018 — must reject
-    if (result.ok) {
-      expect(result.objects.find((object) => object.id === "obj_3")?.slots["out.result"]).toEqual({
-        kind: "literal",
-        value: 999, // no longer derived from in.a/in.b at all, and nothing said so
-      });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.out.result");
     }
-  });
-
-  it("D-019: silently rewrites a committed literal Infinity to null on the NEXT, unrelated mutation", () => {
-    // Rule 2: a mutation "either fully commits or leaves prior state
-    // bit-for-bit untouched". Here the second mutation commits a change to a
-    // slot it never named, because step 1's JSON-round-trip clone cannot
-    // represent every member of `Value`'s own `number` arm.
-    const start = [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
-
-    const first = mutate(start, { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 1e999 } }, []);
-    expect(first.ok).toBe(true);
-    if (!first.ok) return;
-    expect(first.objects[0]?.slots["value"]).toEqual({ kind: "literal", value: Number.POSITIVE_INFINITY });
-
-    // A mutation naming only obj_2 — obj_1 is not mentioned anywhere in it.
-    const second = mutate(first.objects, { kind: "setSlot", address: addr("obj_2", "value"), slot: { kind: "literal", value: 7 } }, first.journal);
-    expect(second.ok).toBe(true);
-    if (!second.ok) return;
-    expect(second.objects[0]?.slots["value"]).toEqual({ kind: "literal", value: null }); // WRONG per D-019 — must still be Infinity
+    expect(objects).toEqual(snapshotBefore); // prior state unchanged (D-016)
   });
 });
+
+describe("mutate — D-019: the step-1 clone preserves every member of Value, not just what JSON can represent (0018-REVIEW-phase0)", () => {
+  it("commits NaN, +Infinity, -Infinity, null, a Point, a Point[], and an ErrorValue unchanged through an UNRELATED mutation", () => {
+    // One object holding a literal slot for every Value variant JSON cannot
+    // round-trip faithfully, plus null for completeness. 'value' schema-
+    // declares only its own "value" path (schema.ts) — every other key here
+    // is an extra literal slot, which validateIntegrity does not restrict
+    // (only formula/derived-kind slots are checked against the schema).
+    const fidelityObject: GraphObject = {
+      id: "obj_1",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: { kind: "literal", value: 1 },
+        nanSlot: { kind: "literal", value: NaN },
+        posInfSlot: { kind: "literal", value: Number.POSITIVE_INFINITY },
+        negInfSlot: { kind: "literal", value: Number.NEGATIVE_INFINITY },
+        nullSlot: { kind: "literal", value: null },
+        pointSlot: { kind: "literal", value: { x: 1, y: 2 } },
+        pointsSlot: {
+          kind: "literal",
+          value: [
+            { x: 1, y: 2 },
+            { x: 3, y: 4 },
+          ],
+        },
+        errorSlot: { kind: "literal", value: { error: "#REF", message: "boom" } },
+      },
+    };
+    const other = valueObject("obj_2", "value_2", 10);
+    // Names ONLY obj_2 — obj_1 does not appear anywhere in this operation,
+    // matching exactly the shape 0018-REVIEW-phase0 verified D-019 through.
+    const operation: Operation = { kind: "setSlot", address: addr("obj_2", "value"), slot: { kind: "literal", value: 20 } };
+
+    const result = mutate([fidelityObject, other], operation, []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const committed = result.objects.find((object) => object.id === "obj_1");
+    expect(committed?.slots.nanSlot).toEqual({ kind: "literal", value: NaN });
+    expect(Number.isNaN((committed?.slots.nanSlot as { readonly value: number } | undefined)?.value)).toBe(true);
+    expect(committed?.slots.posInfSlot).toEqual({ kind: "literal", value: Number.POSITIVE_INFINITY });
+    expect(committed?.slots.negInfSlot).toEqual({ kind: "literal", value: Number.NEGATIVE_INFINITY });
+    expect(committed?.slots.nullSlot).toEqual({ kind: "literal", value: null });
+    expect(committed?.slots.pointSlot).toEqual({ kind: "literal", value: { x: 1, y: 2 } });
+    expect(committed?.slots.pointsSlot).toEqual({
+      kind: "literal",
+      value: [
+        { x: 1, y: 2 },
+        { x: 3, y: 4 },
+      ],
+    });
+    expect(committed?.slots.errorSlot).toEqual({ kind: "literal", value: { error: "#REF", message: "boom" } });
+  });
+});
+

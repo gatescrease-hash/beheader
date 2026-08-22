@@ -214,6 +214,45 @@ describe("evaluate — a derived-kind slot with no matching schema entry", () =>
   });
 });
 
+describe("evaluate — L-13: a stale edge whose dependentSlot has no corresponding slot on the object", () => {
+  it("skips it rather than throwing, for the exact shape D-018 makes mutation.ts's validateIntegrity reject before this file ever sees it", () => {
+    // add_1 with no out.result slot at all — precisely what a §5.11 load
+    // produces before D-018's fix (0018-REVIEW-phase0), and precisely what
+    // mutation.ts's validateIntegrity now rejects before evaluate() is ever
+    // reached (see mutation.test.ts's D-018 tests). Pinned here directly,
+    // calling evaluate() straight past that gate with hand-built edges (this
+    // file does not import mutation.ts), so this defensive branch (0014-
+    // REVIEW-phase0 constraint 8, "pin L-13 once step 4 exists") stays
+    // covered even though the real §5.1 pipeline no longer reaches it.
+    const missingDerivedSlot: GraphObject = {
+      id: "obj_3",
+      name: "add_1",
+      type: "add",
+      slots: {
+        "in.a": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+        "in.b": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+        // out.result entirely absent.
+      },
+    };
+    const objects = [valueObject("obj_1", "value_1", 3), missingDerivedSlot];
+    // Both of add_1's dependency edges into out.result, exactly as
+    // mutation.ts's deriveEdges would still emit them (schema-driven,
+    // independent of whether the object actually carries the slot).
+    const edges: Edge[] = [
+      edge(addr("obj_1", "value"), addr("obj_3", "in", "a")),
+      edge(addr("obj_1", "value"), addr("obj_3", "in", "b")),
+      edge(addr("obj_3", "in", "a"), addr("obj_3", "out", "result")),
+      edge(addr("obj_3", "in", "b"), addr("obj_3", "out", "result")),
+    ];
+
+    expect(() => evaluate(objects, edges)).not.toThrow();
+    const result = evaluate(objects, edges);
+    // Rule 6 upheld even here: no slot was manufactured — add_1 still has
+    // exactly its original two slots.
+    expect(Object.keys(objectById(result, "obj_3").slots).sort()).toEqual(["in.a", "in.b"]);
+  });
+});
+
 describe("evaluate — addressKey consistency", () => {
   it("keys its internal bookkeeping the same way addressKey does, for every slot on every object", () => {
     // Not testing a public contract directly — this documents WHY eval.ts never

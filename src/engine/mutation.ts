@@ -1,30 +1,39 @@
 /**
  * mutation.ts — THE single transactional channel for state change (PROJECT_BRIEF
  * Rule 2). Edge derivation (§5.1 step 3, cycle 0013), integrity validation
- * (step 4, §5.1.1, cycle 0015), and their composition with the already-built
+ * (step 4, §5.1.1, cycle 0015), their composition with the already-built
  * `detectCycle` (step 5) and `evaluate` (step 7) into `deriveValidateAndEvaluate`
- * (cycle 0016) all exist already. As of THIS cycle, `mutate(objects, operation,
- * journal)` wraps that composition with the remaining steps — stage/clone
- * (step 1), apply one operation (step 2), discard-on-reject (step 6), and
- * commit + journal (step 8) — making this file's public surface the FULL
- * §5.1 mutation loop for the one operation kind built so far. See WHAT THIS IS.
+ * (cycle 0016), and `mutate(objects, operation, journal)` wrapping that
+ * composition with the remaining steps — stage/clone (step 1), apply one
+ * operation (step 2), discard-on-reject (step 6), and commit + journal
+ * (step 8, cycle 0017) — all exist already, making this file's public surface
+ * the FULL §5.1 mutation loop for the one operation kind built so far. THIS
+ * cycle (0019) closes three gaps 0018-REVIEW-phase0 found in that surface:
+ * D-018 (schema<->slot reconciliation was one-directional; `validateIntegrity`
+ * now checks both), D-019 (the step-1 clone was lossy for non-finite numbers;
+ * it is now a real recursive clone), and D-021 (`mutate` now REJECTS an
+ * operation naming a nonexistent object instead of a silent no-op). See
+ * WHAT THIS IS.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
  * rebuild the whole edge set rather than tracking which slots were affected.")
  * and step 4 / §5.1.1 ("Validate integrity. Reject if any formula references a
  * slot that does not exist, or if the mutation would delete a slot that still
- * has inbound dependents without repairing them."), plus **D-017 part 2**,
- * closed at cycle 0015 (see WHAT THIS IS, `validateIntegrity`); step 5
- * ("Validate acyclicity... reject on cycle, naming every slot in the cycle.")
- * and step 7 ("Evaluate...") composed at cycle 0016 in `deriveValidateAndEvaluate`.
- * THIS cycle additionally implements step 1 ("Stage. Deep-clone the current
- * document state."), step 2 ("Apply the mutation to the clone."), step 6 ("On
- * rejection: discard the clone entirely... Prior state is untouched."), and
- * step 8 ("Commit. Swap the clone in... append the mutation to the journal"),
- * plus Rule 2's journal requirement ("the mutation API MUST record an
- * append-only journal of committed mutations from day one") — see WHAT THIS IS,
- * `mutate`.
+ * has inbound dependents without repairing them."), plus **D-017 part 2**
+ * (closed cycle 0015) and **D-018** (both directions of the same
+ * reconciliation, closed THIS cycle — see WHAT THIS IS, `validateIntegrity`);
+ * step 5 ("Validate acyclicity... reject on cycle, naming every slot in the
+ * cycle.") and step 7 ("Evaluate...") composed at cycle 0016 in
+ * `deriveValidateAndEvaluate`; step 1 ("Stage. Deep-clone the current
+ * document state.") — now **D-019**-faithful, closed THIS cycle — step 2
+ * ("Apply the mutation to the clone."), step 6 ("On rejection: discard the
+ * clone entirely... Prior state is untouched."), and step 8 ("Commit. Swap
+ * the clone in... append the mutation to the journal"), plus Rule 2's journal
+ * requirement ("the mutation API MUST record an append-only journal of
+ * committed mutations from day one") and **D-021** (an operation naming a
+ * nonexistent object is rejected, not journalled as a no-op, closed THIS
+ * cycle) — see WHAT THIS IS, `mutate`.
  * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
  * trigger-3 (new engine file).
  * LAYER: engine (pure). May import: engine/* only.
@@ -102,10 +111,11 @@
  *     would never produce, but this function does not trust that.
  *
  * `validateIntegrity(objects, edges)` — §5.1 step 4 / §5.1.1, and where D-017
- * part 2 lands. Takes a candidate post-apply object list and its freshly
- * `deriveEdges`-derived edge set (step 2's "apply" and step 3 are NOT this
- * function's job — see NOT DONE HERE; it is handed the result), and rejects
- * with a human-readable message, or passes, in TWO checks, run in this order:
+ * part 2 AND D-018 both land. Takes a candidate post-apply object list and
+ * its freshly `deriveEdges`-derived edge set (step 2's "apply" and step 3 are
+ * NOT this function's job — see NOT DONE HERE; it is handed the result), and
+ * rejects with a human-readable message, or passes, in THREE checks, run in
+ * this order:
  *
  *   1. **D-017 part 2, first** (per 0014-REVIEW-phase0's own constraint: "the
  *      first thing step 4 must do"). For every object THAT HAS a schema entry,
@@ -119,42 +129,58 @@
  *      whose type has NO schema entry at all is skipped, not flagged — D-017's
  *      one permitted exception, because §6's build order guarantees such a
  *      type carries no formula slots yet.
- *   2. **Dangling references** (§5.1.1's stated wording: "any formula
+ *   2. **D-018, the OTHER direction** (`findSchemaSlotKindMismatches`,
+ *      0018-REVIEW-phase0 — closed THIS cycle, previously a disclosed KNOWN
+ *      GAP). D-017 above rejects a slot the object carries that its schema
+ *      does NOT declare; this rejects the reverse two mismatches: (a) a
+ *      schema-declared derived path that is missing its `derived`-kind slot
+ *      entirely — the exact shape a §5.11 load produces, since
+ *      `DerivedSlot.value` is never serialized — which is precisely what
+ *      makes `dependentSlot` dangling in check 3 below WITHOUT this check
+ *      catching it first; and (b) a slot whose actual kind disagrees with
+ *      its schema position at all (`derived` at a `nonDerivedSlotPaths` path,
+ *      or non-`derived` at a schema-declared derived path) — §5.1: "`derived`
+ *      is fixed by schema and can never be converted." Named via
+ *      `formatAddress` directly (`formatSchemaAddress` below): unlike D-017's
+ *      case, every path this check inspects comes FROM the schema, so a real
+ *      `Address` always exists — no `describeUndeclaredSlot`-style exception
+ *      needed here.
+ *   3. **Dangling references** (§5.1.1's stated wording: "any formula
  *      references a slot that does not exist"). For every edge, its
  *      `sourceSlot` must `resolveSlot` (`graph/node.ts`) against `objects`.
- *      `dependentSlot` is NOT checked, and that is a KNOWN GAP rather than a
- *      proof — see D-018. The guarantee holds for `deriveEdges`'s source 1 (a
- *      formula slot it looked up and found before emitting the edge) but NOT
- *      for its source 2: a derived slot's `dependentSlot` path comes from the
- *      SCHEMA, so an object missing its own declared derived slot yields an
- *      edge pointing at nothing and this check stays silent. This ONE check
- *      is both halves of §5.1.1's step-4 sentence at once: a plain bad
- *      reference (a formula typo'd at an object that never existed) and "the
- *      mutation would delete a slot that still has inbound dependents" are
- *      the SAME failure viewed from opposite ends of the same edge — deleting
- *      a slot that formulas elsewhere still reference makes exactly this
- *      check fail, with no separate before/after diff needed (Rule 5: recheck
- *      the whole graph, don't track what changed). §5.1.1 clause 1's own
- *      wording — "naming every dependent" — is why the message names the
- *      DEPENDENT side via `formatAddress`, never the missing source: the
- *      source's object may be gone, so there is nothing safe to format there,
- *      and D-015 forbids leaking its raw `objectId` into the message anyway.
+ *      `dependentSlot` is deliberately NOT checked here — checks 1 and 2
+ *      above are what make that safe: an edge's `dependentSlot` can only be
+ *      dangling via D-017's or D-018's own failure modes, both already
+ *      rejected earlier in this same call. This ONE check is both halves of
+ *      §5.1.1's step-4 sentence at once: a plain bad reference (a formula
+ *      typo'd at an object that never existed) and "the mutation would
+ *      delete a slot that still has inbound dependents" are the SAME failure
+ *      viewed from opposite ends of the same edge — deleting a slot that
+ *      formulas elsewhere still reference makes exactly this check fail,
+ *      with no separate before/after diff needed (Rule 5: recheck the whole
+ *      graph, don't track what changed). §5.1.1 clause 1's own wording —
+ *      "naming every dependent" — is why the message names the DEPENDENT
+ *      side via `formatAddress`, never the missing source: the source's
+ *      object may be gone, so there is nothing safe to format there, and
+ *      D-015 forbids leaking its raw `objectId` into the message anyway.
  *
  *   A genuinely new sub-problem D-017's check hits and D-010/D-015's existing
- *   guidance does not cover: naming an UNDECLARED slot (case 1) needs an
+ *   guidance does not cover: naming an UNDECLARED slot (check 1) needs an
  *   `Address` for `formatAddress`, but by definition no schema declares this
  *   slot's path — there is nothing to look up. `describeUndeclaredSlot` below
  *   is a deliberate, disclosed exception (see its own doc comment) rather than
  *   an application of the "invert `slotKey`" pattern this project has twice
  *   ruled out (D-010; STATUS's "never `key.split(\".\")`"): those rulings
  *   solved "I need a slot's path and something already declares it schema-
- *   side"; this is the one case where nothing does, by construction.
+ *   side"; this is the one case where nothing does, by construction. Check 2
+ *   has no such exception to make — see its own paragraph above.
  *
  * INVARIANTS UPHELD HERE (validateIntegrity)
  *   - Never throws, same as every other function in this module.
- *   - Runs both checks over the WHOLE graph from scratch, every call (Rule 5)
- *     — no diffing against a "previous" object list, matching `deriveEdges`,
- *     `detectCycle`, and `evaluate`'s own from-scratch discipline.
+ *   - Runs all three checks over the WHOLE graph from scratch, every call
+ *     (Rule 5) — no diffing against a "previous" object list, matching
+ *     `deriveEdges`, `detectCycle`, and `evaluate`'s own from-scratch
+ *     discipline.
  *   - Does not call `detectCycle` or `evaluate` itself — acyclicity (step 5)
  *     and evaluation (step 7) are separate, already-built steps this function
  *     does not duplicate or anticipate.
@@ -171,10 +197,10 @@
  *
  * INVARIANTS UPHELD HERE (deriveValidateAndEvaluate)
  *   - Runs the four steps in the fixed order §5.1 specifies and
- *     0014-REVIEW-phase0 requires: validateIntegrity's D-017 check MUST see
- *     the graph before detectCycle does, or a document whose only cycle runs
- *     through an undeclared slot gets a false "no cycle" pass instead of
- *     D-017's rejection (exactly the hazard D-017 exists to close).
+ *     0014-REVIEW-phase0 requires: validateIntegrity's D-017/D-018 checks
+ *     MUST see the graph before detectCycle does, or a document whose only
+ *     cycle runs through an undeclared or schema-mismatched slot gets a false
+ *     "no cycle" pass instead of the rejection those checks exist to give it.
  *   - Never mutates `objects`. Every step it calls is pure and returns new
  *     data; a rejection here means the candidate `objects` this function
  *     received are simply never returned as the `ok: true` arm's evaluated
@@ -184,18 +210,25 @@
  *
  * `mutate(objects, operation, journal)` — §5.1 steps 1, 2, 6, 8, wrapping
  * `deriveValidateAndEvaluate` (steps 3-5, 7). See its own doc comment for the
- * full sequence. One operation kind exists so far: `SetSlotOperation`
- * (`{ kind: "setSlot", address, slot }`), the minimal primitive underneath
- * what §5.10's `link`/`unlink`/`set` commands will eventually call — building
- * those commands themselves is Phase 3's job (§5.10), not this cycle's.
+ * full sequence, INCLUDING the D-021 target-existence check that now runs
+ * before step 1 even starts. One operation kind exists so far:
+ * `SetSlotOperation` (`{ kind: "setSlot", address, slot }`), the minimal
+ * primitive underneath what §5.10's `link`/`unlink`/`set` commands will
+ * eventually call — building those commands themselves is Phase 3's job
+ * (§5.10), not this cycle's.
  *
  * INVARIANTS UPHELD HERE (mutate)
+ *   - **D-021, closed THIS cycle**: an `Operation` whose `address.objectId`
+ *     names no object in `objects` is REJECTED before anything else runs —
+ *     never applied as a no-op and never journalled. See `mutate`'s own doc
+ *     comment for the message's D-015-respecting shape.
  *   - Implements Rule 5's staging mechanism literally: `cloneObjects` performs
- *     a real deep clone (JSON round-trip — see its own doc comment for why
- *     that is a legitimate clone here) before `applyOperation` ever runs, so
- *     "applying to the clone" (§5.1 step 2) never touches the caller's
- *     original `objects` reference even in principle, not merely by the
- *     accident of every downstream function already being pure.
+ *     a real recursive deep clone (D-019, closed THIS cycle — see its own
+ *     doc comment for why a JSON round-trip was not faithful enough) before
+ *     `applyOperation` ever runs, so "applying to the clone" (§5.1 step 2)
+ *     never touches the caller's original `objects` reference even in
+ *     principle, not merely by the accident of every downstream function
+ *     already being pure.
  *   - On rejection, returns `deriveValidateAndEvaluate`'s own `{ ok: false,
  *     message }` untouched (step 6: "discard the clone entirely... return a
  *     failure"). `objects` and `journal` are both simply never reassigned —
@@ -218,6 +251,11 @@
  *   - The batch mutation form (§5.1, required from day one, before any UI
  *     needs it) — applying N operations to ONE clone, validating and
  *     evaluating once. `mutate` here still applies exactly one `Operation`.
+ *     **D-020 (0018-REVIEW-phase0): this MUST land, as its own cycle, before
+ *     `document.ts` begins** — loading a document one operation at a time
+ *     makes every intermediate state of a load separately validated, and
+ *     intermediate load states are routinely invalid (object B not yet
+ *     created when object A's formula references it).
  *   - Any operation kind beyond `SetSlotOperation` (object creation/deletion,
  *     `explode`, vertex add/remove, table resize) — those belong to the
  *     phases that introduce the state they touch (Phase 2-6), same stance
@@ -233,7 +271,7 @@
  *   - Undo itself (only the journal DATA this stores it for, per Rule 2 and
  *     PROJECT_BRIEF §8's deferred list, which defers the undo/redo UI only).
  */
-import { formatAddress, isAddressError, type Address } from "./address.ts";
+import { findObjectById, formatAddress, isAddressError, type Address } from "./address.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/schema.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
@@ -322,6 +360,17 @@ export function validateIntegrity(objects: readonly GraphObject[], edges: readon
   const undeclaredSlotProblems = findUndeclaredFormulaOrDerivedSlots(objects);
   if (undeclaredSlotProblems.length > 0) {
     return { ok: false, message: undeclaredSlotProblems.join("; ") };
+  }
+
+  // D-018 — the OTHER direction of the same schema<->slot reconciliation:
+  // every schema-declared derived slot must actually be present and
+  // `derived`-kind, and no schema-declared non-derived path may hold a
+  // `derived`-kind slot. Run before the dangling-reference check for the same
+  // reason D-017's check does: both are about whether the graph `deriveEdges`
+  // produced can be trusted at all, which detectCycle/evaluate assume.
+  const schemaKindMismatchProblems = findSchemaSlotKindMismatches(objects);
+  if (schemaKindMismatchProblems.length > 0) {
+    return { ok: false, message: schemaKindMismatchProblems.join("; ") };
   }
 
   const danglingReferenceProblems = findDanglingReferences(objects, edges);
@@ -436,16 +485,46 @@ export interface SetSlotOperation {
 export type Operation = SetSlotOperation;
 
 /**
- * §5.1 step 1: "Stage. Deep-clone the current document state." A JSON
- * round-trip is a legitimate deep clone specifically BECAUSE graph state is
- * required to be plain and JSON-serializable (PROJECT_BRIEF §2: "No
- * closures, functions, class instances, or Maps of live objects stored
- * inside graph state") — the exact property §5.11's `document.ts` will rely
- * on for save/load. Never mutates `objects`; the clone shares no reference
- * with anything the caller holds.
+ * §5.1 step 1: "Stage. Deep-clone the current document state." A REAL
+ * recursive clone, not a JSON round-trip (D-019, 0018-REVIEW-phase0): JSON
+ * cannot represent `NaN`/`Infinity`/`-Infinity`, all three legal members of
+ * `graph/node.ts`'s `Value` union (its `number` arm) — the previous
+ * `JSON.parse(JSON.stringify(x))` clone silently turned every one of them
+ * into `null`, so an accepted mutation could commit a change to a slot its
+ * own operation never named (Rule 2's central promise, broken on the ACCEPT
+ * path — see D-019's own probe). Whether a non-finite number OUGHT to be
+ * legal document state at all is separate and unsettled — see Q-006 — but
+ * this function's job is narrower and binds regardless of how that lands:
+ * whatever `Value` a slot legally holds today, the clone MUST preserve it
+ * exactly. `structuredClone` remains unavailable (D-006: it is a DOM-lib
+ * global, excluded by `tsconfig.engine.json`). `deepClone` below is Rule 5's
+ * "dumbest correct implementation" written out by hand: walk arrays and
+ * plain objects, and return every other value completely unchanged — every
+ * `Value` member that is not a `Point`/`Point[]`/`ErrorValue` is a JS
+ * primitive already copied by value wherever it is read, so there is
+ * nothing to "clone" about a `number` (finite or not), `string`, `boolean`,
+ * or `null`; only the two composite shapes (`Point`, `ErrorValue`, and
+ * arrays of either) need real recursion. Never mutates `objects`; the clone
+ * shares no reference with anything the caller holds.
  */
+function deepClone<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClone(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === "object") {
+    const clone: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      clone[key] = deepClone((value as Record<string, unknown>)[key]);
+    }
+    return clone as T;
+  }
+  // Primitives are copied by value already: numbers (including NaN/+Infinity/
+  // -Infinity), strings, booleans, null, undefined. Nothing to do.
+  return value;
+}
+
 function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
-  return JSON.parse(JSON.stringify(objects)) as GraphObject[];
+  return deepClone(objects as GraphObject[]);
 }
 
 /**
@@ -457,14 +536,15 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * mutation is not even type-legal here without an unjustified cast).
  *
  * `setSlot`: replaces whatever is at `operation.address` with
- * `operation.slot` wholesale — no merge, no partial update. An address whose
- * `objectId` names no object in `objects` is a no-op (this function does not
- * reject; an operation referencing a missing object is trusted input from
- * whichever future command layer builds one — see the file header's NOT
- * DONE HERE). A dangling `operation.slot` (e.g. a formula whose reference
- * does not exist) is exactly what `validateIntegrity`'s dangling-reference
- * check (already composed into `deriveValidateAndEvaluate`, called right
- * after this) exists to catch — this function does not duplicate that check.
+ * `operation.slot` wholesale — no merge, no partial update. PRECONDITION,
+ * enforced by `mutate` before this is ever called (D-021, 0018-REVIEW-phase0):
+ * `operation.address.objectId` names a real object in `objects`. This
+ * function does not itself re-check that — see `mutate`'s own D-021 check,
+ * which is the only reason this map can assume exactly one object matches.
+ * A dangling `operation.slot` (e.g. a formula whose reference does not
+ * exist) is exactly what `validateIntegrity`'s dangling-reference check
+ * (already composed into `deriveValidateAndEvaluate`, called right after
+ * this) exists to catch — this function does not duplicate that check.
  */
 function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
   return objects.map((object) => {
@@ -504,12 +584,24 @@ export type MutationResult =
   | { readonly ok: false; readonly message: string };
 
 /**
- * §5.1's full mutation loop for the one `Operation` kind built so far: stage
- * (step 1, `cloneObjects`) → apply (step 2, `applyOperation`) → derive edges,
- * validate integrity, validate acyclicity, evaluate (steps 3-5 and 7,
- * `deriveValidateAndEvaluate`) → on rejection, discard the clone and return
- * the failure untouched (step 6) → on success, append to the journal and
- * return the new state (step 8).
+ * §5.1's full mutation loop for the one `Operation` kind built so far:
+ * reject an operation whose target does not exist (D-021, before anything
+ * else runs) → stage (step 1, `cloneObjects`) → apply (step 2,
+ * `applyOperation`) → derive edges, validate integrity, validate acyclicity,
+ * evaluate (steps 3-5 and 7, `deriveValidateAndEvaluate`) → on rejection,
+ * discard the clone and return the failure untouched (step 6) → on success,
+ * append to the journal and return the new state (step 8).
+ *
+ * The D-021 check (0018-REVIEW-phase0, answering cycle 0017's own question
+ * 2): an `Operation` whose `address.objectId` names no object in `objects`
+ * is REJECTED, never a silent no-op. Checked directly against the ORIGINAL
+ * `objects` — object identity cannot change between here and staging, so
+ * there is no need to clone first just to ask this. The message deliberately
+ * does not `formatAddress` the target (there is no object to resolve a name
+ * from) and deliberately does not print the raw `objectId` either (D-015's
+ * own stance, applied the same way `findDanglingReferences` already applies
+ * it to a missing SOURCE object) — it names only the slot PATH the operation
+ * would have touched.
  *
  * Why staging matters even though every function downstream is already pure
  * (so `objects` was never going to be mutated regardless): Rule 5 asks for
@@ -528,6 +620,13 @@ export function mutate(
   operation: Operation,
   journal: readonly MutationJournalEntry[],
 ): MutationResult {
+  if (findObjectById(operation.address.objectId, objects) === undefined) {
+    return {
+      ok: false,
+      message: `no object exists to apply this operation to — target slot "${slotKey(operation.address.path)}" names no real object (D-021)`,
+    };
+  }
+
   const staged = cloneObjects(objects);
   const candidate = applyOperation(staged, operation);
 
@@ -602,6 +701,73 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
  */
 function describeUndeclaredSlot(object: GraphObject, key: string): string {
   return `${object.name}.${key}`;
+}
+
+/**
+ * D-018 (0018-REVIEW-phase0): the schema<->slot reconciliation D-017 started
+ * is only complete in one direction there. This closes the other two:
+ *
+ *   1. Every schema-declared derived path MUST carry a slot that is present
+ *      AND `derived`-kind. An object missing its own declared derived slot
+ *      makes `deriveEdges` emit edges whose `dependentSlot` names nothing —
+ *      a dangling edge, §5.1.1's absolute invariant, and exactly the shape a
+ *      §5.11 load produces today (`DerivedSlot.value` is never serialized).
+ *   2. A slot at a schema-declared derived path that IS present but is not
+ *      `derived`-kind, or a slot at a `nonDerivedSlotPaths` path that IS
+ *      `derived`-kind, both violate §5.1's "`derived` is fixed by schema and
+ *      can never be converted."
+ *
+ * Named via `formatAddress` (D-015) — unlike `describeUndeclaredSlot` above,
+ * every path checked here comes directly from the SCHEMA itself, so a real
+ * `Address` always exists to format; there is no "nothing to look up" case
+ * the way there is for an undeclared slot.
+ */
+function findSchemaSlotKindMismatches(objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+
+  for (const object of objects) {
+    const schema = getObjectSchema(object.type);
+    if (schema === undefined) {
+      continue; // Same permitted exception as D-017 — see file header.
+    }
+
+    for (const derivedSlotEntry of schema.derivedSlots) {
+      const slot = object.slots[slotKey(derivedSlotEntry.path)];
+      if (slot !== undefined && slot.kind === "derived") {
+        continue; // Correctly present and correctly kinded.
+      }
+      const name = formatSchemaAddress({ objectId: object.id, path: derivedSlotEntry.path }, objects);
+      const reason =
+        slot === undefined
+          ? "is missing — deriveEdges still emits an edge into it, pointing at a slot that does not exist (D-018)"
+          : `is a "${slot.kind}" slot where its schema declares "derived" (D-018) — derived slots can never be converted (§5.1)`;
+      problems.push(`${name} ${reason}`);
+    }
+
+    for (const path of schema.nonDerivedSlotPaths) {
+      const slot = object.slots[slotKey(path)];
+      if (slot === undefined || slot.kind !== "derived") {
+        continue; // Absent (a separate, tolerated gap — see deriveEdges's header) or correctly non-derived.
+      }
+      const name = formatSchemaAddress({ objectId: object.id, path }, objects);
+      problems.push(`${name} is a "derived" slot at a path its schema declares non-derived (D-018) — derived slots can never be converted (§5.1)`);
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * Shared by `findSchemaSlotKindMismatches`'s two checks: formats a schema-
+ * declared `Address` via `formatAddress` (D-015 — never `addressKey`),
+ * falling back to the `AddressError`'s own message in the one case that
+ * cannot actually arise here (the object came from `objects` itself, so it
+ * always resolves) — matching this module's other formatting call sites'
+ * defensive handling rather than assuming it away.
+ */
+function formatSchemaAddress(address: Address, objects: readonly GraphObject[]): string {
+  const formatted = formatAddress(address, objects);
+  return isAddressError(formatted) ? formatted.message : formatted;
 }
 
 /**
