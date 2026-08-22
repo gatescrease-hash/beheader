@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "./address.ts";
+import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
 import type { GraphObject, Slot } from "./graph/node.ts";
@@ -179,5 +180,72 @@ describe("deriveEdges — a formula referencing an address with no corresponding
       sourceSlot: addr("obj_999", "value"),
       dependentSlot: addr("obj_3", "in", "a"),
     });
+  });
+});
+
+/**
+ * KNOWN GAP, pinned deliberately — added by reviewer at 0014-REVIEW-phase0.
+ *
+ * `deriveEdges` walks the SCHEMA's `nonDerivedSlotPaths`, while `evaluate`
+ * walks the OBJECT's own `Object.keys(object.slots)`. Where those two
+ * universes disagree, edges go missing silently. These tests assert the
+ * CURRENT behaviour rather than the desired one, so that the gap is executable
+ * instead of prose and so nobody closes it by accident without reading D-017.
+ *
+ * D-017 does NOT require `deriveEdges` to change. It requires step 4 (§5.1.1
+ * integrity validation, not built yet) to REJECT any object whose slot set
+ * disagrees with its schema, naming the offending slots. When that lands, these
+ * two tests should be replaced by a rejection test — not merely deleted.
+ */
+describe("deriveEdges — a formula slot the object carries but its schema does not declare (KNOWN GAP, D-017)", () => {
+  /** An `add` carrying an undeclared fourth slot `in.c` — schema declares only in.a/in.b. */
+  function addWithUndeclaredSlot(inCRef: Address): GraphObject {
+    return {
+      id: "obj_9",
+      name: "add_9",
+      type: "add",
+      slots: {
+        "in.a": { kind: "literal", value: 1 },
+        "in.b": { kind: "literal", value: 2 },
+        "out.result": { kind: "derived", value: null },
+        "in.c": { kind: "formula", ast: { type: "reference", address: inCRef }, value: null },
+      },
+    };
+  }
+
+  it("derives NO edge for it — the slot is evaluated by graph/eval.ts but never ordered by anything", () => {
+    const objects = [addWithUndeclaredSlot(addr("obj_1", "value")), valueObject("obj_1", "value_1", 42)];
+
+    // in.c reads obj_1.value, so a total edge derivation would emit
+    // obj_1.value -> obj_9.in.c. It does not appear.
+    expect(deriveEdges(objects)).not.toContainEqual({
+      sourceSlot: addr("obj_1", "value"),
+      dependentSlot: addr("obj_9", "in", "c"),
+    });
+  });
+
+  it("hides a REAL cycle from detectCycle, so step 5 would accept the document and step 7 would quietly write #REF", () => {
+    // The document genuinely cycles: in.c -> in.a -> out.result -> in.c.
+    // Only the last of those three edges runs through the undeclared slot, and
+    // dropping it is enough to make the whole cycle invisible.
+    const cyclic: GraphObject = {
+      id: "obj_9",
+      name: "add_9",
+      type: "add",
+      slots: {
+        "in.a": { kind: "formula", ast: { type: "reference", address: addr("obj_9", "in", "c") }, value: null },
+        "in.b": { kind: "literal", value: 2 },
+        "out.result": { kind: "derived", value: null },
+        "in.c": { kind: "formula", ast: { type: "reference", address: addr("obj_9", "out", "result") }, value: null },
+      },
+    };
+
+    const edges = deriveEdges([cyclic]);
+    expect(detectCycle(edges)).toEqual({ hasCycle: false });
+
+    // And this is why that matters: evaluation proceeds and produces plausible
+    // slot records carrying #REF, rather than the mutation being rejected.
+    const evaluated = evaluate([cyclic], edges)[0];
+    expect(evaluated?.slots["out.result"]).toMatchObject({ kind: "derived", value: { error: "#REF" } });
   });
 });

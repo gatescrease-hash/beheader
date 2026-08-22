@@ -437,3 +437,71 @@ Reconciliation required: none in code — the gap was closed by reviewer edit 1 
 0012-REVIEW-phase0, which adds the reverse-order fixture. Binding on every future cycle that
 claims a criterion, and most immediately on `mutation.ts` (cycle rejection with prior state
 provably unchanged) and `document.ts` (round-trips identically).
+
+---
+
+## D-017 — Edge derivation is narrower than the object's real slot set; step 4 MUST reject the disagreement
+Answers: (reviewer finding, cycle 0013)   Ruled: entry 0014-REVIEW-phase0   Binding on: `mutation.ts` step 4, `document.ts`, and every future schema entry
+
+PROJECT_BRIEF §5.1 step 3 says: "Re-derive ALL edges from stored formula ASTs and schema
+declarations." Cycle 0013's `deriveEdges` derives them from **schema declarations only** — it
+walks `ObjectSchema.nonDerivedSlotPaths` and emits a binding edge for each declared path that
+currently holds a `formula` slot. `graph/eval.ts`, by contrast, builds its slot universe from
+`Object.keys(object.slots)` — the object's ACTUAL slots. There are now two disagreeing answers
+to "which slots exist," and nothing reconciles them.
+
+**Where they disagree, edges vanish silently.** Verified by probe at 0014-REVIEW-phase0 on an
+`add` object carrying an undeclared fourth slot `in.c`:
+
+- `in.c` reading `obj_1.value` produced **no** `obj_1.value → obj_9.in.c` edge. `evaluate` still
+  evaluated `in.c` (it is in `object.slots`), so it got a value — but by declaration-order luck,
+  not because anything ordered it.
+- Worse, and this is the part that decides the ruling: a genuine three-slot cycle
+  `in.c → in.a → out.result → in.c` produced an edge set on which `detectCycle` returns
+  `{ hasCycle: false }`. Only one of the three edges runs through the undeclared slot, and
+  dropping it is enough to make the whole cycle invisible. **Step 5 would accept that document**,
+  and step 7 then quietly wrote `#REF` into all three slots.
+
+That is not a coverage gap. It is a soundness gap in the *input* to the cycle check, and it lands
+directly on Phase 0's acceptance clause 2 ("a cycle is rejected with the offending slots named").
+A correct `detectCycle` over an incomplete edge set is still a wrong answer, delivered
+confidently.
+
+**Ruling — two parts.**
+
+1. **`deriveEdges` is NOT required to change.** Its schema-driven approach is a legitimate answer
+   to a real problem (a formula slot's own `path` cannot be recovered from its `GraphObject.slots`
+   key — there is no sanctioned inverse of `slotKey`, D-010), and cycle 0013 reasoned that
+   trade-off out honestly and in the open. Widening the registry rather than inverting a key was
+   the right call at the time it was made.
+
+2. **Step 4 (§5.1.1 integrity validation) MUST make the disagreement LOUD.** Before step 5 runs,
+   the mutation loop MUST reject any object whose actual `formula`/`derived` slot set is not
+   fully covered by its schema's declarations, with a message naming every offending slot via
+   `formatAddress` (never `addressKey`, D-015). An object of a type with **no** schema entry at
+   all is the one permitted exception, and only because §6's build order guarantees it carries no
+   formula slots yet — when the first such type gains formula slots, this exception dies with it.
+   §5.1.1's stated invariant is "an edge must never point at a slot that no longer exists"; this
+   is its unstated mirror — **a slot that exists must never be missing its edges** — and the brief
+   is silent on it only because it never anticipated the two universes coming apart.
+
+**Why rule it now rather than when it bites.** It is already reachable. `document.ts` — the very
+next Phase 0 slice, and acceptance clause 4 — loads `GraphObject[]` from JSON, so an undeclared
+formula slot is one hand-edited file away from a document that passes every validation step and
+evaluates to nonsense. Ruling after `document.ts` exists means retrofitting a rejection path into
+a load path that already "works."
+
+**The Phase 4 half of this, recorded now so it is not rediscovered late.** `nonDerivedSlotPaths`
+is typed `readonly (readonly string[])[]` — a fixed list. A table's `cells.A1`…`cells.Z99` is a
+slot **FAMILY**, not a fixed list, and cannot be enumerated by it (this is the same limitation
+STATUS.md has carried as "the table/`cells` mapping in `address.ts` is still hardcoded", and
+D-005/D-009's unfinished business). So the mechanism as typed cannot cover the one object type
+the brief spends the most words on. That does not make it wrong for Phase 0 — it makes it a known
+temporary shape. **Do not extend `nonDerivedSlotPaths` to tables by adding entries.** Phase 4 must
+revisit the mechanism, and part 2's step-4 check is what will make the need announce itself
+loudly rather than as a table whose formulas mysteriously never recalculate.
+
+Reconciliation required: none in code this cycle. Two tests pinning the CURRENT behaviour were
+added by the reviewer at 0014-REVIEW-phase0 (`mutation.test.ts`, "KNOWN GAP, D-017") so the gap is
+executable rather than prose. When part 2 lands, those two tests are **replaced** by a rejection
+test, not deleted.

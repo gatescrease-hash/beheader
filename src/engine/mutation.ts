@@ -17,11 +17,28 @@
  *   scratch (Rule 5 — no incremental tracking), by walking two sources for
  *   every object, per §5.1:
  *
- *   1. Every `formula`-kind slot's stored AST. Phase 0's `FormulaAst` has
- *      exactly one variant (`ReferenceNode`, PROVISIONAL(Q-005)) — a binding —
- *      so "walking the AST" is just reading its one `address` field. That
- *      address becomes an edge's `sourceSlot`; the formula slot's OWN address
- *      becomes `dependentSlot`.
+ *   1. Every `formula`-kind slot AT A SCHEMA-DECLARED NON-DERIVED PATH — not,
+ *      as §5.1 step 3's own wording ("re-derive ALL edges from stored formula
+ *      ASTs") would have it, every formula slot the object actually carries.
+ *      Phase 0's `FormulaAst` has exactly one variant (`ReferenceNode`,
+ *      PROVISIONAL(Q-005)) — a binding — so "walking the AST" is just reading
+ *      its one `address` field. That address becomes an edge's `sourceSlot`;
+ *      the formula slot's OWN address becomes `dependentSlot`.
+ *
+ *      READ THAT NARROWING AS A HAZARD, NOT A DETAIL — see D-017. This
+ *      function's domain is the SCHEMA's slot set; `graph/eval.ts`'s domain is
+ *      the OBJECT's own `Object.keys(object.slots)`. Where the two disagree —
+ *      an object carrying a formula slot its schema does not declare — the
+ *      slot still gets evaluated, but it is never ordered and its edges never
+ *      exist. Verified by probe at 0014-REVIEW-phase0: a genuine three-slot
+ *      cycle running through one undeclared slot produces an edge set that
+ *      `detectCycle` reports `{ hasCycle: false }` on, so step 5 ACCEPTS the
+ *      document and step 7 then quietly fills all three slots with `#REF`.
+ *      Nothing in THIS file can detect that; making it loud is step 4's job
+ *      (§5.1.1), and D-017 requires it. Note also that `nonDerivedSlotPaths`
+ *      is a fixed list of paths and so cannot express a slot FAMILY (a table's
+ *      `cells.A1`…, D-005/D-009): Phase 4 must revisit this mechanism, not
+ *      merely add entries to it.
  *   2. Every schema-declared derived slot's dependencies, resolved via
  *      `primitives/schema.ts`'s `derivedSlotDependencyAddresses` (which is the
  *      ONLY place a dynamic dependency resolver may run, per that file's own
@@ -85,8 +102,10 @@ import type { Edge } from "./graph/edge.ts";
 import { slotKey, type GraphObject } from "./graph/node.ts";
 
 /**
- * Rebuilds the full `Edge[]` for `objects`, from every stored formula AST and
- * every schema-declared derived slot's dependencies (§5.1 step 3). See the
+ * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
+ * schema-declared non-derived path — NOT from every stored formula AST; see
+ * the header's hazard note and D-017 — and from every schema-declared derived
+ * slot's dependencies (§5.1 step 3). See the
  * file header for why this needs `primitives/schema.ts`'s
  * `nonDerivedSlotPaths` rather than reconstructing a formula slot's own
  * address from its `GraphObject.slots` key.

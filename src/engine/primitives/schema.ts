@@ -148,6 +148,14 @@ export interface DerivedSlotSchema {
  * address (see `mutation.ts`'s header for why that need can't be met any
  * other way). Object CREATION (a slot's default kind/value) is a separate,
  * NOT-YET-BUILT concern — see the file header's NOT DONE HERE.
+ *
+ * TWO LIMITS, BOTH RULED ON AT 0014-REVIEW-phase0 (D-017). First: this list is
+ * the ONLY thing `mutation.ts`'s `deriveEdges` walks, so a formula slot an
+ * object actually carries but this list omits gets no edges at all — silently,
+ * including a cycle running through it. Second: being a fixed list of paths, it
+ * cannot express a slot FAMILY (a table's `cells.A1`…, D-005/D-009). Do not
+ * extend it for tables without reading D-017 first — the answer there is likely
+ * a different mechanism, not more entries in this one.
  */
 export interface ObjectSchema {
   readonly type: ObjectType;
