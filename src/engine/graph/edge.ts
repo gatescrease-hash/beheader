@@ -21,9 +21,11 @@
  * NOT DONE HERE
  *   - Deriving edges from formula ASTs (formula/deps.ts's extractDependencies) or
  *     from a schema's declared derived-slot dependencies (primitives/schema.ts).
- *   - Detecting cycles over a set of edges (graph/cycles.ts).
- *   - Topological evaluation order from a set of edges (graph/eval.ts).
+ *   - Detecting cycles over a set of edges (graph/cycles.ts) or computing a
+ *     topological evaluation order from one (graph/eval.ts) — both consume
+ *     `addressKey` below, but the traversal algorithms themselves live there.
  */
+import { slotKey } from "./node.ts";
 import type { Address } from "../address.ts";
 
 /**
@@ -35,4 +37,29 @@ import type { Address } from "../address.ts";
 export interface Edge {
   readonly sourceSlot: Address;
   readonly dependentSlot: Address;
+}
+
+/**
+ * Canonicalizes a full `Address` (an object id plus a stored path) into a
+ * single string, so the graph-traversal algorithms built over `Edge[]`
+ * (`graph/cycles.ts`'s DFS, `graph/eval.ts`'s topological sort) can use it as a
+ * `Map`/`Set` key instead of comparing `Address` objects by structural
+ * equality on every lookup.
+ *
+ * This is the document-wide counterpart to `node.ts`'s `slotKey`, which only
+ * canonicalizes a path WITHIN one already-known object (for `GraphObject.slots`
+ * lookups). `addressKey` adds the `objectId`, because a graph algorithm walking
+ * the whole document must distinguish, say, two different tables' `cells.A1`.
+ * Declared once, here, beside `Edge` — the type both traversal modules consume
+ * — rather than being reimplemented in each of them (same reasoning as D-014's
+ * `isErrorValue`: the second copy is not hypothetical, `eval.ts` needs this
+ * exact key next).
+ *
+ * Safe for the same reason `slotKey` is: object IDs are `obj_<n>` (D-002) and
+ * cannot contain "::", and `slotKey`'s own output cannot either (its segments
+ * come from `address.ts`'s `PATH_SEGMENT_PATTERN`), so no two distinct
+ * Addresses can collide on this key.
+ */
+export function addressKey(address: Address): string {
+  return `${address.objectId}::${slotKey(address.path)}`;
 }
