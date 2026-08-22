@@ -49,7 +49,9 @@
  *     implementation (Rule 5).
  *   - Visits every node that appears in at least one edge (a full DFS over the
  *     whole graph, §5.1), including nodes in components unrelated to the
- *     first one visited. A node that appears in NO edge cannot participate in
+ *     first one visited — unless a cycle is found first, at which point it
+ *     returns immediately and the remaining nodes go unvisited. Finding ONE
+ *     cycle is all a rejection needs, so there is nothing left to look for. A node that appears in NO edge cannot participate in
  *     a cycle and is correctly never visited (it was never added to the
  *     adjacency built below).
  *

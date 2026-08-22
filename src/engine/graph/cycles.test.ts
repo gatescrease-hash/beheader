@@ -154,4 +154,25 @@ describe("detectCycle — cyclic graphs report hasCycle: true, naming every slot
       expect(result.cycle.map(addressKey)).not.toContain(addressKey(d));
     }
   });
+
+  it("names ONLY the slots in the cycle, never the upstream slots the DFS walked through to reach it", () => {
+    // root -> tail -> a -> b -> a. The cycle is a <-> b; root and tail feed
+    // into it but are NOT in it. §5.10 requires a rejection message to name
+    // "the specific slots involved", and §6's acceptance criterion is that the
+    // OFFENDING slots are named — naming an innocent upstream slot tells the
+    // user a slot is in a cycle when it is not. This defends the one
+    // non-obvious line in detectCycle: the reported cycle is sliced from where
+    // the gray node ENTERED the stack, not from the stack's root.
+    const root = slot("obj_1", "value");
+    const tail = slot("obj_2", "in", "a");
+    const a = slot("obj_3", "in", "a");
+    const b = slot("obj_4", "out", "result");
+    const edges = [edge(root, tail), edge(tail, a), edge(a, b), edge(b, a)];
+    const result = detectCycle(edges);
+    expect(result.hasCycle).toBe(true);
+    if (result.hasCycle) {
+      expect(isGenuineCycle(result.cycle, edges)).toBe(true);
+      expect(new Set(result.cycle.map(addressKey))).toEqual(new Set([addressKey(a), addressKey(b)]));
+    }
+  });
 });

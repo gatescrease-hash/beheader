@@ -344,3 +344,47 @@ compute function (geometry's `centroid`, text's `resolvedContent`, script's `out
 in Phase 3 and Phase 5. The `value !== null` guard is the specific thing worth writing once:
 `typeof null === "object"` and `null` is a member of `Value`, so a copy that omits it reports
 `null` as an error.
+
+---
+
+## D-015 — `addressKey` is an internal Map/Set key and MUST NEVER reach the user; user-facing slot names come from `formatAddress`
+Answers: (reviewer finding, cycle 0009)   Ruled: entry 0010-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: `graph/edge.ts`'s `addressKey` exists for exactly one purpose — keying `Map`s and
+`Set`s inside graph-traversal code (`graph/cycles.ts`'s DFS, `graph/eval.ts`'s topological
+sort). Its output MUST NEVER appear in any string a user reads: rejection messages, command-
+line echoes, an `ErrorValue`'s `message` field, or the `refs` listing. Every user-facing
+mention of a slot MUST be produced by `address.ts`'s `formatAddress`, which resolves the
+object's **current** name against the document's object list.
+
+The inverse binds equally: `formatAddress`'s output MUST NEVER be used as a `Map`/`Set` key
+or as a slot-identity comparison, because it is name-based and therefore changes under
+`rename`.
+
+Concretely, and this is the case that forced the ruling: `mutation.ts`'s acyclicity rejection
+(§5.1 step 5) receives `detectCycle`'s `readonly Address[]` and MUST map every element through
+`formatAddress`, producing `table_x.A1` — never `obj_3::cells.A1`. The Phase 0 acceptance test
+for cycle rejection MUST assert the object's **current name** appears in the message, not
+merely that each slot is mentioned somehow.
+
+Rationale, two independent arguments:
+
+1. **It leaks the identity layer into the naming layer at the worst possible moment.** Rule 3's
+   two-layer scheme exists precisely so that users read names and storage holds IDs. §5.10 calls
+   the rejection message "the entire debugging story for now." A message naming `obj_3` hands
+   the user a token they have never seen on screen and cannot type into a command — and after a
+   `rename`, it is the one string in the system that does not follow.
+2. **It is the path of least resistance, which is why it needs a rule rather than a hope.**
+   `mutation.ts` will already import `Edge` from `graph/edge.ts`; `detectCycle` deliberately
+   returns bare `Address`es with no name attached (correctly — it has no object list);
+   `addressKey` is therefore one import away and returns a plausible-looking string. Reaching
+   `formatAddress` instead requires threading the object list down to the message site, which is
+   strictly more work. A cheaper wrong path that produces output nobody notices is wrong until a
+   rename happens is the exact shape of defect this log exists to prevent.
+
+Ruled now, before `mutation.ts` exists, for the same timing reason as D-006 and D-013: the
+constraint costs nothing to build in and requires rework once a message-formatting path has been
+written against the looser habit.
+
+Reconciliation required: none. `addressKey` has exactly two consumers today, both internal —
+`graph/cycles.ts`'s adjacency/colour maps and `graph/cycles.test.ts`'s assertions.
