@@ -225,3 +225,50 @@ describe("evaluate — addressKey consistency", () => {
     expect(`${object.id}::${key}`).toBe(addressKey(addr("obj_7", "value")));
   });
 });
+
+/**
+ * The same `add` fixture as `addObject`, with its slot record declared
+ * BACKWARDS (`out.result`, then `in.b`, then `in.a`). Object key order is
+ * insertion order in JS, and `evaluate` builds its slot universe by iterating
+ * `Object.keys(object.slots)` — so this is the fixture that can tell
+ * "ordered by the edges" apart from "ordered by however the input happened to
+ * be written." Added by reviewer at 0012-REVIEW-phase0.
+ */
+function addObjectDeclaredBackwards(id: string, name: string, aRef: Address, bRef: Address): GraphObject {
+  const slots: Record<string, Slot> = {
+    "out.result": { kind: "derived", value: null },
+    "in.b": { kind: "formula", ast: { type: "reference", address: bRef }, value: null },
+    "in.a": { kind: "formula", ast: { type: "reference", address: aRef }, value: null },
+  };
+  return { id, name, type: "add", slots };
+}
+
+describe("evaluate — the evaluation ORDER comes from the edges, not from the input's own order", () => {
+  it("propagates correctly with every object AND every slot declared in reverse dependency order (§6: 'in correct topological order')", () => {
+    // The same two-object chain as the derived-slot test above, written
+    // backwards in both dimensions: the most-dependent object first, and
+    // `out.result` declared before the `in.*` slots it reads. The input
+    // order is therefore not itself a valid evaluation order — its very first
+    // slot, `add_2.out.result`, reads two slots that come later — so each
+    // value asserted below is produced by the topological sort or not at all.
+    // That is what makes this test, and not the ones above, the one that
+    // fails if the sort is removed.
+    const objects = [
+      addObjectDeclaredBackwards("obj_5", "add_2", addr("obj_3", "out", "result"), addr("obj_4", "value")),
+      valueObject("obj_4", "value_3", 1),
+      addObjectDeclaredBackwards("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+      valueObject("obj_2", "value_2", 4),
+      valueObject("obj_1", "value_1", 3),
+    ];
+    const edges = [
+      ...addObjectEdges("obj_3", addr("obj_1", "value"), addr("obj_2", "value")),
+      ...addObjectEdges("obj_5", addr("obj_3", "out", "result"), addr("obj_4", "value")),
+    ];
+
+    const result = evaluate(objects, edges);
+
+    expect(objectById(result, "obj_3").slots["out.result"]).toEqual({ kind: "derived", value: 7 });
+    expect(objectById(result, "obj_5").slots["in.a"]).toMatchObject({ kind: "formula", value: 7 });
+    expect(objectById(result, "obj_5").slots["out.result"]).toEqual({ kind: "derived", value: 8 });
+  });
+});

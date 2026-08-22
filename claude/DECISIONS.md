@@ -388,3 +388,52 @@ written against the looser habit.
 
 Reconciliation required: none. `addressKey` has exactly two consumers today, both internal —
 `graph/cycles.ts`'s adjacency/colour maps and `graph/cycles.test.ts`'s assertions.
+
+---
+
+## D-016 — An acceptance-criterion claim MUST be backed by a mutation check; an ORDER is only demonstrated by a fixture whose own order is wrong
+Answers: (reviewer finding, cycle 0011)   Ruled: entry 0012-REVIEW-phase0   Binding on: all future cycles
+
+Ruling, two parts, both mandatory:
+
+1. **Mutation-check every acceptance-criterion claim.** Before reporting any PROJECT_BRIEF §6
+   acceptance criterion — or any sub-clause of one — as PASSING, the implementer MUST neutralise
+   the line or lines that implement it, re-run the suite, and confirm that a **named** test
+   fails. Paste that output into the log entry beside the claim, exactly as cycle 0011 already
+   did voluntarily for its D-013 test. If no test fails, the criterion is **NOT demonstrated**
+   and MUST be reported `NOT YET` no matter how many tests cover the surrounding area.
+
+2. **A criterion about ORDER needs a fixture whose declared order is not already correct.** Where
+   the behaviour under test is an ordering, the demonstrating fixture MUST be written in an order
+   that is *not* a valid evaluation order — objects declared after their dependents, slots
+   declared before the slots they read. A fixture written in dependency order cannot tell a real
+   topological sort apart from no sort at all, because both produce the same answer on it.
+
+Rationale: this is not hypothetical, and it is not a stylistic preference about test coverage.
+Verified by probe during this review: `graph/eval.ts`'s topological sort was replaced with
+`[...nodesByKey.keys()]` — the raw declaration order, no sort of any kind — and the full suite
+passed **107/107**. Every fixture in `eval.test.ts` happened to declare its objects and its slots
+in dependency order already, so the module's entire reason for existing was unpinned while nine
+tests reported it working. Cycle 0011 nevertheless reported the §6 clause "propagate in correct
+topological order *including through derived slots*" as PASSING and cited those tests.
+
+PROCESS_BRIEF §9 already forbids claiming an acceptance criterion passes without an executable
+test demonstrating it, and §12.1 already requires criteria be expressed as executable tests. The
+gap this closes is narrower and is the one that actually bites: a test can *cover* a behaviour,
+*pass*, and still not *demonstrate* it, and reading the test cannot reliably tell you which — the
+implementer of 0011 read theirs and concluded, in good faith, that it did. Only running the
+mutation distinguishes the two, it costs one command, and it is the same check that found the
+identical failure one cycle earlier (0010-REVIEW §6, `cycles.ts`'s `stack.slice(cycleStart)`,
+also 97/97 green under mutation). Two consecutive cycles have now had their single most
+load-bearing line left unpinned by a suite that looked thorough. That is a process gap, not two
+coincidences, so it is ruled rather than fixed twice.
+
+Part 2 exists because part 1 alone is a check the implementer runs *after* writing the fixture,
+and the cheapest fixture to write is almost always the one in dependency order — the same
+accidental uniformity D-008 and 0010-REVIEW §6 both named. Writing the fixture backwards is the
+half of the guarantee that holds when someone forgets to run the mutation.
+
+Reconciliation required: none in code — the gap was closed by reviewer edit 1 at
+0012-REVIEW-phase0, which adds the reverse-order fixture. Binding on every future cycle that
+claims a criterion, and most immediately on `mutation.ts` (cycle rejection with prior state
+provably unchanged) and `document.ts` (round-trips identically).

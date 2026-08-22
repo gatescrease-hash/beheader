@@ -64,8 +64,15 @@
  *   - Assumes ACYCLIC input and does not re-check. `mutation.ts` runs
  *     `detectCycle` before ever calling this (step 5 before step 7); adding a
  *     defensive cycle check here would duplicate that work for no reason.
- *     If `edges` does describe a cycle, the DFS below recurses forever on the
- *     back-edge — which is exactly why step 5 must come first.
+ *     Note how this fails if step 5 is ever skipped, because it is NOT the
+ *     loud failure it looks like: `visit` marks a node visited BEFORE it
+ *     recurses, so a back-edge returns immediately rather than looping. The
+ *     pass therefore COMPLETES on cyclic input and simply emits an order that
+ *     violates some edge — the slots in the cycle read values that are not
+ *     there yet and quietly become `#REF` (verified by probe at
+ *     0012-REVIEW-phase0). That is the same "flaky reactivity" class of bug
+ *     D-013 and PROCESS_BRIEF §9 exist to prevent, and it is why step 5 is
+ *     load-bearing here rather than merely conventional.
  *
  * NOT DONE HERE
  *   - Deriving the Edge[] (mutation.ts step 3) or detecting cycles
@@ -127,7 +134,9 @@ export function evaluate(objects: readonly GraphObject[], edges: readonly Edge[]
   // only after every node reachable FROM it (its dependents) already has —
   // reversing therefore puts every sourceSlot before every dependentSlot it
   // feeds, which is exactly evaluation order. Assumes acyclic input (see file
-  // header) — a back-edge here would recurse forever.
+  // header): a back-edge does not hang here, it returns early and silently
+  // leaves an order that violates that edge — mutation.ts step 5 is what
+  // guarantees there is none.
   const visited = new Set<string>();
   const postorder: string[] = [];
   function visit(nodeKey: string): void {
