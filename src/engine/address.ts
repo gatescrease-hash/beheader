@@ -51,16 +51,20 @@
  *   - Dependency extraction, cycle detection, mutation (formula/deps.ts,
  *     graph/cycles.ts, mutation.ts).
  */
+import { type ObjectType, TABLE_TYPE } from "./graph/node.ts";
 
 /**
  * The minimal shape address resolution needs from an object: its ID, current name,
  * and type. `type` was added under D-005 — resolving a table's bare cell reference
- * to its stored `cells.*` path requires knowing the object is a table.
+ * to its stored `cells.*` path requires knowing the object is a table. `type` is
+ * `ObjectType`, not bare `string` (D-009, 0004-REVIEW-phase0) — `graph/node.ts`'s
+ * `GraphObject` structurally satisfies this interface, so a document's real object
+ * list can be passed here directly with no adapter.
  */
 export interface AddressableObject {
   readonly id: string;
   readonly name: string;
-  readonly type: string;
+  readonly type: ObjectType;
 }
 
 /**
@@ -73,10 +77,11 @@ export interface Address {
 }
 
 /**
- * The failure shape for parseAddress / formatAddress. Matches the `#REF` arm of the
- * engine's ErrorValue union (§5.1) — an address that cannot be resolved is exactly
- * the situation `#REF` exists to represent. This is a plain data value, not a thrown
- * exception: the evaluation loop must never unwind on a broken reference (§5.1).
+ * The failure shape for parseAddress / formatAddress: the `#REF` arm of
+ * `graph/node.ts`'s `ErrorValue` union (§5.1) — an address that cannot be resolved
+ * is exactly the situation `#REF` exists to represent. This is a plain data value,
+ * not a thrown exception: the evaluation loop must never unwind on a broken
+ * reference (§5.1).
  */
 export interface AddressError {
   readonly error: "#REF";
@@ -202,13 +207,8 @@ export function generateDefaultName(typePrefix: string, objects: readonly Addres
   }
 }
 
-/**
- * The one object type (so far) whose stored slot path differs from what the user
- * types. §5.4: "each cell is a slot" under the table's `cells` family; §5.2's
- * address table and §5.1's slot list both show `table_x.A1` stored as
- * `["cells", "A1"]`. See D-005 and the file header's WHAT THIS IS.
- */
-const TABLE_TYPE = "table";
+// TABLE_TYPE ("table") is imported from graph/node.ts, not redeclared here — the
+// object type vocabulary is defined exactly once, per D-009 (0004-REVIEW-phase0).
 const TABLE_CELL_PATH_PREFIX = "cells";
 
 /**
@@ -235,7 +235,7 @@ const CELL_REFERENCE_PATTERN = /^[A-Z]+[0-9]+$/;
  * declares. A table path that is already 2+ segments is left alone, so a user typing
  * the stored form directly (`table_x.cells.A1`) is not double-prefixed.
  */
-function toStoredPath(type: string, surfacePath: readonly string[]): readonly string[] {
+function toStoredPath(type: ObjectType, surfacePath: readonly string[]): readonly string[] {
   const onlySegment = surfacePath.length === 1 ? surfacePath[0] : undefined;
   if (type === TABLE_TYPE && onlySegment !== undefined && CELL_REFERENCE_PATTERN.test(onlySegment)) {
     return [TABLE_CELL_PATH_PREFIX, onlySegment];
@@ -253,7 +253,7 @@ function toStoredPath(type: string, surfacePath: readonly string[]): readonly st
  * added: stripping `["cells","rows"]` would print `table_x.rows`, which re-parses to
  * `["rows"]` — a different slot than the one printed.
  */
-function toSurfacePath(type: string, storedPath: readonly string[]): readonly string[] {
+function toSurfacePath(type: ObjectType, storedPath: readonly string[]): readonly string[] {
   if (type !== TABLE_TYPE || storedPath.length !== 2 || storedPath[0] !== TABLE_CELL_PATH_PREFIX) {
     return storedPath;
   }

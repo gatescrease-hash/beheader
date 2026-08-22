@@ -8,7 +8,46 @@ provisional choice if one exists (and tag it `// PROVISIONAL(Q-NNN)` at every af
 site), stop the cycle if the choice is not reversible. Answered questions are marked
 `ANSWERED → D-NNN` in place here and are never deleted.
 
-Next free ID: **Q-005**
+Next free ID: **Q-006**
+
+---
+
+## Q-005 — What does `formula/ast.ts` contain before Phase 1 builds the real grammar?
+Raised: entry 0005 (implementer)   Brief section: §5.1, §5.3, §6 (Phase 0)   Status: OPEN
+Blocks: nothing further this cycle — a provisional choice was taken. Revisit when Phase 1
+(formula engine) begins.
+
+Ambiguity: Phase 0's `graph/*` data model needs a `FormulaSlot` to hold *something* — its
+formula's AST — but `formula/ast.ts` (and the rest of `formula/*`) is explicitly Phase 1
+(§6's build order: `formula/*` comes after `graph/*`/`mutation.ts`/`document.ts`). The brief
+doesn't say what, if anything, Phase 0 should assume the AST shape is. What Phase 0's own test
+fixture actually needs is narrow: the `add` object's "two formula input slots" (§6) are
+**bindings** — §5.1 defines a binding as "just the degenerate formula `= other.slot`" — not
+arbitrary arithmetic. So the graph mechanism can be exercised with a minimal AST that
+represents only a bare reference.
+
+Options:
+  (a) Define `FormulaAst` now as a one-variant discriminated union (`ReferenceNode` only,
+      `{ type: "reference", address: Address }`) in `formula/ast.ts`, documented as a Phase 0
+      stand-in that Phase 1 *widens* (adds `BinaryOp`/`Literal`/`FunctionCall`/... variants to
+      the union) rather than replaces.
+  (b) Give `FormulaSlot.ast` an opaque/unknown type in Phase 0 and defer any real shape to
+      Phase 1, with `graph/eval.ts` unable to do anything with formula slots until then.
+  (c) Skip formula slots entirely in Phase 0's graph model; add the `formula` slot kind only
+      when Phase 1 lands.
+
+My recommendation: (a). (b) makes `FormulaSlot` nearly useless for the eval/mutation cycles
+that come next in Phase 0 and pushes the same decision one cycle later, unresolved. (c)
+contradicts §5.1, which specifies `formula` as one of exactly three slot kinds from the start,
+and the brief's own Phase 0 fixture explicitly requires formula slots (the `add` object's
+inputs). (a) is minimal, grounded directly in §5.1's own definition of what a binding is (not
+an invented grammar), and it composes forward — a union gains variants, it doesn't get
+restructured.
+
+Reversible? Yes. Widening a discriminated union is additive; nothing downstream needs to
+change shape when Phase 1 adds more `FormulaAst` variants, only when/if it ever needed to
+*remove or restructure* `ReferenceNode`, which nothing in §5.3's grammar suggests.
+Provisional choice taken: yes, (a). Tagged at: `src/engine/formula/ast.ts`.
 
 ---
 

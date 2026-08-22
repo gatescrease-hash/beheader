@@ -18,10 +18,13 @@ import {
   isValidName,
   parseAddress,
 } from "./address.ts";
+import type { ObjectType } from "./graph/node.ts";
 
 // `type` defaults to "polygon" — an arbitrary non-table type — for every test that
 // isn't specifically exercising the table/cells path mapping (D-005).
-function objects(...entries: Array<[id: string, name: string, type?: string]>): AddressableObject[] {
+function objects(
+  ...entries: Array<[id: string, name: string, type?: ObjectType]>
+): AddressableObject[] {
   return entries.map(([id, name, type = "polygon"]) => ({ id, name, type }));
 }
 
