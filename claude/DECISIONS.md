@@ -173,3 +173,47 @@ Rationale: three independent arguments, all pointing the same way.
 
 Reconciliation required: none — Q-003 was correctly escalated rather than guessed, and no
 `PROVISIONAL(Q-003)` tags exist.
+
+---
+
+## D-008 — A surface→stored path mapping keys on the slot's FORM, never on "this type plus one segment"
+Answers: (reviewer finding, cycle 0003)   Ruled: entry 0004-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: where a surface path segment is shorthand for a longer stored path (D-005), the
+mapping MUST be triggered by matching the *form* of the shorthand, never by a structural
+proxy such as "the object is a table and the path has exactly one segment." Concretely, the
+table cell mapping fires only when the single segment matches the A1 form
+(`/^[A-Z]+[0-9]+$/`, §5.4's "A1-style addressing"), not for any single segment.
+
+The inverse direction is bound by the same rule: `toSurfacePath` may strip a prefix only when
+`toStoredPath` could have added it. Stripping `["cells","rows"]` to print `table_x.rows` would
+name a *different* slot than the one being printed, which silently breaks the round-trip
+guarantee D-005 §2 requires.
+
+Rationale: keying on the structural proxy makes the shorthand swallow the type's entire
+single-segment namespace. Verified by probe during this review: under the proxy rule,
+`table_x.rows`, `table_x.opacity`, `table_x.typo` and even `table_x.cells` all resolved to
+phantom `cells.<name>` slots that no schema declares. Tables demonstrably gain non-cell slots
+(`table x=0 y=0 rows=8 cols=8` in §5.10 implies at least `origin.x`/`origin.y`), so this would
+have become a live defect at Phase 2 rather than staying latent. Rule 3 says get addressing
+right early; this is the second subtle addressing error found in the same file, and both were
+of the same kind — a rule that looked right on the specified examples and was wrong on the
+unspecified ones. **Test the unspecified cases, not just the brief's examples.**
+
+---
+
+## D-009 — Object type strings are settled in `graph/node.ts`; `address.ts` imports, never duplicates
+Answers: implementer question 3, cycle 0003   Ruled: entry 0004-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: the vocabulary of object type strings (`"table"`, `"polygon"`, `"circle"`,
+`"polyline"`, `"rect"`, `"text"`, `"image"`, `"script"`, …) is defined once, in
+`graph/node.ts` (or `primitives/schema.ts` if the schema registry ends up owning it), as a
+union type — not as bare `string`. `address.ts`'s `TABLE_TYPE` constant MUST then be replaced
+by a reference to that shared definition rather than keeping its own string literal. Until
+that module exists, `address.ts`'s local constant stands and the type strings appearing in
+tests are illustrative only.
+
+Rationale: `AddressableObject.type` is currently `string`, so a typo (`"tabel"`) silently
+disables the D-005 mapping with no error anywhere. A union type makes that a compile error.
+The constant is duplicated in exactly one place today, which is the cheapest possible moment
+to rule that it must not be duplicated in two.

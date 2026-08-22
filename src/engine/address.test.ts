@@ -149,6 +149,36 @@ describe("parseAddress", () => {
     expect(parseAddress("polygon_1.radius", docObjects)).toEqual({ objectId: "obj_7", path: ["radius"] });
   });
 
+  // D-008 (reviewer edit at 0004-REVIEW-phase0). The cells-prefix mapping keys on the
+  // A1 *form*, not merely on "table + one segment" — otherwise every future scalar
+  // table slot would be swallowed into a phantom cells.<name> slot no schema declares.
+  it.each(["rows", "cols", "opacity", "cells", "typo"])(
+    "does not treat the non-A1-form table path %s as a cell reference",
+    (segment) => {
+      const docObjects = objects(["obj_3", "table_x", "table"]);
+      expect(parseAddress(`table_x.${segment}`, docObjects)).toEqual({
+        objectId: "obj_3",
+        path: [segment],
+      });
+    },
+  );
+
+  // Q-004 pins the current behaviour, not the eventual one: lowercase refs are
+  // deliberately NOT mapped, so that adding lowercase acceptance in Phase 2 is
+  // additive rather than a migration of already-stored lowercase cell slots.
+  it("does not map a lowercase cell ref, pending Q-004 on case normalisation", () => {
+    const docObjects = objects(["obj_3", "table_x", "table"]);
+    expect(parseAddress("table_x.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["a1"] });
+  });
+
+  it("maps a multi-letter, multi-digit cell ref such as AB12", () => {
+    const docObjects = objects(["obj_3", "table_x", "table"]);
+    expect(parseAddress("table_x.AB12", docObjects)).toEqual({
+      objectId: "obj_3",
+      path: ["cells", "AB12"],
+    });
+  });
+
   it("accepts a numeric path segment, for per-vertex slots like vertex.0.x (§5.5)", () => {
     const docObjects = objects(["obj_5", "polyline_1"]);
     expect(parseAddress("polyline_1.vertex.0.x", docObjects)).toEqual({
@@ -264,5 +294,15 @@ describe("parseAddress / formatAddress round-trip every address form in §5.2's 
     const parsed = parseOk(surface, docObjects);
     expect(parsed).toEqual(expected);
     expect(formatAddress(parsed, docObjects)).toBe(surface);
+  });
+
+  // D-008: toStoredPath/toSurfacePath must be inverses over the whole domain, not
+  // just over §5.2's canonical forms. A stored table path whose second segment is
+  // not an A1-form ref must NOT have its prefix stripped — printing `table_x.rows`
+  // for stored ["cells","rows"] would name a different slot than the one printed.
+  it("does not strip a cells prefix whose second segment is not an A1-form ref", () => {
+    expect(formatAddress({ objectId: "obj_3", path: ["cells", "rows"] }, docObjects)).toBe(
+      "table_x.cells.rows",
+    );
   });
 });

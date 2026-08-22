@@ -212,15 +212,33 @@ const TABLE_TYPE = "table";
 const TABLE_CELL_PATH_PREFIX = "cells";
 
 /**
+ * The A1-style cell-reference form (§5.4: "A1-style addressing scoped to the table"):
+ * column letters followed by a row number.
+ *
+ * Uppercase only, deliberately (D-008). Matching case-insensitively here without also
+ * normalising would store `table_x.a1` and `table_x.A1` as two DIFFERENT slots for
+ * what the user sees as one cell. Normalisation is a table-primitive decision, not an
+ * addressing one, so it is deferred to Phase 2 as Q-004. Uppercase-only is the
+ * forward-safe choice: every ref the brief writes is uppercase, so adding lowercase
+ * acceptance later is purely additive and migrates no stored data.
+ */
+const CELL_REFERENCE_PATTERN = /^[A-Z]+[0-9]+$/;
+
+/**
  * Maps a user-typed path to the path a slot is actually stored under (D-005).
- * Identity for every type except `table`, where a single bare segment (`A1`) is
- * shorthand for a `cells.*` slot. A table path that already has 2+ segments is left
- * alone — this covers the (unspecified but harmless) case of a user typing the
- * stored form directly, e.g. `table_x.cells.A1`, without double-prefixing it.
+ * Identity for every type except `table`, where a single segment in A1 form (`A1`)
+ * is shorthand for a `cells.*` slot.
+ *
+ * The A1-form test matters (D-008): keying on "table + exactly one segment" instead
+ * would swallow every future scalar table slot — `table_x.rows`, `table_x.opacity`,
+ * even `table_x.cells` itself — into a phantom `cells.<name>` slot that no schema
+ * declares. A table path that is already 2+ segments is left alone, so a user typing
+ * the stored form directly (`table_x.cells.A1`) is not double-prefixed.
  */
 function toStoredPath(type: string, surfacePath: readonly string[]): readonly string[] {
-  if (type === TABLE_TYPE && surfacePath.length === 1) {
-    return [TABLE_CELL_PATH_PREFIX, ...surfacePath];
+  const onlySegment = surfacePath.length === 1 ? surfacePath[0] : undefined;
+  if (type === TABLE_TYPE && onlySegment !== undefined && CELL_REFERENCE_PATTERN.test(onlySegment)) {
+    return [TABLE_CELL_PATH_PREFIX, onlySegment];
   }
   return surfacePath;
 }
@@ -229,15 +247,21 @@ function toStoredPath(type: string, surfacePath: readonly string[]): readonly st
  * The exact inverse of toStoredPath: strips the `cells` prefix a table's stored
  * path carries, so formatAddress prints the short form the user actually typed
  * (`table_x.A1`, never `table_x.cells.A1`). Identity for every other case.
+ *
+ * The A1-form test is what makes "exact inverse" literally true rather than
+ * approximately true (D-008). It only strips a prefix that toStoredPath could have
+ * added: stripping `["cells","rows"]` would print `table_x.rows`, which re-parses to
+ * `["rows"]` — a different slot than the one printed.
  */
 function toSurfacePath(type: string, storedPath: readonly string[]): readonly string[] {
-  if (type === TABLE_TYPE && storedPath.length === 2 && storedPath[0] === TABLE_CELL_PATH_PREFIX) {
-    const cellRef = storedPath[1];
-    if (cellRef !== undefined) {
-      return [cellRef];
-    }
+  if (type !== TABLE_TYPE || storedPath.length !== 2 || storedPath[0] !== TABLE_CELL_PATH_PREFIX) {
+    return storedPath;
   }
-  return storedPath;
+  const cellRef = storedPath[1];
+  if (cellRef === undefined || !CELL_REFERENCE_PATTERN.test(cellRef)) {
+    return storedPath;
+  }
+  return [cellRef];
 }
 
 /**

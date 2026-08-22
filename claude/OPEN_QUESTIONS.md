@@ -8,7 +8,40 @@ provisional choice if one exists (and tag it `// PROVISIONAL(Q-NNN)` at every af
 site), stop the cycle if the choice is not reversible. Answered questions are marked
 `ANSWERED → D-NNN` in place here and are never deleted.
 
-Next free ID: **Q-004**
+Next free ID: **Q-005**
+
+---
+
+## Q-004 — Are lowercase cell references accepted, and if so are they normalised?
+Raised: entry 0004-REVIEW-phase0 (reviewer)   Brief section: §5.4, §5.2   Status: OPEN
+Blocks: Phase 2 (table primitive). Not needed before then.
+
+Ambiguity: §5.4 specifies "A1-style addressing scoped to the table" and every cell reference
+the brief writes is uppercase (`A1`, `B2`, `C3`, `A1:B4`). It does not say whether a user may
+type `table_x.a1`, and §5.2's case-insensitivity rule is stated for *object names*, not for
+path segments. Spreadsheets conventionally accept lowercase and normalise it to uppercase.
+
+The trap: accepting lowercase *without* normalising stores `cells.a1` and `cells.A1` as two
+distinct graph slots for what the user sees as one cell — two sources of truth for one value,
+which §5.1's single-source-of-truth model does not tolerate.
+
+Options:
+  (a) Uppercase only. `table_x.a1` is not a cell reference and fails slot validation later.
+  (b) Accept both, normalise to uppercase at parse time. One stored slot per cell.
+  (c) Accept both, store as written. **Rejected outright** — this is the two-slots bug above.
+
+My recommendation: (b) eventually, and it is what a user will expect. But it is a
+table-primitive decision (it belongs with cell-reference parsing generally, including ranges
+like `a1:b4`), not an addressing one, so Phase 2 should settle it holistically rather than
+`address.ts` committing to it now.
+
+Reversible? Yes, and deliberately made so. **Current behaviour is (a)** — see D-008. That was
+chosen precisely because it is the forward-safe interim: every ref the brief writes is
+uppercase, so moving to (b) later is purely additive and migrates no already-stored data,
+whereas (c) would require rewriting stored slot paths.
+Provisional choice taken: (a), pinned by test rather than by a `PROVISIONAL` tag —
+`address.test.ts::does not map a lowercase cell ref, pending Q-004 on case normalisation`.
+Tagged at: `src/engine/address.ts` (`CELL_REFERENCE_PATTERN` doc comment).
 
 ---
 
