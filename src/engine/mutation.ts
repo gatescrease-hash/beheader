@@ -1,12 +1,16 @@
 /**
  * mutation.ts — THE single transactional channel for state change (PROJECT_BRIEF
- * Rule 2). This cycle builds exactly one piece of it: edge derivation (§5.1
- * mutation-loop step 3), deliberately split out from the full 8-step loop —
- * see WHAT THIS IS.
+ * Rule 2). Two pieces exist so far: edge derivation (§5.1 mutation-loop step
+ * 3, cycle 0013) and, as of this cycle, integrity validation (step 4, §5.1.1).
+ * Both are deliberately split out from the full 8-step loop — see WHAT THIS IS.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
- * rebuild the whole edge set rather than tracking which slots were affected.").
+ * rebuild the whole edge set rather than tracking which slots were affected.")
+ * and step 4 / §5.1.1 ("Validate integrity. Reject if any formula references a
+ * slot that does not exist, or if the mutation would delete a slot that still
+ * has inbound dependents without repairing them."), plus **D-017 part 2**,
+ * which this cycle exists to close (see WHAT THIS IS, `validateIntegrity`).
  * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
  * trigger-3 (new engine file).
  * LAYER: engine (pure). May import: engine/* only.
@@ -83,23 +87,82 @@
  *     blindly — a document mutation.ts's own future object-creation step
  *     would never produce, but this function does not trust that.
  *
+ * `validateIntegrity(objects, edges)` — §5.1 step 4 / §5.1.1, and where D-017
+ * part 2 lands. Takes a candidate post-apply object list and its freshly
+ * `deriveEdges`-derived edge set (step 2's "apply" and step 3 are NOT this
+ * function's job — see NOT DONE HERE; it is handed the result), and rejects
+ * with a human-readable message, or passes, in TWO checks, run in this order:
+ *
+ *   1. **D-017 part 2, first** (per 0014-REVIEW-phase0's own constraint: "the
+ *      first thing step 4 must do"). For every object THAT HAS a schema entry,
+ *      every slot currently `formula` or `derived` kind must have a key
+ *      matching one of that schema's declared paths
+ *      (`nonDerivedSlotPaths`/`derivedSlots`, both re-derived via `slotKey` —
+ *      never compared by inverting the OBJECT's key, same discipline as
+ *      `deriveEdges` itself). A mismatch means `deriveEdges` silently dropped
+ *      this slot's edges (D-017's own finding) — reject before `detectCycle`
+ *      ever runs on a graph that cannot be trusted to be total. An object
+ *      whose type has NO schema entry at all is skipped, not flagged — D-017's
+ *      one permitted exception, because §6's build order guarantees such a
+ *      type carries no formula slots yet.
+ *   2. **Dangling references** (§5.1.1's stated wording: "any formula
+ *      references a slot that does not exist"). For every edge, its
+ *      `sourceSlot` must `resolveSlot` (`graph/node.ts`) against `objects`;
+ *      `dependentSlot` never needs checking here because `deriveEdges` only
+ *      ever builds one from a real, currently-iterated object. This ONE check
+ *      is both halves of §5.1.1's step-4 sentence at once: a plain bad
+ *      reference (a formula typo'd at an object that never existed) and "the
+ *      mutation would delete a slot that still has inbound dependents" are
+ *      the SAME failure viewed from opposite ends of the same edge — deleting
+ *      a slot that formulas elsewhere still reference makes exactly this
+ *      check fail, with no separate before/after diff needed (Rule 5: recheck
+ *      the whole graph, don't track what changed). §5.1.1 clause 1's own
+ *      wording — "naming every dependent" — is why the message names the
+ *      DEPENDENT side via `formatAddress`, never the missing source: the
+ *      source's object may be gone, so there is nothing safe to format there,
+ *      and D-015 forbids leaking its raw `objectId` into the message anyway.
+ *
+ *   A genuinely new sub-problem D-017's check hits and D-010/D-015's existing
+ *   guidance does not cover: naming an UNDECLARED slot (case 1) needs an
+ *   `Address` for `formatAddress`, but by definition no schema declares this
+ *   slot's path — there is nothing to look up. `describeUndeclaredSlot` below
+ *   is a deliberate, disclosed exception (see its own doc comment) rather than
+ *   an application of the "invert `slotKey`" pattern this project has twice
+ *   ruled out (D-010; STATUS's "never `key.split(\".\")`"): those rulings
+ *   solved "I need a slot's path and something already declares it schema-
+ *   side"; this is the one case where nothing does, by construction.
+ *
+ * INVARIANTS UPHELD HERE (validateIntegrity)
+ *   - Never throws, same as every other function in this module.
+ *   - Runs both checks over the WHOLE graph from scratch, every call (Rule 5)
+ *     — no diffing against a "previous" object list, matching `deriveEdges`,
+ *     `detectCycle`, and `evaluate`'s own from-scratch discipline.
+ *   - Does not call `detectCycle` or `evaluate` itself — acyclicity (step 5)
+ *     and evaluation (step 7) are separate, already-built steps this function
+ *     does not duplicate or anticipate.
+ *
  * NOT DONE HERE (the rest of `mutation.ts`, later cycles)
- *   - Stage (clone), apply an operation, validate integrity (§5.1.1 —
- *     dangling-edge rejection), validate acyclicity (`graph/cycles.ts`,
+ *   - Stage (clone), apply an operation, validate acyclicity (`graph/cycles.ts`,
  *     already built — reject and format via `address.ts`'s `formatAddress`,
  *     NEVER `addressKey`, per D-015), evaluate (`graph/eval.ts`, already
- *     built), commit + journal. All of §5.1's steps 1-2 and 4-8.
+ *     built), commit + journal. All of §5.1's steps 1-2 and 5-8.
  *   - The batch mutation form (§5.1, required from day one).
  *   - Any operation shape (`setLiteral`, `link`, object creation/deletion) —
- *     this cycle derives edges from whatever `GraphObject[]` it is handed; it
- *     does not produce one.
+ *     this file only derives edges and validates whatever `GraphObject[]` it
+ *     is handed; it does not produce or apply one.
+ *   - The slot-deletion REPAIR path (§5.1.1's second legal option, rewriting
+ *     inbound references to `#REF`) — Phase 0 has no type that uses it (only
+ *     table row/column deletion does, Phase 2/4), so `validateIntegrity`'s
+ *     dangling check always takes the Reject branch. Nothing here decides
+ *     between the two; that belongs to whichever future operation needs it.
  *   - Range expansion (`A1:B4` → concrete cell dependencies, §5.3) and
  *     reference adjustment on table resize (§5.4) — both Phase 2/4 concerns,
  *     irrelevant while `formula/ast.ts` has only `ReferenceNode`.
  */
+import { formatAddress, isAddressError, type Address } from "./address.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/schema.ts";
-import type { Edge } from "./graph/edge.ts";
-import { slotKey, type GraphObject } from "./graph/node.ts";
+import { addressKey, type Edge } from "./graph/edge.ts";
+import { resolveSlot, slotKey, type GraphObject } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -162,4 +225,142 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
   }
 
   return edges;
+}
+
+/**
+ * The result of `validateIntegrity` (§5.1 step 4 / §5.1.1). `ok: false` means
+ * reject the mutation outright — the caller (a later cycle's full loop)
+ * discards the clone entirely (§5.1 step 6) rather than proceeding to step 5.
+ */
+export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false; readonly message: string };
+
+/**
+ * §5.1 step 4 / §5.1.1 — see the file header's `validateIntegrity` section
+ * for the two checks, their order, and why D-017's undeclared-slot check must
+ * run before the dangling-reference check. Never throws.
+ *
+ * `edges` MUST already be `deriveEdges(objects)` for the SAME `objects` — this
+ * function does not re-derive them; it only validates what it is handed.
+ */
+export function validateIntegrity(objects: readonly GraphObject[], edges: readonly Edge[]): IntegrityCheckResult {
+  const undeclaredSlotProblems = findUndeclaredFormulaOrDerivedSlots(objects);
+  if (undeclaredSlotProblems.length > 0) {
+    return { ok: false, message: undeclaredSlotProblems.join("; ") };
+  }
+
+  const danglingReferenceProblems = findDanglingReferences(objects, edges);
+  if (danglingReferenceProblems.length > 0) {
+    return { ok: false, message: danglingReferenceProblems.join("; ") };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * D-017 part 2: every `formula`/`derived`-kind slot an object ACTUALLY carries
+ * must match one of its schema's declared paths. A type with no schema entry
+ * at all is skipped, not flagged — see the file header's "one permitted
+ * exception" note. `literal`-kind slots are not checked: an undeclared literal
+ * has no inbound edges either way (§5.1's slot-kind table), so it cannot cause
+ * the silent edge-derivation gap D-017 is about.
+ */
+function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+
+  for (const object of objects) {
+    const schema = getObjectSchema(object.type);
+    if (schema === undefined) {
+      continue; // D-017's one permitted exception — see file header.
+    }
+
+    // Re-derive the declared KEY set from the schema's declared PATHS via
+    // slotKey — never the reverse (D-010) — mirroring exactly how
+    // `deriveEdges` above already re-derives `slotKey(path)` from each
+    // `nonDerivedSlotPaths` entry rather than inverting anything.
+    const declaredKeys = new Set<string>([
+      ...schema.nonDerivedSlotPaths.map((path) => slotKey(path)),
+      ...schema.derivedSlots.map((entry) => slotKey(entry.path)),
+    ]);
+
+    for (const key of Object.keys(object.slots)) {
+      const slot = object.slots[key];
+      if (slot === undefined) {
+        continue; // noUncheckedIndexedAccess artifact only — key came from Object.keys of this same record.
+      }
+      if ((slot.kind === "formula" || slot.kind === "derived") && !declaredKeys.has(key)) {
+        problems.push(
+          `${describeUndeclaredSlot(object, key)} is a "${slot.kind}" slot that object type ` +
+            `"${object.type}"'s schema does not declare (D-017) — its edges were silently omitted`,
+        );
+      }
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * Names a slot that has NO schema-declared path — see the file header's
+ * discussion of why this is a deliberate, disclosed exception rather than the
+ * "invert `slotKey`" pattern D-010/STATUS rule out elsewhere. Produces the
+ * EXACT SAME string `formatAddress` would for every schema-registered type
+ * today (`value`/`add`): neither is a table, and `address.ts`'s
+ * `toSurfacePath` is the identity for every non-table type, so
+ * `formatAddress`'s `[name, ...path].join(".")` collapses to exactly
+ * `name + "." + slotKey(path)` — i.e. `name + "." + key`. This stops being
+ * exact only for a type using D-005's surface/stored mapping (a table); D-017
+ * already forbids extending `nonDerivedSlotPaths` to tables for the same
+ * underlying reason, so that combination cannot arise before Phase 4 revisits
+ * the whole mechanism.
+ */
+function describeUndeclaredSlot(object: GraphObject, key: string): string {
+  return `${object.name}.${key}`;
+}
+
+/**
+ * §5.1.1: "any formula references a slot that does not exist." Checks every
+ * edge's `sourceSlot` against `resolveSlot` (`graph/node.ts`) — `dependentSlot`
+ * never needs the same check here, because `deriveEdges` only ever builds one
+ * from a real, currently-iterated object (see that function above).
+ *
+ * Also covers §5.1.1's other clause ("the mutation would delete a slot that
+ * still has inbound dependents without repairing them") for free: deleting a
+ * slot that some formula elsewhere still references makes that formula's edge
+ * fail this exact check, with no separate before/after diff needed (Rule 5).
+ *
+ * Groups by the missing source so an object with several formulas dangling at
+ * the SAME missing slot gets one problem naming every dependent, not one line
+ * per edge repeating the same missing target.
+ */
+function findDanglingReferences(objects: readonly GraphObject[], edges: readonly Edge[]): readonly string[] {
+  const dependentsByMissingSource = new Map<string, Address[]>();
+
+  for (const edge of edges) {
+    if (resolveSlot(edge.sourceSlot, objects) !== undefined) {
+      continue; // resolves fine — nothing wrong with this edge.
+    }
+    const key = addressKey(edge.sourceSlot);
+    const existing = dependentsByMissingSource.get(key);
+    if (existing === undefined) {
+      dependentsByMissingSource.set(key, [edge.dependentSlot]);
+    } else {
+      existing.push(edge.dependentSlot);
+    }
+  }
+
+  const problems: string[] = [];
+  for (const dependents of dependentsByMissingSource.values()) {
+    // §5.1.1 clause 1's own wording: "naming every dependent" — never the
+    // missing source itself. The source's object may not exist at all (D-015
+    // forbids leaking its raw objectId into a message, and there is nothing
+    // else safe to format), whereas every dependentSlot here names a slot on
+    // an object that, by construction, still exists.
+    const names = dependents.map((address) => {
+      const formatted = formatAddress(address, objects);
+      return isAddressError(formatted) ? formatted.message : formatted;
+    });
+    const verb = names.length === 1 ? "references" : "reference";
+    problems.push(`${names.join(", ")} ${verb} a slot that does not exist`);
+  }
+  return problems;
 }

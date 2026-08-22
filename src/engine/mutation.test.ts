@@ -12,7 +12,7 @@ import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
 import type { GraphObject, Slot } from "./graph/node.ts";
-import { deriveEdges } from "./mutation.ts";
+import { deriveEdges, validateIntegrity } from "./mutation.ts";
 
 /** Matches graph/eval.test.ts's / graph/cycles.test.ts's own shorthand. */
 function addr(objectId: string, ...path: readonly string[]): Address {
@@ -184,50 +184,56 @@ describe("deriveEdges — a formula referencing an address with no corresponding
 });
 
 /**
- * KNOWN GAP, pinned deliberately — added by reviewer at 0014-REVIEW-phase0.
- *
- * `deriveEdges` walks the SCHEMA's `nonDerivedSlotPaths`, while `evaluate`
- * walks the OBJECT's own `Object.keys(object.slots)`. Where those two
- * universes disagree, edges go missing silently. These tests assert the
- * CURRENT behaviour rather than the desired one, so that the gap is executable
- * instead of prose and so nobody closes it by accident without reading D-017.
- *
- * D-017 does NOT require `deriveEdges` to change. It requires step 4 (§5.1.1
- * integrity validation, not built yet) to REJECT any object whose slot set
- * disagrees with its schema, naming the offending slots. When that lands, these
- * two tests should be replaced by a rejection test — not merely deleted.
+ * An `add` carrying an undeclared fourth slot `in.c` — schema declares only
+ * in.a/in.b. Shared by the tests below (`deriveEdges`'s still-current gap, and
+ * `validateIntegrity`'s D-017 rejection of it).
  */
-describe("deriveEdges — a formula slot the object carries but its schema does not declare (KNOWN GAP, D-017)", () => {
-  /** An `add` carrying an undeclared fourth slot `in.c` — schema declares only in.a/in.b. */
-  function addWithUndeclaredSlot(inCRef: Address): GraphObject {
-    return {
-      id: "obj_9",
-      name: "add_9",
-      type: "add",
-      slots: {
-        "in.a": { kind: "literal", value: 1 },
-        "in.b": { kind: "literal", value: 2 },
-        "out.result": { kind: "derived", value: null },
-        "in.c": { kind: "formula", ast: { type: "reference", address: inCRef }, value: null },
-      },
-    };
-  }
+function addWithUndeclaredSlot(inCRef: Address): GraphObject {
+  return {
+    id: "obj_9",
+    name: "add_9",
+    type: "add",
+    slots: {
+      "in.a": { kind: "literal", value: 1 },
+      "in.b": { kind: "literal", value: 2 },
+      "out.result": { kind: "derived", value: null },
+      "in.c": { kind: "formula", ast: { type: "reference", address: inCRef }, value: null },
+    },
+  };
+}
 
-  it("derives NO edge for it — the slot is evaluated by graph/eval.ts but never ordered by anything", () => {
+describe("deriveEdges — a formula slot the object carries but its schema does not declare (D-017)", () => {
+  it("still derives NO edge for it — deriveEdges itself is unchanged by D-017 part 2, see mutation.ts's header", () => {
     const objects = [addWithUndeclaredSlot(addr("obj_1", "value")), valueObject("obj_1", "value_1", 42)];
 
     // in.c reads obj_1.value, so a total edge derivation would emit
-    // obj_1.value -> obj_9.in.c. It does not appear.
+    // obj_1.value -> obj_9.in.c. It does not appear — D-017 leaves deriveEdges
+    // alone and puts the obligation on validateIntegrity instead (below).
     expect(deriveEdges(objects)).not.toContainEqual({
       sourceSlot: addr("obj_1", "value"),
       dependentSlot: addr("obj_9", "in", "c"),
     });
   });
+});
 
-  it("hides a REAL cycle from detectCycle, so step 5 would accept the document and step 7 would quietly write #REF", () => {
-    // The document genuinely cycles: in.c -> in.a -> out.result -> in.c.
-    // Only the last of those three edges runs through the undeclared slot, and
-    // dropping it is enough to make the whole cycle invisible.
+describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot is rejected", () => {
+  it("rejects an object carrying a formula slot its own schema does not declare, naming it", () => {
+    const objects = [addWithUndeclaredSlot(addr("obj_1", "value")), valueObject("obj_1", "value_1", 42)];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_9.in.c");
+    }
+  });
+
+  it("was previously a KNOWN GAP (0014-REVIEW-phase0): the same cyclic document that hid a real cycle from detectCycle is now rejected before detectCycle is ever reached", () => {
+    // The document genuinely cycles: in.c -> in.a -> out.result -> in.c. Only
+    // the last of those three edges runs through the undeclared slot, and
+    // dropping it was enough to make the whole cycle invisible to detectCycle
+    // (still true below — that is WHY step 4 must run first, per D-017).
     const cyclic: GraphObject = {
       id: "obj_9",
       name: "add_9",
@@ -239,13 +245,98 @@ describe("deriveEdges — a formula slot the object carries but its schema does 
         "in.c": { kind: "formula", ast: { type: "reference", address: addr("obj_9", "out", "result") }, value: null },
       },
     };
-
     const edges = deriveEdges([cyclic]);
+
+    // Confirms the hazard is still live at the detectCycle layer — nothing
+    // about that function changed, and nothing should.
     expect(detectCycle(edges)).toEqual({ hasCycle: false });
 
-    // And this is why that matters: evaluation proceeds and produces plausible
-    // slot records carrying #REF, rather than the mutation being rejected.
-    const evaluated = evaluate([cyclic], edges)[0];
-    expect(evaluated?.slots["out.result"]).toMatchObject({ kind: "derived", value: { error: "#REF" } });
+    // But the mutation loop never reaches detectCycle with this document:
+    // validateIntegrity rejects it first.
+    const result = validateIntegrity([cyclic], edges);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_9.in.c");
+    }
+  });
+
+  it("does not flag an object whose type has no schema entry at all (D-017's one permitted exception)", () => {
+    const noSchemaYet: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: { radius: { kind: "literal", value: 5 } },
+    };
+    expect(validateIntegrity([noSchemaYet], deriveEdges([noSchemaYet]))).toEqual({ ok: true });
+  });
+});
+
+describe("validateIntegrity — §5.1.1: a formula referencing a slot that does not exist", () => {
+  it("rejects a formula whose reference resolves to no object at all, naming the DEPENDENT slot", () => {
+    const objects = [
+      valueObject("obj_2", "value_2", 5),
+      addObject("obj_3", "add_1", addr("obj_999", "value"), addr("obj_2", "value")),
+    ];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a"); // the referencing slot, not the missing obj_999
+      expect(result.message).not.toContain("obj_999"); // D-015: never leak a raw internal id
+    }
+  });
+
+  it("rejects a formula referencing a real object's slot that does not exist on it", () => {
+    const objects = [
+      valueObject("obj_2", "value_2", 5),
+      addObject("obj_3", "add_1", addr("obj_2", "nonexistent_slot"), addr("obj_2", "value")),
+    ];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+    }
+  });
+
+  it("passes PROJECT_BRIEF §6's well-formed value/add fixture", () => {
+    const objects = [
+      valueObject("obj_1", "value_1", 10),
+      valueObject("obj_2", "value_2", 5),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    expect(validateIntegrity(objects, deriveEdges(objects))).toEqual({ ok: true });
+  });
+
+  it("runs the D-017 check before the dangling-reference check, on a document with both problems", () => {
+    // add_9 has BOTH an undeclared slot (in.c) AND, separately, add_1's in.a
+    // dangles at a nonexistent object. Only the D-017 problem should be
+    // reported — the ordering itself is load-bearing (0014-REVIEW-phase0's
+    // constraint 1), not merely convenient, so it is pinned by a test rather
+    // than only asserted in the header.
+    const objects = [
+      addWithUndeclaredSlot(addr("obj_1", "value")),
+      valueObject("obj_1", "value_1", 42),
+      addObject("obj_3", "add_1", addr("obj_999", "value"), addr("obj_1", "value")),
+    ];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_9.in.c");
+      expect(result.message).not.toContain("add_1.in.a"); // the OTHER problem — not reached this call
+    }
+  });
+
+  it("never throws for any of the above documents", () => {
+    const objects = [addWithUndeclaredSlot(addr("obj_1", "value")), valueObject("obj_1", "value_1", 42)];
+    expect(() => validateIntegrity(objects, deriveEdges(objects))).not.toThrow();
+    expect(() => validateIntegrity([], [])).not.toThrow();
   });
 });

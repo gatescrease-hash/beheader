@@ -1,6 +1,6 @@
-# STATUS — as of entry 0014-REVIEW-phase0
+# STATUS — as of entry 0015-validate-integrity
 
-STATE: GREEN — compiles under both tsconfigs, all tests pass (119/119, 0 skipped, 0 `.only`).
+STATE: GREEN — compiles under both tsconfigs, all tests pass (126/126, 0 skipped, 0 `.only`).
 
 Current phase: 0 — Graph core (headless, no pixels). Acceptance criterion (PROJECT_BRIEF §6):
 > you can build a graph in a unit test, bind slots, mutate a value and watch it propagate
@@ -8,142 +8,140 @@ Current phase: 0 — Graph core (headless, no pixels). Acceptance criterion (PRO
 > the offending slots named **and prior state is provably unchanged**; deleting a slot with
 > dependents is rejected; and a document round-trips to JSON and back identically.
 
-Status: **partial — one of four clauses closed.** Treat it as a four-part gate:
+Status: **partial — one of four clauses closed.** Four-part gate:
 
 1. Propagation in correct topological order, including through derived slots — **PASSING**
-   since 0012-REVIEW. Pinned by `graph/eval.test.ts`'s reverse-declared-order fixture, the one
-   test that fails if the topological sort is removed.
-2. Cycle rejected, offending slots named, prior state provably unchanged — **NOT YET**, and
-   read **D-017** before starting: `detectCycle` is correct, but can now be handed an
-   *incomplete* edge set, which makes a real cycle invisible. Step 4 must close that first.
-3. Deleting a slot with dependents is rejected — **NOT YET**.
+   since 0012-REVIEW (`graph/eval.test.ts`'s reverse-declared-order fixture).
+2. Cycle rejected, offending slots named, prior state provably unchanged — **NOT YET.**
+   `validateIntegrity` (this cycle) makes the graph handed to `detectCycle` trustworthy again
+   (closes D-017), but nothing wires the four pieces together yet, and there is no stage/clone
+   to snapshot for "prior state provably unchanged."
+3. Deleting a slot with dependents is rejected — **NOT YET** (no delete operation exists), but
+   `validateIntegrity`'s dangling-reference check is the mechanism that will reject it.
 4. Document round-trips to JSON identically — **NOT YET**.
 
-Last review: **0014-REVIEW-phase0, verdict ACCEPT WITH EDITS. Next slice may begin.**
+Last review: **0014-REVIEW-phase0, ACCEPT WITH EDITS.** Cycle 0015 (this one) is **unreviewed —
+REVIEW: REQUIRED** (trigger 2).
 
 ## Built and reviewed
-- Scaffold: `package.json`, both tsconfigs (strict + DOM-free, D-006), `vite.config.ts`,
-  `index.html`, Vitest, `src/main.ts` placeholder.
-- `address.ts` + tests (§5.2) — 44 tests. Two-layer name/ID scheme, naming rules, D-005
-  surface↔stored path mapping keyed on the A1 form (D-008), exact inverses.
-- `graph/node.ts` + tests (§5.1) — 20 tests. `Value`/`Point`/`ErrorValue`/`isErrorValue` (D-014),
+- Scaffold: `package.json`, both tsconfigs (strict + DOM-free, D-006), Vitest.
+- `address.ts` (§5.2, 44 tests) — two-layer name/ID scheme, D-005 surface↔stored mapping
+  keyed on the A1 form (D-008), exact `parseAddress`/`formatAddress` inverses.
+- `graph/node.ts` (§5.1, 20 tests) — `Value`/`Point`/`ErrorValue`/`isErrorValue` (D-014),
   `ObjectType`/`TABLE_TYPE` (D-009/D-011), the three slot kinds, `GraphObject`, `slotKey`/
   `getSlot`/`resolveSlot`.
-- `graph/edge.ts` + tests (§5.1) — 6 tests. `Edge` and `addressKey`. **Internal-only, D-015.**
+- `graph/edge.ts` (§5.1, 6 tests) — `Edge` and `addressKey`. **Internal-only, D-015.**
 - `formula/ast.ts` — one-variant `FormulaAst`. **`PROVISIONAL(Q-005)`, approved 0006-REVIEW.**
-  Phase 1 *widens* this union, never replaces it.
-- `primitives/schema.ts` + tests (§5.1) — 19 tests. Derived-slot declarations
-  (`DerivedSlotDependencies` static/dynamic, `DerivedSlotCompute`, `DerivedSlotSchema`,
-  `derivedSlotDependencyAddresses`, `getObjectSchema`, `findDerivedSlotSchema`), plus as of 0013
-  `ObjectSchema.nonDerivedSlotPaths` (a type's literal/formula slot paths, PATHS only — no
-  default-kind). Real entries for `value`/`add` (D-011).
-- `graph/cycles.ts` + tests (§5.1 step 5) — 11 tests. `detectCycle(edges)`: naive from-scratch DFS
-  following `sourceSlot -> dependentSlot`, returning the first cycle as an ordered `Address[]`.
-  Takes no object list, formats no message.
-- `graph/eval.ts` + tests (§5.1 step 7) — 10 tests. `evaluate(objects, edges)`: naive full
-  topological evaluation (DFS postorder reversal) over an edge set ASSUMED acyclic. All three
-  slot kinds in ONE pass — no `recompute()` — D-013's read-restriction taken from `edges`.
-- `mutation.ts` + tests (§5.1 step 3 ONLY) — **9 tests, reviewed at 0014.** `deriveEdges`
-  rebuilds the whole `Edge[]` from scratch every call (Rule 5): binding edges from formula slots
-  at schema-declared `nonDerivedSlotPaths`, dependency edges from each schema derived slot via
-  `derivedSlotDependencyAddresses` (its one call site). Never throws. **Narrower than §5.1 step
-  3's wording — D-017, and the two "KNOWN GAP" tests.** The loop's other seven steps do not exist.
+- `primitives/schema.ts` (§5.1, 19 tests) — derived-slot declarations
+  (`derivedSlotDependencyAddresses`, `getObjectSchema`, `findDerivedSlotSchema`) plus (0013)
+  `ObjectSchema.nonDerivedSlotPaths`. Real entries for `value`/`add` (D-011). Reviewed at 0014.
+- `graph/cycles.ts` (§5.1 step 5, 11 tests) — `detectCycle(edges)`: from-scratch DFS,
+  returns the first cycle as an ordered `Address[]`. No object list, no message.
+- `graph/eval.ts` (§5.1 step 7, 10 tests) — `evaluate(objects, edges)`: full topological pass
+  (DFS postorder reversal) over an edge set ASSUMED acyclic; all three slot kinds in one pass,
+  D-013 enforced mechanically.
+- `mutation.ts`'s `deriveEdges` (§5.1 step 3, reviewed at 0014) — rebuilds the whole `Edge[]`
+  every call from `nonDerivedSlotPaths` + `derivedSlots`. Narrower than "every stored formula
+  AST" (D-017) — **closed as of this cycle by `validateIntegrity`; `deriveEdges` itself is
+  UNCHANGED and stays that way, per D-017's own ruling.**
+
+## Built this cycle, not yet reviewed
+- **`mutation.ts`'s `validateIntegrity(objects, edges)` (§5.1 step 4 / §5.1.1)** — 16 tests in
+  `mutation.test.ts` (9 new, 2 removed — 0014's "KNOWN GAP" tests, replaced with real rejection
+  tests per that review's own instruction). Two checks, run in this order, short-circuiting on
+  the first with any problems:
+  1. **D-017 part 2** — rejects any object whose actual `formula`/`derived` slots disagree with
+     its schema's declared paths, naming the offending slot(s). No-schema types are skipped.
+  2. **§5.1.1 dangling-reference rejection** — rejects any edge whose `sourceSlot` doesn't
+     `resolveSlot`, naming the DEPENDENT (never the missing source — see gotchas).
+  **Read 0015's log entry before touching check 1's messaging.** It names an undeclared slot as
+  `${object.name}.${key}` via a small helper, `describeUndeclaredSlot` — deliberately NOT
+  `formatAddress`, because an undeclared slot has no schema-declared path to format in the first
+  place. Disclosed as a judgment call, flagged as a question for the reviewer, not settled.
 
 ## Not started, in order
-(1) The rest of `mutation.ts` — §5.1 steps 1-2 and 4-8, the batch form, an operation shape;
-(2) `document.ts` + round-trip test (`nextObjectId`, D-002). Then Phase 1 — not before Phase 0's
-criterion passes and is reviewed.
+(1) Wire `deriveEdges → validateIntegrity → detectCycle → evaluate` into one sequence (still no
+clone/journal); then stage/clone (step 1), apply (step 2), reject-and-discard-on-cycle (step 6),
+commit + journal (step 8), and the batch form. (2) `document.ts` + round-trip (`nextObjectId`,
+D-002). Then Phase 1 — not before Phase 0's criterion passes and is reviewed.
 
 ## Next slice (recommended)
+Wire the four built pieces into one sequence: `deriveEdges` → `validateIntegrity` (reject, stop)
+→ `detectCycle` (reject, stop, format every cycle slot via `formatAddress`, D-015) → `evaluate`.
+Still not the full 8-step loop (no clone/apply/journal), but the first point where clause 2's
+cycle-rejection becomes demonstrable end-to-end.
 
-The rest of the 8-step loop, or a first cut. **Start with step 4 (§5.1.1 integrity validation)** —
-D-017 part 2 makes it a correctness prerequisite for step 5, not merely the next item in order.
-It must reject (a) any edge pointing at a slot that does not exist in the clone, (b) a mutation
-deleting a slot with inbound dependents and no repair pass, and (c) **any object whose actual
-formula/derived slot set is not covered by its schema** (the D-017 case). Messages via
-`formatAddress` over every `Address`, **never** `addressKey` (D-015).
-
-Then steps 1-2 (deep-clone stage, apply), 5-6 (`detectCycle`, reject and discard the clone
-entirely), 7 (`evaluate`), 8 (commit — swap the clone in, append to an append-only journal;
-Rule 2 requires the journal from day one even though undo is not built). Start narrow: one
-`setLiteral`-shaped operation plus the batch form (§5.1 requires batch from day one, and
-document loading MUST use it) against the `value`/`add` fixture. Full command surface: Phase 3.
-
-**D-016 binds this cycle hardest so far.** Two Phase 0 clauses land here — cycle rejection naming
-the offending slots, and prior state provably unchanged. Before claiming either, neutralise the
-code implementing it, re-run, show a *named* test fails, paste the output. "Prior state provably
-unchanged" needs a deep compare against a snapshot taken **before** the call — a test that only
-checks the return value's shape would miss a clone that leaked into the original before rejecting.
+**D-016 binds hardest here still.** "Prior state provably unchanged" needs step 1 (stage/clone)
+to exist before it means anything — a rejection test that only checks the return shape proves
+nothing about state; it needs a deep compare against a pre-call snapshot. Do not claim clause 2
+until that snapshot test exists and its own mutation check names a failing test.
 
 ## Known problems
-- **D-017 — the live one.** `deriveEdges` walks the SCHEMA's slot set; `eval.ts` walks the
-  OBJECT's. Where they disagree edges vanish silently, and a real cycle can go invisible to
-  `detectCycle` — step 5 accepts the document, step 7 writes `#REF`s (probed, 0014-REVIEW §6).
-  `deriveEdges` need not change; **step 4 must make the disagreement loud.** Two tests pin the
-  current behaviour — replace them with a rejection test when step 4 lands, don't delete them.
-- **L-16** — nothing enforces that a schema's `nonDerivedSlotPaths` and `derivedSlots` paths are
-  disjoint; a type listing one in both would not throw, and `deriveEdges` would quietly do one
-  thing or the other by that slot's current `kind`. Fix: one registry-wide `slotKey`-compared
-  test (D-010), same shape as L-8's.
-- **L-17 / L-18** — `deriveEdges` shares path-array references with the schema registry (harmless
-  now; note it if `document.ts` ever stores edges rather than re-deriving them), and does not
-  deduplicate (both consumers tolerate duplicates — no dedupe pass without a case needing one).
-- **L-13** — `eval.ts`'s stale-edge `continue` branch is reached by no test; replacing it with a
-  `throw` still passes. Genuinely defensive. Pin it once step 4 exists; until then do not
-  describe it as covered.
-- **L-14** — `eval.ts`'s two `ErrorValue` messages name no slot. Unfixable there: D-015 forbids
-  `addressKey` in user-facing text and `evaluate` has no object list for `formatAddress`. A real
-  gap for whoever renders error badges (§5.9).
-- **L-6 – L-15, carried and unchanged** — cosmetics and small unenforced assumptions, each
-  written up where it was found (0006/0008/0010/0012-REVIEW §4). Two are worth acting on when
-  you are already in the file: **L-8** (registry key vs `ObjectSchema.type`, fold into L-16's
-  test) and **L-10** (`addressKey` assumes D-002 `obj_<n>` IDs — note it in `document.ts`).
-- **`detectCycle`'s reported cycle can start at any member.** Correct either way, but a message
-  wanting a specific leading slot must order it.
-- **Recursion depth** — `detectCycle` and `evaluate` both recurse once per slot along the longest
-  chain. Fine at the brief's scale (Rule 5), but `document.ts` can load an arbitrarily long one.
-  Watch it there; do not pre-optimise either file.
-- **`document.ts` forward constraint** — `DerivedSlot.value` is required, but §5.11 says derived
-  values are never serialized. Load must place a `null` placeholder before the evaluation pass.
-- The table/`cells` mapping in `address.ts` is still hardcoded, and `nonDerivedSlotPaths` cannot
-  express a slot family either (D-017's Phase 4 note — do not extend it for tables). Both wait on
-  `schema.ts` expressing families (D-005 §4, D-009). `npm run typecheck` does not cover config
-  files; `npm audit`'s 5 dev-dep advisories are low severity, unchanged, out of scope.
-- **SETTLED, do not re-raise:** the flat `claude/` layout (0002-REVIEW); extracting the shared
-  vocabulary out of `graph/node.ts` (0006-REVIEW §6); unifying `isErrorValue` with
-  `isAddressError` (D-014); **inverting a `GraphObject.slots` key to recover a path** — solved
-  twice by declaring the path schema-side instead (0011 `DerivedSlotSchema.path`, 0013
-  `nonDerivedSlotPaths`). A third such need follows that pattern; never `key.split(".")`.
+- **D-017 — CLOSED as of this cycle.** `deriveEdges` still walks the SCHEMA's slot set (still
+  correct per its own ruling); `validateIntegrity` check 1 now makes the schema/object
+  disagreement LOUD instead of silent.
+- **L-16** — nothing enforces `nonDerivedSlotPaths`/`derivedSlots` paths are disjoint on one
+  type. Fix: one registry-wide `slotKey`-compared test (D-010), same shape as L-8's. Open.
+- **L-17 / L-18** — `deriveEdges` shares path-array references with the registry (harmless), and
+  does not deduplicate (both consumers tolerate it). Unchanged.
+- **L-13** — `eval.ts`'s stale-edge `continue` branch is still reached by no test. Closer to
+  pinnable now that `validateIntegrity` exists, but not pinned — don't call it covered yet.
+- **L-14** — `eval.ts`'s two `ErrorValue` messages name no slot (no object list to `formatAddress`
+  with). Unfixable there; a real gap for whoever renders error badges (§5.9).
+- **NEW — `describeUndeclaredSlot` is not `formatAddress`.** Deliberate, disclosed (0015's
+  entry). Produces the identical string `formatAddress` would for every schema-registered type
+  today (neither `value` nor `add` is a table), but stops being exact if a table ever gains an
+  undeclared slot — already forbidden territory per D-017's Phase 4 note. Reviewer judgment
+  requested, not treated as settled.
+- **L-6 – L-15, carried** — cosmetics, written up where found (0006/0008/0010/0012-REVIEW §4).
+  Worth folding in when nearby: **L-8** (into L-16's test) and **L-10** (`addressKey` assumes
+  D-002 `obj_<n>` IDs — note in `document.ts`).
+- **`detectCycle`'s reported cycle can start at any member** — correct either way.
+- **Recursion depth** — `detectCycle`/`evaluate` recurse once per slot on the longest chain.
+  Fine at brief scale; watch it once `document.ts` can load an arbitrarily long one.
+- **`document.ts` forward constraint** — `DerivedSlot.value` is required but never serialized
+  (§5.11); load must place a `null` placeholder before evaluating.
+- Table/`cells` mapping in `address.ts` still hardcoded; `nonDerivedSlotPaths` cannot express a
+  slot family either (D-017's Phase 4 note — do not extend it for tables). Both wait on
+  `schema.ts` expressing families (D-005 §4, D-009).
+- **SETTLED, do not re-raise:** flat `claude/` layout (0002-REVIEW); shared vocabulary out of
+  `graph/node.ts` (0006-REVIEW §6); unifying `isErrorValue`/`isAddressError` (D-014); inverting
+  a `GraphObject.slots` key to recover a KNOWN slot's path — solved twice by declaring it
+  schema-side (0011, 0013); never `key.split(".")`. **`describeUndeclaredSlot` is not a fourth
+  instance of that same solved problem** — it names a slot nothing declares at all — see above.
 
 ## Live PROVISIONAL tags and open questions
-**`PROVISIONAL(Q-005)`** → `formula/ast.ts`, `graph/eval.ts` (`evaluateReference`), `mutation.ts`
-(both AST-reading sites). Approved at 0006-REVIEW, not a live risk; all tags come out together
-when Phase 1 widens `FormulaAst`. Questions: **Q-001/Q-002** (Phase 3, fifth deferral),
-**Q-004** (Phase 2), **Q-005** (Phase 1, approved), **Q-003** ANSWERED → D-007. None raised at
-0011-0013. Next free: **Q-006**.
+**`PROVISIONAL(Q-005)`** → `formula/ast.ts`, `graph/eval.ts`, `mutation.ts` (both AST-reading
+sites). Approved 0006-REVIEW, not a live risk. **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2),
+**Q-005** (approved), **Q-003** ANSWERED → D-007. None formally raised at 0011-0015 — 0015
+disclosed a design tension in its entry's "Questions for reviewer" instead of opening a
+`Q-NNN` (see that entry for why). Next free: **Q-006**.
 
 ## Gotchas for the next model
-- **Two answers to "which slots exist," and they can disagree (D-017).** `deriveEdges` reads the
-  schema; `evaluate` reads the object. Nothing reconciles them until step 4 does. Corollary: a
-  type that forgets `nonDerivedSlotPaths` gets zero binding edges silently — no error, no throw.
-- **D-016** — a test can cover a behaviour, pass, and still not *demonstrate* it; only the mutation
-  tells you which. ORDER claims need a *wrong*-order fixture; "state unchanged" needs a snapshot.
+- **D-017 is CLOSED, but `deriveEdges` itself did not change.** If you call
+  `deriveEdges`/`detectCycle`/`evaluate` from anywhere new, call `validateIntegrity` in between
+  the first two, or you've reopened D-017's hole locally.
+- **Naming an undeclared slot has no `Address`.** `describeUndeclaredSlot` in `mutation.ts` is
+  not trying to be `formatAddress` — read its doc comment before assuming every slot-naming path
+  should go through `formatAddress`. This is the one place it structurally cannot.
+- **D-016** — a test can cover a behaviour, pass, and still not *demonstrate* it. ORDER claims
+  need a wrong-order fixture; "state unchanged" needs a pre-call snapshot, which doesn't exist
+  anywhere in this codebase yet (step 1 isn't built).
 - **Cyclic input to `evaluate` fails SILENTLY** — `visit` marks visited before recursing, so a
   back-edge returns early and the pass completes, quietly emitting `#REF`s. Step 5 before step 7
-  is load-bearing, not conventional; do not add a defensive cycle check inside `eval.ts`.
+  is load-bearing; do not add a defensive cycle check inside `eval.ts`.
 - **`GraphObject`, not `Object`** — naming-collision workaround; the prose word is still "object."
-- **`address.ts` ↔ `graph/node.ts` share TYPES only** (`import type`, fully erased). **A value
-  import from `address.ts` into `graph/node.ts` creates a real runtime cycle.**
+- **`address.ts` ↔ `graph/node.ts` share TYPES only** (`import type`) — a value import between
+  them creates a real runtime cycle.
 - **`Value`/`Point`/`ErrorValue`/`isErrorValue` live in `graph/node.ts`** — never redefine (D-014).
 - **Slot keys come only from `slotKey()`** (D-010), **document-wide keys only from
-  `addressKey()`** (D-015); both stay internal. User-facing slot names come from
-  `formatAddress` — `obj_3::cells.A1` in a rejection message is a defect.
+  `addressKey()`** (D-015); both stay internal. User-facing names come from `formatAddress`
+  (exception: `describeUndeclaredSlot`, above — read why before extending it further).
 - **`ObjectType` includes `value`/`add`** (D-011); **`explode` sets type to `polyline`** (D-012).
-  Do not "fix" either. `resolveSlot`/`getObjectSchema`/`findDerivedSlotSchema` return `undefined`
-  on a miss, not an `ErrorValue` — turning that into `#REF` is the caller's job, as `eval.ts` does.
-- **The schema registry stores FUNCTIONS and that is correct** — the closure prohibition covers
-  `GraphObject`/`Slot`/document state, not a module-level registry (0008-REVIEW §2); same for
-  the three modules' function-local scratch `Map`s. Don't "fix" any of them.
-- **`derivedSlotDependencyAddresses` runs at edge-derivation time only** (Rule 6) — inside
-  `deriveEdges`, its one call site. `eval.ts` never calls it.
+  `resolveSlot`/`getObjectSchema`/`findDerivedSlotSchema` return `undefined` on a miss, not an
+  `ErrorValue` — turning that into `#REF` is the caller's job, as `eval.ts` does.
+- **The schema registry stores FUNCTIONS and that is correct** (0008-REVIEW §2) — same for the
+  three modules' function-local scratch `Map`s. Don't "fix" any of them.
+- **`derivedSlotDependencyAddresses` runs at edge-derivation time only** (Rule 6) — `eval.ts`
+  and `validateIntegrity` never call it.
 - Each PowerShell call is a fresh process; the Bash tool's `npm` is not on PATH — use PowerShell.
