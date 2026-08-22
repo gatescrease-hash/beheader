@@ -1,8 +1,11 @@
 /**
  * mutation.ts — THE single transactional channel for state change (PROJECT_BRIEF
- * Rule 2). Two pieces exist so far: edge derivation (§5.1 mutation-loop step
- * 3, cycle 0013) and, as of this cycle, integrity validation (step 4, §5.1.1).
- * Both are deliberately split out from the full 8-step loop — see WHAT THIS IS.
+ * Rule 2). Three things exist so far: edge derivation (§5.1 mutation-loop step
+ * 3, cycle 0013), integrity validation (step 4, §5.1.1, cycle 0015), and — as
+ * of this cycle — `deriveValidateAndEvaluate`, which composes those two with
+ * the already-built `detectCycle` (step 5, `graph/cycles.ts`) and `evaluate`
+ * (step 7, `graph/eval.ts`) into one sequence. All of this is deliberately
+ * still short of the full 8-step loop — see WHAT THIS IS and NOT DONE HERE.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -10,7 +13,11 @@
  * and step 4 / §5.1.1 ("Validate integrity. Reject if any formula references a
  * slot that does not exist, or if the mutation would delete a slot that still
  * has inbound dependents without repairing them."), plus **D-017 part 2**,
- * which this cycle exists to close (see WHAT THIS IS, `validateIntegrity`).
+ * closed at cycle 0015 (see WHAT THIS IS, `validateIntegrity`). This cycle
+ * additionally composes step 5 ("Validate acyclicity. Full DFS over the whole
+ * graph. Reject on cycle, naming every slot in the cycle.") and step 7
+ * ("Evaluate. Topologically sort all slots and evaluate every one...") with
+ * the two above, in `deriveValidateAndEvaluate` — see WHAT THIS IS.
  * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
  * trigger-3 (new engine file).
  * LAYER: engine (pure). May import: engine/* only.
@@ -141,11 +148,34 @@
  *     and evaluation (step 7) are separate, already-built steps this function
  *     does not duplicate or anticipate.
  *
+ * `deriveValidateAndEvaluate(objects)` — composes all four pieces above
+ * (`deriveEdges` → `validateIntegrity` → `detectCycle` → `evaluate`) into the
+ * one sequence §5.1 steps 3-5 and 7 describe, in that order. See its own doc
+ * comment for why the ORDER is the entire point (0014-REVIEW-phase0's
+ * constraint 1) rather than something worth leaving to each future call site.
+ * This is the first point where Phase 0 acceptance clause 2's REJECTION half
+ * ("a cycle is rejected with the offending slots named") is demonstrable
+ * end-to-end — see STATUS.md for why the clause's OTHER half ("prior state
+ * provably unchanged", D-016) is NOT claimed by this cycle.
+ *
+ * INVARIANTS UPHELD HERE (deriveValidateAndEvaluate)
+ *   - Runs the four steps in the fixed order §5.1 specifies and
+ *     0014-REVIEW-phase0 requires: validateIntegrity's D-017 check MUST see
+ *     the graph before detectCycle does, or a document whose only cycle runs
+ *     through an undeclared slot gets a false "no cycle" pass instead of
+ *     D-017's rejection (exactly the hazard D-017 exists to close).
+ *   - Never mutates `objects`. Every step it calls is pure and returns new
+ *     data; a rejection here means the candidate `objects` this function
+ *     received are simply never returned as the `ok: true` arm's evaluated
+ *     result — there is nothing here for a caller's own prior state to be
+ *     corrupted by, because this function was never given write access to it.
+ *   - Never throws, matching every function it composes.
+ *
  * NOT DONE HERE (the rest of `mutation.ts`, later cycles)
- *   - Stage (clone), apply an operation, validate acyclicity (`graph/cycles.ts`,
- *     already built — reject and format via `address.ts`'s `formatAddress`,
- *     NEVER `addressKey`, per D-015), evaluate (`graph/eval.ts`, already
- *     built), commit + journal. All of §5.1's steps 1-2 and 5-8.
+ *   - Stage (clone), apply an operation, commit + journal — §5.1 steps 1, 2,
+ *     6, 8. `deriveValidateAndEvaluate` is handed a candidate post-apply
+ *     object list; it does not produce one, and its `ok: true` result is not
+ *     committed anywhere by this file.
  *   - The batch mutation form (§5.1, required from day one).
  *   - Any operation shape (`setLiteral`, `link`, object creation/deletion) —
  *     this file only derives edges and validates whatever `GraphObject[]` it
@@ -161,7 +191,9 @@
  */
 import { formatAddress, isAddressError, type Address } from "./address.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/schema.ts";
+import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
+import { evaluate } from "./graph/eval.ts";
 import { resolveSlot, slotKey, type GraphObject } from "./graph/node.ts";
 
 /**
@@ -254,6 +286,90 @@ export function validateIntegrity(objects: readonly GraphObject[], edges: readon
   }
 
   return { ok: true };
+}
+
+/**
+ * The result of `deriveValidateAndEvaluate` (§5.1 steps 3-5 and 7, composed).
+ * `ok: false` means reject — the candidate `objects` passed in are discarded
+ * by the CALLER (§5.1 step 6, "discard the clone entirely"); this function
+ * never had write access to whatever prior state that clone came from. `ok:
+ * true` carries the FULLY EVALUATED object list (step 7's output), ready for a
+ * future step 8 to commit as-is.
+ */
+export type GraphEvaluationResult =
+  | { readonly ok: true; readonly objects: readonly GraphObject[] }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Wires the four already-built pieces of §5.1's mutation loop into one fixed
+ * sequence: `deriveEdges` (step 3) → `validateIntegrity` (step 4) →
+ * `detectCycle` (step 5) → `evaluate` (step 7). Steps 1-2 (stage/clone, apply
+ * an operation) and 6, 8 (discard-on-reject, commit + journal) are NOT this
+ * function's job — see the file header's NOT DONE HERE. `objects` is a
+ * candidate post-apply object list; this function does not produce one.
+ *
+ * Why compose rather than leave callers to chain the four calls in order
+ * themselves: the ORDER is load-bearing, not a convenience.
+ * 0014-REVIEW-phase0's own constraint 1 requires `validateIntegrity` to run
+ * BEFORE `detectCycle` — a document whose only cycle runs through a slot its
+ * schema doesn't declare must get D-017's rejection, never a false "no cycle"
+ * pass from `detectCycle` seeing an incomplete edge set (D-017's own finding).
+ * Repeating that order correctly at every future call site is exactly the
+ * class of gap this project's history shows gets silently dropped — D-017
+ * itself was one layer of that same mistake. One function makes the order
+ * impossible to get wrong by omission.
+ *
+ * This is the first place Phase 0 acceptance clause 2's REJECTION half (§6:
+ * "a cycle is rejected with the offending slots named") is demonstrable
+ * end-to-end. The clause's OTHER half ("prior state provably unchanged",
+ * D-016) is deliberately NOT claimed here: it needs step 1's clone to exist
+ * before a snapshot comparison means anything, and that clone is not built yet
+ * — see STATUS.md.
+ *
+ * Never throws, matching every function it composes. Never mutates `objects`
+ * — every step here is pure and returns new data.
+ */
+export function deriveValidateAndEvaluate(objects: readonly GraphObject[]): GraphEvaluationResult {
+  const edges = deriveEdges(objects);
+
+  const integrity = validateIntegrity(objects, edges);
+  if (!integrity.ok) {
+    return integrity;
+  }
+
+  const cycleCheck = detectCycle(edges);
+  if (cycleCheck.hasCycle) {
+    return { ok: false, message: formatCycleRejection(cycleCheck.cycle, objects) };
+  }
+
+  return { ok: true, objects: evaluate(objects, edges) };
+}
+
+/**
+ * §5.1 step 5's rejection message: "reject on cycle, naming every slot in the
+ * cycle." Formats every `Address` `detectCycle` reported via `address.ts`'s
+ * `formatAddress` — NEVER `addressKey`, which would leak the internal
+ * id/slot-key layer into a user-facing string (D-015) — in cycle order, and
+ * closes the loop back to the first slot so the message shows the actual
+ * closed chain rather than an open list ending nowhere.
+ *
+ * `detectCycle`'s contract guarantees every address in `cycle` already
+ * resolves: `validateIntegrity`'s dangling-reference check, which
+ * `deriveValidateAndEvaluate` runs immediately before ever calling
+ * `detectCycle`, already confirmed every edge's `sourceSlot` resolves, and
+ * every `dependentSlot` is one `deriveEdges` only ever builds from a real,
+ * currently-iterated object. `formatAddress`'s `AddressError` arm is handled
+ * anyway rather than assumed away, matching this module's own never-throws
+ * discipline.
+ */
+function formatCycleRejection(cycle: readonly Address[], objects: readonly GraphObject[]): string {
+  const names = cycle.map((address) => {
+    const formatted = formatAddress(address, objects);
+    return isAddressError(formatted) ? formatted.message : formatted;
+  });
+  const first = names[0];
+  const chain = first === undefined ? names.join(" → ") : [...names, first].join(" → ");
+  return `cyclic dependency: ${chain}`;
 }
 
 /**

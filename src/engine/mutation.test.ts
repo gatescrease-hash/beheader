@@ -12,7 +12,7 @@ import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
 import type { GraphObject, Slot } from "./graph/node.ts";
-import { deriveEdges, validateIntegrity } from "./mutation.ts";
+import { deriveEdges, deriveValidateAndEvaluate, validateIntegrity } from "./mutation.ts";
 
 /** Matches graph/eval.test.ts's / graph/cycles.test.ts's own shorthand. */
 function addr(objectId: string, ...path: readonly string[]): Address {
@@ -338,5 +338,113 @@ describe("validateIntegrity — §5.1.1: a formula referencing a slot that does 
     const objects = [addWithUndeclaredSlot(addr("obj_1", "value")), valueObject("obj_1", "value_1", 42)];
     expect(() => validateIntegrity(objects, deriveEdges(objects))).not.toThrow();
     expect(() => validateIntegrity([], [])).not.toThrow();
+  });
+});
+
+describe("deriveValidateAndEvaluate — composing deriveEdges -> validateIntegrity -> detectCycle -> evaluate", () => {
+  it("evaluates PROJECT_BRIEF §6's fixture end-to-end, including through a derived slot, with no hand-built edges anywhere", () => {
+    // Same two-hop literal -> formula -> derived -> formula -> derived chain
+    // as the "deriveEdges — integration with graph/eval.ts" describe block
+    // above, but exercised through the single composed entry point this
+    // cycle adds, rather than by calling deriveEdges/evaluate directly.
+    const objects = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+      valueObject("obj_4", "value_3", 1),
+      addObject("obj_5", "add_2", addr("obj_3", "out", "result"), addr("obj_4", "value")),
+    ];
+
+    const result = deriveValidateAndEvaluate(objects);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const add1 = result.objects.find((object) => object.id === "obj_3");
+      const add2 = result.objects.find((object) => object.id === "obj_5");
+      expect(add1?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
+      expect(add2?.slots["out.result"]).toEqual({ kind: "derived", value: 8 });
+    }
+  });
+
+  it("rejects a genuine cycle (in.a reads its own out.result) before evaluate ever runs, naming every slot in the cycle via formatAddress", () => {
+    // A minimal SELF-cycle using only schema-declared paths — no undeclared
+    // slot involved — so this exercises detectCycle's rejection specifically,
+    // not validateIntegrity's D-017 check (covered separately below).
+    const selfCyclicAdd: GraphObject = {
+      id: "obj_1",
+      name: "add_1",
+      type: "add",
+      slots: {
+        "in.a": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "out", "result") }, value: null },
+        "in.b": { kind: "literal", value: 2 },
+        "out.result": { kind: "derived", value: null },
+      },
+    };
+
+    const result = deriveValidateAndEvaluate([selfCyclicAdd]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+      expect(result.message).toContain("add_1.out.result");
+    }
+  });
+
+  it("runs validateIntegrity before detectCycle: when a document has BOTH an undeclared slot AND an unrelated genuine cycle, only the D-017 message is reported", () => {
+    // add_1 has TWO independent problems: (1) an undeclared in.c slot (D-017,
+    // caught by validateIntegrity), and (2) a genuine self-cycle in.a <->
+    // out.result that IS fully captured by deriveEdges (both in.a and
+    // out.result are schema-declared, so unlike the "KNOWN GAP" fixture
+    // above, detectCycle CAN and does see this one on its own). This is the
+    // fixture that actually distinguishes the two orders — mutation-tested by
+    // temporarily swapping validateIntegrity and detectCycle in
+    // deriveValidateAndEvaluate: the swap left all other tests green but
+    // failed only this one, now reporting "cyclic dependency" instead of
+    // "add_1.in.c" (see 0016's log entry).
+    const bothProblems: GraphObject = {
+      id: "obj_1",
+      name: "add_1",
+      type: "add",
+      slots: {
+        "in.a": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "out", "result") }, value: null },
+        "in.b": { kind: "literal", value: 2 },
+        "out.result": { kind: "derived", value: null },
+        "in.c": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "in", "c") }, value: null },
+      },
+    };
+
+    const result = deriveValidateAndEvaluate([bothProblems]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.c");
+      expect(result.message).not.toContain("cyclic dependency"); // never reached detectCycle's message
+    }
+  });
+
+  it("rejects a dangling reference before evaluate ever runs, naming the dependent slot", () => {
+    const objects = [
+      valueObject("obj_2", "value_2", 5),
+      addObject("obj_3", "add_1", addr("obj_999", "value"), addr("obj_2", "value")),
+    ];
+
+    const result = deriveValidateAndEvaluate(objects);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+    }
+  });
+
+  it("never throws, for a well-formed document, a rejected one, or an empty one", () => {
+    const wellFormed = [
+      valueObject("obj_1", "value_1", 10),
+      valueObject("obj_2", "value_2", 5),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    expect(() => deriveValidateAndEvaluate(wellFormed)).not.toThrow();
+    expect(() => deriveValidateAndEvaluate([addWithUndeclaredSlot(addr("obj_1", "value"))])).not.toThrow();
+    expect(() => deriveValidateAndEvaluate([])).not.toThrow();
+    expect(deriveValidateAndEvaluate([])).toEqual({ ok: true, objects: [] });
   });
 });
