@@ -1,19 +1,20 @@
 /**
  * mutation.ts — THE single transactional channel for state change (PROJECT_BRIEF
  * Rule 2). Edge derivation (§5.1 step 3, cycle 0013), integrity validation
- * (step 4, §5.1.1, cycle 0015), their composition with the already-built
- * `detectCycle` (step 5) and `evaluate` (step 7) into `deriveValidateAndEvaluate`
- * (cycle 0016), and `mutate(objects, operation, journal)` wrapping that
- * composition with the remaining steps — stage/clone (step 1), apply one
- * operation (step 2), discard-on-reject (step 6), and commit + journal
- * (step 8, cycle 0017) — all exist already, making this file's public surface
- * the FULL §5.1 mutation loop for the one operation kind built so far. THIS
- * cycle (0019) closes three gaps 0018-REVIEW-phase0 found in that surface:
- * D-018 (schema<->slot reconciliation was one-directional; `validateIntegrity`
- * now checks both), D-019 (the step-1 clone was lossy for non-finite numbers;
- * it is now a real recursive clone), and D-021 (`mutate` now REJECTS an
- * operation naming a nonexistent object instead of a silent no-op). See
- * WHAT THIS IS.
+ * (step 4, §5.1.1, cycle 0015; widened to check schema<->slot reconciliation
+ * in BOTH directions, D-018, cycle 0019), their composition with the already-
+ * built `detectCycle` (step 5) and `evaluate` (step 7) into
+ * `deriveValidateAndEvaluate` (cycle 0016), and `mutate(objects, operations,
+ * journal)` wrapping that composition with the remaining steps — stage/clone
+ * (step 1, a real recursive clone as of D-019/cycle 0019), apply every
+ * operation in the batch to that ONE clone (step 2), discard-on-reject
+ * (step 6), and commit + journal (step 8, cycle 0017) — all exist already,
+ * making this file's public surface the FULL §5.1 mutation loop. THIS cycle
+ * (0019, second half) closes the last item from 0018-REVIEW-phase0's REVISE
+ * list: **D-020**, the batch form. `mutate` now accepts a LIST of operations,
+ * applied to a single clone, validated and evaluated once, committing
+ * all-or-nothing, appending exactly one journal entry holding the whole list
+ * — never N separate single-operation calls. See WHAT THIS IS, `mutate`.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -22,18 +23,22 @@
  * slot that does not exist, or if the mutation would delete a slot that still
  * has inbound dependents without repairing them."), plus **D-017 part 2**
  * (closed cycle 0015) and **D-018** (both directions of the same
- * reconciliation, closed THIS cycle — see WHAT THIS IS, `validateIntegrity`);
+ * reconciliation, closed cycle 0019 — see WHAT THIS IS, `validateIntegrity`);
  * step 5 ("Validate acyclicity... reject on cycle, naming every slot in the
  * cycle.") and step 7 ("Evaluate...") composed at cycle 0016 in
  * `deriveValidateAndEvaluate`; step 1 ("Stage. Deep-clone the current
- * document state.") — now **D-019**-faithful, closed THIS cycle — step 2
- * ("Apply the mutation to the clone."), step 6 ("On rejection: discard the
- * clone entirely... Prior state is untouched."), and step 8 ("Commit. Swap
- * the clone in... append the mutation to the journal"), plus Rule 2's journal
+ * document state.") — **D-019**-faithful, closed cycle 0019 — step 2 ("Apply
+ * the mutation to the clone."), step 6 ("On rejection: discard the clone
+ * entirely... Prior state is untouched."), and step 8 ("Commit. Swap the
+ * clone in... append the mutation to the journal"), plus Rule 2's journal
  * requirement ("the mutation API MUST record an append-only journal of
  * committed mutations from day one") and **D-021** (an operation naming a
- * nonexistent object is rejected, not journalled as a no-op, closed THIS
- * cycle) — see WHAT THIS IS, `mutate`.
+ * nonexistent object is rejected, not journalled as a no-op, closed cycle
+ * 0019) — see WHAT THIS IS, `mutate`. Also §5.1's **"Batch mutations
+ * (required)"** subsection ("The API must accept a list of operations
+ * applied to a single clone, validated and evaluated once, committing
+ * all-or-nothing... Document loading MUST use a batch.") — **D-020**, closed
+ * THIS cycle.
  * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
  * trigger-3 (new engine file).
  * LAYER: engine (pure). May import: engine/* only.
@@ -208,37 +213,51 @@
  *     corrupted by, because this function was never given write access to it.
  *   - Never throws, matching every function it composes.
  *
- * `mutate(objects, operation, journal)` — §5.1 steps 1, 2, 6, 8, wrapping
- * `deriveValidateAndEvaluate` (steps 3-5, 7). See its own doc comment for the
- * full sequence, INCLUDING the D-021 target-existence check that now runs
- * before step 1 even starts. One operation kind exists so far:
- * `SetSlotOperation` (`{ kind: "setSlot", address, slot }`), the minimal
- * primitive underneath what §5.10's `link`/`unlink`/`set` commands will
- * eventually call — building those commands themselves is Phase 3's job
+ * `mutate(objects, operations, journal)` — §5.1 steps 1, 2, 6, 8, wrapping
+ * `deriveValidateAndEvaluate` (steps 3-5, 7), widened to the BATCH form
+ * (D-020, closed THIS cycle). See its own doc comment for the full sequence,
+ * INCLUDING the empty-batch and D-021 target-existence checks that now run
+ * before step 1 even starts, over every operation in the list. One operation
+ * kind exists so far: `SetSlotOperation` (`{ kind: "setSlot", address, slot }`),
+ * the minimal primitive underneath what §5.10's `link`/`unlink`/`set` commands
+ * will eventually call — building those commands themselves is Phase 3's job
  * (§5.10), not this cycle's.
  *
  * INVARIANTS UPHELD HERE (mutate)
- *   - **D-021, closed THIS cycle**: an `Operation` whose `address.objectId`
- *     names no object in `objects` is REJECTED before anything else runs —
- *     never applied as a no-op and never journalled. See `mutate`'s own doc
- *     comment for the message's D-015-respecting shape.
+ *   - **D-020, closed THIS cycle**: accepts a LIST of operations, applies all
+ *     of them to ONE clone (folded left-to-right, so a later operation in the
+ *     batch sees an earlier one's effect), then derives edges / validates /
+ *     evaluates exactly ONCE over the fully-applied candidate — never once
+ *     per operation. "Committing all-or-nothing" holds structurally: nothing
+ *     between the fold and the single `deriveValidateAndEvaluate` call can
+ *     partially commit, because nothing is committed until that one call
+ *     returns `ok: true`.
+ *   - **D-021, closed cycle 0019**: ANY operation in the batch whose
+ *     `address.objectId` names no object in `objects` rejects the WHOLE
+ *     batch before anything else runs — never applied as a no-op for that one
+ *     operation while the rest proceed, and never journalled. An empty batch
+ *     (`operations.length === 0`) is rejected the same way, for the same
+ *     "no false record in the journal" reason. See `mutate`'s own doc comment
+ *     for both messages' D-015-respecting shape.
  *   - Implements Rule 5's staging mechanism literally: `cloneObjects` performs
- *     a real recursive deep clone (D-019, closed THIS cycle — see its own
- *     doc comment for why a JSON round-trip was not faithful enough) before
- *     `applyOperation` ever runs, so "applying to the clone" (§5.1 step 2)
- *     never touches the caller's original `objects` reference even in
+ *     a real recursive deep clone (D-019, closed cycle 0019 — see its own doc
+ *     comment for why a JSON round-trip was not faithful enough) ONCE, before
+ *     any operation in the batch is applied, so "applying to the clone" (§5.1
+ *     step 2) never touches the caller's original `objects` reference even in
  *     principle, not merely by the accident of every downstream function
  *     already being pure.
  *   - On rejection, returns `deriveValidateAndEvaluate`'s own `{ ok: false,
  *     message }` untouched (step 6: "discard the clone entirely... return a
  *     failure"). `objects` and `journal` are both simply never reassigned —
  *     the caller's references are exactly what they were before the call.
- *   - On success, appends exactly one `MutationJournalEntry` (the applied
- *     `Operation`) to `journal` (Rule 2, "from day one") and returns the
- *     evaluated result as the new state (step 8's "swap in"). This file does
- *     not itself hold "the current document" between calls — see NOT DONE
- *     HERE — so "commit" here means "return the new state for whichever
- *     caller owns it to adopt," not an internal assignment.
+ *   - On success, appends exactly one `MutationJournalEntry` — holding the
+ *     WHOLE operation list just committed, not one entry per operation — to
+ *     `journal` (Rule 2, "from day one"; D-020: "one committed batch is one
+ *     journal entry") and returns the evaluated result as the new state
+ *     (step 8's "swap in"). This file does not itself hold "the current
+ *     document" between calls — see NOT DONE HERE — so "commit" here means
+ *     "return the new state for whichever caller owns it to adopt," not an
+ *     internal assignment.
  *   - Never throws, matching every function it composes.
  *
  * NOT DONE HERE (the rest of `mutation.ts`, later cycles)
@@ -248,14 +267,6 @@
  *     whatever calls it (a future `document.ts`, or a command handler) owns
  *     the current `objects`/`journal` pair and decides what to do with a
  *     rejection.
- *   - The batch mutation form (§5.1, required from day one, before any UI
- *     needs it) — applying N operations to ONE clone, validating and
- *     evaluating once. `mutate` here still applies exactly one `Operation`.
- *     **D-020 (0018-REVIEW-phase0): this MUST land, as its own cycle, before
- *     `document.ts` begins** — loading a document one operation at a time
- *     makes every intermediate state of a load separately validated, and
- *     intermediate load states are routinely invalid (object B not yet
- *     created when object A's formula references it).
  *   - Any operation kind beyond `SetSlotOperation` (object creation/deletion,
  *     `explode`, vertex add/remove, table resize) — those belong to the
  *     phases that introduce the state they touch (Phase 2-6), same stance
@@ -537,14 +548,21 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  *
  * `setSlot`: replaces whatever is at `operation.address` with
  * `operation.slot` wholesale — no merge, no partial update. PRECONDITION,
- * enforced by `mutate` before this is ever called (D-021, 0018-REVIEW-phase0):
- * `operation.address.objectId` names a real object in `objects`. This
- * function does not itself re-check that — see `mutate`'s own D-021 check,
- * which is the only reason this map can assume exactly one object matches.
- * A dangling `operation.slot` (e.g. a formula whose reference does not
- * exist) is exactly what `validateIntegrity`'s dangling-reference check
- * (already composed into `deriveValidateAndEvaluate`, called right after
- * this) exists to catch — this function does not duplicate that check.
+ * enforced by `mutate` before this is ever called, once per operation in the
+ * WHOLE batch (D-021, 0018-REVIEW-phase0): `operation.address.objectId` names
+ * a real object in `objects`. This function does not itself re-check that —
+ * see `mutate`'s own D-021 check, which is the only reason this map can
+ * assume exactly one object matches. Still true when `mutate` folds this
+ * function over several operations in one batch (D-020): `SetSlotOperation`
+ * never adds or removes an object, only rewrites a slot, so an object present
+ * before the first fold step is still present — under the same `id` — before
+ * every later one; D-021's check against the ORIGINAL (pre-batch) `objects`
+ * remains valid for every operation in the list, not just the first. A
+ * dangling `operation.slot` (e.g. a formula whose reference does not exist)
+ * is exactly what `validateIntegrity`'s dangling-reference check (already
+ * composed into `deriveValidateAndEvaluate`, called once after the WHOLE
+ * batch has been applied) exists to catch — this function does not duplicate
+ * that check.
  */
 function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
   return objects.map((object) => {
@@ -559,49 +577,71 @@ function applyOperation(objects: readonly GraphObject[], operation: Operation): 
 }
 
 /**
- * One committed mutation (Rule 2: "the mutation API MUST record an
- * append-only journal of committed mutations from day one so that it can be
- * [undone later]"). Records only the `Operation` that was applied — enough
- * to replay or, eventually, invert a mutation; PROJECT_BRIEF §8 defers only
- * the undo/redo UI, not this data. No timestamp or other metadata yet: add
- * it when something concrete needs it (same stance `primitives/schema.ts`
- * takes on widening its own declarations).
+ * One committed mutation — a BATCH, per D-020 (0018-REVIEW-phase0, fix 5):
+ * "The API must accept a list of operations applied to a single clone,
+ * validated and evaluated once, committing all-or-nothing" (§5.1). Records
+ * the WHOLE operation list that was committed together, not one entry per
+ * operation — a batch is one transaction, so one journal entry is what an
+ * eventual undo must invert as a unit (Rule 2: "the mutation API MUST record
+ * an append-only journal of committed mutations from day one"). PROJECT_BRIEF
+ * §8 defers only the undo/redo UI, not this data. No timestamp or other
+ * metadata yet: add it when something concrete needs it (same stance
+ * `primitives/schema.ts` takes on widening its own declarations).
  */
 export interface MutationJournalEntry {
-  readonly operation: Operation;
+  readonly operations: readonly Operation[];
 }
 
 /**
- * The result of `mutate` (§5.1's full loop for one operation). `ok: false`
+ * The result of `mutate` (§5.1's full loop for one batch). `ok: false`
  * mirrors `deriveValidateAndEvaluate`'s own rejection shape exactly — see
  * `mutate`'s doc comment for why `objects`/`journal` need no separate
  * "unchanged" field: the caller's own references already are unchanged.
  * `ok: true` carries the new committed `objects` (step 7's evaluated result)
- * and `journal` (with exactly one new entry appended, step 8).
+ * and `journal` (with exactly one new entry appended, step 8, holding every
+ * operation in the batch that was just committed).
  */
 export type MutationResult =
   | { readonly ok: true; readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] }
   | { readonly ok: false; readonly message: string };
 
 /**
- * §5.1's full mutation loop for the one `Operation` kind built so far:
- * reject an operation whose target does not exist (D-021, before anything
- * else runs) → stage (step 1, `cloneObjects`) → apply (step 2,
- * `applyOperation`) → derive edges, validate integrity, validate acyclicity,
- * evaluate (steps 3-5 and 7, `deriveValidateAndEvaluate`) → on rejection,
- * discard the clone and return the failure untouched (step 6) → on success,
- * append to the journal and return the new state (step 8).
+ * §5.1's full mutation loop, widened to the BATCH form D-020 requires
+ * (0018-REVIEW-phase0, fix 5 — "widen the existing entry point, never add a
+ * second one," the same stance Q-005 set for `FormulaAst`): reject an empty
+ * batch, or one containing an operation whose target does not exist (D-021,
+ * before anything else runs) → stage ONE clone (step 1, `cloneObjects`) →
+ * apply EVERY operation to that SAME clone, in order (step 2, `applyOperation`,
+ * folded left-to-right — later operations see earlier ones' effects, matching
+ * "applied to a single clone" rather than N independent clones) → derive
+ * edges, validate integrity, validate acyclicity, evaluate ONCE over the
+ * fully-batch-applied candidate (steps 3-5 and 7, `deriveValidateAndEvaluate`)
+ * → on rejection, discard the clone and return the failure untouched (step 6:
+ * the WHOLE batch fails together, "committing all-or-nothing") → on success,
+ * append exactly ONE journal entry holding every operation in the batch, and
+ * return the new state (step 8).
  *
- * The D-021 check (0018-REVIEW-phase0, answering cycle 0017's own question
- * 2): an `Operation` whose `address.objectId` names no object in `objects`
- * is REJECTED, never a silent no-op. Checked directly against the ORIGINAL
- * `objects` — object identity cannot change between here and staging, so
- * there is no need to clone first just to ask this. The message deliberately
- * does not `formatAddress` the target (there is no object to resolve a name
- * from) and deliberately does not print the raw `objectId` either (D-015's
- * own stance, applied the same way `findDanglingReferences` already applies
- * it to a missing SOURCE object) — it names only the slot PATH the operation
- * would have touched.
+ * Two checks run before staging, both over the ORIGINAL `objects` (object
+ * identity cannot change between here and staging, so there is no need to
+ * clone first to ask either question):
+ *
+ * - **Empty batch.** `operations.length === 0` is rejected outright — same
+ *   reasoning as D-021 below: a committed batch that applied nothing would
+ *   still append a journal entry recording a "mutation" that changed nothing,
+ *   which is a false record of history (Rule 2's journal exists to be
+ *   replayed/inverted, and an empty entry is nothing to invert).
+ * - **D-021** (0018-REVIEW-phase0, answering cycle 0017's own question 2): ANY
+ *   operation in the batch whose `address.objectId` names no object in
+ *   `objects` rejects the WHOLE batch — never a silent no-op for that one
+ *   operation while the rest proceed, matching "committing all-or-nothing."
+ *   Every offending operation is named, not just the first (`findObjectById`
+ *   filters, doesn't just find one) — same multi-problem-in-one-message style
+ *   `validateIntegrity`'s checks already use. The message deliberately does
+ *   not `formatAddress` the target (there is no object to resolve a name
+ *   from) and deliberately does not print the raw `objectId` either (D-015's
+ *   own stance, applied the same way `findDanglingReferences` already applies
+ *   it to a missing SOURCE object) — it names only the slot PATH each
+ *   offending operation would have touched.
  *
  * Why staging matters even though every function downstream is already pure
  * (so `objects` was never going to be mutated regardless): Rule 5 asks for
@@ -617,18 +657,29 @@ export type MutationResult =
  */
 export function mutate(
   objects: readonly GraphObject[],
-  operation: Operation,
+  operations: readonly Operation[],
   journal: readonly MutationJournalEntry[],
 ): MutationResult {
-  if (findObjectById(operation.address.objectId, objects) === undefined) {
-    return {
-      ok: false,
-      message: `no object exists to apply this operation to — target slot "${slotKey(operation.address.path)}" names no real object (D-021)`,
-    };
+  if (operations.length === 0) {
+    return { ok: false, message: "a mutation batch must contain at least one operation" };
+  }
+
+  const missingTargetMessages = operations
+    .filter((operation) => findObjectById(operation.address.objectId, objects) === undefined)
+    .map(
+      (operation) =>
+        `no object exists to apply this operation to — target slot "${slotKey(operation.address.path)}" names no real object (D-021)`,
+    );
+  if (missingTargetMessages.length > 0) {
+    return { ok: false, message: missingTargetMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
-  const candidate = applyOperation(staged, operation);
+  // Fold left-to-right over the SAME clone (§5.1: "applied to a single
+  // clone") — each operation sees every earlier operation's effect, unlike N
+  // independent single-operation mutate() calls, which would each re-derive
+  // edges, re-validate, and re-evaluate the whole graph from scratch.
+  const candidate = operations.reduce<readonly GraphObject[]>((current, operation) => applyOperation(current, operation), staged);
 
   const result = deriveValidateAndEvaluate(candidate);
   if (!result.ok) {
@@ -638,7 +689,7 @@ export function mutate(
   return {
     ok: true,
     objects: result.objects,
-    journal: [...journal, { operation }],
+    journal: [...journal, { operations }],
   };
 }
 

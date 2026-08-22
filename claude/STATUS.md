@@ -1,28 +1,26 @@
-# STATUS — as of entry 0019-close-d018-d019-d021
+# STATUS — as of entry 0020-batch-mutations
 
-STATE: GREEN (compiles under both configs, 143/143 tests pass, 0 skipped, 0 `.only`). No test in
-the suite pins known-broken behaviour right now — the three that did (D-018 ×2, D-019) were
-replaced by rejection/fidelity tests this cycle.
+STATE: GREEN (compiles under both configs, 148/148 tests pass, 0 skipped, 0 `.only`). No test in
+the suite pins known-broken behaviour right now.
 
 Current phase: 0 — Graph core (headless, no pixels)
 Phase 0 acceptance criterion (§6): build a graph in a unit test, bind slots, mutate a value and
 watch it propagate in topological order including through derived slots; a cycle is rejected with
 the offending slots named and prior state provably unchanged; deleting a slot with dependents is
 rejected; a document round-trips to JSON identically. — **partial, 2 of 4 clauses closed.**
-Last review point: **0018-REVIEW-phase0, verdict REVISE** — fixes 1-4 closed at entry 0019 (this
-one); fix 5 (D-020, batch form) is the one item still open from that review.
-Cycles since last review: 1/3 · diff since last review: ~559 lines / 3 files (cap 800/10)
+Last review point: **0018-REVIEW-phase0, verdict REVISE** — all five fixes now closed (1-4 at entry
+0019, fix 5/D-020 at entry 0020, this one). **REVIEW: REQUIRED before another cycle starts** — not
+because a numeric cap fired (cycles since that review: 2/3; diff: 769 lines / 3 files, both under
+the 800/10 cap), but per 0018-REVIEW-phase0's own explicit instruction to end the cycle that lands
+D-020 and hand it back, since it changes the only mutation entry point's signature.
 
-## Do this next
-1. **D-020** — widen `mutate` to the batch form (list of operations, one clone, one validation,
-   one evaluation, **one** journal entry). Its own slice, per 0018-REVIEW-phase0's fix 5. Must land
-   before `document.ts` begins (D-018 and D-020 both name it as a precondition).
-2. A delete-with-dependents `Operation` variant → Phase 0 clause 3 (`validateIntegrity`'s dangling
+## Do this next — after review lands
+1. A delete-with-dependents `Operation` variant → Phase 0 clause 3 (`validateIntegrity`'s dangling
    check is already the mechanism; it needs an operation that can actually delete a slot).
-3. `document.ts` + round-trip, `nextObjectId` (D-002) → clause 4. New file, so §6.1 trigger 2
-   forces its own review point regardless of the batch cap. Answer **Q-006** (is a non-finite
-   number legal document state) before writing the round-trip test — D-019 binds the clone to be
-   faithful either way, but the round-trip test itself needs Q-006 settled first.
+2. `document.ts` + round-trip, `nextObjectId` (D-002) → clause 4. New file, so §6.1 trigger 2
+   forces its own review point regardless. Both D-018 and D-020 (now closed) were named as its
+   preconditions — clear to start once review lands. Answer **Q-006** (is a non-finite number
+   legal document state) before writing the round-trip test.
 
 Then Phase 1 — not before Phase 0's criterion passes in full and the gate is reviewed as one unit.
 
@@ -44,18 +42,20 @@ Then Phase 1 — not before Phase 0's criterion passes in full and the gate is r
   branch pinned directly at cycle 0019 (0014-REVIEW-phase0 constraint 8, closed).
 - `mutation.ts` — `deriveEdges` (step 3, 0013/0014-REVIEW); `validateIntegrity` (step 4 / §5.1.1,
   THREE checks: D-017 part 2 [0015], D-018 both directions [0019], dangling-reference [0015]);
-  `deriveValidateAndEvaluate` (steps 3-5 + 7 composed, 0016); `mutate(objects, operation, journal)`
-  with `cloneObjects` (real recursive clone, D-019, 0019)/`applyOperation`/`Operation`/
-  `MutationJournalEntry` (steps 1, 2, 6, 8, 0017; D-021 target-existence rejection added 0019).
-  **0018-REVIEW-phase0's fixes 1-4 all closed at 0019** (this entry) — mutation-tested, see its log.
-  Fix 5 (D-020, batch form) is the one thing left from that review before this file's surface is
-  fully settled for `document.ts`.
+  `deriveValidateAndEvaluate` (steps 3-5 + 7 composed, 0016); `mutate(objects, operations, journal)`
+  — **BATCH form since 0020 (D-020)**: `operations` is a `readonly Operation[]`, folded over ONE
+  `cloneObjects` clone (real recursive clone, D-019, 0019), validated/evaluated ONCE, committing
+  exactly ONE `MutationJournalEntry` holding the whole list. D-021 (target-existence rejection,
+  0019) and the empty-batch rejection (0020) both check every operation up front, before staging.
+  **All five of 0018-REVIEW-phase0's fixes are now closed** (1-4 at 0019, 5/D-020 at 0020) —
+  mutation-tested throughout, see both entries' logs. **Awaiting the review this hand-back triggers
+  before `document.ts` begins.**
 
 ## Not started, in order
-(1) D-020 (batch form) — see "Do this next" #1. (2) A delete-with-dependents `Operation` variant →
-clause 3. (3) `document.ts` + round-trip, `nextObjectId` (D-002) → clause 4; new file, so §6.1
-trigger 2 forces its own review point regardless. Then Phase 1 — not before Phase 0's criterion
-passes in full and the gate is reviewed as one unit.
+(1) A delete-with-dependents `Operation` variant → clause 3. (2) `document.ts` + round-trip,
+`nextObjectId` (D-002) → clause 4; new file, so §6.1 trigger 2 forces its own review point
+regardless. Both wait on the review this entry's hand-back requests. Then Phase 1 — not before
+Phase 0's criterion passes in full and the gate is reviewed as one unit.
 
 ## Acceptance criterion, clause by clause
 1. Topological propagation including derived slots — **PASSING** (`graph/eval.test.ts`'s
@@ -65,12 +65,10 @@ passes in full and the gate is reviewed as one unit.
    a deep-compare against a pre-call snapshot, mutation-tested twice.
 3. Deleting a slot with dependents is rejected — **NOT YET**, no delete operation exists.
 4. Document round-trips to JSON identically — **NOT YET**, `document.ts` not started; blocked on
-   D-020 (batch form) and **Q-006** (non-finite number legality) both.
+   the pending review of this batch (0018-REVIEW-phase0's hand-back) and **Q-006** (non-finite
+   number legality).
 
 ## Known problems
-- **D-020 (open)** — no batch form yet. Required by §5.1 from day one; deferred four cycles running
-  (0016, 0017, and now 0019 — this cycle deliberately did fixes 1-4 first, per the review's own
-  ordering). Must land before `document.ts`.
 - **L-16** — nothing enforces `nonDerivedSlotPaths`/`derivedSlots` paths are disjoint on one type.
   Fix: one registry-wide `slotKey`-compared test (D-010), same shape as L-8's. Open.
 - **L-17 / L-18** — `deriveEdges` shares path-array references with the registry (harmless) and
@@ -88,7 +86,8 @@ passes in full and the gate is reviewed as one unit.
 - **`document.ts` forward constraints** — `DerivedSlot.value` is required but never serialized
   (§5.11), so load must place a placeholder before evaluating; D-018 (now closed) is what makes
   that loud instead of silent if a loader gets it wrong. Loading MUST use the batch form (D-020,
-  still open). `address.ts`'s `formatAddress` itself states a raw `objectId` in its OWN
+  now closed — `mutate` takes a `readonly Operation[]`). `address.ts`'s `formatAddress` itself
+  states a raw `objectId` in its OWN
   `AddressError` message when the id doesn't resolve — `mutation.ts` deliberately does NOT do this
   in its own messages (D-015; see `findDanglingReferences`'s and `mutate`'s D-021 check's own
   stances) — a disclosed, accepted asymmetry, not a bug to fix in `address.ts`.
@@ -101,7 +100,8 @@ passes in full and the gate is reviewed as one unit.
   `describeUndeclaredSlot`'s raw-key naming (D-022); collapsing §5.1.1's two clauses into one
   `resolveSlot` check (0018-REVIEW-phase0); schema<->slot reconciliation being one-directional
   (D-018, closed 0019); the step-1 clone using JSON (D-019, closed 0019); a nonexistent-object
-  operation being a no-op (D-021, closed 0019).
+  operation being a no-op (D-021, closed 0019); `mutate` taking one operation instead of a batch
+  (D-020, closed 0020).
 
 ## Live PROVISIONAL tags and open questions
 **`PROVISIONAL(Q-005)`** → `formula/ast.ts`, `graph/eval.ts`, `mutation.ts` (both AST-reading
@@ -120,10 +120,20 @@ faithful regardless of how this lands. **Q-001/Q-002** (Phase 3), **Q-004** (Pha
   to confirm each specific test depends on the specific line it claims to.
 - **"X never needs checking because Y" is a claim to test, not to comment.** (0018-REVIEW's own
   lesson, re-confirmed here — no new instance found this cycle.)
-- **`mutate` is the one entry point that runs the full §5.1 loop** — call it, don't hand-chain
-  `cloneObjects`/`applyOperation`/`deriveValidateAndEvaluate`. It applies ONE operation per call
-  until D-020 lands. It now also rejects (D-021) before ever staging, if the target object doesn't
-  exist — check that first if you're reasoning about its control flow.
+- **`mutate(objects, operations, journal)` takes a BATCH now (D-020, cycle 0020)** — `operations` is
+  a `readonly Operation[]`, not a bare `Operation`. It's the one entry point that runs the full §5.1
+  loop — call it, don't hand-chain `cloneObjects`/`applyOperation`/`deriveValidateAndEvaluate`. It
+  rejects (before ever staging) an empty batch, or a batch where ANY operation's target doesn't
+  exist (D-021) — check both if you're reasoning about its control flow. Every operation in a batch
+  folds over the SAME clone, in order; only ONE `deriveValidateAndEvaluate` call and ONE journal
+  entry happen per batch, holding every operation in it.
+- **A test's own comment can overclaim what the test proves — mutation-test the CLAIM, not just the
+  code.** At 0020, a "last write wins" test's comment claimed it proved shared-clone-fold semantics;
+  neutralizing the fold left that specific test green (the fixture couldn't tell "shared clone" from
+  "independent clones, keep only the last" apart, since both operations targeted the same address).
+  Caught before commit by mutation-testing the mechanism and checking which test(s) actually moved —
+  the same "a plausible claim is not a tested one" lesson 0018-REVIEW-phase0's finding 1 raised about
+  a doc comment, recurring in a test comment instead.
 - **The clone (`deepClone`/`cloneObjects`) is load-bearing AND now faithful** — do not "simplify it
   away" on the reasoning that everything downstream is pure, and do not reach for
   `JSON.parse(JSON.stringify(...))` as a shortcut if this file ever needs cloning again elsewhere —

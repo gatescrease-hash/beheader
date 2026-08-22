@@ -4,7 +4,9 @@
  * schema/slot reconciliation checks), their composition with acyclicity
  * validation and evaluation (steps 5, 7) into `deriveValidateAndEvaluate`, and
  * `mutate` itself (steps 1, 2, 6, 8, wrapping the above — cycle 0017, with
- * cycle 0019 closing D-019's clone-fidelity gap and D-021's no-op gap).
+ * cycle 0019 closing D-019's clone-fidelity gap and D-021's no-op gap, and
+ * widening it to D-020's BATCH form — a `readonly Operation[]`, not one
+ * `Operation` — as that cycle's second half).
  *
  * Colocated with mutation.ts per D-001. Fixtures are built by hand, the same
  * convention `graph/eval.test.ts` and `graph/cycles.test.ts` use.
@@ -472,13 +474,13 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
       slot: { kind: "literal", value: 100 },
     };
 
-    const result = mutate(initial, operation, []);
+    const result = mutate(initial, [operation], []);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       const add1 = result.objects.find((object) => object.id === "obj_3");
       expect(add1?.slots["out.result"]).toEqual({ kind: "derived", value: 104 }); // 100 + 4
-      expect(result.journal).toEqual([{ operation }]);
+      expect(result.journal).toEqual([{ operations: [operation] }]);
     }
   });
 
@@ -504,7 +506,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
       slot: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "out", "result") }, value: null },
     };
 
-    const result = mutate(initial, operation, []);
+    const result = mutate(initial, [operation], []);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -541,7 +543,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
       slot: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "out", "result") }, value: null },
     };
 
-    const result = mutate(initial, operation, priorJournal);
+    const result = mutate(initial, [operation], priorJournal);
 
     expect(result.ok).toBe(false); // this mutation is the same genuine cycle as the test above
     expect(initial).toEqual(snapshotObjectsBefore);
@@ -560,7 +562,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
       slot: { kind: "formula", ast: { type: "reference", address: addr("obj_999", "value") }, value: null },
     };
 
-    const result = mutate(initial, operation, []);
+    const result = mutate(initial, [operation], []);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -579,9 +581,9 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     };
     const noOtherObjectOp: Operation = { kind: "setSlot", address: addr("obj_404", "value"), slot: { kind: "literal", value: 9 } };
 
-    expect(() => mutate(initial, acceptedOp, [])).not.toThrow();
-    expect(() => mutate(initial, rejectingOp, [])).not.toThrow();
-    expect(() => mutate(initial, noOtherObjectOp, [])).not.toThrow();
+    expect(() => mutate(initial, [acceptedOp], [])).not.toThrow();
+    expect(() => mutate(initial, [rejectingOp], [])).not.toThrow();
+    expect(() => mutate(initial, [noOtherObjectOp], [])).not.toThrow();
   });
 
   it("rejects an operation naming a nonexistent object, rather than applying nothing and journalling a false record (D-021)", () => {
@@ -593,7 +595,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     const snapshotObjectsBefore = JSON.parse(JSON.stringify(initial)) as unknown;
     const operation: Operation = { kind: "setSlot", address: addr("obj_404", "value"), slot: { kind: "literal", value: 9 } };
 
-    const result = mutate(initial, operation, priorJournal);
+    const result = mutate(initial, [operation], priorJournal);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -603,6 +605,99 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     }
     expect(initial).toEqual(snapshotObjectsBefore);
     expect(priorJournal).toEqual([]); // unchanged — nothing was journalled
+  });
+});
+
+describe("mutate — D-020: the batch form (0018-REVIEW-phase0, fix 5)", () => {
+  it("applies every operation in the batch to the SAME clone, in order, appending exactly ONE journal entry holding the whole list", () => {
+    const initial = [valueObject("obj_1", "value_1", 3), valueObject("obj_2", "value_2", 4), addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value"))];
+    const firstOp: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 10 } };
+    const secondOp: Operation = { kind: "setSlot", address: addr("obj_2", "value"), slot: { kind: "literal", value: 20 } };
+
+    const result = mutate(initial, [firstOp, secondOp], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Both operations' effects are visible — derived from a SINGLE evaluation
+    // pass over both changes at once, not two independent mutate() calls.
+    const add1 = result.objects.find((object) => object.id === "obj_3");
+    expect(add1?.slots["out.result"]).toEqual({ kind: "derived", value: 30 }); // 10 + 20
+    // Exactly one journal entry, holding BOTH operations (D-020: "one
+    // committed batch is one journal entry"), not two entries.
+    expect(result.journal).toEqual([{ operations: [firstOp, secondOp] }]);
+  });
+
+  it("lets a LATER operation in the same batch overwrite what an EARLIER one in the same batch just wrote — last write wins", () => {
+    // Both operations target the SAME slot. Mutation-tested: this fixture
+    // alone does NOT distinguish "folded over one shared clone" from "each
+    // operation applied to its own fresh clone of the original, keeping only
+    // the last" — both produce 200 here, since nothing about an earlier
+    // conflicting write to the SAME address survives either way. The test
+    // above ("appends exactly ONE journal entry...", asserting 30 = 10 + 20
+    // across TWO DIFFERENT slots) is the one that actually proves the shared-
+    // clone claim; this one only pins last-write-wins as its own, separate,
+    // observable behaviour worth having a name for.
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const first: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 100 } };
+    const second: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 200 } };
+
+    const result = mutate(initial, [first, second], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects[0]?.slots.value).toEqual({ kind: "literal", value: 200 });
+  });
+
+  it("rejects the WHOLE batch (all-or-nothing) when only ONE of several operations would break the graph, leaving prior state unchanged", () => {
+    const initial = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const fineOp: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 99 } };
+    // The offending operation: rebinds add_1.in.a to read its own out.result — a genuine self-cycle.
+    const cyclicOp: Operation = {
+      kind: "setSlot",
+      address: addr("obj_3", "in", "a"),
+      slot: { kind: "formula", ast: { type: "reference", address: addr("obj_3", "out", "result") }, value: null },
+    };
+
+    const result = mutate(initial, [fineOp, cyclicOp], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+    }
+    // fineOp's change did NOT partially commit — the whole batch was discarded.
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("rejects an empty batch outright, rather than cloning/validating/evaluating/journalling nothing", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+
+    const result = mutate(initial, [], []);
+
+    expect(result.ok).toBe(false);
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("rejects the whole batch, naming EVERY operation with a nonexistent target, not just the first (D-021 across a batch)", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const firstMissing: Operation = { kind: "setSlot", address: addr("obj_404", "value"), slot: { kind: "literal", value: 1 } };
+    const fine: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 2 } };
+    const secondMissing: Operation = { kind: "setSlot", address: addr("obj_405", "x", "y"), slot: { kind: "literal", value: 3 } };
+
+    const result = mutate(initial, [firstMissing, fine, secondMissing], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).not.toContain("obj_404");
+      expect(result.message).not.toContain("obj_405");
+      expect(result.message).toContain("value"); // firstMissing's target slot path
+      expect(result.message).toContain("x.y"); // secondMissing's target slot path
+    }
   });
 });
 
@@ -697,7 +792,7 @@ describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (00
       slot: { kind: "literal", value: 999 },
     };
 
-    const result = mutate(objects, operation, []);
+    const result = mutate(objects, [operation], []);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -740,7 +835,7 @@ describe("mutate — D-019: the step-1 clone preserves every member of Value, no
     // matching exactly the shape 0018-REVIEW-phase0 verified D-019 through.
     const operation: Operation = { kind: "setSlot", address: addr("obj_2", "value"), slot: { kind: "literal", value: 20 } };
 
-    const result = mutate([fidelityObject, other], operation, []);
+    const result = mutate([fidelityObject, other], [operation], []);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
