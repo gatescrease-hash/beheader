@@ -153,6 +153,18 @@ describe("add's out.result compute function", () => {
     expect(result).toMatchObject({ error: "#REF" });
   });
 
+  // Pinned at 0008-REVIEW in answer to entry 0007's Q2. `null` is a member of
+  // Value, and `typeof null === "object"`, so it reaches the #TYPE branch rather
+  // than the error or #REF branches. That is the correct fail-closed answer for
+  // an arithmetic node and is asserted here so it is pinned behaviour rather
+  // than an accident of branch order. Deliberately NOT the spreadsheet
+  // "blank counts as 0" convention — `add` is a Phase 0 fixture (§6), not a
+  // product primitive, so it has no user-facing blank-cell semantics to match.
+  it("returns #TYPE for a null input, rather than coercing it to zero", () => {
+    const result = computeAdd(addObject, readFrom({ "in.a": null, "in.b": 5 }));
+    expect(result).toMatchObject({ error: "#TYPE" });
+  });
+
   it("never throws for any of the above inputs", () => {
     expect(() => computeAdd(addObject, readFrom({}))).not.toThrow();
     expect(() => computeAdd(addObject, readFrom({ "in.a": null, "in.b": null }))).not.toThrow();

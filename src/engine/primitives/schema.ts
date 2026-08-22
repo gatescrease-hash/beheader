@@ -68,7 +68,7 @@
  *   - Any geometry/table/text/script/image schema entries (Phases 3, 4, 5, 6).
  */
 import type { Address } from "../address.ts";
-import { slotKey, type ErrorValue, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
+import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 
 // ---------------------------------------------------------------------------
 // Dependency declarations (§5.1: "Dependencies may be declared statically ...
@@ -184,11 +184,6 @@ const VALUE_SCHEMA: ObjectSchema = {
 const ADD_IN_A_PATH: readonly string[] = ["in", "a"];
 const ADD_IN_B_PATH: readonly string[] = ["in", "b"];
 const ADD_OUT_RESULT_PATH: readonly string[] = ["out", "result"];
-
-/** True for the `ErrorValue` member of `Value`; false for every other member. */
-function isErrorValue(value: Value): value is ErrorValue {
-  return typeof value === "object" && value !== null && "error" in value;
-}
 
 /**
  * `add` (PROJECT_BRIEF §6): "two formula input slots, one derived output slot —

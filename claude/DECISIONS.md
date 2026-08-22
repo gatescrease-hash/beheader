@@ -280,3 +280,67 @@ preset)" — one category, one slot exposure (per-vertex literal slots plus a de
 `vertices`). A separate type would be a second entry in the schema registry with a schema
 identical to `polyline`'s, which is duplication the brief never asks for and which Rule 5's
 "dumbest correct implementation" argues against.
+
+---
+
+## D-013 — A derived slot's compute function may read ONLY the addresses its own dependency declaration returned
+Answers: (reviewer finding, cycle 0007)   Ruled: entry 0008-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: for every derived slot, the set of addresses its `compute` function reads MUST be a
+subset of the set `derivedSlotDependencyAddresses()` returns for that same slot. A compute
+function MUST NOT read any other slot, on its own object or any other, by any means.
+
+Two binding consequences:
+
+1. **`graph/eval.ts` MUST enforce this mechanically, not by convention.** When it invokes a
+   derived slot's `compute`, the `read` callback it passes MUST resolve only that slot's
+   declared dependency addresses and MUST return a `#REF` `ErrorValue` — not the real value —
+   for anything else. This is a set-membership check over an array the evaluator has already
+   computed in order to build the edges, so it costs one comparison per read and no extra
+   bookkeeping (Rule 5 is not a licence to skip it).
+2. **A schema entry SHOULD derive both from the same constants**, as `add` already does with
+   `ADD_IN_A_PATH` / `ADD_IN_B_PATH`. That is the cheap half of the guarantee; consequence 1
+   is the half that actually holds when a future entry forgets.
+
+Rationale: `graph/eval.ts` builds its topological order out of the **declared** edges. A
+compute function that reads an *undeclared* slot therefore reads a slot the sort was never
+asked to order before it — so the value it gets is whichever one happens to be there: this
+pass's, or the previous pass's. That is silently, intermittently stale output, and it presents
+exactly as "flaky reactivity," the failure mode `PROCESS_BRIEF` §9 already forbids a
+`recompute()` pass for causing. The two failures are the same bug reached by different routes,
+and only one of the routes was closed.
+
+This is not hypothetical at the point it is being ruled: `DerivedSlotCompute`'s `read`
+parameter accepts **any** `Address`, deliberately, because §5.1's dynamic dependency case
+(`text.resolvedContent`, `script.out.*`) genuinely needs to read other objects. The parameter
+cannot be narrowed by type, so the constraint has to be enforced at the call site or not at
+all. Ruled now, before `eval.ts` exists, because ruling after it is written against a looser
+contract means rewriting it; ruling now costs nothing.
+
+Reconciliation required: none — `add`'s compute already reads exactly its two declared
+dependencies. This binds `graph/eval.ts`, which is the next module to be built.
+
+---
+
+## D-014 — Predicates over the `Value` union are declared once, in `graph/node.ts`
+Answers: (reviewer finding, cycle 0007)   Ruled: entry 0008-REVIEW-phase0   Binding on: all future cycles
+
+Ruling: a type guard that narrows a `Value` — `isErrorValue` today, and any sibling a later
+phase needs (`isPoint`, `isPointList`, …) — is declared in `graph/node.ts` beside the `Value`
+union itself and imported everywhere else. No module may define its own local copy.
+`isErrorValue` was moved there by reviewer edit at 0008-REVIEW.
+
+`address.ts`'s `isAddressError` is explicitly **not** covered by this and stays where it is: it
+takes `unknown` (not `Value`) and narrows to the `#REF`-only `AddressError`, so it answers a
+different question for a different caller. Do not "unify" the two — 0006-REVIEW §6 declined to
+deepen the `address.ts` ↔ `graph/node.ts` coupling, and that reasoning is unchanged.
+
+Rationale: this is D-009's principle applied to the value vocabulary rather than the object-type
+vocabulary, for the same reason and at the same cheapest moment — the predicate was duplicated
+in exactly one place (byte-identical bodies in `address.ts` and `primitives/schema.ts`), and the
+next copy was already guaranteed: §5.1 requires errors to propagate, so *every* derived slot's
+compute function (geometry's `centroid`, text's `resolvedContent`, script's `out.*`) and
+`formula/eval.ts` must all make this exact check. Left alone, the third and fourth copies arrive
+in Phase 3 and Phase 5. The `value !== null` guard is the specific thing worth writing once:
+`typeof null === "object"` and `null` is a member of `Value`, so a copy that omits it reports
+`null` as an error.

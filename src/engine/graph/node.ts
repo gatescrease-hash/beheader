@@ -91,6 +91,26 @@ export interface ErrorValue {
  */
 export type Value = number | string | boolean | Point | readonly Point[] | null | ErrorValue;
 
+/**
+ * Narrows a `Value` to its `ErrorValue` arm.
+ *
+ * Why it lives here rather than at its call site: §5.1 requires that errors
+ * PROPAGATE — "any formula reading an error slot yields an error" — so every
+ * derived slot's compute function (`primitives/schema.ts`) and, later,
+ * `formula/eval.ts` must make exactly this check before touching a value.
+ * It is defined once, beside `ErrorValue` itself, for the same reason `Value`
+ * and `Point` are (D-009's principle: the value vocabulary is declared in one
+ * place and imported, never redeclared).
+ *
+ * The `value !== null` guard is load-bearing, not defensive noise: `typeof
+ * null === "object"`, and `null` is a member of `Value`. The other object-shaped
+ * members (`Point`, `readonly Point[]`) are correctly excluded by the `"error"`
+ * property test.
+ */
+export function isErrorValue(value: Value): value is ErrorValue {
+  return typeof value === "object" && value !== null && "error" in value;
+}
+
 // ---------------------------------------------------------------------------
 // Object type vocabulary (D-009)
 // ---------------------------------------------------------------------------

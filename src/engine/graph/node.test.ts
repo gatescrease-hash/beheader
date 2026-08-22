@@ -13,6 +13,7 @@ import type { ReferenceNode } from "../formula/ast.ts";
 import {
   TABLE_TYPE,
   getSlot,
+  isErrorValue,
   resolveSlot,
   slotKey,
   type DerivedSlot,
@@ -21,6 +22,8 @@ import {
   type GraphObject,
   type LiteralSlot,
   type ObjectType,
+  type Point,
+  type Value,
 } from "./node.ts";
 
 describe("slotKey", () => {
@@ -94,6 +97,38 @@ describe("the three slot kinds (§5.1's table)", () => {
     const errorValue: ErrorValue = { error: "#DIV0", message: "division by zero" };
     const slot: LiteralSlot = { kind: "literal", value: errorValue };
     expect(slot.value).toEqual({ error: "#DIV0", message: "division by zero" });
+  });
+});
+
+// §5.1 requires errors to PROPAGATE, so every derived-slot compute function and
+// (later) formula/eval.ts makes exactly this check before touching a value.
+// Tested across the WHOLE Value union rather than just the error case, per
+// D-008's lesson — the two members a naive implementation gets wrong are `null`
+// (typeof null === "object") and `readonly Point[]` (also object-shaped).
+describe("isErrorValue", () => {
+  it("is true for an ErrorValue", () => {
+    const errorValue: Value = { error: "#REF", message: "no such slot" };
+    expect(isErrorValue(errorValue)).toBe(true);
+  });
+
+  it("is false for null, which is object-typed but not an error", () => {
+    expect(isErrorValue(null)).toBe(false);
+  });
+
+  it("is false for a Point, which is object-shaped but carries no error property", () => {
+    const point: Point = { x: 1, y: 2 };
+    expect(isErrorValue(point)).toBe(false);
+  });
+
+  it("is false for a Point[], the other object-shaped member of Value", () => {
+    const points: readonly Point[] = [{ x: 1, y: 2 }];
+    expect(isErrorValue(points)).toBe(false);
+  });
+
+  it("is false for every scalar member of Value", () => {
+    expect(isErrorValue(42)).toBe(false);
+    expect(isErrorValue("a string")).toBe(false);
+    expect(isErrorValue(true)).toBe(false);
   });
 });
 
