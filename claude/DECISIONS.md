@@ -53,7 +53,7 @@ that round-trips its objects but not its counter fails Phase 0.
 ## D-003 — One cycle is one commit; the commit message names the log entry
 Answers: (seed)   Ruled: entry 0000-SEED-reviewer   Binding on: all future cycles
 
-Ruling: Each work cycle produces exactly one commit, on `main`, whose first line is
+Ruling: Each work cycle produces exactly one commit, on `master`, whose first line is
 `NNNN <slug>` matching the log entry filename (`0004 formula-lexer` ↔
 `claude-log/entries/0004-formula-lexer.md`). The commit includes the code, the tests, the
 new log entry, and the rewritten `STATUS.md`. Reviewer edits are a separate commit,
