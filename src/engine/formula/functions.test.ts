@@ -58,6 +58,16 @@ describe("FUNCTION_REGISTRY — completeness", () => {
   it("getFunctionEntry returns undefined for an unknown name", () => {
     expect(getFunctionEntry("FOO")).toBeUndefined();
   });
+
+  it("returns undefined for an Object.prototype member name, which a bare index would resolve (D-034)", () => {
+    // `toString(1)` is a formula parser.ts accepts today (it validates no function name), so a
+    // bare `FUNCTION_REGISTRY[name]` would hand eval.ts `Object.prototype.toString` typed as a
+    // FunctionEntry — and the next field read (checkArity's `arity.kind`) would throw inside
+    // src/engine/. Found at 0035-REVIEW-phase1.
+    for (const inherited of ["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"]) {
+      expect(getFunctionEntry(inherited)).toBeUndefined();
+    }
+  });
 });
 
 describe("D-029 — IF/AND/OR are lazy (no implementation); NOT is the one eager exception", () => {
@@ -190,6 +200,14 @@ describe("ABS / FLOOR / CEIL / SQRT", () => {
     expect(call("SQRT", [9])).toBe(3);
   });
 
+  it("CEIL of a small negative number is +0, not an error (D-033)", () => {
+    // Math.ceil(-0.5) === -0. The second reachable -0 producer in this file, alongside ROUND;
+    // added at 0035-REVIEW-phase1, where the previous #TYPE behaviour was found and ruled wrong.
+    const result = call("CEIL", [-0.5]);
+    expect(result).toBe(0);
+    expect(Object.is(result, -0)).toBe(false);
+  });
+
   it("SQRT of a negative number is #TYPE (NaN result), not a thrown exception", () => {
     expectError(call("SQRT", [-1]), "#TYPE");
   });
@@ -205,11 +223,17 @@ describe("ROUND(n, digits)", () => {
     expect(call("ROUND", [3.14159, 0])).toBe(3);
   });
 
-  it("rounding to -0 is caught and reported as #TYPE (Q-008)", () => {
-    // Math.round(-0.4) === -0 in JS — a real, reachable illegal-number case this
-    // function must catch, unlike primitives/schema.ts's `add` (see that file's
-    // own header for why `+` alone can never produce it).
-    expectError(call("ROUND", [-0.4, 0]), "#TYPE");
+  it("a result of -0 is normalised to +0, NOT reported as an error (D-033)", () => {
+    // Math.round(-0.4) === -0 in JS. The answer IS zero and zero is representable, so erroring
+    // would replace a correct answer with a lie; only the sign bit — which JSON cannot carry
+    // (Q-008) — is dropped. Expectation changed from #TYPE at 0035-REVIEW-phase1 (D-033).
+    const result = call("ROUND", [-0.4, 0]);
+    expect(result).toBe(0);
+    expect(Object.is(result, -0)).toBe(false);
+  });
+
+  it("still reports a genuinely unrepresentable result as #TYPE (D-033's other half)", () => {
+    expectError(call("ROUND", [1, 400]), "#TYPE"); // 10 ** 400 overflows, so the result is NaN
   });
 
   it("propagates an error from either argument", () => {

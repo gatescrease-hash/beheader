@@ -113,6 +113,15 @@ IEEE 754 `+` of two finite, non-`-0` operands cannot itself produce `-0` — see
 > a compute using `*` or `/` must re-derive it (`-1 * 0` is `-0`), which 0026 says in the schema
 > header. Widened by **D-027**: the same predicate now governs `camera` and `nextObjectId` too.
 
+> Reviewer note 2 (0035-REVIEW-phase1): **narrowed on the compute side by D-033, still OPEN and
+> still provisional on the storage side.** Cycle 0034 read option (a) as also binding COMPUTE
+> results, and made `functions.ts` return `#TYPE` for any `-0` — so `CEIL(-0.5)` and
+> `ROUND(-0.4, 0)` reported an error for a correct, exactly representable answer. D-033 splits the
+> two: a computed `-0` normalises to `+0`; only a non-finite result errors. That is NOT this
+> question's rejected option (c), which is about `mutate` rewriting a value an OPERATION asked to
+> store (the D-019 defect). Nothing is asked for by a compute function. `mutate` still rejects an
+> authored `-0` literal, in a slot value and in a journal payload, exactly as option (a) says.
+
 ---
 
 ## Q-007 — What shape does the document's serialized "camera state" (§5.11) have in Phase 0?

@@ -745,3 +745,86 @@ it is correct over its real domain. That is an accident of its call sites, not a
 predicate — it is named here so the next person to widen its domain knows to tighten it first.
 `graph/node.ts`'s `isErrorValue` is correct by construction: its parameter is `Value`, and
 `ErrorValue` is the only arm of `Value` with an `error` field.
+
+---
+
+## D-033 — A computed `-0` is NORMALISED to `+0`; only a genuinely unrepresentable result becomes an error
+Ruled: entry 0035-REVIEW-phase1 (reviewer)   Binding on: `formula/functions.ts`,
+`formula/eval.ts`, `primitives/schema.ts`'s compute functions, and every future compute path
+
+`isIllegalNumber` (`graph/node.ts`) stays the ONE leaf predicate every value-legality check is
+built from (D-014) — but its two halves get different answers on the COMPUTE side:
+
+- **Non-finite (`NaN`, `Infinity`, `-Infinity`) → `#TYPE`.** Unchanged, D-025. The computation has
+  no answer this project can represent, so returning a number would be a lie.
+- **`-0` → return `+0`.** The computation HAS an answer, and it is zero. Only IEEE 754's sign bit
+  on a zero is dropped — a bit §5.11's JSON format cannot carry anyway (`JSON.stringify(-0)` is
+  `"0"`), and one no reader of a `Value` can observe (`-0 === 0`).
+
+Rationale: cycle 0034 mapped both halves to `#TYPE`, which made `CEIL(-0.5)` and `ROUND(-0.4, 0)`
+— ordinary arithmetic with an exactly representable answer — return an error. That converts a
+persistence-format artifact (Q-008, about what may be STORED) into a user-facing arithmetic
+failure, and an error is strictly worse than the correct answer: `#TYPE` propagates through every
+downstream formula, so one `CEIL` of a small negative number poisons a whole subgraph.
+
+This does NOT reopen Q-008, and it is NOT Q-008's rejected option (c). That rejection is about
+`mutate` silently rewriting a value an OPERATION asked to store — the D-019 defect, where an
+accepted mutation changes a value the caller stated. Nothing is stated here: a compute function is
+choosing which legal `Value` its own arithmetic yields, and there is no user-authored `-0` to
+preserve. `mutate` still rejects an authored `-0` literal, in a slot value and in a journal
+payload, exactly as before (Q-008 option (a) stands, still provisional).
+
+Binding shape: the normalisation belongs at the ONE guard every compute result already routes
+through (`functions.ts`'s `finiteResult`), never sprinkled per function. A future compute path that
+can produce `-0` MUST route through a guard of that shape rather than deciding for itself.
+
+Reconciliation required: none — `finiteResult` and its two tests were fixed at this review.
+`primitives/schema.ts`'s `add` needs no change (its header's reasoning that `+` over legal operands
+cannot produce `-0` remains correct); a compute using `*` or `/` must route through a guard.
+
+---
+
+## D-034 — A registry keyed by user-supplied text is looked up by OWN property, never by a bare index
+Ruled: entry 0035-REVIEW-phase1 (reviewer)   Binding on: `formula/functions.ts` and every future
+`Record<string, T>` whose key can come from parsed input
+
+`FUNCTION_REGISTRY` is an object literal, so `FUNCTION_REGISTRY[name]` resolves up the prototype
+chain: `getFunctionEntry("toString")` returned `Object.prototype.toString`, and
+`getFunctionEntry("__proto__")` returned `Object.prototype` — both truthy, both typed
+`FunctionEntry`, neither one. The first field read on that value (`entry.arity.kind`, inside
+`checkArity`) throws a `TypeError` — the one thing `src/engine/` promises never to do, from a file
+whose own header says "No entry here ever throws."
+
+It is reachable from ordinary user text, not theoretical: `parser.ts` validates no function name,
+so `toString(1)` parses to `{ type: "functionCall", name: "toString", args: [...] }` today.
+Verified by probe at this review, before the fix.
+
+Ruling: every lookup into a `Record<string, T>` whose key originates in parsed or user-supplied
+text MUST guard with `Object.hasOwn(record, key)` (or be built on a prototype-less object) before
+indexing. Type-level safety is not enough here — `noUncheckedIndexedAccess` types the result
+`T | undefined` and the prototype hit satisfies `T`.
+
+Reconciliation required: none beyond this review's own edit to `getFunctionEntry`, plus its
+regression test. `LAZY_FUNCTION_NAMES` / `RANGE_ACCEPTING_FUNCTION_NAMES` are `Set`s and were never
+exposed to this.
+
+---
+
+## D-035 — `IF` takes exactly three arguments; `AND`/`OR` take at least one
+Ruled: entry 0035-REVIEW-phase1 (reviewer)   Binding on: `formula/functions.ts`,
+`formula/eval.ts`, `formula/ast.ts`
+
+§5.3 names `IF` in its built-ins list without a signature (unlike `ROUND(n, digits)` and `PI()`),
+so this is a gap, settled here rather than left for the evaluator to decide by accident:
+
+- **`IF` is `EXACTLY(3)`.** Excel's optional third argument is deliberately NOT adopted: the
+  brief's own prose writes `IF(cond, trueVal, falseVal)` with all three named, and requiring three
+  is the additively-widenable direction (a 2-arg form can be legalised later; narrowing after
+  formulas exist cannot). This overrides `ast.ts`'s stale "2 or 3 args" header note, corrected at
+  this review — that note predates D-029 and was never implemented.
+- **`AND`/`OR` are `AT_LEAST(1)`.** Cycle 0034's call, confirmed: it matches Excel (D-030's
+  tie-breaker), a one-argument boolean combinator is harmless (`AND(x)` is `x`), and nothing
+  depends on the stricter reading. Cheap to narrow later if a real reason appears.
+
+This binds `checkArity`'s inputs only — D-029 still forbids all three from having an eager
+implementation, and `eval.ts` MUST check arity itself before evaluating either branch.

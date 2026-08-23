@@ -46,20 +46,24 @@
  *   2. Type-check every remaining argument against what the function actually needs, one #TYPE
  *      message per bad argument, naming its 1-based position.
  *   3. Compute, then run the result through `finiteResult` — the SAME `isIllegalNumber` predicate
- *      (`graph/node.ts`, D-014) `mutation.ts`'s D-025/Q-008 checks already use, catching a
- *      non-finite OR `-0` result and mapping it to `#TYPE` rather than letting it become illegal
- *      document state later (D-025, D-027, Q-008 all bind this the same way `add`'s compute
- *      already does it — see that file's own header for why `add` itself does not need the `-0`
- *      half, and why most functions here DO: `ROUND(-0.4, 0)` is a real, reachable `-0` this file
- *      must catch that `add`'s narrower `+`-only argument never could).
+ *      (`graph/node.ts`, D-014) `mutation.ts`'s D-025/Q-008 checks already use, so no result that
+ *      cannot survive §5.11's JSON format ever leaves this file. Its two halves get DIFFERENT
+ *      answers, per **D-033**: a non-finite result becomes `#TYPE` (as `add`'s compute already
+ *      does, D-025), while a `-0` result is normalised to `+0` — `CEIL(-0.5)` and `ROUND(-0.4, 0)`
+ *      have a correct, representable answer, and erroring would replace it with a lie. See
+ *      `finiteResult`'s own comment; see `add`'s header for why `+` alone can never reach either.
  *
- *   Every implementation is ALSO defensive against being called with too FEW arguments (a missing
- *   `args[index]` reads as `undefined`, `noUncheckedIndexedAccess`) — it returns a `#TYPE` naming
- *   the missing argument rather than crashing. This is deliberate belt-and-braces: `checkArity`
- *   exists precisely so a real caller (`eval.ts`, later) checks BEFORE calling `implementation`,
- *   but this file does not trust that a future caller always will (the same layered-validation
- *   posture `address.ts`/`mutation.ts` already establish, D-017's precedent: a check upstream is
- *   necessary, not a license for the function underneath to assume it ran).
+ *   Every FIXED-ARITY implementation is ALSO defensive against being called with too FEW arguments
+ *   (a missing `args[index]` reads as `undefined`, `noUncheckedIndexedAccess`) — it returns a
+ *   `#TYPE` naming the missing argument rather than crashing. The VARIADIC ones have no fixed
+ *   position to miss: called with zero arguments they return their own identity or a caught
+ *   illegal result (`SUM()` is `0`, `CONCAT()` is `""`, `MIN()`/`MAX()`/`AVG()` are `#TYPE` via
+ *   `finiteResult`), never a crash — their `atLeast(1)` minimum is enforced by `checkArity`, not
+ *   by the implementation. This is deliberate belt-and-braces: `checkArity` exists precisely so a
+ *   real caller (`eval.ts`, later) checks BEFORE calling `implementation`, but this file does not
+ *   trust that a future caller always will (the same layered-validation posture `address.ts`/
+ *   `mutation.ts` already establish, D-017's precedent: a check upstream is necessary, not a
+ *   license for the function underneath to assume it ran).
  *
  *   **Function names are matched case-sensitively, uppercase only** (`getFunctionEntry("sum")` is
  *   `undefined`; only `"SUM"` resolves). This is not a fresh guess: `parser.ts`'s own
@@ -253,13 +257,31 @@ function asStringList(name: string, args: readonly Value[]): readonly string[] |
 }
 
 /**
- * Guards a computed numeric result against D-025 (non-finite) and Q-008 (`-0`) — the SAME
- * `isIllegalNumber` predicate `mutation.ts` and `primitives/schema.ts`'s `add` already use
- * (D-014). Every eager arithmetic implementation below routes its result through this rather than
- * returning a raw `number` directly.
+ * Guards a computed numeric result through the SAME `isIllegalNumber` predicate (`graph/node.ts`,
+ * D-014) `mutation.ts` and `primitives/schema.ts`'s `add` already use — but answers its two halves
+ * DIFFERENTLY, per **D-033** (ruled at 0035-REVIEW-phase1):
+ *
+ *   - Non-finite (`NaN`, `Infinity`, `-Infinity`) becomes `#TYPE`. The computation has no answer
+ *     this project can represent (`SQRT(-1)`, `POW(0, -1)`), so reporting a number would be a lie.
+ *     Same treatment `add`'s compute already gives it (D-025).
+ *   - `-0` is normalised to `+0`. The computation DOES have an answer and it is zero: `CEIL(-0.5)`
+ *     and `ROUND(-0.4, 0)` are ordinary arithmetic whose only defect is IEEE 754's sign bit on a
+ *     zero — which JSON cannot carry (Q-008) and which no reader of a `Value` can distinguish.
+ *     Erroring there turns a correct answer into `#TYPE`.
+ *
+ * This is NOT Q-008's rejected option (c): that rejection is about `mutate` silently rewriting a
+ * value an OPERATION asked to store (the D-019 defect). Nothing here was asked for by an operation
+ * — a compute function is choosing which legal `Value` its own arithmetic yields — and `mutate`
+ * still rejects an authored `-0` literal exactly as before. Every eager arithmetic implementation
+ * below routes its result through this rather than returning a raw `number` directly.
  */
 function finiteResult(name: string, value: number): Value {
   if (isIllegalNumber(value)) {
+    // D-033: `-0` is the one illegal number whose correct answer IS representable — normalise
+    // rather than error. Everything else this predicate catches is genuinely unrepresentable.
+    if (Object.is(value, -0)) {
+      return 0;
+    }
     return { error: "#TYPE", message: `${name}: result is not a legal number (${value})` };
   }
   return value;
@@ -430,8 +452,20 @@ export const FUNCTION_REGISTRY: Readonly<Record<string, FunctionEntry>> = {
   }),
 };
 
-/** Exact, case-sensitive lookup. See the file header for why case-sensitivity is not a fresh guess. */
+/**
+ * Exact, case-sensitive lookup. See the file header for why case-sensitivity is not a fresh guess.
+ *
+ * `Object.hasOwn` first, never a bare index (**D-034**, 0035-REVIEW-phase1): `FUNCTION_REGISTRY`
+ * is an object literal, so `FUNCTION_REGISTRY["toString"]` walks up the prototype chain and hands
+ * back `Object.prototype.toString` — a truthy value the type system believes is a `FunctionEntry`,
+ * whose first field read (`entry.arity`, inside `checkArity`) then throws a `TypeError` inside
+ * `src/engine/`. `toString(1)` is a formula `parser.ts` accepts today (it validates no function
+ * name), so the bad lookup is reachable from ordinary user text, not theoretical.
+ */
 export function getFunctionEntry(name: string): FunctionEntry | undefined {
+  if (!Object.hasOwn(FUNCTION_REGISTRY, name)) {
+    return undefined;
+  }
   return FUNCTION_REGISTRY[name];
 }
 

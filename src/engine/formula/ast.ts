@@ -176,7 +176,7 @@ export interface UnaryOpNode {
  * header for why this is not a closed union the way `ObjectType` (D-009) is.
  * `IF` is NOT a separate AST node: §5.3 lists it among the built-in
  * FUNCTIONS, so `IF(cond, trueVal, falseVal)` is simply a `FunctionCallNode`
- * named `"IF"` with 2 or 3 args — no `ConditionalNode` exists here. (Text's
+ * named `"IF"` with exactly three args (D-035) — no `ConditionalNode` here. (Text's
  * OWN `{? }{:}{?}` block-tree conditional, §5.6, is a different, later
  * concern — a block-tree node, not a formula AST node.)
  */
