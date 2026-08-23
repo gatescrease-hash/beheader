@@ -212,7 +212,12 @@ export function generateDefaultName(typePrefix: string, objects: readonly Addres
 
 // TABLE_TYPE ("table") is imported from graph/node.ts, not redeclared here — the
 // object type vocabulary is defined exactly once, per D-009 (0004-REVIEW-phase0).
-const TABLE_CELL_PATH_PREFIX = "cells";
+// Exported (cycle 0040) so `primitives/table.ts` builds a `["cells", ref]` path
+// against the SAME constant this file's own `toStoredPath`/`bareCellAddress` use,
+// rather than a second copy of the string `"cells"` — D-010's "declare vocabulary
+// once" principle, applied to this literal the same way `TABLE_TYPE` already applies
+// it to the type string.
+export const TABLE_CELL_PATH_PREFIX = "cells";
 
 /**
  * The A1-style cell-reference form (§5.4: "A1-style addressing scoped to the table"):
@@ -277,6 +282,102 @@ export function isCellReferenceForm(segment: string): boolean {
  */
 export function bareCellAddress(tableObjectId: string, cellReference: string): Address {
   return { objectId: tableObjectId, path: [TABLE_CELL_PATH_PREFIX, normalizeCellReference(cellReference)] };
+}
+
+// ---------------------------------------------------------------------------
+// Column-letter <-> index arithmetic and cell-reference splitting (cycle 0040)
+//
+// §5.4's A1 form is bijective base-26 over columns ("Excel" numbering): A=1,
+// B=2, ..., Z=26, AA=27, AB=28, .... `address.ts` already owns every other
+// cell-reference-FORM concern (the pattern, isCellReferenceForm,
+// bareCellAddress), and `CELL_REFERENCE_PATTERN` already admits multi-letter
+// columns (D-039's widened form), so this is that same ownership extended one
+// step: taking a reference apart / putting one back together, not a new
+// concept. `primitives/table.ts` (the table primitive's own domain — default
+// dimensions, enumerating a RANGE's rectangle of cells) is the first consumer,
+// per D-036 constraint 2's own wording ("lives beside the table primitive or
+// in address.ts"). Both directions are pure integer/string arithmetic with no
+// document-state or schema dependency, so they are exported standalone here,
+// same posture `formula/*`'s Phase 1 files took before Phase 2 wired them in.
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts a column-letters string (already known to match `[A-Za-z]+`, per
+ * `isCellReferenceForm`/`CELL_REFERENCE_PATTERN`) to its 1-based bijective
+ * base-26 index: `"A"` -> 1, `"Z"` -> 26, `"AA"` -> 27. Accepts either case —
+ * `columnLetters.charCodeAt` is normalised per character rather than requiring
+ * the caller to uppercase first, matching D-039's "accept either case" stance
+ * generally, though every caller in this codebase happens to pass an
+ * already-uppercase string post-D-039 normalisation.
+ *
+ * Precondition (not re-checked, same posture as `bareCellAddress`): every
+ * character is an ASCII letter. A caller MUST validate the form first (e.g.
+ * via `isCellReferenceForm`'s pattern, or `parseCellReference` below) — this
+ * function has no `#`-shaped failure to return and this file's "never throw"
+ * discipline means it cannot fail loudly on bad input, only silently produce
+ * a meaningless number. Never called directly on unvalidated user text.
+ */
+export function columnLettersToIndex(columnLetters: string): number {
+  let index = 0;
+  for (const char of columnLetters) {
+    // 'A'/'a' -> 1: charCodeAt of the uppercased char, minus 'A' (64), plus 1.
+    index = index * 26 + (char.toUpperCase().charCodeAt(0) - 64);
+  }
+  return index;
+}
+
+/**
+ * The exact inverse of `columnLettersToIndex`: a 1-based column index to its
+ * bijective base-26 letters, always uppercase (D-039: exactly one spelling is
+ * ever stored or displayed). `index` MUST be a positive integer — same
+ * precondition posture as the function above; not re-checked here.
+ */
+export function indexToColumnLetters(index: number): string {
+  let remaining = index;
+  let letters = "";
+  while (remaining > 0) {
+    const digit = (remaining - 1) % 26;
+    letters = String.fromCharCode(65 + digit) + letters;
+    remaining = Math.floor((remaining - 1) / 26);
+  }
+  return letters;
+}
+
+/** One cell reference split into its column-letters and row-number parts (both halves of the A1 form, §5.4). */
+export interface CellCoordinates {
+  readonly column: number;
+  readonly row: number;
+}
+
+/**
+ * Splits a cell reference (`"AB12"`) into 1-based `{ column, row }` numbers —
+ * the structured form a rectangle-enumeration helper (`primitives/table.ts`)
+ * needs; `columnLettersToIndex` handles the column half. `undefined` for
+ * anything not matching `CELL_REFERENCE_PATTERN` (D-039's either-case form) —
+ * never throws, matching this file's discipline everywhere else.
+ */
+export function parseCellReference(cellReference: string): CellCoordinates | undefined {
+  const match = /^([A-Za-z]+)([0-9]+)$/.exec(cellReference);
+  if (match === null) {
+    return undefined;
+  }
+  // Safe: a successful match against this two-group pattern always populates both
+  // capture groups (neither is optional in the pattern), so match[1]/match[2] are
+  // real strings, not `undefined` — noUncheckedIndexedAccess types them defensively
+  // regardless, so this is asserted rather than re-derived.
+  const columnLetters = match[1] as string;
+  const rowDigits = match[2] as string;
+  return { column: columnLettersToIndex(columnLetters), row: Number(rowDigits) };
+}
+
+/**
+ * The exact inverse of `parseCellReference`: 1-based `{ column, row }` numbers
+ * to an A1-form string, always uppercase (D-039). `column`/`row` MUST both be
+ * positive integers — not re-checked, same precondition posture as
+ * `indexToColumnLetters`.
+ */
+export function formatCellReference(coordinates: CellCoordinates): string {
+  return `${indexToColumnLetters(coordinates.column)}${coordinates.row}`;
 }
 
 /**

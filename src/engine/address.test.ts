@@ -11,13 +11,17 @@ import {
   type AddressableObject,
   bareCellAddress,
   checkNameAvailable,
+  columnLettersToIndex,
   findObjectByName,
   formatAddress,
+  formatCellReference,
   generateDefaultName,
+  indexToColumnLetters,
   isAddressError,
   isNameTaken,
   isValidName,
   parseAddress,
+  parseCellReference,
 } from "./address.ts";
 import type { ObjectType } from "./graph/node.ts";
 
@@ -331,5 +335,76 @@ describe("parseAddress / formatAddress round-trip every address form in §5.2's 
     expect(formatAddress({ objectId: "obj_3", path: ["cells", "rows"] }, docObjects)).toBe(
       "table_x.cells.rows",
     );
+  });
+});
+
+describe("columnLettersToIndex / indexToColumnLetters — bijective base-26 (§5.4, cycle 0040)", () => {
+  it.each<[letters: string, index: number]>([
+    ["A", 1],
+    ["B", 2],
+    ["Z", 26],
+    ["AA", 27],
+    ["AB", 28],
+    ["AZ", 52],
+    ["BA", 53],
+    ["ZZ", 702],
+    ["AAA", 703],
+  ])("%s <-> %i", (letters, index) => {
+    expect(columnLettersToIndex(letters)).toBe(index);
+    expect(indexToColumnLetters(index)).toBe(letters);
+  });
+
+  it("columnLettersToIndex accepts either case, per D-039", () => {
+    expect(columnLettersToIndex("ab")).toBe(28);
+    expect(columnLettersToIndex("Ab")).toBe(28);
+  });
+
+  it("indexToColumnLetters always produces uppercase, per D-039", () => {
+    expect(indexToColumnLetters(28)).toBe("AB");
+  });
+
+  it("round-trips every index from 1 to 1000 with no collision (bijective, not merely injective within a small sample)", () => {
+    const seen = new Set<string>();
+    for (let index = 1; index <= 1000; index += 1) {
+      const letters = indexToColumnLetters(index);
+      expect(seen.has(letters), `duplicate letters "${letters}" at index ${index}`).toBe(false);
+      seen.add(letters);
+      expect(columnLettersToIndex(letters)).toBe(index);
+    }
+  });
+});
+
+describe("parseCellReference / formatCellReference (§5.4, cycle 0040)", () => {
+  it.each<[reference: string, column: number, row: number]>([
+    ["A1", 1, 1],
+    ["Z9", 26, 9],
+    ["AA1", 27, 1],
+    ["AB12", 28, 12],
+  ])("splits %s into {column: %i, row: %i} and back", (reference, column, row) => {
+    expect(parseCellReference(reference)).toEqual({ column, row });
+    expect(formatCellReference({ column, row })).toBe(reference);
+  });
+
+  it("parseCellReference accepts either case and formatCellReference always answers uppercase (D-039)", () => {
+    expect(parseCellReference("ab12")).toEqual({ column: 28, row: 12 });
+    expect(formatCellReference({ column: 28, row: 12 })).toBe("AB12");
+  });
+
+  it("parseCellReference returns undefined, never throws, for a non-cell-shaped string", () => {
+    expect(parseCellReference("")).toBeUndefined();
+    expect(parseCellReference("12A")).toBeUndefined();
+    expect(parseCellReference("A")).toBeUndefined();
+    expect(parseCellReference("1")).toBeUndefined();
+    expect(parseCellReference("A1B2")).toBeUndefined();
+  });
+
+  it("agrees with bareCellAddress/toStoredPath's own TABLE_CELL_PATH_PREFIX shape (no drift between the two mappings)", () => {
+    // parseCellReference/formatCellReference operate on the bare reference string;
+    // bareCellAddress wraps it in the stored ["cells", ref] path. Both must agree on
+    // the same uppercase spelling for the same cell.
+    const coordinates = parseCellReference("b3");
+    expect(coordinates).toEqual({ column: 2, row: 3 });
+    const ref = formatCellReference(coordinates as { column: number; row: number });
+    expect(bareCellAddress("obj_1", ref)).toEqual(bareCellAddress("obj_1", "b3"));
   });
 });
