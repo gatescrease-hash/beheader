@@ -248,6 +248,20 @@ describe("deserializeDocument — malformed input, never throws", () => {
     expect(deserializeDocument(missingAst).ok).toBe(false);
   });
 
+  it("routes a formula slot holding an unsupported AST shape (Q-005/cycle 0028) through mutate's own rejection — the shape a hand-edited file could carry today, since document.ts trusts a formula slot's ast content", () => {
+    const objects: readonly GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 1 }, value: null } } },
+    ];
+    const serialized = serializeDocument({ ...createEmptyDocument(), objects });
+
+    const result = deserializeDocument(serialized);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+  });
+
   it("routes a genuinely broken graph (dangling reference) through mutate's own rejection — proving §5.11's 'applies objects through the mutation API' end-to-end", () => {
     const objects = [valueObject("obj_2", "value_2", 5), addObject("obj_3", "add_1", addr("obj_999", "value"), addr("obj_2", "value"))];
     const serialized = serializeDocument({ ...createEmptyDocument(), objects });

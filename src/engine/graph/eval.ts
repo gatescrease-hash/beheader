@@ -19,13 +19,12 @@
  *
  *   - `literal` slots keep their stored value unchanged — nothing computes a
  *     literal; it IS the source of truth (§5.1's table).
- *   - `formula` slots evaluate their AST. Phase 0's `FormulaAst` has exactly
- *     one variant (`ReferenceNode`, PROVISIONAL(Q-005)) — a binding is "just
- *     the degenerate formula `= other.slot`" (§5.1), so evaluating one means
- *     reading the referenced slot's ALREADY-EVALUATED value from this same
- *     pass. Phase 1 replaces `evaluateReference` below with a real
- *     `formula/eval.ts` walking the full grammar; nothing else in this file
- *     changes shape when that happens.
+ *   - `formula` slots evaluate their AST. `FormulaAst` is now the full §5.3
+ *     union (Q-005, ANSWERED cycle 0028) — but this file's `evaluateFormula`
+ *     only actually evaluates the `ReferenceNode` shape (a binding is "just
+ *     the degenerate formula `= other.slot`", §5.1); every other shape is a
+ *     temporary, provably-unreachable `#PARSE` rejection until Phase 2 wires
+ *     in the real `formula/eval.ts`. See `evaluateFormula`'s own doc comment.
  *   - `derived` slots call their schema's compute function
  *     (primitives/schema.ts), exactly once, INSIDE this same topological pass
  *     — never in a separate post-pass (§5.1, PROCESS_BRIEF §9).
@@ -78,12 +77,14 @@
  *   - Deriving the Edge[] (mutation.ts step 3) or detecting cycles
  *     (graph/cycles.ts, already built) — both must already have happened
  *     before this file's `evaluate` is called.
- *   - Any real formula grammar beyond a bare reference (formula/*, Phase 1).
+ *   - Any real formula grammar beyond a bare reference — `formula/*` (Phase 1,
+ *     standalone) builds the grammar; wiring it in HERE is Phase 2's job.
  *   - Cloning/committing/journaling (mutation.ts, not yet built) — this file
  *     only evaluates; it does not decide what becomes the document's new
  *     current state.
  */
 import type { Address } from "../address.ts";
+import { isReferenceNode, type FormulaAst } from "../formula/ast.ts";
 import { getObjectSchema, type DerivedSlotSchema } from "../primitives/schema.ts";
 import { addressKey, type Edge } from "./edge.ts";
 import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
@@ -218,7 +219,7 @@ function evaluateSlot(
     case "literal":
       return slot.value;
     case "formula":
-      return evaluateReference(slot.ast.address, evaluatedValues);
+      return evaluateFormula(slot.ast, evaluatedValues);
     case "derived":
       return evaluateDerivedSlot(object, key, edges, evaluatedValues);
   }
@@ -244,21 +245,45 @@ function nextSlot(slot: Slot, value: Value): Slot {
 }
 
 /**
- * Phase 0's entire "formula evaluation": `FormulaAst` has exactly one variant
- * (`ReferenceNode`, PROVISIONAL(Q-005)) — a binding, "just the degenerate
- * formula `= other.slot`" (§5.1). Evaluating one means reading the referenced
- * slot's value from THIS SAME pass — guaranteed already evaluated, because
- * whatever derived `edges` (mutation.ts step 3) must have produced a
- * sourceSlot=referenced/dependentSlot=this-formula-slot edge for the
- * topological order above to have placed the reference first.
+ * `FormulaAst` is now the full §5.3 union (Q-005, ANSWERED cycle 0028) — this
+ * function is the narrow, TEMPORARY bridge until Phase 2 wires in the real
+ * `formula/eval.ts`. It handles exactly the one shape this build can commit
+ * to a document at all: `mutation.ts`'s `validateIntegrity` (cycle 0028's new
+ * check) rejects any `formula`-kind slot whose AST is not a `ReferenceNode`
+ * BEFORE this function is ever called — so the non-reference branch below is
+ * provably unreachable for any document `mutate` accepted.
+ *
+ * This function does not get to ASSUME that from here, though (this file
+ * cannot see `mutation.ts`'s check run) — it fails closed with an `ErrorValue`
+ * rather than throwing or indexing into a field that might not exist, the
+ * same defensive stance every other function in this file already takes.
+ *
+ * Phase 2 replaces the non-reference branch's rejection with a real call into
+ * `formula/eval.ts`; the reference branch (`evaluateReference`) does not
+ * change shape when that happens (Q-005's binding constraint).
+ */
+function evaluateFormula(ast: FormulaAst, evaluatedValues: ReadonlyMap<string, Value>): Value {
+  if (!isReferenceNode(ast)) {
+    return {
+      error: "#PARSE",
+      message: `this build's evaluator only supports a bare reference (a binding); a "${ast.type}" formula is not wired in until Phase 2`,
+    };
+  }
+  return evaluateReference(ast.address, evaluatedValues);
+}
+
+/**
+ * A binding: "just the degenerate formula `= other.slot`" (§5.1). Evaluating
+ * one means reading the referenced slot's value from THIS SAME pass —
+ * guaranteed already evaluated, because whatever derived `edges`
+ * (mutation.ts step 3) must have produced a sourceSlot=referenced/
+ * dependentSlot=this-formula-slot edge for the topological order above to
+ * have placed the reference first.
  *
  * Rejects (never throws): if the referenced address was never evaluated in
  * this pass — a dangling reference, or a caller-supplied `edges` that does
  * not actually encode the dependency — returns `#REF` rather than `undefined`,
- * since `undefined` is not a member of `Value` (§5.1). Phase 1 replaces this
- * whole function with `formula/eval.ts`'s real evaluator; nothing else in
- * this file needs to change shape when that happens (Q-005's binding
- * constraint: the union is widened, never restructured).
+ * since `undefined` is not a member of `Value` (§5.1).
  */
 function evaluateReference(address: Address, evaluatedValues: ReadonlyMap<string, Value>): Value {
   const value = evaluatedValues.get(addressKey(address));

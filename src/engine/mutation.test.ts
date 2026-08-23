@@ -16,6 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "./address.ts";
+import type { FormulaAst } from "./formula/ast.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
@@ -283,6 +284,78 @@ describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot
       slots: { radius: { kind: "literal", value: 5 } },
     };
     expect(validateIntegrity([noSchemaYet], deriveEdges([noSchemaYet]))).toEqual({ ok: true });
+  });
+});
+
+describe("validateIntegrity — unsupported formula AST shape (Q-005's widening of FormulaAst, cycle 0028)", () => {
+  it("rejects a formula slot holding a LiteralNode, naming it, before evaluate would ever be reached", () => {
+    const objects: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 42 }, value: null } } },
+    ];
+
+    const result = validateIntegrity(objects, deriveEdges(objects));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("literal");
+    }
+  });
+
+  it("rejects every non-reference AST shape in turn: literal, range, binaryOp, unaryOp, functionCall", () => {
+    const nonReferenceAsts: FormulaAst[] = [
+      { type: "literal", value: 1 },
+      { type: "range", start: addr("obj_1", "value"), end: addr("obj_1", "value") },
+      { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } },
+      { type: "unaryOp", operator: "NOT", operand: { type: "literal", value: true } },
+      { type: "functionCall", name: "SUM", args: [] },
+    ];
+    for (const ast of nonReferenceAsts) {
+      const objects: GraphObject[] = [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast, value: null } } }];
+      expect(validateIntegrity(objects, deriveEdges(objects)).ok).toBe(false);
+    }
+  });
+
+  it("does not flag a formula slot holding the one supported shape, ReferenceNode — the ordinary binding case", () => {
+    const objects = [valueObject("obj_1", "value_1", 1), addObject("obj_2", "add_1", addr("obj_1", "value"), addr("obj_1", "value"))];
+    const result = validateIntegrity(objects, deriveEdges(objects));
+    expect(result.ok).toBe(true);
+  });
+
+  it("runs before the dangling-reference check: a document with BOTH an unsupported AST and an unrelated dangling reference reports only the unsupported-AST problem", () => {
+    const objects: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 1 }, value: null } } },
+      addObject("obj_2", "add_1", addr("obj_999", "value"), addr("obj_1", "value")),
+    ];
+
+    const result = validateIntegrity(objects, deriveEdges(objects));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).not.toContain("add_1.in.a"); // the dangling-reference problem — not reached this call
+    }
+  });
+
+  it("rejected via the real mutate() entry point, naming the slot, leaving prior state unchanged", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "formula", ast: { type: "literal", value: 99 }, value: null } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("never throws for any non-reference AST shape", () => {
+    const objects: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "functionCall", name: "SUM", args: [] }, value: null } } },
+    ];
+    expect(() => validateIntegrity(objects, deriveEdges(objects))).not.toThrow();
   });
 });
 

@@ -253,6 +253,26 @@ describe("evaluate — L-13: a stale edge whose dependentSlot has no correspondi
   });
 });
 
+describe("evaluate — a formula slot whose AST is not a ReferenceNode (Q-005/cycle 0028)", () => {
+  it("evaluates to #PARSE rather than throwing — this build's evaluator only supports a bare reference until Phase 2", () => {
+    // mutation.ts's validateIntegrity (its new check, cycle 0028) rejects this
+    // shape before evaluate() is ever reached via the real §5.1 pipeline —
+    // pinned here directly, the same "call evaluate() straight past the gate"
+    // convention the L-13 test above already uses, so this defensive branch
+    // stays covered even though the real pipeline no longer reaches it.
+    const unsupported: GraphObject = {
+      id: "obj_1",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "literal", value: 42 }, value: null } },
+    };
+
+    expect(() => evaluate([unsupported], [])).not.toThrow();
+    const result = evaluate([unsupported], []);
+    expect(result[0]?.slots.value).toMatchObject({ kind: "formula", value: { error: "#PARSE" } });
+  });
+});
+
 describe("evaluate — addressKey consistency", () => {
   it("keys its internal bookkeeping the same way addressKey does, for every slot on every object", () => {
     // Not testing a public contract directly — this documents WHY eval.ts never

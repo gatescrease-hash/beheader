@@ -1,152 +1,122 @@
-# STATUS — as of entry 0027-REVIEW-phase0
+# STATUS — as of entry 0028-formula-ast
 
-STATE: GREEN. Compiles under both configs, 213/213 tests pass, 0 skipped, 0 `.only`, no test pins
-known-broken behaviour.
+STATE: GREEN. Compiles under both configs, 233/233 tests pass, 0 skipped, 0 `.only`, no test pins
+known-broken behaviour. **This entry is itself UNREVIEWED — do not build `lexer.ts`, `parser.ts`,
+or any other `formula/*` file until it lands.**
 
-Current phase: **0 is COMPLETE.** Last review point: **0027-REVIEW-phase0, verdict ACCEPT WITH
-EDITS — the Phase 0 gate is SIGNED OFF.** All four §6 acceptance clauses pass and are confirmed by
-review. Cycle 0026 closed 0025-REVIEW's REVISE list; the reviewer closed the same rule's last two
-uncovered fields (`camera`, `nextObjectId`) and ruled **D-027**.
+Current phase: **1 — Formula engine (`formula/*`), standalone.** Phase 0 is COMPLETE and SIGNED OFF
+(0027-REVIEW-phase0, ACCEPT WITH EDITS). Last review point: 0027-REVIEW-phase0. Cycle 0028 built
+`formula/ast.ts` — `formula/`'s first REAL file, a mandatory §6.1 trigger 2 review point on its own.
 
-## Next slice — Phase 1: the formula engine (`formula/`)
-Standalone and heavily unit-tested, `extractDependencies` from the start (§5.3, §6's build order).
-Read `claude/entries/0027-REVIEW-phase0.md`'s "Constraints carried into Phase 1" first. In short:
-- **`formula/`'s first real file is a §6.1 trigger 2 review point.** Stop there; do not batch the
-  grammar behind it.
-- **Q-005 resolves in Phase 1: WIDEN `FormulaAst`, never replace it.** A binding must stay
-  representable as a bare reference under the full §5.3 grammar. Clear every `PROVISIONAL(Q-005)`
-  tag (`formula/ast.ts`, `graph/eval.ts`, `mutation.ts`) in that cycle and mark the question
-  ANSWERED.
-- **`extractDependencies` is eager and TOTAL across both `IF` branches.** A cycle in an untaken
-  branch is a real cycle. Never lazy, never branch-aware (§5.3, §9).
-- **One engine (Rule 4)** — text and table cells share it. Never a second evaluator.
+## Next slice — REVIEW REQUIRED first, then `lexer.ts`
+`formula/ast.ts` is `formula/`'s first real file. 0027-REVIEW's carried constraint 1: stop there,
+do not batch the grammar behind it. If accepted, next slice is `formula/lexer.ts` (tokenizer),
+then `parser.ts`, `deps.ts` (`extractDependencies`, eager/total per §5.3/§9), `functions.ts`, and
+`formula/eval.ts` — each standalone, heavily unit-tested, per PROJECT_BRIEF §6's Phase 1 build
+order. Phase 1's acceptance criterion needs ALL of these; none is claimed yet.
 
 ## Built
-- Scaffold: `package.json`, both tsconfigs (strict + DOM-free, D-006), Vitest. `node_modules` is
-  gitignored — run `npm install` if `npm run typecheck`/`npm test` fail on a missing `tsc`.
-- `address.ts` (§5.2, 44 tests) — two-layer name/ID scheme, D-005 surface↔stored mapping keyed on
-  the A1 form (D-008), exact `parseAddress`/`formatAddress` inverses, `findObjectById`.
-- `graph/node.ts` (§5.1, 27 tests) — `Value`/`Point`/`ErrorValue`/`isErrorValue` (D-014),
-  `isIllegalNumber`/`hasIllegalNumber` (D-025 + Q-008 — ONE predicate, widened, not two),
-  `ObjectType`/`TABLE_TYPE` (D-009/D-011), the three slot kinds, `GraphObject`,
-  `slotKey`/`getSlot`/`resolveSlot`. Every field `readonly`.
-- `graph/edge.ts` (§5.1, 6 tests) — `Edge`, `addressKey`. **Internal-only, D-015.**
-- `formula/ast.ts` — one-variant `FormulaAst`. **`PROVISIONAL(Q-005)`** — Phase 1 widens it.
-- `primitives/schema.ts` (§5.1, 21 tests) — `derivedSlotDependencyAddresses`, `getObjectSchema`,
-  `findDerivedSlotSchema`, `ObjectSchema.nonDerivedSlotPaths`; `value`/`add` entries. `add`'s
-  compute maps a non-finite sum to `#TYPE` itself — the ONLY guard on a freshly computed derived
-  value. It needs no `-0` guard (its inputs are already legal and `+` cannot produce `-0`); a
-  future `*`/`/` compute MUST re-derive that (`-1 * 0` is `-0`).
-- `graph/cycles.ts` (§5.1 step 5, 11 tests) — `detectCycle(edges)`, from-scratch DFS.
-- `graph/eval.ts` (§5.1 step 7, 11 tests) — `evaluate(objects, edges)`, one topological pass over
-  an edge set ASSUMED acyclic; all three slot kinds; D-013 enforced mechanically.
-- `mutation.ts` (§5.1's full loop, 68 tests) — `deriveEdges`; `validateIntegrity` running FOUR
-  checks in order (D-017 undeclared slot → D-018 schema↔slot reconciliation, both directions →
-  dangling reference → D-025/Q-008 illegal slot value); `deriveValidateAndEvaluate`;
-  `mutate(objects, operations, journal)` — batch form (D-020) with THREE preconditions before
-  staging (empty batch; D-021/D-026 existence simulation; D-025/Q-008 payload legality), ONE clone
-  (D-019), one validation/evaluation pass, one journal entry with payloads cloned (D-024). Three
-  operation kinds: `SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`.
-- `document.ts` (§5.11, 25 tests) — `Document`, `serializeDocument`/`deserializeDocument`,
-  `saveDocument`/`loadDocument`. Loading rebuilds every object as a `CreateObjectOperation` and
-  calls `mutate` in ONE batch; a zero-object document bypasses `mutate` entirely. Journal VALUES
-  (not structure) checked on load via `rawContainsIllegalNumber`; `camera` and `nextObjectId`
-  checked on load too (**D-027**, 0027-REVIEW). `CameraState` is **PROVISIONAL(Q-007)**.
+- Scaffold, `address.ts` (44 tests), `graph/node.ts` (27 tests, `Value`/`isIllegalNumber`/
+  `hasIllegalNumber`/slot kinds), `graph/edge.ts` (6 tests), `primitives/schema.ts` (21 tests,
+  `value`/`add` schema entries), `graph/cycles.ts` (11 tests), `mutation.ts` (§5.1's full loop, 74
+  tests), `document.ts` (§5.11, 26 tests) — all reviewed and unchanged in substance since
+  0027-REVIEW, except as noted below. See 0025/0026/0027's entries for their own detail; not
+  repeated here (STATUS stays short — full history is `claude/entries/`).
+- **`graph/eval.ts`** (§5.1 step 7, 12 tests) — `evaluate(objects, edges)`. THIS cycle:
+  `evaluateSlot`'s `"formula"` case now calls `evaluateFormula`, which narrows to `ReferenceNode`
+  (unchanged `evaluateReference`) or returns `#PARSE` for any other AST shape — a defensive,
+  provably-unreachable-for-any-accepted-document fallback (see mutation.ts below).
+- **`mutation.ts`** — THIS cycle: `deriveEdges`'s source-1 loop narrows to `ReferenceNode`
+  (compiler-enforced, not just tested — see Gotchas). `validateIntegrity` gained a FIFTH,
+  deliberately TEMPORARY check, `findUnsupportedFormulaAsts` (run as check 2, right after D-017,
+  same family) — rejects a `formula`-kind slot whose AST is not yet a shape this build's evaluator
+  understands. Deleted whole-cloth once Phase 2 wires in the real formula engine.
+- **`formula/ast.ts`** (NEW real content, 12 tests, cycle 0028) — `FormulaAst` widened from Phase
+  0's one-variant stand-in to the FULL §5.3 grammar: `LiteralNode`, `ReferenceNode` (byte-for-byte
+  unchanged), `RangeNode` (endpoint pair, never pre-expanded), `BinaryOpNode` (one node, one
+  `operator` field spanning the WHOLE precedence chain), `UnaryOpNode` (`-`/`NOT`),
+  `FunctionCallNode` (`IF` is an ordinary call, not a dedicated node). `isReferenceNode` is the
+  ONE sanctioned narrowing predicate (D-014). **Q-005 is ANSWERED** (0006-REVIEW's own ruling,
+  executed now).
 
-## Acceptance criterion — Phase 0, all four PASSING and REVIEWED
-1. Topological propagation including derived slots — closed 0012-REVIEW.
-2. Cycle rejected, offending slots named, prior state provably unchanged — closed 0017/0018-REVIEW.
-3. Deleting a slot with dependents is rejected — closed 0022/0025-REVIEW. Uses the pre-existing
-   dangling-reference check; names EVERY dependent (§5.1.1).
-4. Document round-trips to JSON identically — closed 0026 + 0027-REVIEW. Pinned as TEXT
-   (`expect(saveDocument(loaded)).toBe(json)`), not just shape.
+## Acceptance criterion — Phase 0, all four PASSING and REVIEWED (unchanged, see 0027-REVIEW)
+Phase 1's criterion is NOT YET claimed — see Next slice. `ast.ts` alone cannot satisfy any of it
+(needs a lexer/parser/evaluator/function registry, none built yet).
 
 ## Known problems
-- **`camera` has no WRITE-side guard** (D-027): `saveDocument` returns a `string` and has no
-  failure channel, so nothing can reject an in-memory illegal camera. Harmless today
-  (`DEFAULT_CAMERA` is the only writer in the tree) — **Phase 3 must guard camera state where it is
-  computed**; a `NaN` zoom saves as `null` and makes the document unloadable.
-- **The journal's STRUCTURE is deliberately unvalidated** beyond `Array.isArray` —
-  `journal: ["garbage", 42, null]` loads, and nothing replays the journal yet, so garbage shape is
-  inert. A disclosed stance (`document.ts`'s header), distinct from journal VALUE legality, which
-  is enforced.
-- **L-16** — nothing enforces `nonDerivedSlotPaths`/`derivedSlots` disjointness on one type. One
-  registry-wide `slotKey`-compared test (D-010) fixes it; cheapest open cleanup.
-- **L-17 / L-18** — `deriveEdges` shares path-array references with the registry (harmless) and
-  does not deduplicate (both consumers tolerate it).
-- **L-14** — `eval.ts`'s two `ErrorValue` messages name no slot; a real gap for §5.9's error badges.
-- **§5.11's `style` field** has no data-model counterpart yet; the serializer is field-by-field and
-  will silently drop it unless whoever adds `style` also adds it there.
-- **`nextObjectId` is not reconciled against a loaded file's ids** — fails loudly later
-  (`createObject` rejects a duplicate), but Phase 3's minting must consult the object list.
-- **`noUnusedLocals` is off**, so a dead import compiles (one was found and removed at
-  0027-REVIEW). Turning it on is a config change — §6.1 trigger 6, not a silent fix.
-- **Four places can reject a mutation** — three `mutate` preconditions plus `validateIntegrity`.
-  Correct (each is about a different thing) and enumerated in the file header. If a FIFTH appears,
-  give them one named section.
-- **L-6 – L-15, carried** — cosmetics. Fold in when nearby: **L-8** (into L-16's test), **L-10**
-  (`addressKey` assumes `obj_<n>` ids — wants a note in `document.ts`).
-- **Recursion depth** — `detectCycle`/`evaluate`/`deepClone` recurse; fine at brief scale.
-- Table/`cells` mapping in `address.ts` still hardcoded; `nonDerivedSlotPaths` cannot express a slot
-  family. Both wait on `schema.ts` expressing families (D-005 §4, D-009). **Do not extend
-  `nonDerivedSlotPaths` to tables.**
-- **SETTLED, do not re-raise:** flat `claude/` layout; shared vocabulary out of `graph/node.ts`;
-  unifying `isErrorValue`/`isAddressError` (D-014); inverting a `slots` key to recover a KNOWN
-  slot's path; `describeUndeclaredSlot`'s raw-key naming (D-022, three call sites); collapsing
-  §5.1.1's two clauses into one `resolveSlot` check; one-directional schema↔slot reconciliation
-  (D-018); the JSON-based clone (D-019); a nonexistent-object operation as a no-op (D-021);
-  single-operation `mutate` (D-020); suppressing an unresolvable object's id from a message
-  (D-023); a payload or journal entering committed state by reference (D-024); checking batch
-  targets only against the pre-batch `objects`, or adding a second identity mechanism (D-026);
-  whether clause 3 needed a new rejection mechanism (no — 0022); non-finite numbers as legal state
-  (D-025 — no); `-0` as legal state (Q-008 PROVISIONAL — no); whether the post-fold check alone
-  enforces D-025 (no — payloads need their own precondition, 0026); whether value legality stops at
-  slot values (no — D-027, it is the whole document's rule).
+- **`findUnsupportedFormulaAsts` (mutation.ts) and `evaluateFormula`'s `#PARSE` branch
+  (graph/eval.ts) are BOTH temporary.** Both exist only because `FormulaAst` is now wider than
+  this build's evaluator. Delete both — and `deriveEdges`'s matching narrowing — the moment Phase
+  2 wires in the real `formula/eval.ts` and every `FormulaAst` shape is genuinely supported. Do not
+  let them survive past that point as dead defensive code with a stale reason.
+- **Q-009 (new, OPEN)**: are `AND`/`OR`/`NOT` operators, functions, or both? §5.3 lists them as
+  both (the precedence chain AND the built-ins list). Does not block anything today — both forms
+  are already representable in `FormulaAst` without conflict — but `parser.ts`/`functions.ts` need
+  an answer. Recommendation: (a) both, meaning the same thing.
+- **`camera` has no WRITE-side guard** (D-027, carried, unchanged) — Phase 3 must guard camera
+  state where it is computed.
+- **The journal's STRUCTURE is deliberately unvalidated** beyond `Array.isArray` (carried,
+  unchanged) — distinct from journal VALUE legality, which is enforced.
+- **L-16** — nothing enforces `nonDerivedSlotPaths`/`derivedSlots` disjointness on one type
+  (carried, cheapest open cleanup).
+- **L-17/L-18/L-14, §5.11's `style` field, `nextObjectId` reconciliation, `noUnusedLocals` off,
+  L-6–L-15 cosmetics, recursion depth, table/`cells` hardcoding — all carried unchanged from
+  0027-REVIEW's STATUS. Not repeated here; see that entry if detail is needed.**
+- **Five places can reject a mutation now** — four `mutate`/`validateIntegrity` checks that
+  existed at 0027-REVIEW, plus THIS cycle's `findUnsupportedFormulaAsts`. Still correct (each is
+  about a different thing), still enumerated in the file header. TEMPORARY, unlike the other four
+  — see above.
+- **SETTLED, do not re-raise:** everything 0027-REVIEW's STATUS already listed settled, PLUS: Q-005
+  (formula AST widening — ANSWERED); whether widening `FormulaAst` needed matching changes to
+  `mutation.ts`/`graph/eval.ts` (it did — the compiler enforces `deriveEdges`'s narrowing; see
+  Gotchas); whether `IF` needs its own AST node (it does not — an ordinary `FunctionCallNode`);
+  whether `LiteralNode` should be three node types instead of one (it should not — §5.3 groups
+  number/string/boolean as one grammar category).
 
 ## Live PROVISIONAL tags and open questions
-**`PROVISIONAL(Q-005)`** → `formula/ast.ts`, `graph/eval.ts`, `mutation.ts`. **Due now** — Phase 1
-resolves it. **`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`; approved 0025-REVIEW, Phase
-3 WIDENS it. **`PROVISIONAL(Q-008)`** → `graph/node.ts`'s `isIllegalNumber` (one site, correctly);
-approved 0027-REVIEW, open only for the human's option to overrule. **Q-006** ANSWERED → D-025,
-both halves enforced. **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2) deferred; **Q-003** → D-007.
-Next free: **Q-009**.
+**`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`. **`PROVISIONAL(Q-008)`** →
+`graph/node.ts`'s `isIllegalNumber`. **Q-009** OPEN, not yet provisional-tagged anywhere (nothing
+commits to an answer today — see above). **Q-005** ANSWERED this cycle — all its tags removed.
+**Q-006** ANSWERED → D-025. **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2) deferred. **Q-003** →
+D-007. Next free: **Q-010**.
 
 ## Gotchas for the next model
-- **Value legality is the whole DOCUMENT's rule, not the slot's** (D-027). Every number reachable
-  from a `Document` — slot value, journal payload, `camera`, `nextObjectId`, whatever is added next
-  — must pass `isIllegalNumber`. A new numeric field extends the existing check; it does not get an
-  exemption for "not really being document state."
-- **`mutate` has THREE preconditions before staging**: empty batch, target existence (D-021/D-026),
-  payload legality (D-025/Q-008). The third is why `[setSlot v=Infinity, setSlot v=5]` is REJECTED
-  even though the final value is legal: the illegal payload still enters the journal. Do not
-  "simplify" it into only checking the post-fold graph — that was 0025-REVIEW's blocking finding.
-- **`findIllegalSlotValues` and `findIllegalOperationPayloads` are both needed** — post-fold graph
-  vs. raw operations. Removing either reopens a real hole; they are not redundant.
-- **Object identity inside a batch is ONE `Set<id>` simulation** (D-026). `setSlot`/`deleteObject`
-  require presence, `createObject` requires absence and ADDS the id. Extend that same walk.
-- **`validateIntegrity` runs BEFORE `evaluate` and never re-checks its output** — a compute
-  function's own guard is the ONLY protection for a freshly computed value.
-- **Deleting an object needed NO new rejection check**; the dangling-reference check already is it.
-- **A derived slot's load-time placeholder is provably unobservable** — don't test for it.
-- **A zero-object document must bypass `mutate`** (D-020's empty-batch rejection).
-- **Mutation-testing proves a mechanism is load-bearing, not that it is correct.** Ask both: would
-  removing it fail a named test, *and* does it do its job for every input its types admit? D-019,
-  D-024, and D-025's journal half each passed the first and failed the second.
-- **A plausible claim written as a proof is this project's recurring defect** — and a §6 clause
-  claimed PASSING once already deserves re-verification of the SPECIFIC mechanism, not just a green
-  suite (0024's "all four PASS" was wrong about exactly one clause; 0026's was right).
-- **A fixture that LOOKS like it tests a thing may not** — 0020's "last write wins" batch; 0024's
-  round-trip journal, which carried a finite `3` through the test without testing it.
-- **The clone is load-bearing AND faithful** — never `JSON.parse(JSON.stringify(...))` (D-019),
-  never `structuredClone` (D-006).
-- **Cyclic input to `evaluate` fails SILENTLY** — step 5 before step 7 is load-bearing; no
-  defensive cycle check inside `eval.ts`.
-- **PROCESS_BRIEF §8.1's `grep "document\."` Rule 1 check hits `document.ts`'s own parameter** —
-  not violations; the real guard is `tsconfig.engine.json`.
-- **`GraphObject`, not `Object`**; **`address.ts` ↔ `graph/node.ts` share TYPES only**;
-  **`Value`/`Point`/`ErrorValue`/`isErrorValue`/`isIllegalNumber`/`hasIllegalNumber` live in
-  `graph/node.ts`** — never redefine (D-014).
-- **Slot keys only from `slotKey()`** (D-010); **document-wide keys only from `addressKey()`**
-  (D-015). User-facing names come from `formatAddress` — exceptions: D-022, D-023.
-- **The schema registry stores FUNCTIONS and that is correct** (0008-REVIEW §2).
+- **`FormulaAst` is a SIX-variant union now, not one.** Any code reading `.address` off a
+  `FormulaSlot.ast` MUST first narrow via `isReferenceNode` (`formula/ast.ts`) — the compiler
+  enforces this (verified: removing the narrowing in `deriveEdges` is a `tsc` error, not just a
+  failing test — a STRONGER guarantee than mutation-testing can show). Do not add a second
+  narrowing pattern; reuse `isReferenceNode`.
+- **Two places in this codebase currently reject EVERY `FormulaAst` shape except `ReferenceNode`,
+  and both are TEMPORARY**: `mutation.ts`'s `findUnsupportedFormulaAsts` (write side — a document
+  is never accepted with an unsupported shape) and `graph/eval.ts`'s `evaluateFormula` (a
+  defensive `#PARSE` fallback, provably unreachable for anything `mutate` accepted, but written
+  anyway since `eval.ts` cannot see `mutate`'s check run from where it sits). When Phase 2 wires in
+  the real formula engine, DELETE both rather than widen them — they exist to be deleted, not
+  extended.
+- **`RangeNode` now EXISTS in the type system but nothing expands one into edges yet.** A formula
+  slot holding a `RangeNode` is rejected the same way any other unsupported shape is, by the same
+  temporary check. Range expansion is Phase 2/4.
+- **`IF` is `FunctionCallNode { name: "IF", args: [...] }` — there is no `ConditionalNode`.** Do
+  not invent one; §5.3 lists `IF` among the built-in FUNCTIONS.
+- **`BinaryOpNode`/`UnaryOpNode` do not encode precedence.** One node, one `operator` field, spanning
+  the WHOLE §5.3 chain (`OR` through `^`) — precedence is `parser.ts`'s job to resolve INTO this
+  flat shape, not something the AST type itself expresses.
+- **Q-009**: `AND`/`OR`/`NOT` can be represented BOTH as `BinaryOpNode`/`UnaryOpNode` operators AND
+  as `FunctionCallNode` calls — the type does not force a choice. `parser.ts`/`functions.ts` must
+  choose whether to wire up one or both, and if both, that they mean the same thing.
+- **`mutate` checks the post-fold GRAPH, the operations' PAYLOADS, and (now) whether a formula
+  slot's AST shape is one this build can walk at all** — three genuinely different things, in
+  `validateIntegrity` plus two pre-staging preconditions. The file header enumerates all of them;
+  read it before adding a sixth.
+- **`document.ts` trusts `mutate` for graph legality and only shape-validates what `mutate`
+  cannot** (unchanged) — a formula slot's `ast` CONTENT is one of the things it trusts, which is
+  exactly why a hand-edited file can reach `findUnsupportedFormulaAsts` today even though nothing
+  else in this build can construct a non-reference AST.
+- **Mutation-testing proves a mechanism is load-bearing, not that it is correct** (carried). This
+  cycle's `deriveEdges` narrowing is a case where the COMPILER, not a test, is the proof — worth
+  distinguishing: a compile error is a stronger guarantee than a red test.
+- **A derived slot's load-time placeholder is provably unobservable; a zero-object document must
+  bypass `mutate`; the clone is load-bearing AND faithful; cyclic input to `evaluate` fails
+  SILENTLY without step 5; slot keys only from `slotKey()`; document-wide keys only from
+  `addressKey()`.** All carried unchanged from 0027-REVIEW's STATUS — not repeated in full here.
 - Each PowerShell call is a fresh process; the Bash tool's `npm` is not on PATH — use PowerShell.

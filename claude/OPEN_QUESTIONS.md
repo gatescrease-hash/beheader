@@ -8,11 +8,44 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-009**
+Next free ID: **Q-010**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-009 — Are `AND`/`OR`/`NOT` infix/prefix OPERATORS, callable FUNCTIONS, or both?
+Raised: entry 0028-formula-ast (implementer)   Brief section: §5.3
+Status: OPEN
+Blocks: `parser.ts`/`functions.ts` (later Phase 1 cycles) — does NOT block `ast.ts` itself; see
+below.
+
+Ambiguity: §5.3's operator precedence chain lists `OR` and `AND` as INFIX operators ("Operators,
+loosest to tightest: `OR` → `AND` → comparison → ..."), and its unary-operator list includes `NOT`.
+The SAME section's built-ins list ALSO names `IF, AND, OR, NOT, SUM, MIN, ...` as callable
+FUNCTIONS, alongside genuinely function-only entries like `SUM`/`ROUND`. The brief never says
+whether `AND`/`OR`/`NOT` are operators, functions, or both — and if both, whether `AND(a,b,c)`
+(N-ary) and `a AND b` (binary infix) are required to mean the same thing.
+
+Options: (a) both forms exist and mean the same thing — `a AND b` desugars to (or is evaluated
+identically to) `AND(a, b)`; `AND(a,b,c,...)` is the N-ary generalisation. (b) operators only —
+drop `AND`/`OR`/`NOT` from the function registry; the built-ins list's mention of them is loose
+prose, not a registry requirement. (c) functions only — parse `AND`/`OR`/`NOT` exclusively as
+`FunctionCallNode`s, and do not give them infix/prefix grammar productions at all, contradicting
+the precedence chain's own wording.
+
+Recommendation: (a). It is the closest reading of BOTH cited passages taken literally (neither
+would need to be explained away), it matches how spreadsheet languages this project is explicitly
+modelled on (Excel) actually behave, and it costs nothing today: `formula/ast.ts`'s `BinaryOpNode`/
+`UnaryOpNode`/`FunctionCallNode` already represent both forms without conflict (see `ast.ts`'s own
+header) — this question decides `parser.ts`'s grammar productions and `functions.ts`'s registry
+entries, not `ast.ts`'s shape, which is why it does not block this cycle.
+
+Reversible? Yes — a parser-level and registry-level choice; no stored document state can depend on
+it before `parser.ts` exists. Provisional choice taken: not yet (deferred to whichever cycle builds
+`parser.ts`/`functions.ts`, since nothing today needs an answer).
 
 ---
 
@@ -151,8 +184,15 @@ implemented at cycle 0019).
 ---
 
 ## Q-005 — What does `formula/ast.ts` contain before Phase 1 builds the real grammar?
-Raised: entry 0005   Brief section: §5.1, §5.3, §6 (Phase 0)   Status: OPEN (approved provisional)
-Blocks: nothing this cycle — revisit when Phase 1 (formula engine) begins.
+Raised: entry 0005   Brief section: §5.1, §5.3, §6 (Phase 0)
+Status: **ANSWERED → 0006-REVIEW-phase0's ruling, EXECUTED at entry 0028-formula-ast** (Phase 1
+landed). `FormulaAst` is now the full §5.3 grammar (`LiteralNode`, `ReferenceNode`, `RangeNode`,
+`BinaryOpNode`, `UnaryOpNode`, `FunctionCallNode`) — widened, not replaced, per 0006-REVIEW's own
+binding constraint below: `ReferenceNode` is byte-for-byte what Phase 0 shipped (pinned by
+`ast.test.ts`). Every `PROVISIONAL(Q-005)` tag (`formula/ast.ts`, `graph/eval.ts`, `mutation.ts`)
+is removed. No fresh `DECISIONS.md` entry: 0006-REVIEW-phase0's own text already is the ruling —
+"(a) APPROVED... remove PROVISIONAL(Q-005) tags and mark ANSWERED when Phase 1 lands" — this
+entry is that execution, not a new decision.
 
 Ambiguity: Phase 0's `graph/*` needs a `FormulaSlot` to hold *something*, but `formula/ast.ts` is
 explicitly Phase 1 work. What Phase 0's own fixture needs is narrow: the `add` object's two
