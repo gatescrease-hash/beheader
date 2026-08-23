@@ -61,6 +61,14 @@ operation payload before staging; `document.ts`'s journal read-side check reject
 `add`'s compute needs no separate `-0` guard: its inputs are already-legal by the time it runs, and
 IEEE 754 `+` of two finite, non-`-0` operands cannot itself produce `-0` — see 0026's own entry.
 
+> Reviewer note (0027-REVIEW-phase0): **(a) APPROVED as provisional**, same standing as Q-005 and
+> Q-007. Stays OPEN only because the human may still want to overrule it; nothing depends on that
+> answer arriving. Single-site tagging is correct — D-004 asks for a tag wherever the CHOICE is
+> encoded, and after cycle 0026 there is exactly one such site, which is an improvement over
+> tagging every consumer. The `add` reasoning is correct as stated and correctly scoped to `+`;
+> a compute using `*` or `/` must re-derive it (`-1 * 0` is `-0`), which 0026 says in the schema
+> header. Widened by **D-027**: the same predicate now governs `camera` and `nextObjectId` too.
+
 ---
 
 ## Q-007 — What shape does the document's serialized "camera state" (§5.11) have in Phase 0?

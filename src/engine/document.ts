@@ -231,11 +231,18 @@ export type DocumentLoadResult = { readonly ok: true; readonly document: Documen
  * silently lose information here" — WRONG when it was written (corrected at
  * 0025-REVIEW-phase0, whose finding 1 is exactly that claim's counterexample:
  * a journal payload holding `Infinity` stringified to `null`). As of cycle
- * 0026 the claim is TRUE again, but for a different, load-bearing reason, not
- * by accident: `mutate` (`mutation.ts`) now rejects any operation whose
- * payload is illegal (D-025/Q-008) BEFORE it can ever enter the journal, so
- * no `Document` this software produces can hold an illegal number anywhere —
- * object list or journal. `deserializeDocument`'s own journal check (see its
+ * 0026 the claim is TRUE for the object list and the journal, and for a
+ * load-bearing reason rather than by accident: `mutate` (`mutation.ts`) now
+ * rejects any operation whose payload is illegal (D-025/Q-008) BEFORE it can
+ * enter either one. It is NOT true of `camera` (corrected at 0027-REVIEW,
+ * which found `1e999` and `-0` still round-tripping wrongly there): camera
+ * state never passes through `mutate`, and this function has no failure
+ * channel with which to reject one — it returns a `string`. Today nothing in
+ * the tree writes a camera except `DEFAULT_CAMERA`, so no document this
+ * software produces holds an illegal one; `deserializeDocument` rejects such a
+ * file on load, so the failure is loud rather than silent. **D-027 binds
+ * whoever first writes real camera state (Phase 3) to keep it that way** —
+ * a NaN zoom saves as `null` and makes the document unloadable. `deserializeDocument`'s own journal check (see its
  * doc comment) closes the other direction, for a `Document` this software did
  * NOT produce (a hand-edited or foreign file): such a file is rejected
  * outright rather than silently accepted-then-corrupted. Together, any
@@ -318,8 +325,17 @@ export function deserializeDocument(raw: unknown): DocumentLoadResult {
       message: `unsupported document formatVersion ${JSON.stringify(raw.formatVersion)} — this build only reads formatVersion ${FORMAT_VERSION}`,
     };
   }
-  if (typeof raw.nextObjectId !== "number" || !Number.isInteger(raw.nextObjectId) || raw.nextObjectId < 0) {
-    return { ok: false, message: "nextObjectId must be a non-negative integer (D-002)" };
+  // D-027 (0027-REVIEW): `Number.isInteger` already excludes NaN and both
+  // infinities, but NOT `-0`, which JSON writes back as `0` — the same
+  // round-trip defect as every other illegal number, on the counter instead of
+  // a slot value. Value legality is a property of the whole document.
+  if (
+    typeof raw.nextObjectId !== "number" ||
+    !Number.isInteger(raw.nextObjectId) ||
+    raw.nextObjectId < 0 ||
+    isIllegalNumber(raw.nextObjectId)
+  ) {
+    return { ok: false, message: "nextObjectId must be a non-negative integer, and not -0 (D-002/D-027)" };
   }
   if (!Array.isArray(raw.objects)) {
     return { ok: false, message: "objects must be an array" };
@@ -381,6 +397,20 @@ type CameraReconstructionResult = { readonly ok: true; readonly camera: CameraSt
 function reconstructCamera(raw: unknown): CameraReconstructionResult {
   if (!isPlainObject(raw) || typeof raw.x !== "number" || typeof raw.y !== "number" || typeof raw.zoom !== "number") {
     return { ok: false, message: "camera must be an object with numeric x, y, and zoom (PROVISIONAL(Q-007))" };
+  }
+  // D-027 (0027-REVIEW): the camera is document state like anything else, and
+  // its three numbers go through the same JSON — a file holding `1e999` parses
+  // to `Infinity` and saves back as `null`; `-0` saves as `0`. Cycle 0026
+  // closed exactly this for the object list and the journal; the camera is the
+  // third numeric surface of the same `Document`, and the rule belongs to the
+  // document, not to the slot. Read side only: `saveDocument` has no failure
+  // channel to reject an in-memory camera (see its own doc comment), which is
+  // why D-027 binds whoever WRITES camera state in Phase 3.
+  if (isIllegalNumber(raw.x) || isIllegalNumber(raw.y) || isIllegalNumber(raw.zoom)) {
+    return {
+      ok: false,
+      message: "camera holds an illegal number (non-finite, or -0), which is not legal document state (D-025/Q-008/D-027)",
+    };
   }
   return { ok: true, camera: { x: raw.x, y: raw.y, zoom: raw.zoom } };
 }

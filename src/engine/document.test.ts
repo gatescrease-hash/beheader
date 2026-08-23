@@ -362,3 +362,49 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
     expect(result.ok).toBe(true); // 42 is a perfectly legal number — nothing here is illegal
   });
 });
+
+describe("deserializeDocument — D-027: the same value rule over the document's OTHER numeric fields (reviewer edit, 0027-REVIEW-phase0)", () => {
+  // Cycle 0026 closed the object list and the journal. `camera` and
+  // `nextObjectId` are the document's two remaining numeric surfaces, and they
+  // never pass through `mutate` at all — so they had neither guard. Probed at
+  // 0027-REVIEW: a file whose camera zoom is the JSON token `1e999` loaded as
+  // Infinity and re-saved as `null`; a camera x of `-0` re-saved as `0`. Both
+  // are §6 clause 4 counterexamples in a field §5.11 names explicitly.
+  const legal = { formatVersion: FORMAT_VERSION, nextObjectId: 1, objects: [], journal: [], camera: { x: 0, y: 0, zoom: 1 } };
+
+  it("rejects a camera whose zoom is non-finite (a file written as 1e999 parses to Infinity)", () => {
+    const json = JSON.stringify(legal).replace('"zoom":1', '"zoom":1e999');
+
+    const result = loadDocument(json);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("camera");
+      expect(result.message).toContain("D-027");
+    }
+  });
+
+  it("rejects a camera coordinate of -0, which JSON writes back as 0 (Q-008)", () => {
+    const result = deserializeDocument({ ...legal, camera: { x: -0, y: 0, zoom: 1 } });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("camera");
+    }
+  });
+
+  it("rejects a nextObjectId of -0 — Number.isInteger accepts it, JSON writes it back as 0", () => {
+    const result = deserializeDocument({ ...legal, nextObjectId: -0 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("nextObjectId");
+    }
+  });
+
+  it("still accepts a legal camera and counter, so the checks are not over-broad", () => {
+    const result = deserializeDocument({ ...legal, nextObjectId: 0, camera: { x: -12.5, y: 0, zoom: 0.25 } });
+
+    expect(result.ok).toBe(true);
+  });
+});

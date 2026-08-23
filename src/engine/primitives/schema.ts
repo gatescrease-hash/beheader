@@ -90,7 +90,7 @@
  *   - Any geometry/table/text/script/image schema entries (Phases 3, 4, 5, 6).
  */
 import type { Address } from "../address.ts";
-import { hasIllegalNumber, isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
+import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 
 // ---------------------------------------------------------------------------
 // Dependency declarations (§5.1: "Dependencies may be declared statically ...

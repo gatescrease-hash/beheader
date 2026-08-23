@@ -533,3 +533,43 @@ right generalization of D-021, not a special case needing its own ruling. D-021 
 whose target does not resolve is rejected rather than silently no-op'd; D-002 says ids are unique
 and never reused. "Creating an id that already exists" is the same sentence read from the other
 side, and belongs in the same check.
+
+---
+
+## D-027 — Value legality is a property of the whole `Document`, not of slot values
+Ruled: entry 0027-REVIEW-phase0 (reviewer)   Binding on: `document.ts`, `mutation.ts`, every future
+field of `Document`, and Phase 3's camera writer
+
+Every number reachable from a `Document` — in a slot value, in a journal payload, in `camera`, in
+`nextObjectId`, and in whatever field is added next — MUST pass `graph/node.ts`'s
+`isIllegalNumber` (non-finite, or `-0`). A new numeric field extends the existing check on the load
+path; it does NOT get its own separate rule, and it does NOT get an exemption for being "not really
+document state."
+
+Where the check lives is decided by where the value can enter:
+
+1. Through `mutate` — the object list and the journal. `mutate` rejects an illegal payload before
+   staging and an illegal slot value in `validateIntegrity` (cycle 0026).
+2. Never through `mutate` — `camera`, `nextObjectId`, and any future top-level field.
+   `deserializeDocument` rejects an illegal one on load (0027-REVIEW). **`saveDocument` cannot:
+   it returns a `string` and has no failure channel**, so a field in this class is guarded on the
+   read side only, and whoever WRITES it is responsible for never producing an illegal one.
+   Phase 3, which is the first code that will write real camera state, is bound by this: a `NaN`
+   zoom out of a zoom-to-fit over an empty selection serializes to `null` and makes the document
+   unloadable. Guard it where it is computed.
+
+Rationale: this is the third round of one defect. Cycle 0023 enforced D-025 over slot values;
+0025-REVIEW found the journal uncovered; cycle 0026 closed the journal; 0027-REVIEW found `camera`
+and `nextObjectId` uncovered, verified by probe:
+
+```
+file camera zoom 1e999 -> loads as Infinity -> re-saves as "zoom":null   (not identical)
+file camera x    -0    -> loads as -0       -> re-saves as "x":0         (not identical)
+file nextObjectId -0   -> loads as -0       -> re-saves as 0             (not identical)
+in-memory camera NaN   -> saves as null     -> the document no longer LOADS at all
+```
+
+Each fix was correct and each was scoped to the field the previous review named. The ruling
+generalises it once so the next field does not need a fourth round: the rule belongs to the
+document, and PROJECT_BRIEF §6 clause 4 ("round-trips to JSON and back identically") is a claim
+about the whole of it.
