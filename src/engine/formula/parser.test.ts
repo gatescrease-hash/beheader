@@ -1,0 +1,424 @@
+/**
+ * parser.test.ts — tests for formula/parser.ts (PROJECT_BRIEF §5.3, parser stage).
+ *
+ * IMPLEMENTS: PROJECT_BRIEF §5.3, and the slice of Phase 1's own acceptance criterion
+ * this file can demonstrate in isolation — literals, operator precedence, nested `IF`,
+ * reference resolution, ranges in aggregates, and "malformed input yields #PARSE
+ * rather than throwing." NOT demonstrated here: eager/total dependency extraction and
+ * lazy/short-circuit EVALUATION (both need `deps.ts`/`eval.ts`, later cycles) — this
+ * file only builds the AST; it never evaluates it.
+ */
+import { describe, expect, it } from "vitest";
+import type { AddressableObject } from "../address.ts";
+import type { ObjectType } from "../graph/node.ts";
+import type { FormulaAst } from "./ast.ts";
+import { isParseError, type ParseError, parseFormula, parseFormulaTokens } from "./parser.ts";
+
+// Same fixture-building convention as address.test.ts: `type` defaults to a harmless
+// non-table type unless a test is specifically exercising table/bare-cell-ref behaviour.
+function objects(...entries: Array<[id: string, name: string, type?: ObjectType]>): AddressableObject[] {
+  return entries.map(([id, name, type = "polygon"]) => ({ id, name, type }));
+}
+
+/** Parses and asserts success, narrowing away the ParseError arm for the caller. */
+function parseOk(source: string, docObjects: readonly AddressableObject[] = [], tableObjectId?: string): FormulaAst {
+  const result = parseFormula(source, docObjects, tableObjectId);
+  if (isParseError(result)) {
+    throw new Error(`expected "${source}" to parse, got #PARSE: ${result.message}`);
+  }
+  return result;
+}
+
+/** Parses and asserts failure, narrowing away the FormulaAst arm for the caller. */
+function parseFail(source: string, docObjects: readonly AddressableObject[] = [], tableObjectId?: string): ParseError {
+  const result = parseFormula(source, docObjects, tableObjectId);
+  if (!isParseError(result)) {
+    throw new Error(`expected "${source}" to fail to parse, got: ${JSON.stringify(result)}`);
+  }
+  return result;
+}
+
+describe("parseFormula — literals", () => {
+  it("parses a number literal", () => {
+    expect(parseOk("42")).toEqual({ type: "literal", value: 42 });
+  });
+
+  it("parses a decimal number literal", () => {
+    expect(parseOk("1.5")).toEqual({ type: "literal", value: 1.5 });
+  });
+
+  it("parses a string literal, escape already resolved by the lexer", () => {
+    expect(parseOk('"say \\"hi\\""')).toEqual({ type: "literal", value: 'say "hi"' });
+  });
+
+  it("parses TRUE and FALSE as boolean literals", () => {
+    expect(parseOk("TRUE")).toEqual({ type: "literal", value: true });
+    expect(parseOk("FALSE")).toEqual({ type: "literal", value: false });
+  });
+
+  it("parses unary minus over a number literal as UnaryOpNode, not a signed literal", () => {
+    expect(parseOk("-2")).toEqual({
+      type: "unaryOp",
+      operator: "-",
+      operand: { type: "literal", value: 2 },
+    });
+  });
+
+  it("parses repeated unary prefixes", () => {
+    expect(parseOk("- -2")).toEqual({
+      type: "unaryOp",
+      operator: "-",
+      operand: { type: "unaryOp", operator: "-", operand: { type: "literal", value: 2 } },
+    });
+    expect(parseOk("NOT NOT TRUE")).toEqual({
+      type: "unaryOp",
+      operator: "NOT",
+      operand: { type: "unaryOp", operator: "NOT", operand: { type: "literal", value: true } },
+    });
+  });
+});
+
+describe("parseFormula — references", () => {
+  it("resolves a dotted name.path reference to a stored Address (§5.2 — IDs, not names)", () => {
+    const docObjects = objects(["obj_7", "polygon_1"]);
+    expect(parseOk("polygon_1.origin.x", docObjects)).toEqual({
+      type: "reference",
+      address: { objectId: "obj_7", path: ["origin", "x"] },
+    });
+  });
+
+  it("resolves a numeric path segment (vertex.0.x) — the lexer's own disclosed number-vs-identifier split", () => {
+    const docObjects = objects(["obj_1", "polyline_1"]);
+    expect(parseOk("polyline_1.vertex.0.x", docObjects)).toEqual({
+      type: "reference",
+      address: { objectId: "obj_1", path: ["vertex", "0", "x"] },
+    });
+  });
+
+  it("rejects an unresolvable name as a hard #PARSE, immediately", () => {
+    const error = parseFail("nonexistent_object.value", []);
+    expect(error.message).toContain('no object named "nonexistent_object"');
+  });
+
+  it("rejects a bare single word with no table context (Bare refs in text formulas are a parse error, §5.3)", () => {
+    const error = parseFail("A1", []);
+    expect(error.error).toBe("#PARSE");
+  });
+
+  it("resolves a bare cell ref only when a tableObjectId is supplied, to that table's cells.* path", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    expect(parseOk("A1", docObjects, "obj_5")).toEqual({
+      type: "reference",
+      address: { objectId: "obj_5", path: ["cells", "A1"] },
+    });
+  });
+
+  it("does not treat a lowercase cell-shaped word as a bare cell ref (Q-004's still-open, still uppercase-only interim, inherited unchanged)", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    const error = parseFail("a1", docObjects, "obj_5");
+    expect(error.error).toBe("#PARSE");
+  });
+
+  it("a dotted reference into a table's cell still works even with tableObjectId set (the bare-ref path only applies to a single, dot-free segment)", () => {
+    const docObjects = objects(["obj_1", "table_x", "table"], ["obj_2", "table_y", "table"]);
+    expect(parseOk("table_y.A1", docObjects, "obj_1")).toEqual({
+      type: "reference",
+      address: { objectId: "obj_2", path: ["cells", "A1"] },
+    });
+  });
+});
+
+// Every fixture object below is referenced as "<name>.v" (a plain, single-segment
+// path) rather than bare — address.ts's parseAddress always requires "name.path" (2+
+// segments), so a bare object name alone is never a resolvable reference (§5.2).
+const refA: FormulaAst = { type: "reference", address: { objectId: "obj_1", path: ["v"] } };
+const refB: FormulaAst = { type: "reference", address: { objectId: "obj_2", path: ["v"] } };
+const refC: FormulaAst = { type: "reference", address: { objectId: "obj_3", path: ["v"] } };
+
+describe("parseFormula — operator precedence (§5.3: OR -> AND -> comparison -> + - -> * / % -> ^ -> unary/NOT -> primary)", () => {
+  it("* binds tighter than +", () => {
+    expect(parseOk("1 + 2 * 3")).toEqual({
+      type: "binaryOp",
+      operator: "+",
+      left: { type: "literal", value: 1 },
+      right: { type: "binaryOp", operator: "*", left: { type: "literal", value: 2 }, right: { type: "literal", value: 3 } },
+    });
+  });
+
+  it("+ binds tighter than comparison", () => {
+    expect(parseOk("1 + 2 > 3")).toEqual({
+      type: "binaryOp",
+      operator: ">",
+      left: { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } },
+      right: { type: "literal", value: 3 },
+    });
+  });
+
+  it("comparison binds tighter than AND, which binds tighter than OR", () => {
+    expect(parseOk("a.v = 1 AND b.v = 2 OR c.v = 3", objects(["obj_1", "a"], ["obj_2", "b"], ["obj_3", "c"]))).toEqual({
+      type: "binaryOp",
+      operator: "OR",
+      left: {
+        type: "binaryOp",
+        operator: "AND",
+        left: { type: "binaryOp", operator: "=", left: refA, right: { type: "literal", value: 1 } },
+        right: { type: "binaryOp", operator: "=", left: refB, right: { type: "literal", value: 2 } },
+      },
+      right: { type: "binaryOp", operator: "=", left: refC, right: { type: "literal", value: 3 } },
+    });
+  });
+
+  it("^ binds tighter than unary minus's operand position, and is left-associative (Excel's convention, per the file header)", () => {
+    expect(parseOk("2 ^ 3 ^ 2")).toEqual({
+      type: "binaryOp",
+      operator: "^",
+      left: { type: "binaryOp", operator: "^", left: { type: "literal", value: 2 }, right: { type: "literal", value: 3 } },
+      right: { type: "literal", value: 2 },
+    });
+  });
+
+  it("unary NOT binds tighter than comparison — 'NOT a.v = b.v' parses as '(NOT a.v) = b.v', per §5.3's own precedence chain", () => {
+    const docObjects = objects(["obj_1", "a"], ["obj_2", "b"]);
+    expect(parseOk("NOT a.v = b.v", docObjects)).toEqual({
+      type: "binaryOp",
+      operator: "=",
+      left: { type: "unaryOp", operator: "NOT", operand: refA },
+      right: refB,
+    });
+  });
+
+  it("every symbol comparison operator lexes and parses to its own BinaryOperator", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["a.v = b.v", "="],
+      ["a.v <> b.v", "<>"],
+      ["a.v < b.v", "<"],
+      ["a.v > b.v", ">"],
+      ["a.v <= b.v", "<="],
+      ["a.v >= b.v", ">="],
+    ];
+    const docObjects = objects(["obj_1", "a"], ["obj_2", "b"]);
+    for (const [source, operator] of cases) {
+      const ast = parseOk(source, docObjects) as { type: string; operator: string };
+      expect(ast.type, source).toBe("binaryOp");
+      expect(ast.operator, source).toBe(operator);
+    }
+  });
+
+  it("parentheses override precedence", () => {
+    expect(parseOk("(1 + 2) * 3")).toEqual({
+      type: "binaryOp",
+      operator: "*",
+      left: { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } },
+      right: { type: "literal", value: 3 },
+    });
+  });
+});
+
+describe("parseFormula — function calls", () => {
+  it("parses a nested IF as an ordinary FunctionCallNode (no ConditionalNode — §5.3/D-029)", () => {
+    const docObjects = objects(["obj_1", "a"]);
+    expect(parseOk('IF(a.v > 0, "pos", IF(a.v < 0, "neg", "zero"))', docObjects)).toEqual({
+      type: "functionCall",
+      name: "IF",
+      args: [
+        { type: "binaryOp", operator: ">", left: refA, right: { type: "literal", value: 0 } },
+        { type: "literal", value: "pos" },
+        {
+          type: "functionCall",
+          name: "IF",
+          args: [
+            { type: "binaryOp", operator: "<", left: refA, right: { type: "literal", value: 0 } },
+            { type: "literal", value: "neg" },
+            { type: "literal", value: "zero" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("parses a zero-argument call", () => {
+    expect(parseOk("PI()")).toEqual({ type: "functionCall", name: "PI", args: [] });
+  });
+
+  it("parses an unrecognised function name successfully — name/arity validation is functions.ts's job, not this file's (see file header)", () => {
+    expect(parseOk("FOO(1, 2, 3)")).toEqual({
+      type: "functionCall",
+      name: "FOO",
+      args: [{ type: "literal", value: 1 }, { type: "literal", value: 2 }, { type: "literal", value: 3 }],
+    });
+  });
+
+  it("rejects a missing closing paren", () => {
+    const error = parseFail("SUM(1, 2");
+    expect(error.error).toBe("#PARSE");
+  });
+});
+
+describe("parseFormula — D-029: AND/OR/NOT are both operators and functions, meaning the same thing", () => {
+  it("parses AND(a.v, b.v) as a FunctionCallNode named AND, not a BinaryOpNode", () => {
+    const docObjects = objects(["obj_1", "a"], ["obj_2", "b"]);
+    expect(parseOk("AND(a.v, b.v)", docObjects)).toEqual({ type: "functionCall", name: "AND", args: [refA, refB] });
+  });
+
+  it("parses OR(a.v, b.v) as a FunctionCallNode named OR", () => {
+    const docObjects = objects(["obj_1", "a"], ["obj_2", "b"]);
+    expect(parseOk("OR(a.v, b.v)", docObjects)).toEqual({ type: "functionCall", name: "OR", args: [refA, refB] });
+  });
+
+  it("parses NOT(a.v) as a FunctionCallNode named NOT, not a UnaryOpNode", () => {
+    const docObjects = objects(["obj_1", "a"]);
+    expect(parseOk("NOT(a.v)", docObjects)).toEqual({ type: "functionCall", name: "NOT", args: [refA] });
+  });
+
+  it("parses AND/OR N-ary call forms (more than two arguments)", () => {
+    const docObjects = objects(["obj_1", "a"], ["obj_2", "b"], ["obj_3", "c"]);
+    expect(parseOk("AND(a.v, b.v, c.v)", docObjects)).toEqual({ type: "functionCall", name: "AND", args: [refA, refB, refC] });
+  });
+
+  it("still parses a.v AND b.v as an ordinary infix BinaryOpNode when not followed by '('", () => {
+    const docObjects = objects(["obj_1", "a"], ["obj_2", "b"]);
+    expect(parseOk("a.v AND b.v", docObjects)).toEqual({ type: "binaryOp", operator: "AND", left: refA, right: refB });
+  });
+
+  it("a bare AND/OR keyword with no '(' and no left operand is a #PARSE, not a value", () => {
+    expect(parseFail("AND").error).toBe("#PARSE");
+    expect(parseFail("OR").error).toBe("#PARSE");
+  });
+});
+
+describe("parseFormula — ranges (§5.3: only as a direct argument to SUM/MIN/MAX/AVG)", () => {
+  it("parses A1:B4 as a RangeNode when it is SUM's direct argument", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    expect(parseOk("SUM(A1:B4)", docObjects, "obj_5")).toEqual({
+      type: "functionCall",
+      name: "SUM",
+      args: [
+        {
+          type: "range",
+          start: { objectId: "obj_5", path: ["cells", "A1"] },
+          end: { objectId: "obj_5", path: ["cells", "B4"] },
+        },
+      ],
+    });
+  });
+
+  it("accepts a range alongside ordinary arguments in MIN/MAX/AVG", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    for (const name of ["MIN", "MAX", "AVG"]) {
+      const ast = parseOk(`${name}(A1:B4, 0)`, docObjects, "obj_5");
+      if (ast.type !== "functionCall") {
+        throw new Error(`expected a functionCall node for ${name}, got ${ast.type}`);
+      }
+      expect(ast.args[0]?.type, name).toBe("range");
+    }
+  });
+
+  it("rejects a range as a non-aggregate function's argument", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    const error = parseFail("IF(A1:B4, 1, 2)", docObjects, "obj_5");
+    expect(error.message).toContain("aggregate function");
+  });
+
+  it("rejects a bare range as a whole formula (not first-class — §5.3)", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    const error = parseFail("A1:B4", docObjects, "obj_5");
+    expect(error.error).toBe("#PARSE");
+  });
+
+  it("rejects a range nested one level inside an aggregate argument (SUM(A1:B4 + 1)) — the range's DIRECT parent is '+', not SUM", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    const error = parseFail("SUM(A1:B4 + 1)", docObjects, "obj_5");
+    expect(error.message).toContain("aggregate function");
+  });
+
+  it("accepts SUM(A1:B4) + 1 — the range itself IS a direct SUM argument; '+1' only adds to the call's RESULT, never touches the range", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    expect(parseOk("SUM(A1:B4) + 1", docObjects, "obj_5")).toEqual({
+      type: "binaryOp",
+      operator: "+",
+      left: {
+        type: "functionCall",
+        name: "SUM",
+        args: [{ type: "range", start: { objectId: "obj_5", path: ["cells", "A1"] }, end: { objectId: "obj_5", path: ["cells", "B4"] } }],
+      },
+      right: { type: "literal", value: 1 },
+    });
+  });
+
+  it("a self-inclusive range is still just a RangeNode here — cycle-ness is a graph-time concern, not this file's (§5.3: 'do not special-case it')", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    expect(parseOk("SUM(A6:A6)", docObjects, "obj_5")).toEqual({
+      type: "functionCall",
+      name: "SUM",
+      args: [{ type: "range", start: { objectId: "obj_5", path: ["cells", "A6"] }, end: { objectId: "obj_5", path: ["cells", "A6"] } }],
+    });
+  });
+
+  it("accepts SUM((A1:B4)) — a redundant paren does not defeat the placement check (disclosed in the file header: parens add no AST node)", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    expect(parseOk("SUM((A1:B4))", docObjects, "obj_5")).toEqual({
+      type: "functionCall",
+      name: "SUM",
+      args: [{ type: "range", start: { objectId: "obj_5", path: ["cells", "A1"] }, end: { objectId: "obj_5", path: ["cells", "B4"] } }],
+    });
+  });
+});
+
+describe("parseFormula — malformed input never throws, returns a #PARSE ParseError instead", () => {
+  it("rejects an empty formula", () => {
+    const error = parseFail("");
+    expect(error.message).toBe("empty formula");
+  });
+
+  it("rejects a formula that is only whitespace", () => {
+    expect(parseFail("   ").error).toBe("#PARSE");
+  });
+
+  it("rejects trailing garbage after a complete expression", () => {
+    const error = parseFail("1 + 2 3");
+    expect(error.message).toContain("trailing input");
+  });
+
+  it("propagates a LexError from the lex stage unchanged, as a valid ParseError", () => {
+    const error = parseFail('"unterminated');
+    expect(error.error).toBe("#PARSE");
+    expect(error.message).toContain("unterminated string literal");
+  });
+
+  it("rejects a dangling operator with nothing after it", () => {
+    expect(parseFail("1 +").error).toBe("#PARSE");
+  });
+
+  it("rejects a stray comma", () => {
+    expect(parseFail("1, 2").error).toBe("#PARSE");
+  });
+
+  it("never throws across a battery of malformed inputs", () => {
+    const malformed = ["", "(", ")", "1 +", "+ 1 +", "SUM(", "SUM(,)", "1 2 3", "@", "AND(", ".", "A1:", ":A1", "1:2"];
+    for (const source of malformed) {
+      let result: unknown;
+      expect(() => {
+        result = parseFormula(source, []);
+      }, `expected parseFormula(${JSON.stringify(source)}) not to throw`).not.toThrow();
+      expect(result).toMatchObject({ error: "#PARSE" });
+    }
+  });
+});
+
+describe("parseFormulaTokens — the lower-level, already-lexed entry point", () => {
+  it("parses directly from a hand-built token array, matching lex()'s own output shape", () => {
+    const tokens = [
+      { type: "number" as const, text: "1", start: 0, value: 1 },
+      { type: "plus" as const, text: "+", start: 2 },
+      { type: "number" as const, text: "2", start: 4, value: 2 },
+      { type: "eof" as const, text: "", start: 5 },
+    ];
+    const result = parseFormulaTokens(tokens, []);
+    expect(result).toEqual({
+      type: "binaryOp",
+      operator: "+",
+      left: { type: "literal", value: 1 },
+      right: { type: "literal", value: 2 },
+    });
+  });
+});

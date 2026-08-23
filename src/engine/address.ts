@@ -45,9 +45,12 @@
  *     mutation-loop step 4. What IS done here (D-005) is narrower and structural:
  *     mapping a known type's surface path shape to its stored path shape, not
  *     verifying the resulting slot exists.
- *   - Bare cell references (`A1`) legal only inside table cell formulas (§5.3). That
- *     context-sensitive grammar belongs to formula/deps.ts, which calls into this
- *     module for the non-bare case.
+ *   - Resolving a BARE cell reference (`A1`, no leading `name.`) — legal only inside
+ *     a table cell formula (§5.3), meaning "this table, that cell." That context
+ *     (which table) belongs to `formula/parser.ts` (cycle 0031), which calls
+ *     `isCellReferenceForm` below to detect the shape and builds the `Address`
+ *     directly (there is no name to resolve — the table is already known), then
+ *     falls through to `parseAddress` here for every other case (a real `name.path`).
  *   - Dependency extraction, cycle detection, mutation (formula/deps.ts,
  *     graph/cycles.ts, mutation.ts).
  */
@@ -223,6 +226,24 @@ const TABLE_CELL_PATH_PREFIX = "cells";
  * acceptance later is purely additive and migrates no stored data.
  */
 const CELL_REFERENCE_PATTERN = /^[A-Z]+[0-9]+$/;
+
+/**
+ * Whether `segment` has the A1 cell-reference FORM (D-008: key on form, never a
+ * structural proxy) — exported so `formula/parser.ts` can detect a BARE cell ref
+ * (`A1`, no leading `name.`) using the exact same pattern this file uses for the
+ * `table_x.A1` shorthand, rather than keeping a second copy that could drift from
+ * this one. This file's own `parseAddress` cannot resolve a bare ref itself — it
+ * requires a `name.path`, at least two segments (see `parseAddress`'s own rejection)
+ * — because "legal only inside a table cell formula" (§5.3) is a context a plain
+ * `input: string` doesn't carry; `parser.ts` supplies that context (which table) and
+ * calls this predicate first, falling through to `parseAddress` for every other case.
+ * Currently uppercase-only, same interim behaviour as everywhere else this pattern is
+ * used (Q-004, still open, deferred to Phase 2) — `parser.ts` inherits that choice
+ * rather than making a second one.
+ */
+export function isCellReferenceForm(segment: string): boolean {
+  return CELL_REFERENCE_PATTERN.test(segment);
+}
 
 /**
  * Maps a user-typed path to the path a slot is actually stored under (D-005).
