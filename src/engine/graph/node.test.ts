@@ -13,8 +13,9 @@ import type { ReferenceNode } from "../formula/ast.ts";
 import {
   TABLE_TYPE,
   getSlot,
-  hasNonFiniteNumber,
+  hasIllegalNumber,
   isErrorValue,
+  isIllegalNumber,
   resolveSlot,
   slotKey,
   type DerivedSlot,
@@ -133,45 +134,67 @@ describe("isErrorValue", () => {
   });
 });
 
-// D-025 (Q-006, cycle 0023): non-finite numbers are not legal document state.
-// Tested across the WHOLE Value union, same discipline as isErrorValue above —
-// a naive implementation's likely blind spots are a Point/Point[]'s NESTED
-// x/y fields (easy to check only the top-level shape and miss inside it) and
-// the non-number members, which must stay false unconditionally.
-describe("hasNonFiniteNumber (D-025/Q-006)", () => {
-  it("is true for a bare NaN, +Infinity, or -Infinity", () => {
-    expect(hasNonFiniteNumber(NaN)).toBe(true);
-    expect(hasNonFiniteNumber(Number.POSITIVE_INFINITY)).toBe(true);
-    expect(hasNonFiniteNumber(Number.NEGATIVE_INFINITY)).toBe(true);
+// D-025 (Q-006, cycle 0023) + Q-008 (cycle 0026, PROVISIONAL, recommendation
+// (a)): non-finite numbers AND negative zero are not legal document state —
+// hasIllegalNumber is the ONE predicate for both (widened at cycle 0026, not
+// a second check beside the old hasNonFiniteNumber name). Tested across the
+// WHOLE Value union, same discipline as isErrorValue above — a naive
+// implementation's likely blind spots are a Point/Point[]'s NESTED x/y fields
+// (easy to check only the top-level shape and miss inside it), the non-number
+// members (must stay false unconditionally), and -0 specifically confusable
+// with plain 0 by anything that compares with `===` instead of `Object.is`.
+describe("isIllegalNumber (D-025/Q-006 + Q-008, cycle 0026)", () => {
+  it("is true for NaN, +Infinity, -Infinity, and -0", () => {
+    expect(isIllegalNumber(NaN)).toBe(true);
+    expect(isIllegalNumber(Number.POSITIVE_INFINITY)).toBe(true);
+    expect(isIllegalNumber(Number.NEGATIVE_INFINITY)).toBe(true);
+    expect(isIllegalNumber(-0)).toBe(true);
   });
 
-  it("is false for a finite number, including 0 and a negative number", () => {
-    expect(hasNonFiniteNumber(0)).toBe(false);
-    expect(hasNonFiniteNumber(-42)).toBe(false);
-    expect(hasNonFiniteNumber(Number.MAX_VALUE)).toBe(false);
+  it("is false for a finite, non-negative-zero number, including plain 0 and a negative number", () => {
+    expect(isIllegalNumber(0)).toBe(false);
+    expect(isIllegalNumber(-42)).toBe(false);
+    expect(isIllegalNumber(Number.MAX_VALUE)).toBe(false);
+  });
+});
+
+describe("hasIllegalNumber (D-025/Q-006 + Q-008, cycle 0026)", () => {
+  it("is true for a bare NaN, +Infinity, -Infinity, or -0", () => {
+    expect(hasIllegalNumber(NaN)).toBe(true);
+    expect(hasIllegalNumber(Number.POSITIVE_INFINITY)).toBe(true);
+    expect(hasIllegalNumber(Number.NEGATIVE_INFINITY)).toBe(true);
+    expect(hasIllegalNumber(-0)).toBe(true);
   });
 
-  it("is true for a Point whose x OR y is non-finite, false when both are finite", () => {
-    expect(hasNonFiniteNumber({ x: NaN, y: 0 })).toBe(true);
-    expect(hasNonFiniteNumber({ x: 0, y: Number.POSITIVE_INFINITY })).toBe(true);
-    expect(hasNonFiniteNumber({ x: 1, y: 2 })).toBe(false);
+  it("is false for a finite, non-negative-zero number, including 0 and a negative number", () => {
+    expect(hasIllegalNumber(0)).toBe(false);
+    expect(hasIllegalNumber(-42)).toBe(false);
+    expect(hasIllegalNumber(Number.MAX_VALUE)).toBe(false);
   });
 
-  it("is true for a Point[] with ANY non-finite point, false when every point is finite", () => {
+  it("is true for a Point whose x OR y is non-finite or -0, false when both are legal", () => {
+    expect(hasIllegalNumber({ x: NaN, y: 0 })).toBe(true);
+    expect(hasIllegalNumber({ x: 0, y: Number.POSITIVE_INFINITY })).toBe(true);
+    expect(hasIllegalNumber({ x: -0, y: 0 })).toBe(true);
+    expect(hasIllegalNumber({ x: 1, y: 2 })).toBe(false);
+  });
+
+  it("is true for a Point[] with ANY illegal point, false when every point is legal", () => {
     const points: readonly Point[] = [
       { x: 1, y: 2 },
       { x: 3, y: Number.NEGATIVE_INFINITY },
     ];
-    expect(hasNonFiniteNumber(points)).toBe(true);
-    expect(hasNonFiniteNumber([{ x: 1, y: 2 }])).toBe(false);
-    expect(hasNonFiniteNumber([])).toBe(false);
+    expect(hasIllegalNumber(points)).toBe(true);
+    expect(hasIllegalNumber([{ x: 1, y: -0 }])).toBe(true);
+    expect(hasIllegalNumber([{ x: 1, y: 2 }])).toBe(false);
+    expect(hasIllegalNumber([])).toBe(false);
   });
 
   it("is false for every non-number member of Value: string, boolean, null, ErrorValue", () => {
-    expect(hasNonFiniteNumber("a string")).toBe(false);
-    expect(hasNonFiniteNumber(true)).toBe(false);
-    expect(hasNonFiniteNumber(null)).toBe(false);
-    expect(hasNonFiniteNumber({ error: "#TYPE", message: "boom" })).toBe(false);
+    expect(hasIllegalNumber("a string")).toBe(false);
+    expect(hasIllegalNumber(true)).toBe(false);
+    expect(hasIllegalNumber(null)).toBe(false);
+    expect(hasIllegalNumber({ error: "#TYPE", message: "boom" })).toBe(false);
   });
 });
 

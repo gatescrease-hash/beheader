@@ -112,29 +112,59 @@ export function isErrorValue(value: Value): value is ErrorValue {
 }
 
 /**
- * Whether `value` contains a non-finite number (`NaN`, `Infinity`, `-Infinity`)
+ * The single leaf-level test every value-legality check in this codebase is
+ * built from: is `n` a number that cannot survive this project's JSON-based
+ * persistence format (§5.11) unchanged?
+ *
+ *   - Non-finite (`NaN`, `Infinity`, `-Infinity`) — D-025/Q-006 (ruled by the
+ *     human directly, cycle 0023): JSON has no representation for any of the
+ *     three, so `mutate` rejects them as document state.
+ *   - Negative zero (`-0`) — PROVISIONAL(Q-008), taken at 0025-REVIEW-phase0's
+ *     recommendation (a), cycle 0026: `Number.isFinite(-0)` is `true`, so the
+ *     non-finite check alone does not cover it, but JSON cannot represent the
+ *     sign either (`JSON.stringify(-0)` is `"0"`), and `mutate([setSlot
+ *     value_1.value = -0])` committed it with `ok: true` while a save/load
+ *     round-trip silently turned it into `0` — the same defect one arm
+ *     further out. Reversible: one branch here, no stored data can depend on
+ *     it (nothing in the tree today can author a `-0` except a hand-written
+ *     literal).
+ *
+ * Exported (not merely an internal helper of `hasIllegalNumber` below)
+ * because `document.ts`'s read-side journal check (0025-REVIEW-phase0 finding
+ * 1's other half) walks raw, not-yet-typed JSON data rather than a `Value`,
+ * and needs this exact leaf test rather than a duplicate of it.
+ */
+export function isIllegalNumber(n: number): boolean {
+  return !Number.isFinite(n) || Object.is(n, -0);
+}
+
+/**
+ * Whether `value` contains an illegal number (`isIllegalNumber` above)
  * anywhere within it — a bare number, or nested inside a `Point`/`Point[]`'s
- * `x`/`y` fields (D-025/Q-006: non-finite numbers are not legal document
- * state). Declared here, beside `Value` itself, for the same reason
+ * `x`/`y` fields. Declared here, beside `Value` itself, for the same reason
  * `isErrorValue` is (D-014's principle: a predicate over the `Value` union is
  * declared once and imported everywhere, never redeclared) — `mutation.ts`'s
- * D-025 check and `primitives/schema.ts`'s compute functions both need it.
+ * D-025/Q-008 checks and `primitives/schema.ts`'s compute functions both need
+ * it. Named `hasIllegalNumber`, not `hasNonFiniteNumber` (its name through
+ * cycle 0025) — cycle 0026 widened it to also catch `-0` (Q-008), and this is
+ * the SAME predicate widened, per this project's own "widen, never add a
+ * parallel one" stance (D-020, D-026), not a second check beside it.
  *
  * `string`, `boolean`, `null`, and `ErrorValue` trivially cannot contain a
  * number at all, so they always return `false` — checked via `isErrorValue`
  * itself rather than duck-typing "has an `x`," so a `Point`-shaped value is
  * never mistaken for one and vice versa.
  */
-export function hasNonFiniteNumber(value: Value): boolean {
+export function hasIllegalNumber(value: Value): boolean {
   if (typeof value === "number") {
-    return !Number.isFinite(value);
+    return isIllegalNumber(value);
   }
   if (Array.isArray(value)) {
-    return (value as readonly Point[]).some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y));
+    return (value as readonly Point[]).some((point) => isIllegalNumber(point.x) || isIllegalNumber(point.y));
   }
   if (typeof value === "object" && value !== null && !isErrorValue(value)) {
     const point = value as Point;
-    return !Number.isFinite(point.x) || !Number.isFinite(point.y);
+    return isIllegalNumber(point.x) || isIllegalNumber(point.y);
   }
   return false; // string, boolean, null, ErrorValue
 }

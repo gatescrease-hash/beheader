@@ -35,7 +35,22 @@
  * 0021-REVIEW's carried forward-hazard note (constraint 1): a batch that can
  * GROW the object set mid-fold, not just shrink it — see WHAT THIS IS,
  * `CreateObjectOperation`, and `mutate`'s own doc comment for how the
- * existence simulation now handles both directions.
+ * existence simulation now handles both directions. Cycle 0026 answers
+ * 0025-REVIEW-phase0's REVISE verdict (three findings; finding 1 blocking):
+ * D-025 (cycle 0023) only ever checked the POST-FOLD graph, so an illegal
+ * value living in an operation's own PAYLOAD — one later overwritten in the
+ * SAME batch, or one attached to an object also deleted in the SAME batch —
+ * still reached the journal untouched, because nothing re-checked a payload
+ * once the fold moved past it. `mutate` now rejects any such operation BEFORE
+ * staging (a precondition on the operation, same shape as D-021's existence
+ * check — see `findIllegalOperationPayloads` and `mutate`'s own doc comment).
+ * This closes the WRITE side; `document.ts`'s own cycle-0026 changes close
+ * the READ side (a loaded file's journal never passes through `mutate` at
+ * all). Cycle 0026 also settles **Q-008** (is `-0` legal document state?
+ * PROVISIONAL, recommendation (a): no) by widening the SAME predicate D-025
+ * already added rather than writing a parallel one — see `graph/node.ts`'s
+ * `hasIllegalNumber` (renamed from `hasNonFiniteNumber`) for the widened
+ * check itself.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -200,27 +215,33 @@
  *      side via `formatAddress`, never the missing source: the source's
  *      object may be gone, so there is nothing safe to format there, and
  *      D-015 forbids leaking its raw `objectId` into the message anyway.
- *   4. **Non-finite slot values** (`findNonFiniteSlotValues`, D-025/Q-006,
- *      cycle 0023 — "non-finite numbers are not legal document state").
- *      Every slot's `value` field (all three kinds carry one) is checked via
- *      `graph/node.ts`'s `hasNonFiniteNumber` — a bare `NaN`/`Infinity`/
- *      `-Infinity`, or one nested inside a `Point`/`Point[]`'s `x`/`y`. Runs
- *      LAST and independently of checks 1-3: value legality is orthogonal to
- *      schema/edge structure, so there is no ordering hazard to reason about
- *      the way check 1 before check 3 needs one. Applies to `literal`,
- *      `formula`, and `derived` slots alike, but NOT as a backstop for a
- *      freshly-computed `derived` value: this function runs BEFORE `evaluate`
- *      (see `deriveValidateAndEvaluate` below) and `evaluate`'s result is
- *      returned as-is, never re-validated — so this check can only ever see a
- *      non-finite number in a LITERAL (freshly written or already sitting in
- *      `objects`) or a STALE formula/derived cached value from a prior pass.
- *      A non-finite result a compute function returns THIS pass is entirely
- *      that function's own responsibility (`add`'s is the only one that
- *      exists, and does — see `primitives/schema.ts`); verified by
- *      mutation-test that removing `add`'s own guard commits a raw `Infinity`
- *      with nothing here to catch it (this cycle's log entry — an earlier
- *      draft of this comment claimed otherwise and was corrected before
- *      commit, the same shape as 0018-REVIEW-phase0's finding 1).
+ *   4. **Illegal slot values** (`findIllegalSlotValues`, D-025/Q-006, cycle
+ *      0023, WIDENED by Q-008 at cycle 0026 — "non-finite numbers, and `-0`,
+ *      are not legal document state"). Every slot's `value` field (all three
+ *      kinds carry one) is checked via `graph/node.ts`'s `hasIllegalNumber` —
+ *      a bare `NaN`/`Infinity`/`-Infinity`/`-0`, or one nested inside a
+ *      `Point`/`Point[]`'s `x`/`y`. Runs LAST and independently of checks
+ *      1-3: value legality is orthogonal to schema/edge structure, so there
+ *      is no ordering hazard to reason about the way check 1 before check 3
+ *      needs one. Applies to `literal`, `formula`, and `derived` slots alike,
+ *      but NOT as a backstop for a freshly-computed `derived` value: this
+ *      function runs BEFORE `evaluate` (see `deriveValidateAndEvaluate`
+ *      below) and `evaluate`'s result is returned as-is, never re-validated —
+ *      so this check can only ever see an illegal number in a LITERAL
+ *      (freshly written or already sitting in `objects`) or a STALE
+ *      formula/derived cached value from a prior pass. An illegal result a
+ *      compute function returns THIS pass is entirely that function's own
+ *      responsibility (`add`'s is the only one that exists, and does — see
+ *      `primitives/schema.ts`); verified by mutation-test that removing
+ *      `add`'s own guard commits a raw `Infinity` with nothing here to catch
+ *      it (0023's log entry — an earlier draft of this comment claimed
+ *      otherwise and was corrected before commit, the same shape as
+ *      0018-REVIEW-phase0's finding 1). Also NOT a backstop for an illegal
+ *      OPERATION PAYLOAD: this check only ever sees the POST-FOLD graph, so a
+ *      payload later overwritten (or attached to an object later deleted) in
+ *      the SAME batch never reaches it at all — `mutate`'s own precondition
+ *      check, `findIllegalOperationPayloads`, is what closes that hole (cycle
+ *      0026, 0025-REVIEW-phase0 finding 1); see `mutate`'s doc comment.
  *
  *   A genuinely new sub-problem D-017's check hits and D-010/D-015's existing
  *   guidance does not cover: naming an UNDECLARED slot (check 1) needs an
@@ -348,7 +369,7 @@ import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/sc
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasNonFiniteNumber, resolveSlot, slotKey, type GraphObject, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, resolveSlot, slotKey, type GraphObject, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -450,13 +471,14 @@ export function validateIntegrity(objects: readonly GraphObject[], edges: readon
     return { ok: false, message: danglingReferenceProblems.join("; ") };
   }
 
-  // D-025 (Q-006, cycle 0023): non-finite numbers are not legal document
-  // state. Runs last — it is orthogonal to the three checks above (schema/
-  // edge structure vs. raw value legality), so there is no ordering hazard
-  // the way D-017-before-D-018-before-dangling has; it is simply appended.
-  const nonFiniteValueProblems = findNonFiniteSlotValues(objects);
-  if (nonFiniteValueProblems.length > 0) {
-    return { ok: false, message: nonFiniteValueProblems.join("; ") };
+  // D-025 (Q-006, cycle 0023), widened by Q-008 (cycle 0026): non-finite
+  // numbers and -0 are not legal document state. Runs last — it is orthogonal
+  // to the three checks above (schema/edge structure vs. raw value legality),
+  // so there is no ordering hazard the way D-017-before-D-018-before-dangling
+  // has; it is simply appended.
+  const illegalValueProblems = findIllegalSlotValues(objects);
+  if (illegalValueProblems.length > 0) {
+    return { ok: false, message: illegalValueProblems.join("; ") };
   }
 
   return { ok: true };
@@ -826,6 +848,32 @@ export type MutationResult =
  *   slot PATH it would have touched; `deleteObject` has no path to name, so it
  *   says plainly that it attempted a deletion.
  *
+ * A THIRD check, also before staging, also over the RAW `operations` (cycle
+ * 0026, closing 0025-REVIEW-phase0 finding 1's write side):
+ *
+ * - **D-025/Q-008 on the PAYLOAD** (`findIllegalOperationPayloads`). Checks
+ *   1-2 above simulate object EXISTENCE only; neither looks at what an
+ *   operation would actually WRITE. `findIllegalSlotValues` (validateIntegrity
+ *   check 4) does look at values, but only over the POST-FOLD graph — so an
+ *   operation carrying an illegal value that a LATER operation in the SAME
+ *   batch overwrites (`[setSlot v=Infinity, setSlot v=5]`) or that belongs to
+ *   an object a LATER operation in the SAME batch deletes
+ *   (`[createObject {v: NaN}, deleteObject]`) never reaches check 4 at all —
+ *   the illegal payload still lands in the JOURNAL, which records every
+ *   operation in the batch, not just the graph's final shape. This check
+ *   closes that hole at its source: it inspects `setSlot`'s `slot.value` and
+ *   every slot of `createObject`'s whole `object`, and rejects the WHOLE
+ *   batch if ANY operation's payload is illegal — regardless of whether that
+ *   operation's effect would have been overwritten or deleted later in the
+ *   SAME batch. `deleteObject` carries no value payload and is skipped.
+ *   Gathers every offending operation in one pass, same style as the other
+ *   two checks. Named via `formatAddress` where the target already resolves
+ *   (a `setSlot` almost always names an existing object) or the object's own
+ *   `name` field where it does not yet exist in `objects` at all (a
+ *   `createObject` payload carries its own name, so `describeUndeclaredSlot`
+ *   applies directly — see that function's own doc comment for why reusing it
+ *   here is its third sanctioned call site's shape, not a new exception).
+ *
  * Why staging matters even though every function downstream is already pure
  * (so `objects` was never going to be mutated regardless): Rule 5 asks for
  * this literally ("implement staging by deep-cloning the document state"),
@@ -902,6 +950,18 @@ export function mutate(
   });
   if (missingTargetMessages.length > 0) {
     return { ok: false, message: missingTargetMessages.join("; ") };
+  }
+
+  // D-025/Q-008 on the WRITE side (cycle 0026, 0025-REVIEW-phase0 finding 1):
+  // an operation's own PAYLOAD is rejected here, before staging, if it is
+  // illegal — regardless of whether a LATER operation in this SAME batch
+  // would overwrite it or delete the object it belongs to. See
+  // `findIllegalOperationPayloads`'s own doc comment for why this cannot be
+  // folded into `findIllegalSlotValues` (validateIntegrity check 4), which
+  // only ever sees the POST-FOLD graph.
+  const illegalPayloadMessages = findIllegalOperationPayloads(operations, objects);
+  if (illegalPayloadMessages.length > 0) {
+    return { ok: false, message: illegalPayloadMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -983,17 +1043,22 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
  * underlying reason, so that combination cannot arise before Phase 4 revisits
  * the whole mechanism.
  *
- * Two call sites (D-022 confines this raw-key naming style to THIS function —
- * a second site reuses it, never reimplements it): `findUndeclaredFormulaOr
- * DerivedSlots`, where the slot genuinely has no schema-declared path by
- * definition, and `findNonFiniteSlotValues` (D-025, cycle 0023), where it
- * might or might not — an extra literal slot is legal regardless of the
- * schema (`validateIntegrity` never restricts those), so that check cannot
- * assume a real `Address` is recoverable via the schema the way check 2
- * (`findSchemaSlotKindMismatches`) can, and needs a naming path that works
- * either way. The bounded correctness claim above (identical to
+ * THREE call sites now (D-022 confines this raw-key naming style to THIS
+ * function — every other site reuses it, never reimplements it):
+ * `findUndeclaredFormulaOrDerivedSlots`, where the slot genuinely has no
+ * schema-declared path by definition; `findIllegalSlotValues` (D-025, cycle
+ * 0023), where it might or might not — an extra literal slot is legal
+ * regardless of the schema (`validateIntegrity` never restricts those), so
+ * that check cannot assume a real `Address` is recoverable via the schema the
+ * way check 2 (`findSchemaSlotKindMismatches`) can; and
+ * `findIllegalOperationPayloads`'s `createObject` branch (cycle 0026), naming
+ * a slot on an object that may not even exist in `objects` YET (it is only
+ * being proposed by this very operation) — there is no `objects` list to
+ * resolve a schema lookup against at all in that case, only the payload's own
+ * `object.name`. The bounded correctness claim above (identical to
  * `formatAddress` for every non-table type) is exactly what makes reusing it
- * for a POSSIBLY-declared slot safe, not only for a definitely-undeclared one.
+ * safe in all three cases, not only the definitely-undeclared one it was
+ * built for.
  */
 function describeUndeclaredSlot(object: GraphObject, key: string): string {
   return `${object.name}.${key}`;
@@ -1119,12 +1184,13 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
 }
 
 /**
- * D-025 (Q-006, cycle 0023): non-finite numbers are not legal document state.
- * Checks every slot's `value` field — `LiteralSlot`, `FormulaSlot`, and
- * `DerivedSlot` all carry one (`graph/node.ts`) — via `hasNonFiniteNumber`
- * (D-014's shared-predicate principle), regardless of the object's type or
- * whether it has a schema entry at all: unlike D-017/D-018, this check needs
- * no schema knowledge, so there is no "type with no schema yet" exemption.
+ * D-025 (Q-006, cycle 0023), widened by Q-008 (cycle 0026): non-finite
+ * numbers and `-0` are not legal document state. Checks every slot's `value`
+ * field — `LiteralSlot`, `FormulaSlot`, and `DerivedSlot` all carry one
+ * (`graph/node.ts`) — via `hasIllegalNumber` (D-014's shared-predicate
+ * principle), regardless of the object's type or whether it has a schema
+ * entry at all: unlike D-017/D-018, this check needs no schema knowledge, so
+ * there is no "type with no schema yet" exemption.
  *
  * Named via `describeUndeclaredSlot` — REUSING the same function
  * `findUndeclaredFormulaOrDerivedSlots` already calls, not a new copy of its
@@ -1139,8 +1205,12 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
  * to `formatAddress` for every registered, non-table type) makes this exact
  * for Phase 0's fixtures regardless of whether the slot happens to BE
  * schema-declared or not.
+ *
+ * Checks only the POST-FOLD graph — see `mutate`'s doc comment and
+ * `findIllegalOperationPayloads` below for the companion check this one does
+ * NOT make: an operation's own payload, before it is folded at all.
  */
-function findNonFiniteSlotValues(objects: readonly GraphObject[]): readonly string[] {
+function findIllegalSlotValues(objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
 
   for (const object of objects) {
@@ -1149,10 +1219,10 @@ function findNonFiniteSlotValues(objects: readonly GraphObject[]): readonly stri
       if (slot === undefined) {
         continue; // noUncheckedIndexedAccess artifact only — key came from Object.keys of this same record.
       }
-      if (!hasNonFiniteNumber(slot.value)) {
+      if (!hasIllegalNumber(slot.value)) {
         continue;
       }
-      problems.push(`${describeUndeclaredSlot(object, key)} holds a non-finite number (${describeNonFiniteValue(slot.value)}), which is not legal document state (D-025)`);
+      problems.push(`${describeUndeclaredSlot(object, key)} holds an illegal value (${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`);
     }
   }
 
@@ -1160,23 +1230,91 @@ function findNonFiniteSlotValues(objects: readonly GraphObject[]): readonly stri
 }
 
 /**
- * Renders a value that `hasNonFiniteNumber` has already flagged, for check 4's
- * message. Reviewer edit at 0025-REVIEW-phase0: the message interpolated the
- * value directly, so every non-finite number nested inside a `Point`/`Point[]`
- * printed as `[object Object]` — a rejection that cannot say what it rejected,
- * the same defect D-023 fixed for the D-021 message and the same §5.1 step 6
- * requirement ("a human-readable failure") behind it. `JSON.stringify` is NOT
- * usable here for exactly the reason this check exists: it renders every one of
- * the three offending values as `null`.
+ * §5.1's own operation-payload precondition for D-025/Q-008 (cycle 0026,
+ * closing 0025-REVIEW-phase0 finding 1's write side) — see `mutate`'s doc
+ * comment for WHY this is a separate check from `findIllegalSlotValues`
+ * above, not a duplicate of it: this one inspects RAW `operations`, before
+ * any fold, so it catches a payload the fold would otherwise hide (overwritten
+ * by a later operation in the same batch, or attached to an object a later
+ * operation in the same batch deletes).
  *
- * Only ever called on a value `hasNonFiniteNumber` returned `true` for, so the
+ * `setSlot`: checks `operation.slot.value`. Named via `formatAddress` against
+ * the PRE-BATCH `objects` — almost always resolves, since a `setSlot` nearly
+ * always targets an object that already exists; on the one edge case it does
+ * not (a batch that creates an object and then, in the same batch, writes an
+ * illegal value to one of ITS slots via a separate `setSlot`), `formatAddress`
+ * itself already falls back to naming the raw id as an id (D-023) — the same
+ * defensive handling this file's other `formatAddress` call sites use.
+ *
+ * `createObject`: checks EVERY slot of `operation.object`, gathering every
+ * illegal one, not just the first — same "one problem per bad thing found"
+ * style as `validateIntegrity`'s own checks. Named via `describeUndeclaredSlot`
+ * (this function's third sanctioned call site — see its own doc comment):
+ * the object being created is not yet in `objects` at all, so there is
+ * nothing to `formatAddress` against; only the payload's own `object.name` is
+ * available, exactly the situation that function already exists for.
+ *
+ * `deleteObject`: no value payload — skipped entirely.
+ */
+function findIllegalOperationPayloads(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+
+  operations.forEach((operation, index) => {
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+
+    if (operation.kind === "setSlot") {
+      if (!hasIllegalNumber(operation.slot.value)) {
+        return;
+      }
+      const formatted = formatAddress(operation.address, objects);
+      const name = isAddressError(formatted) ? formatted.message : formatted;
+      problems.push(
+        `${prefix}: ${name} would hold an illegal value (${describeIllegalValue(operation.slot.value)}), which is not legal document state (D-025/Q-008)`,
+      );
+      return;
+    }
+
+    if (operation.kind === "createObject") {
+      for (const key of Object.keys(operation.object.slots)) {
+        const slot = operation.object.slots[key];
+        if (slot === undefined || !hasIllegalNumber(slot.value)) {
+          continue; // noUncheckedIndexedAccess artifact only, or this slot's own value is legal.
+        }
+        problems.push(
+          `${prefix}: ${describeUndeclaredSlot(operation.object, key)} would hold an illegal value ` +
+            `(${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`,
+        );
+      }
+      return;
+    }
+
+    // deleteObject: no value payload to check.
+  });
+
+  return problems;
+}
+
+/**
+ * Renders a value that `hasIllegalNumber` has already flagged, for check 4's
+ * (and `findIllegalOperationPayloads`'s own) message. Reviewer edit at
+ * 0025-REVIEW-phase0: the message interpolated the value directly, so every
+ * non-finite number nested inside a `Point`/`Point[]` printed as `[object
+ * Object]` — a rejection that cannot say what it rejected, the same defect
+ * D-023 fixed for the D-021 message and the same §5.1 step 6 requirement ("a
+ * human-readable failure") behind it. `JSON.stringify` is NOT usable here for
+ * exactly the reason this check exists: it renders every one of `NaN`/
+ * `Infinity`/`-Infinity` as `null`, AND renders `-0` as `"0"` — indistinguishable
+ * from legal `0` (Q-008's own defect), so `formatIllegalNumber` below handles
+ * the sign explicitly rather than delegating to `String`.
+ *
+ * Only ever called on a value `hasIllegalNumber` returned `true` for, so the
  * remaining arms of `Value` (string, boolean, null, ErrorValue) are unreachable
  * — `String(value)` is the honest fallback rather than a thrown error, since
  * nothing in this file throws.
  */
-function describeNonFiniteValue(value: Value): string {
+function describeIllegalValue(value: Value): string {
   if (typeof value === "number") {
-    return String(value);
+    return formatIllegalNumber(value);
   }
   if (Array.isArray(value)) {
     return `[${(value as readonly Point[]).map(describePoint).join(", ")}]`;
@@ -1188,5 +1326,16 @@ function describeNonFiniteValue(value: Value): string {
 }
 
 function describePoint(point: Point): string {
-  return `{ x: ${point.x}, y: ${point.y} }`;
+  return `{ x: ${formatIllegalNumber(point.x)}, y: ${formatIllegalNumber(point.y)} }`;
+}
+
+/**
+ * `String(-0)` is `"0"` — indistinguishable from legal `0` in a rejection
+ * message that exists specifically to say what was found (Q-008). Every
+ * other number this function is ever called on (`NaN`/`Infinity`/`-Infinity`,
+ * or any ordinary finite number appearing beside an illegal one inside a
+ * `Point`) prints exactly as `String` already renders it.
+ */
+function formatIllegalNumber(n: number): string {
+  return Object.is(n, -0) ? "-0" : String(n);
 }

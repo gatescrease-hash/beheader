@@ -18,10 +18,10 @@ Next free ID: **Q-009**
 
 ## Q-008 — Is negative zero (`-0`) legal document state?
 Raised: entry 0025-REVIEW-phase0 (reviewer)   Brief section: §5.1 (`Value`), §5.11, §6 clause 4
-Status: OPEN
-Blocks: nothing outright — but it is a live counterexample to §6 clause 4 ("round-trips to JSON
-and back **identically**") until it is settled, so it should be settled in the same cycle that
-closes 0025-REVIEW-phase0's REVISE item 1, which touches the same predicate.
+Status: OPEN (provisional choice taken, reversible — same standing as Q-005/Q-007)
+Blocks: nothing outright — it WAS a live counterexample to §6 clause 4 ("round-trips to JSON and
+back **identically**"); closed at entry 0026-phase0-revise-fix, same cycle that closed
+0025-REVIEW-phase0's REVISE item 1, which touches the same predicate.
 
 Ambiguity: D-025 settled the three non-finite numbers because JSON cannot represent them. `-0` is
 the remaining member of `Value`'s `number` arm with the same defect, and D-025 does not cover it
@@ -51,10 +51,15 @@ Recommendation: (a). It is one branch, it is consistent with D-025's own rationa
 does not survive the format is not document state), and it is forward-safe: no saved document can
 contain `-0` today, so nothing existing becomes unloadable.
 
-Reversible? Yes — one branch and one message in `mutation.ts`; no stored data can depend on it.
-Provisional choice taken: not yet. If the human has not ruled by the time REVISE item 1 is
-implemented, take (a) as PROVISIONAL(Q-008) and tag it at the predicate — this is reversible in
-the D-004 sense, unlike Q-006, which touched the visible behaviour of overflow.
+Reversible? Yes — one branch and one message; no stored data can depend on it.
+Provisional choice taken: **(a)**, at entry 0026-phase0-revise-fix — the human had not ruled by
+then. Tagged at exactly one site: `graph/node.ts`'s `isIllegalNumber`, the single leaf predicate
+D-025 (non-finite) and Q-008 (`-0`) now share (widened, not duplicated — same "widen the existing
+mechanism" stance D-020/D-026 already established). `mutate` rejects `-0` as a slot value (both a
+freshly-written literal and one already sitting in the document, same as D-025) and as an
+operation payload before staging; `document.ts`'s journal read-side check rejects it there too.
+`add`'s compute needs no separate `-0` guard: its inputs are already-legal by the time it runs, and
+IEEE 754 `+` of two finite, non-`-0` operands cannot itself produce `-0` — see 0026's own entry.
 
 ---
 
@@ -129,6 +134,11 @@ implemented at cycle 0019).
 > object list only. See 0025-REVIEW-phase0 finding 1: a journal payload holding `Infinity` is
 > saved as `null`, so the answer to this question is currently enforced on one of the two halves
 > it was written for. Q-006 stays ANSWERED — the ruling is not in doubt, its implementation is.
+
+> Implementer note (entry 0026-phase0-revise-fix): the journal half closed. `mutate` now rejects an
+> illegal operation payload before it can reach the journal (write side); `document.ts` rejects a
+> loaded file whose journal already holds one (read side, since a loaded journal never passes
+> through `mutate`). Both halves of D-025 — object list and journal — are enforced now.
 
 ---
 

@@ -1258,3 +1258,144 @@ describe("mutate — D-025's rejection says WHICH non-finite value it found (rev
     }
   });
 });
+
+describe("mutate — Q-008: -0 is not legal document state (PROVISIONAL, recommendation (a), 0025-REVIEW-phase0, enforced cycle 0026)", () => {
+  it("rejects a setSlot writing a bare -0 literal, naming the slot, prior state unchanged, distinguishing it from legal 0", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: -0 } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("D-025/Q-008");
+      expect(result.message).toContain("-0"); // not "0" — Q-008's own defect if it printed that
+    }
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("accepts a setSlot writing plain 0 — Q-008 is specifically about the SIGN, not zero itself", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 0 } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a -0 nested inside a Point literal (x or y)", () => {
+    const initial: GraphObject[] = [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } }];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "origin"), slot: { kind: "literal", value: { x: -0, y: 3 } } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("{ x: -0, y: 3 }");
+    }
+  });
+});
+
+describe("mutate — D-025/Q-008 on the OPERATION PAYLOAD, before staging, closing 0025-REVIEW-phase0 finding 1's write side (cycle 0026)", () => {
+  it("(probe A) rejects a batch where an EARLIER setSlot carries an illegal value even though a LATER setSlot in the SAME batch overwrites it — nothing partially commits, nothing is journalled", () => {
+    // 0025-REVIEW-phase0's own probe: mutate([setSlot v=Infinity, setSlot
+    // v=5]) previously returned ok:true (committed value 5, correct — but
+    // journal[0].operations[0].slot.value was Infinity, never checked).
+    // findIllegalSlotValues alone can never catch this: it only ever sees the
+    // POST-FOLD graph, and the fold's final value (5) is perfectly legal.
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const illegalFirst: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: Number.POSITIVE_INFINITY } };
+    const legalSecond: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 5 } };
+
+    const result = mutate(initial, [illegalFirst, legalSecond], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 1 of 2");
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("D-025/Q-008");
+    }
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("(probe F) rejects a batch that creates an object with an illegal slot even though the SAME batch deletes that object afterward", () => {
+    // The other half of 0025-REVIEW-phase0's probes: the illegal payload
+    // never survives the fold (the object is gone by the time the candidate
+    // graph is checked), so findIllegalSlotValues would see nothing wrong —
+    // but the CREATE operation's payload itself was illegal, and it still
+    // would have entered the journal.
+    const illegalObject: GraphObject = { id: "obj_2", name: "value_2", type: "value", slots: { value: { kind: "literal", value: NaN } } };
+    const create: Operation = { kind: "createObject", object: illegalObject };
+    const deleteAfter: Operation = { kind: "deleteObject", objectId: "obj_2" };
+
+    const result = mutate([], [create, deleteAfter], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 1 of 2");
+      expect(result.message).toContain("value_2.value");
+      expect(result.message).toContain("D-025/Q-008");
+    }
+  });
+
+  it("rejects a createObject whose payload holds an illegal value, naming the object and slot, without needing the object to exist in `objects` first", () => {
+    const illegalObject: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: Number.NEGATIVE_INFINITY } } };
+    const operation: Operation = { kind: "createObject", object: illegalObject };
+
+    const result = mutate([], [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("-Infinity");
+    }
+  });
+
+  it("gathers EVERY illegal slot on a createObject payload, not just the first", () => {
+    const illegalObject: GraphObject = {
+      id: "obj_1",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "literal", value: NaN }, other: { kind: "literal", value: -0 } },
+    };
+    const operation: Operation = { kind: "createObject", object: illegalObject };
+
+    const result = mutate([], [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("value_1.other");
+    }
+  });
+
+  it("gathers EVERY offending operation across the whole batch, not just the first", () => {
+    const firstIllegal: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: NaN } };
+    const fine: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 1 } };
+    const secondIllegal: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: -0 } };
+    const initial = [valueObject("obj_1", "value_1", 1)];
+
+    const result = mutate(initial, [firstIllegal, fine, secondIllegal], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 1 of 3");
+      expect(result.message).toContain("operation 3 of 3");
+      expect(result.message).not.toContain("operation 2 of 3");
+    }
+  });
+
+  it("does not reject a batch whose payloads are all legal, even when the post-fold graph is exactly the same shape as an illegal one would be", () => {
+    // Sanity check that this new precondition is not over-broad: a perfectly
+    // ordinary accepted batch must still succeed.
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 42 } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(true);
+  });
+});

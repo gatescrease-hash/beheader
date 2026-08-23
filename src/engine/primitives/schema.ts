@@ -62,8 +62,16 @@
  *     state) rather than throwing or returning `NaN`/`undefined` (§5.1: "Errors
  *     must never throw across the evaluation loop"). Every FUTURE derived
  *     slot's compute function that does arithmetic must map a non-finite
- *     result to `#TYPE` the same way — `graph/node.ts`'s `hasNonFiniteNumber`
- *     is the shared predicate (D-014's principle) for checking this.
+ *     result to `#TYPE` the same way — `graph/node.ts`'s `hasIllegalNumber`
+ *     is the shared predicate (D-014's principle) for checking this. `add`
+ *     does NOT additionally guard against a `-0` result (Q-008, cycle 0026):
+ *     its two inputs are themselves already-legal `Value`s by the time this
+ *     function ever sees them (mutation.ts rejects `-0` before it can enter
+ *     committed state — see that file's cycle 0026 header), and IEEE 754
+ *     addition of two finite, non-`-0` operands can never itself produce
+ *     `-0` — only `-0 + -0` does, which cannot arise here. A future compute
+ *     function using multiplication or division MUST reason about this
+ *     freshly; the guarantee is specific to `+`.
  *
  * NOT DONE HERE
  *   - Declaring an object type's default KIND per slot (literal vs. formula) or
@@ -82,7 +90,7 @@
  *   - Any geometry/table/text/script/image schema entries (Phases 3, 4, 5, 6).
  */
 import type { Address } from "../address.ts";
-import { hasNonFiniteNumber, isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
+import { hasIllegalNumber, isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 
 // ---------------------------------------------------------------------------
 // Dependency declarations (§5.1: "Dependencies may be declared statically ...

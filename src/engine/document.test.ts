@@ -104,6 +104,56 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
     }
   });
 
+  it("round-trips a JOURNAL carrying the SAME value vocabulary the object list does (0025-REVIEW-phase0 finding 1 / REVISE item 4) — including the literal saveDocument(loaded) === json text equality that catches this whole class", () => {
+    // 0025-REVIEW-phase0's own diagnosis: the previous round-trip test's
+    // fixture journal held a single finite `3`, so the journal was carried
+    // through the test without ever being TESTED. This fixture exercises
+    // every member of Value a journal operation payload can carry — number,
+    // string, boolean, null, Point, Point[], ErrorValue — across all three
+    // operation kinds, so a future regression in ANY of them fails this test.
+    const document: Document = {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 3,
+      objects: [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)],
+      journal: [
+        {
+          operations: [
+            { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 42 } },
+            { kind: "setSlot", address: addr("obj_1", "name_string"), slot: { kind: "literal", value: "hello" } },
+            { kind: "setSlot", address: addr("obj_1", "flag"), slot: { kind: "literal", value: true } },
+            { kind: "setSlot", address: addr("obj_1", "empty"), slot: { kind: "literal", value: null } },
+            { kind: "setSlot", address: addr("obj_1", "origin"), slot: { kind: "literal", value: { x: 1, y: -2 } } },
+            {
+              kind: "setSlot",
+              address: addr("obj_1", "vertices"),
+              slot: { kind: "literal", value: [{ x: 0, y: 0 }, { x: 3, y: 4 }] },
+            },
+            { kind: "setSlot", address: addr("obj_1", "broken"), slot: { kind: "literal", value: { error: "#REF", message: "no such slot" } } },
+          ],
+        },
+        {
+          operations: [
+            { kind: "createObject", object: valueObject("obj_2", "value_2", 2) },
+            { kind: "deleteObject", objectId: "obj_2" },
+          ],
+        },
+      ],
+      camera: { x: 0, y: 0, zoom: 1 },
+    };
+
+    const json = saveDocument(document);
+    const result = loadDocument(json);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.document).toEqual(document);
+    // The one-line check 0025-REVIEW-phase0 asked for: saving what was just
+    // loaded reproduces the EXACT same JSON text, not merely an equal-shaped
+    // document — catches any silent rewrite, whatever value turns out to be
+    // the next one JSON cannot represent.
+    expect(saveDocument(result.document)).toBe(json);
+  });
+
   it("round-trips an empty document (zero objects) without ever calling mutate's batch API", () => {
     const document = createEmptyDocument();
 
@@ -228,5 +278,87 @@ describe("deserializeDocument — malformed input, never throws", () => {
     expect(() => deserializeDocument(42)).not.toThrow();
     expect(() => deserializeDocument({})).not.toThrow();
     expect(() => deserializeDocument({ formatVersion: FORMAT_VERSION, objects: "nope" })).not.toThrow();
+  });
+});
+
+describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-REVIEW-phase0 finding 1, closed cycle 0026)", () => {
+  it("rejects a document whose JOURNAL holds a raw non-finite number — probe I: the SAME 1e999 that is rejected in the object list must also be rejected here, not silently corrupted on the next save", () => {
+    // 0025-REVIEW-phase0's sharpest probe: JSON.parse("1e999") is Infinity —
+    // a syntactically ordinary JSON number token that overflows on parse.
+    // Before cycle 0026 this loaded fine and then saveDocument silently wrote
+    // "null" in its place. It must now be rejected outright.
+    const parsed = JSON.parse(
+      `{"formatVersion":${FORMAT_VERSION},"nextObjectId":1,"objects":[],"journal":[{"operations":[{"kind":"setSlot","address":{"objectId":"obj_1","path":["value"]},"slot":{"kind":"literal","value":1e999}}]}],"camera":{"x":0,"y":0,"zoom":1}}`,
+    ) as unknown;
+
+    const result = deserializeDocument(parsed);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("journal");
+      expect(result.message).toContain("D-025/Q-008");
+    }
+  });
+
+  it("rejects a document whose journal holds -0 (Q-008), nested inside a Point", () => {
+    const document = {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 1,
+      objects: [],
+      journal: [{ operations: [{ kind: "setSlot", address: { objectId: "obj_1", path: ["origin"] }, slot: { kind: "literal", value: { x: -0, y: 1 } } }] }],
+      camera: { x: 0, y: 0, zoom: 1 },
+    };
+
+    const result = deserializeDocument(document);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("D-025/Q-008");
+    }
+  });
+
+  it("rejects an illegal number inside a createObject payload sitting in the journal, even though a deleteObject in the SAME entry removes it", () => {
+    // The write-side analogue of this exact shape (mutation.test.ts's "probe
+    // F") is rejected by mutate() before it can ever reach a journal this
+    // software writes — but a FOREIGN file can still claim one.
+    const document = {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 1,
+      objects: [],
+      journal: [
+        {
+          operations: [
+            { kind: "createObject", object: { id: "obj_9", name: "value_9", type: "value", slots: { value: { kind: "literal", value: NaN } } } },
+            { kind: "deleteObject", objectId: "obj_9" },
+          ],
+        },
+      ],
+      camera: { x: 0, y: 0, zoom: 1 },
+    };
+    // NaN has no JSON literal, so build this one directly rather than through
+    // JSON.stringify/parse (which would already turn it into null before this
+    // test could exercise anything) — deserializeDocument accepts raw
+    // `unknown` data structurally, and this is exactly that shape.
+
+    const result = deserializeDocument(document);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("D-025/Q-008");
+    }
+  });
+
+  it("does NOT reject a structurally garbled journal that happens to contain no illegal numbers — value-legality and structural validity are separate, and structure stays deliberately unvalidated (see file header)", () => {
+    const document = {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 1,
+      objects: [],
+      journal: ["garbage", 42, null],
+      camera: { x: 0, y: 0, zoom: 1 },
+    };
+
+    const result = deserializeDocument(document);
+
+    expect(result.ok).toBe(true); // 42 is a perfectly legal number — nothing here is illegal
   });
 });
