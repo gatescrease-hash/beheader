@@ -54,8 +54,8 @@
  * that same defect class (`camera`/`nextObjectId`, D-027) and **SIGNED OFF
  * THE PHASE 0 GATE**. Cycle 0028 begins Phase 1 (`formula/*`) and answers
  * **Q-005**: `formula/ast.ts`'s `FormulaAst` is now the full §5.3 grammar
- * (six variants, was one) — `validateIntegrity` gains a FIFTH, TEMPORARY
- * check, `findUnsupportedFormulaAsts`, closing the exact D-017 hazard shape
+ * (seven variants with D-028's, was one) — `validateIntegrity` gains a FIFTH,
+ * TEMPORARY check, `findUnsupportedFormulaAsts`, closing the D-017 hazard shape
  * one more time: `deriveEdges` still only derives an edge from the
  * `ReferenceNode` shape (no general `extractDependencies` exists until Phase
  * 2), so a formula slot holding any other AST shape would get NO edge at all
@@ -203,9 +203,9 @@
  *      cycle 0028, closing Q-005's own widening of `FormulaAst`). Same family
  *      as check 1 — both are about whether `deriveEdges`'s output can be
  *      trusted — reached from a different angle: `FormulaAst` is now a
- *      six-variant union (§5.3's full grammar), but `deriveEdges` still only
- *      derives an edge from the `ReferenceNode` shape (see that function's own
- *      doc comment) because the general `extractDependencies` this build would
+ *      seven-variant union (§5.3's grammar plus D-028's `ErrorNode`), but
+ *      `deriveEdges` still derives an edge only from the `ReferenceNode` shape
+ *      (see its own doc comment), because the `extractDependencies` it would
  *      need does not exist until Phase 2. A `formula`-kind slot holding any
  *      OTHER AST shape would therefore get NO edge at all — `deriveEdges`
  *      silently dropping a real dependency, D-017's exact failure class,

@@ -1,19 +1,23 @@
-# STATUS — as of entry 0028-formula-ast
+# STATUS — as of entry 0029-REVIEW-phase1
 
-STATE: GREEN. Compiles under both configs, 233/233 tests pass, 0 skipped, 0 `.only`, no test pins
-known-broken behaviour. **This entry is itself UNREVIEWED — do not build `lexer.ts`, `parser.ts`,
-or any other `formula/*` file until it lands.**
+STATE: GREEN. Compiles under both configs, 235/235 tests pass, 0 skipped, 0 `.only`, no test pins
+known-broken behaviour. **Cycle 0028 is REVIEWED — 0029-REVIEW-phase1, ACCEPT WITH EDITS.
+`lexer.ts` is UNBLOCKED.**
 
 Current phase: **1 — Formula engine (`formula/*`), standalone.** Phase 0 is COMPLETE and SIGNED OFF
-(0027-REVIEW-phase0, ACCEPT WITH EDITS). Last review point: 0027-REVIEW-phase0. Cycle 0028 built
-`formula/ast.ts` — `formula/`'s first REAL file, a mandatory §6.1 trigger 2 review point on its own.
+(0027-REVIEW-phase0). Last review point: **0029-REVIEW-phase1, verdict ACCEPT WITH EDITS** — it
+added `ErrorNode` to `FormulaAst` (**D-028**) and answered **Q-009** (**D-029**).
+Cycles since last review: 0/3 · diff since last review: 0 lines / 0 files (cap 800/10). For the
+record, cycle 0028's own diff was **722 lines / 7 files**, not the 557/6 its entry stated — see
+0029-REVIEW §5; anything touching `mutation.ts`/`graph/eval.ts` next starts near the cap.
 
-## Next slice — REVIEW REQUIRED first, then `lexer.ts`
-`formula/ast.ts` is `formula/`'s first real file. 0027-REVIEW's carried constraint 1: stop there,
-do not batch the grammar behind it. If accepted, next slice is `formula/lexer.ts` (tokenizer),
-then `parser.ts`, `deps.ts` (`extractDependencies`, eager/total per §5.3/§9), `functions.ts`, and
-`formula/eval.ts` — each standalone, heavily unit-tested, per PROJECT_BRIEF §6's Phase 1 build
-order. Phase 1's acceptance criterion needs ALL of these; none is claimed yet.
+## Next slice — `lexer.ts` (unblocked)
+0027-REVIEW's carried constraint 1 is discharged; 0029-REVIEW's constraint 1 replaces it: build
+`formula/lexer.ts` (tokenizer) alone and do NOT batch `parser.ts` behind it — `parser.ts` is where
+D-029, Q-004, and §5.3's range-placement rule all land at once. After it: `parser.ts`, `deps.ts`
+(`extractDependencies`, eager/total per §5.3/§9), `functions.ts`, and `formula/eval.ts` — each
+standalone, heavily unit-tested, per PROJECT_BRIEF §6's Phase 1 build order. Phase 1's acceptance
+criterion needs ALL of these; none is claimed yet.
 
 ## Built
 - Scaffold, `address.ts` (44 tests), `graph/node.ts` (27 tests, `Value`/`isIllegalNumber`/
@@ -31,13 +35,16 @@ order. Phase 1's acceptance criterion needs ALL of these; none is claimed yet.
   deliberately TEMPORARY check, `findUnsupportedFormulaAsts` (run as check 2, right after D-017,
   same family) — rejects a `formula`-kind slot whose AST is not yet a shape this build's evaluator
   understands. Deleted whole-cloth once Phase 2 wires in the real formula engine.
-- **`formula/ast.ts`** (NEW real content, 12 tests, cycle 0028) — `FormulaAst` widened from Phase
+- **`formula/ast.ts`** (real content, 14 tests, cycle 0028 + 0029-REVIEW's edits) — `FormulaAst`
+  widened from Phase
   0's one-variant stand-in to the FULL §5.3 grammar: `LiteralNode`, `ReferenceNode` (byte-for-byte
   unchanged), `RangeNode` (endpoint pair, never pre-expanded), `BinaryOpNode` (one node, one
   `operator` field spanning the WHOLE precedence chain), `UnaryOpNode` (`-`/`NOT`),
-  `FunctionCallNode` (`IF` is an ordinary call, not a dedicated node). `isReferenceNode` is the
-  ONE sanctioned narrowing predicate (D-014). **Q-005 is ANSWERED** (0006-REVIEW's own ruling,
-  executed now).
+  `FunctionCallNode` (`IF` is an ordinary call, not a dedicated node), and — added by
+  0029-REVIEW — **`ErrorNode`** (`{ type: "error"; error: "#REF" }`, **D-028**), the node §5.1.1's
+  repair path and §5.4's reference-adjustment pass write in place of ONE invalidated reference.
+  `isReferenceNode` is the ONE sanctioned narrowing predicate (D-014). **Q-005 is ANSWERED**
+  (0006-REVIEW's own ruling, executed now).
 
 ## Acceptance criterion — Phase 0, all four PASSING and REVIEWED (unchanged, see 0027-REVIEW)
 Phase 1's criterion is NOT YET claimed — see Next slice. `ast.ts` alone cannot satisfy any of it
@@ -49,10 +56,9 @@ Phase 1's criterion is NOT YET claimed — see Next slice. `ast.ts` alone cannot
   this build's evaluator. Delete both — and `deriveEdges`'s matching narrowing — the moment Phase
   2 wires in the real `formula/eval.ts` and every `FormulaAst` shape is genuinely supported. Do not
   let them survive past that point as dead defensive code with a stale reason.
-- **Q-009 (new, OPEN)**: are `AND`/`OR`/`NOT` operators, functions, or both? §5.3 lists them as
-  both (the precedence chain AND the built-ins list). Does not block anything today — both forms
-  are already representable in `FormulaAst` without conflict — but `parser.ts`/`functions.ts` need
-  an answer. Recommendation: (a) both, meaning the same thing.
+- **Q-009 is no longer open — ANSWERED → D-029** (0029-REVIEW). Binding on
+  `parser.ts`/`functions.ts`/`eval.ts`, which must cite it in their headers and test it with the
+  code, not after. See Gotchas for the half that bites.
 - **`camera` has no WRITE-side guard** (D-027, carried, unchanged) — Phase 3 must guard camera
   state where it is computed.
 - **The journal's STRUCTURE is deliberately unvalidated** beyond `Array.isArray` (carried,
@@ -75,13 +81,13 @@ Phase 1's criterion is NOT YET claimed — see Next slice. `ast.ts` alone cannot
 
 ## Live PROVISIONAL tags and open questions
 **`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`. **`PROVISIONAL(Q-008)`** →
-`graph/node.ts`'s `isIllegalNumber`. **Q-009** OPEN, not yet provisional-tagged anywhere (nothing
-commits to an answer today — see above). **Q-005** ANSWERED this cycle — all its tags removed.
+`graph/node.ts`'s `isIllegalNumber`. **Q-009** ANSWERED → D-029 (0029-REVIEW); no tag was ever
+taken. **Q-005** ANSWERED at cycle 0028 — all its tags removed.
 **Q-006** ANSWERED → D-025. **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2) deferred. **Q-003** →
 D-007. Next free: **Q-010**.
 
 ## Gotchas for the next model
-- **`FormulaAst` is a SIX-variant union now, not one.** Any code reading `.address` off a
+- **`FormulaAst` is a SEVEN-variant union now, not one.** Any code reading `.address` off a
   `FormulaSlot.ast` MUST first narrow via `isReferenceNode` (`formula/ast.ts`) — the compiler
   enforces this (verified: removing the narrowing in `deriveEdges` is a `tsc` error, not just a
   failing test — a STRONGER guarantee than mutation-testing can show). Do not add a second
@@ -93,6 +99,11 @@ D-007. Next free: **Q-010**.
   anyway since `eval.ts` cannot see `mutate`'s check run from where it sits). When Phase 2 wires in
   the real formula engine, DELETE both rather than widen them — they exist to be deleted, not
   extended.
+- **`ErrorNode` EXISTS but nothing constructs one yet, deliberately (D-028).** It is written only
+  by §5.1.1's repair path and §5.4's reference-adjustment pass, both Phase 2. Repairing at
+  FORMULA level instead of NODE level is the trap it exists to prevent: `= A1 + B1` whose `B1`
+  column was deleted must keep deriving its edge from `A1`. An `ErrorNode` evaluates to `#REF`,
+  never `#PARSE`, and `extractDependencies` yields nothing for it.
 - **`RangeNode` now EXISTS in the type system but nothing expands one into edges yet.** A formula
   slot holding a `RangeNode` is rejected the same way any other unsupported shape is, by the same
   temporary check. Range expansion is Phase 2/4.
@@ -101,9 +112,11 @@ D-007. Next free: **Q-010**.
 - **`BinaryOpNode`/`UnaryOpNode` do not encode precedence.** One node, one `operator` field, spanning
   the WHOLE §5.3 chain (`OR` through `^`) — precedence is `parser.ts`'s job to resolve INTO this
   flat shape, not something the AST type itself expresses.
-- **Q-009**: `AND`/`OR`/`NOT` can be represented BOTH as `BinaryOpNode`/`UnaryOpNode` operators AND
-  as `FunctionCallNode` calls — the type does not force a choice. `parser.ts`/`functions.ts` must
-  choose whether to wire up one or both, and if both, that they mean the same thing.
+- **D-029 (was Q-009)**: `AND`/`OR`/`NOT` get BOTH forms and both mean the same thing — but
+  `IF`/`AND`/`OR` are evaluated LAZILY by `formula/eval.ts` at the call site, never by a
+  `functions.ts` registry implementation (a table-driven registry gets already-evaluated args, so
+  it cannot short-circuit; §5.3 requires short-circuiting). `NOT` is an ordinary registry entry.
+  This is the single easiest way to build a formula engine that looks right and is wrong.
 - **`mutate` checks the post-fold GRAPH, the operations' PAYLOADS, and (now) whether a formula
   slot's AST shape is one this build can walk at all** — three genuinely different things, in
   `validateIntegrity` plus two pre-staging preconditions. The file header enumerates all of them;

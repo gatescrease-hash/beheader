@@ -573,3 +573,86 @@ Each fix was correct and each was scoped to the field the previous review named.
 generalises it once so the next field does not need a fourth round: the rule belongs to the
 document, and PROJECT_BRIEF §6 clause 4 ("round-trips to JSON and back identically") is a claim
 about the whole of it.
+
+---
+
+## D-028 — A repaired reference is its OWN AST node (`ErrorNode`), never a widened `LiteralNode`
+Answers: nothing open — closes a gap found at 0029-REVIEW-phase1
+Ruled: entry 0029-REVIEW-phase1 (reviewer)   Binding on: `formula/*`, and Phase 2's table
+reference-adjustment pass
+
+`FormulaAst` has a seventh variant, `ErrorNode` (`{ type: "error"; error: "#REF" }`), and §5.1.1's
+repair path and §5.4's reference-adjustment pass MUST write that node in place of the ONE
+reference they invalidate. They MUST NOT: widen `LiteralNode.value` to admit an `ErrorValue`;
+replace the whole formula's AST with a single error; or store the error only in the slot's `value`
+and leave the AST pointing at a slot that no longer exists.
+
+Rationale: the brief states this twice, in its own words, and both times as a NODE.
+§5.1.1 — repair "rewrites every inbound reference into a `#REF` **error node** in the referring
+AST". §5.4 — "A reference to a deleted row/column becomes a `#REF` error **stored in the AST at
+that position**." The distinction is load-bearing, not cosmetic: `= A1 + B1` whose `B1` column was
+deleted must keep deriving its edge from `A1`. Repairing at formula level instead of node level
+would silently drop that surviving edge — the same class of failure D-017 exists to prevent, and
+the one §5.1.1 forbids outright ("NEVER silently drop an edge... Reject or repair; there is no
+third option").
+
+`error` is deliberately the one-member literal `"#REF"`, not `graph/node.ts`'s full `ErrorCode`:
+`#REF` is the only code the brief ever stores in an AST (`#PARSE` is a parse-time failure — an
+unparseable formula is never committed at all, §5.3). Widening that literal later is additive and
+sanctioned; adding a second error-shaped node type is not.
+
+Evaluation semantics, binding on Phase 2's `formula/eval.ts`: an `ErrorNode` evaluates to the
+`ErrorValue` `{ error: "#REF", message: ... }` — NOT to `#PARSE`. `graph/eval.ts`'s current
+`evaluateFormula` returns `#PARSE` for every non-reference shape; that branch is temporary and is
+deleted, not extended, when the real evaluator lands (STATUS's own carried note).
+
+`extractDependencies` (`formula/deps.ts`) yields NOTHING for an `ErrorNode` — it is the absence of
+a dependency, made explicit. That is what makes the repair path leave a consistent edge set.
+
+Reconciliation required: none today. Nothing constructs an `ErrorNode` yet, and `mutate`'s
+temporary `findUnsupportedFormulaAsts` rejects one like any other not-yet-supported shape —
+correctly, since the pass that would write one does not exist until Phase 2, the same cycle that
+deletes that check.
+
+---
+
+## D-029 — `AND`/`OR`/`NOT` are BOTH operators and functions (Q-009 answered: option (a)) — but `IF`/`AND`/`OR` are never evaluated through the eager registry
+Answers: Q-009   Ruled: entry 0029-REVIEW-phase1 (reviewer)   Binding on: `formula/parser.ts`,
+`formula/functions.ts`, `formula/eval.ts`, `formula/deps.ts`
+
+Two rulings, and the second is the load-bearing one.
+
+**1. Both forms exist and mean the same thing.** `parser.ts` gives `AND`/`OR` their infix
+productions and `NOT` its prefix production per §5.3's precedence chain, AND accepts `AND(a, b,
+...)` / `OR(a, b, ...)` / `NOT(a)` as calls per §5.3's built-ins list. `a AND b` and `AND(a, b)`
+MUST produce the same value; the call form is the N-ary generalisation. Neither passage of §5.3
+has to be explained away, and this is how the spreadsheet model the brief is built on behaves.
+`ast.ts` needs no change: `BinaryOpNode`/`UnaryOpNode` and `FunctionCallNode` already represent
+both without conflict.
+
+**2. Sameness of VALUE does not mean sameness of EVALUATION MACHINERY.** §5.3 requires
+`evaluate` to be lazy: "`IF` evaluates only the taken branch. `AND`/`OR` short-circuit. A runtime
+error... in an *untaken* branch therefore never occurs and never surfaces." A table-driven registry
+(§5.3: "name → arity → implementation") receives ARGUMENTS THAT HAVE ALREADY BEEN EVALUATED. So:
+
+- `IF`, `AND`, and `OR` MUST be evaluated by `formula/eval.ts` itself, at the `FunctionCallNode`
+  site, BEFORE any registry dispatch — in both their operator form and their call form.
+  `functions.ts` MUST NOT hold an implementation for them that computes from evaluated arguments.
+  Registering their names/arities for arity checking and "is this a known function" is fine;
+  computing them from pre-evaluated args is the defect.
+- `NOT` is exempt: one argument, no branch to skip, so an ordinary registry entry is correct.
+- `deps.ts` treats both forms IDENTICALLY and remains EAGER and TOTAL over both — every argument of
+  every `IF`/`AND`/`OR`, in either form, contributes dependencies. §5.3: "A cycle discovered in an
+  untaken branch is a REAL cycle and MUST be rejected."
+
+Rationale: this is §5.3's central "getting it backwards breaks reactivity in a way that is very
+hard to debug" warning, arriving one cycle before the code that can get it wrong. Wiring `IF`
+through the registry is the single most natural way to build it and produces a formula engine that
+looks right, passes casual tests, and evaluates the untaken branch of every conditional — which
+also detonates §5.3's "an error in an untaken branch never surfaces" guarantee. Recording it now,
+while `functions.ts` is unwritten, costs a paragraph; finding it later costs the phase.
+
+Reconciliation required: none yet — no `PROVISIONAL(Q-009)` tag was ever taken (the implementer
+correctly declined to commit to an answer). Binding on the cycle that writes `parser.ts` /
+`functions.ts` / `eval.ts`, each of which MUST cite this decision in its file header and carry a
+test named for the rule it defends.

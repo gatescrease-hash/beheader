@@ -13,6 +13,7 @@ import type { Address } from "../address.ts";
 import {
   isReferenceNode,
   type BinaryOpNode,
+  type ErrorNode,
   type FormulaAst,
   type FunctionCallNode,
   type LiteralNode,
@@ -129,6 +130,27 @@ describe("FunctionCallNode", () => {
   });
 });
 
+describe("ErrorNode (0029-REVIEW-phase1, D-028)", () => {
+  it("replaces ONE reference inside a surviving formula, not the whole formula — §5.1.1's repair path rewrites \"every inbound reference into a #REF error node in the referring AST\"", () => {
+    // `= A1 + B1` after B1's column was deleted (§5.4's adjustment pass). The
+    // BinaryOpNode survives, so A1 still derives its edge — which is the whole
+    // point of repairing at node level rather than failing the formula.
+    const repaired: BinaryOpNode = {
+      type: "binaryOp",
+      operator: "+",
+      left: { type: "reference", address: addr("obj_3", "cells", "A1") },
+      right: { type: "error", error: "#REF" },
+    };
+    expect(repaired.left).toMatchObject({ type: "reference" });
+    expect(repaired.right).toEqual({ type: "error", error: "#REF" });
+  });
+
+  it("carries the code alone — a stored AST holds no ErrorValue message (D-028)", () => {
+    const node: ErrorNode = { type: "error", error: "#REF" };
+    expect(Object.keys(node).sort()).toEqual(["error", "type"]);
+  });
+});
+
 describe("isReferenceNode", () => {
   it("is true only for a ReferenceNode, false for every other variant", () => {
     const nodes: readonly FormulaAst[] = [
@@ -138,9 +160,10 @@ describe("isReferenceNode", () => {
       { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } },
       { type: "unaryOp", operator: "-", operand: { type: "literal", value: 1 } },
       { type: "functionCall", name: "SUM", args: [] },
+      { type: "error", error: "#REF" },
     ];
     const results = nodes.map(isReferenceNode);
-    expect(results).toEqual([false, true, false, false, false, false]);
+    expect(results).toEqual([false, true, false, false, false, false, false]);
   });
 });
 

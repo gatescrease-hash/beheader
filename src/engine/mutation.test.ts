@@ -302,13 +302,14 @@ describe("validateIntegrity — unsupported formula AST shape (Q-005's widening 
     }
   });
 
-  it("rejects every non-reference AST shape in turn: literal, range, binaryOp, unaryOp, functionCall", () => {
+  it("rejects every non-reference AST shape in turn: literal, range, binaryOp, unaryOp, functionCall, error", () => {
     const nonReferenceAsts: FormulaAst[] = [
       { type: "literal", value: 1 },
       { type: "range", start: addr("obj_1", "value"), end: addr("obj_1", "value") },
       { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } },
       { type: "unaryOp", operator: "NOT", operand: { type: "literal", value: true } },
       { type: "functionCall", name: "SUM", args: [] },
+      { type: "error", error: "#REF" }, // D-028, added 0029-REVIEW-phase1 — this list must stay exhaustive over FormulaAst.
     ];
     for (const ast of nonReferenceAsts) {
       const objects: GraphObject[] = [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast, value: null } } }];

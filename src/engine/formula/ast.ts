@@ -18,7 +18,9 @@
  * get wrong — every later formula file is built ON these shapes.
  *
  * WHAT THIS IS
- *   Every `FormulaAst` node §5.3's grammar needs, and nothing it does not:
+ *   Every `FormulaAst` node §5.3's grammar needs, plus the ONE node that
+ *   grammar never produces but §5.1.1/§5.4 require a stored AST to be able to
+ *   hold (`ErrorNode`) — and nothing it does not:
  *
  *   - `LiteralNode` — a number, string, or boolean literal (`3`, `"hello"`,
  *     `TRUE`). One node for all three, not three node types: §5.3 groups them
@@ -61,6 +63,17 @@
  *     driven vocabulary (unlike D-009's `ObjectType`, which IS closed) — an
  *     unrecognised name is a `functions.ts`/`parser.ts`-time `#PARSE`, not a
  *     compile-time constraint here.
+ *
+ *   - `ErrorNode` — a `#REF` stored IN the AST at one reference's position.
+ *     NOT part of §5.3's grammar: no formula the parser ever sees contains
+ *     one. It exists because §5.1.1's REPAIR path "rewrites every inbound
+ *     reference into a `#REF` error node in the referring AST", and §5.4 says
+ *     the same of a reference to a deleted row/column ("becomes a `#REF`
+ *     error stored in the AST at that position"). Both are the brief's own
+ *     words, and both describe a NODE, not a whole-formula failure: `= A1 +
+ *     B1` whose `B1` column was deleted stays a `BinaryOpNode` with an
+ *     `ErrorNode` where its right operand was, so the surviving `A1`
+ *     reference keeps its edge. Added at 0029-REVIEW-phase1 — see D-028.
  *
  * A GENUINE AMBIGUITY, noted here rather than silently resolved (raised as
  * **Q-009**): §5.3 lists `AND`/`OR`/`NOT` BOTH as infix/prefix OPERATORS
@@ -174,12 +187,39 @@ export interface FunctionCallNode {
 }
 
 /**
+ * A `#REF` error stored IN the AST at one reference's position (D-028). Never
+ * produced by parsing — §5.3 has no syntax for it, and an unresolvable name is
+ * a parse-time failure rather than a stored node (§5.3: "An unresolvable
+ * reference is a PARSE-time error regardless of branch"). It is written only
+ * by §5.1.1's repair path and §5.4's reference-adjustment pass, both Phase 2,
+ * and it is what keeps that repair a NODE-level rewrite: the rest of the
+ * formula, and every edge the rest of it derives, survives.
+ *
+ * `error` is the one-member literal `"#REF"`, not `graph/node.ts`'s full
+ * `ErrorCode`: `#REF` is the only code the brief ever stores in an AST, and a
+ * one-member literal is both the dumbest correct shape (Rule 5) and additively
+ * widenable if that ever stops being true. Evaluation turns this node into a
+ * full `ErrorValue` (D-028); the node carries no `message` of its own.
+ */
+export interface ErrorNode {
+  readonly type: "error";
+  readonly error: "#REF";
+}
+
+/**
  * The formula AST's root type — WIDENED this cycle (Q-005, ANSWERED) from
  * Phase 0's one-variant stand-in to the full §5.3 grammar. `ReferenceNode`
  * is preserved exactly, per Q-005's own binding constraint: a binding stays
  * representable as a bare reference under the full grammar too.
  */
-export type FormulaAst = LiteralNode | ReferenceNode | RangeNode | BinaryOpNode | UnaryOpNode | FunctionCallNode;
+export type FormulaAst =
+  | LiteralNode
+  | ReferenceNode
+  | RangeNode
+  | BinaryOpNode
+  | UnaryOpNode
+  | FunctionCallNode
+  | ErrorNode;
 
 /**
  * Narrows `FormulaAst` to its `ReferenceNode` arm — the ONE sanctioned way to

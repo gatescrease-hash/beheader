@@ -18,7 +18,8 @@ Next free ID: **Q-010**
 
 ## Q-009 — Are `AND`/`OR`/`NOT` infix/prefix OPERATORS, callable FUNCTIONS, or both?
 Raised: entry 0028-formula-ast (implementer)   Brief section: §5.3
-Status: OPEN
+Status: **ANSWERED → D-029** (ruled at entry 0029-REVIEW-phase1, option (a) — with a
+binding rider the question did not anticipate: see the reviewer note at the end)
 Blocks: `parser.ts`/`functions.ts` (later Phase 1 cycles) — does NOT block `ast.ts` itself; see
 below.
 
@@ -46,6 +47,16 @@ entries, not `ast.ts`'s shape, which is why it does not block this cycle.
 Reversible? Yes — a parser-level and registry-level choice; no stored document state can depend on
 it before `parser.ts` exists. Provisional choice taken: not yet (deferred to whichever cycle builds
 `parser.ts`/`functions.ts`, since nothing today needs an answer).
+
+> Reviewer note (0029-REVIEW-phase1): **(a) APPROVED — both forms, meaning the same thing.** The
+> question was right that `ast.ts` does not need an answer, and right to decline a provisional
+> choice. But answering it surfaced something the question did not ask, which is why D-029 rules on
+> two things instead of one: §5.3's built-in registry is table-driven over **already-evaluated**
+> arguments, while §5.3 ALSO requires `IF`/`AND`/`OR` to short-circuit. Both cannot be true of the
+> same dispatch path. D-029: `IF`/`AND`/`OR` are evaluated lazily by `formula/eval.ts` at the call
+> site and never computed by a `functions.ts` implementation, in either syntactic form; `NOT` is an
+> ordinary registry entry; `deps.ts` stays eager and total over both forms. Binding before
+> `parser.ts`/`functions.ts`/`eval.ts` are written.
 
 ---
 
