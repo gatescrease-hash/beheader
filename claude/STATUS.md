@@ -1,14 +1,15 @@
-# STATUS — as of entry 0040-table-primitive-first-file
+# STATUS — as of entry 0041-REVIEW-phase2
 
-STATE: GREEN (compiles under both configs, 470/470 tests pass, 0 skipped, 0 `.only`).
+STATE: GREEN (compiles under both configs, 474/474 tests pass, 0 skipped, 0 `.only`).
 
-**Process state: REVIEW REQUIRED before the next cycle begins.** `primitives/table.ts` (entry
-0040) is the table primitive subsystem's FIRST FILE — PROCESS_BRIEF §6.1 trigger 2, a mandatory
-stop regardless of batch headroom. **Do not start a new slice** — Phase 2's real wiring work above
-all — until this lands.
+**Cycles 0039 and 0040 are REVIEWED — verdict ACCEPT WITH EDITS (entry 0041-REVIEW-phase2).**
+Two defects fixed in `address.ts` (both the same one-spelling-per-cell invariant, reached from two
+routes cycle 0039 left open), three rulings: **D-043** (exactly one spelling of a cell exists; the
+form enforces it), **D-044** (range expansion is bounded by the table's current dimensions),
+**D-045** (a cross-object range is rejected at parse time). Phase 2 continues.
 
 **PHASE 1 IS COMPLETE AND SIGNED OFF** (0037-REVIEW-phase1). **Phase 2 — Table primitive — is
-OPEN.** D-039/D-038 (entry 0039) are done. Entry 0040 adds standalone, UNWIRED table-primitive
+OPEN.** D-039/D-038 (entry 0039) are done. Entry 0040 added standalone, UNWIRED table-primitive
 logic (default dimensions; a range's rectangle-enumeration helper) — nothing consumes it yet, and
 `getObjectSchema("table")` still returns `undefined`. One Phase 1 criterion clause is still carried
 into Phase 2 by name: **range EVALUATION** (`SUM(A1:B4)` still returns a placeholder `#PARSE`) —
@@ -17,17 +18,19 @@ demands the proof.
 
 Current phase: **2 — Table primitive.** "Wire the formula engine into cell slots. Add reference
 adjustment. Still headless."
-Last review point: **0037-REVIEW-phase1, ACCEPT WITH EDITS** (Phase 1 gate PASSED; D-036/D-037
-ruled). Since then: entry **0038-RULINGS** (human, closed Q-010/Q-004/Q-002/Q-001 → D-038..D-042),
-entry **0039** (implementer — executed D-039/D-038), entry **0040** (implementer, this cycle —
-`primitives/table.ts`, first file of the table subsystem, trigger 2 fired).
-Cycles since last review: **2/3** · diff since last review: **~638 lines / 7 files** (cap 800/10)
-— under cap, but trigger 2 forces the stop regardless.
+Last review point: **0041-REVIEW-phase2, ACCEPT WITH EDITS.** Before it: 0037-REVIEW-phase1 (Phase
+1 gate), entry 0038-RULINGS (human, closed Q-010/Q-004/Q-002/Q-001 → D-038..D-042), entries 0039
+and 0040 (implementer).
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+State the counting convention next batch — insertions, or insertions + deletions (0041-REVIEW §6).
 
-## Next slice — BLOCKED pending review of entry 0040
-Once reviewed, the real Phase 2 wiring work, per PROJECT_BRIEF §6 and 0037-REVIEW §9 — **read that
-section, and D-036, before designing anything.** What entry 0040 did NOT solve, and what this
-slice must:
+## Next slice — the DYNAMIC SLOT FAMILY, not the wiring
+`table` cannot enter `primitives/schema.ts`'s `SCHEMAS` while `ObjectSchema.nonDerivedSlotPaths` is
+a fixed list, and D-017 says that mechanism is its own decision. That is now the critical path:
+`deriveEdges` and `validateIntegrity` both consume the schema shape, so **nothing about tables can
+be wired until it exists.** It touches `mutation.ts` and `primitives/schema.ts` — both load-bearing
+(§6.2) — so expect a reviewed cycle of its own, and write the design down before the code.
+Read 0041-REVIEW-phase2 §9 first; it lists what bites and in what order.
 
 - **The `ObjectSchema` dynamic-slot-family mechanism.** A table's cells (`cells.A1`...`cells.H8`,
   growing/shrinking with row/column count) cannot be expressed by `ObjectSchema.nonDerivedSlotPaths`
@@ -54,14 +57,6 @@ slice must:
 - Row/column insert/delete + §5.4's reference-adjustment/clamping pass — needs its own design too;
   entry 0040 deliberately built nothing towards this (clamping depends on the delete-mutation
   mechanics, not on dimensions alone).
-- **Three open questions from entry 0040, unanswered:** (1) should `enumerateRangeCellPaths`
-  bounds-check against the table's actual dimensions, or is relying on `read`'s own `#REF` miss
-  correct; (2) should a cross-table range (`SUM(table_x.A1:table_y.B4)`) be rejected earlier, at
-  `parser.ts`'s parse time, rather than only at enumeration time as entry 0040 does today (a
-  genuinely new finding — nothing upstream currently blocks it); (3) is the `address.ts`/`table.ts`
-  split for the column-arithmetic helpers the right home long-term.
-
-Anything touching `mutation.ts`, `graph/*`, or `primitives/schema.ts` is load-bearing under §6.2.
 
 ## Built and reviewed (all of Phase 0 and Phase 1)
 - Scaffold, `graph/node.ts`, `graph/edge.ts`, `primitives/schema.ts`, `graph/cycles.ts`,
@@ -72,9 +67,11 @@ Anything touching `mutation.ts`, `graph/*`, or `primitives/schema.ts` is load-be
   (44 tests), **`formula/eval.ts`** (47 tests) — the full formula engine, Phase 1, signed off at
   0037-REVIEW-phase1.
 
-## Built this batch, not yet reviewed (cycles 0039–0040)
-- **`address.ts` (D-039, cycle 0039)** — `CELL_REFERENCE_PATTERN` accepts either case; normalises
-  to uppercase at one point (`normalizeCellReference`), called from `toStoredPath`/`bareCellAddress`.
+## Built and reviewed at 0041-REVIEW (cycles 0039–0040)
+- **`address.ts` (D-039, cycle 0039; D-043, 0041-REVIEW)** — `CELL_REFERENCE_PATTERN` accepts
+  either case and rejects leading zeros/row 0; ONE regex defines the form and `parseCellReference`
+  `exec`s it; every route into a stored cell path normalises through `normalizeCellReference`,
+  including the written-out `table_x.cells.a1` form.
 - **`formula/parser.ts` (D-038, cycle 0039)** — rejects an unrecognised function name or wrong
   argument count at `#PARSE` time, naming the function and its position.
 - **`address.ts` (cycle 0040)** — exported `TABLE_CELL_PATH_PREFIX`; added
@@ -83,10 +80,11 @@ Anything touching `mutation.ts`, `graph/*`, or `primitives/schema.ts` is load-be
 - **`primitives/table.ts` (NEW, cycle 0040, 190 lines)** — `DEFAULT_TABLE_ROWS`/`COLS` = 8;
   `enumerateRangeCellPaths(start, end)` expands a range's two endpoints into every cell path in
   the rectangle between them (row-major, no table-dimension bounds check by design, rejects a
-  cross-object range). **Not yet wired into anything** — no `ObjectSchema` entry, no `eval.ts`/
+  cross-object range — both now ruled: D-044 bounds it, D-045 moves the cross-object check to
+  parse time). **Not yet wired into anything** — no `ObjectSchema` entry, no `eval.ts`/
   `mutation.ts` consumer. See "Next slice" above for exactly what's deferred and why.
-- All mutation-tested (entries 0039/0040); §6.1 trigger 5 (0039, pre-authorised) and trigger 2
-  (0040, the reason this batch stops here) are the only triggers that fired.
+- All mutation-tested (entries 0039/0040), verified at 0041-REVIEW; §6.1 trigger 5 (0039,
+  pre-authorised) and trigger 2 (0040) are the only triggers that fired.
 
 ## Acceptance criteria
 - **Phase 0** — all four PASSING and REVIEWED (0027-REVIEW).
@@ -97,11 +95,13 @@ Anything touching `mutation.ts`, `graph/*`, or `primitives/schema.ts` is load-be
 
 ## Known problems
 - **Range evaluation is a placeholder `#PARSE`** (D-036). See "Next slice" above.
-- **`primitives/table.ts`'s `enumerateRangeCellPaths` has no table-dimension bounds check by
-  design** (entry 0040 Decision 1) — reviewer question 1, unanswered.
-- **A cross-table range is not rejected until `enumerateRangeCellPaths` runs** (entry 0040
-  Decision 2) — `formula/parser.ts` does not currently prevent `SUM(table_x.A1:table_y.B4)` from
-  parsing. Reviewer question 2, unanswered. A genuinely new finding, not previously flagged.
+- **`enumerateRangeCellPaths` is unbounded and must not be wired as it stands** — RULED, **D-044**:
+  it takes the table's current extent when it is wired, cells outside it are omitted rather than
+  `#REF`, and that same change removes the `A1:ZZ999999` resource hazard. An unbounded expansion in
+  `deriveEdges` would build edges to slots that do not exist (dangling edges).
+- **A cross-object range is still only rejected at `enumerateRangeCellPaths`** — RULED, **D-045**:
+  the check also belongs in `parser.ts` at `#PARSE` time (decidable from the text alone, D-038's
+  line); the enumeration check stays as the defensive arm. Found and disclosed by cycle 0040.
 - **`MIN`/`MAX` spread their argument list** (`Math.min(...numbers)`), `RangeError` risk on a large
   one — unreachable until ranges flatten into arguments, owned by the wiring cycle (0035-REVIEW
   Finding 4, carried).
@@ -126,7 +126,10 @@ Anything touching `mutation.ts`, `graph/*`, or `primitives/schema.ts` is load-be
   bijective base-26, either case in, uppercase out (cycle 0040) · an explicit write replaces a
   formula, dragging unchanged (D-040, Phase 3 — nothing to build yet) · `unlink` keeps what was
   displayed (D-041, Phase 3 — nothing to build yet) · this is a one-user tool, no product/market
-  reasoning (D-042) · everything 0029/0032/0035-REVIEW listed settled.
+  reasoning (D-042) · exactly one stored spelling per cell — no leading zeros, no row 0, one regex
+  defines the form (D-043, fixed at 0041-REVIEW) · the column arithmetic stays in `address.ts`,
+  rectangle enumeration in `table.ts` (0041-REVIEW answer 3) · everything 0029/0032/0035-REVIEW
+  listed settled.
 
 ## Live PROVISIONAL tags and open questions
 **Zero open questions block any phase.** Q-010 → D-038, Q-004 → D-039, Q-002 → D-040, Q-001 → D-041
@@ -140,8 +143,14 @@ not brief ambiguities):** bounds-checking in `enumerateRangeCellPaths`; cross-ta
 rejection point; the `address.ts`/`table.ts` split. Next free: **Q-011**.
 
 ## Gotchas for the next model
-- **This batch is BLOCKED on review (trigger 2).** Do not start Phase 2's wiring cycle, or any
-  other new slice, until entry 0040 is reviewed.
+- **D-043: one spelling per cell, and the test for it is not "the new spelling is accepted".** It
+  is that EVERY route into the stored form lands on the same string. There were three routes
+  (shorthand, written-out `cells.<ref>`, and the row's digits); cycle 0039 closed one. Enumerate
+  the routes before claiming a normalisation ruling is done.
+- **`enumerateRangeCellPaths` is not wired-ready (D-044)** — it needs the table's extent, and its
+  signature changes when you wire it. Decide `Address[]` vs paths at the same time.
+- **The next slice is the dynamic slot family, NOT the wiring** — nothing about tables can be
+  wired while `getObjectSchema("table")` returns `undefined`. Read 0041-REVIEW-phase2 §9.
 - **The `ObjectSchema` dynamic-slot-family problem is THE design question waiting at the top of
   the wiring cycle.** Read D-017 in full before touching `primitives/schema.ts` or `mutation.ts`'s
   `deriveEdges`/`validateIntegrity`. Do not extend `nonDerivedSlotPaths` with more fixed entries —

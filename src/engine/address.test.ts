@@ -18,6 +18,7 @@ import {
   generateDefaultName,
   indexToColumnLetters,
   isAddressError,
+  isCellReferenceForm,
   isNameTaken,
   isValidName,
   parseAddress,
@@ -200,6 +201,34 @@ describe("parseAddress", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("table_x.a1", docObjects)).toEqual(parseAddress("table_x.A1", docObjects));
     expect(parseAddress("table_x.aB12", docObjects)).toEqual(parseAddress("table_x.AB12", docObjects));
+  });
+
+  // D-043 (0041-REVIEW-phase2): the same one-spelling rule, reached from the two angles
+  // cycle 0039 left open — the already-written stored form, and a row with leading zeros.
+  it("the written-out stored form is normalised too: table_x.cells.a1 is the SAME slot as table_x.a1 (D-043)", () => {
+    const docObjects = objects(["obj_3", "table_x", "table"]);
+    expect(parseAddress("table_x.cells.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
+    expect(parseAddress("table_x.cells.a1", docObjects)).toEqual(parseAddress("table_x.A1", docObjects));
+  });
+
+  it("a row with leading zeros is NOT a cell reference, so A007 never becomes a second slot beside A7 (D-043)", () => {
+    const docObjects = objects(["obj_3", "table_x", "table"]);
+    expect(isCellReferenceForm("A007")).toBe(false);
+    expect(isCellReferenceForm("A7")).toBe(true);
+    // Not a cell form, so no `cells.` prefix is added — it resolves as an ordinary
+    // path segment, which names no slot, rather than a phantom second cell.
+    expect(parseAddress("table_x.A007", docObjects)).toEqual({ objectId: "obj_3", path: ["A007"] });
+  });
+
+  it("row 0 is not a cell reference — A1 notation has no row 0 (D-043)", () => {
+    expect(isCellReferenceForm("A0")).toBe(false);
+    expect(parseCellReference("A0")).toBeUndefined();
+  });
+
+  it("parseCellReference and isCellReferenceForm agree on every shape, because they share one pattern (D-043)", () => {
+    for (const candidate of ["A1", "a1", "AB12", "Z99", "A007", "A0", "A", "1", "A1B", "", "AA0"]) {
+      expect(parseCellReference(candidate) !== undefined).toBe(isCellReferenceForm(candidate));
+    }
   });
 
   it("maps a multi-letter, multi-digit cell ref such as AB12", () => {

@@ -232,8 +232,22 @@ export const TABLE_CELL_PATH_PREFIX = "cells";
  * (`toStoredPath` and `bareCellAddress` below, both routed through
  * `normalizeCellReference`), never at this pattern-matching stage and never re-derived
  * at a call site.
+ *
+ * **Exactly one spelling of a cell is ever stored (D-043).** Two things follow, and
+ * both are enforced by this one pattern rather than by callers:
+ *   - Either CASE is the same cell (D-039), normalised at the single point below.
+ *   - The row is `[1-9][0-9]*` — no leading zeros, no row `0`. `A007` and `A0` are
+ *     NOT this form and resolve as ordinary path segments (which name no slot), so
+ *     they fail rather than quietly becoming a second `cells.A007` slot beside
+ *     `cells.A7`, or a `cells.A0` for a row A1 notation does not have. Tightened at
+ *     0041-REVIEW-phase2, where `A007` and `A7` were confirmed to store as two
+ *     different slots for one cell — D-008's own two-slots hazard, a third time.
+ *
+ * The capture groups are load-bearing: `parseCellReference` below `exec`s this SAME
+ * pattern rather than keeping a second, near-identical one. One regex, one definition
+ * of the form — a second copy is how the predicate and the splitter drift apart.
  */
-const CELL_REFERENCE_PATTERN = /^[A-Za-z]+[0-9]+$/;
+const CELL_REFERENCE_PATTERN = /^([A-Za-z]+)([1-9][0-9]*)$/;
 
 /**
  * The ONE point a cell reference's case is decided (D-039) — called by both
@@ -357,16 +371,16 @@ export interface CellCoordinates {
  * never throws, matching this file's discipline everywhere else.
  */
 export function parseCellReference(cellReference: string): CellCoordinates | undefined {
-  const match = /^([A-Za-z]+)([0-9]+)$/.exec(cellReference);
-  if (match === null) {
+  // The SAME `CELL_REFERENCE_PATTERN` `isCellReferenceForm` tests with, `exec`d for its
+  // two capture groups (0041-REVIEW-phase2: this used to carry a second, near-identical
+  // regex whose row part was `[0-9]+`, so it split `A007` into row 7 while the stored
+  // path kept `A007` — the splitter and the predicate had already drifted).
+  const match = CELL_REFERENCE_PATTERN.exec(cellReference);
+  const columnLetters = match?.[1];
+  const rowDigits = match?.[2];
+  if (columnLetters === undefined || rowDigits === undefined) {
     return undefined;
   }
-  // Safe: a successful match against this two-group pattern always populates both
-  // capture groups (neither is optional in the pattern), so match[1]/match[2] are
-  // real strings, not `undefined` — noUncheckedIndexedAccess types them defensively
-  // regardless, so this is asserted rather than re-derived.
-  const columnLetters = match[1] as string;
-  const rowDigits = match[2] as string;
   return { column: columnLettersToIndex(columnLetters), row: Number(rowDigits) };
 }
 
@@ -396,9 +410,23 @@ export function formatCellReference(coordinates: CellCoordinates): string {
  * resolve to `{ path: ["cells", "A1"] }`, never to two different slots for one cell.
  */
 function toStoredPath(type: ObjectType, surfacePath: readonly string[]): readonly string[] {
+  if (type !== TABLE_TYPE) {
+    return surfacePath;
+  }
   const onlySegment = surfacePath.length === 1 ? surfacePath[0] : undefined;
-  if (type === TABLE_TYPE && onlySegment !== undefined && CELL_REFERENCE_PATTERN.test(onlySegment)) {
+  if (onlySegment !== undefined && CELL_REFERENCE_PATTERN.test(onlySegment)) {
     return [TABLE_CELL_PATH_PREFIX, normalizeCellReference(onlySegment)];
+  }
+  // The already-written stored form (`table_x.cells.a1`) is normalised too (D-043,
+  // 0041-REVIEW-phase2). The shorthand above was the only path routed through
+  // `normalizeCellReference`, so typing the two-segment form — which this file
+  // explicitly supports, see the comment above — stored `cells.a1` beside the
+  // `cells.A1` that `table_x.a1` produced: two slots for one cell, which is the exact
+  // failure D-039 was ruled to prevent. Same form test, same single normalisation
+  // point; no prefix is added here, so D-008's `toSurfacePath` inverse is untouched.
+  const [prefix, cellReference] = surfacePath;
+  if (surfacePath.length === 2 && prefix === TABLE_CELL_PATH_PREFIX && cellReference !== undefined && CELL_REFERENCE_PATTERN.test(cellReference)) {
+    return [TABLE_CELL_PATH_PREFIX, normalizeCellReference(cellReference)];
   }
   return surfacePath;
 }

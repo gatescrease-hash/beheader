@@ -1018,3 +1018,97 @@ brief itself uses spreadsheet convention as a tie-breaker (D-030, Excel), that s
 concrete reference, not a claim about an audience.
 
 Past entries keep their wording; the log is append-only and is not rewritten for style.
+
+---
+
+## D-043 — Exactly ONE spelling of a cell reference exists; the form itself enforces it
+Ruled: entry 0041-REVIEW-phase2 (reviewer)   Binding on: `address.ts`, and every consumer of the
+A1 form
+
+D-039 settled case. Cycle 0039 implemented it correctly for the shorthand path and left the same
+hazard open in two other places, both confirmed by probe before this ruling:
+
+```
+table_x.a1        -> path ["cells","A1"]     table_x.cells.a1  -> path ["cells","a1"]
+table_x.A7        -> path ["cells","A7"]     table_x.A007      -> path ["cells","A007"]
+```
+
+Two stored slots for one cell, twice — D-008's original two-slots-for-one-cell hazard, reached
+from the written-out stored form and from leading zeros instead of from case. The ruling is the
+general form of D-039, and it is enforced by the FORM, not by callers:
+
+1. **The row part is `[1-9][0-9]*`.** `A007` and `A0` are not cell references at all: no leading
+   zeros, and no row `0`, which A1 notation does not have. They resolve as ordinary path segments
+   naming no slot, so they fail instead of quietly becoming a phantom second cell. Accepting
+   `A007` as a synonym for `A7` later is purely additive; splitting one cell into two is not.
+2. **EVERY path that builds a stored cell path normalises** — including the already-written
+   `table_x.cells.a1`, which `toStoredPath` previously passed through untouched.
+3. **One regex is the definition of the form.** `parseCellReference` `exec`s the same
+   `CELL_REFERENCE_PATTERN` that `isCellReferenceForm` tests, rather than keeping a second,
+   near-identical copy — the two had already drifted (the copy's row part was `[0-9]+`, so it
+   split `A007` into row 7 while the stored path kept `A007`, and an enumerated path would never
+   have matched the stored slot).
+
+The general rule, which is the part worth carrying: **when a ruling says "exactly one spelling is
+ever stored", the test is not "the new spelling is accepted" — it is that every route into the
+stored form lands on the same string.** Enumerate the routes; there were three here, and the
+cycle found one.
+
+Fixed at this review, with four regression tests including one asserting `parseCellReference` and
+`isCellReferenceForm` agree on every shape.
+
+---
+
+## D-044 — Range expansion is BOUNDED by the table's current dimensions at the moment it expands
+Answers: 0040's reviewer question 1   Ruled: entry 0041-REVIEW-phase2 (reviewer)   Binding on:
+`primitives/table.ts`, `mutation.ts`'s `deriveEdges`, `formula/eval.ts`
+
+Cycle 0040's `enumerateRangeCellPaths` deliberately does not bounds-check, on the reasoning that a
+`read` miss already becomes `#REF` at the consumer. That is right for a single reference and wrong
+for a range, for one hard reason and one soft one:
+
+- **Hard: dangling edges.** §5.3 puts expansion in edge derivation, and an unbounded expansion
+  makes `deriveEdges` produce edges pointing at slots that do not exist. "No dangling edges" is an
+  invariant, not a preference (§5.1.1: reject or repair, there is no third option), and a
+  read-miss at evaluation time cannot repair an edge that was already built.
+- **Soft, but the brief's own words:** §5.3 — "Expansion is therefore always re-derived from
+  **current table dimensions** and can never go stale." The dimensions are named as an input to
+  expansion, not as something a later stage compensates for. §5.4's "a range whose endpoint was
+  deleted **clamps to the remaining extent**" is the same idea from the deletion side.
+
+Ruling, for the cycle that wires this up:
+
+1. `enumerateRangeCellPaths` takes the table's current extent (a row/column count, or an
+   equivalent cell-exists predicate) and emits only cells that exist. It is not wired as it stands.
+2. Cells outside the extent are **omitted, not `#REF`** — `SUM(A1:A100)` over an 8-row table sums
+   the rows that exist. If the clamped rectangle is empty, the aggregate simply receives zero
+   arguments, which `checkArity` and `functions.ts`'s existing zero-argument behaviour already
+   decide (D-035). Do not invent a new error path for it.
+3. Bounding at the source also removes a resource hazard the current shape has: `A1:ZZ999999`
+   enumerates millions of paths before anything downstream can object. This is the same cycle that
+   owns `MIN`/`MAX`'s spread (D-036 constraint 5) — the two are one problem seen twice.
+
+Nothing consumes the function today, so this costs a signature change and no migration.
+
+---
+
+## D-045 — A range whose endpoints name different objects is rejected at PARSE time
+Answers: 0040's reviewer question 2   Ruled: entry 0041-REVIEW-phase2 (reviewer)   Binding on:
+`formula/parser.ts`, `primitives/table.ts`
+
+`SUM(table_x.A1:table_y.B4)` currently parses — cycle 0040 found this while designing the
+enumerator and correctly rejected it there rather than silently enumerating a nonsensical
+rectangle. The enumeration-layer rejection is right and stays. It is not the right PLACE for the
+only check, though: **which objects two endpoints name is decidable from the formula text alone,
+with no values read, so it belongs at entry** — D-038's line exactly, and `parser.ts` already
+rejects a misplaced range two lines away from where this check goes.
+
+So: `validateRangePlacement` (or its neighbour) also rejects a cross-object range, `#PARSE`, with
+the same position-carrying shape D-038 established. `enumerateRangeCellPaths`'s own check stays as
+the defensive arm for a hand-built or loaded AST — the same relationship `formula/eval.ts`'s
+unknown-function branch now has to `parser.ts`'s (D-038).
+
+Rationale beyond consistency: a range is the one construct where the brief's model (§5.4, "a
+self-contained grid... not regions of one giant sheet") makes a cross-object span meaningless
+rather than merely unusual, and an error the operator sees while typing is worth more than one
+that surfaces as `#REF` in a cell later.
