@@ -813,21 +813,27 @@ describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (00
 });
 
 describe("mutate — D-019: the step-1 clone preserves every member of Value, not just what JSON can represent (0018-REVIEW-phase0)", () => {
-  it("commits NaN, +Infinity, -Infinity, null, a Point, a Point[], and an ErrorValue unchanged through an UNRELATED mutation", () => {
-    // One object holding a literal slot for every Value variant JSON cannot
-    // round-trip faithfully, plus null for completeness. 'value' schema-
-    // declares only its own "value" path (schema.ts) — every other key here
-    // is an extra literal slot, which validateIntegrity does not restrict
-    // (only formula/derived-kind slots are checked against the schema).
+  // D-025 (Q-006, cycle 0023) landed AFTER this describe block was first
+  // written: non-finite numbers are no longer legal document state. The
+  // ORIGINAL version of this test committed NaN/+Infinity/-Infinity as part
+  // of its fixture and asserted ACCEPTANCE — that fixture is now illegal, so
+  // this is a changed test expectation (PROCESS_BRIEF §6.1 trigger 5,
+  // authorized by D-025 itself, disclosed in cycle 0023's log entry). Split
+  // in two: fidelity for what remains LEGAL (below), and D-025's rejection of
+  // what no longer is (next describe block) — which itself depends on this
+  // same clone fidelity, see that block's own comment.
+  it("commits null, a Point, a Point[], and an ErrorValue unchanged through an UNRELATED mutation — everything JSON cannot round-trip faithfully EXCEPT a non-finite number", () => {
+    // 'value' schema declares only its own "value" path (schema.ts) — every
+    // other key here is an extra literal slot, which validateIntegrity does
+    // not restrict (only formula/derived-kind slots are checked against the
+    // schema; D-025's finiteness check is the only one that touches literals,
+    // and none of these values are numbers at all).
     const fidelityObject: GraphObject = {
       id: "obj_1",
       name: "value_1",
       type: "value",
       slots: {
         value: { kind: "literal", value: 1 },
-        nanSlot: { kind: "literal", value: NaN },
-        posInfSlot: { kind: "literal", value: Number.POSITIVE_INFINITY },
-        negInfSlot: { kind: "literal", value: Number.NEGATIVE_INFINITY },
         nullSlot: { kind: "literal", value: null },
         pointSlot: { kind: "literal", value: { x: 1, y: 2 } },
         pointsSlot: {
@@ -850,10 +856,6 @@ describe("mutate — D-019: the step-1 clone preserves every member of Value, no
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const committed = result.objects.find((object) => object.id === "obj_1");
-    expect(committed?.slots.nanSlot).toEqual({ kind: "literal", value: NaN });
-    expect(Number.isNaN((committed?.slots.nanSlot as { readonly value: number } | undefined)?.value)).toBe(true);
-    expect(committed?.slots.posInfSlot).toEqual({ kind: "literal", value: Number.POSITIVE_INFINITY });
-    expect(committed?.slots.negInfSlot).toEqual({ kind: "literal", value: Number.NEGATIVE_INFINITY });
     expect(committed?.slots.nullSlot).toEqual({ kind: "literal", value: null });
     expect(committed?.slots.pointSlot).toEqual({ kind: "literal", value: { x: 1, y: 2 } });
     expect(committed?.slots.pointsSlot).toEqual({
@@ -864,6 +866,122 @@ describe("mutate — D-019: the step-1 clone preserves every member of Value, no
       ],
     });
     expect(committed?.slots.errorSlot).toEqual({ kind: "literal", value: { error: "#REF", message: "boom" } });
+  });
+});
+
+describe("mutate — D-025: non-finite numbers are not legal document state (Q-006, ruled by the human directly, cycle 0023)", () => {
+  it("rejects a setSlot writing a non-finite literal (NaN, +Infinity, -Infinity in turn), naming the slot, prior state unchanged", () => {
+    for (const nonFinite of [NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const initial = [valueObject("obj_1", "value_1", 1)];
+      const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+      const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: nonFinite } };
+
+      const result = mutate(initial, [operation], []);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.message).toContain("value_1.value");
+        expect(result.message).toContain("D-025");
+      }
+      expect(initial).toEqual(snapshotBefore);
+    }
+  });
+
+  it("rejects a mutation touching an UNRELATED object when the document ALREADY holds a non-finite literal elsewhere, naming the pre-existing offender (Rule 5: recheck the whole graph)", () => {
+    // The illegal value is not introduced by this operation at all — it was
+    // already sitting on obj_1 before the call. D-025 rechecks the WHOLE
+    // graph every time (the same discipline D-017/D-018/dangling-reference
+    // already use), not just what this operation touched.
+    const alreadyIllegal: GraphObject = {
+      id: "obj_1",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "literal", value: Number.POSITIVE_INFINITY } },
+    };
+    const other = valueObject("obj_2", "value_2", 1);
+    const operation: Operation = { kind: "setSlot", address: addr("obj_2", "value"), slot: { kind: "literal", value: 2 } };
+
+    const result = mutate([alreadyIllegal, other], [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+    // Prior state unchanged (D-016) — checked field-by-field rather than via a
+    // JSON-round-tripped snapshot, because JSON is exactly what would silently
+    // turn this test's own Infinity fixture into null (D-019's own point).
+    expect(alreadyIllegal.slots.value).toEqual({ kind: "literal", value: Number.POSITIVE_INFINITY });
+    expect(other.slots.value).toEqual({ kind: "literal", value: 1 });
+  });
+
+  it("rejects a non-finite number nested inside a Point literal (x or y)", () => {
+    const initial: GraphObject[] = [
+      {
+        id: "obj_1",
+        name: "value_1",
+        type: "value",
+        slots: { value: { kind: "literal", value: 1 }, originSlot: { kind: "literal", value: { x: NaN, y: 0 } } },
+      },
+    ];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 2 } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.originSlot");
+    }
+  });
+
+  it("accepts a legal, finite `add` sum, and rejects one that would overflow to a non-finite result via #TYPE, never committing Infinity", () => {
+    const initial = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const finite = deriveValidateAndEvaluate(initial);
+    expect(finite.ok).toBe(true);
+    if (finite.ok) {
+      expect(finite.objects.find((object) => object.id === "obj_3")?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
+    }
+
+    // Rebind both inputs to overflow-sized literals, then re-evaluate: add's
+    // own compute (primitives/schema.ts) maps the non-finite sum to #TYPE
+    // itself. This is NOT redundant with validateIntegrity's D-025 check —
+    // that check runs BEFORE evaluate and never re-inspects what evaluate
+    // just produced, so add's own guard is the ONLY thing standing between a
+    // finite input pair and a committed raw Infinity (see this cycle's log
+    // entry for the mutation-test that removes add's guard and shows exactly
+    // that: mutate still returns ok:true, holding Infinity).
+    const overflowing = [
+      valueObject("obj_1", "value_1", Number.MAX_VALUE),
+      valueObject("obj_2", "value_2", Number.MAX_VALUE),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const overflowed = deriveValidateAndEvaluate(overflowing);
+    expect(overflowed.ok).toBe(true); // an ErrorValue is legitimate graph state, not a rejection (§5.1)
+    if (overflowed.ok) {
+      const result = overflowed.objects.find((object) => object.id === "obj_3")?.slots["out.result"];
+      expect(result).toMatchObject({ kind: "derived", value: { error: "#TYPE" } });
+    }
+  });
+
+  it("(correctness link to D-019) a lossy clone would have hidden the illegal value from this check entirely", () => {
+    // Not a mutation-test experiment on THIS cycle's own new code — it
+    // probes why D-019 (closed 0019, unchanged here) still matters now that
+    // Q-006 has landed: if cloneObjects ever regressed to a JSON round-trip,
+    // NaN would silently become `null` — a LEGAL value — before this
+    // describe block's own rejection check ever ran, and the document below
+    // would be wrongly ACCEPTED instead of correctly rejected. Demonstrated
+    // here by asserting the ACTUAL (real clone) behaviour is rejection; see
+    // this cycle's log entry for the paired mutation-test run that reverts
+    // the clone and shows this same assertion then fails.
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: NaN } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
   });
 });
 

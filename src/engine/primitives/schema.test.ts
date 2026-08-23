@@ -184,4 +184,20 @@ describe("add's out.result compute function", () => {
     expect(() => computeAdd(addObject, readFrom({}))).not.toThrow();
     expect(() => computeAdd(addObject, readFrom({ "in.a": null, "in.b": null }))).not.toThrow();
   });
+
+  // D-025 (Q-006, cycle 0023): non-finite numbers are not legal document
+  // state. Two finite numeric inputs whose SUM overflows must fail closed the
+  // same way a wrong-shaped input already does — #TYPE, never a committed
+  // Infinity/NaN — rather than silently returning a non-finite `Value`.
+  it("returns #TYPE, never a raw Infinity, when two finite inputs sum to a non-finite result (D-025)", () => {
+    const result = computeAdd(addObject, readFrom({ "in.a": Number.MAX_VALUE, "in.b": Number.MAX_VALUE }));
+    expect(result).toMatchObject({ error: "#TYPE" });
+    expect(result).not.toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("does NOT reject a large but still-finite sum", () => {
+    const result = computeAdd(addObject, readFrom({ "in.a": Number.MAX_VALUE, "in.b": 1 }));
+    expect(result).toBe(Number.MAX_VALUE + 1); // still finite — Number.MAX_VALUE dwarfs +1 but doesn't overflow
+    expect(Number.isFinite(result as number)).toBe(true);
+  });
 });

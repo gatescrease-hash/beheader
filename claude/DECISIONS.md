@@ -464,3 +464,39 @@ its own array could otherwise rewrite what a past call recorded.
 
 Applied by the reviewer at 0021-REVIEW (two lines, both mutation-checked). The general rule binds
 future operation kinds, which will carry larger payloads than one `Slot`.
+
+---
+
+## D-025 — Non-finite numbers are NOT legal document state (Q-006 answered: option (b))
+Ruled: the human, directly, 2026-08-22 (in response to entry 0022's hand-back) — Answers: **Q-006**
+
+`NaN`, `Infinity`, and `-Infinity` — all three legal members of `Value`'s `number` arm at the type
+level — are illegal as committed document state, in the object list AND in the serialized mutation
+journal (0021-REVIEW's widening of Q-006's scope; a journal entry's `Operation` payloads carry the
+same `Value` union). Two consequences, both required, matching Q-006's own option (b):
+
+1. **`mutation.ts` rejects a slot whose value contains a non-finite number.** Applies uniformly to
+   `literal`, `formula`, and `derived` slots (all three carry a `value: Value` field) — not only a
+   freshly written literal, but any non-finite value already sitting anywhere in the candidate
+   object list, re-checked from scratch on every mutation (Rule 5), the same way D-017/D-018/the
+   dangling-reference check already do.
+2. **Every derived-slot compute function maps a non-finite result to an `ErrorValue`** — `#TYPE`,
+   already a member of `ErrorCode` (§5.1); no new error code needed. `add`'s compute is the first
+   and only one that exists (D-011) and is the one this ruling requires fixing.
+
+Rationale: option (b) is the smaller change, keeps the serialized format plain JSON at exactly the
+point §5.11 says it is (option (a) would not), and §5.1 already establishes that an `ErrorValue` in
+the graph is legitimate state — mapping overflow to `#TYPE` is the SAME move `add`'s compute already
+makes for a wrong-shaped input, not a new category of behaviour. This was explicitly the human's
+call, not the reviewer's or the implementer's (OPEN_QUESTIONS.md's own recommendation said so), and
+was given directly rather than through a numbered review entry.
+
+Consequence for D-019: D-019's clone-fidelity requirement is UNCHANGED and, if anything, more
+load-bearing now — the rejection this ruling requires depends on the clone being faithful. A lossy
+clone would silently turn a `NaN` literal into `null` before this ruling's check ever saw it, and the
+document would then be wrongly ACCEPTED as holding a legal `null` rather than correctly REJECTED for
+holding an illegal `NaN` — the same "accept-path corruption" shape D-019's own probe found, now one
+layer further downstream. `mutation.test.ts`'s existing D-019 fidelity test (built on a document that
+already held several non-finite literals, expecting ACCEPTANCE) is exactly the fixture this ruling
+makes illegal, and MUST change — PROCESS_BRIEF §6.1 trigger 5, disclosed in the cycle that applies
+this ruling (0023).

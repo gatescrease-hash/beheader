@@ -111,6 +111,34 @@ export function isErrorValue(value: Value): value is ErrorValue {
   return typeof value === "object" && value !== null && "error" in value;
 }
 
+/**
+ * Whether `value` contains a non-finite number (`NaN`, `Infinity`, `-Infinity`)
+ * anywhere within it — a bare number, or nested inside a `Point`/`Point[]`'s
+ * `x`/`y` fields (D-025/Q-006: non-finite numbers are not legal document
+ * state). Declared here, beside `Value` itself, for the same reason
+ * `isErrorValue` is (D-014's principle: a predicate over the `Value` union is
+ * declared once and imported everywhere, never redeclared) — `mutation.ts`'s
+ * D-025 check and `primitives/schema.ts`'s compute functions both need it.
+ *
+ * `string`, `boolean`, `null`, and `ErrorValue` trivially cannot contain a
+ * number at all, so they always return `false` — checked via `isErrorValue`
+ * itself rather than duck-typing "has an `x`," so a `Point`-shaped value is
+ * never mistaken for one and vice versa.
+ */
+export function hasNonFiniteNumber(value: Value): boolean {
+  if (typeof value === "number") {
+    return !Number.isFinite(value);
+  }
+  if (Array.isArray(value)) {
+    return (value as readonly Point[]).some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y));
+  }
+  if (typeof value === "object" && value !== null && !isErrorValue(value)) {
+    const point = value as Point;
+    return !Number.isFinite(point.x) || !Number.isFinite(point.y);
+  }
+  return false; // string, boolean, null, ErrorValue
+}
+
 // ---------------------------------------------------------------------------
 // Object type vocabulary (D-009)
 // ---------------------------------------------------------------------------

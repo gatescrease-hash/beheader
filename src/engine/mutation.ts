@@ -25,8 +25,10 @@
  * operation kind able to add or remove an object invalidates checking
  * targets once, up front, against the pre-batch `objects` — this is the
  * first such kind, so this cycle fixes it (see `mutate`'s doc comment for the
- * simulated-existence walk) rather than deferring it again. See WHAT THIS IS,
- * `mutate`.
+ * simulated-existence walk) rather than deferring it again. Cycle 0023 adds
+ * `validateIntegrity`'s FOURTH check, **D-025** (Q-006, ruled by the human
+ * directly): non-finite numbers (`NaN`/`Infinity`/`-Infinity`) are not legal
+ * document state — see WHAT THIS IS, `validateIntegrity`, check 4.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -54,7 +56,12 @@
  * REJECT path ("`delete <object>`... where a silent break would go
  * unnoticed") via `DeleteObjectOperation`, closing PROJECT_BRIEF §6 Phase 0
  * acceptance clause 3 ("deleting a slot with dependents is rejected") — see
- * WHAT THIS IS, `DeleteObjectOperation`'s own doc comment. §5.1.1's REPAIR
+ * WHAT THIS IS, `DeleteObjectOperation`'s own doc comment. Cycle 0023
+ * implements **D-025** (Q-006, answered by the human directly): non-finite
+ * numbers are not legal document state, per §5.1's `Value` union admitting
+ * them at the type level while §6 clause 4 requires an identical JSON
+ * round-trip, which none of the three can survive — see WHAT THIS IS,
+ * `validateIntegrity`, check 4. §5.1.1's REPAIR
  * path (table row/column deletion rewriting references to `#REF`) is
  * deliberately NOT implemented here — see NOT DONE HERE.
  * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
@@ -134,11 +141,11 @@
  *     would never produce, but this function does not trust that.
  *
  * `validateIntegrity(objects, edges)` — §5.1 step 4 / §5.1.1, and where D-017
- * part 2 AND D-018 both land. Takes a candidate post-apply object list and
- * its freshly `deriveEdges`-derived edge set (step 2's "apply" and step 3 are
- * NOT this function's job — see NOT DONE HERE; it is handed the result), and
- * rejects with a human-readable message, or passes, in THREE checks, run in
- * this order:
+ * part 2, D-018, AND D-025 all land. Takes a candidate post-apply object list
+ * and its freshly `deriveEdges`-derived edge set (step 2's "apply" and step 3
+ * are NOT this function's job — see NOT DONE HERE; it is handed the result),
+ * and rejects with a human-readable message, or passes, in FOUR checks, run
+ * in this order:
  *
  *   1. **D-017 part 2, first** (per 0014-REVIEW-phase0's own constraint: "the
  *      first thing step 4 must do"). For every object THAT HAS a schema entry,
@@ -186,6 +193,27 @@
  *      side via `formatAddress`, never the missing source: the source's
  *      object may be gone, so there is nothing safe to format there, and
  *      D-015 forbids leaking its raw `objectId` into the message anyway.
+ *   4. **Non-finite slot values** (`findNonFiniteSlotValues`, D-025/Q-006,
+ *      cycle 0023 — "non-finite numbers are not legal document state").
+ *      Every slot's `value` field (all three kinds carry one) is checked via
+ *      `graph/node.ts`'s `hasNonFiniteNumber` — a bare `NaN`/`Infinity`/
+ *      `-Infinity`, or one nested inside a `Point`/`Point[]`'s `x`/`y`. Runs
+ *      LAST and independently of checks 1-3: value legality is orthogonal to
+ *      schema/edge structure, so there is no ordering hazard to reason about
+ *      the way check 1 before check 3 needs one. Applies to `literal`,
+ *      `formula`, and `derived` slots alike, but NOT as a backstop for a
+ *      freshly-computed `derived` value: this function runs BEFORE `evaluate`
+ *      (see `deriveValidateAndEvaluate` below) and `evaluate`'s result is
+ *      returned as-is, never re-validated — so this check can only ever see a
+ *      non-finite number in a LITERAL (freshly written or already sitting in
+ *      `objects`) or a STALE formula/derived cached value from a prior pass.
+ *      A non-finite result a compute function returns THIS pass is entirely
+ *      that function's own responsibility (`add`'s is the only one that
+ *      exists, and does — see `primitives/schema.ts`); verified by
+ *      mutation-test that removing `add`'s own guard commits a raw `Infinity`
+ *      with nothing here to catch it (this cycle's log entry — an earlier
+ *      draft of this comment claimed otherwise and was corrected before
+ *      commit, the same shape as 0018-REVIEW-phase0's finding 1).
  *
  *   A genuinely new sub-problem D-017's check hits and D-010/D-015's existing
  *   guidance does not cover: naming an UNDECLARED slot (check 1) needs an
@@ -200,7 +228,7 @@
  *
  * INVARIANTS UPHELD HERE (validateIntegrity)
  *   - Never throws, same as every other function in this module.
- *   - Runs all three checks over the WHOLE graph from scratch, every call
+ *   - Runs all four checks over the WHOLE graph from scratch, every call
  *     (Rule 5) — no diffing against a "previous" object list, matching
  *     `deriveEdges`, `detectCycle`, and `evaluate`'s own from-scratch
  *     discipline.
@@ -310,7 +338,7 @@ import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/sc
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { resolveSlot, slotKey, type GraphObject, type Slot } from "./graph/node.ts";
+import { hasNonFiniteNumber, resolveSlot, slotKey, type GraphObject, type Slot } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -384,8 +412,8 @@ export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false;
 
 /**
  * §5.1 step 4 / §5.1.1 — see the file header's `validateIntegrity` section
- * for the two checks, their order, and why D-017's undeclared-slot check must
- * run before the dangling-reference check. Never throws.
+ * for all FOUR checks, their order, and why D-017's undeclared-slot check
+ * must run before the dangling-reference check. Never throws.
  *
  * `edges` MUST already be `deriveEdges(objects)` for the SAME `objects` — this
  * function does not re-derive them; it only validates what it is handed.
@@ -410,6 +438,15 @@ export function validateIntegrity(objects: readonly GraphObject[], edges: readon
   const danglingReferenceProblems = findDanglingReferences(objects, edges);
   if (danglingReferenceProblems.length > 0) {
     return { ok: false, message: danglingReferenceProblems.join("; ") };
+  }
+
+  // D-025 (Q-006, cycle 0023): non-finite numbers are not legal document
+  // state. Runs last — it is orthogonal to the three checks above (schema/
+  // edge structure vs. raw value legality), so there is no ordering hazard
+  // the way D-017-before-D-018-before-dangling has; it is simply appended.
+  const nonFiniteValueProblems = findNonFiniteSlotValues(objects);
+  if (nonFiniteValueProblems.length > 0) {
+    return { ok: false, message: nonFiniteValueProblems.join("; ") };
   }
 
   return { ok: true };
@@ -852,18 +889,30 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
 }
 
 /**
- * Names a slot that has NO schema-declared path — see the file header's
- * discussion of why this is a deliberate, disclosed exception rather than the
- * "invert `slotKey`" pattern D-010/STATUS rule out elsewhere. Produces the
- * EXACT SAME string `formatAddress` would for every schema-registered type
- * today (`value`/`add`): neither is a table, and `address.ts`'s
- * `toSurfacePath` is the identity for every non-table type, so
+ * Names a slot WITHOUT assuming it has a schema-declared path — see the file
+ * header's discussion of why this is a deliberate, disclosed exception rather
+ * than the "invert `slotKey`" pattern D-010/STATUS rule out elsewhere.
+ * Produces the EXACT SAME string `formatAddress` would for every
+ * schema-registered type today (`value`/`add`): neither is a table, and
+ * `address.ts`'s `toSurfacePath` is the identity for every non-table type, so
  * `formatAddress`'s `[name, ...path].join(".")` collapses to exactly
  * `name + "." + slotKey(path)` — i.e. `name + "." + key`. This stops being
  * exact only for a type using D-005's surface/stored mapping (a table); D-017
  * already forbids extending `nonDerivedSlotPaths` to tables for the same
  * underlying reason, so that combination cannot arise before Phase 4 revisits
  * the whole mechanism.
+ *
+ * Two call sites (D-022 confines this raw-key naming style to THIS function —
+ * a second site reuses it, never reimplements it): `findUndeclaredFormulaOr
+ * DerivedSlots`, where the slot genuinely has no schema-declared path by
+ * definition, and `findNonFiniteSlotValues` (D-025, cycle 0023), where it
+ * might or might not — an extra literal slot is legal regardless of the
+ * schema (`validateIntegrity` never restricts those), so that check cannot
+ * assume a real `Address` is recoverable via the schema the way check 2
+ * (`findSchemaSlotKindMismatches`) can, and needs a naming path that works
+ * either way. The bounded correctness claim above (identical to
+ * `formatAddress` for every non-table type) is exactly what makes reusing it
+ * for a POSSIBLY-declared slot safe, not only for a definitely-undeclared one.
  */
 function describeUndeclaredSlot(object: GraphObject, key: string): string {
   return `${object.name}.${key}`;
@@ -985,5 +1034,46 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
     const verb = names.length === 1 ? "references" : "reference";
     problems.push(`${names.join(", ")} ${verb} a slot that does not exist`);
   }
+  return problems;
+}
+
+/**
+ * D-025 (Q-006, cycle 0023): non-finite numbers are not legal document state.
+ * Checks every slot's `value` field — `LiteralSlot`, `FormulaSlot`, and
+ * `DerivedSlot` all carry one (`graph/node.ts`) — via `hasNonFiniteNumber`
+ * (D-014's shared-predicate principle), regardless of the object's type or
+ * whether it has a schema entry at all: unlike D-017/D-018, this check needs
+ * no schema knowledge, so there is no "type with no schema yet" exemption.
+ *
+ * Named via `describeUndeclaredSlot` — REUSING the same function
+ * `findUndeclaredFormulaOrDerivedSlots` already calls, not a new copy of its
+ * raw-key naming (D-022 confines that naming style to this one function; the
+ * fix is to call it, not to reimplement it a second time). It is the right
+ * tool here for the same reason it is there: a LITERAL slot's key need not
+ * correspond to any schema-declared path at all (extra literal slots are
+ * legal — `validateIntegrity` never restricts them against a schema, only
+ * `formula`/`derived`-kind slots), so this check cannot assume a real
+ * `Address` is always recoverable via the schema the way check 2 above can.
+ * `describeUndeclaredSlot`'s own bounded correctness claim (D-022: identical
+ * to `formatAddress` for every registered, non-table type) makes this exact
+ * for Phase 0's fixtures regardless of whether the slot happens to BE
+ * schema-declared or not.
+ */
+function findNonFiniteSlotValues(objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+
+  for (const object of objects) {
+    for (const key of Object.keys(object.slots)) {
+      const slot = object.slots[key];
+      if (slot === undefined) {
+        continue; // noUncheckedIndexedAccess artifact only — key came from Object.keys of this same record.
+      }
+      if (!hasNonFiniteNumber(slot.value)) {
+        continue;
+      }
+      problems.push(`${describeUndeclaredSlot(object, key)} holds a non-finite number (${slot.value}), which is not legal document state (D-025)`);
+    }
+  }
+
   return problems;
 }

@@ -13,6 +13,7 @@ import type { ReferenceNode } from "../formula/ast.ts";
 import {
   TABLE_TYPE,
   getSlot,
+  hasNonFiniteNumber,
   isErrorValue,
   resolveSlot,
   slotKey,
@@ -129,6 +130,48 @@ describe("isErrorValue", () => {
     expect(isErrorValue(42)).toBe(false);
     expect(isErrorValue("a string")).toBe(false);
     expect(isErrorValue(true)).toBe(false);
+  });
+});
+
+// D-025 (Q-006, cycle 0023): non-finite numbers are not legal document state.
+// Tested across the WHOLE Value union, same discipline as isErrorValue above —
+// a naive implementation's likely blind spots are a Point/Point[]'s NESTED
+// x/y fields (easy to check only the top-level shape and miss inside it) and
+// the non-number members, which must stay false unconditionally.
+describe("hasNonFiniteNumber (D-025/Q-006)", () => {
+  it("is true for a bare NaN, +Infinity, or -Infinity", () => {
+    expect(hasNonFiniteNumber(NaN)).toBe(true);
+    expect(hasNonFiniteNumber(Number.POSITIVE_INFINITY)).toBe(true);
+    expect(hasNonFiniteNumber(Number.NEGATIVE_INFINITY)).toBe(true);
+  });
+
+  it("is false for a finite number, including 0 and a negative number", () => {
+    expect(hasNonFiniteNumber(0)).toBe(false);
+    expect(hasNonFiniteNumber(-42)).toBe(false);
+    expect(hasNonFiniteNumber(Number.MAX_VALUE)).toBe(false);
+  });
+
+  it("is true for a Point whose x OR y is non-finite, false when both are finite", () => {
+    expect(hasNonFiniteNumber({ x: NaN, y: 0 })).toBe(true);
+    expect(hasNonFiniteNumber({ x: 0, y: Number.POSITIVE_INFINITY })).toBe(true);
+    expect(hasNonFiniteNumber({ x: 1, y: 2 })).toBe(false);
+  });
+
+  it("is true for a Point[] with ANY non-finite point, false when every point is finite", () => {
+    const points: readonly Point[] = [
+      { x: 1, y: 2 },
+      { x: 3, y: Number.NEGATIVE_INFINITY },
+    ];
+    expect(hasNonFiniteNumber(points)).toBe(true);
+    expect(hasNonFiniteNumber([{ x: 1, y: 2 }])).toBe(false);
+    expect(hasNonFiniteNumber([])).toBe(false);
+  });
+
+  it("is false for every non-number member of Value: string, boolean, null, ErrorValue", () => {
+    expect(hasNonFiniteNumber("a string")).toBe(false);
+    expect(hasNonFiniteNumber(true)).toBe(false);
+    expect(hasNonFiniteNumber(null)).toBe(false);
+    expect(hasNonFiniteNumber({ error: "#TYPE", message: "boom" })).toBe(false);
   });
 });
 

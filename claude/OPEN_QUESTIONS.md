@@ -18,8 +18,8 @@ Next free ID: **Q-007**
 
 ## Q-006 — Is a non-finite number (`NaN`, `Infinity`, `-Infinity`) legal document state?
 Raised: entry 0018-REVIEW-phase0 (reviewer)   Brief section: §5.1 (`Value`), §5.11, §6 clause 4
-Status: OPEN
-Blocks: Phase 0 clause 4 — answer this before `document.ts`'s round-trip test is written.
+Status: **ANSWERED → D-025** (ruled by the human directly, 2026-08-22, option (b))
+Blocked: Phase 0 clause 4 — was blocking `document.ts`'s round-trip test; unblocked now.
 
 Ambiguity: `Value`'s `number` arm admits all three, and they are reachable today with nothing but
 literals — `add`'s compute over two `1e308` literals yields `Infinity`, and `set x 1e999` parses

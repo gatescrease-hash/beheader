@@ -57,8 +57,13 @@
  *   - `compute` never throws. `add`'s compute function demonstrates the required
  *     shape: propagate an upstream `ErrorValue` unchanged, then fail closed with
  *     a typed `ErrorValue` (`#REF` for a dependency that did not resolve, `#TYPE`
- *     for a wrong-shaped value) rather than throwing or returning `NaN`/`undefined`
- *     (§5.1: "Errors must never throw across the evaluation loop").
+ *     for a wrong-shaped value, ALSO `#TYPE` for a non-finite result — D-025/
+ *     Q-006, cycle 0023: `NaN`/`Infinity`/`-Infinity` are not legal document
+ *     state) rather than throwing or returning `NaN`/`undefined` (§5.1: "Errors
+ *     must never throw across the evaluation loop"). Every FUTURE derived
+ *     slot's compute function that does arithmetic must map a non-finite
+ *     result to `#TYPE` the same way — `graph/node.ts`'s `hasNonFiniteNumber`
+ *     is the shared predicate (D-014's principle) for checking this.
  *
  * NOT DONE HERE
  *   - Declaring an object type's default KIND per slot (literal vs. formula) or
@@ -77,7 +82,7 @@
  *   - Any geometry/table/text/script/image schema entries (Phases 3, 4, 5, 6).
  */
 import type { Address } from "../address.ts";
-import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
+import { hasNonFiniteNumber, isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 
 // ---------------------------------------------------------------------------
 // Dependency declarations (§5.1: "Dependencies may be declared statically ...
@@ -229,7 +234,17 @@ const ADD_OUT_RESULT_PATH: readonly string[] = ["out", "result"];
  * scripts all rely on." `out.result` is the one derived slot; its compute
  * function sums `in.a` and `in.b`, propagating an upstream error unchanged
  * (§5.1: "Errors propagate") and failing closed — never throwing — on anything
- * else unexpected.
+ * else unexpected, INCLUDING a non-finite sum (D-025/Q-006: `1e308 + 1e308`
+ * overflows to `Infinity`, which is not legal document state — mapped to
+ * `#TYPE` here). This is NOT a redundant belt-and-braces check: `mutation.ts`'s
+ * D-025 validateIntegrity check runs BEFORE `evaluate` in the mutation loop
+ * and never re-inspects what `evaluate` itself just produced, so THIS is the
+ * only guard a non-finite `derived`-slot result ever passes through —
+ * verified by mutation-test (this cycle's log entry): removing it lets
+ * `mutate` commit a raw `Infinity` with `ok: true`. An earlier draft of this
+ * comment claimed the two checks were redundant; that was wrong and is
+ * corrected here rather than left standing (see 0018-REVIEW-phase0's finding
+ * 1 and 0020's own self-caught test-comment lesson — same failure shape).
  */
 const ADD_SCHEMA: ObjectSchema = {
   type: "add",
@@ -260,7 +275,23 @@ const ADD_SCHEMA: ObjectSchema = {
         if (typeof a !== "number" || typeof b !== "number") {
           return { error: "#TYPE", message: "add: in.a and in.b must both be numbers" };
         }
-        return a + b;
+        const sum = a + b;
+        // D-025 (Q-006): a non-finite result is not legal document state.
+        // Failing closed with the SAME #TYPE code the line above already uses
+        // for a wrong-shaped input — and this is NOT merely the tidier of two
+        // equally-safe options: mutation.ts's validateIntegrity runs BEFORE
+        // `evaluate` in the mutation loop (deriveEdges -> validateIntegrity ->
+        // detectCycle -> evaluate) and its result is returned AS-IS, never
+        // re-validated. A non-finite `sum` returned here would commit straight
+        // into `out.result`'s cached value with nothing downstream to catch
+        // it — verified by mutation-test (see this cycle's log entry): with
+        // this check removed, `mutate` returns `ok: true` holding a raw
+        // `Infinity`. This function is the ONLY guard against that; it is not
+        // a backstop for one that already exists elsewhere.
+        if (!Number.isFinite(sum)) {
+          return { error: "#TYPE", message: `add: in.a + in.b overflowed to a non-finite number (${sum})` };
+        }
+        return sum;
       },
     },
   ],
