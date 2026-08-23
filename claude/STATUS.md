@@ -1,45 +1,35 @@
-# STATUS — as of entry 0021-REVIEW-phase0
+# STATUS — as of entry 0022-delete-object
 
-STATE: GREEN (compiles under both configs, 150/150 tests pass, 0 skipped, 0 `.only`). No test in
+STATE: GREEN (compiles under both configs, 157/157 tests pass, 0 skipped, 0 `.only`). No test in
 the suite pins known-broken behaviour.
 
 Current phase: 0 — Graph core (headless, no pixels)
 Phase 0 acceptance criterion (§6): build a graph in a unit test, bind slots, mutate a value and
 watch it propagate in topological order including through derived slots; a cycle is rejected with
 the offending slots named and prior state provably unchanged; deleting a slot with dependents is
-rejected; a document round-trips to JSON identically. — **partial, 2 of 4 clauses closed.**
-Last review point: **0021-REVIEW-phase0, verdict ACCEPT WITH EDITS.** All five of
-0018-REVIEW-phase0's REVISE fixes are closed and verified. **`document.ts` may begin.**
-Cycles since last review: 0/3 · diff since last review: 0 lines / 0 files (cap 800/10)
+rejected; a document round-trips to JSON identically. — **partial, 3 of 4 clauses closed.**
+Last review point: **0021-REVIEW-phase0, verdict ACCEPT WITH EDITS.** `document.ts` was cleared to
+begin, but is separately blocked on Q-006 (below) — not a review gate, an open question.
+Cycles since last review: 1/3 · diff since last review: 338 lines / 2 files (cap 800/10)
 
-## Next slice (recommended)
-**`document.ts` + the JSON round-trip** (clause 4) — `formatVersion` from the first commit, object
-list, the mutation journal, camera state; derived slot values never serialized (§5.11). New file,
-so §6.1 trigger 2 forces its own review point at the end of that cycle regardless of the cap.
-Read *Before `document.ts`* below first — four things there change what you build. Alternatively
-(smaller, and it stays inside already-reviewed surface): a delete-with-dependents `Operation`
-variant to close clause 3. Either order works; clause 3's is the cheaper cycle.
+## Next slice — blocked, needs a human/reviewer answer first
+**`document.ts` + the JSON round-trip** (clause 4) is the only remaining slice, and it is blocked on
+**Q-006** (is a non-finite number legal document state?) — OPEN_QUESTIONS.md's own text says this
+"wants the human's product call, not an implementer's." The round-trip test cannot be written
+honestly until it is settled, because it governs both the object list AND the serialized mutation
+journal (0021-REVIEW's widening of Q-006's scope). **Do not guess at this to unblock yourself** —
+wait for an answer, or an explicit instruction to take the recommended option as PROVISIONAL.
 
-Then Phase 1 — not before all four clauses pass and the gate is reviewed as one unit.
+Once Q-006 lands, `document.ts` needs: `formatVersion` from the first commit, object list, the
+mutation journal, camera state; derived slot values never serialized (§5.11); `nextObjectId` (D-002)
+round-tripped, not recomputed; a placeholder for `DerivedSlot.value` before evaluating on load
+(D-018 catches a wrong placeholder loudly); loading applies objects via `mutate`'s BATCH form
+(D-020) — a zero-object document is NOT routed through `mutate` at all (an empty batch is rejected,
+by design); `L-10` (`addressKey` assumes D-002 `obj_<n>` ids) wants a note. New file, so §6.1
+trigger 2 forces its own review point at the end of that cycle regardless of the cap.
 
-## Before `document.ts` — carried constraints from 0021-REVIEW
-1. **Object creation invalidates where D-021's check sits.** §5.11: "Loading applies objects
-   through the mutation API." That needs a `CreateObjectOperation`. `mutate` currently validates
-   every operation's target against the **pre-batch** `objects`, before the fold — sound only
-   because `SetSlotOperation` never adds or removes an object (`applyOperation`'s own doc comment
-   says so). Your slice is the one that breaks that. Make the target check variant-aware or move it
-   inside the fold, and **pin it with a test**, not a comment.
-2. **An empty batch is rejected** (0020, accepted). So loading a zero-object document must not be
-   routed through `mutate` at all — nothing to apply. Handle it in the loader; do not weaken the
-   rejection.
-3. **D-024 binds every new operation kind** — nothing a caller hands `mutate` may enter committed
-   state or the journal by reference; clone the payload.
-4. **Answer Q-006 first** (is a non-finite number legal document state?). It governs the **journal**
-   as well as the object list — §5.11 serializes the journal, and `Operation` payloads carry the
-   same `Value` union. Clause 4's round-trip test cannot be written honestly until it is settled.
-5. `DerivedSlot.value` is never serialized, so load must place a placeholder before evaluating —
-   D-018 is what makes a loader that gets this wrong fail loudly instead of silently.
-6. `L-10` — `addressKey` assumes D-002 `obj_<n>` ids; note it in `document.ts`.
+Then Phase 1 — not before all four clauses pass and the gate is reviewed as one unit (§6.1 trigger
+1: a phase gate is never batchable).
 
 ## Built and reviewed
 - Scaffold: `package.json`, both tsconfigs (strict + DOM-free, D-006), Vitest. `node_modules` is
@@ -57,13 +47,16 @@ Then Phase 1 — not before all four clauses pass and the gate is reviewed as on
 - `graph/eval.ts` (§5.1 step 7, 11 tests) — `evaluate(objects, edges)`, one topological pass over
   an edge set ASSUMED acyclic; all three slot kinds; D-013 enforced mechanically. L-13's stale-edge
   branch pinned at 0019 (0014-REVIEW constraint 8, closed).
-- `mutation.ts` (§5.1's full loop, 39 tests) — `deriveEdges` (step 3); `validateIntegrity` (step 4 /
+- `mutation.ts` (§5.1's full loop, 46 tests) — `deriveEdges` (step 3); `validateIntegrity` (step 4 /
   §5.1.1) running **three** checks in a fixed order: D-017 undeclared slot → D-018 both directions
   of schema↔slot reconciliation → dangling reference; `deriveValidateAndEvaluate` (steps 3-5 + 7);
   `mutate(objects, operations, journal)` — **batch form** (D-020): rejects an empty batch and any
-  operation with an unresolvable target (D-021/D-023) before staging, then ONE real recursive clone
-  (D-019), every operation folded over it in order, ONE validation/evaluation pass, ONE journal
-  entry holding the whole list (payloads cloned, D-024).
+  operation with an unresolvable target (D-021/D-023) before staging, via a fold-aware existence
+  simulation (cycle 0022 — see Gotchas), then ONE real recursive clone (D-019), every operation
+  folded over it in order, ONE validation/evaluation pass, ONE journal entry holding the whole list
+  (payloads cloned, D-024). **Two operation kinds**: `SetSlotOperation` (rewrites one slot) and
+  `DeleteObjectOperation` (cycle 0022 — removes a whole object; §5.1.1's dangling-reference check,
+  unchanged, is what rejects one with live dependents).
 
 ## Acceptance criterion, clause by clause
 1. Topological propagation including derived slots — **PASSING** (`graph/eval.test.ts`'s
@@ -71,10 +64,11 @@ Then Phase 1 — not before all four clauses pass and the gate is reviewed as on
 2. Cycle rejected, offending slots named, prior state provably unchanged — **PASSING** (0017,
    accepted 0018-REVIEW). Through the real `mutate` entry point, deep-compared against a pre-call
    snapshot, mutation-tested twice.
-3. Deleting a slot with dependents is rejected — **NOT YET**, no delete operation exists.
-   `validateIntegrity`'s dangling check is already the mechanism.
+3. Deleting a slot with dependents is rejected — **PASSING** (0022). `DeleteObjectOperation` +
+   `validateIntegrity`'s pre-existing dangling-reference check (no new mechanism), through the real
+   `mutate` entry point, prior state deep-compared, mutation-tested.
 4. Document round-trips to JSON identically — **NOT YET**, `document.ts` not started. Blocked on
-   **Q-006**.
+   **Q-006** — see *Next slice* above.
 
 ## Known problems
 - **L-16** — nothing enforces `nonDerivedSlotPaths`/`derivedSlots` paths are disjoint on one type.
@@ -87,7 +81,7 @@ Then Phase 1 — not before all four clauses pass and the gate is reviewed as on
   itself (about an operation's preconditions). Correct, but a reader will look in only one; the
   file header says so. Noted, not a defect.
 - **L-6 – L-15, carried** — cosmetics, written up where found (0006/0008/0010/0012-REVIEW §4).
-  Fold in when nearby: **L-8** (into L-16's test), **L-10** (see *Before `document.ts`*).
+  Fold in when nearby: **L-8** (into L-16's test), **L-10** (see *Next slice*, `document.ts`).
 - **`detectCycle`'s reported cycle can start at any member** — correct either way.
 - **Recursion depth** — `detectCycle`/`evaluate` recurse once per slot on the longest chain; so
   does `deepClone`, one frame per nesting level (at most ~2 for any `Value` today). Fine at brief
@@ -102,17 +96,33 @@ Then Phase 1 — not before all four clauses pass and the gate is reviewed as on
   (0018-REVIEW); one-directional schema↔slot reconciliation (D-018, closed 0019); the JSON-based
   clone (D-019, closed 0019); a nonexistent-object operation as a no-op (D-021, closed 0019);
   single-operation `mutate` (D-020, closed 0020); suppressing an unresolvable object's id from a
-  failure message (D-023, closed 0021-REVIEW).
+  failure message (D-023, closed 0021-REVIEW); a payload/journal entering committed state by
+  reference (D-024, closed 0021-REVIEW); checking a batch's operation targets ONLY against the
+  pre-batch `objects` (closed 0022 — see Gotchas, fold-aware existence simulation); no operation
+  that can close Phase 0 acceptance clause 3 (closed 0022, `DeleteObjectOperation`).
 
 ## Live PROVISIONAL tags and open questions
 **`PROVISIONAL(Q-005)`** → `formula/ast.ts`, `graph/eval.ts`, `mutation.ts` (both AST-reading
 sites). Approved 0006-REVIEW, not a live risk.
-**Q-006 — OPEN, and now blocking**: is a non-finite number (`NaN`/`±Infinity`) legal document
-state? Governs the serialized **journal** as well as the object list. Answer before clause 4's
-round-trip test. **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2) deferred; **Q-003** ANSWERED →
-D-007. Next free: **Q-007**.
+**Q-006 — OPEN, and the ONLY thing blocking further Phase 0 progress**: is a non-finite number
+(`NaN`/`±Infinity`) legal document state? Governs the serialized **journal** as well as the object
+list (0021-REVIEW). Explicitly not an implementer's call to make (OPEN_QUESTIONS.md). **Q-001/
+Q-002** (Phase 3), **Q-004** (Phase 2) deferred; **Q-003** ANSWERED → D-007. Next free: **Q-007**.
 
 ## Gotchas for the next model
+- **A batch's target-existence check is a `Set<id>` SIMULATION of the fold, not a static pre-check
+  against the original `objects`** (cycle 0022, fixing 0021-REVIEW's carried constraint 1) —
+  `DeleteObjectOperation` can shrink the object set mid-batch, so checking once up front against
+  the pre-batch snapshot would miss a LATER operation targeting an object an EARLIER one in the
+  SAME batch just deleted. The check walks operations in order over one `Set<id>` seeded from
+  `objects`, removing an id the moment a valid `deleteObject` for it is seen — still gathering
+  EVERY offending operation in one pass, not just the first. **The next operation kind that can ADD
+  an object (object creation, for `document.ts`'s loader) must ADD to this same `Set`, not build a
+  second mechanism.**
+- **Deleting an object needed NO new rejection check.** `validateIntegrity`'s existing dangling-
+  reference check already rejects it when something else still depends on the deleted object's
+  slots — the same check that already catches a typo'd formula reference. Phase 0 acceptance
+  clause 3 closed by giving `mutate` an operation that can produce that shape, not by adding a check.
 - **Mutation-testing proves a mechanism is load-bearing, not that it is correct.** Ask both: would
   removing it break a named test, *and* does it do its job for every input its types admit? D-019
   (a lossy clone) and D-024 (an un-cloned payload) both passed the first question and failed the
@@ -125,8 +135,8 @@ D-007. Next free: **Q-007**.
   precisely that nothing resolves.
 - **`mutate(objects, operations, journal)` takes a BATCH** — `readonly Operation[]`. One clone, one
   validation/evaluation pass, one journal entry. It rejects an empty batch and any unresolvable
-  target *before* staging. Call it; don't hand-chain `cloneObjects`/`applyOperation`/
-  `deriveValidateAndEvaluate`.
+  target *before* staging (fold-aware since 0022 — see above). Call it; don't hand-chain
+  `cloneObjects`/`applyOperation`/`deriveValidateAndEvaluate`.
 - **The clone is load-bearing AND faithful** — never `JSON.parse(JSON.stringify(...))` for graph
   state (D-019), and never `structuredClone` (D-006: DOM-lib global, excluded).
 - **`validateIntegrity` runs THREE checks in a fixed order**: D-017 → D-018 → dangling reference,

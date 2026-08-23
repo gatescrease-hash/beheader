@@ -4,9 +4,12 @@
  * schema/slot reconciliation checks), their composition with acyclicity
  * validation and evaluation (steps 5, 7) into `deriveValidateAndEvaluate`, and
  * `mutate` itself (steps 1, 2, 6, 8, wrapping the above — cycle 0017, with
- * cycle 0019 closing D-019's clone-fidelity gap and D-021's no-op gap, and
- * widening it to D-020's BATCH form — a `readonly Operation[]`, not one
- * `Operation` — as that cycle's second half).
+ * cycle 0019 closing D-019's clone-fidelity gap and D-021's no-op gap,
+ * widened to D-020's BATCH form — a `readonly Operation[]`, not one
+ * `Operation` — at cycle 0020, and to `Operation`'s SECOND variant,
+ * `DeleteObjectOperation`, at cycle 0022 — which closes Phase 0 acceptance
+ * clause 3 and makes the batch's existence check fold-aware, since deletion
+ * is the first operation kind able to shrink the object set mid-batch).
  *
  * Colocated with mutation.ts per D-001. Fixtures are built by hand, the same
  * convention `graph/eval.test.ts` and `graph/cycles.test.ts` use.
@@ -895,5 +898,118 @@ describe("mutate — D-024: nothing the caller hands mutate enters committed sta
     expect(result.journal[0]?.operations).toEqual(operations);
     expect(result.journal[0]?.operations).not.toBe(operations);
     expect(result.journal[0]?.operations[0]).not.toBe(operations[0]);
+  });
+});
+
+describe("mutate — DeleteObjectOperation (§5.1.1's `delete <object>`, closes Phase 0 acceptance clause 3, cycle 0022)", () => {
+  it("deletes an object with no dependents, removing it from the result and appending one journal entry", () => {
+    const initial = [valueObject("obj_1", "value_1", 10), valueObject("obj_2", "value_2", 20)];
+    const operation: Operation = { kind: "deleteObject", objectId: "obj_2" };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.map((object) => object.id)).toEqual(["obj_1"]);
+    expect(result.journal).toEqual([{ operations: [operation] }]);
+  });
+
+  it("rejects deleting an object a formula elsewhere still depends on, naming the dependent and leaving prior state unchanged (PROJECT_BRIEF §6 clause 3, D-016)", () => {
+    // No new rejection mechanism: deleting obj_1 makes add_1's in.a edge
+    // dangle exactly the way a typo'd formula reference already does, and
+    // validateIntegrity's existing dangling-reference check (§5.1.1) is what
+    // rejects it — see DeleteObjectOperation's own doc comment.
+    const initial = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const operation: Operation = { kind: "deleteObject", objectId: "obj_1" };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+    }
+    expect(initial).toEqual(snapshotBefore); // prior state provably unchanged
+  });
+
+  it("accepts deleting an object whose ONLY dependent is being deleted in the SAME batch", () => {
+    // Both obj_1 (the dependency) and add_1 (its only dependent) are removed
+    // together — the resulting graph has no dangling edge at all, because
+    // add_1's own formula/derived slots are gone along with it.
+    const initial = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const deleteValue: Operation = { kind: "deleteObject", objectId: "obj_1" };
+    const deleteAdd: Operation = { kind: "deleteObject", objectId: "obj_3" };
+
+    const result = mutate(initial, [deleteValue, deleteAdd], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.map((object) => object.id)).toEqual(["obj_2"]);
+  });
+
+  it("rejects deleting an object that does not exist, naming the id as an id (D-021/D-023, deleteObject variant)", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const operation: Operation = { kind: "deleteObject", objectId: "obj_404" };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain(`attempts to delete object id "obj_404"`);
+      expect(result.message).toContain("does not exist in this document");
+    }
+  });
+
+  it("rejects the WHOLE batch when an EARLIER operation deletes an object a LATER operation in the SAME batch still targets (fold-aware existence check)", () => {
+    // The pre-batch-only existence check 0019/0020 shipped would have passed
+    // this — obj_1 exists when the batch STARTS. It must be checked against
+    // the id set as it would exist at the moment each operation folds.
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const deleteOp: Operation = { kind: "deleteObject", objectId: "obj_1" };
+    const laterSetOp: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 2 } };
+
+    const result = mutate(initial, [deleteOp, laterSetOp], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 2 of 2");
+      expect(result.message).toContain(`object id "obj_1"`);
+    }
+  });
+
+  it("rejects a batch that deletes the SAME object twice, blaming only the second occurrence", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const first: Operation = { kind: "deleteObject", objectId: "obj_1" };
+    const second: Operation = { kind: "deleteObject", objectId: "obj_1" };
+
+    const result = mutate(initial, [first, second], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 2 of 2");
+      expect(result.message).not.toContain("operation 1 of 2");
+    }
+  });
+
+  it("accepts a batch that deletes one object and mutates an unrelated one in the SAME transaction, appending one journal entry", () => {
+    const initial = [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
+    const deleteOp: Operation = { kind: "deleteObject", objectId: "obj_1" };
+    const setOp: Operation = { kind: "setSlot", address: addr("obj_2", "value"), slot: { kind: "literal", value: 99 } };
+
+    const result = mutate(initial, [deleteOp, setOp], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.map((object) => object.id)).toEqual(["obj_2"]);
+    expect(result.objects[0]?.slots.value).toEqual({ kind: "literal", value: 99 });
+    expect(result.journal).toEqual([{ operations: [deleteOp, setOp] }]);
   });
 });

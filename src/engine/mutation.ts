@@ -9,12 +9,24 @@
  * (step 1, a real recursive clone as of D-019/cycle 0019), apply every
  * operation in the batch to that ONE clone (step 2), discard-on-reject
  * (step 6), and commit + journal (step 8, cycle 0017) — all exist already,
- * making this file's public surface the FULL §5.1 mutation loop. THIS cycle
- * (0019, second half) closes the last item from 0018-REVIEW-phase0's REVISE
- * list: **D-020**, the batch form. `mutate` now accepts a LIST of operations,
- * applied to a single clone, validated and evaluated once, committing
- * all-or-nothing, appending exactly one journal entry holding the whole list
- * — never N separate single-operation calls. See WHAT THIS IS, `mutate`.
+ * making this file's public surface the FULL §5.1 mutation loop. Cycle 0020
+ * closed 0018-REVIEW-phase0's last REVISE item, **D-020** (the batch form):
+ * `mutate` accepts a LIST of operations, applied to a single clone, validated
+ * and evaluated once, committing all-or-nothing, appending exactly one
+ * journal entry holding the whole list — never N separate single-operation
+ * calls. THIS cycle (0022) adds `Operation`'s SECOND variant,
+ * `DeleteObjectOperation` (§5.1.1's `delete <object>`), closing Phase 0
+ * acceptance clause 3 ("deleting a slot with dependents is rejected") — no
+ * new rejection mechanism needed, `validateIntegrity`'s existing
+ * dangling-reference check already IS that mechanism (see
+ * `DeleteObjectOperation`'s own doc comment) — and makes the batch's
+ * target-existence check (D-021/D-023) fold-aware: 0018-REVIEW-phase0's
+ * carried forward-hazard note (0021-REVIEW, constraint 1) warned that ANY
+ * operation kind able to add or remove an object invalidates checking
+ * targets once, up front, against the pre-batch `objects` — this is the
+ * first such kind, so this cycle fixes it (see `mutate`'s doc comment for the
+ * simulated-existence walk) rather than deferring it again. See WHAT THIS IS,
+ * `mutate`.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -38,7 +50,13 @@
  * (required)"** subsection ("The API must accept a list of operations
  * applied to a single clone, validated and evaluated once, committing
  * all-or-nothing... Document loading MUST use a batch.") — **D-020**, closed
- * THIS cycle.
+ * cycle 0020. THIS cycle (0022) implements §5.1.1's own worked example of the
+ * REJECT path ("`delete <object>`... where a silent break would go
+ * unnoticed") via `DeleteObjectOperation`, closing PROJECT_BRIEF §6 Phase 0
+ * acceptance clause 3 ("deleting a slot with dependents is rejected") — see
+ * WHAT THIS IS, `DeleteObjectOperation`'s own doc comment. §5.1.1's REPAIR
+ * path (table row/column deletion rewriting references to `#REF`) is
+ * deliberately NOT implemented here — see NOT DONE HERE.
  * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
  * trigger-3 (new engine file).
  * LAYER: engine (pure). May import: engine/* only.
@@ -267,10 +285,15 @@
  *     whatever calls it (a future `document.ts`, or a command handler) owns
  *     the current `objects`/`journal` pair and decides what to do with a
  *     rejection.
- *   - Any operation kind beyond `SetSlotOperation` (object creation/deletion,
- *     `explode`, vertex add/remove, table resize) — those belong to the
- *     phases that introduce the state they touch (Phase 2-6), same stance
- *     `primitives/schema.ts` already takes on its own per-type entries.
+ *   - Any operation kind beyond `SetSlotOperation`/`DeleteObjectOperation`
+ *     (object CREATION in particular, `explode`, vertex add/remove, table
+ *     resize) — those belong to the phases/slices that introduce the state
+ *     they touch (`document.ts` for creation, Phase 2-6 for the rest), same
+ *     stance `primitives/schema.ts` already takes on its own per-type
+ *     entries. Note for whichever slice adds `CreateObjectOperation`: the
+ *     existence check below is already fold-aware and variant-aware (see
+ *     `mutate`'s doc comment) — a creation variant needs to ADD an id to the
+ *     same simulated `Set`, not invent a second mechanism.
  *   - The slot-deletion REPAIR path (§5.1.1's second legal option, rewriting
  *     inbound references to `#REF`) — Phase 0 has no type that uses it (only
  *     table row/column deletion does, Phase 2/4), so `validateIntegrity`'s
@@ -282,7 +305,7 @@
  *   - Undo itself (only the journal DATA this stores it for, per Rule 2 and
  *     PROJECT_BRIEF §8's deferred list, which defers the undo/redo UI only).
  */
-import { findObjectById, formatAddress, isAddressError, type Address } from "./address.ts";
+import { formatAddress, isAddressError, type Address } from "./address.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/schema.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
@@ -492,8 +515,41 @@ export interface SetSlotOperation {
   readonly slot: Slot;
 }
 
-/** The full set of operations `mutate` can apply. One variant so far — see `SetSlotOperation`. */
-export type Operation = SetSlotOperation;
+/**
+ * Removes the whole object named by `objectId` — §5.1.1's `delete <object>`,
+ * the general slot-deletion rule's primary example (this cycle's fixture has
+ * no per-slot deletion below the whole-object level; `value`/`add` each
+ * disappear entirely or not at all). Carries no `Address`/slot path: deleting
+ * an object removes every slot it has at once, so there is no single slot to
+ * name — see `applyOperation`'s doc comment for how the removal itself is
+ * applied, and `mutate`'s for how §5.1.1's REJECT path (a slot elsewhere still
+ * depends on one of THIS object's slots) is enforced — not here, but by
+ * `validateIntegrity`'s existing dangling-reference check (§5.1.1 clause 1),
+ * unchanged by this operation kind: deleting an object simply removes it from
+ * `objects` before `deriveEdges`/`validateIntegrity` ever run over the
+ * candidate, so an edge some OTHER object still has pointing at one of this
+ * object's slots dangles exactly the way a typo'd formula reference already
+ * does — no new mechanism, the existing one closes Phase 0 acceptance clause 3
+ * for free. The REPAIR path (§5.1.1's other legal option, rewriting inbound
+ * references to `#REF`) is explicitly NOT implemented here — see the file
+ * header's NOT DONE HERE; Phase 0 has no type that needs it.
+ */
+export interface DeleteObjectOperation {
+  readonly kind: "deleteObject";
+  readonly objectId: string;
+}
+
+/**
+ * The full set of operations `mutate` can apply. Two variants now
+ * (`SetSlotOperation`, `DeleteObjectOperation`) — widened, per Q-005/D-020's
+ * "widen the union, never restructure" stance, not a second entry point.
+ */
+export type Operation = SetSlotOperation | DeleteObjectOperation;
+
+/** The object id an operation targets, whichever variant it is — shared by the existence check and the message-building below. */
+function operationTargetId(operation: Operation): string {
+  return operation.kind === "deleteObject" ? operation.objectId : operation.address.objectId;
+}
 
 /**
  * §5.1 step 1: "Stage. Deep-clone the current document state." A REAL
@@ -547,24 +603,39 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * mutation is not even type-legal here without an unjustified cast).
  *
  * `setSlot`: replaces whatever is at `operation.address` with
- * `operation.slot` wholesale — no merge, no partial update. PRECONDITION,
- * enforced by `mutate` before this is ever called, once per operation in the
- * WHOLE batch (D-021, 0018-REVIEW-phase0): `operation.address.objectId` names
- * a real object in `objects`. This function does not itself re-check that —
- * see `mutate`'s own D-021 check, which is the only reason this map can
- * assume exactly one object matches. Still true when `mutate` folds this
- * function over several operations in one batch (D-020): `SetSlotOperation`
- * never adds or removes an object, only rewrites a slot, so an object present
- * before the first fold step is still present — under the same `id` — before
- * every later one; D-021's check against the ORIGINAL (pre-batch) `objects`
- * remains valid for every operation in the list, not just the first. A
- * dangling `operation.slot` (e.g. a formula whose reference does not exist)
- * is exactly what `validateIntegrity`'s dangling-reference check (already
- * composed into `deriveValidateAndEvaluate`, called once after the WHOLE
- * batch has been applied) exists to catch — this function does not duplicate
- * that check.
+ * `operation.slot` wholesale — no merge, no partial update. A dangling
+ * `operation.slot` (e.g. a formula whose reference does not exist) is exactly
+ * what `validateIntegrity`'s dangling-reference check (already composed into
+ * `deriveValidateAndEvaluate`, called once after the WHOLE batch has been
+ * applied) exists to catch — this function does not duplicate that check.
+ *
+ * `deleteObject`: removes the whole object named by `operation.objectId` —
+ * `.filter`, not `.map`, since this variant shrinks the array rather than
+ * rewriting one entry in place. Nothing checks here whether some OTHER
+ * object's formula still points at one of the removed object's slots — that
+ * is `validateIntegrity`'s dangling-reference check again, unchanged: an edge
+ * whose `sourceSlot` no longer resolves is exactly what that check already
+ * looks for, and it runs over the candidate AFTER this whole batch has been
+ * folded, so it sees the object genuinely gone (§5.1.1 clause 1's REJECT path,
+ * closing Phase 0 acceptance clause 3).
+ *
+ * PRECONDITION, enforced by `mutate` before this is EVER called, once per
+ * operation in the WHOLE batch: `operationTargetId(operation)` names an
+ * object that still exists at the moment THIS operation is folded — not
+ * merely at the start of the batch. `DeleteObjectOperation` is the reason that
+ * distinction now matters: unlike `SetSlotOperation` alone (0019/0020's
+ * invariant, no longer sufficient on its own now that a batch can shrink the
+ * object set mid-fold), an object present before the first fold step may be
+ * GONE by a later one, if an earlier operation in the same batch deleted it.
+ * `mutate`'s existence check simulates exactly this — walking the batch
+ * against an evolving `Set<id>`, removing an id the moment a valid
+ * `deleteObject` for it is seen — so this function itself can still simply
+ * ASSUME a match exists; see `mutate`'s own doc comment for the simulation.
  */
 function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
+  if (operation.kind === "deleteObject") {
+    return objects.filter((object) => object.id !== operation.objectId);
+  }
   return objects.map((object) => {
     if (object.id !== operation.address.objectId) {
       return object;
@@ -625,27 +696,38 @@ export type MutationResult =
  * append exactly ONE journal entry holding every operation in the batch, and
  * return the new state (step 8).
  *
- * Two checks run before staging, both over the ORIGINAL `objects` (object
- * identity cannot change between here and staging, so there is no need to
- * clone first to ask either question):
+ * Two checks run before staging, both over a SIMULATION of the batch's effect
+ * on object EXISTENCE only (no clone needed yet — see below):
  *
  * - **Empty batch.** `operations.length === 0` is rejected outright — same
  *   reasoning as D-021 below: a committed batch that applied nothing would
  *   still append a journal entry recording a "mutation" that changed nothing,
  *   which is a false record of history (Rule 2's journal exists to be
  *   replayed/inverted, and an empty entry is nothing to invert).
- * - **D-021** (0018-REVIEW-phase0, answering cycle 0017's own question 2): ANY
- *   operation in the batch whose `address.objectId` names no object in
- *   `objects` rejects the WHOLE batch — never a silent no-op for that one
- *   operation while the rest proceed, matching "committing all-or-nothing."
- *   Every offending operation is named, not just the first (`findObjectById`
- *   filters, doesn't just find one) — same multi-problem-in-one-message style
- *   `validateIntegrity`'s checks already use. The message deliberately does
- *   not `formatAddress` the target (there is no object to resolve a name
- *   from) and deliberately does not print the raw `objectId` either (D-015's
- *   own stance, applied the same way `findDanglingReferences` already applies
- *   it to a missing SOURCE object) — it names only the slot PATH each
- *   offending operation would have touched.
+ * - **D-021** (0018-REVIEW-phase0, answering cycle 0017's own question 2),
+ *   made variant-aware THIS cycle for `DeleteObjectOperation`: ANY operation
+ *   in the batch whose target does not exist AT THE MOMENT it would be folded
+ *   rejects the WHOLE batch — never a silent no-op for that one operation
+ *   while the rest proceed, matching "committing all-or-nothing." A single
+ *   `objects.find`/`findObjectById` against the ORIGINAL, pre-batch `objects`
+ *   (0019/0020's version) is no longer sufficient on its own: a
+ *   `DeleteObjectOperation` can remove an id mid-batch, so a LATER operation
+ *   naming that same id must be rejected even though the id was present when
+ *   the batch started. The check below walks the operations in order against
+ *   one evolving `Set<id>` (seeded from `objects`, `deleteObject` removing an
+ *   id the moment a VALID deletion for it is seen) — a plain existence
+ *   simulation, not a real fold (no slot data touched, no clone made) — so
+ *   each operation's target is checked against exactly the id set it would
+ *   actually see once `applyOperation` really folds over it. Every offending
+ *   operation is still named, not just the first, gathered in the SAME pass
+ *   as the simulation itself — matching 0020's own reasoning (a document load
+ *   with several bad references benefits from seeing all of them at once) and
+ *   `validateIntegrity`'s own multi-problem-in-one-message style. Both
+ *   variants' messages deliberately avoid `formatAddress` (there is no object
+ *   to resolve a name from) and deliberately avoid printing the raw
+ *   `objectId` as anything OTHER than an id (D-023) — `setSlot` names the
+ *   slot PATH it would have touched; `deleteObject` has no path to name, so it
+ *   says plainly that it attempted a deletion.
  *
  * Why staging matters even though every function downstream is already pure
  * (so `objects` was never going to be mutated regardless): Rule 5 asks for
@@ -668,18 +750,38 @@ export function mutate(
     return { ok: false, message: "a mutation batch must contain at least one operation" };
   }
 
-  const missingTargetMessages = operations.flatMap((operation, index) =>
-    findObjectById(operation.address.objectId, objects) === undefined
-      ? [
-          // D-023: the object id appears here, LABELLED as an id, because no
-          // name exists to print — the whole rejection is that nothing
-          // resolves. Naming only the slot path made two different missing
-          // objects produce the same sentence twice.
-          `operation ${index + 1} of ${operations.length} targets slot "${slotKey(operation.address.path)}" ` +
-            `on object id "${operation.address.objectId}", which does not exist in this document (D-021)`,
-        ]
-      : [],
-  );
+  // D-021 across the WHOLE batch, made variant-aware now that a batch can
+  // shrink the object set mid-fold (`DeleteObjectOperation`): a plain
+  // "does operationTargetId(operation) exist in the ORIGINAL objects" check
+  // (0019/0020's version) is no longer sound on its own — an operation later
+  // in the batch may target an object an EARLIER operation in the SAME batch
+  // already deleted, which the original `objects` array alone cannot show.
+  // Simulate the fold's effect on OBJECT EXISTENCE ONLY (a plain `Set<id>`,
+  // no slot data) walking the batch in order, so each operation's target is
+  // checked against exactly the id set it would actually see once folded —
+  // while still gathering EVERY offending operation in one pass, not stopping
+  // at the first, matching 0020's own reasoning (a document load with several
+  // bad references benefits from seeing all of them at once).
+  const survivingIds = new Set(objects.map((object) => object.id));
+  const missingTargetMessages: string[] = [];
+  operations.forEach((operation, index) => {
+    const targetId = operationTargetId(operation);
+    if (!survivingIds.has(targetId)) {
+      // D-023: the object id appears here, LABELLED as an id, because no
+      // name exists to print — the whole rejection is that nothing resolves.
+      const prefix = `operation ${index + 1} of ${operations.length}`;
+      missingTargetMessages.push(
+        operation.kind === "deleteObject"
+          ? `${prefix} attempts to delete object id "${targetId}", which does not exist in this document (D-021)`
+          : `${prefix} targets slot "${slotKey(operation.address.path)}" on object id "${targetId}", ` +
+              `which does not exist in this document (D-021)`,
+      );
+      return; // Nothing to remove from the simulation — this id was never in it.
+    }
+    if (operation.kind === "deleteObject") {
+      survivingIds.delete(targetId); // A later operation targeting the SAME id must see it gone.
+    }
+  });
   if (missingTargetMessages.length > 0) {
     return { ok: false, message: missingTargetMessages.join("; ") };
   }
