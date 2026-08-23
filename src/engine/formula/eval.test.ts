@@ -122,6 +122,21 @@ describe("evaluate — arithmetic (+ - * / % ^)", () => {
     expect(evaluate(binary("^", num(2), num(10)), EMPTY_READ)).toBe(1024);
   });
 
+  it("% takes the DIVISOR's sign, matching Excel's MOD rather than JavaScript's remainder (D-037)", () => {
+    // Added at 0037-REVIEW-phase1: cycle 0036 used the bare JS operator, which returns -2 here.
+    // D-030's tie-breaker settles a §5.3 gap by Excel, and MOD(-5, 3) is 1.
+    expect(evaluate(binary("%", num(-5), num(3)), EMPTY_READ)).toBe(1);
+    expect(evaluate(binary("%", num(5), num(-3)), EMPTY_READ)).toBe(-1);
+    expect(evaluate(binary("%", num(-5), num(-3)), EMPTY_READ)).toBe(-2);
+    expect(evaluate(binary("%", num(10), num(3)), EMPTY_READ)).toBe(1); // unchanged for positives
+  });
+
+  it("a % that lands exactly on zero is +0, never -0 (D-033 guard still applies)", () => {
+    const result = evaluate(binary("%", num(-6), num(3)), EMPTY_READ);
+    expect(result).toBe(0);
+    expect(Object.is(result, -0)).toBe(false);
+  });
+
   it("division and modulo by zero are #DIV0, not #TYPE and not Infinity/NaN", () => {
     expectError(evaluate(binary("/", num(1), num(0)), EMPTY_READ), "#DIV0");
     expectError(evaluate(binary("%", num(1), num(0)), EMPTY_READ), "#DIV0");

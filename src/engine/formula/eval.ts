@@ -95,12 +95,16 @@
  *   the call-form dispatch, and evaluates ONLY `args[1]` (true branch) or `args[2]` (false
  *   branch) — never both, never the untaken one.
  *
- *   **`NOT` is delegated to `functions.ts`'s own registry entry** (`evaluateNot`), never
- *   reimplemented here — D-029's one eager exception needs no laziness, and duplicating its
- *   type-check-and-negate logic in two files would be exactly the kind of parallel copy this
- *   project's own "declare once" principle (D-009/D-014) exists to prevent. Both the prefix
- *   `UnaryOpNode` form and the call `FunctionCallNode` form route through the SAME
- *   `evaluateNot([operand], read)` — one evaluated operand, one call into the registry.
+ *   **`NOT` is delegated to `functions.ts`'s own registry entry**, never reimplemented here —
+ *   D-029's one eager exception needs no laziness, and duplicating its type-check-and-negate logic
+ *   in two files would be exactly the kind of parallel copy this project's own "declare once"
+ *   principle (D-009/D-014) exists to prevent. The two syntactic forms reach that ONE registry
+ *   entry by two different routes, and it is worth being precise about which (corrected at
+ *   0037-REVIEW-phase1, where the original wording claimed a shared helper that does not exist):
+ *   the prefix `UnaryOpNode` form goes through `evaluateNot`, while the call `FunctionCallNode`
+ *   form is an ordinary eager entry and goes through `evaluateFunctionCall`'s eager path like
+ *   `SUM` or `ABS`. Both end at `functions.ts`'s `NOT` implementation with one evaluated operand,
+ *   so the two forms agree by construction — pinned by a test asserting exactly that.
  *
  * INVARIANTS UPHELD HERE
  *   - `evaluate` NEVER throws. Every failure mode — an unresolved reference, a wrong-typed
@@ -311,6 +315,9 @@ function compareOrdered<T extends number | string | boolean>(
  * otherwise report for the same non-finite `Infinity`/`NaN` result. Every other result routes
  * through `finiteResult` (D-033): `-0` normalises to `+0`, a genuinely non-finite result is
  * `#TYPE`.
+ *
+ * `%` takes the DIVISOR's sign (Excel's `MOD`), not JavaScript's remainder — see the operator's
+ * own comment below and D-037.
  */
 function evaluateArithmetic(
   operator: ArithmeticOperator,
@@ -348,7 +355,13 @@ function evaluateArithmetic(
       if (rightValue === 0) {
         return { error: "#DIV0", message: "modulo by zero" };
       }
-      return finiteResult("%", leftValue % rightValue);
+      // D-037: the RESULT TAKES THE DIVISOR'S SIGN (Excel's `MOD`), not JavaScript's `%`, whose
+      // remainder takes the dividend's: `-5 % 3` is `1` here, where the bare JS operator gives
+      // `-2`. D-030's standing tie-breaker — a formula-language gap §5.3 leaves open is settled by
+      // Excel — and the useful behaviour for the wrapping cases a canvas actually has (an angle,
+      // a grid index, a colour cycle). `((l % r) + r) % r` is the floored modulo, exactly Excel's
+      // `MOD` including a negative divisor (`5 % -3` is `-1`).
+      return finiteResult("%", ((leftValue % rightValue) + rightValue) % rightValue);
     case "^":
       return finiteResult("^", Math.pow(leftValue, rightValue));
   }
@@ -426,9 +439,12 @@ function evaluateIf(args: readonly FormulaAst[], read: ReadSlot): Value {
 /**
  * `NOT` — D-029's one eager exception. Evaluates its one operand, then delegates the
  * type-check-and-negate logic to `functions.ts`'s OWN `NOT` registry entry rather than
- * reimplementing it here (D-009/D-014's "declare once" principle). Used by BOTH the prefix
- * `UnaryOpNode` form and the call `FunctionCallNode` form — see `evaluateUnaryOp` and
- * `evaluateFunctionCall`.
+ * reimplementing it here (D-009/D-014's "declare once" principle).
+ *
+ * Reached ONLY from `evaluateUnaryOp` (the prefix `NOT x` form). The call form `NOT(x)` is an
+ * ordinary `EagerFunctionEntry` and takes `evaluateFunctionCall`'s eager path instead, ending at
+ * the same registry implementation — which is why the two forms agree. (Corrected at
+ * 0037-REVIEW-phase1: this comment previously claimed both forms route through here.)
  */
 function evaluateNot(args: readonly FormulaAst[], read: ReadSlot): Value {
   const operand = args[0];

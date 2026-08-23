@@ -8,13 +8,57 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-010**
+Next free ID: **Q-011**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
 
 ---
+
+## Q-010 — Is a formula naming an unknown function, or calling a known one with the wrong argument count, REJECTED at authoring time or accepted and shown as an error value?
+Raised: entry 0037-REVIEW-phase1 (reviewer)   Brief section: §5.3   Status: OPEN
+Blocks: nothing today (nothing can store a general formula yet — `mutation.ts`'s
+`findUnsupportedFormulaAsts` still rejects every non-reference AST). **Must be settled by the
+Phase 2 cycle that makes cell formulas storable**, because that is the cycle that decides what
+happens when a user types one.
+
+Ambiguity: §5.3 says "An unresolvable **reference** is a PARSE-time error regardless of branch,
+because names are resolved to IDs at parse time" — and `parser.ts` implements exactly that. It says
+nothing about an unresolvable FUNCTION name, even though the registry that would resolve one exists
+at parse time too (`parser.ts` already imports `functions.ts` for range placement). So today the
+two behave differently: `= nosuchobject.v` cannot be authored at all, while `= FOO(1)` parses
+cleanly, and `= SUM()` — a call that can never be right at any runtime, with no values involved —
+parses cleanly too. Both become an error VALUE at evaluation instead (`#TYPE`, entry 0036).
+
+Options:
+(a) **Split, following Excel** (D-030's tie-breaker): a wrong ARGUMENT COUNT is a parse-time
+    rejection (Excel refuses the entry outright), while an UNKNOWN NAME is accepted and evaluates
+    to an error value (Excel stores it and shows `#NAME?`).
+(b) **Both are parse-time rejections** — `parseFormula` validates name and arity via
+    `getFunctionEntry`/`checkArity`, matching how it already treats an unresolvable reference and
+    an illegally placed range. One consistent rule: anything decidable from the AST alone, without
+    reading a single value, fails at authoring time.
+(c) **Both stay runtime error values** — today's behaviour, unchanged.
+
+Recommendation: **(b)**, with (a) as the close second. (b) gives the user the error while they are
+still typing rather than as a permanently broken cell, it matches the "anything static fails
+early" line `parser.ts` already draws twice, and it needs no new machinery — the two functions it
+would call were built in cycle 0034 and are still consumed by nothing else. Its cost is that the
+project has no `#NAME`-style code, so (a)'s "accepted, shows an error" arm has nowhere natural to
+land anyway. Deliberately NOT ruled at 0037-REVIEW: this is a product-facing behaviour question
+(does the app refuse the keystroke or show a broken cell?), it is squarely the human's call, and
+nothing is blocked while it waits.
+
+Reversible? Yes, entirely — no stored data can depend on it while formulas are unstorable.
+Provisional choice taken: **no** — current behaviour is (c) by default, not by decision. Pinned by
+`parser.test.ts`'s "parses an unrecognised function name successfully" and `eval.test.ts`'s
+"an unknown function name is #TYPE" / "a wrong argument count is #TYPE". Whichever option lands,
+those three test expectations move with it — that is authorised in advance, so it is not a
+§6.1 trigger 5 escalation for the cycle that does it.
+
+---
+
 
 ## Q-009 — Are `AND`/`OR`/`NOT` infix/prefix OPERATORS, callable FUNCTIONS, or both?
 Raised: entry 0028-formula-ast (implementer)   Brief section: §5.3

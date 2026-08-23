@@ -828,3 +828,75 @@ so this is a gap, settled here rather than left for the evaluator to decide by a
 
 This binds `checkArity`'s inputs only — D-029 still forbids all three from having an eager
 implementation, and `eval.ts` MUST check arity itself before evaluating either branch.
+
+---
+
+## D-036 — Range EVALUATION belongs to the table primitive's cycle, not to `formula/eval.ts` standalone; Phase 1's gate passes without it
+Ruled: entry 0037-REVIEW-phase1 (reviewer)   Binding on: `formula/eval.ts`, `mutation.ts`,
+`primitives/table.ts`, and the Phase 2 cycle that wires the formula engine into cell slots
+
+Cycle 0036 made `evaluate` return a disclosed, temporary `#PARSE` for a `RangeNode` and asked
+whether Phase 1 can be claimed complete with that gap. **It can, and the deferral is correct** —
+not merely tolerated:
+
+- §5.4 (the brief's own words): "A range whose endpoint was deleted **clamps to the remaining
+  extent**; a range deleted entirely becomes `#REF`." Clamping is a function of the table's CURRENT
+  dimensions. A table-blind evaluator cannot do it, so a `formula/*`-standalone implementation
+  would necessarily be one that has to be replaced, not extended.
+- §5.3 puts expansion "at edge-derivation time (step 3 of the mutation loop)", not in the
+  evaluator's own walk.
+- `address.ts`'s cell form is `/^[A-Z]+[0-9]+$/` — multi-letter columns are already legal, so
+  enumerating `A1:AB4` needs real bijective base-26 arithmetic. That helper belongs beside the
+  table primitive (§5.4) or in `address.ts`, where its own tests live — never invented inside
+  `eval.ts`.
+- Phase 2's own acceptance criterion already demands the missing proof: "`SUM(A1:A5)` recomputes
+  correctly after inserting a row inside the range."
+
+**Phase 1's "ranges in aggregates" clause is therefore satisfied at the parse level (entry 0031)
+and the dependency level (entry 0033), and its EVALUATION half is carried into Phase 2's gate.**
+This is a carve-out with a named home, not a waiver: Phase 2 cannot close without it.
+
+Binding on whoever implements it:
+
+1. **`evaluate` expands the range itself, through its `read` callback**, over addresses enumerated
+   from the endpoint pair — NOT a pre-flattening pass that rewrites the AST before evaluation. A
+   pre-pass would be a second walk that has to know the grammar, which is Rule 4's "do not write a
+   second evaluator" reached by a side door.
+2. **The enumeration/clamping helper lives with the table primitive or `address.ts`**, is tested
+   there, and is imported by `eval.ts` — the same posture `bareCellAddress` already established.
+3. **`evaluateRangeNode` is DELETED when that lands, never extended.**
+4. **Until it lands, a formula containing a range must not be storable.** The wiring cycle either
+   implements range evaluation in the same cycle, or keeps rejecting range-containing formulas at
+   authoring time. A cell that accepts `= SUM(A1:A5)` and then displays `#PARSE` forever is the
+   one outcome this ruling forbids: it looks like a working feature and is not.
+5. The same cycle owns 0035-REVIEW's Finding 4 (`MIN`/`MAX`'s `Math.min(...)` spread), because it
+   is the cycle that first makes an aggregate's argument list arbitrarily long.
+
+---
+
+## D-037 — `%` takes the DIVISOR's sign (Excel's `MOD`); comparisons stay same-type-only
+Ruled: entry 0037-REVIEW-phase1 (reviewer)   Binding on: `formula/eval.ts` and any later evaluator
+
+Two §5.3 semantic gaps, settled together because both were reached in cycle 0036 and one of them
+was taken silently.
+
+**1. `%` is floored modulo, not JavaScript's remainder.** §5.3 lists `%` in the `* / %` precedence
+tier and never defines its sign behaviour. Cycle 0036 used the bare JS operator — so `-5 % 3` was
+`-2` — without listing it as a decision. **D-030's standing tie-breaker applies: a formula-language
+gap §5.3 leaves open is settled by Excel**, and `MOD(-5, 3)` is `1`. It is also the behaviour the
+wrapping cases a canvas actually has (an angle, a grid index, a colour cycle) need. Implemented at
+this review as `((l % r) + r) % r`, which matches Excel including a negative divisor
+(`5 % -3` is `-1`), and still routes through `finiteResult` so an exact zero is `+0` (D-033).
+
+Note for the next gap of this kind: an operator semantic that the brief does not state is a
+decision, and belongs in the entry's "Decisions I made" section even when the implementation is
+one JavaScript operator. Reaching for the host language's default IS a choice.
+
+**2. Comparisons (`= <> < > <= >=`) require both operands to be the SAME primitive type; a
+cross-type comparison is `#TYPE`.** Cycle 0036's Decision 3, disclosed and asked about —
+**confirmed**. The alternative (`=`/`<>` returning `false` across types while the orderings stay
+strict) was considered and rejected: a silent `false` when a cell holds the string `"5"` and the
+formula compares it to `5` hides exactly the type confusion this project surfaces everywhere else,
+and Excel's own cross-type ordering (number < text < boolean) is an arbitrary rule nobody
+remembers. Strictness is additively widenable — every formula this build accepts stays valid if a
+future cycle widens it — while the reverse is not.
