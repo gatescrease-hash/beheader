@@ -1,29 +1,26 @@
-# STATUS — as of entry 0033-formula-deps
+# STATUS — as of entry 0034-formula-functions
 
-STATE: GREEN (compiles under both configs, 341/341 tests pass, 0 skipped, 0 `.only`). Cycle 0033
-(`deps.ts`) is UNREVIEWED but under no obligation to stop — no §6.1 trigger fired and the batch cap
-is nowhere near exceeded (see below). **`functions.ts` is UNBLOCKED**, but read the Gotchas section
-below before starting it.
+STATE: GREEN (compiles under both configs, 382/382 tests pass, 0 skipped, 0 `.only`). **Cycles
+0033 and 0034 are UNREVIEWED. Process state: REVIEW REQUIRED before the next cycle begins** — the
+§6.3 batch cap is mechanically exceeded (see below). **Do not start `formula/eval.ts`, or any
+other new slice, until this lands.**
 
 Current phase: **1 — Formula engine (`formula/*`), standalone.** Phase 0 is COMPLETE and SIGNED OFF
 (0027-REVIEW-phase0). Last review point: **0032-REVIEW-phase1, verdict ACCEPT WITH EDITS** — three
 latent defects fixed (`isParseError` vs `ErrorNode`, a hand-built cell path, the engine's only
 `throw`) and three rulings: **D-030** (`^` left-associative), **D-031** (numbers in stored ASTs),
-**D-032** (error predicates). Cycles since last review: **1/3** · diff since last review: **393
-lines / 2 files** (cap 800/10, well under).
+**D-032** (error predicates). Cycles since last review: **2/3** · diff since last review: **1176
+lines / 5 files** — **EXCEEDS the 800/10 cap.** (393/2 from cycle 0033 + 783/3 from cycle 0034: 760
+lines in two new files, `functions.ts`/`functions.test.ts`, plus a 23-line disclosed refactor of
+`parser.ts`.) Entry 0033's own hand-off note predicted this before cycle 0034 began: "very likely
+denser than the ~400 lines of remaining headroom... worth ending the batch immediately after it."
 
-## Next slice — `functions.ts` (unblocked, read the Gotchas note first)
-`functions.ts`: the table-driven built-in registry (name → arity → implementation) for `IF`, `AND`,
-`OR`, `NOT`, `SUM`, `MIN`, `MAX`, `AVG`, `ABS`, `ROUND(n, digits)`, `FLOOR`, `CEIL`, `SQRT`, `POW`,
-`CONCAT`, `LEN`, `PI()`, `SIN`, `COS`, `TAN`, `ATAN2`, `DEG`, `RAD` (§5.3's own list). **D-029 binds
-this file directly**: `IF`/`AND`/`OR` may be registered for arity/name-checking purposes but MUST
-NOT hold an implementation that computes from pre-evaluated arguments — that lazy, short-circuit
-evaluation is `formula/eval.ts`'s job, at the `FunctionCallNode` site, in BOTH syntactic forms. `NOT`
-is an ordinary registry entry (one argument, no branch to skip). Getting this backwards produces a
-formula engine that looks right and passes casual tests while silently evaluating the untaken branch
-of every conditional — read D-029 in full (`claude/DECISIONS.md`) before writing this file, not
-after. Followed by `formula/eval.ts` — per PROJECT_BRIEF §6's Phase 1 build order. Phase 1's
-acceptance criterion needs ALL of `functions.ts`/`eval.ts`; none is claimed yet.
+## Next slice — BLOCKED pending review
+`formula/eval.ts` (the evaluator — lazy/short-circuit, per §5.3/D-029) is the last file Phase 1
+needs, but **must not start until 0033/0034 are reviewed.** Three questions are open for the
+reviewer in entry 0034's own "Questions for reviewer" section (uniform `isIllegalNumber` guarding
+on every eager function vs. per-function reasoning; `AND`/`OR`'s arity minimum of 1 vs. 2; whether
+folding `parser.ts`'s aggregate-name set into this cycle, rather than a separate one, was right).
 
 ## Built
 - Scaffold, `graph/node.ts`, `graph/edge.ts`, `primitives/schema.ts`, `graph/cycles.ts`,
@@ -32,56 +29,62 @@ acceptance criterion needs ALL of `functions.ts`/`eval.ts`; none is claimed yet.
 - **`address.ts`** (45 tests, unchanged this cycle) — see 0032-REVIEW for `bareCellAddress`.
 - **`formula/ast.ts`** (14 tests) — unchanged this cycle.
 - **`formula/lexer.ts`** (36 tests) — unchanged this cycle.
-- **`formula/parser.ts`** (49 tests) — unchanged this cycle. See entry 0031/0032-REVIEW.
+- **`formula/parser.ts`** (49 tests) — cycle 0034 made ONE small, disclosed, behaviour-preserving
+  change: its former local `AGGREGATE_FUNCTION_NAMES` `Set` is now an import of `functions.ts`'s
+  `RANGE_ACCEPTING_FUNCTION_NAMES` (same four names, same behaviour — confirmed by the unchanged
+  test suite). See entry 0031/0032-REVIEW for everything else; unchanged in substance.
 - **`formula/deps.ts`** (20 tests, cycle 0033) — `extractDependencies(ast): readonly Dependency[]`.
-  Walks the entire `FormulaAst` eagerly and totally (§5.3, D-029): both `IF` branches, both
-  syntactic forms of `AND`/`OR`/`NOT`, with zero special-casing by function name (the walk recurses
-  into every `FunctionCallNode` arg and every operator's operand(s) unconditionally). `Dependency`
-  is `ReferenceDependency | RangeDependency` — a `RangeNode` is reported as its own endpoint-pair
-  shape, NOT expanded into individual cells (that expansion needs the target table's current
-  dimensions and happens at edge-derivation time, per §5.3 — a disclosed design decision this cycle
-  makes for whichever cycle wires this into `mutation.ts`, not yet done). Dependencies are NOT
-  deduplicated (`a.v + a.v` yields two entries). `ErrorNode` (D-028) and `LiteralNode` yield nothing.
-  Never throws. NOT wired into `mutation.ts`'s `deriveEdges` or `graph/eval.ts` this cycle — both
-  stay on their existing, narrower `ReferenceNode`-only path until Phase 2 (see Known problems).
-  See the file's own header for full design rationale.
+  Eager, total walk of the whole `FormulaAst` (§5.3, D-029): both `IF` branches, both syntactic
+  forms of `AND`/`OR`/`NOT`, zero special-casing by function name. `Dependency` is
+  `ReferenceDependency | RangeDependency` — a `RangeNode` is reported as its own endpoint-pair
+  shape, NOT expanded into individual cells (expansion needs a table's current dimensions and
+  happens at edge-derivation time, per §5.3 — a disclosed design decision, no consumer yet). Not
+  deduplicated. `ErrorNode`/`LiteralNode` yield nothing. Never throws. NOT wired into
+  `mutation.ts`'s `deriveEdges` or `graph/eval.ts` this cycle (Phase 2 work).
+- **`formula/functions.ts`** (41 tests, cycle 0034) — `FUNCTION_REGISTRY`: all 23 §5.3 built-ins,
+  `name → arity → implementation`. `IF`/`AND`/`OR` are `LazyFunctionEntry` (name/arity only, NO
+  `implementation` field — D-029, enforced structurally by the discriminated union, not just by
+  convention). `NOT` is D-029's one eager exception. Every eager implementation propagates the
+  first upstream error, type-checks its arguments (`#TYPE`, naming the bad argument's position),
+  and guards its numeric result with `finiteResult` (D-025 non-finite AND Q-008 `-0`, via the
+  shared `isIllegalNumber` predicate). Also exports `RANGE_ACCEPTING_FUNCTION_NAMES`,
+  `LAZY_FUNCTION_NAMES`, and `checkArity`. NOT wired into any evaluator yet — see file header.
 
 ## Acceptance criterion — Phase 0, all four PASSING and REVIEWED (unchanged, see 0027-REVIEW)
 Phase 1's criterion is NOT YET claimed. Demonstrated so far, in isolation: literals, precedence,
-nested IF, reference resolution, ranges in aggregates, #PARSE-not-throw (parser, entry 0031), and
+nested IF, reference resolution, ranges in aggregates, #PARSE-not-throw (parser, entry 0031);
 eager/total dependency extraction across both IF branches and both AND/OR/NOT forms (deps, entry
-0033). NOT yet demonstrated: lazy/short-circuit evaluation, the full built-in registry
-(`functions.ts`/`eval.ts` unbuilt).
+0033); every built-in computing correctly, propagating errors, and failing closed (functions,
+entry 0034). NOT yet demonstrated: lazy/short-circuit evaluation itself (`eval.ts` unbuilt, and
+blocked pending review — see above).
 
 ## Known problems
 - **`findUnsupportedFormulaAsts` (mutation.ts) and `evaluateFormula`'s `#PARSE` branch
   (graph/eval.ts) are BOTH temporary** (carried, unchanged) — delete both, and `deriveEdges`'s
-  matching narrowing, the moment Phase 2 wires in the real `formula/eval.ts`. `deriveEdges` still
-  derives an edge only from the `ReferenceNode` shape — `deps.ts` existing does NOT change this;
-  wiring `extractDependencies` into `deriveEdges` is explicitly Phase 2 work (§5.3: range expansion
-  needs a table's current dimensions, which `primitives/schema.ts` cannot yet express for a slot
-  FAMILY — see D-017's own forward note).
+  matching narrowing, the moment Phase 2 wires in the real `formula/eval.ts`. `deps.ts`/
+  `functions.ts` existing does NOT change this; wiring either into `deriveEdges`/`graph/eval.ts` is
+  explicitly Phase 2 work.
 - **`camera` has no WRITE-side guard** (D-027, carried).
 - **The journal's STRUCTURE is deliberately unvalidated** beyond `Array.isArray` (carried).
 - **L-16, L-17/L-18/L-14, §5.11's `style` field, `nextObjectId` reconciliation, `noUnusedLocals`
   off, L-6–L-15 cosmetics, recursion depth, table/`cells` hardcoding — all carried unchanged.**
-- **`lexer.ts`'s two disclosed edge cases** (carried, unchanged — see prior STATUS revisions for
-  detail).
+- **`lexer.ts`'s two disclosed edge cases** (carried, unchanged — see prior STATUS revisions).
 - **`^` (exponentiation) is left-associative — RULED, D-030.** Do not "correct" it.
 - **A `LiteralNode`'s `value` inside a stored AST is unchecked document state (D-031)** — carried,
-  unchanged. Still unreachable today only because `findUnsupportedFormulaAsts` rejects every
-  non-reference AST shape; the cycle that deletes that check MUST extend the value-legality walk to
-  formula ASTs in the same cycle (D-031's own binding text).
-- **NEW: `formula/deps.ts`'s `RangeDependency` shape is a disclosed, forward-looking design choice
-  with no consumer yet.** Nothing today reads `Dependency.kind === "range"` — pinned by tests inside
-  `deps.test.ts` only. Whoever wires `extractDependencies` into `mutation.ts`'s `deriveEdges`
-  (Phase 2) inherits this shape rather than needing to invent one; it is NOT yet validated against a
-  real edge-derivation consumer.
-- **SETTLED, do not re-raise:** everything 0029-REVIEW's and 0032-REVIEW's STATUS already listed
-  settled (see prior revisions for the full list — precedence chain, D-029 dispatch,
-  range-placement-as-post-parse-walk, `SUM((A1:B4))`'s acceptance, etc.), plus now: dependency
-  extraction needs no per-function-name special-casing (walking every arg/operand unconditionally is
-  sufficient for D-029), and a `RangeNode` is reported pre-expansion rather than flattened.
+  unchanged; still unreachable today only because `findUnsupportedFormulaAsts` rejects every
+  non-reference AST shape.
+- **`formula/deps.ts`'s `RangeDependency` shape has no consumer yet** (carried from 0033) —
+  pinned by tests inside `deps.test.ts` only.
+- **NEW: `functions.ts`'s registry has no consumer yet either** — `checkArity` and every
+  `implementation` are tested directly, by calling them from the test file, not through any real
+  evaluation path. `eval.ts` (blocked, see above) is what will actually call these.
+- **SETTLED, do not re-raise:** everything 0029/0032-REVIEW's STATUS already listed settled (see
+  prior revisions — precedence chain, D-029 dispatch, range-placement-as-post-parse-walk,
+  `SUM((A1:B4))`'s acceptance, dependency extraction needing no per-name special-casing, a
+  `RangeNode` reported pre-expansion), plus now: function names are matched case-sensitively,
+  uppercase-only (consistent with the pre-existing `AGGREGATE_FUNCTION_NAMES`/
+  `RANGE_ACCEPTING_FUNCTION_NAMES` precedent — not a fresh guess); `CONCAT` requires string
+  arguments with no implicit coercion.
 
 ## Live PROVISIONAL tags and open questions
 **`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`. **`PROVISIONAL(Q-008)`** →
@@ -90,42 +93,36 @@ ANSWERED → D-025. **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2, inherited unc
 **Q-003** → D-007. No new question raised this cycle. Next free: **Q-010**.
 
 ## Gotchas for the next model
-- **Read D-029 (`claude/DECISIONS.md`) in full before writing `functions.ts`.** The registry MUST
-  NOT hold an eager implementation of `IF`/`AND`/`OR` — that's `eval.ts`'s job, lazily, at the call
-  site, in both syntactic forms. `NOT` is the one exception (ordinary registry entry). Getting this
-  backwards produces code that passes casual tests while evaluating the untaken branch of every
-  conditional — the exact failure D-029 exists to prevent.
-- **Batch discipline (0032-REVIEW §6, restated):** end a batch before starting any cycle that
-  cannot fit the remaining headroom under the 800-line cap — roughly, stop if under ~200 lines are
-  left. Currently 393/800 used (1/3 cycles) — real headroom, but `functions.ts` is likely to be
-  dense (≈20 built-ins × implementation + tests, plus this project's own documentation-heavy style)
-  and carries D-029's binding correctness rule. Entry 0033's own recommendation: treat it as its own
-  cycle and stop the batch immediately after it rather than continuing straight to `eval.ts`.
+- **STOP: do not start a new slice.** Cycles 0033/0034 need review first (§6.3's line cap is
+  exceeded: 1176/800). Read entry 0034's "Questions for reviewer" section before anything else.
+- **Batch discipline, restated a third time now:** 0032-REVIEW's own STATUS text already warned
+  "end a batch before starting any cycle that cannot fit the remaining headroom" after the PRIOR
+  batch reached 2.2× the cap the same way (a moderate cycle followed immediately by the phase's
+  densest file). It happened again this batch, predicted correctly in entry 0033's own hand-off
+  note but not avoided, because there was still nominal headroom (393/800) and the next file was
+  the declared next slice. Take from this: predicting a dense file correctly is not the same as it
+  fitting — when a hand-off note names a specific risk, prefer treating that file as review-gated
+  on completion regardless of the arithmetic at the START of the cycle.
+- **`functions.ts`'s registry is data with no consumer yet** — reading its own file header before
+  wiring it into `eval.ts` is essential: the `LazyFunctionEntry`/`EagerFunctionEntry` split exists
+  specifically so `eval.ts` can special-case `LAZY_FUNCTION_NAMES` and never accidentally call an
+  `implementation` that does not exist for `IF`/`AND`/`OR`.
 - **`parser.ts` does NOT validate function names or arity** — `FOO(1,2,3)` parses successfully.
-  Only `functions.ts` (next) rejects an unknown name.
-- **Range placement is a POST-PARSE tree walk** in `parser.ts` (`validateRangePlacement`), unrelated
-  to but easily confused with `deps.ts`'s `RangeDependency` shape — the former is a parse-time
-  syntax restriction, the latter is a dependency-reporting shape. Don't conflate them.
-- **`deps.ts`'s `extractDependencies` does NOT expand a range into concrete cells** — it reports the
-  endpoint pair only (`RangeDependency`). Expansion needs a table's current dimensions and happens
-  at edge-derivation time (`mutation.ts`), which does not consume this file yet.
+  `functions.ts`'s `getFunctionEntry`/`checkArity` exist now but are not wired into anything that
+  rejects an unknown name yet — that's `eval.ts`'s (or a future command layer's) job.
+- **Range placement (`parser.ts`) and range DEPENDENCY reporting (`deps.ts`) are different
+  concerns** — don't conflate them (carried from 0033).
 - **`^` is left-associative (D-030, ruled), `AND`/`OR`/`NOT`'s dual-form dispatch lives in
-  `parser.ts`'s `parsePrimaryExpr` + `parseUnaryExpr`** — neither should be silently "corrected"
-  without reading entry 0031's reasoning and D-030 first. `deps.ts` achieves the SAME dual-form
-  neutrality with no dispatch logic at all — it just walks every arg/operand unconditionally; that
-  asymmetry (parser needs to dispatch, deps does not) is expected, not a sign one of them is wrong.
+  `parser.ts`'s `parsePrimaryExpr`/`parseUnaryExpr`** — read entry 0031 and D-030 before touching.
 - **An error-shaped type predicate discriminates on the CODE, never on the presence of an `error`
-  field (D-032).** `isParseError` was fixed at 0032-REVIEW; `isAddressError` is correct only because
-  its domain has no `error` field — tighten it before widening that domain.
-- **`src/engine/` contains no `throw`, and should stay that way.** `deps.ts`'s exhaustiveness arm
-  follows the same non-throwing discipline `parser.ts`'s `walkForRangePlacement` established.
+  field (D-032).** `isAddressError` is correct only because its domain has no `error` field.
+- **`src/engine/` contains no `throw`, and should stay that way.**
 - **D-029, still binding, still not implemented in any evaluator**: `IF`/`AND`/`OR` MUST be
-  evaluated lazily by `formula/eval.ts` itself, never by a `functions.ts` registry entry computing
-  from pre-evaluated arguments — in BOTH syntactic forms. `NOT` is an ordinary registry entry.
-  `deps.ts` (this cycle) IS eager and total over both forms, by construction — see Built above.
+  evaluated lazily by `formula/eval.ts` itself, never by a `functions.ts` registry entry — `NOT` is
+  the one exception. `deps.ts` is eager/total over both forms; `functions.ts`'s registry now
+  structurally FORBIDS an eager `IF`/`AND`/`OR` implementation (no `implementation` field exists to
+  write one into) — both halves of D-029 are now enforced by the type system, not only by rule.
 - **`isCellReferenceForm`/`bareCellAddress` (address.ts) are the ONLY sanctioned way to detect/build
-  a bare cell-ref-shaped segment outside `address.ts` itself.** Do not re-derive the regex elsewhere.
+  a bare cell-ref-shaped segment outside `address.ts` itself.**
 - **`ErrorNode` still exists but nothing constructs one yet, deliberately (D-028)** — unchanged.
-  `deps.ts` yields nothing for one (tested); when it starts being constructed in Phase 2, grep for
-  code that assumes an AST cannot carry an `error` field.
 - Each PowerShell call is a fresh process; the Bash tool's `npm` is not on PATH — use PowerShell.

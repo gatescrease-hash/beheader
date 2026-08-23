@@ -95,14 +95,15 @@
  *   same "identifier followed by `(`" path every other built-in function name is.
  *
  *   This file does NOT validate a function's NAME or ARITY (`FOO(1,2,3)` for an
- *   unrecognised `"FOO"` parses successfully as a `FunctionCallNode` — `functions.ts`,
- *   a later cycle, is the registry that rejects it) — with exactly one, narrow,
- *   brief-mandated exception: which names may take a range argument (`SUM`/`MIN`/
- *   `MAX`/`AVG`, §5.3's own words), needed to enforce the range-placement rule THIS
- *   cycle, before `functions.ts` exists to own that vocabulary generally. This is a
- *   disclosed, minimal duplication expected to fold into `functions.ts`'s registry
- *   later (e.g. an `isAggregate` flag per entry) rather than staying a second list
- *   forever — not done now because `functions.ts` does not exist yet.
+ *   unrecognised `"FOO"` parses successfully as a `FunctionCallNode` — `functions.ts`
+ *   is the registry that rejects it, wired into a future `eval.ts`/command layer, not
+ *   here) — with exactly one, narrow, brief-mandated exception: which names may take a
+ *   range argument (`SUM`/`MIN`/`MAX`/`AVG`, §5.3's own words), needed to enforce the
+ *   range-placement rule. As of cycle 0034, this imports `functions.ts`'s
+ *   `RANGE_ACCEPTING_FUNCTION_NAMES` rather than keeping its own copy of that set — the
+ *   fold-in this file's own header used to describe as "expected... once it exists" is
+ *   now done; see `functions.ts`'s own header for the other side of it. Behaviour is
+ *   byte-for-byte unchanged (same four names), so no test's expectation moved.
  *
  * INVARIANTS UPHELD HERE
  *   - `parseFormulaTokens`/`parseFormula` NEVER throw. Every malformed input is a
@@ -145,6 +146,7 @@
  */
 import { type Address, type AddressableObject, bareCellAddress, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";
 import type { BinaryOperator, FormulaAst } from "./ast.ts";
+import { RANGE_ACCEPTING_FUNCTION_NAMES } from "./functions.ts";
 import { lex, type LexError, type Token } from "./lexer.ts";
 
 /**
@@ -196,9 +198,6 @@ export function isParseError(value: unknown): value is ParseError {
 function isLexError(result: readonly Token[] | LexError): result is LexError {
   return !Array.isArray(result);
 }
-
-/** §5.3's four aggregate functions — the only names a `RangeNode` may be a direct argument of. See the file header for why this is a small, disclosed, temporary duplication rather than a `functions.ts` lookup. */
-const AGGREGATE_FUNCTION_NAMES: ReadonlySet<string> = new Set(["SUM", "MIN", "MAX", "AVG"]);
 
 const OR_OPERATOR_TOKENS: ReadonlyMap<string, BinaryOperator> = new Map([["or", "OR"]]);
 const AND_OPERATOR_TOKENS: ReadonlyMap<string, BinaryOperator> = new Map([["and", "AND"]]);
@@ -548,7 +547,7 @@ function walkForRangePlacement(node: FormulaAst, isDirectAggregateArgument: bool
     case "unaryOp":
       return walkForRangePlacement(node.operand, false);
     case "functionCall": {
-      const isAggregate = AGGREGATE_FUNCTION_NAMES.has(node.name);
+      const isAggregate = RANGE_ACCEPTING_FUNCTION_NAMES.has(node.name);
       for (const arg of node.args) {
         const error = walkForRangePlacement(arg, isAggregate);
         if (error !== undefined) {
