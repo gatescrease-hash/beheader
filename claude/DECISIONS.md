@@ -900,3 +900,121 @@ formula compares it to `5` hides exactly the type confusion this project surface
 and Excel's own cross-type ordering (number < text < boolean) is an arbitrary rule nobody
 remembers. Strictness is additively widenable — every formula this build accepts stays valid if a
 future cycle widens it — while the reverse is not.
+
+---
+
+## D-038 — A formula that cannot be valid is REFUSED when it is entered (Q-010 answered by the human: option (b))
+Answers: Q-010   Ruled: entry 0038-RULINGS (human, 2026-08-23)   Binding on: `formula/parser.ts`,
+`mutation.ts`, and every future authoring path
+
+Anything decidable from the formula text alone, with no values read, fails at entry rather than
+becoming a stored error value. `parseFormula` therefore rejects, alongside the unresolvable
+reference and the misplaced range it already rejects:
+
+- an **unknown function name** (`getFunctionEntry` returns `undefined`), and
+- a **wrong argument count** for a known one (`checkArity` fails).
+
+**The human's condition, and it is binding: this must not foreclose autocomplete or
+did-you-mean matching in the formula/text entry later.** Concretely, on the cycle that implements
+this:
+
+1. Validation runs when a formula is **committed**, never per keystroke. Nothing here may end up
+   on the typing path.
+2. The rejection carries the **offending name and its position** in the `#PARSE` error, not just a
+   message — a later suggestion pass needs both, and retrofitting positions is the expensive kind
+   of change.
+3. `FUNCTION_REGISTRY` stays **enumerable by name** (`Object.keys`). Nothing may make the name set
+   private, computed, or scattered — that list is the future autocomplete's source.
+4. A rejected formula's **source text is never discarded** by the layer that rejects it; the caller
+   keeps it so it can be edited rather than retyped.
+
+`formula/eval.ts`'s own "unknown function" / "wrong arity" branches STAY as written. They stop
+being reachable from typed input and become the defensive arms for an AST arriving from a loaded
+file (D-031's world) — which is exactly what they should be.
+
+Reconciliation required: `parser.test.ts`'s "parses an unrecognised function name successfully"
+inverts, and gains an arity case. Pre-authorised at 0037-REVIEW — it is not a §6.1 trigger 5
+escalation. `eval.test.ts`'s two tests stay, re-described as defensive.
+
+---
+
+## D-039 — Lowercase cell references are ACCEPTED and normalised to uppercase (Q-004 answered by the human: option (b))
+Answers: Q-004   Ruled: entry 0038-RULINGS (human, 2026-08-23)   Binding on: `address.ts`,
+`formula/parser.ts`
+
+`a1`, `A1`, and `a1` written as a bare ref inside a table cell formula all mean the same cell.
+Both spellings are accepted; **exactly one form is ever stored, and it is uppercase.**
+
+- The A1 form test widens to `/^[A-Za-z]+[0-9]+$/`. D-008 is unchanged in principle — the mapping
+  still keys on the segment's FORM, never a structural proxy; only the form widens.
+- **Normalisation happens at exactly ONE point**, where the stored path is built (`toStoredPath` /
+  `bareCellAddress`), not at each call site. D-008's own rationale names the bug this prevents:
+  accepting both cases without normalising gives two stored slots for one cell — two sources of
+  truth, which §5.1 does not tolerate. That is the failure this ruling exists to make impossible,
+  so the test that matters is not "lowercase is accepted" but **"both spellings produce the
+  identical stored `Address`."**
+- The displayed form is uppercase. The tool keeps no memory of which case was typed; there is
+  nothing to round-trip.
+
+Reconciliation required: remove the `PROVISIONAL`/pending-Q-004 note on `address.ts`'s
+`CELL_REFERENCE_PATTERN`; invert `address.test.ts`'s "does not map a lowercase cell ref, pending
+Q-004"; `parser.ts` inherits the widened predicate rather than making a second decision.
+
+---
+
+## D-040 — An explicit write to a formula slot REPLACES the formula (Q-002 answered by the human: option (b))
+Answers: Q-002   Ruled: entry 0038-RULINGS (human, 2026-08-23)   Binding on: the `set` command
+path, `mutation.ts`
+
+`set polygon_1.radius 42` on a slot currently driven by a formula succeeds: the formula is
+discarded and the slot becomes a literal holding what was typed. The reviewer recommended
+refusing; **the human overruled, and the reasoning is recorded because it generalises**: this is a
+tool with one user, who is the same person who wrote the formula. An explicit typed command is an
+explicit statement of intent, and a tool that argues with its operator about their own work is
+worse than one that does what it was told.
+
+Bounds, so this does not spread further than it was ruled:
+
+1. **Not silent.** The command reports what it replaced (the formula's source text), so the change
+   is visible even though it is allowed. Rule 2's transactional shape is unchanged — it is one
+   mutation, and edge re-derivation rebuilds the edge set from scratch as it already does, so the
+   formula's inbound edges disappear with it and no special handling exists or is needed.
+2. **Dragging is NOT covered.** §5.9's partial-binding behaviour stands exactly as the brief
+   specifies it: a drag slides the free axis and reports what drives the other. A drag is a
+   continuous gesture, not a statement of intent, and the brief is explicit there — this ruling
+   settles the `set` path only.
+3. **A DERIVED slot is still rejected.** Derived slots are computed by their object's schema
+   (Rule 6); nothing about this ruling reopens that.
+
+---
+
+## D-041 — `unlink` keeps whatever value was last displayed, errors included (Q-001 answered by the human: option (a))
+Answers: Q-001   Ruled: entry 0038-RULINGS (human, 2026-08-23)   Binding on: the `unlink` command
+path
+
+The value on screen is the value kept. No substitution of a schema default, no rejection when the
+formula was currently erroring — an `ErrorValue` in the graph is already legitimate state (§5.1),
+so freezing one into a literal is legal, and it is the least surprising outcome: what was there
+stays there.
+
+This is safe specifically because of D-040: an unlinked error is a frozen error, and the operator
+can now simply type over it. Ruled together, the two make "get me out of this formula" a
+one-command operation in every case.
+
+---
+
+## D-042 — This is a TOOL with exactly one user; do not argue from product reasoning
+Ruled: entry 0038-RULINGS (human, 2026-08-23)   Binding on: every entry, decision, comment, and
+review from here on
+
+There is no product, no user base, no customer. There is one operator, who is also the person the
+brief was written by. Justify a design choice by whether it is correct, whether it is the simplest
+thing that works (Rule 5), and how cheap it is to change later (§9's tie-breakers) — never by
+"users will expect", "this is what users do", or any appeal to a market that does not exist.
+
+The practical effect: an argument that reduces to "a user might be confused" carries no weight. An
+argument that reduces to "this silently produces the wrong number" carries all of it. Where the
+brief itself uses spreadsheet convention as a tie-breaker (D-030, Excel), that stands — it is a
+concrete reference, not a claim about an audience.
+
+Past entries keep their wording; the log is append-only and is not rewritten for style.

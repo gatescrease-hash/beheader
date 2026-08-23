@@ -17,7 +17,10 @@ Next free ID: **Q-011**
 ---
 
 ## Q-010 — Is a formula naming an unknown function, or calling a known one with the wrong argument count, REJECTED at authoring time or accepted and shown as an error value?
-Raised: entry 0037-REVIEW-phase1 (reviewer)   Brief section: §5.3   Status: OPEN
+Raised: entry 0037-REVIEW-phase1 (reviewer)   Brief section: §5.3
+Status: **ANSWERED → D-038** (ruled by the human directly, 2026-08-23, option (b) — with a binding
+condition the question did not anticipate: it must not foreclose autocomplete/did-you-mean in the
+formula entry later. See D-038 for the four constraints that follow from it.)
 Blocks: nothing today (nothing can store a general formula yet — `mutation.ts`'s
 `findUnsupportedFormulaAsts` still rejects every non-reference AST). **Must be settled by the
 Phase 2 cycle that makes cell formulas storable**, because that is the cycle that decides what
@@ -281,7 +284,10 @@ Reversible? Yes. Provisional choice taken: (a). Tagged at `src/engine/formula/as
 ---
 
 ## Q-004 — Are lowercase cell references accepted, and if so are they normalised?
-Raised: entry 0004-REVIEW-phase0 (reviewer)   Brief section: §5.4, §5.2   Status: OPEN
+Raised: entry 0004-REVIEW-phase0 (reviewer)   Brief section: §5.4, §5.2
+Status: **ANSWERED → D-039** (ruled by the human directly, 2026-08-23, option (b): accept both
+cases, normalise to uppercase at one point). The recommendation below said "Phase 2 should settle
+it holistically" — Phase 2 is now open, and it is settled.
 Blocks: Phase 2 (table primitive). Not needed before then.
 
 Ambiguity: §5.4 says "A1-style addressing"; every cell ref the brief writes is uppercase. It
@@ -306,8 +312,8 @@ since moving to (b) later is purely additive. Pinned by test rather than a `PROV
 
 ## Q-001 — What does `unlink` store when the last computed value is not a plain scalar?
 Raised: entry 0000 (reviewer)   Brief section: §5.10, §5.1
-Status: OPEN — deferral reaffirmed at 0002-REVIEW-phase0
-Blocks: Phase 3 (`unlink` command). Not needed before then.
+Status: **ANSWERED → D-041** (ruled by the human directly, 2026-08-23, option (a): keep whatever
+was displayed, errors included). Safe because D-040 lets the operator type straight over it.
 
 > Reviewer note (0002-REVIEW-phase0): deliberately not ruled — Phase 3 command-surface question,
 > reversible, nothing in Phase 0/1 depends on it. If Phase 3 arrives before the next review, take
@@ -330,8 +336,10 @@ hasn't begun).
 
 ## Q-002 — Does `set` on a formula slot implicitly unlink, or is it rejected?
 Raised: entry 0000 (reviewer)   Brief section: §5.10, §5.1
-Status: OPEN — deferral reaffirmed at 0002-REVIEW-phase0
-Blocks: Phase 3 (`set` command). Not needed before then.
+Status: **ANSWERED → D-040** (ruled by the human directly, 2026-08-23, option (b): the write wins
+and the formula is replaced). The reviewer recommended (a) and was overruled — see D-040, which
+records why, and its three bounds (report what was replaced; dragging is NOT covered, §5.9 stands;
+a derived slot is still rejected).
 
 > Reviewer note (0002-REVIEW-phase0): same reasoning as Q-001. If Phase 3 arrives first, take
 > option (a) below as `PROVISIONAL` rather than blocking — already consistent with §5.9's
