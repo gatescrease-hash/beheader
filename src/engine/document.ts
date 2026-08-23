@@ -82,8 +82,17 @@
  *     string is treated the same honest way `getObjectSchema` already treats
  *     an unrecognised one (no edges derived, no schema checks applied), and
  *     anything wrong with a slot's actual content is `mutate`'s job to catch.
- *   - The journal is carried through UNVALIDATED beyond "is an array of
- *     objects holding an `operations` array" — see NOT DONE HERE.
+ *   - The journal is carried through UNVALIDATED beyond `Array.isArray`.
+ *     An earlier wording of this line claimed a per-entry check ("an array of
+ *     objects holding an `operations` array") that this file has never
+ *     performed — `journal: ["garbage", 42, null]` loads without complaint,
+ *     verified by probe at 0025-REVIEW-phase0 and corrected here rather than
+ *     left standing. Carrying it unvalidated is deliberate for now (nothing
+ *     replays the journal — see NOT DONE HERE); claiming a check that does
+ *     not exist is the defect. 0025-REVIEW-phase0 finding 1 is the other half
+ *     of this same field: a journal payload's `Value` is not checked against
+ *     D-025 either, and THAT one is not merely undocumented — it silently
+ *     rewrites a saved document's history on the accept path.
  *
  * NOT DONE HERE
  *   - Actually reading/writing a file, or any DOM interaction (`<input
@@ -196,10 +205,17 @@ export type DocumentLoadResult = { readonly ok: true; readonly document: Documen
 
 /**
  * `JSON.stringify(serializeDocument(document))` — the literal "round-trips to
- * JSON" half of clause 4. Never fails: `document` is already well-typed data
- * with no non-finite numbers (D-025 forbids them from ever entering committed
- * state), so `JSON.stringify` cannot silently lose information here the way
- * it would for a raw `Value` before D-025 existed.
+ * JSON" half of clause 4. Never THROWS. It can still lose information, and an
+ * earlier wording of this comment claimed otherwise ("cannot silently lose
+ * information here") — corrected at 0025-REVIEW-phase0, whose finding 1 is
+ * exactly that claim's counterexample. D-025 keeps every non-finite number out
+ * of the OBJECT LIST, so the object half of the round trip is genuinely safe;
+ * it is not enforced over the mutation JOURNAL this same function serializes,
+ * where an `Operation` payload carries the same `Value` union. A journal
+ * payload holding `Infinity` is stringified to `null` and reloads as `null`,
+ * so the document does not round-trip identically (PROJECT_BRIEF §6 clause 4).
+ * That gap is 0025-REVIEW-phase0's REVISE item 1, to be closed in `mutate`
+ * where the payload enters the journal, NOT by sanitising anything here.
  */
 export function saveDocument(document: Document): string {
   return JSON.stringify(serializeDocument(document));

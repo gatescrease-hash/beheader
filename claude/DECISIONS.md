@@ -500,3 +500,36 @@ layer further downstream. `mutation.test.ts`'s existing D-019 fidelity test (bui
 already held several non-finite literals, expecting ACCEPTANCE) is exactly the fixture this ruling
 makes illegal, and MUST change — PROCESS_BRIEF §6.1 trigger 5, disclosed in the cycle that applies
 this ruling (0023).
+
+---
+
+## D-026 — Object identity inside a batch is tracked by ONE simulation, and every operation kind that changes it extends that simulation
+Ruled: entry 0025-REVIEW-phase0 (reviewer, answering cycle 0024's own question 1)   Binding on:
+`mutation.ts`, every future `Operation` variant
+
+`mutate` decides whether an operation's target exists by walking the batch in order against a
+single `Set<id>` seeded from `objects` (the existence simulation, cycle 0022). That walk is the
+ONLY authority on object identity during a batch. Any future operation kind that can ADD, REMOVE,
+or RE-KEY an object MUST extend that same walk, and MUST state its own precondition in terms of it:
+
+- `setSlot`, `deleteObject` — the id MUST be in the set at the moment this operation is reached.
+- `createObject` — the MIRROR: the id MUST NOT be in the set, and a valid creation ADDS it.
+
+NEVER add a second, parallel pre-check; NEVER check a target against the pre-batch `objects` array;
+NEVER decide identity inside `applyOperation`, which is entitled to assume the simulation already
+settled it.
+
+Rationale: this is the third time the same hazard has come round. 0021-REVIEW-phase0's carried
+constraint 1 predicted it while only `setSlot` existed; cycle 0022 fixed the shrink half
+(`deleteObject`); cycle 0024 added the grow half (`createObject`). Each time the fix was correct
+BECAUSE it extended one mechanism rather than adding a second — verified by probe at
+0025-REVIEW-phase0: `[deleteObject obj_1, createObject obj_1]` in one batch is accepted and yields
+a replacement object, a behaviour nobody wrote a branch for. It falls out of both halves feeding
+one simulation, and would have needed a special case in any design with two. Recording it as a
+ruling so the next variant does not have to rediscover it.
+
+This also answers cycle 0024's question 1: `CreateObjectOperation`'s inverted precondition is the
+right generalization of D-021, not a special case needing its own ruling. D-021 says an operation
+whose target does not resolve is rejected rather than silently no-op'd; D-002 says ids are unique
+and never reused. "Creating an id that already exists" is the same sentence read from the other
+side, and belongs in the same check.

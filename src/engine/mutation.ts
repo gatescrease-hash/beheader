@@ -348,7 +348,7 @@ import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/sc
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasNonFiniteNumber, resolveSlot, slotKey, type GraphObject, type Slot } from "./graph/node.ts";
+import { hasNonFiniteNumber, resolveSlot, slotKey, type GraphObject, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -1152,9 +1152,41 @@ function findNonFiniteSlotValues(objects: readonly GraphObject[]): readonly stri
       if (!hasNonFiniteNumber(slot.value)) {
         continue;
       }
-      problems.push(`${describeUndeclaredSlot(object, key)} holds a non-finite number (${slot.value}), which is not legal document state (D-025)`);
+      problems.push(`${describeUndeclaredSlot(object, key)} holds a non-finite number (${describeNonFiniteValue(slot.value)}), which is not legal document state (D-025)`);
     }
   }
 
   return problems;
+}
+
+/**
+ * Renders a value that `hasNonFiniteNumber` has already flagged, for check 4's
+ * message. Reviewer edit at 0025-REVIEW-phase0: the message interpolated the
+ * value directly, so every non-finite number nested inside a `Point`/`Point[]`
+ * printed as `[object Object]` — a rejection that cannot say what it rejected,
+ * the same defect D-023 fixed for the D-021 message and the same §5.1 step 6
+ * requirement ("a human-readable failure") behind it. `JSON.stringify` is NOT
+ * usable here for exactly the reason this check exists: it renders every one of
+ * the three offending values as `null`.
+ *
+ * Only ever called on a value `hasNonFiniteNumber` returned `true` for, so the
+ * remaining arms of `Value` (string, boolean, null, ErrorValue) are unreachable
+ * — `String(value)` is the honest fallback rather than a thrown error, since
+ * nothing in this file throws.
+ */
+function describeNonFiniteValue(value: Value): string {
+  if (typeof value === "number") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${(value as readonly Point[]).map(describePoint).join(", ")}]`;
+  }
+  if (typeof value === "object" && value !== null && "x" in value && "y" in value) {
+    return describePoint(value as Point);
+  }
+  return String(value);
+}
+
+function describePoint(point: Point): string {
+  return `{ x: ${point.x}, y: ${point.y} }`;
 }

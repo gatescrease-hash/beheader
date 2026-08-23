@@ -1220,3 +1220,41 @@ describe("mutate — DeleteObjectOperation (§5.1.1's `delete <object>`, closes 
     expect(result.journal).toEqual([{ operations: [deleteOp, setOp] }]);
   });
 });
+
+describe("mutate — D-025's rejection says WHICH non-finite value it found (reviewer edit, 0025-REVIEW-phase0)", () => {
+  // The message interpolated the offending value directly, so a non-finite
+  // number nested inside a Point/Point[] printed as "[object Object]" — a
+  // rejection that names the slot but cannot say what is wrong with it. Same
+  // defect, and same §5.1 step 6 requirement, as D-023 fixed for D-021's own
+  // message. JSON.stringify would not have helped: it renders NaN/±Infinity
+  // as null, which is the very corruption this check exists to catch.
+  it("names the offending coordinate inside a Point literal, not [object Object]", () => {
+    const initial: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { origin: { kind: "literal", value: { x: Number.NEGATIVE_INFINITY, y: 2 } } } },
+    ];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "other"), slot: { kind: "literal", value: 1 } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("{ x: -Infinity, y: 2 }");
+      expect(result.message).not.toContain("[object Object]");
+    }
+  });
+
+  it("names the offending point inside a Point[] literal", () => {
+    const initial: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { vertices: { kind: "literal", value: [{ x: 0, y: 0 }, { x: 1, y: NaN }] } } },
+    ];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "other"), slot: { kind: "literal", value: 1 } };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("{ x: 1, y: NaN }");
+      expect(result.message).not.toContain("[object Object]");
+    }
+  });
+});

@@ -8,11 +8,53 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-008**
+Next free ID: **Q-009**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-008 — Is negative zero (`-0`) legal document state?
+Raised: entry 0025-REVIEW-phase0 (reviewer)   Brief section: §5.1 (`Value`), §5.11, §6 clause 4
+Status: OPEN
+Blocks: nothing outright — but it is a live counterexample to §6 clause 4 ("round-trips to JSON
+and back **identically**") until it is settled, so it should be settled in the same cycle that
+closes 0025-REVIEW-phase0's REVISE item 1, which touches the same predicate.
+
+Ambiguity: D-025 settled the three non-finite numbers because JSON cannot represent them. `-0` is
+the remaining member of `Value`'s `number` arm with the same defect, and D-025 does not cover it
+(`Number.isFinite(-0)` is `true`). Verified by probe at 0025-REVIEW-phase0, through the real
+public API:
+
+```
+mutate([setSlot value_1.value = -0])          -> ok: true, committed value Object.is(-0) -> true
+saveDocument(...)                             -> ..."value":{"kind":"literal","value":0}...
+loadDocument(...)                             -> reloaded Object.is(-0) -> false
+```
+
+So a document that `mutate` accepts does not round-trip identically. Nothing in Phase 0 can author
+a `-0` except a hand-written literal (there is no parser until Phase 1, and `add` reaches `-0`
+only from `-0` inputs), so the practical exposure today is nil — but the acceptance clause is a
+bit-identity claim, and this is the exact reasoning that produced D-025.
+
+Options: (a) illegal, rejected the same way and in the same place as a non-finite number — one
+more arm on the same predicate, one more sentence in the same message. (b) legal, and
+`document.ts` encodes the sign explicitly on save — rejected for the same reason Q-006 rejected
+its own option (a): the on-disk format stops being plain JSON at exactly the point §5.11 says it
+is. (c) legal and silently normalised to `0` on the way in — rejected: an accepted mutation that
+changes a value the operation did not ask to change is the D-019 defect again, and clause 4 would
+be true only because state was quietly rewritten.
+
+Recommendation: (a). It is one branch, it is consistent with D-025's own rationale (a number that
+does not survive the format is not document state), and it is forward-safe: no saved document can
+contain `-0` today, so nothing existing becomes unloadable.
+
+Reversible? Yes — one branch and one message in `mutation.ts`; no stored data can depend on it.
+Provisional choice taken: not yet. If the human has not ruled by the time REVISE item 1 is
+implemented, take (a) as PROVISIONAL(Q-008) and tag it at the predicate — this is reversible in
+the D-004 sense, unlike Q-006, which touched the visible behaviour of overflow.
 
 ---
 
@@ -38,6 +80,14 @@ that Phase 3 is unlikely to need more than a widen.
 
 Reversible? Yes — nothing outside `document.ts` reads or writes this shape yet; Phase 3 can freely
 replace it. Provisional choice taken: (a). Tagged at: `document.ts`'s `CameraState` interface.
+
+> Reviewer note (0025-REVIEW-phase0): **(a) APPROVED as provisional**, same standing as Q-005 —
+> stays OPEN because it fully resolves only when Phase 3 builds `render/camera.ts`, which owns this
+> shape. Binding constraints until then: Phase 3 **widens** `CameraState`, never replaces it with a
+> differently-named concept; the field stays plain and serializable (Rule 5); and `document.ts` is
+> not permitted to grow a second reader of it. `deserializeDocument` rejecting a malformed camera
+> is right and should survive the widening — a document whose camera is garbage is a document that
+> cannot be opened at the right place, which is a real failure, not a field to default away.
 
 ---
 
@@ -73,6 +123,12 @@ implemented at cycle 0019).
 > mutation journal in the serialized document**, and a `MutationJournalEntry` holds `Operation`s
 > whose `Slot` payloads carry the same `Value` union. So whatever this question settles applies to
 > the journal too, not only to the object list — answer it once, for both.
+
+> Reviewer note 2 (0025-REVIEW-phase0): that widening WAS carried into D-025's own ruling text
+> ("in the object list AND in the serialized mutation journal") and then implemented over the
+> object list only. See 0025-REVIEW-phase0 finding 1: a journal payload holding `Infinity` is
+> saved as `null`, so the answer to this question is currently enforced on one of the two halves
+> it was written for. Q-006 stays ANSWERED — the ruling is not in doubt, its implementation is.
 
 ---
 
