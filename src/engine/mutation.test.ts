@@ -985,6 +985,95 @@ describe("mutate — D-025: non-finite numbers are not legal document state (Q-0
   });
 });
 
+describe("mutate — CreateObjectOperation (§5.11's loader primitive, cycle 0024)", () => {
+  it("creates a brand-new object into an EMPTY graph, appending one journal entry", () => {
+    const newObject: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 42 } } };
+    const operation: Operation = { kind: "createObject", object: newObject };
+
+    const result = mutate([], [operation], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects).toEqual([newObject]);
+    expect(result.journal).toEqual([{ operations: [operation] }]);
+  });
+
+  it("creates several objects in ONE batch, including a formula binding between two objects created in the SAME batch", () => {
+    // This is exactly document.ts's shape: every object of a saved document
+    // created together, so a formula slot can reference a sibling object
+    // that's ALSO being created in this same call — neither exists yet at
+    // the start of the batch, so this only works because the existence
+    // simulation ADDS each id as its createObject is processed (cycle 0024).
+    const value1: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 3 } } };
+    const value2: GraphObject = { id: "obj_2", name: "value_2", type: "value", slots: { value: { kind: "literal", value: 4 } } };
+    const add1 = addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value"));
+    const operations: Operation[] = [
+      { kind: "createObject", object: value1 },
+      { kind: "createObject", object: value2 },
+      { kind: "createObject", object: add1 },
+    ];
+
+    const result = mutate([], operations, []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.find((object) => object.id === "obj_3")?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
+  });
+
+  it("rejects creating an object whose id ALREADY exists, leaving prior state unchanged (D-002/D-021)", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const duplicate: GraphObject = { id: "obj_1", name: "value_1_again", type: "value", slots: { value: { kind: "literal", value: 2 } } };
+    const operation: Operation = { kind: "createObject", object: duplicate };
+
+    const result = mutate(initial, [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain(`object id "obj_1"`);
+      expect(result.message).toContain("ALREADY exists");
+    }
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("rejects a batch that creates the SAME id twice, blaming only the second occurrence", () => {
+    const first: Operation = { kind: "createObject", object: valueObject("obj_1", "value_1", 1) };
+    const second: Operation = { kind: "createObject", object: valueObject("obj_1", "value_1_dup", 2) };
+
+    const result = mutate([], [first, second], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 2 of 2");
+      expect(result.message).not.toContain("operation 1 of 2");
+    }
+  });
+
+  it("clones the created object into committed state (D-024) — the caller's own payload is not aliased", () => {
+    const payload: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } };
+    const operation: Operation = { kind: "createObject", object: payload };
+
+    const result = mutate([], [operation], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects[0]).toEqual(payload);
+    expect(result.objects[0]).not.toBe(payload);
+  });
+
+  it("rejects creating an object that would introduce a dangling reference or a cycle, via validateIntegrity, unchanged", () => {
+    const dangling: GraphObject = addObject("obj_1", "add_1", addr("obj_999", "value"), addr("obj_1", "value"));
+    const operation: Operation = { kind: "createObject", object: dangling };
+
+    const result = mutate([], [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("add_1.in.a");
+    }
+  });
+});
+
 describe("mutate — D-024: nothing the caller hands mutate enters committed state or the journal by reference", () => {
   it("clones the operation's own Slot into committed state, so two operations sharing one payload do not share one committed slot", () => {
     const initial = [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];

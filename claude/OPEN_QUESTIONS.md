@@ -8,11 +8,36 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-007**
+Next free ID: **Q-008**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-007 — What shape does the document's serialized "camera state" (§5.11) have in Phase 0?
+Raised: entry 0024-document (implementer)   Brief section: §5.11, §5.9
+Status: OPEN (provisional choice taken, reversible)
+Blocks: nothing — `render/camera.ts` (Phase 3) is the real consumer; Phase 0 only needs SOMETHING
+plain and serializable to round-trip.
+
+Ambiguity: §5.11 lists "camera state" as one of the document's top-level fields, but `render/
+camera.ts` (§5.9: "world → screen and screen → world," pan/zoom) is Phase 3 work and does not exist
+yet. The brief never states the camera's own data shape (a pan offset plus a zoom factor is the
+obvious reading of §5.9's own description, but that's an inference, not a stated shape).
+
+Options: (a) a minimal placeholder shape (`{ x, y, zoom }` — world-space pan offset plus zoom
+factor) defined in `document.ts` itself, which Phase 3's `render/camera.ts` either adopts as-is or
+widens. (b) skip serializing camera state entirely until Phase 3 needs it — **rejected**, §5.11
+states it as part of the format from the first commit, same as `formatVersion`. (c) block this
+cycle on a human ruling — rejected as disproportionate for a field nothing reads yet.
+
+Recommendation: (a). Cheap, plain, serializable, and matches §5.9's own vocabulary closely enough
+that Phase 3 is unlikely to need more than a widen.
+
+Reversible? Yes — nothing outside `document.ts` reads or writes this shape yet; Phase 3 can freely
+replace it. Provisional choice taken: (a). Tagged at: `document.ts`'s `CameraState` interface.
 
 ---
 

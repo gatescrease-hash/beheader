@@ -28,7 +28,14 @@
  * simulated-existence walk) rather than deferring it again. Cycle 0023 adds
  * `validateIntegrity`'s FOURTH check, **D-025** (Q-006, ruled by the human
  * directly): non-finite numbers (`NaN`/`Infinity`/`-Infinity`) are not legal
- * document state — see WHAT THIS IS, `validateIntegrity`, check 4.
+ * document state — see WHAT THIS IS, `validateIntegrity`, check 4. Cycle
+ * 0024 adds `Operation`'s THIRD variant, `CreateObjectOperation` — the
+ * primitive `document.ts`'s loader needs (§5.11: "Loading applies objects
+ * through the mutation API"), which also finally exercises the OTHER half of
+ * 0021-REVIEW's carried forward-hazard note (constraint 1): a batch that can
+ * GROW the object set mid-fold, not just shrink it — see WHAT THIS IS,
+ * `CreateObjectOperation`, and `mutate`'s own doc comment for how the
+ * existence simulation now handles both directions.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -261,13 +268,15 @@
  *
  * `mutate(objects, operations, journal)` — §5.1 steps 1, 2, 6, 8, wrapping
  * `deriveValidateAndEvaluate` (steps 3-5, 7), widened to the BATCH form
- * (D-020, closed THIS cycle). See its own doc comment for the full sequence,
+ * (D-020, closed cycle 0020). See its own doc comment for the full sequence,
  * INCLUDING the empty-batch and D-021 target-existence checks that now run
- * before step 1 even starts, over every operation in the list. One operation
- * kind exists so far: `SetSlotOperation` (`{ kind: "setSlot", address, slot }`),
- * the minimal primitive underneath what §5.10's `link`/`unlink`/`set` commands
- * will eventually call — building those commands themselves is Phase 3's job
- * (§5.10), not this cycle's.
+ * before step 1 even starts, over every operation in the list. THREE
+ * operation kinds exist: `SetSlotOperation` (`{ kind: "setSlot", address,
+ * slot }`, the minimal primitive underneath what §5.10's `link`/`unlink`/
+ * `set` commands will eventually call — building those commands themselves
+ * is Phase 3's job), `DeleteObjectOperation` (cycle 0022, §5.1.1's
+ * `delete <object>`), and `CreateObjectOperation` (cycle 0024, §5.11's
+ * document loading — see its own doc comment).
  *
  * INVARIANTS UPHELD HERE (mutate)
  *   - **D-020, closed THIS cycle**: accepts a LIST of operations, applies all
@@ -278,8 +287,10 @@
  *     between the fold and the single `deriveValidateAndEvaluate` call can
  *     partially commit, because nothing is committed until that one call
  *     returns `ok: true`.
- *   - **D-021, closed cycle 0019**: ANY operation in the batch whose
- *     `address.objectId` names no object in `objects` rejects the WHOLE
+ *   - **D-021, closed cycle 0019, made variant-aware at 0022/0024**: ANY
+ *     operation in the batch whose target does not resolve — for `setSlot`/
+ *     `deleteObject`, an id that does NOT exist; for `createObject` (cycle
+ *     0024), the MIRROR — an id that ALREADY exists — rejects the WHOLE
  *     batch before anything else runs — never applied as a no-op for that one
  *     operation while the rest proceed, and never journalled. An empty batch
  *     (`operations.length === 0`) is rejected the same way, for the same
@@ -313,15 +324,14 @@
  *     whatever calls it (a future `document.ts`, or a command handler) owns
  *     the current `objects`/`journal` pair and decides what to do with a
  *     rejection.
- *   - Any operation kind beyond `SetSlotOperation`/`DeleteObjectOperation`
- *     (object CREATION in particular, `explode`, vertex add/remove, table
- *     resize) — those belong to the phases/slices that introduce the state
- *     they touch (`document.ts` for creation, Phase 2-6 for the rest), same
- *     stance `primitives/schema.ts` already takes on its own per-type
- *     entries. Note for whichever slice adds `CreateObjectOperation`: the
- *     existence check below is already fold-aware and variant-aware (see
- *     `mutate`'s doc comment) — a creation variant needs to ADD an id to the
- *     same simulated `Set`, not invent a second mechanism.
+ *   - Any operation kind beyond `SetSlotOperation`/`DeleteObjectOperation`/
+ *     `CreateObjectOperation` (`explode`, vertex add/remove, table resize) —
+ *     those belong to the phases that introduce the state they touch
+ *     (Phase 2-6), same stance `primitives/schema.ts` already takes on its
+ *     own per-type entries. A user-facing "add a new circle" COMMAND (§5.10,
+ *     Phase 3 — choosing a fresh id from `nextObjectId`, a type's default
+ *     slot values) is a different, NOT-YET-BUILT concern layered on top of
+ *     `CreateObjectOperation`, not the same thing as it.
  *   - The slot-deletion REPAIR path (§5.1.1's second legal option, rewriting
  *     inbound references to `#REF`) — Phase 0 has no type that uses it (only
  *     table row/column deletion does, Phase 2/4), so `validateIntegrity`'s
@@ -577,15 +587,47 @@ export interface DeleteObjectOperation {
 }
 
 /**
- * The full set of operations `mutate` can apply. Two variants now
- * (`SetSlotOperation`, `DeleteObjectOperation`) — widened, per Q-005/D-020's
- * "widen the union, never restructure" stance, not a second entry point.
+ * Adds a WHOLE, already-fully-formed object to the graph — carrying the
+ * complete `GraphObject` (id, name, type, every slot) rather than "create a
+ * default object of this type." That distinction matters: this is
+ * `document.ts`'s loader primitive (§5.11: "Loading applies objects through
+ * the mutation API"), which needs to reconstruct EXACT prior state — a
+ * user-facing "add a new circle" command (§5.10, Phase 3) is a different,
+ * NOT-YET-BUILT concern (choosing a fresh id from `nextObjectId`, a type's
+ * default slot values) layered on top of this same primitive later.
+ *
+ * PRECONDITION, enforced by `mutate` before this is ever called: `object.id`
+ * must NOT already name an object at the moment THIS operation is folded —
+ * the reverse of `setSlot`/`deleteObject`'s precondition, since creation is
+ * the one operation kind that ADDS to the id set the existence simulation
+ * tracks (see `mutate`'s own doc comment). Everything else about whether the
+ * created object is well-formed (its slots matching its schema, no dangling
+ * references, no non-finite values) is `validateIntegrity`'s job, run once
+ * over the whole post-fold candidate — this operation does not duplicate any
+ * of those checks.
  */
-export type Operation = SetSlotOperation | DeleteObjectOperation;
+export interface CreateObjectOperation {
+  readonly kind: "createObject";
+  readonly object: GraphObject;
+}
+
+/**
+ * The full set of operations `mutate` can apply. Three variants now
+ * (`SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`) —
+ * widened, per Q-005/D-020's "widen the union, never restructure" stance, not
+ * a second entry point.
+ */
+export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation;
 
 /** The object id an operation targets, whichever variant it is — shared by the existence check and the message-building below. */
 function operationTargetId(operation: Operation): string {
-  return operation.kind === "deleteObject" ? operation.objectId : operation.address.objectId;
+  if (operation.kind === "deleteObject") {
+    return operation.objectId;
+  }
+  if (operation.kind === "createObject") {
+    return operation.object.id;
+  }
+  return operation.address.objectId;
 }
 
 /**
@@ -597,10 +639,14 @@ function operationTargetId(operation: Operation): string {
  * into `null`, so an accepted mutation could commit a change to a slot its
  * own operation never named (Rule 2's central promise, broken on the ACCEPT
  * path — see D-019's own probe). Whether a non-finite number OUGHT to be
- * legal document state at all is separate and unsettled — see Q-006 — but
- * this function's job is narrower and binds regardless of how that lands:
- * whatever `Value` a slot legally holds today, the clone MUST preserve it
- * exactly. `structuredClone` remains unavailable (D-006: it is a DOM-lib
+ * legal document state at all was a separate question (Q-006) at the time
+ * D-019 was ruled — now ANSWERED (D-025, cycle 0023: no, it is not) — but
+ * this function's job was always narrower and binds regardless of how that
+ * landed: whatever `Value` a slot legally holds, the clone MUST preserve it
+ * exactly. That fidelity is what makes D-025's own rejection check
+ * trustworthy in the first place — a lossy clone would hide an illegal value
+ * from it (see `findNonFiniteSlotValues`'s own doc comment).
+ * `structuredClone` remains unavailable (D-006: it is a DOM-lib
  * global, excluded by `tsconfig.engine.json`). `deepClone` below is Rule 5's
  * "dumbest correct implementation" written out by hand: walk arrays and
  * plain objects, and return every other value completely unchanged — every
@@ -666,12 +712,26 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * GONE by a later one, if an earlier operation in the same batch deleted it.
  * `mutate`'s existence check simulates exactly this — walking the batch
  * against an evolving `Set<id>`, removing an id the moment a valid
- * `deleteObject` for it is seen — so this function itself can still simply
- * ASSUME a match exists; see `mutate`'s own doc comment for the simulation.
+ * `deleteObject` for it is seen (ADDING one for a valid `createObject`,
+ * cycle 0024) — so this function itself can still simply ASSUME a match
+ * exists (or, for `createObject`, ASSUME no match exists yet); see `mutate`'s
+ * own doc comment for the simulation.
+ *
+ * `createObject`: appends `operation.object` to the array — the one variant
+ * that GROWS it rather than rewriting or removing an entry. `document.ts`'s
+ * loader (cycle 0024, §5.11) is the reason this exists: reconstructing a
+ * saved document means creating every one of its objects, from nothing, via
+ * this exact mechanism (never a separate, parallel "just assign the array"
+ * path — Rule 2).
  */
 function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
   if (operation.kind === "deleteObject") {
     return objects.filter((object) => object.id !== operation.objectId);
+  }
+  if (operation.kind === "createObject") {
+    // D-024: the caller's own GraphObject never enters committed state by
+    // reference — same reasoning as setSlot's payload below.
+    return [...objects, deepClone(operation.object)];
   }
   return objects.map((object) => {
     if (object.id !== operation.address.objectId) {
@@ -788,25 +848,46 @@ export function mutate(
   }
 
   // D-021 across the WHOLE batch, made variant-aware now that a batch can
-  // shrink the object set mid-fold (`DeleteObjectOperation`): a plain
-  // "does operationTargetId(operation) exist in the ORIGINAL objects" check
-  // (0019/0020's version) is no longer sound on its own — an operation later
-  // in the batch may target an object an EARLIER operation in the SAME batch
-  // already deleted, which the original `objects` array alone cannot show.
-  // Simulate the fold's effect on OBJECT EXISTENCE ONLY (a plain `Set<id>`,
-  // no slot data) walking the batch in order, so each operation's target is
-  // checked against exactly the id set it would actually see once folded —
-  // while still gathering EVERY offending operation in one pass, not stopping
-  // at the first, matching 0020's own reasoning (a document load with several
-  // bad references benefits from seeing all of them at once).
+  // both shrink AND grow the object set mid-fold (`DeleteObjectOperation`,
+  // `CreateObjectOperation`): a plain "does operationTargetId(operation)
+  // exist in the ORIGINAL objects" check (0019/0020's version) is no longer
+  // sound on its own — an operation later in the batch may target an object
+  // an EARLIER operation in the SAME batch already deleted OR just created,
+  // which the original `objects` array alone cannot show. Simulate the
+  // fold's effect on OBJECT EXISTENCE ONLY (a plain `Set<id>`, no slot data)
+  // walking the batch in order, so each operation's target is checked
+  // against exactly the id set it would actually see once folded — while
+  // still gathering EVERY offending operation in one pass, not stopping at
+  // the first, matching 0020's own reasoning (a document load with several
+  // bad references benefits from seeing all of them at once — the exact
+  // shape a corrupted saved document's object list could produce).
+  //
+  // `createObject`'s precondition is the MIRROR of the other two: it must
+  // name an id that does NOT yet exist (creating a DUPLICATE id would either
+  // silently coexist as two objects sharing one id — meaningless, since every
+  // lookup in this codebase finds only the first — or, if allowed to
+  // proceed, produce exactly that ambiguity; D-002 already requires ids to be
+  // unique and never reused, so a batch that would violate that is rejected
+  // outright, the same "no silently-wrong result" stance every other check
+  // in this file takes).
   const survivingIds = new Set(objects.map((object) => object.id));
   const missingTargetMessages: string[] = [];
   operations.forEach((operation, index) => {
     const targetId = operationTargetId(operation);
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+    if (operation.kind === "createObject") {
+      if (survivingIds.has(targetId)) {
+        missingTargetMessages.push(
+          `${prefix} attempts to create object id "${targetId}", which ALREADY exists in this document (D-002/D-021)`,
+        );
+        return; // Nothing to add — this id was already taken, duplicate creation refused.
+      }
+      survivingIds.add(targetId); // A later operation targeting this SAME id must see it as existing.
+      return;
+    }
     if (!survivingIds.has(targetId)) {
       // D-023: the object id appears here, LABELLED as an id, because no
       // name exists to print — the whole rejection is that nothing resolves.
-      const prefix = `operation ${index + 1} of ${operations.length}`;
       missingTargetMessages.push(
         operation.kind === "deleteObject"
           ? `${prefix} attempts to delete object id "${targetId}", which does not exist in this document (D-021)`

@@ -1,32 +1,31 @@
-# STATUS — as of entry 0023-answer-q006
+# STATUS — as of entry 0024-document
 
-STATE: GREEN (compiles under both configs, 169/169 tests pass, 0 skipped, 0 `.only`). No test in
+STATE: GREEN (compiles under both configs, 191/191 tests pass, 0 skipped, 0 `.only`). No test in
 the suite pins known-broken behaviour.
 
 Current phase: 0 — Graph core (headless, no pixels)
 Phase 0 acceptance criterion (§6): build a graph in a unit test, bind slots, mutate a value and
 watch it propagate in topological order including through derived slots; a cycle is rejected with
 the offending slots named and prior state provably unchanged; deleting a slot with dependents is
-rejected; a document round-trips to JSON identically. — **partial, 3 of 4 clauses closed.**
-Last review point: **0021-REVIEW-phase0, verdict ACCEPT WITH EDITS.** Since then: Q-006 was answered
-directly by the human (**D-025**, cycle 0023) — `document.ts` is now fully unblocked.
-Cycles since last review: 2/3 · diff since last review: 730 lines / 6 files (cap 800/10)
+rejected; a document round-trips to JSON identically. — **ALL FOUR CLAUSES NOW PASS.**
+Last review point: **0021-REVIEW-phase0, verdict ACCEPT WITH EDITS.** Since then: Q-006 answered by
+the human directly (**D-025**, cycle 0023); `CreateObjectOperation` + `document.ts` (cycle 0024)
+closed the last clause.
+Cycles since last review: 3/3 · diff since last review: ~1609 lines / 10 files (cap 800/10) — both
+already over, but see below: review is mandatory regardless, for a stronger reason than the cap.
 
-## Next slice
-**`document.ts` + the JSON round-trip** (clause 4) — the last clause, and no longer blocked on
-anything. Needs: `formatVersion` from the first commit, object list, the mutation journal, camera
-state; derived slot values never serialized (§5.11); `nextObjectId` (D-002) round-tripped, not
-recomputed; a placeholder for `DerivedSlot.value` before evaluating on load (D-018 catches a wrong
-placeholder loudly); loading applies objects via `mutate`'s BATCH form (D-020) — a zero-object
-document is NOT routed through `mutate` at all (an empty batch is rejected, by design); a
-NON-FINITE literal or journal payload found while loading is illegal per **D-025** — a loader that
-naively passes one to `mutate` gets D-025's own rejection, which is the correct behaviour, not a bug
-to route around; `L-10` (`addressKey` assumes D-002 `obj_<n>` ids) wants a note. New file, so §6.1
-trigger 2 forces its own review point at the end of that cycle regardless of the cap (which, at
-730/800 lines and 2/3 cycles already, is close regardless).
+## REVIEW: REQUIRED before any further cycle — for TWO independent reasons
+1. **`document.ts` is a brand-new file** (§6.1 trigger 2).
+2. **The Phase 0 gate is now COMPLETE** — all four acceptance clauses pass, and a phase gate is
+   NEVER batchable (§6.1 trigger 1). Phase 1 (formula engine) MUST NOT start before the reviewer
+   confirms the gate as a whole.
 
-Then Phase 1 — not before all four clauses pass and the gate is reviewed as one unit (§6.1 trigger
-1: a phase gate is never batchable).
+**Do not start Phase 1, or any further Phase 0 slice (`explode`, vertex operations, etc.), until
+this lands.** See `claude/entries/0024-document.md`'s own Review point for the full reasoning.
+
+## Next slice — after review lands
+Phase 1: `formula/*`, standalone and heavily unit-tested (`extractDependencies` from the start).
+Not before the reviewer has confirmed the Phase 0 gate.
 
 ## Built and reviewed
 - Scaffold: `package.json`, both tsconfigs (strict + DOM-free, D-006), Vitest. `node_modules` is
@@ -44,23 +43,31 @@ Then Phase 1 — not before all four clauses pass and the gate is reviewed as on
 - `graph/eval.ts` (§5.1 step 7, 11 tests) — `evaluate(objects, edges)`, one topological pass over
   an edge set ASSUMED acyclic; all three slot kinds; D-013 enforced mechanically. L-13's stale-edge
   branch pinned at 0019 (0014-REVIEW constraint 8, closed).
-- `mutation.ts` (§5.1's full loop, 51 tests) — `deriveEdges` (step 3); `validateIntegrity` (step 4 /
+- `mutation.ts` (§5.1's full loop, 57 tests) — `deriveEdges` (step 3); `validateIntegrity` (step 4 /
   §5.1.1) running **four** checks in a fixed order: D-017 undeclared slot → D-018 both directions of
   schema↔slot reconciliation → dangling reference → D-025 non-finite value (cycle 0023, last —
   independent of the other three); `deriveValidateAndEvaluate` (steps 3-5 + 7);
   `mutate(objects, operations, journal)` — **batch form** (D-020): rejects an empty batch and any
-  operation with an unresolvable target (D-021/D-023) before staging, via a fold-aware existence
-  simulation (cycle 0022 — see Gotchas), then ONE real recursive clone (D-019), every operation
-  folded over it in order, ONE validation/evaluation pass, ONE journal entry holding the whole list
-  (payloads cloned, D-024). **Two operation kinds**: `SetSlotOperation` (rewrites one slot) and
-  `DeleteObjectOperation` (cycle 0022 — removes a whole object; §5.1.1's dangling-reference check,
-  unchanged, is what rejects one with live dependents).
+  operation with an unresolvable target (D-021/D-023) before staging, via a fold-aware, BOTH-
+  DIRECTIONS existence simulation (shrink-aware since cycle 0022, grow-aware since cycle 0024 — see
+  Gotchas), then ONE real recursive clone (D-019), every operation folded over it in order, ONE
+  validation/evaluation pass, ONE journal entry holding the whole list (payloads cloned, D-024).
+  **Three operation kinds**: `SetSlotOperation` (rewrites one slot), `DeleteObjectOperation` (cycle
+  0022 — removes a whole object; §5.1.1's dangling-reference check, unchanged, is what rejects one
+  with live dependents), and `CreateObjectOperation` (cycle 0024 — adds a whole, already-formed
+  object; its precondition MIRRORS the other two: the id must NOT already exist).
 - `graph/node.ts` also has `hasNonFiniteNumber` (cycle 0023, D-025) beside `Value` (D-014's
   shared-predicate principle) — checked by both `mutation.ts`'s D-025 check and `add`'s own compute.
 - `primitives/schema.ts`'s `add` compute maps a non-finite sum to `#TYPE` (D-025, cycle 0023) — the
   ONLY guard against a non-finite `derived` value; `validateIntegrity` runs BEFORE `evaluate` and
   never re-checks its output (see Gotchas — a real overclaim about this was caught and fixed cycle
   0023, before commit).
+- `document.ts` (§5.11, 16 tests, cycle 0024) — `Document` (formatVersion, `nextObjectId`, objects,
+  journal, camera), `serializeDocument`/`deserializeDocument`, `saveDocument`/`loadDocument` (the
+  literal JSON string round-trip). Loading reconstructs every object as a `CreateObjectOperation`
+  and calls `mutate` in ONE batch (D-020), trusting `mutate`'s own validation for graph legality — a
+  zero-object document bypasses `mutate` entirely (D-020's empty-batch rejection would otherwise
+  make it impossible to load one). `CameraState` is **PROVISIONAL(Q-007)**.
 
 ## Acceptance criterion, clause by clause
 1. Topological propagation including derived slots — **PASSING** (`graph/eval.test.ts`'s
@@ -71,8 +78,9 @@ Then Phase 1 — not before all four clauses pass and the gate is reviewed as on
 3. Deleting a slot with dependents is rejected — **PASSING** (0022). `DeleteObjectOperation` +
    `validateIntegrity`'s pre-existing dangling-reference check (no new mechanism), through the real
    `mutate` entry point, prior state deep-compared, mutation-tested.
-4. Document round-trips to JSON identically — **NOT YET**, `document.ts` not started. No longer
-   blocked on anything (Q-006 answered → D-025, cycle 0023) — see *Next slice* above.
+4. Document round-trips to JSON identically — **PASSING** (cycle 0024). `saveDocument`/
+   `loadDocument`, the literal JSON-string pair, round-trip PROJECT_BRIEF §6's fixture — objects,
+   `nextObjectId`, journal, and camera all field-for-field identical — mutation-tested ten ways.
 
 ## Known problems
 - **L-16** — nothing enforces `nonDerivedSlotPaths`/`derivedSlots` paths are disjoint on one type.
@@ -104,17 +112,39 @@ Then Phase 1 — not before all four clauses pass and the gate is reviewed as on
   reference (D-024, closed 0021-REVIEW); checking a batch's operation targets ONLY against the
   pre-batch `objects` (closed 0022 — see Gotchas, fold-aware existence simulation); no operation
   that can close Phase 0 acceptance clause 3 (closed 0022, `DeleteObjectOperation`); Q-006 unanswered
-  (closed 0023, D-025 — non-finite numbers are illegal document state).
+  (closed 0023, D-025 — non-finite numbers are illegal document state); no operation that can
+  GROW the object set for document loading (closed 0024, `CreateObjectOperation`); no `document.ts`
+  (closed 0024 — Phase 0 acceptance clause 4).
 
 ## Live PROVISIONAL tags and open questions
 **`PROVISIONAL(Q-005)`** → `formula/ast.ts`, `graph/eval.ts`, `mutation.ts` (both AST-reading
 sites). Approved 0006-REVIEW, not a live risk.
-**No open question currently blocks anything.** **Q-006** ANSWERED → **D-025** (ruled by the human
-directly, cycle 0023: non-finite numbers are illegal document state, governing both the object list
-and the serialized journal). **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2) deferred; **Q-003**
-ANSWERED → D-007. Next free: **Q-007**.
+**`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState` (cycle 0024): a minimal `{ x, y, zoom }`
+placeholder since `render/camera.ts` (Phase 3) doesn't exist yet. Reversible; nothing outside
+`document.ts` reads it. **No other open question blocks anything.** **Q-006** ANSWERED → **D-025**
+(ruled by the human directly, cycle 0023). **Q-001/Q-002** (Phase 3), **Q-004** (Phase 2) deferred;
+**Q-003** ANSWERED → D-007. Next free: **Q-008**.
 
 ## Gotchas for the next model
+- **A batch's existence simulation now handles BOTH growth and shrinkage** (cycle 0024,
+  `CreateObjectOperation` completing 0022's `DeleteObjectOperation` side): `createObject`'s
+  precondition is the MIRROR of the other two — the id must NOT already exist, and a valid creation
+  ADDS the id to the simulated `Set` so a later operation in the same batch sees it. Any FUTURE
+  operation kind that changes object identity must extend this SAME simulation, never add a
+  parallel check.
+- **`document.ts` trusts `mutate` for graph legality; it only shape-validates what `mutate` cannot**
+  (top-level fields, per-object id/name/type/slots structure) — it does NOT re-check a slot's
+  `value`/`ast` content or a `type` string against the real `ObjectType` union (same honest-
+  `undefined` stance `getObjectSchema` already takes). Do not duplicate `validateIntegrity`'s job
+  here if you touch this file.
+- **A derived slot's load-time placeholder value is provably UNOBSERVABLE** — `evaluate` (inside the
+  same `mutate` call) always overwrites it before any caller sees the result, and a rejected load
+  returns nothing at all either way. Don't try to force a test that distinguishes what placeholder
+  was chosen; there isn't one. (cycle 0024's own log entry states this explicitly rather than
+  skipping it silently.)
+- **A zero-object document must bypass `mutate` entirely** — D-020's empty-batch rejection would
+  otherwise make loading an empty document impossible. Mutation-tested (cycle 0024): removing the
+  special case breaks exactly the empty-document round-trip.
 - **Non-finite numbers (`NaN`/`±Infinity`) are illegal document state** (D-025, cycle 0023,
   ruled by the human directly — Q-006 answered). `validateIntegrity`'s 4th check rejects a
   non-finite LITERAL (freshly written or already sitting in `objects`); `add`'s own compute maps a
