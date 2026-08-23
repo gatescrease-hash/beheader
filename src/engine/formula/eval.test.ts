@@ -309,12 +309,18 @@ describe("evaluate — ordinary (eager) function calls", () => {
     expect(evaluate(concat, EMPTY_READ)).toBe("ab");
   });
 
-  it("an unknown function name is #TYPE, never a crash (D-034)", () => {
+  // D-038 (Q-010 answered by the human): as of formula/parser.ts's own cycle, typed
+  // input can no longer produce either shape below — parseFormula now rejects an
+  // unknown name / wrong arity at #PARSE time. These two arms stay as genuinely
+  // defensive: a hand-built AST (these tests), or one loaded from a saved document
+  // (D-031's world), can still reach evaluate() directly with either shape, and it
+  // must still not crash.
+  it("an unknown function name is #TYPE, never a crash — defensive only, unreachable from typed input since D-038 (D-034)", () => {
     const node: FunctionCallNode = { type: "functionCall", name: "toString", args: [num(1)] };
     expectError(evaluate(node, EMPTY_READ), "#TYPE");
   });
 
-  it("a wrong argument count is #TYPE (checkArity)", () => {
+  it("a wrong argument count is #TYPE — defensive only, unreachable from typed input since D-038 (checkArity)", () => {
     const node: FunctionCallNode = { type: "functionCall", name: "ROUND", args: [num(1)] };
     expectError(evaluate(node, EMPTY_READ), "#TYPE");
   });

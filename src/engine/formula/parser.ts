@@ -5,10 +5,13 @@
  * `name.path` AND bare cell refs), the entire operator precedence chain, function
  * calls, and ranges restricted to an aggregate function's direct argument. Also
  * implements **D-029** (`AND`/`OR`/`NOT` as BOTH infix/prefix operators and callable
- * functions, both forms meaning the same thing) and inherits **Q-004**'s still-open,
- * still-provisional uppercase-only cell-reference form unchanged (this file makes no
- * new ruling on it — see `address.ts`'s `isCellReferenceForm`, reused here rather than
- * duplicated).
+ * functions, both forms meaning the same thing) and inherits **D-039**'s
+ * either-case cell-reference form unchanged (this file makes no new ruling on it —
+ * see `address.ts`'s `isCellReferenceForm`, reused here rather than duplicated).
+ * As of this cycle, also implements **D-038** (Q-010 answered by the human): a
+ * function call naming an unrecognised function, or calling a known one with the
+ * wrong argument count, is now a `#PARSE`-time rejection — see
+ * `parseFunctionCallExpr` below.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
@@ -94,16 +97,25 @@
  *   header: `IF` lexes as a plain `identifier`), so `IF(...)` is handled by the exact
  *   same "identifier followed by `(`" path every other built-in function name is.
  *
- *   This file does NOT validate a function's NAME or ARITY (`FOO(1,2,3)` for an
- *   unrecognised `"FOO"` parses successfully as a `FunctionCallNode` — `functions.ts`
- *   is the registry that rejects it, wired into a future `eval.ts`/command layer, not
- *   here) — with exactly one, narrow, brief-mandated exception: which names may take a
- *   range argument (`SUM`/`MIN`/`MAX`/`AVG`, §5.3's own words), needed to enforce the
- *   range-placement rule. As of cycle 0034, this imports `functions.ts`'s
- *   `RANGE_ACCEPTING_FUNCTION_NAMES` rather than keeping its own copy of that set — the
- *   fold-in this file's own header used to describe as "expected... once it exists" is
- *   now done; see `functions.ts`'s own header for the other side of it. Behaviour is
- *   byte-for-byte unchanged (same four names), so no test's expectation moved.
+ *   This file DOES validate a function's NAME and ARITY, as of D-038 (Q-010 answered
+ *   by the human, 2026-08-23, option (b)): `FOO(1,2,3)` for an unrecognised `"FOO"`,
+ *   or `ROUND(1)` for a known name with the wrong argument count, is now a `#PARSE`
+ *   rejection, using `functions.ts`'s own `getFunctionEntry`/`checkArity` — the exact
+ *   two functions cycle 0034 built and nothing consumed until now. This is anything
+ *   "decidable from the AST alone, without reading a single value" (D-038's own
+ *   words) — the same posture this file already takes for an unresolvable reference
+ *   and a misplaced range. `parseFunctionCallExpr` runs the check once the full
+ *   argument list is known, and reports the offending name AND its position (the
+ *   function-name token's `start`) in the returned `ParseError` — D-038's binding
+ *   condition that this must not foreclose a later autocomplete/did-you-mean pass,
+ *   which needs both. `functions.ts`'s registry stays enumerable by name
+ *   (`Object.keys(FUNCTION_REGISTRY)`) for the same reason.
+ *
+ *   This file still has exactly one, narrow, brief-mandated exception it decides on
+ *   its own rather than deferring to the registry: which names may take a range
+ *   argument (`SUM`/`MIN`/`MAX`/`AVG`, §5.3's own words), needed to enforce the
+ *   range-placement rule — imported as `functions.ts`'s `RANGE_ACCEPTING_FUNCTION_NAMES`
+ *   rather than a second local copy (cycle 0034's fold-in).
  *
  * INVARIANTS UPHELD HERE
  *   - `parseFormulaTokens`/`parseFormula` NEVER throw. Every malformed input is a
@@ -119,10 +131,16 @@
  *     through) — never an arbitrary expression, matching `RangeNode`'s own type shape.
  *
  * NOT DONE HERE
- *   - `extractDependencies` (`formula/deps.ts`), evaluation (`formula/eval.ts`), the
- *     function registry (`formula/functions.ts`) — all later, unbatched cycles.
- *   - Validating a function's name/arity beyond the narrow aggregate-placement
- *     exception above (see WHAT THIS IS).
+ *   - `extractDependencies` (`formula/deps.ts`), evaluation (`formula/eval.ts`) — later
+ *     cycles. The function registry itself (`formula/functions.ts`) already exists and
+ *     is now consumed here for name/arity validation (D-038) — see WHAT THIS IS.
+ *   - Deciding WHEN this file runs relative to typing: D-038's condition is that
+ *     validation happens "when a formula is committed, never per keystroke" — that is
+ *     a caller-level policy (whoever wires formula entry to the UI, a later cycle),
+ *     not something `parseFormula`/`parseFormulaTokens` can enforce; this file simply
+ *     validates whatever it is called with. Likewise, keeping a rejected formula's
+ *     source text alive for editing (D-038's fourth constraint) is the caller's job —
+ *     this file returns a `ParseError`, never mutates or discards its `source` input.
  *   - Text's `{= }` / `{? }{:}{?}` embedding syntax (§5.6) — a block-tree concern,
  *     Phase 5, layered ON TOP of this file (a text dependency walker calls into this
  *     parser for each embedded formula's inner expression text; it does not change
@@ -146,7 +164,7 @@
  */
 import { type Address, type AddressableObject, bareCellAddress, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";
 import type { BinaryOperator, FormulaAst } from "./ast.ts";
-import { RANGE_ACCEPTING_FUNCTION_NAMES } from "./functions.ts";
+import { checkArity, getFunctionEntry, RANGE_ACCEPTING_FUNCTION_NAMES } from "./functions.ts";
 import { lex, type LexError, type Token } from "./lexer.ts";
 
 /**
@@ -399,8 +417,22 @@ function parsePrimaryExpr(state: ParserState): FormulaAst | ParseError {
   return unexpectedTokenError(token, "an expression");
 }
 
-/** `NAME(arg, arg, ...)` (§5.3), zero or more comma-separated arguments, each a full expression (`parseOrExpr`, the top of the precedence chain) — so `SUM(A1:B4)`'s single argument can itself be a range (see the file header on range placement) while `IF(a > b, 1, 2)`'s three arguments are ordinary expressions. */
+/**
+ * `NAME(arg, arg, ...)` (§5.3), zero or more comma-separated arguments, each a full
+ * expression (`parseOrExpr`, the top of the precedence chain) — so `SUM(A1:B4)`'s
+ * single argument can itself be a range (see the file header on range placement)
+ * while `IF(a > b, 1, 2)`'s three arguments are ordinary expressions.
+ *
+ * Once the full argument list is known, validates the call against `functions.ts`'s
+ * registry (D-038): an unrecognised name, or a known name called with the wrong
+ * argument count, is a `#PARSE` rejection naming the function and pointing at
+ * `nameToken.start` — the same position a caller would highlight if it read the
+ * offending name back out of the source. Arity is checked ONLY after a name is known
+ * to exist, matching `checkArity`'s own contract (it has nothing to check an unknown
+ * name's arity against).
+ */
 function parseFunctionCallExpr(state: ParserState, name: string): FormulaAst | ParseError {
+  const nameToken = peek(state);
   advance(state); // the name token itself — already peeked by the caller
 
   const openParen = expect(state, "lparen", '"("');
@@ -428,6 +460,15 @@ function parseFunctionCallExpr(state: ParserState, name: string): FormulaAst | P
   const closeParen = expect(state, "rparen", '")" to close the argument list');
   if (isParseError(closeParen)) {
     return closeParen;
+  }
+
+  const entry = getFunctionEntry(name);
+  if (entry === undefined) {
+    return { error: "#PARSE", message: `unknown function "${name}"`, start: nameToken.start };
+  }
+  const arityCheck = checkArity(entry.name, entry.arity, args.length);
+  if (!arityCheck.ok) {
+    return { error: "#PARSE", message: arityCheck.message, start: nameToken.start };
   }
 
   return { type: "functionCall", name, args };

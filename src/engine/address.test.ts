@@ -152,6 +152,12 @@ describe("parseAddress", () => {
     expect(bareCellAddress("obj_3", "AB12")).toEqual(parseAddress("table_x.AB12", docObjects));
   });
 
+  it("bareCellAddress normalises a lowercase bare ref the same way parseAddress does (D-039)", () => {
+    const docObjects = objects(["obj_3", "table_x", "table"]);
+    expect(bareCellAddress("obj_3", "a1")).toEqual(parseAddress("table_x.A1", docObjects));
+    expect(bareCellAddress("obj_3", "a1")).toEqual(parseAddress("table_x.a1", docObjects));
+  });
+
   it("leaves a path that is already 2+ segments alone on a table, e.g. table_x.cells.A1", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("table_x.cells.A1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
@@ -176,12 +182,20 @@ describe("parseAddress", () => {
     },
   );
 
-  // Q-004 pins the current behaviour, not the eventual one: lowercase refs are
-  // deliberately NOT mapped, so that adding lowercase acceptance in Phase 2 is
-  // additive rather than a migration of already-stored lowercase cell slots.
-  it("does not map a lowercase cell ref, pending Q-004 on case normalisation", () => {
+  // D-039 (Q-004 answered by the human, 2026-08-23): a lowercase cell ref IS a cell
+  // reference, and is normalised to uppercase at the one point the stored path is
+  // built — the test that matters is not "lowercase is accepted" in isolation but
+  // that both spellings land on the SAME stored Address (D-008's own two-slots hazard,
+  // reached from case instead of a structural proxy).
+  it("maps a lowercase cell ref, normalised to uppercase (D-039)", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
-    expect(parseAddress("table_x.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["a1"] });
+    expect(parseAddress("table_x.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
+  });
+
+  it("a lowercase and an uppercase spelling of the same cell resolve to the IDENTICAL stored Address (D-039)", () => {
+    const docObjects = objects(["obj_3", "table_x", "table"]);
+    expect(parseAddress("table_x.a1", docObjects)).toEqual(parseAddress("table_x.A1", docObjects));
+    expect(parseAddress("table_x.aB12", docObjects)).toEqual(parseAddress("table_x.AB12", docObjects));
   });
 
   it("maps a multi-letter, multi-digit cell ref such as AB12", () => {

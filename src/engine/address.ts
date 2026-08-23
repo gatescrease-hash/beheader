@@ -218,14 +218,28 @@ const TABLE_CELL_PATH_PREFIX = "cells";
  * The A1-style cell-reference form (§5.4: "A1-style addressing scoped to the table"):
  * column letters followed by a row number.
  *
- * Uppercase only, deliberately (D-008). Matching case-insensitively here without also
- * normalising would store `table_x.a1` and `table_x.A1` as two DIFFERENT slots for
- * what the user sees as one cell. Normalisation is a table-primitive decision, not an
- * addressing one, so it is deferred to Phase 2 as Q-004. Uppercase-only is the
- * forward-safe choice: every ref the brief writes is uppercase, so adding lowercase
- * acceptance later is purely additive and migrates no stored data.
+ * Accepts EITHER case (D-039, Q-004 answered by the human 2026-08-23): `a1` and `A1`
+ * are both this FORM. Matching case-insensitively here without ALSO normalising would
+ * store `table_x.a1` and `table_x.A1` as two DIFFERENT slots for what the user sees as
+ * one cell — D-008's own two-slots-for-one-cell hazard, reached from case instead of
+ * from a structural proxy. The fix is the same shape D-008 already established:
+ * normalisation happens at exactly ONE point, where the stored path is actually built
+ * (`toStoredPath` and `bareCellAddress` below, both routed through
+ * `normalizeCellReference`), never at this pattern-matching stage and never re-derived
+ * at a call site.
  */
-const CELL_REFERENCE_PATTERN = /^[A-Z]+[0-9]+$/;
+const CELL_REFERENCE_PATTERN = /^[A-Za-z]+[0-9]+$/;
+
+/**
+ * The ONE point a cell reference's case is decided (D-039) — called by both
+ * `toStoredPath` and `bareCellAddress`, the only two places that build a cell slot's
+ * actual stored path segment. Never called anywhere else; a call site normalising its
+ * own copy would be exactly the "two sources of truth" bug D-008/D-039 both exist to
+ * prevent.
+ */
+function normalizeCellReference(cellReference: string): string {
+  return cellReference.toUpperCase();
+}
 
 /**
  * Whether `segment` has the A1 cell-reference FORM (D-008: key on form, never a
@@ -237,9 +251,8 @@ const CELL_REFERENCE_PATTERN = /^[A-Z]+[0-9]+$/;
  * — because "legal only inside a table cell formula" (§5.3) is a context a plain
  * `input: string` doesn't carry; `parser.ts` supplies that context (which table) and
  * calls this predicate first, falling through to `parseAddress` for every other case.
- * Currently uppercase-only, same interim behaviour as everywhere else this pattern is
- * used (Q-004, still open, deferred to Phase 2) — `parser.ts` inherits that choice
- * rather than making a second one.
+ * Accepts either case (D-039) — `parser.ts` inherits that from this one pattern rather
+ * than making a second decision.
  */
 export function isCellReferenceForm(segment: string): boolean {
   return CELL_REFERENCE_PATTERN.test(segment);
@@ -258,9 +271,12 @@ export function isCellReferenceForm(segment: string): boolean {
  *
  * `cellReference` MUST already satisfy `isCellReferenceForm` — the caller checks that
  * (it is what decides this is a bare cell ref at all); this function does not re-check.
+ * The reference is normalised to uppercase (D-039) via `normalizeCellReference`, the
+ * same single point `toStoredPath` routes through, so `a1` and `A1` typed as bare
+ * refs resolve to the identical stored slot `table_x.A1` does.
  */
 export function bareCellAddress(tableObjectId: string, cellReference: string): Address {
-  return { objectId: tableObjectId, path: [TABLE_CELL_PATH_PREFIX, cellReference] };
+  return { objectId: tableObjectId, path: [TABLE_CELL_PATH_PREFIX, normalizeCellReference(cellReference)] };
 }
 
 /**
@@ -273,11 +289,15 @@ export function bareCellAddress(tableObjectId: string, cellReference: string): A
  * even `table_x.cells` itself — into a phantom `cells.<name>` slot that no schema
  * declares. A table path that is already 2+ segments is left alone, so a user typing
  * the stored form directly (`table_x.cells.A1`) is not double-prefixed.
+ *
+ * The matched segment is normalised to uppercase (D-039) via `normalizeCellReference`
+ * before it becomes part of the stored path — `table_x.a1` and `table_x.A1` both
+ * resolve to `{ path: ["cells", "A1"] }`, never to two different slots for one cell.
  */
 function toStoredPath(type: ObjectType, surfacePath: readonly string[]): readonly string[] {
   const onlySegment = surfacePath.length === 1 ? surfacePath[0] : undefined;
   if (type === TABLE_TYPE && onlySegment !== undefined && CELL_REFERENCE_PATTERN.test(onlySegment)) {
-    return [TABLE_CELL_PATH_PREFIX, onlySegment];
+    return [TABLE_CELL_PATH_PREFIX, normalizeCellReference(onlySegment)];
   }
   return surfacePath;
 }

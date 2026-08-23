@@ -113,10 +113,12 @@ describe("parseFormula — references", () => {
     });
   });
 
-  it("does not treat a lowercase cell-shaped word as a bare cell ref (Q-004's still-open, still uppercase-only interim, inherited unchanged)", () => {
+  it("treats a lowercase cell-shaped word as a bare cell ref too, normalised to uppercase (D-039, inherited from address.ts's isCellReferenceForm)", () => {
     const docObjects = objects(["obj_5", "table_x", "table"]);
-    const error = parseFail("a1", docObjects, "obj_5");
-    expect(error.error).toBe("#PARSE");
+    expect(parseOk("a1", docObjects, "obj_5")).toEqual({
+      type: "reference",
+      address: { objectId: "obj_5", path: ["cells", "A1"] },
+    });
   });
 
   it("a dotted reference into a table's cell still works even with tableObjectId set (the bare-ref path only applies to a single, dot-free segment)", () => {
@@ -240,12 +242,36 @@ describe("parseFormula — function calls", () => {
     expect(parseOk("PI()")).toEqual({ type: "functionCall", name: "PI", args: [] });
   });
 
-  it("parses an unrecognised function name successfully — name/arity validation is functions.ts's job, not this file's (see file header)", () => {
-    expect(parseOk("FOO(1, 2, 3)")).toEqual({
+  // D-038 (Q-010 answered by the human, 2026-08-23): inverts this file's own
+  // pre-ruling behaviour, pre-authorised at 0037-REVIEW — not a §6.1 trigger 5
+  // escalation. Anything decidable from the AST alone, without reading a value, now
+  // fails at parse time, matching how an unresolvable reference already behaves.
+  it("rejects an unrecognised function name at parse time (D-038), naming it and pointing at its position", () => {
+    const error = parseFail("FOO(1, 2, 3)");
+    expect(error.message).toContain('"FOO"');
+    expect(error.start).toBe(0); // "FOO" starts the source
+  });
+
+  it("rejects a known function called with the wrong argument count (D-038)", () => {
+    const error = parseFail("ROUND(1)");
+    expect(error.message).toContain("ROUND");
+    expect(error.start).toBe(0); // "ROUND" starts the source
+  });
+
+  it("reports the wrong-arity function's position, not offset 0, when it is not at the start of the source", () => {
+    const error = parseFail("1 + ROUND(1)");
+    expect(error.message).toContain("ROUND");
+    expect(error.start).toBe(4); // "ROUND" begins at index 4
+  });
+
+  it("still parses a known function with a correct argument count, including AND/OR's at-least-one arity (D-035)", () => {
+    const docObjects = objects(["obj_1", "a"]);
+    expect(parseOk("ROUND(1.5, 0)")).toEqual({
       type: "functionCall",
-      name: "FOO",
-      args: [{ type: "literal", value: 1 }, { type: "literal", value: 2 }, { type: "literal", value: 3 }],
+      name: "ROUND",
+      args: [{ type: "literal", value: 1.5 }, { type: "literal", value: 0 }],
     });
+    expect(parseOk("AND(a.v)", docObjects)).toEqual({ type: "functionCall", name: "AND", args: [refA] });
   });
 
   it("rejects a missing closing paren", () => {
