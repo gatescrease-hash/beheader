@@ -34,10 +34,12 @@
  *     file, and it is a pure refactor: no parser test's expectations changed, because the set of
  *     names it recognises is identical before and after.
  *   - `LAZY_FUNCTION_NAMES` — every name D-029 forbids an eager implementation for (today: `IF`,
- *     `AND`, `OR`). Exported now, consumed by nobody yet, for the same reason
- *     `RANGE_ACCEPTING_FUNCTION_NAMES` is: whoever writes `formula/eval.ts` next needs exactly
- *     this set to know which `FunctionCallNode` names it must special-case rather than dispatch
+ *     `AND`, `OR`). Consumed as of cycle 0036 by `formula/eval.ts`, which special-cases exactly
+ *     this set at the `FunctionCallNode` site rather than dispatching
  *     into this registry's `implementation`.
+ *   - `finiteResult(name, value)` — exported as of cycle 0036 so `formula/eval.ts`'s own
+ *     arithmetic operators route through the SAME D-033 guard rather than a second copy. See its
+ *     own doc comment.
  *
  *   Every EAGER implementation follows `primitives/schema.ts`'s `add` compute function's own
  *   established shape (same file, same precedent, same rationale — not reinvented here):
@@ -274,8 +276,16 @@ function asStringList(name: string, args: readonly Value[]): readonly string[] |
  * — a compute function is choosing which legal `Value` its own arithmetic yields — and `mutate`
  * still rejects an authored `-0` literal exactly as before. Every eager arithmetic implementation
  * below routes its result through this rather than returning a raw `number` directly.
+ *
+ * EXPORTED (cycle 0036) so `formula/eval.ts`'s own arithmetic operators (`+ - * / % ^` and unary
+ * `-`) route through the SAME guard rather than a second copy — D-033's own binding text: "A future
+ * compute path that can produce `-0` MUST route through a guard of THAT SHAPE rather than deciding
+ * for itself." Reusing the literal function, not merely its shape, is the stronger reading and
+ * keeps D-014's "one leaf predicate, one place it is applied" property intact as this project's
+ * third caller (`add`'s narrower non-finite-only check is unaffected — see that file's own header
+ * for why `+` alone can never reach the `-0` half).
  */
-function finiteResult(name: string, value: number): Value {
+export function finiteResult(name: string, value: number): Value {
   if (isIllegalNumber(value)) {
     // D-033: `-0` is the one illegal number whose correct answer IS representable — normalise
     // rather than error. Everything else this predicate catches is genuinely unrepresentable.
