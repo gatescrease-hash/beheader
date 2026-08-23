@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Address,
   type AddressableObject,
+  bareCellAddress,
   checkNameAvailable,
   findObjectByName,
   formatAddress,
@@ -140,6 +141,15 @@ describe("parseAddress", () => {
   it("resolves the object name case-insensitively", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("TABLE_X.A1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
+  });
+
+  it("bareCellAddress agrees with parseAddress: two spellings of one cell resolve to ONE slot (0032-REVIEW-phase1)", () => {
+    // formula/parser.ts resolves a BARE "A1" through bareCellAddress and a dotted
+    // "table_x.A1" through parseAddress. If those two ever disagree, one cell has two
+    // slots — the hazard Q-004 was raised about, reached from a different door.
+    const docObjects = objects(["obj_3", "table_x", "table"]);
+    expect(bareCellAddress("obj_3", "A1")).toEqual(parseAddress("table_x.A1", docObjects));
+    expect(bareCellAddress("obj_3", "AB12")).toEqual(parseAddress("table_x.AB12", docObjects));
   });
 
   it("leaves a path that is already 2+ segments alone on a table, e.g. table_x.cells.A1", () => {

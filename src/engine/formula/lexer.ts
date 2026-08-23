@@ -89,10 +89,16 @@
  *   - Grammar, precedence, and AST construction (`parser.ts` — later, unbatched cycle).
  *   - Whether a numeric token's `value` is legal DOCUMENT state (D-025/D-027's
  *     `isIllegalNumber`) — a long enough digit run lexes to `Infinity` here exactly the
- *     way `Number("1" + "0".repeat(400))` does in plain JS. That is `mutate`'s check to
- *     make (D-025/D-027, already built and binding on whichever cycle first writes a
- *     parsed formula AST into a slot), not this file's: nothing this file produces is
- *     document state until a later mutation writes it in.
+ *     way `Number("1" + "0".repeat(400))` does in plain JS. Correctly not this file's
+ *     job: nothing this file produces is document state until a later mutation writes
+ *     it in. **But the check that must catch it does not exist yet** — corrected at
+ *     0032-REVIEW-phase1, which found this comment claiming otherwise.
+ *     `validateIntegrity`'s `findIllegalSlotValues` walks each slot's `value` field
+ *     ONLY; it never walks a formula slot's stored `ast`, so a `LiteralNode` holding
+ *     `Infinity` would pass it and then serialize to `null` (§6 clause 4's
+ *     round-trip-identically claim, falsified — D-025's own reasoning). Unreachable
+ *     TODAY only because `findUnsupportedFormulaAsts` rejects every non-reference AST
+ *     shape outright. **D-031** binds the fix to the cycle that removes that shield.
  *   - Recognising `A1`-shaped identifiers as cell references, resolving any identifier
  *     to an `Address`, or deciding whether a numeric-looking path segment (the `0` in
  *     `vertex.0.x`) is part of a reference rather than an arithmetic literal — all of

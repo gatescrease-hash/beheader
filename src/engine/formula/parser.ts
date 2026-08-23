@@ -143,7 +143,7 @@
  *     never two consecutive numeric segments), so it is not fixed here — fixing it
  *     would require the lexer to carry grammar context it is deliberately free of.
  */
-import { type Address, type AddressableObject, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";
+import { type Address, type AddressableObject, bareCellAddress, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";
 import type { BinaryOperator, FormulaAst } from "./ast.ts";
 import { lex, type LexError, type Token } from "./lexer.ts";
 
@@ -172,9 +172,18 @@ export interface ParseError {
  * Narrows a `parseFormula`/`parseFormulaTokens` result to its `ParseError` arm — same
  * reason and same shape as `address.ts`'s `isAddressError` (D-014's principle: declare
  * the narrowing once, import it everywhere, never re-derive it with a cast).
+ *
+ * Discriminates on the VALUE of `error` (`"#PARSE"`), never on the mere PRESENCE of an
+ * `error` field (D-032, 0032-REVIEW-phase1). `ast.ts`'s `ErrorNode` — `{ type: "error";
+ * error: "#REF" }`, D-028 — is a `FormulaAst`, i.e. a member of this function's own
+ * argument union, and it HAS an `error` field: a presence check reports a perfectly
+ * good repaired AST as a parse failure. Nothing constructs an `ErrorNode` yet, so this
+ * was latent rather than live, but it becomes reachable the moment §5.4's
+ * reference-adjustment pass writes one (a cell holding `= B1` whose column is deleted
+ * repairs to an `ErrorNode` AT THE ROOT).
  */
 export function isParseError(value: unknown): value is ParseError {
-  return typeof value === "object" && value !== null && "error" in value;
+  return typeof value === "object" && value !== null && "error" in value && value.error === "#PARSE";
 }
 
 /**
@@ -484,7 +493,10 @@ function parseReferenceAddress(state: ParserState): Address | ParseError {
   if (segments.length === 1) {
     const only = segments[0] as string; // Safe: segments.length === 1, just checked.
     if (state.tableObjectId !== undefined && isCellReferenceForm(only)) {
-      return { objectId: state.tableObjectId, path: ["cells", only] };
+      // Both halves of the mapping come from address.ts — the FORM check and the stored
+      // PATH shape. Hand-building ["cells", only] here would be a second copy of
+      // toStoredPath's own mapping, free to drift (0032-REVIEW-phase1).
+      return bareCellAddress(state.tableObjectId, only);
     }
   }
 
@@ -546,8 +558,17 @@ function walkForRangePlacement(node: FormulaAst, isDirectAggregateArgument: bool
       return undefined;
     }
     default: {
+      // Compile-time exhaustiveness (this assignment is a `tsc` error the moment
+      // `FormulaAst` grows a variant), WITHOUT a throw: this file's stated invariant is
+      // that it never throws, and `document.ts` casts a loaded formula slot's `ast`
+      // unchecked, so a hand-edited file is a real path by which a shape the compiler
+      // believes impossible could reach this walk (0032-REVIEW-phase1).
       const exhaustive: never = node;
-      throw new Error(`unreachable FormulaAst variant in validateRangePlacement: ${JSON.stringify(exhaustive)}`);
+      return {
+        error: "#PARSE",
+        message: `unrecognised formula AST node: ${JSON.stringify(exhaustive)}`,
+        start: 0,
+      };
     }
   }
 }

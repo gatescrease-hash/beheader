@@ -246,6 +246,24 @@ export function isCellReferenceForm(segment: string): boolean {
 }
 
 /**
+ * Builds the stored `Address` a BARE cell ref (`A1`) resolves to inside table
+ * `tableObjectId` (§5.3: "this table, that cell"). The other half of
+ * `isCellReferenceForm` above, and exported for the same reason: `parser.ts` needs the
+ * cell path shape this file already owns (`TABLE_CELL_PATH_PREFIX`, D-005's
+ * surface-to-stored mapping), and a hand-built `["cells", segment]` at the call site
+ * would be a second copy of it, free to drift from `toStoredPath`'s (0032-REVIEW-phase1).
+ * A bare ref and the equivalent `table_x.A1` MUST resolve to the same slot — two
+ * spellings of one cell resolving to two slots is exactly the hazard Q-004 was raised
+ * about. Pinned by a test comparing this against `parseAddress`'s own result.
+ *
+ * `cellReference` MUST already satisfy `isCellReferenceForm` — the caller checks that
+ * (it is what decides this is a bare cell ref at all); this function does not re-check.
+ */
+export function bareCellAddress(tableObjectId: string, cellReference: string): Address {
+  return { objectId: tableObjectId, path: [TABLE_CELL_PATH_PREFIX, cellReference] };
+}
+
+/**
  * Maps a user-typed path to the path a slot is actually stored under (D-005).
  * Identity for every type except `table`, where a single segment in A1 form (`A1`)
  * is shorthand for a `cells.*` slot.

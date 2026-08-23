@@ -656,3 +656,92 @@ Reconciliation required: none yet — no `PROVISIONAL(Q-009)` tag was ever taken
 correctly declined to commit to an answer). Binding on the cycle that writes `parser.ts` /
 `functions.ts` / `eval.ts`, each of which MUST cite this decision in its file header and carry a
 test named for the rule it defends.
+
+---
+
+## D-030 — `^` is LEFT-associative; a formula-language semantics gap is settled by Excel, and recorded
+Answers: entry 0031's question 2   Ruled: entry 0032-REVIEW-phase1 (reviewer)   Binding on:
+`formula/parser.ts`, `formula/eval.ts`, and any future re-parse of formula source
+
+`2^3^2` is `(2^3)^2` = 64, not `2^(3^2)` = 512. `parser.ts`'s inclusion of `^` in the shared
+left-associative tier helper is CORRECT and MUST NOT be "fixed" to right-associativity without a
+new ruling here.
+
+Rationale, and the general rule it carries: §5.3 gives `^` a precedence tier but is silent on
+associativity, and most mathematical notation is right-associative — so a future model will read
+this code, recognise the more common convention, and believe it has found a bug. It has not.
+PROJECT_BRIEF §1 names **Excel** as this project's model for the formula engine ("a formula engine
+with references, math, and conditionals"), and Excel's `^` is left-associative. Where §5.3 is
+silent on a formula-language detail, Excel's behaviour is the tie-breaker, because the brief chose
+that precedent itself.
+
+The implementer asked whether this should have been a `Q-NNN` instead of an implementation
+decision. Taking it as an implementation decision was right — it is reversible (§5.11 stores ASTs,
+never re-parseable source, so changing it later affects only newly-typed formulas and migrates
+nothing) — but the reasoning belonged somewhere binding rather than in one file's header, which is
+what this entry fixes. Same standing for the next such gap: decide it against Excel, implement it,
+and say so where the next model will look.
+
+---
+
+## D-031 — A number inside a stored formula AST is document state, and the value-legality check must reach it
+Extends: D-025, D-027   Ruled: entry 0032-REVIEW-phase1 (reviewer)   Binding on: whichever cycle
+first makes a parsed `FormulaAst` reachable into a slot (Phase 2's "wire the formula engine into
+cell slots")
+
+D-027 ruled that "every number reachable from a `Document`" must pass `isIllegalNumber`. A
+`LiteralNode`'s `value` inside a formula slot's stored `ast` IS such a number — §5.11 serializes
+stored ASTs as part of the document — and NOTHING checks it today:
+`validateIntegrity`'s `findIllegalSlotValues` walks each slot's `value` field only, never
+`slot.ast`. Verified by probe at 0032-REVIEW-phase1, through the real parser:
+
+```
+parseFormula("1" + "0".repeat(400), objects)  -> { type: "literal", value: Infinity }
+JSON.stringify({ v: Infinity })               -> {"v":null}
+```
+
+Therefore, binding:
+
+1. The cycle that deletes `mutation.ts`'s temporary `findUnsupportedFormulaAsts` MUST, in the SAME
+   cycle, extend `validateIntegrity`'s value-legality check to walk every `formula`-kind slot's
+   stored AST and reject any `LiteralNode` whose `value` fails `isIllegalNumber`. That temporary
+   check is the ONLY thing keeping this unreachable today — removing it without the walk opens the
+   hole in the same commit that closes the shield.
+2. Widen the EXISTING predicate and the EXISTING check (`hasIllegalNumber`, `findIllegalSlotValues`)
+   rather than adding a parallel one — the same "widen, do not duplicate" stance D-020/D-026/D-027
+   already established.
+3. `lexer.ts` and `parser.ts` are NOT the place to enforce it. A lexer that rejects an overflowing
+   digit run is enforcing document-state policy from inside a pure text-scanning stage, and §5.3
+   deliberately keeps the four stages separate. They may produce such a literal; `mutate` must
+   refuse to commit it.
+
+Rationale: this is the same defect for the fourth time (slot values -> journal payloads ->
+`camera`/`nextObjectId` -> stored ASTs), which is exactly what D-027 was generalised to prevent.
+The rule was already right; what was missing was anyone noticing that a new producer of numbers had
+appeared. `lexer.ts`'s header asserted this was "already built and binding" — it was not, and that
+assertion has been corrected in place.
+
+---
+
+## D-032 — An error-shaped type predicate discriminates on the error CODE, never on the presence of an `error` field
+Ruled: entry 0032-REVIEW-phase1 (reviewer)   Binding on: `isParseError`, and every future predicate
+over a union with an error arm
+
+A predicate that narrows `X | SomeError` MUST test the VALUE of the discriminant
+(`value.error === "#PARSE"`), not merely that an `error` field exists. Fixed this cycle in
+`parser.ts`'s `isParseError`, which returned `true` for `formula/ast.ts`'s `ErrorNode`
+(`{ type: "error"; error: "#REF" }`, D-028) — a member of its own argument union, and a legitimate
+AST that can be the ROOT of a repaired formula (a cell holding `= B1` whose column is deleted).
+Verified by probe before the fix: `isParseError({ type: "error", error: "#REF" })` returned `true`.
+
+Also binding: a predicate's parameter type is a claim about its domain. `unknown` claims it is
+total over every value in the program, and a presence check cannot honour that claim. Prefer the
+narrowest parameter type the call sites actually need; where `unknown` is genuinely wanted (so
+tests can pass arbitrary shapes), the body must discriminate strongly enough to deserve it.
+
+`address.ts`'s `isAddressError` uses the same presence check and is NOT changed: `AddressError` is
+only ever discriminated against `Address` and `string`, neither of which has an `error` field, so
+it is correct over its real domain. That is an accident of its call sites, not a property of the
+predicate — it is named here so the next person to widen its domain knows to tighten it first.
+`graph/node.ts`'s `isErrorValue` is correct by construction: its parameter is `Value`, and
+`ErrorValue` is the only arm of `Value` with an `error` field.

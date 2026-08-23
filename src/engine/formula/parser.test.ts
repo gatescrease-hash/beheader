@@ -405,6 +405,25 @@ describe("parseFormula — malformed input never throws, returns a #PARSE ParseE
   });
 });
 
+describe("isParseError (0032-REVIEW-phase1, D-032)", () => {
+  it("is true for a real ParseError", () => {
+    expect(isParseError({ error: "#PARSE", message: "x", start: 0 })).toBe(true);
+  });
+
+  it("is FALSE for ast.ts's ErrorNode, which is a FormulaAst that also has an 'error' field (D-028)", () => {
+    // A repaired reference (§5.1.1/§5.4) is a perfectly good AST, and can be the ROOT
+    // of one: a cell holding "= B1" whose column is deleted repairs to exactly this.
+    // Discriminating on the mere PRESENCE of "error" would report it as a parse failure.
+    const repairedRoot: FormulaAst = { type: "error", error: "#REF" };
+    expect(isParseError(repairedRoot)).toBe(false);
+  });
+
+  it("is false for every other FormulaAst variant and for a plain Address", () => {
+    expect(isParseError({ type: "literal", value: 1 })).toBe(false);
+    expect(isParseError({ objectId: "obj_1", path: ["value"] })).toBe(false);
+  });
+});
+
 describe("parseFormulaTokens — the lower-level, already-lexed entry point", () => {
   it("parses directly from a hand-built token array, matching lex()'s own output shape", () => {
     const tokens = [
