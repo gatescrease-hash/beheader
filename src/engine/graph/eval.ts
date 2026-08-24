@@ -31,7 +31,11 @@
  *     general evaluator. `evaluateFormula`'s own doc comment covers the two
  *     callbacks it builds and hands through: `read` for plain references,
  *     `readRange` for a range reached inside an aggregate call (D-036,
- *     bounded by the table's current extent, D-044).
+ *     bounded by the table's current extent, D-044). `readRange` OMITS an
+ *     empty cell — one with no slot at all, or one holding `null` — from the
+ *     flattened values it returns, rather than erroring (D-047, entry 0045-
+ *     REVIEW's fix list items 2-3); a plain `read` miss is unaffected and
+ *     still becomes `#REF` via `formula/eval.ts`'s own handling.
  *   - `derived` slots call their schema's compute function
  *     (primitives/schema.ts), exactly once, INSIDE this same topological pass
  *     — never in a separate post-pass (§5.1, PROCESS_BRIEF §9).
@@ -305,8 +309,16 @@ function evaluateFormula(ast: FormulaAst, objects: readonly GraphObject[], evalu
     const values: Value[] = [];
     for (const cellAddress of cellAddresses) {
       const value = evaluatedValues.get(addressKey(cellAddress));
-      if (value === undefined) {
-        return { error: "#REF", message: "a cell within this range did not resolve to a value" };
+      // D-047 items 2-3: a cell within the range's bound that never resolved
+      // (no slot on the table — mutation.ts's `deriveEdges` never derived an
+      // edge for it, item 1) or that resolved to `null` is EMPTY, not an
+      // error, and is simply omitted from the flattened values. Both
+      // representations of "empty" must agree (D-047 item 3), so neither
+      // reaches `formula/eval.ts`'s aggregate arguments at all — see
+      // `MIN`/`MAX`'s zero-argument fallback in functions.ts for the case
+      // where every cell in the range is empty.
+      if (value === undefined || value === null) {
+        continue;
       }
       values.push(value);
     }

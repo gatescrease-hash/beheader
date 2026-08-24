@@ -114,6 +114,18 @@
  * constraint 5) — both landed in this cycle because this is the first cycle
  * able to make a range's flattened argument list arbitrarily long.
  *
+ * 0045-REVIEW-phase2 REVISED the above: a range spanning an EMPTY cell (no
+ * slot at all, within the table's bound) made the document unconditionally
+ * unrejectable. **D-047**, fixed THIS cycle (0046): `deriveEdges`'s Source 1
+ * skips an enumerated range cell with no slot on the table object — no edge
+ * at all, not a dangling one (see the loop below); the matching skip on the
+ * evaluation side lives in `graph/eval.ts`'s `readRange`, not here. Also
+ * **D-048** (0045-REVIEW's Finding 3, answering entry 0044's own reviewer
+ * question 1): `findIllegalOperationPayloads` now walks a `setSlot`/
+ * `createObject` payload's `formula`-kind AST via the same
+ * `collectIllegalAstLiterals` `findIllegalSlotValues` already used.
+ *
+
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
  * rebuild the whole edge set rather than tracking which slots were affected.")
@@ -165,11 +177,13 @@
  *      cycle "walking the AST" means calling `formula/deps.ts`'s
  *      `extractDependencies` for real — every `ReferenceDependency` becomes
  *      one edge directly; every `RangeDependency` expands into one edge PER
- *      CELL currently within the named table's extent (D-044), via
- *      `primitives/table.ts`'s `enumerateRangeCellAddresses`, re-resolved
- *      from CURRENT `rows`/`cols` on every call (D-036 constraint 2 — never a
- *      cached expansion). The formula slot's OWN address becomes every
- *      resulting edge's `dependentSlot`.
+ *      CELL currently within the named table's extent (D-044) THAT HAS A
+ *      SLOT (D-047 — an in-bounds cell with no slot is empty, ordinary state
+ *      and gets no edge at all), via `primitives/table.ts`'s
+ *      `enumerateRangeCellAddresses`, re-resolved from CURRENT `rows`/`cols`
+ *      on every call (D-036 constraint 2 — never a cached expansion). The
+ *      formula slot's OWN address becomes every resulting edge's
+ *      `dependentSlot`.
  *
  *      READ THAT NARROWING AS A HAZARD, NOT A DETAIL — see D-017. This
  *      function's domain is the SCHEMA's slot set; `graph/eval.ts`'s domain is
@@ -325,11 +339,11 @@
  *      batch never reaches it at all — `mutate`'s own precondition check,
  *      `findIllegalOperationPayloads`, is what closes that hole for a slot's
  *      own `value` (cycle 0026, 0025-REVIEW-phase0 finding 1); see `mutate`'s
- *      doc comment. `findIllegalOperationPayloads` does NOT yet walk a
- *      `createObject`/`setSlot` payload's stored AST the same way — a
- *      disclosed, narrower gap than the one D-025 closed, flagged in
- *      STATUS.md's Known problems rather than closed here (see this cycle's
- *      log entry for why).
+ *      doc comment. As of D-048 (0045-REVIEW, closing entry 0044's disclosed
+ *      gap), `findIllegalOperationPayloads` ALSO walks a `createObject`/
+ *      `setSlot` payload's stored `formula`-kind AST via the same
+ *      `collectIllegalAstLiterals` — the same defect (D-025/Q-008's history)
+ *      found a fifth time, this time at the payload/AST intersection.
  *
  *   A genuinely new sub-problem D-017's check hits and D-010/D-015's existing
  *   guidance does not cover: naming an UNDECLARED slot (check 1) needs an
@@ -534,12 +548,25 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
         // `delete <table>` succeed while a range elsewhere still names it,
         // exactly the §5.1.1 hazard that check exists to prevent.
         const tableObject = objects.find((candidate) => candidate.id === dependency.start.objectId);
-        const cellAddresses = tableObject === undefined ? undefined : enumerateRangeCellAddresses(dependency.start, dependency.end, tableObject);
-        if (cellAddresses === undefined || isRangeEnumerationError(cellAddresses)) {
+        if (tableObject === undefined) {
+          edges.push({ sourceSlot: dependency.start, dependentSlot });
+          continue;
+        }
+        const cellAddresses = enumerateRangeCellAddresses(dependency.start, dependency.end, tableObject);
+        if (isRangeEnumerationError(cellAddresses)) {
           edges.push({ sourceSlot: dependency.start, dependentSlot });
           continue;
         }
         for (const cellAddress of cellAddresses) {
+          // D-047 item 1: a cell within the range's bound that has no slot on
+          // the table object is ordinary, expected empty state — not a
+          // dangling reference — so it gets no edge at all. This is
+          // different from the unresolvable-TABLE fallback just above: here
+          // the table exists and the address is in-bounds, only the specific
+          // cell is unpopulated.
+          if (tableObject.slots[slotKey(cellAddress.path)] === undefined) {
+            continue;
+          }
           edges.push({ sourceSlot: cellAddress, dependentSlot });
         }
       }
@@ -1355,9 +1382,8 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
  * Checks only the POST-FOLD graph — see `mutate`'s doc comment and
  * `findIllegalOperationPayloads` below for the companion check this one does
  * NOT make: an operation's own payload, before it is folded at all. As of
- * this cycle that companion check does NOT yet walk a payload's stored AST
- * the same D-031 way — disclosed as a known, narrower gap (STATUS.md), not
- * closed here.
+ * D-048, that companion check ALSO walks a payload's stored AST the same
+ * D-031 way, via the same `collectIllegalAstLiterals` this function calls.
  */
 function findIllegalSlotValues(objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
@@ -1448,7 +1474,11 @@ function collectIllegalAstLiterals(ast: FormulaAst, out: number[] = []): number[
  * not (a batch that creates an object and then, in the same batch, writes an
  * illegal value to one of ITS slots via a separate `setSlot`), `formatAddress`
  * itself already falls back to naming the raw id as an id (D-023) — the same
- * defensive handling this file's other `formatAddress` call sites use.
+ * defensive handling this file's other `formatAddress` call sites use. As of
+ * D-048 (0045-REVIEW), a `formula`-kind `operation.slot` is ALSO walked via
+ * `collectIllegalAstLiterals` — the same check `findIllegalSlotValues` runs
+ * post-fold, run here too so a payload a LATER operation in the SAME batch
+ * overwrites never slips past both checks.
  *
  * `createObject`: checks EVERY slot of `operation.object`, gathering every
  * illegal one, not just the first — same "one problem per bad thing found"
@@ -1456,7 +1486,8 @@ function collectIllegalAstLiterals(ast: FormulaAst, out: number[] = []): number[
  * (this function's third sanctioned call site — see its own doc comment):
  * the object being created is not yet in `objects` at all, so there is
  * nothing to `formatAddress` against; only the payload's own `object.name` is
- * available, exactly the situation that function already exists for.
+ * available, exactly the situation that function already exists for. Each
+ * `formula`-kind slot gets the same D-048 AST walk as the `setSlot` arm.
  *
  * `deleteObject`: no value payload — skipped entirely.
  */
@@ -1467,27 +1498,51 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
     const prefix = `operation ${index + 1} of ${operations.length}`;
 
     if (operation.kind === "setSlot") {
-      if (!hasIllegalNumber(operation.slot.value)) {
-        return;
-      }
       const formatted = formatAddress(operation.address, objects);
       const name = isAddressError(formatted) ? formatted.message : formatted;
-      problems.push(
-        `${prefix}: ${name} would hold an illegal value (${describeIllegalValue(operation.slot.value)}), which is not legal document state (D-025/Q-008)`,
-      );
+      if (hasIllegalNumber(operation.slot.value)) {
+        problems.push(
+          `${prefix}: ${name} would hold an illegal value (${describeIllegalValue(operation.slot.value)}), which is not legal document state (D-025/Q-008)`,
+        );
+      }
+      if (operation.slot.kind === "formula") {
+        // D-048: the SAME walk `findIllegalSlotValues` runs post-fold, run
+        // here too — otherwise a payload a LATER operation in this same
+        // batch overwrites or deletes never reaches that check at all, even
+        // though the journal records every operation in the batch.
+        const illegalLiterals = collectIllegalAstLiterals(operation.slot.ast);
+        if (illegalLiterals.length > 0) {
+          problems.push(
+            `${prefix}: ${name}'s formula would hold illegal number literal(s) ` +
+              `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state (D-025/D-031/D-048)`,
+          );
+        }
+      }
       return;
     }
 
     if (operation.kind === "createObject") {
       for (const key of Object.keys(operation.object.slots)) {
         const slot = operation.object.slots[key];
-        if (slot === undefined || !hasIllegalNumber(slot.value)) {
-          continue; // noUncheckedIndexedAccess artifact only, or this slot's own value is legal.
+        if (slot === undefined) {
+          continue; // noUncheckedIndexedAccess artifact only.
         }
-        problems.push(
-          `${prefix}: ${describeUndeclaredSlot(operation.object, key)} would hold an illegal value ` +
-            `(${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`,
-        );
+        if (hasIllegalNumber(slot.value)) {
+          problems.push(
+            `${prefix}: ${describeUndeclaredSlot(operation.object, key)} would hold an illegal value ` +
+              `(${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`,
+          );
+        }
+        if (slot.kind === "formula") {
+          // D-048, same reasoning as the setSlot arm above.
+          const illegalLiterals = collectIllegalAstLiterals(slot.ast);
+          if (illegalLiterals.length > 0) {
+            problems.push(
+              `${prefix}: ${describeUndeclaredSlot(operation.object, key)}'s formula would hold illegal number literal(s) ` +
+                `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state (D-025/D-031/D-048)`,
+            );
+          }
+        }
       }
       return;
     }

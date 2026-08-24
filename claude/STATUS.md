@@ -1,37 +1,26 @@
-# STATUS — as of entry 0045-REVIEW-phase2
+# STATUS — as of entry 0046-empty-cell-range-fix
 
-STATE: GREEN (compiles under both configs, 536/536 tests pass, 0 skipped, 0 `.only`) — but see
-below: the build is green and the SEMANTICS are not.
+STATE: GREEN (compiles under both configs, 545/545 tests pass, 0 skipped, 0 `.only`) — and, as of
+this cycle, the SEMANTICS the build was hiding a gap in (0045-REVIEW's REVISE) are fixed too.
 
-**Process state: entry 0044 reviewed at 0045-REVIEW-phase2 — verdict REVISE.** Four numbered fix
-items (0045-REVIEW §8), all small. Two new binding rulings: **D-047** (an empty cell inside a range
-is skipped, not an error) and **D-048** (the payload-level AST literal walk). **The next cycle is
-the fix list**, not the resize slice — the resize slice would trip over D-047 on its first test.
+**Process state: 0045-REVIEW's four-item fix list is CLOSED (D-047, D-048).** No `§6.1` trigger
+fired this cycle — the fix list was reviewer-directed, not a new design decision, and no test
+expectation changed (nine tests added, none altered). Batching: cycle 1/3 since 0045-REVIEW-phase2,
+diff ~335 lines / 3 files (cap 800/10). Entry 0046's own assessment: **REVIEW RECOMMENDED, not
+REQUIRED** — the implementer is not starting the resize/creation slice without hearing back first,
+even though the batch cap does not force a stop.
 
 Current phase: **2 — Table primitive.** "Wire the formula engine into cell slots. Add reference
-adjustment. Still headless." The formula engine IS wired (entry 0044); reference adjustment is not.
-Last review point: **0045-REVIEW-phase2, REVISE** (cycle 0044).
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+adjustment. Still headless." The formula engine is wired AND now handles the ordinary sparse-table
+case (entry 0044 + 0046); reference adjustment is not built.
+Last review point: **0045-REVIEW-phase2, REVISE** (cycle 0044) — fix list closed at entry 0046.
+Cycles since last review: **1/3** · diff since last review: **~335 lines / 3 files** (cap 800/10).
 Convention: insertions + deletions (settled 0042).
 
-## Next slice — the 0045-REVIEW fix list (start here, one cycle, with tests)
+## Next slice — table resize/creation (what actually closes Phase 2's gate)
 
-1. **`deriveEdges` (`mutation.ts`): skip an enumerated range cell that has no slot.** D-047 item 1.
-   Leave the unresolvable-TABLE fallback (entry 0044 Decision 3) alone — different case, correct.
-2. **`readRange` (`graph/eval.ts`): omit an absent cell** from the returned `Value[]` instead of
-   returning `#REF` for the whole range. D-047 item 2.
-3. **`readRange`: omit a `null`-valued cell**, so both representations of "empty" agree. D-047
-   item 3. Do NOT touch `asNumberList` or any scalar path — `SUM(a, null)` stays `#TYPE`.
-4. **`findIllegalOperationPayloads` (`mutation.ts`): walk a payload's `formula`-slot AST** via the
-   existing `collectIllegalAstLiterals`. D-048.
-
-Required tests are listed in 0045-REVIEW §8 — the sparse-range case was a testing gap as much as a
-design one, so the fix does not count as done without them. Read D-047's boundary carefully: it
-covers RANGE expansion only.
-
-## Then — table resize/creation (what actually closes Phase 2's gate)
-
-Deferred across four cycles now (0042, 0043-REVIEW, 0044, 0045-REVIEW). This is the cycle.
+Deferred across five cycles now (0042, 0043-REVIEW, 0044, 0045-REVIEW, 0046). This is the cycle,
+**once a reviewer has looked at 0046** (recommended, not a hard gate — see Process state above).
 
 - A table-creation mutation/command populating `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` and the cell
   family (§5.10: `table x=0 y=0 rows=8 cols=8`). `createObject` already suffices as the underlying
@@ -46,8 +35,11 @@ Deferred across four cycles now (0042, 0043-REVIEW, 0044, 0045-REVIEW). This is 
 - **A bare `setSlot` on `rows`/`cols` is NOT an adequate resize primitive** — read entry 0042's
   Decision 3 and D-046 together. D-046 settles the dimension slots' KIND; COHERENCE with the cells
   that actually exist is still open and this cycle owns closing it.
-- Whatever creation decides about empty cells, **D-047 guarantees aggregates behave identically
-  either way** — that choice is no longer load-bearing for the formula engine.
+- **D-047 now guarantees this design choice is not load-bearing for the formula engine**: whatever
+  creation/resize decides about how an empty cell is represented (no slot at all, vs. a slot holding
+  `null`), both already work identically in every aggregate, proven by entry 0046's tests. Design
+  the resize primitive for whatever is cleanest to implement; do not let the formula engine's needs
+  constrain that choice.
 
 ## Phase 2 acceptance criterion — PARTIAL
 
@@ -55,9 +47,11 @@ Quoted in full at entry 0044 and 0045-REVIEW §4. Clause status:
 
 - Two tables, cross-table formula, live update — **PASSING** (real `mutate()` end-to-end).
 - Circular reference rejected, including through range-derived edges — **PASSING**.
-- `SUM(A1:A5)` recomputes when a cell within the range changes — **PASSING, but only for a
-  FULLY-POPULATED range** (0045-REVIEW Finding 1). "...after inserting a row" — **NOT YET**;
-  needs both the D-047 fix and row insert.
+- `SUM(A1:A5)` recomputes when a cell within the range changes — **PASSING for both a
+  fully-populated AND a sparsely-populated range** (0045-REVIEW Finding 1 / D-047, closed entry
+  0046). "...after inserting a row" — **NOT YET**; row insertion itself still does not exist. Entry
+  0046 closed the semantic PRECONDITION that clause needs (an empty cell inside a range no longer
+  breaks the document); the resize cycle still owns the insertion itself.
 - Row/column delete with `#REF` repair, `delete <table>` rejected-until-`force` — **NOT YET**.
   `delete <table>` IS correctly rejected while a range depends on it; there is no `force` flag and
   no row/column deletion to repair.
@@ -70,14 +64,20 @@ Phase 0 in full (0027-REVIEW) · the full formula engine, `formula/ast.ts` … `
 (`NonDerivedSlotPathGroup`, `resolveNonDerivedSlotPaths`, `TABLE_SCHEMA`,
 `enumerateTableCellSlotPaths`, D-046's `literal`-only dimension guard) (0043-REVIEW).
 
-## Built, reviewed, REVISIONS PENDING (entry 0044, 0045-REVIEW)
+## Built, reviewed with REVISE, revisions now closed (entries 0044 + 0046, reviewed at 0045-REVIEW)
 
-Accepted as built, except the four fix items above: range evaluation wired end-to-end
-(`formula/eval.ts`'s `readRange`, `graph/eval.ts`'s real `read`/`readRange` closures, `deriveEdges`
-walking `extractDependencies` and expanding a `RangeDependency` via `enumerateRangeCellAddresses`,
-D-044-bounded and D-046-safe) · **the three temporary bridges are DELETED**, verified by grep ·
-**D-045** · **D-031**'s `collectIllegalAstLiterals` · `MIN`/`MAX`'s `.reduce` ·
-`enumerateRangeCellAddresses` returns `Address[]`, closing 0041-REVIEW §5's open signature question.
+Range evaluation wired end-to-end (`formula/eval.ts`'s `readRange`, `graph/eval.ts`'s real
+`read`/`readRange` closures, `deriveEdges` walking `extractDependencies` and expanding a
+`RangeDependency` via `enumerateRangeCellAddresses`, D-044-bounded and D-046-safe) · **the three
+temporary bridges are DELETED**, verified by grep · **D-045** · **D-031**'s
+`collectIllegalAstLiterals` · `MIN`/`MAX`'s `.reduce` · `enumerateRangeCellAddresses` returns
+`Address[]` · **D-047**: `deriveEdges` skips an enumerated range cell with no slot; `readRange`
+omits an absent or `null`-valued cell from its flattened `Value[]` · **D-048**:
+`findIllegalOperationPayloads` walks a `setSlot`/`createObject` formula payload's AST via
+`collectIllegalAstLiterals`, closing the asymmetry with `findIllegalSlotValues`.
+
+**Not yet independently reviewed**: entry 0046 itself (the fix-list implementation) — recommended,
+not required, per its own self-assessment.
 
 ## Not started
 
@@ -86,18 +86,17 @@ everything in Phases 3–7.
 
 ## Known problems
 
-- **A range spanning an empty cell cannot be committed** — 0045-REVIEW Finding 1, ruled D-047,
-  **owned by the next cycle's fix list**. Absent cell → document rejected as a dangling reference;
-  `null` cell → `#TYPE`. Neither representation of "empty" works today.
-- **`findIllegalOperationPayloads` does not walk a payload's stored AST** — ruled D-048, fix item 4.
 - **The dangling-reference message names the DEPENDENT, not the missing SOURCE**, and repeats once
   per missing cell (`table_x.B1 references a slot that does not exist; table_x.B1 references...`).
-  Scales badly for a range. D-047 removes the common path into it; fix the message when it is next
-  touched (0045-REVIEW Finding 4).
+  Scales badly for a range. D-047 removed the common path into it (a sparse range with an ordinary
+  gap no longer reaches this at all); still worth fixing the message when it is next touched
+  (0045-REVIEW Finding 4, not fixed at 0046 — out of that cycle's declared scope).
 - **A dimension write is not checked for COHERENCE with the cells that exist.** D-046 settles the
   KIND (`literal` only); a raw `setSlot` on a *literal* `rows`/`cols` can still disagree with the
   object's actual cell slots. Self-limiting for the dangerous half (D-017 catches a stray
-  formula/derived cell); silently orphaning for the harmless half. The resize design owns this.
+  formula/derived cell); silently orphaning for the harmless half. The resize design owns this. As
+  of D-047, this is no longer a formula-engine-correctness problem (an orphaned/undersized cell just
+  reads as empty) — it is purely a resize-design problem now.
 - **No bound on how large `rows`/`cols` may be set.** Flag for the resize/creation design.
 - **D-022's bounded-correctness claim does not hold for `table`** — narrowed and accepted at
   0043-REVIEW §7 Q1. Do not "fix" it; the pinning test stays as a tripwire.
@@ -109,32 +108,41 @@ everything in Phases 3–7.
   L-6–L-15 cosmetics, recursion depth.
 - **SETTLED, do not re-raise:** D-030 `^` left-assoc · uppercase-only function names · strict
   `CONCAT` · `deps.ts` reports a range PRE-expansion · D-035 · D-033 `-0` · D-037 `%` · D-038 ·
-  D-039 · bijective base-26 columns · D-043 · D-044 · D-045 · D-046 · **D-047 empty cells skipped**
-  · **D-048 payload ASTs walked** · `enumerateRangeCellAddresses` returns `Address[]` · the
-  unresolvable-table fallback stays · `readRange` stays OPTIONAL until a 2nd production caller ·
-  dimensions stay SLOTS · the `static`/`dynamic` union stays · D-040/D-041 (Phase 3) · D-042 ·
-  everything 0029/0032/0035/0041/0043/0045-REVIEW listed settled.
+  D-039 · bijective base-26 columns · D-043 · D-044 · D-045 · D-046 · D-047 · D-048 ·
+  `enumerateRangeCellAddresses` returns `Address[]` · the unresolvable-table fallback stays ·
+  `readRange` stays OPTIONAL until a 2nd production caller · dimensions stay SLOTS · the
+  `static`/`dynamic` union stays · D-040/D-041 (Phase 3) · D-042 · everything
+  0029/0032/0035/0041/0043/0045-REVIEW listed settled.
 
 ## Live PROVISIONAL tags and open questions
 
-**Zero open questions block any phase.** Entry 0044 raised no `Q-NNN`; 0045-REVIEW answered all
-four of its reviewer questions (§7) and ruled D-047/D-048.
-
-Still open, blocking nothing: **`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`;
-**`PROVISIONAL(Q-008)`** → `graph/node.ts`'s `isIllegalNumber`. Answered earlier: Q-001 → D-041,
-Q-002 → D-040, Q-003 → D-007, Q-004 → D-039, Q-005, Q-006 → D-025, Q-009 → D-029, Q-010 → D-038.
-Next free: **Q-011**.
+**Zero open questions block any phase.** Entry 0046 raised none. Still open, blocking nothing:
+**`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`; **`PROVISIONAL(Q-008)`** →
+`graph/node.ts`'s `isIllegalNumber`. Answered earlier: Q-001 → D-041, Q-002 → D-040, Q-003 → D-007,
+Q-004 → D-039, Q-005, Q-006 → D-025, Q-009 → D-029, Q-010 → D-038. Next free: **Q-011**.
 
 ## Gotchas for the next model
 
 - **D-047 covers RANGE expansion only.** A range skips absent and `null` cells; an explicit scalar
-  argument and a plain `ReferenceNode` to a missing slot are UNCHANGED. Over-reaching here would
-  turn every genuine dangling reference into a silent skip — pin the boundary with a test.
+  argument and a plain `ReferenceNode` to a missing slot are UNCHANGED and still rejected as
+  dangling — pinned by a dedicated test at entry 0046. Do not extend the skip to scalar arguments.
+- **`deriveEdges`'s D-047 skip and `readRange`'s D-047 skip are two SEPARATE checks that happen to
+  agree, not one shared function.** `deriveEdges` reads `tableObject.slots[...]` directly (no slot
+  at all → no edge); `readRange` checks the resolved VALUE (`undefined` from no edge having existed,
+  OR an existing slot's value being `null`) → omitted from the flattened list. Entry 0046's
+  mutation-test checks proved these are independent: disabling one alone produces a DIFFERENT
+  failure set than disabling the other. Keep them that way — do not try to unify them into one
+  check spanning both files.
+- **A `false && narrowingCondition` mutation-test gate can break TypeScript's control-flow narrowing
+  for the REST of that `if` block**, even on lines that look unrelated to the edit — reported as a
+  property missing from the wider (pre-narrowed) union type. Entry 0046 hit this gating
+  `operation.slot.kind === "formula"`. Prefer gating with a named boolean flag ANDed AFTER an
+  already-narrowed condition (`condition && !MUTATION_TEST_FLAG`) instead of `false && condition`.
 - **The brief is SILENT on empty cells, and silence is a §6.1 trigger 3, not a licence to decide.**
-  Entry 0044 settled it by omission and it cost a REVISE. When the brief says nothing about
-  something load-bearing, raise a `Q-NNN`.
-- **State every file you touched in the log entry, comment-only edits included.** Entry 0044's
-  `lexer.ts` edit was correct but undisclosed, which is why its file count was wrong (13 vs 14).
+  Entry 0044 settled it by omission and it cost a REVISE (D-047 fixed it at 0046). When the brief
+  says nothing about something load-bearing, raise a `Q-NNN`.
+- **State every file you touched in the log entry, comment-only edits included** (0045-REVIEW's
+  Finding, re-stated because it is easy to forget under time pressure, not because it recurred).
 - **`readRange` runs DURING evaluation and reads `rows`/`cols` — that is only safe because D-046
   makes dimensions `literal`-only.** Do not relax D-046 without re-reading this.
 - **`readRange` is OPTIONAL by ruling (0045-REVIEW §7 Q3).** Make it REQUIRED the moment a second
@@ -149,6 +157,7 @@ Next free: **Q-011**.
   (D-033) · registry lookup by `Object.hasOwn` (D-034) · `src/engine/` contains no `throw` ·
   one user, justify by correctness and cheapness to change (D-042).
 - **Batch discipline:** entry 0044 ran to 1848 lines / 14 files, more than twice the cap, in one
-  cycle. The §6.1 triggers made it moot, but a slice that large is hard to review well and this one
-  hid a semantic gap inside a green tree. Prefer stopping at the cap.
+  cycle, and hid a semantic gap inside a green tree. Entry 0046, by contrast, stayed tightly scoped
+  to exactly the reviewer's fix list (~335 lines / 3 files) — this is the shape to aim for: small,
+  reviewer-directed, fully tested. Prefer stopping at the cap even when no trigger forces it.
 - Each PowerShell call is a fresh process; the Bash tool's `npm` is not on PATH — use PowerShell.

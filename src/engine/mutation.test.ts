@@ -2060,3 +2060,207 @@ describe("deriveEdges — a range naming a table that does not resolve falls bac
     expect(deletion.ok).toBe(false);
   });
 });
+
+describe("deriveEdges/mutate — D-047: an EMPTY cell inside a range is skipped, not an error, so an aggregate over a PARTIALLY populated table commits (0045-REVIEW Finding 1's fix)", () => {
+  it("SUM(A1:A5) over a table with genuinely ABSENT cells (no slot at all) commits and sums only the cells that exist", () => {
+    const table = tableObject("obj_1", "table_x", 5, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      // A2 intentionally absent — no slot at all.
+      "cells.A3": { kind: "literal", value: 3 },
+      // A4 intentionally absent.
+      "cells.A5": { kind: "literal", value: 5 },
+    });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A5") }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 9 });
+    }
+  });
+
+  it("the SAME sum, with the gaps holding an explicit `null` literal instead of no slot at all — both representations of empty must agree (D-047 item 3)", () => {
+    const table = tableObject("obj_1", "table_x", 5, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: null },
+      "cells.A3": { kind: "literal", value: 3 },
+      "cells.A4": { kind: "literal", value: null },
+      "cells.A5": { kind: "literal", value: 5 },
+    });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A5") }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 9 });
+    }
+  });
+
+  it("AVG(A1:A5) divides by the COUNT OF NON-EMPTY cells, not the range's full span — the clause most likely to regress silently", () => {
+    const table = tableObject("obj_1", "table_x", 5, 1, {
+      "cells.A1": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 4 },
+      "cells.A5": { kind: "literal", value: 6 },
+    });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "AVG", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A5") }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // (2+4+6)/3 = 4, NOT /5 (which would be 2.4).
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 4 });
+    }
+  });
+
+  it("a range where NO cell in the range exists at all commits and returns the aggregate's own empty answer (SUM's 0), not #REF", () => {
+    const table = tableObject("obj_1", "table_x", 5, 1); // no cell slots whatsoever.
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A5") }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 0 });
+    }
+  });
+
+  it("D-047 item 4's boundary: a plain ReferenceNode (not a range) to an absent slot is STILL rejected as a dangling reference — this fix must not over-reach", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } }); // A2 absent.
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A2") }, value: null },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("does not exist");
+    }
+  });
+});
+
+describe("mutate — D-048: `findIllegalOperationPayloads` walks a payload's stored formula AST, the same as `findIllegalSlotValues` does post-fold (0045-REVIEW Finding 3, closing entry 0044's reviewer question 1)", () => {
+  it("rejects a batch where an EARLIER setSlot's FORMULA payload holds an illegal AST literal even though a LATER setSlot in the SAME batch overwrites it", () => {
+    const initial = [valueObject("obj_1", "value_1", 1)];
+    const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
+    const illegalFirst: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "value"),
+      slot: { kind: "formula", ast: { type: "literal", value: Number.POSITIVE_INFINITY }, value: null },
+    };
+    const legalSecond: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 5 } };
+
+    const result = mutate(initial, [illegalFirst, legalSecond], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 1 of 2");
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("D-048");
+    }
+    expect(initial).toEqual(snapshotBefore);
+  });
+
+  it("rejects a createObject whose payload holds a formula-kind slot with an illegal AST literal, even though a LATER op in the batch deletes that object", () => {
+    const illegalObject: GraphObject = {
+      id: "obj_2",
+      name: "value_2",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "literal", value: NaN }, value: null } },
+    };
+    const create: Operation = { kind: "createObject", object: illegalObject };
+    const deleteAfter: Operation = { kind: "deleteObject", objectId: "obj_2" };
+
+    const result = mutate([], [create, deleteAfter], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 1 of 2");
+      expect(result.message).toContain("value_2.value");
+      expect(result.message).toContain("D-048");
+    }
+  });
+
+  it("catches an illegal literal buried inside the payload AST, not just at its root", () => {
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "value"),
+      slot: {
+        kind: "formula",
+        ast: { type: "functionCall", name: "ABS", args: [{ type: "binaryOp", operator: "+", left: { type: "literal", value: -0 }, right: { type: "literal", value: 1 } }] },
+        value: null,
+      },
+    };
+
+    const result = mutate([valueObject("obj_1", "value_1", 1)], [operation], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("-0");
+    }
+  });
+
+  it("does not reject a batch whose formula payloads are all legal", () => {
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "value"),
+      slot: { kind: "formula", ast: { type: "literal", value: 42 }, value: null },
+    };
+
+    const result = mutate([valueObject("obj_1", "value_1", 1)], [operation], []);
+
+    expect(result.ok).toBe(true);
+  });
+});
