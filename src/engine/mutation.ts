@@ -126,7 +126,7 @@
  * `collectIllegalAstLiterals` `findIllegalSlotValues` already used.
  *
  * 0048-REVIEW-phase2 REVISED entry 0047's row/column insertion: verdict
- * REVISE, a three-item fix list, all closed THIS cycle (0049). **D-050**:
+ * REVISE, a three-item fix list, all closed at entry 0049. **D-050**:
  * `findInvalidTableResizes` now simulates the batch LEFT-TO-RIGHT (one
  * `Map<objectId, TrackedTableState>`, the same pattern the existence check's
  * `survivingIds` already established) rather than validating every operation
@@ -161,8 +161,8 @@
  * §5.4 states the repair path unconditionally for row/column deletion,
  * unlike `delete <table>` (`DeleteObjectOperation`), which still rejects a
  * deletion with live dependents by default; a `force` flag widening THAT
- * operation to take the repair path too is explicitly NOT built this cycle —
- * see NOT DONE HERE.
+ * operation to take the repair path too is explicitly NOT built as of entry
+ * 0050 — see NOT DONE HERE.
  *
 
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
@@ -500,13 +500,13 @@
  *   - The `force` flag on `DeleteObjectOperation` (`delete <table>`) — §5.1.1's
  *     REPAIR path for a WHOLE-OBJECT deletion, widening that (existing)
  *     operation to rewrite live dependents to `#REF` instead of unconditionally
- *     rejecting them, the way it does today. Row/column deletion (THIS cycle,
+ *     rejecting them, the way it does today. Row/column deletion (entry 0050,
  *     `DeleteTableLineOperation`) is a DIFFERENT operation with its own,
  *     unconditional repair path — see that operation's own doc comment for why
  *     the two do not share a mechanism. Phase 2's acceptance criterion needs
- *     both; only the row/column half lands this cycle — see STATUS.md.
+ *     both; only the row/column half lands at entry 0050 — see STATUS.md.
  *   - Reference adjustment on table resize (§5.4) is now DONE for both
- *     directions: insertion (entry 0047) and deletion (THIS cycle). Range
+ *     directions: insertion (entry 0047) and deletion (entry 0050). Range
  *     EXPANSION itself (`A1:B4` → concrete cell dependencies, §5.3) has been
  *     done since the range-evaluation wiring cycle — see `deriveEdges`'s
  *     Source 1, above.
@@ -885,9 +885,9 @@ export interface InsertTableLineOperation {
  * on the deleted cells, rewriting each inbound reference to `#REF`." This is
  * deliberately DIFFERENT from `DeleteObjectOperation` (`delete <table>`),
  * which still rejects by default and will gain a separate `force` flag (NOT
- * built this cycle — see the file header's NOT DONE HERE) to opt into repair
- * instead. The two operations do not share a mechanism because they answer
- * different questions: this one always repairs (§5.4 states it as the ONLY
+ * built as of entry 0050 — see the file header's NOT DONE HERE) to opt into
+ * repair instead. The two operations do not share a mechanism because they
+ * answer different questions: this one always repairs (§5.4 states it as the ONLY
  * behaviour for a row/column), while whole-object deletion's default is still
  * to protect a formula elsewhere by refusing (§5.1.1's REJECT-by-default
  * stance for `delete <object>`).
@@ -897,7 +897,7 @@ export interface InsertTableLineOperation {
  * names an EXISTING object of type `"table"` whose `rows`/`cols` can be
  * coherently resized (D-046, `isTableDimensionResizable`), and `index` names
  * an EXISTING row/column AS OF THIS OPERATION'S OWN POSITION in the batch —
- * `findInvalidTableResizes` (widened THIS cycle to simulate both insertion
+ * `findInvalidTableResizes` (widened at entry 0050 to simulate both insertion
  * and deletion together, in one left-to-right walk, per D-050's own binding
  * text) is the primary check. Unlike insertion, `deleteTableLine` (the
  * primitive) does NOT clamp an out-of-range index — there is no "nearest

@@ -22,7 +22,7 @@
  * row/column INSERTION (`insertTableLine`, `getTableDimensions`,
  * `shiftCellAddressForInsert`) — the first piece of §5.4's "rows and columns
  * can be added or removed." 0048-REVIEW-phase2 REVISED entry 0047: verdict
- * REVISE, three fixes, all landing THIS cycle (0049) — **D-049**,
+ * REVISE, three fixes, all landing at entry 0049 — **D-049**,
  * `insertTableLine` now preserves every slot it does not own, never rebuilding
  * `slots` from scratch (see its own doc comment); **D-046 fix 3**,
  * `isTableDimensionResizable` (new, below) lets `mutation.ts` reject an insert

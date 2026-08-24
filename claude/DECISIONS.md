@@ -1345,3 +1345,155 @@ node-level walk in this file (e.g. one applied at `reference`/`range` nodes retu
 not after the address-level version has been forced halfway.
 
 Reconciliation required: none.
+
+## D-053 — A resize precondition MUST find the table's WHOLE extent readable, not just the axis it changes
+Answers: —   Ruled: entry 0051-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`, `primitives/table.ts`, every future resize-like operation
+
+**Ruling.** `findInvalidTableResizes` MUST reject an `insertTableLine` or `deleteTableLine` when
+EITHER `rows` or `cols` is present and not `literal` — never only the dimension named by
+`operation.axis`. A table whose extent cannot be fully read cannot be coherently resized on any
+axis. The rejection message names the offending dimension and D-046, the same way every other
+rejection in that function names its reason.
+
+**Rationale.** 0048-REVIEW-phase2's fix 3 was written as "an insert into a table whose `rows`/`cols`
+is not `literal`" and entry 0049's own decision 1 read it correctly, in detail, and said so. The
+code did not follow: `isTableDimensionResizable(object, axis)` reads one slot and the check consults
+one flag. Verified against the built code at entry 0051-REVIEW-phase2 §4, on a table with
+`rows: literal 3` and `cols: formula`:
+
+```
+mutate([value_1, table_x], [insertTableLine table_x row 1]) → ok: true,
+    cols slot after: {"kind":"literal","value":0}
+mutate([value_1, table_x], [deleteTableLine table_x row 1]) → ok: true,
+    cols slot after: {"kind":"literal","value":0}
+```
+
+Both primitives re-assert `literal` on BOTH dimensions on every call — they must, since the
+untouched axis's count still has to be written back — and `getTableDimensions` reads a non-`literal`
+dimension as a fail-safe `0` (D-046). So a ROW resize silently destroys a `formula`-kind `cols`
+slot: its AST, its cached value, and its inbound edge, committing `ok: true` with nothing reported.
+That is D-049's own prohibition ("a slot may only disappear as the EXPLICIT, specified effect of the
+mutation") reached from the axis nobody was looking at.
+
+**Companion ruling — the repair pass and the slot walk MUST keep IDENTICAL bounds.** The address
+repair (`repairCellAddressForDelete`, `shiftCellAddressForInsert`) is unbounded; the slot walk
+(`insertTableLine`/`deleteTableLine` via `enumerateTableCellSlotPaths`) is bounded by the current
+extent. Where a cell slot exists OUTSIDE the extent, the reference moves and the slot does not,
+which on the delete side produces a REJECTED row deletion — contradicting §5.4's "it proceeds even
+when other objects depend on the deleted cells" (verified, entry 0051-REVIEW-phase2 §5). Neither
+side may be bounded or unbounded on its own: insertion and deletion MUST diverge identically until
+the dimension/cell coherence gap is closed for both at once, in its own slice. A one-sided fix is
+forbidden.
+
+Reconciliation required: fix list at 0051-REVIEW-phase2 §8, items 1 and 2.
+
+## D-054 — Row/column DELETION does not clamp an out-of-range index; the precondition check is its sole guard
+Answers: entry 0050's reviewer question 1   Ruled: entry 0051-REVIEW-phase2 (reviewer)
+Binding on: `primitives/table.ts`, `mutation.ts`
+
+**Ruling.** `deleteTableLine` MUST NOT clamp, floor, or otherwise repair an out-of-range `index`,
+and MUST NOT refuse to take a table below zero lines by silently doing nothing. Its precondition —
+`index` is an integer naming an existing line as of this operation's own position in the batch — is
+enforced entirely by `findInvalidTableResizes`. The asymmetry with `insertTableLine`'s clamp is
+deliberate and stays documented in both functions' doc comments.
+
+**Rationale.** Insertion's clamp has a real interpretation: an index past the end means "append."
+Deletion's would have none — there is no nearest line to delete instead of a nonexistent one — so
+any defensive floor would turn a precondition bug into a plausible-looking table with the wrong
+number of lines, which is strictly harder to notice than a malformed one. D-045 already established
+the primary-validation / defensive-arm split for range placement; this ruling records that the
+defensive arm is OPTIONAL, and is only worth having where it has a meaning. Ruled so that a future
+cycle does not add a "just in case" clamp for symmetry with insertion.
+
+Reconciliation required: none. Confirms entry 0050 as built.
+
+## D-055 — A range endpoint's role is decided by its VALUE against the other endpoint, never by its AST field; ranges are NOT normalised
+Answers: entry 0050's reviewer question 2   Ruled: entry 0051-REVIEW-phase2 (reviewer)
+Binding on: `primitives/table.ts`, `formula/*`, any future code walking `RangeNode` endpoints
+
+**Ruling.** Any code that must decide which side of a range an endpoint is on MUST compare its
+coordinate against the OTHER endpoint's, never assume `RangeNode.start` holds the smaller value.
+`parser.ts` accepts a reversed range (`A5:A1`) as legal and stores it as written. A range MUST NOT
+be normalised to `start <= end` at parse time, at storage time, or anywhere else.
+
+**Rationale.** Three, the last decisive. (1) Rule 3's two-layer scheme makes the stored AST the
+authoritative record and display the derived view — normalising would render a formula the user did
+not type. (2) `enumerateRangeCellAddresses` already treats the endpoint pair as an unordered
+rectangle via `Math.min`/`Math.max`, so value-based IS the established convention here; a
+normalising point would be a SECOND place range semantics live, free to drift from it (D-010).
+(3) Normalisation could never remove the need for value-based handling anyway: §5.11 loads
+documents whose stored ASTs predate any such rule, so the value-based path would still have to
+exist as the defensive arm. It is added surface, not removed surface.
+
+`primitives/table.ts`'s `clampRangeEndpointValue` (entry 0050) is the reference implementation.
+
+Reconciliation required: none. Confirms entry 0050 as built.
+
+## D-056 — `rewriteObjectFormulaAddresses` and `repairObjectFormulaAddresses` stay a PAIR; whole-object repair reuses the repair one unchanged
+Answers: entry 0050's reviewer question 3   Ruled: entry 0051-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`
+
+**Ruling.** The two functions are NOT collapsed behind a shared helper. Neither is a third one
+added for whole-object (`delete <table> force`) repair: that slice MUST call
+`repairObjectFormulaAddresses` exactly as it stands, passing different callbacks — "does this
+address name any slot on `objectId`" for a reference, "does either endpoint name it" for a range.
+
+**Rationale.** Two functions differing only in which total walk they call is not duplication worth
+abstracting; a wrapper parameterised over the walk would obscure both and buy nothing. More
+importantly the question's premise — that whole-object repair needs a third near-identical function
+— is wrong. `repairObjectFormulaAddresses` is already generic over its two callbacks and has no
+notion of tables, axes, or indices; "deleted" means whatever the callbacks decide it means. That is
+the whole point of the node-level shape D-052 called for. A third copy would be the first real
+duplication in this family, arriving precisely because nobody checked whether the second one
+already fit.
+
+Reconciliation required: `STATUS.md`'s "Next slice" paragraph, which currently steers the `force`
+cycle toward new callbacks in a new home — fix list at 0051-REVIEW-phase2 §8, item 4.
+
+## D-057 — The REPAIR path MUST report every slot it broke, through ONE channel, built once
+Answers: —   Ruled: entry 0051-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`, and the `force`-flag slice in particular
+
+**Ruling.** §5.1.1 ("The command must report which slots were broken") and §5.4 ("The command
+reports every slot it broke") are requirements of the repair path, not of the command line, and they
+are currently unbuilt for row/column deletion. They MUST be built by the cycle that adds the `force`
+flag to `DeleteObjectOperation`, and that cycle MUST build ONE reporting channel serving BOTH repair
+sites — never a deletion-specific report plus a whole-object-specific one. Until then the gap is
+recorded in `STATUS.md`'s known problems and in `DeleteTableLineOperation`'s own doc comment.
+
+**Rationale.** Entry 0050 does not mention this clause anywhere: not built, not deferred, not listed
+as unfinished. It is a §5.4 conformance gap rather than a false gate claim (Phase 2's acceptance
+criterion in §6 does not require it, so "clause 4's DELETE half PASSING" stands), but it is exactly
+the class of brief requirement that gets quietly normalised away because no test names it.
+
+It is ruled now, rather than left to the cycle that needs it, because the shape is decided by
+something that already exists: `applyOperation` returns `readonly GraphObject[]` and has no channel
+for a report at all, and `mutate`'s success arm returns `{ objects, journal }`. Adding a report
+means widening one of those, which is a load-bearing decision in `mutation.ts` — and the `force`
+slice hits the identical requirement from §5.1.1. Deciding it while ONE repair site exists costs a
+paragraph; deciding it after two exist costs a refactor of both plus whatever already consumes them.
+
+Reconciliation required: fix list at 0051-REVIEW-phase2 §8, item 3 (record it). Build: the `force`
+slice.
+
+## D-058 — A cycle-history comment names its entry number; never a bare "this cycle"
+Answers: —   Ruled: entry 0051-REVIEW-phase2 (reviewer)
+Binding on: every source and test file
+
+**Ruling.** The per-cycle history paragraphs these file headers carry are accepted practice in this
+repo and stay. But every one of them, and every inline comment dating a design decision, MUST name
+the entry it refers to ("entry 0050", "as of entry 0047") — NEVER a bare "this cycle" or "THIS
+cycle." This binds new and edited comments. It is not a licence to sweep existing sites: leave the
+older ones alone until a cycle touches that passage for another reason.
+
+**Rationale.** "This cycle" is only unambiguous on the day it is written. 0048-REVIEW-phase2 §7 had
+to hand-correct 15 comment sites attributing entry 0047's work to entry 0046; entry 0051-REVIEW
+had to correct 8 more of a different shape — `mutation.ts` had reached the point where bare "THIS
+cycle" meant entry 0049 in one paragraph and entry 0050 in another, in the same file. These comments
+are how the next model dates a design decision, which is their only reason to exist; a comment that
+cannot be dated is worse than no comment, because it reads as precise. Fixing the same class twice
+by hand is the signal PROCESS_BRIEF §8 names: it becomes a ruling, not a third round of edits.
+
+Reconciliation required: none. The 8 sites in this batch's diff were corrected at review
+(0051-REVIEW-phase2 §7).

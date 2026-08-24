@@ -1,31 +1,45 @@
-# STATUS — as of entry 0050-row-column-deletion
+# STATUS — as of entry 0051-REVIEW-phase2
 
-STATE: GREEN (compiles under both configs, 643/643 tests pass, 0 skipped, 0 `.only`).
+STATE: GREEN (compiles under both configs, 643/643 tests pass, 0 skipped, 0 `.only`) — but see
+"Known problems": entry 0051-REVIEW found a live data-loss bug (fix 1) that the suite does not
+currently catch.
 
-**Process state: REVIEW REQUIRED.** Two independent §6.1 triggers fired this cycle: trigger 3
-(brief-silent, load-bearing design decisions on `mutation.ts`/`primitives/table.ts`/`formula/deps.ts`
-— the node-level REPAIR walk, the range-clamp tie-break arithmetic, the widened batch-simulation
-shape) and the §6.3 batch cap, exceeded by a wide margin (this cycle alone: ~1246 changed lines / 6
-files; cumulative since 0048-REVIEW-phase2 including entry 0049: ~1708 lines / 6 unique files,
-cap 800/10). No further cycle should begin — in particular the `force`-flag cycle below must not
-start — until this lands review.
+**Process state: REVISE — a five-item fix list is outstanding.** Entries 0049 + 0050 were reviewed
+at **0051-REVIEW-phase2, verdict REVISE**. The next cycle is that fix list and nothing else; the
+`force`-flag slice does not start until it closes. The batch cap is reset by this review point.
 
 Current phase: **2 — Table primitive.** Row/column **INSERTION** (0047, reviewed 0048, fixed 0049)
-and row/column **DELETION** (0050, this entry) are both built. Row/column deletion is the FIRST
-real use of §5.1.1's REPAIR path anywhere in this codebase. The remaining Phase 2 gap is narrower
-than before: only `delete <table>`'s `force` flag (whole-OBJECT repair, a different mechanism from
-row/column repair) is unbuilt.
-Last review point: **0048-REVIEW-phase2, REVISE** (covering entries 0046 + 0047; its fix list was
-closed by entry 0049, not yet re-reviewed — entry 0050 (this one) is ALSO not yet reviewed).
-Cycles since last review: **2/3** · diff since last review: ~1708 lines / 6 files (cap 800/10 —
-EXCEEDED).
+and row/column **DELETION** (0050) are both built; deletion is the FIRST real use of §5.1.1's
+REPAIR path anywhere in this codebase, and its design was ACCEPTED at 0051-REVIEW (D-054, D-055,
+D-056 all confirm entry 0050 as built). The remaining Phase 2 gap is `delete <table>`'s `force`
+flag (whole-OBJECT repair) plus §5.1.1/§5.4's broken-slot REPORT, which D-057 assigns to that same
+slice.
+Last review point: **0051-REVIEW-phase2, REVISE** (covering entries 0049 + 0050, ~1708 lines /
+6 files).
+Cycles since last review: **0/3** · diff since last review: 0 lines / 0 files (cap 800/10).
 Convention: insertions + deletions (settled 0042).
 
-## Next slice — the `force` flag on `delete <table>` (`DeleteObjectOperation`), closing Phase 2's gate
+## Next slice — 0051-REVIEW-phase2 §8's fix list (five items), and nothing else
 
-**Do not start this before entry 0050 lands review** — the batch cap is already well exceeded, and
-this slice will likely reuse or extend the REPAIR mechanism entry 0050 built, which itself has open
-reviewer questions (see entry 0050's own "Review point").
+Read entry `claude/entries/0051-REVIEW-phase2.md` §8 in full; it is specific and numbered. In
+summary:
+
+1. **Fix 1 is the only code-behaviour item and it is a live bug.** `findInvalidTableResizes` checks
+   only the resized axis's dimension for literal-ness, so a ROW resize on a table whose `cols` slot
+   is `formula`-kind commits `ok: true` and destroys that slot (AST, cached value, inbound edge),
+   replacing it with `literal 0`. Live on BOTH `insertTableLine` and `deleteTableLine`. Reject when
+   EITHER dimension is non-literal — **D-053**. One-line condition change plus two tests.
+2. Pin and disclose the deletion-can-still-reject route (0051-REVIEW §5) — a test plus a
+   `STATUS.md` known problem. **Do not** bound either repair pass by extent: D-053's companion
+   ruling forbids a one-sided fix.
+3. Record §5.1.1/§5.4's "reports every slot it broke" as unbuilt (**D-057**) — one paragraph in
+   `DeleteTableLineOperation`'s doc comment and one known problem. No code.
+4. Rewrite this file's own `force`-slice guidance per **D-056** — whole-object repair REUSES
+   `repairObjectFormulaAddresses` unchanged with different callbacks; no third helper function, and
+   the "where should the new callbacks live" question is settled, not open.
+5. Cut this file under PROCESS_BRIEF §2's 150-line budget (it is 226).
+
+### After that — the `force` flag on `delete <table>` (`DeleteObjectOperation`), closing Phase 2's gate
 
 - `DeleteObjectOperation` gains a `force?: boolean` field (widen the union member, per Q-005/D-020's
   "widen, never restructure" stance). Today it unconditionally takes the REJECT path (§5.1.1 clause
@@ -33,38 +47,34 @@ reviewer questions (see entry 0050's own "Review point").
   DEFAULT (unchanged), and — only when `force` is passed — every inbound reference to ANY of the
   deleted object's slots is rewritten to `#REF` instead, the same D-028 `ErrorNode` shape row/column
   deletion now uses.
-- **This is a DIFFERENT mechanism from row/column deletion, not a reuse of `repairAddressesInAst`'s
-  table-specific callbacks.** Whole-object repair has no axis and no clamping: a `ReferenceNode`
-  naming any slot on the deleted object becomes `#REF` outright; a `RangeNode` naming the deleted
-  object (either endpoint) becomes `#REF` entirely (there is no "remaining extent" to clamp to — the
-  whole table is gone). `repairAddressesInAst` (`formula/deps.ts`, entry 0050) is still the right
-  node-level WALK to reuse — its `repairReference`/`repairRange` callback shape doesn't care what
-  "deleted" means — but the callbacks themselves need new, simpler table-agnostic logic (does this
-  address name ANY slot on `objectId`?), not `primitives/table.ts`'s row/column-specific functions.
-- Where should the new callbacks live? `mutation.ts` itself is a reasonable first guess (no
-  per-object-type primitive file "owns" whole-object deletion the way `primitives/table.ts` owns
-  row/column deletion) — but decide this deliberately, don't default into it.
+- **Reuse `repairObjectFormulaAddresses` AS IT STANDS, with different callbacks — D-056.** It is
+  already generic over its two callbacks and has no notion of tables, axes, or indices. Whole-object
+  repair supplies simpler ones: a `ReferenceNode` naming any slot on the deleted object reports
+  `"deleted"`; a `RangeNode` with EITHER endpoint on it reports `"deleted"` entirely (there is no
+  remaining extent to clamp to — the whole table is gone). Those callbacks live in `mutation.ts`,
+  beside the operation they serve; no per-object-type primitive file owns whole-object deletion.
+  Do NOT add a third `*ObjectFormulaAddresses` helper.
+- **Build the broken-slot REPORT in this slice — D-057**, one channel serving BOTH repair sites
+  (row/column deletion and whole-object `force`), never two. `applyOperation` returns
+  `readonly GraphObject[]` and `mutate`'s success arm returns `{ objects, journal }`; widening one
+  of those is the load-bearing decision D-057 exists to make you take deliberately.
 - `validateIntegrity`'s existing dangling-reference check (§5.1.1 clause 1) still fires when `force`
   is NOT passed. When it IS passed, `applyOperation`'s `deleteObject` branch needs to run the repair
   pass BEFORE the object is removed and BEFORE `validateIntegrity` runs — study `insertTableLine`'s/
   `deleteTableLine`'s branch shape in `applyOperation` for the established pattern (repair
   document-wide, unconditionally, no relevance pre-filter).
-- Entry 0050 left three open reviewer questions (see its own "Review point") that bear directly on
-  this slice's design — read them first, in particular question 3 (whether
-  `repairObjectFormulaAddresses`/`rewriteObjectFormulaAddresses` should collapse behind a shared
-  helper — a THIRD near-identical function for whole-object repair would make that worth resolving
-  now rather than a fourth time later).
 
 ## Phase 2 acceptance criterion — one clause left, narrower than before
 
-Quoted in full at entry 0044/0045-REVIEW §4. Clause status, re-verified this cycle:
+Quoted in full at entry 0044/0045-REVIEW §4. Clause status, re-verified at 0051-REVIEW:
 
 - Two tables, cross-table formula, live update — **PASSING**.
 - Circular reference rejected, including through range-derived edges — **PASSING**.
 - `SUM(A1:A5)` recomputes correctly after inserting a row inside the range — **PASSING** (0047,
   accepted at 0048-REVIEW §1).
-- Row/column delete with `#REF` repair — **NOW PASSING** (0050, this entry — demonstrated
-  end-to-end, see entry 0050's own "Acceptance criteria status").
+- Row/column delete with `#REF` repair — **PASSING** (0050; demonstration test confirmed at
+  0051-REVIEW §1 and §10). §5.4's separate "reports every slot it broke" clause is NOT built —
+  D-057, see Known problems.
 - `delete <table>` rejected-until-`force` — **NOT YET**. The only remaining clause. The gate review
   happens when it lands.
 
@@ -81,7 +91,7 @@ INSERTION: `InsertTableLineOperation`, `insertTableLine`/`getTableDimensions`/
 `rewriteObjectFormulaAddresses`, `findInvalidTableResizes`, D-051/D-052 (0047, reviewed 0048 —
 REVISE, three fixes required, closed 0049: D-049, D-050, fix 3).
 
-## Built this batch, NOT YET reviewed (entries 0049 + 0050)
+## Built and reviewed at 0051-REVIEW-phase2 (entries 0049 + 0050) — REVISE, fix list outstanding
 
 - Entry 0049's fix list (D-049, D-050, fix 3) — see prior STATUS revision for detail, unchanged by
   entry 0050.
@@ -100,10 +110,25 @@ engine primitive already suffices via `createObject`) · everything in Phases 3�
 
 ## Known problems
 
-- **`repairObjectFormulaAddresses` and `rewriteObjectFormulaAddresses` are now near-duplicate
+- **LIVE BUG (0051-REVIEW §4, fix 1): a ROW resize on a table whose `cols` slot is not `literal`
+  destroys that slot.** `findInvalidTableResizes` checks only `operation.axis`'s dimension, but both
+  primitives re-assert `literal` on BOTH — so the untouched axis's `formula` slot commits as
+  `literal 0`, losing its AST, its value, and its inbound edge, `ok: true`, nothing reported.
+  Verified on insertion AND deletion. **D-053.** Fix it before anything else.
+- **§5.1.1/§5.4's "the command reports every slot it broke" is UNBUILT** for row/column deletion —
+  no collector, no report field, and `applyOperation` returns `readonly GraphObject[]` with no
+  channel for one. **D-057** assigns it to the `force` slice, ONE channel for both repair sites.
+- **Row/column deletion CAN still be REJECTED**, contradicting §5.4's "it proceeds even when other
+  objects depend on the deleted cells" (0051-REVIEW §5): the address-repair pass is unbounded while
+  the slot walk is extent-bounded, so a reference to an out-of-extent cell slot shifts to an empty
+  position and dangles. Reachable only through the coherence gap below. **D-053's companion ruling
+  forbids fixing one side** — insertion and deletion must diverge identically until the coherence
+  gap closes for both.
+- **`repairObjectFormulaAddresses` and `rewriteObjectFormulaAddresses` are near-duplicate
   functions** (`mutation.ts`) — one calls `repairAddressesInAst`, the other `rewriteAddressesInAst`,
-  otherwise structurally identical. Entry 0050's own open reviewer question 3. Do not collapse them
-  without a ruling — their callback shapes genuinely differ.
+  otherwise structurally identical. **RULED at 0051-REVIEW: D-056 — they stay a pair, and
+  whole-object repair reuses `repairObjectFormulaAddresses` unchanged rather than adding a third.**
+  Not a problem to fix; listed so nobody re-opens it.
 - **`rewriteObjectFormulaAddresses`/`repairObjectFormulaAddresses` both walk `formula`-kind slots
   only** — total TODAY (a `formula` slot's `ast` is the only stored AST), but §5.4 requires the
   adjustment/repair pass to cover text boxes too, and Phase 4 stores text content as a block tree in
@@ -111,7 +136,7 @@ engine primitive already suffices via `createObject`) · everything in Phases 3�
   carried unchanged by entry 0050 — the same gap now exists twice, once per pass). Do not build for
   it now; do not forget it.
 - **`deleteTableLine` has NO defensive clamp for an out-of-range index** — a deliberate asymmetry
-  with `insertTableLine` (entry 0050 decision 3; see its own open reviewer question 1). Currently
+  with `insertTableLine`, CONFIRMED and ruled **D-054** at 0051-REVIEW (do not add one). Currently
   safe because `findInvalidTableResizes` is the ONLY caller path that reaches it with a real
   operation; a future caller bypassing that check would corrupt the table rather than clamp.
 - **A dimension write is not checked for COHERENCE with the cells that exist, in general.** D-046
@@ -132,6 +157,8 @@ engine primitive already suffices via `createObject`) · everything in Phases 3�
   deliberately unvalidated beyond `Array.isArray` · `lexer.ts`'s two disclosed edge cases · L-16,
   L-17/L-18/L-14, §5.11's `style` field, `nextObjectId` reconciliation, `noUnusedLocals` off,
   L-6–L-15 cosmetics, recursion depth.
+- **SETTLED at 0051-REVIEW:** D-054 · D-055 · D-056 · D-058 (a comment names its ENTRY number,
+  never a bare "this cycle").
 - **SETTLED, do not re-raise:** D-030 `^` left-assoc · uppercase-only function names · strict
   `CONCAT` · `deps.ts` reports a range PRE-expansion · D-035 · D-033 `-0` · D-037 `%` · D-038 ·
   D-039 · bijective base-26 columns · D-043 · D-044 · D-045 · D-046 · D-047 · D-048 · D-049 ·
@@ -147,9 +174,9 @@ engine primitive already suffices via `createObject`) · everything in Phases 3�
 
 ## Live PROVISIONAL tags and open questions
 
-**Zero open questions block any phase.** Entry 0050 raised none in `OPEN_QUESTIONS.md` (its three
-reviewer questions are design confirmations for the review to rule on, same posture entry 0047's
-were — they became D-051/D-052/D-050). Still open, blocking nothing: **`PROVISIONAL(Q-007)`** →
+**Zero open questions block any phase.** Entry 0050 raised none in `OPEN_QUESTIONS.md`; its three
+reviewer questions were design confirmations and are now **answered — D-054 (no delete clamp),
+D-055 (value-based range tie-break, no normalisation), D-056 (the helper pair stays, no third)**. Still open, blocking nothing: **`PROVISIONAL(Q-007)`** →
 `document.ts`'s `CameraState`; **`PROVISIONAL(Q-008)`** → `graph/node.ts`'s `isIllegalNumber`.
 Answered earlier: Q-001 → D-041, Q-002 → D-040, Q-003 → D-007, Q-004 → D-039, Q-005, Q-006 → D-025,
 Q-009 → D-029, Q-010 → D-038. Next free: **Q-011**.
