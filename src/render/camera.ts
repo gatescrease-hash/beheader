@@ -65,10 +65,21 @@ export function worldToScreen(camera: CameraState, worldPoint: WorldPoint): Scre
 }
 
 /**
- * Screen -> world, under `camera` — the exact inverse of `worldToScreen`. Pure;
- * never throws: `camera.zoom` is always `>= MIN_ZOOM > 0` (every `CameraState`
- * this file produces is clamped, and `document.ts`'s `deserializeDocument`
- * rejects a malformed camera on load), so this never divides by zero. §5.9.
+ * Screen -> world, under `camera` — the exact inverse of `worldToScreen`. §5.9.
+ *
+ * PRECONDITION: `camera.zoom` is non-zero. Every `CameraState` this file
+ * PRODUCES satisfies it — `clampZoom` holds zoom inside `[MIN_ZOOM, MAX_ZOOM]`
+ * — but a camera read off a LOADED document does not. `deserializeDocument`
+ * rejects only numbers that are illegal AS NUMBERS (non-finite, or `-0` —
+ * D-027); `zoom: 0`, a negative zoom, and `1e-300` are all legal numbers and
+ * load fine. At `zoom: 0` this returns `Infinity` rather than throwing, because
+ * JS division does not throw — so a caller passing an unvalidated loaded camera
+ * gets a silently useless point instead of an error.
+ *
+ * D-062 puts that guard in `render/`, where a loaded camera enters the render
+ * layer, and NOT in `document.ts`: `MIN_ZOOM` is defined here, and Rule 1
+ * forbids `engine/` importing `render/`, so the loader structurally cannot
+ * enforce this file's range.
  */
 export function screenToWorld(camera: CameraState, screenPoint: ScreenPoint): WorldPoint {
   return {

@@ -1584,3 +1584,76 @@ present tense before this ruling existed, and raised Q-011 rather than editing t
 That pass is now retroactively sanctioned. The 82 `(D-NNN)` citations it left in source are the
 "Okay" form and stay; a spot check found no comment that cites a ruling INSTEAD of stating its
 reason.
+
+---
+
+## D-061 — `CameraState` is `{ x, y, zoom }`, and `camera.x`/`camera.y` is the world point at the screen's TOP-LEFT corner
+Answers: Q-007   Ruled: entry 0058-REVIEW-phase3   Binding on: `render/*`, `primitives/geometry.ts`,
+`command/*`, and anything else that converts between world and screen space
+
+**Ruling.** The camera is exactly three numbers and is not widened without a fresh ruling:
+
+- `camera.x`, `camera.y` — the WORLD-space point displayed at the screen's top-left corner
+  (pixel `0,0`), **not** the viewport centre.
+- `camera.zoom` — world lengths to screen pixels.
+- The transform is `screen = (world - camera) * zoom`, and its inverse
+  `world = screen / zoom + camera`. `render/camera.ts` owns both; nothing else re-implements them.
+
+Q-007 asked what shape §5.11's "camera state" has. `render/camera.ts` (entry 0057) is the consumer
+0025-REVIEW-phase0 required before closing it, and it needed no widening, because none of
+`worldToScreen`/`screenToWorld`/`panByScreenDelta`/`zoomAtScreenPoint` needs a viewport size —
+the caller supplies a screen-space point or delta per call. Every constraint 0025-REVIEW-phase0
+attached is met: the shape was widened-not-replaced (in fact unchanged), it stays plain and
+serializable, `document.ts` grew no second reader, and `deserializeDocument`'s rejection survives.
+
+**Rationale for pinning the CONVENTION, not just the shape.** The shape was never the risk; the
+convention is. `{ x, y, zoom }` reads identically under a centre-of-viewport reading, and a
+renderer or a hit-tester written against the wrong one is off by half a viewport — a bug that looks
+like a drifting camera, not like a wrong constant, and that only appears once something is actually
+drawn. Top-left is chosen because it needs no viewport size to define at all, which is the property
+that let the shape stay three numbers.
+
+A future "fit to bounding box" helper DOES need a viewport size. That is an argument for passing it
+per call, as every other function here does — not for storing it in `CameraState`. Widening this
+shape requires a new decision that supersedes this one.
+
+Reconciliation required: none. Q-007's `PROVISIONAL` tags were already removed at entry 0057, on
+0054-REVIEW-phase2 §7's explicit instruction; that instruction is confirmed as having been correct
+authority. Mark Q-007 `ANSWERED → D-061`.
+
+---
+
+## D-062 — A number that is LEGAL is not therefore VALID for its domain. The zoom range is `render/`'s to enforce, at the point a loaded camera enters the render layer
+Ruled: entry 0058-REVIEW-phase3   Binding on: `render/*` (every consumer of a `Document`'s `camera`),
+and on any future numeric field with a restricted domain
+
+**Ruling.** `isIllegalNumber` (D-027) answers one question only: *is this a number JSON can
+round-trip* — it rejects non-finite values and `-0`. It does NOT answer *is this number meaningful
+for the field it sits in*. `deserializeDocument` therefore accepts `camera.zoom` of `0`, of `-5`,
+and of `1e-300`; all three are legal numbers and none is a usable zoom.
+
+So:
+
+1. **No `render/` function may assume a `Document`'s camera is inside `[MIN_ZOOM, MAX_ZOOM]`.**
+   Only a `CameraState` produced by `render/camera.ts` carries that guarantee.
+2. **A loaded camera is clamped once, in `render/`, at the boundary where it enters the render
+   layer** — the same shape as `finiteOrFallback`: correct it to something usable, do not throw.
+   Whichever cycle first loads a document into a live canvas owns building that boundary.
+3. **`document.ts` is NOT to grow a zoom-range check.** `MIN_ZOOM`/`MAX_ZOOM` are `render/`'s
+   constants; Rule 1 forbids `engine/` importing `render/`, and duplicating the bounds in `engine/`
+   creates two sources of truth for one range — the defect D-014's principle exists to prevent.
+
+**Rationale.** Entry 0057's `screenToWorld` documented the opposite as a guarantee: "`camera.zoom`
+is always `>= MIN_ZOOM > 0` (... `deserializeDocument` rejects a malformed camera on load), so this
+never divides by zero." Probed at 0058-REVIEW-phase3, that is false — `{ x: 0, y: 0, zoom: 0 }`
+loads clean and `screenToWorld` then returns `{ x: Infinity, y: Infinity }` without throwing,
+because JS division does not throw. The claim is corrected in place at that review.
+
+The failure this prevents is quiet, which is why it is ruled rather than merely fixed: hit-testing
+(§5.9, "screen point → topmost object") that receives `Infinity` selects nothing, and a renderer at
+`zoom: 0` collapses every object onto the origin. Both look like a broken document, not like a
+camera that needed clamping — and neither raises an error anywhere.
+
+This generalises deliberately. `nextObjectId` is the same class of field: `isIllegalNumber` lets a
+non-integer or a negative `nextObjectId` load. Where a field's domain is narrower than "a legal
+number," the owner of the domain enforces it, at the boundary where the value is first used.

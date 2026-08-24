@@ -3,7 +3,7 @@
  * (§5.9). Colocated with camera.ts per D-001.
  */
 import { describe, expect, it } from "vitest";
-import type { CameraState } from "../engine/document.ts";
+import { deserializeDocument, type CameraState } from "../engine/document.ts";
 import { MAX_ZOOM, MIN_ZOOM, panByScreenDelta, screenToWorld, worldToScreen, zoomAtScreenPoint } from "./camera.ts";
 
 const IDENTITY_CAMERA: CameraState = { x: 0, y: 0, zoom: 1 };
@@ -96,5 +96,44 @@ describe("zoomAtScreenPoint", () => {
     const result = zoomAtScreenPoint(IDENTITY_CAMERA, { x: 1e6, y: -1e6 }, MIN_ZOOM);
     expect(Number.isFinite(result.x)).toBe(true);
     expect(Number.isFinite(result.y)).toBe(true);
+  });
+});
+
+// KNOWN GAP (D-062) — a camera read off a LOADED document is not range-checked.
+// `deserializeDocument` enforces number LEGALITY only (finite, not `-0` — D-027),
+// which a zoom of `0`, of `-5`, or of `1e-300` all satisfy. These tests pin the
+// CURRENT behaviour so the gap is executable rather than a claim in a comment:
+// they are tripwires, not endorsements. The cycle that first loads a document into
+// a live canvas builds the clamp D-062 requires, at the `render/` boundary, and
+// rewrites this block to assert the clamped result instead.
+describe("a loaded camera is not clamped to [MIN_ZOOM, MAX_ZOOM] (D-062, known gap)", () => {
+  const loadCameraWithZoom = (zoom: number): CameraState => {
+    const result = deserializeDocument({
+      formatVersion: 1,
+      nextObjectId: 1,
+      objects: [],
+      journal: [],
+      camera: { x: 0, y: 0, zoom },
+    });
+    if (!result.ok) {
+      throw new Error(`expected the loader to accept zoom ${zoom}, got: ${result.message}`);
+    }
+    return result.document.camera;
+  };
+
+  it("loads a zoom of 0, and screenToWorld then yields a non-finite point instead of throwing", () => {
+    const camera = loadCameraWithZoom(0);
+    expect(camera.zoom).toBe(0);
+    expect(screenToWorld(camera, { x: 100, y: 50 })).toEqual({ x: Infinity, y: Infinity });
+  });
+
+  it("loads a NEGATIVE zoom, which mirrors the world rather than being rejected", () => {
+    const camera = loadCameraWithZoom(-5);
+    expect(worldToScreen(camera, { x: 10, y: 0 })).toEqual({ x: -50, y: -0 });
+  });
+
+  it("loads a zoom far below MIN_ZOOM, so MIN_ZOOM binds only cameras this file produces", () => {
+    const camera = loadCameraWithZoom(1e-300);
+    expect(camera.zoom).toBeLessThan(MIN_ZOOM);
   });
 });

@@ -222,8 +222,8 @@ IEEE 754 `+` of two finite, non-`-0` operands cannot itself produce `-0` — see
 
 ## Q-007 — What shape does the document's serialized "camera state" (§5.11) have in Phase 0?
 Raised: entry 0024-document (implementer)   Brief section: §5.11, §5.9
-Status: **RESOLVED BY IMPLEMENTATION, entry 0057 — awaiting reviewer confirmation to close as
-ANSWERED → D-NNN.** `render/camera.ts` now exists as the real consumer 0025-REVIEW-phase0 named,
+Status: **ANSWERED → D-061** (confirmed at entry 0058-REVIEW-phase3; resolved by implementation
+at entry 0057). `render/camera.ts` now exists as the real consumer 0025-REVIEW-phase0 named,
 and needs no widening: `{ x, y, zoom }` (camera.x/y as the world point at the screen's top-left
 corner, zoom as a scale factor) is sufficient for `worldToScreen`/`screenToWorld`/
 `panByScreenDelta`/`zoomAtScreenPoint`, because none of them need a viewport size. Every binding
@@ -239,6 +239,16 @@ answer, on the reviewer's own prior instruction. §6.1 trigger 2 (`render/camera
 file of a new subsystem) already forces a review point this cycle regardless, so formal closure
 follows promptly.
 Blocks: nothing — `render/camera.ts` is now built.
+
+> Reviewer note (0058-REVIEW-phase3): **confirmed and closed as D-061**, which pins the CONVENTION
+> (`camera.x`/`y` is the world point at the screen's top-left corner, never the viewport centre) as
+> well as the shape — the shape was never the risk; a renderer written against a centre-based
+> reading is. Entry 0057's tag removal ahead of a minted `D-NNN` was CORRECT: 0054-REVIEW-phase2 §7
+> instructed it directly, and a review entry is binding authority.
+>
+> Separately, entry 0057 documented a guarantee the loader does not actually provide — a loaded
+> `camera.zoom` of `0`, `-5`, or `1e-300` passes `deserializeDocument`. See **D-062**, which puts
+> that guard on `render/` rather than on `document.ts`.
 
 Ambiguity: §5.11 lists "camera state" as one of the document's top-level fields, but `render/
 camera.ts` (§5.9: "world → screen and screen → world," pan/zoom) is Phase 3 work and does not exist
