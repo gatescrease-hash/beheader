@@ -248,9 +248,19 @@ describe("deserializeDocument — malformed input, never throws", () => {
     expect(deserializeDocument(missingAst).ok).toBe(false);
   });
 
-  it("routes a formula slot holding an unsupported AST shape (Q-005/cycle 0028) through mutate's own rejection — the shape a hand-edited file could carry today, since document.ts trusts a formula slot's ast content", () => {
+  it("routes a formula slot at an undeclared path (D-017) through mutate's own rejection — the shape a hand-edited file could carry today, since document.ts trusts a slot's content unchecked", () => {
+    // `bogus` is not `value`'s one schema-declared path (`primitives/schema.ts`'s
+    // VALUE_SCHEMA) — D-017's undeclared-slot check, not this file's job to catch.
     const objects: readonly GraphObject[] = [
-      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 1 }, value: null } } },
+      {
+        id: "obj_1",
+        name: "value_1",
+        type: "value",
+        slots: {
+          value: { kind: "literal", value: 1 },
+          bogus: { kind: "formula", ast: { type: "literal", value: 1 }, value: null },
+        },
+      },
     ];
     const serialized = serializeDocument({ ...createEmptyDocument(), objects });
 
@@ -258,7 +268,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("value_1.bogus");
     }
   });
 

@@ -253,23 +253,159 @@ describe("evaluate — L-13: a stale edge whose dependentSlot has no correspondi
   });
 });
 
-describe("evaluate — a formula slot whose AST is not a ReferenceNode (Q-005/cycle 0028)", () => {
-  it("evaluates to #PARSE rather than throwing — this build's evaluator only supports a bare reference until Phase 2", () => {
-    // mutation.ts's validateIntegrity (its new check, cycle 0028) rejects this
-    // shape before evaluate() is ever reached via the real §5.1 pipeline —
-    // pinned here directly, the same "call evaluate() straight past the gate"
-    // convention the L-13 test above already uses, so this defensive branch
-    // stays covered even though the real pipeline no longer reaches it.
-    const unsupported: GraphObject = {
+describe("evaluate — a formula slot whose AST is not a ReferenceNode (Q-005's widening; wired for real THIS cycle, D-036)", () => {
+  it("evaluates a LiteralNode formula for real — no #PARSE placeholder any more", () => {
+    const literalFormula: GraphObject = {
       id: "obj_1",
       name: "value_1",
       type: "value",
       slots: { value: { kind: "formula", ast: { type: "literal", value: 42 }, value: null } },
     };
 
-    expect(() => evaluate([unsupported], [])).not.toThrow();
-    const result = evaluate([unsupported], []);
-    expect(result[0]?.slots.value).toMatchObject({ kind: "formula", value: { error: "#PARSE" } });
+    expect(() => evaluate([literalFormula], [])).not.toThrow();
+    const result = evaluate([literalFormula], []);
+    expect(result[0]?.slots.value).toEqual({ kind: "formula", ast: { type: "literal", value: 42 }, value: 42 });
+  });
+
+  it("evaluates a binaryOp formula that references another slot, correctly ordered by the edge deriveEdges would have produced", () => {
+    const objects: GraphObject[] = [
+      valueObject("obj_1", "value_1", 10),
+      {
+        id: "obj_2",
+        name: "value_2",
+        type: "value",
+        slots: {
+          value: {
+            kind: "formula",
+            ast: { type: "binaryOp", operator: "+", left: { type: "reference", address: addr("obj_1", "value") }, right: { type: "literal", value: 5 } },
+            value: null,
+          },
+        },
+      },
+    ];
+    const edges: Edge[] = [edge(addr("obj_1", "value"), addr("obj_2", "value"))];
+
+    const result = evaluate(objects, edges);
+    expect(objectById(result, "obj_2").slots.value).toMatchObject({ value: 15 });
+  });
+
+  it("evaluates a functionCall formula (SUM over plain scalar references)", () => {
+    const objects: GraphObject[] = [
+      valueObject("obj_1", "value_1", 1),
+      valueObject("obj_2", "value_2", 2),
+      {
+        id: "obj_3",
+        name: "value_3",
+        type: "value",
+        slots: {
+          value: {
+            kind: "formula",
+            ast: {
+              type: "functionCall",
+              name: "SUM",
+              args: [
+                { type: "reference", address: addr("obj_1", "value") },
+                { type: "reference", address: addr("obj_2", "value") },
+              ],
+            },
+            value: null,
+          },
+        },
+      },
+    ];
+    const edges: Edge[] = [edge(addr("obj_1", "value"), addr("obj_3", "value")), edge(addr("obj_2", "value"), addr("obj_3", "value"))];
+
+    const result = evaluate(objects, edges);
+    expect(objectById(result, "obj_3").slots.value).toMatchObject({ value: 3 });
+  });
+
+  it("an ErrorNode (D-028) evaluates to its #REF ErrorValue, still never throwing", () => {
+    const errorFormula: GraphObject = {
+      id: "obj_1",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "error", error: "#REF" }, value: null } },
+    };
+    const result = evaluate([errorFormula], []);
+    expect(result[0]?.slots.value).toMatchObject({ value: { error: "#REF" } });
+  });
+});
+
+describe("evaluate — a range inside an aggregate call, expanded through the readRange wiring THIS cycle built (D-036/D-044)", () => {
+  /** A table object with `rows`/`cols` literal slots and a literal value at every one of the given cells. */
+  function tableObject(id: string, name: string, rows: number, cols: number, cellValues: Record<string, number>): GraphObject {
+    const slots: Record<string, Slot> = {
+      rows: { kind: "literal", value: rows },
+      cols: { kind: "literal", value: cols },
+    };
+    for (const [ref, value] of Object.entries(cellValues)) {
+      slots[`cells.${ref}`] = { kind: "literal", value };
+    }
+    return { id, name, type: "table", slots };
+  }
+
+  it("SUM(A1:B2) over a 2x2 table sums exactly those four cells", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, { A1: 1, B1: 2, A2: 3, B2: 4 });
+    const sumFormula: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "B2") }] },
+          value: null,
+        },
+      },
+    };
+    // The edges deriveEdges would derive: every cell in the range feeds the formula slot.
+    const edges: Edge[] = [
+      edge(addr("obj_1", "cells", "A1"), addr("obj_2", "value")),
+      edge(addr("obj_1", "cells", "B1"), addr("obj_2", "value")),
+      edge(addr("obj_1", "cells", "A2"), addr("obj_2", "value")),
+      edge(addr("obj_1", "cells", "B2"), addr("obj_2", "value")),
+    ];
+
+    const result = evaluate([table, sumFormula], edges);
+    expect(objectById(result, "obj_2").slots.value).toMatchObject({ value: 10 });
+  });
+
+  it("D-044: a range extending past the table's current extent sums only the cells that exist", () => {
+    const table = tableObject("obj_1", "table_x", 1, 1, { A1: 7 });
+    const sumFormula: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "Z99") }] },
+          value: null,
+        },
+      },
+    };
+    const edges: Edge[] = [edge(addr("obj_1", "cells", "A1"), addr("obj_2", "value"))];
+
+    const result = evaluate([table, sumFormula], edges);
+    expect(objectById(result, "obj_2").slots.value).toMatchObject({ value: 7 });
+  });
+
+  it("a range naming a table that does not exist in this pass evaluates to #REF rather than throwing", () => {
+    const sumFormula: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_missing", "cells", "A1"), end: addr("obj_missing", "cells", "B2") }] },
+          value: null,
+        },
+      },
+    };
+    expect(() => evaluate([sumFormula], [])).not.toThrow();
+    const result = evaluate([sumFormula], []);
+    expect(result[0]?.slots.value).toMatchObject({ value: { error: "#REF" } });
   });
 });
 

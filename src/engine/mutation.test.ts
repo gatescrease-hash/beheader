@@ -288,46 +288,60 @@ describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot
   });
 });
 
-describe("validateIntegrity — unsupported formula AST shape (Q-005's widening of FormulaAst, cycle 0028)", () => {
-  it("rejects a formula slot holding a LiteralNode, naming it, before evaluate would ever be reached", () => {
+describe("deriveEdges/validateIntegrity — every FormulaAst shape is genuinely supported (D-036 constraint 3: the ReferenceNode-only narrowing and its findUnsupportedFormulaAsts shield are BOTH deleted this cycle)", () => {
+  it("accepts a formula slot holding a bare LiteralNode — no edges needed, no rejection", () => {
     const objects: GraphObject[] = [
       { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 42 }, value: null } } },
     ];
 
-    const result = validateIntegrity(objects, deriveEdges(objects));
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toContain("value_1.value");
-      expect(result.message).toContain("literal");
-    }
+    expect(deriveEdges(objects)).toEqual([]); // a literal has no dependency to derive an edge from.
+    expect(validateIntegrity(objects, deriveEdges(objects))).toEqual({ ok: true });
   });
 
-  it("rejects every non-reference AST shape in turn: literal, range, binaryOp, unaryOp, functionCall, error", () => {
-    const nonReferenceAsts: FormulaAst[] = [
+  it("accepts and correctly wires every non-reference AST shape in turn: literal, binaryOp, unaryOp, functionCall — each formerly rejected, now genuinely supported", () => {
+    const referenced = addr("obj_9", "value");
+    const shapes: FormulaAst[] = [
       { type: "literal", value: 1 },
-      { type: "range", start: addr("obj_1", "value"), end: addr("obj_1", "value") },
-      { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } },
+      { type: "binaryOp", operator: "+", left: { type: "reference", address: referenced }, right: { type: "literal", value: 2 } },
       { type: "unaryOp", operator: "NOT", operand: { type: "literal", value: true } },
-      { type: "functionCall", name: "SUM", args: [] },
-      { type: "error", error: "#REF" }, // D-028, added 0029-REVIEW-phase1 — this list must stay exhaustive over FormulaAst.
+      { type: "functionCall", name: "SUM", args: [{ type: "reference", address: referenced }] },
     ];
-    for (const ast of nonReferenceAsts) {
-      const objects: GraphObject[] = [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast, value: null } } }];
-      expect(validateIntegrity(objects, deriveEdges(objects)).ok).toBe(false);
+    for (const ast of shapes) {
+      const objects: GraphObject[] = [
+        valueObject("obj_9", "value_9", 5),
+        { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast, value: null } } },
+      ];
+      expect(validateIntegrity(objects, deriveEdges(objects)).ok).toBe(true);
     }
   });
 
-  it("does not flag a formula slot holding the one supported shape, ReferenceNode — the ordinary binding case", () => {
+  it("an ErrorNode (D-028) is accepted as legitimate, already-repaired state, not rejected", () => {
+    const objects: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "error", error: "#REF" }, value: null } } },
+    ];
+    expect(validateIntegrity(objects, deriveEdges(objects))).toEqual({ ok: true });
+  });
+
+  it("still does not flag a formula slot holding a plain ReferenceNode — the ordinary binding case, unchanged", () => {
     const objects = [valueObject("obj_1", "value_1", 1), addObject("obj_2", "add_1", addr("obj_1", "value"), addr("obj_1", "value"))];
     const result = validateIntegrity(objects, deriveEdges(objects));
     expect(result.ok).toBe(true);
   });
 
-  it("runs before the dangling-reference check: a document with BOTH an unsupported AST and an unrelated dangling reference reports only the unsupported-AST problem", () => {
+  it("a binaryOp formula referencing a slot that does NOT resolve is still caught by the dangling-reference check — extractDependencies feeds it a real edge to check", () => {
     const objects: GraphObject[] = [
-      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 1 }, value: null } } },
-      addObject("obj_2", "add_1", addr("obj_999", "value"), addr("obj_1", "value")),
+      {
+        id: "obj_1",
+        name: "value_1",
+        type: "value",
+        slots: {
+          value: {
+            kind: "formula",
+            ast: { type: "binaryOp", operator: "+", left: { type: "reference", address: addr("obj_999", "value") }, right: { type: "literal", value: 1 } },
+            value: null,
+          },
+        },
+      },
     ];
 
     const result = validateIntegrity(objects, deriveEdges(objects));
@@ -335,14 +349,90 @@ describe("validateIntegrity — unsupported formula AST shape (Q-005's widening 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("value_1.value");
-      expect(result.message).not.toContain("add_1.in.a"); // the dangling-reference problem — not reached this call
     }
   });
 
-  it("rejected via the real mutate() entry point, naming the slot, leaving prior state unchanged", () => {
+  it("committed via the real mutate() entry point — a formula containing a range is storable, per D-036 constraint 4", () => {
+    const table = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 42 } });
+    const sumCell = tableObject("obj_2", "table_y", 1, 1, {
+      "cells.A1": {
+        kind: "formula",
+        ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A1") }] },
+        value: null,
+      },
+    });
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: sumCell }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const committed = result.objects.find((object) => object.id === "obj_2");
+      expect(committed?.slots["cells.A1"]).toMatchObject({ value: 42 });
+    }
+  });
+
+  it("never throws for any FormulaAst shape", () => {
+    const objects: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "functionCall", name: "SUM", args: [] }, value: null } } },
+    ];
+    expect(() => validateIntegrity(objects, deriveEdges(objects))).not.toThrow();
+  });
+});
+
+describe("validateIntegrity — D-031: an illegal number LITERAL inside a stored formula AST is rejected, the same way an illegal slot VALUE already is", () => {
+  it("rejects a formula slot whose AST holds a non-finite LiteralNode, naming the slot", () => {
+    const objects: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: Infinity }, value: null } } },
+    ];
+
+    const result = validateIntegrity(objects, deriveEdges(objects));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain("Infinity");
+    }
+  });
+
+  it("rejects a -0 LiteralNode buried inside a binaryOp/functionCall tree, not just at the AST root", () => {
+    const objects: GraphObject[] = [
+      {
+        id: "obj_1",
+        name: "value_1",
+        type: "value",
+        slots: {
+          value: {
+            kind: "formula",
+            ast: { type: "functionCall", name: "ABS", args: [{ type: "binaryOp", operator: "+", left: { type: "literal", value: -0 }, right: { type: "literal", value: 1 } }] },
+            value: null,
+          },
+        },
+      },
+    ];
+
+    const result = validateIntegrity(objects, deriveEdges(objects));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("-0");
+    }
+  });
+
+  it("does NOT reject a perfectly ordinary finite literal — this is a targeted check, not a blanket ban on LiteralNodes", () => {
+    const objects: GraphObject[] = [
+      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 3.5 }, value: null } } },
+    ];
+    expect(validateIntegrity(objects, deriveEdges(objects))).toEqual({ ok: true });
+  });
+
+  it("reachable through the real mutate() entry point, leaving prior state unchanged", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
-    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "formula", ast: { type: "literal", value: 99 }, value: null } };
+    const operation: Operation = {
+      kind: "setSlot",
+      address: addr("obj_1", "value"),
+      slot: { kind: "formula", ast: { type: "literal", value: NaN }, value: null },
+    };
 
     const result = mutate(initial, [operation], []);
 
@@ -353,9 +443,20 @@ describe("validateIntegrity — unsupported formula AST shape (Q-005's widening 
     expect(initial).toEqual(snapshotBefore);
   });
 
-  it("never throws for any non-reference AST shape", () => {
+  it("never throws, including on a deeply nested illegal literal", () => {
     const objects: GraphObject[] = [
-      { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "functionCall", name: "SUM", args: [] }, value: null } } },
+      {
+        id: "obj_1",
+        name: "value_1",
+        type: "value",
+        slots: {
+          value: {
+            kind: "formula",
+            ast: { type: "unaryOp", operator: "-", operand: { type: "unaryOp", operator: "-", operand: { type: "literal", value: -Infinity } } },
+            value: null,
+          },
+        },
+      },
     ];
     expect(() => validateIntegrity(objects, deriveEdges(objects))).not.toThrow();
   });
@@ -1739,5 +1840,223 @@ describe("table dimensions are literal-only — Rule 6 (D-046)", () => {
     // fail its own re-validation.
     const result = mutate(objects, [{ kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 1 } }], []);
     expect(result.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The range-evaluation wiring (STATUS.md's "Next slice"; D-036's five
+// constraints, all landing this cycle). These are the end-to-end proofs
+// closest to PROJECT_BRIEF §6 Phase 2's own acceptance criterion — but see
+// each test's own note for exactly which clause it demonstrates and which
+// clause (row/column insert/delete, the repair-vs-force reject path) still
+// needs the still-deferred resize/creation cycle: this cycle does not claim
+// the phase criterion complete.
+// ---------------------------------------------------------------------------
+
+describe("mutate — two separate tables, a cross-table formula, live update (Phase 2 criterion clause 1, real end-to-end)", () => {
+  it("table_a.B2 holds a formula reading table_b.C3 * 2 and updates live when table_b.C3 changes", () => {
+    const tableB = tableObject("obj_2", "table_b", 3, 3, { "cells.C3": { kind: "literal", value: 10 } });
+    const tableA = tableObject("obj_1", "table_a", 2, 2, {
+      "cells.B2": {
+        kind: "formula",
+        ast: { type: "binaryOp", operator: "*", left: { type: "reference", address: addr("obj_2", "cells", "C3") }, right: { type: "literal", value: 2 } },
+        value: null,
+      },
+    });
+
+    const created = mutate([], [{ kind: "createObject", object: tableB }, { kind: "createObject", object: tableA }], []);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+    expect(created.objects.find((o) => o.id === "obj_1")?.slots["cells.B2"]).toMatchObject({ value: 20 });
+
+    // Change the SOURCE cell — table_a.B2 must recompute, live, in the SAME
+    // mutation that only touched table_b.
+    const updated = mutate(created.objects, [{ kind: "setSlot", address: addr("obj_2", "cells", "C3"), slot: { kind: "literal", value: 100 } }], created.journal);
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.objects.find((o) => o.id === "obj_1")?.slots["cells.B2"]).toMatchObject({ value: 200 });
+    }
+  });
+});
+
+describe("mutate — a circular reference between two tables, running through a RANGE this time, is rejected (Phase 2 criterion clause 2)", () => {
+  it("table_a.A1 = SUM(table_b.A1:A1), table_b.A1 = SUM(table_a.A1:A1) — a genuine cycle through range-derived edges", () => {
+    const tableA = tableObject("obj_1", "table_a", 1, 1, {
+      "cells.A1": {
+        kind: "formula",
+        ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_2", "cells", "A1"), end: addr("obj_2", "cells", "A1") }] },
+        value: null,
+      },
+    });
+    const tableB = tableObject("obj_2", "table_b", 1, 1, {
+      "cells.A1": {
+        kind: "formula",
+        ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A1") }] },
+        value: null,
+      },
+    });
+
+    const result = mutate([], [{ kind: "createObject", object: tableA }, { kind: "createObject", object: tableB }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("cyclic dependency");
+    }
+  });
+
+  it("a self-inclusive range (A6 = SUM(A1:A6)) is a genuine self-edge and is correctly rejected as a cycle — §5.3: 'do not special-case it'", () => {
+    const table = tableObject("obj_1", "table_x", 6, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 1 },
+      "cells.A3": { kind: "literal", value: 1 },
+      "cells.A4": { kind: "literal", value: 1 },
+      "cells.A5": { kind: "literal", value: 1 },
+      "cells.A6": {
+        kind: "formula",
+        ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A6") }] },
+        value: null,
+      },
+    });
+
+    const result = mutate([], [{ kind: "createObject", object: table }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("cyclic dependency");
+    }
+  });
+});
+
+describe("mutate — SUM(A1:A5) recomputes correctly as cell values change (Phase 2 criterion clause 3's LIVE-UPDATE half; the row-INSERT half needs the still-deferred resize cycle — see STATUS.md)", () => {
+  it("recomputes when a cell WITHIN the range changes, in the same batch that changed only that cell", () => {
+    const table = tableObject("obj_1", "table_x", 5, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 1 },
+      "cells.A3": { kind: "literal", value: 1 },
+      "cells.A4": { kind: "literal", value: 1 },
+      "cells.A5": {
+        kind: "formula",
+        ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A4") }] },
+        value: null,
+      },
+    });
+
+    const created = mutate([], [{ kind: "createObject", object: table }], []);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+    expect(created.objects.find((o) => o.id === "obj_1")?.slots["cells.A5"]).toMatchObject({ value: 4 });
+
+    const updated = mutate(created.objects, [{ kind: "setSlot", address: addr("obj_1", "cells", "A2"), slot: { kind: "literal", value: 10 } }], created.journal);
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.objects.find((o) => o.id === "obj_1")?.slots["cells.A5"]).toMatchObject({ value: 13 });
+    }
+  });
+});
+
+describe("deriveEdges/mutate — D-044: range expansion is bounded by the table's CURRENT extent, re-derived every call, never cached", () => {
+  it("SUM(A1:Z99) over a small table only sums the cells that actually exist", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.B1": { kind: "literal", value: 2 },
+      "cells.A2": { kind: "literal", value: 3 },
+      "cells.B2": { kind: "literal", value: 4 },
+    });
+    const sumConsumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "Z99") }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: sumConsumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 10 });
+    }
+  });
+
+  it("the SAME range expands to MORE edges once the table's rows/cols grow — never a cached expansion from the first call", () => {
+    const small = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 1 } });
+    const rangeFormula: Slot = {
+      kind: "formula",
+      ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "B2") }] },
+      value: null,
+    };
+    const consumer: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: rangeFormula } };
+
+    const smallEdges = deriveEdges([small, consumer]);
+    expect(smallEdges).toHaveLength(1); // only A1 exists yet.
+
+    const grown = tableObject("obj_1", "table_x", 2, 2, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.B1": { kind: "literal", value: 2 },
+      "cells.A2": { kind: "literal", value: 3 },
+      "cells.B2": { kind: "literal", value: 4 },
+    });
+    const grownEdges = deriveEdges([grown, consumer]);
+    expect(grownEdges).toHaveLength(4); // the SAME range now spans all four cells.
+  });
+});
+
+describe("deriveEdges — a range naming a table that does not resolve falls back to ONE edge from its own start address, so the dangling-reference check still catches and names it (the defensive arm; D-045 rejects the reachable authored case at parse time)", () => {
+  it("a range dependency whose table id does not exist in objects still produces a dangling edge, not a silently-dropped dependency", () => {
+    const consumer: GraphObject = {
+      id: "obj_1",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_missing", "cells", "A1"), end: addr("obj_missing", "cells", "B2") }] },
+          value: null,
+        },
+      },
+    };
+
+    const edges = deriveEdges([consumer]);
+    expect(edges).toEqual([{ sourceSlot: addr("obj_missing", "cells", "A1"), dependentSlot: addr("obj_1", "value") }]);
+
+    const result = validateIntegrity([consumer], edges);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+  });
+
+  it("this is what makes `delete <table>` correctly REJECTED while a range elsewhere still names it — deleting the table the range depends on leaves a dangling edge, the same way deleting a plainly-referenced object already does", () => {
+    const table = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 1 } });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A1") }] },
+          value: null,
+        },
+      },
+    };
+
+    const created = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const deletion = mutate(created.objects, [{ kind: "deleteObject", objectId: "obj_1" }], created.journal);
+    expect(deletion.ok).toBe(false);
   });
 });

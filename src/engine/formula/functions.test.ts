@@ -190,6 +190,27 @@ describe("SUM / MIN / MAX / AVG", () => {
     expectError(result, "#TYPE");
     expect((result as ErrorValue).message).toContain("argument 2");
   });
+
+  it("MIN/MAX with ZERO arguments (unreachable via checkArity for a literal call, but reachable once a range clamps to empty, D-044 point 2) match Math.min()/Math.max()'s own documented answer — #TYPE, not a crash", () => {
+    // checkArity's AT_LEAST(1) only guards the AST-level argument COUNT
+    // (`MIN(A1:A100)` is one argument node); a range clamped to an empty
+    // rectangle (D-044) still reaches `implementation` with a flattened
+    // EMPTY Value[] — exactly what this call simulates directly.
+    expectError(call("MIN", []), "#TYPE");
+    expectError(call("MAX", []), "#TYPE");
+  });
+
+  it("D-036 constraint 5: MIN/MAX over a very large argument list do not throw a RangeError — the Math.min(...)/Math.max(...) spread this replaced would have", () => {
+    // Comfortably past the argument-count ceiling that crashes a bare
+    // `Math.min(...bigArray)` spread in this engine (well under 1e6, chosen
+    // to keep the test fast while still far past any plausible call-stack
+    // argument limit).
+    const many = Array.from({ length: 200_000 }, (_, i) => i);
+    expect(() => call("MIN", many)).not.toThrow();
+    expect(() => call("MAX", many)).not.toThrow();
+    expect(call("MIN", many)).toBe(0);
+    expect(call("MAX", many)).toBe(199_999);
+  });
 });
 
 describe("ABS / FLOOR / CEIL / SQRT", () => {

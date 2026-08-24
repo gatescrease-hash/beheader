@@ -390,6 +390,30 @@ describe("parseFormula — ranges (§5.3: only as a direct argument to SUM/MIN/M
   });
 });
 
+describe("parseFormula — D-045: a range whose endpoints name different objects is rejected at PARSE time", () => {
+  it("rejects SUM(table_x.A1:table_y.B4) — two DIFFERENT tables — with a #PARSE naming the problem", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"], ["obj_6", "table_y", "table"]);
+    const error = parseFail("SUM(table_x.A1:table_y.B4)", docObjects);
+    expect(error.error).toBe("#PARSE");
+    expect(error.message).toContain("same table");
+  });
+
+  it("accepts SUM(table_x.A1:table_x.B4) — both endpoints naming the SAME table, written out in full", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"]);
+    expect(parseOk("SUM(table_x.A1:table_x.B4)", docObjects)).toEqual({
+      type: "functionCall",
+      name: "SUM",
+      args: [{ type: "range", start: { objectId: "obj_5", path: ["cells", "A1"] }, end: { objectId: "obj_5", path: ["cells", "B4"] } }],
+    });
+  });
+
+  it("still runs the placement check first — a cross-object range in a non-aggregate position is rejected for placement, not object identity", () => {
+    const docObjects = objects(["obj_5", "table_x", "table"], ["obj_6", "table_y", "table"]);
+    const error = parseFail("IF(table_x.A1:table_y.B4, 1, 2)", docObjects);
+    expect(error.message).toContain("aggregate function");
+  });
+});
+
 describe("parseFormula — malformed input never throws, returns a #PARSE ParseError instead", () => {
   it("rejects an empty formula", () => {
     const error = parseFail("");

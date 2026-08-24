@@ -83,6 +83,37 @@
  * column, or wires range expansion — see `primitives/table.ts`'s own NOT DONE
  * HERE for the full list still deferred to the wiring cycle.
  *
+ * THIS cycle IS that wiring cycle — STATUS.md's "Next slice — the
+ * range-evaluation wiring," 0041-REVIEW-phase2 §9's ordering, D-036's five
+ * binding constraints. `deriveEdges`'s Source 1 no longer reads a formula
+ * slot's AST by hand (the `ReferenceNode`-only narrowing D-036 constraint 3
+ * named for deletion): it walks `formula/deps.ts`'s `extractDependencies` for
+ * real, over EVERY `FormulaAst` shape, turning each `ReferenceDependency`
+ * into one edge and each `RangeDependency` into one edge per cell currently
+ * within the named table's extent (D-044), via `primitives/table.ts`'s
+ * `enumerateRangeCellAddresses` — bounded, re-resolved every call, reading
+ * dimensions `literal`-only (D-046). `validateIntegrity`'s TEMPORARY
+ * `findUnsupportedFormulaAsts` check — the shield that made the old narrowing
+ * safe — is DELETED, not merely unused: every `FormulaAst` shape is genuinely
+ * supported now, so there is nothing left for it to guard against. Deleting
+ * it is also what makes **D-031** reachable (a `LiteralNode`'s value inside a
+ * stored AST is document state the SAME way a slot's own `value` is) — closed
+ * in the SAME cycle, per D-031's own binding text: `findIllegalSlotValues`
+ * (validateIntegrity's value-legality check) now ALSO walks every
+ * `formula`-kind slot's stored AST and rejects an illegal `LiteralNode`, the
+ * widened existing check, not a parallel one. `graph/eval.ts`'s
+ * `ReferenceNode`-only bridge is likewise deleted (that file's own header),
+ * and `formula/eval.ts` gains real range-aggregate expansion (that file's own
+ * header) — the THREE temporary bridges STATUS.md named come down together,
+ * in this one cycle, as D-036 required. A range-containing formula is
+ * therefore storable as of this cycle (D-036 constraint 4) — nothing here
+ * withheld that separately. `formula/parser.ts` gains **D-045** (a
+ * cross-object range is rejected at PARSE time, not left to
+ * `enumerateRangeCellAddresses`'s own defensive check), and `functions.ts`'s
+ * `MIN`/`MAX` lose their `Math.min(...)`/`Math.max(...)` spread risk (D-036
+ * constraint 5) — both landed in this cycle because this is the first cycle
+ * able to make a range's flattened argument list arbitrarily long.
+ *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
  * rebuild the whole edge set rather than tracking which slots were affected.")
@@ -130,17 +161,15 @@
  *   1. Every `formula`-kind slot AT A SCHEMA-DECLARED NON-DERIVED PATH — not,
  *      as §5.1 step 3's own wording ("re-derive ALL edges from stored formula
  *      ASTs") would have it, every formula slot the object actually carries.
- *      `FormulaAst` is now the full §5.3 union (Q-005, ANSWERED cycle 0028),
- *      but this function still only derives an edge from the `ReferenceNode`
- *      shape — "walking the AST" is reading its one `address` field. A
- *      formula slot whose AST is any OTHER shape is skipped here (no edge
- *      derived for it) and is a TEMPORARY gap, closed not by this function
- *      but by `validateIntegrity`'s new check (see WHAT THIS IS below):
- *      `mutate` rejects the whole document before this gap can matter. Real,
- *      general edge derivation via `formula/deps.ts`'s `extractDependencies`
- *      is Phase 2's job ("wire the formula engine into cell slots").
- *      That address becomes an edge's `sourceSlot`; the formula slot's OWN
- *      address becomes `dependentSlot`.
+ *      `FormulaAst` is the full §5.3 union (Q-005, cycle 0028), and as of THIS
+ *      cycle "walking the AST" means calling `formula/deps.ts`'s
+ *      `extractDependencies` for real — every `ReferenceDependency` becomes
+ *      one edge directly; every `RangeDependency` expands into one edge PER
+ *      CELL currently within the named table's extent (D-044), via
+ *      `primitives/table.ts`'s `enumerateRangeCellAddresses`, re-resolved
+ *      from CURRENT `rows`/`cols` on every call (D-036 constraint 2 — never a
+ *      cached expansion). The formula slot's OWN address becomes every
+ *      resulting edge's `dependentSlot`.
  *
  *      READ THAT NARROWING AS A HAZARD, NOT A DETAIL — see D-017. This
  *      function's domain is the SCHEMA's slot set; `graph/eval.ts`'s domain is
@@ -205,11 +234,14 @@
  *     would never produce, but this function does not trust that.
  *
  * `validateIntegrity(objects, edges)` — §5.1 step 4 / §5.1.1, and where D-017
- * part 2, D-018, AND D-025 all land. Takes a candidate post-apply object list
- * and its freshly `deriveEdges`-derived edge set (step 2's "apply" and step 3
- * are NOT this function's job — see NOT DONE HERE; it is handed the result),
- * and rejects with a human-readable message, or passes, in FIVE checks, run
- * in this order:
+ * part 2, D-018, D-025, AND (as of THIS cycle) D-031 all land. Takes a
+ * candidate post-apply object list and its freshly `deriveEdges`-derived edge
+ * set (step 2's "apply" and step 3 are NOT this function's job — see NOT DONE
+ * HERE; it is handed the result), and rejects with a human-readable message,
+ * or passes, in FOUR checks, run in this order — down from five: the
+ * TEMPORARY `findUnsupportedFormulaAsts` check (cycle 0028) is DELETED THIS
+ * cycle, per D-036 constraint 3, now that `deriveEdges` genuinely supports
+ * every `FormulaAst` shape and there is nothing left for it to guard:
  *
  *   1. **D-017 part 2, first** (per 0014-REVIEW-phase0's own constraint: "the
  *      first thing step 4 must do"). For every object THAT HAS a schema entry,
@@ -223,29 +255,11 @@
  *      whose type has NO schema entry at all is skipped, not flagged — D-017's
  *      one permitted exception, because §6's build order guarantees such a
  *      type carries no formula slots yet.
- *   2. **Unsupported formula AST shape** (`findUnsupportedFormulaAsts`, NEW at
- *      cycle 0028, closing Q-005's own widening of `FormulaAst`). Same family
- *      as check 1 — both are about whether `deriveEdges`'s output can be
- *      trusted — reached from a different angle: `FormulaAst` is now a
- *      seven-variant union (§5.3's grammar plus D-028's `ErrorNode`), but
- *      `deriveEdges` still derives an edge only from the `ReferenceNode` shape
- *      (see its own doc comment), because the `extractDependencies` it would
- *      need does not exist until Phase 2. A `formula`-kind slot holding any
- *      OTHER AST shape would therefore get NO edge at all — `deriveEdges`
- *      silently dropping a real dependency, D-017's exact failure class,
- *      reached through a different door. Rejected here, by name, before
- *      `detectCycle` runs on a graph that cannot be trusted — the same
- *      reasoning as check 1, run immediately after it for the same reason.
- *      TEMPORARY: this check exists only because this build's evaluator is
- *      narrower than the type system now allows; Phase 2 deletes it once
- *      `deriveEdges`/`evaluate` are wired to the real formula engine and can
- *      handle every shape `FormulaAst` admits.
- *   3. **D-018, the OTHER direction** (`findSchemaSlotKindMismatches`,
- *      0018-REVIEW-phase0 — closed THIS cycle, previously a disclosed KNOWN
- *      GAP). D-017 above rejects a slot the object carries that its schema
- *      does NOT declare; this rejects the reverse two mismatches: (a) a
- *      schema-declared derived path that is missing its `derived`-kind slot
- *      entirely — the exact shape a §5.11 load produces, since
+ *   2. **D-018, the OTHER direction** (`findSchemaSlotKindMismatches`,
+ *      0018-REVIEW-phase0). D-017 above rejects a slot the object carries that
+ *      its schema does NOT declare; this rejects the reverse two mismatches:
+ *      (a) a schema-declared derived path that is missing its `derived`-kind
+ *      slot entirely — the exact shape a §5.11 load produces, since
  *      `DerivedSlot.value` is never serialized — which is precisely what
  *      makes `dependentSlot` dangling in check 3 below WITHOUT this check
  *      catching it first; and (b) a slot whose actual kind disagrees with
@@ -256,10 +270,10 @@
  *      case, every path this check inspects comes FROM the schema, so a real
  *      `Address` always exists — no `describeUndeclaredSlot`-style exception
  *      needed here.
- *   4. **Dangling references** (§5.1.1's stated wording: "any formula
+ *   3. **Dangling references** (§5.1.1's stated wording: "any formula
  *      references a slot that does not exist"). For every edge, its
  *      `sourceSlot` must `resolveSlot` (`graph/node.ts`) against `objects`.
- *      `dependentSlot` is deliberately NOT checked here — checks 1 and 3
+ *      `dependentSlot` is deliberately NOT checked here — checks 1 and 2
  *      above are what make that safe: an edge's `dependentSlot` can only be
  *      dangling via D-017's or D-018's own failure modes, both already
  *      rejected earlier in this same call. This ONE check is both halves of
@@ -273,34 +287,49 @@
  *      "naming every dependent" — is why the message names the DEPENDENT
  *      side via `formatAddress`, never the missing source: the source's
  *      object may be gone, so there is nothing safe to format there, and
- *      D-015 forbids leaking its raw `objectId` into the message anyway.
- *   5. **Illegal slot values** (`findIllegalSlotValues`, D-025/Q-006, cycle
+ *      D-015 forbids leaking its raw `objectId` into the message anyway. A
+ *      range dependency whose table could not be resolved (or, defensively,
+ *      failed to enumerate) reaches this check via `deriveEdges`'s own
+ *      fallback edge (that function's own doc comment) rather than a special
+ *      case here — the same dangling-reference machinery, no new mechanism.
+ *   4. **Illegal slot values** (`findIllegalSlotValues`, D-025/Q-006, cycle
  *      0023, WIDENED by Q-008 at cycle 0026 — "non-finite numbers, and `-0`,
- *      are not legal document state"). Every slot's `value` field (all three
- *      kinds carry one) is checked via `graph/node.ts`'s `hasIllegalNumber` —
- *      a bare `NaN`/`Infinity`/`-Infinity`/`-0`, or one nested inside a
- *      `Point`/`Point[]`'s `x`/`y`. Runs LAST and independently of checks
- *      1-4: value legality is orthogonal to schema/edge structure, so there
- *      is no ordering hazard to reason about the way check 1 before check 4
- *      needs one. Applies to `literal`, `formula`, and `derived` slots alike,
- *      but NOT as a backstop for a freshly-computed `derived` value: this
- *      function runs BEFORE `evaluate` (see `deriveValidateAndEvaluate`
- *      below) and `evaluate`'s result is returned as-is, never re-validated —
- *      so this check can only ever see an illegal number in a LITERAL
- *      (freshly written or already sitting in `objects`) or a STALE
- *      formula/derived cached value from a prior pass. An illegal result a
- *      compute function returns THIS pass is entirely that function's own
- *      responsibility (`add`'s is the only one that exists, and does — see
+ *      are not legal document state" — and WIDENED AGAIN this cycle by
+ *      **D-031**). Every slot's `value` field (all three kinds carry one) is
+ *      checked via `graph/node.ts`'s `hasIllegalNumber` — a bare `NaN`/
+ *      `Infinity`/`-Infinity`/`-0`, or one nested inside a `Point`/`Point[]`'s
+ *      `x`/`y`. As of D-031, every `formula`-kind slot's stored AST is ALSO
+ *      walked (`collectIllegalAstLiterals` below) for a `LiteralNode` whose
+ *      `number` value fails the SAME leaf predicate — reachable for the first
+ *      time this cycle, since the TEMPORARY `findUnsupportedFormulaAsts`
+ *      check that used to reject every non-reference AST (and so kept a
+ *      `LiteralNode` deep inside one from ever being stored) is gone; D-031's
+ *      own binding text requires closing this in the SAME cycle. Runs LAST
+ *      and independently of checks 1-3: value legality is orthogonal to
+ *      schema/edge structure, so there is no ordering hazard to reason about
+ *      the way check 1 before check 3 needs one. Applies to `literal`,
+ *      `formula`, and `derived` slots alike, but NOT as a backstop for a
+ *      freshly-computed `derived` value: this function runs BEFORE `evaluate`
+ *      (see `deriveValidateAndEvaluate` below) and `evaluate`'s result is
+ *      returned as-is, never re-validated — so this check can only ever see
+ *      an illegal number in a LITERAL (freshly written or already sitting in
+ *      `objects`), a STORED AST LITERAL (D-031), or a STALE formula/derived
+ *      cached value from a prior pass. An illegal result a compute function
+ *      returns THIS pass is entirely that function's own responsibility
+ *      (`add`'s is the only one that exists, and does — see
  *      `primitives/schema.ts`); verified by mutation-test that removing
  *      `add`'s own guard commits a raw `Infinity` with nothing here to catch
- *      it (0023's log entry — an earlier draft of this comment claimed
- *      otherwise and was corrected before commit, the same shape as
- *      0018-REVIEW-phase0's finding 1). Also NOT a backstop for an illegal
- *      OPERATION PAYLOAD: this check only ever sees the POST-FOLD graph, so a
- *      payload later overwritten (or attached to an object later deleted) in
- *      the SAME batch never reaches it at all — `mutate`'s own precondition
- *      check, `findIllegalOperationPayloads`, is what closes that hole (cycle
- *      0026, 0025-REVIEW-phase0 finding 1); see `mutate`'s doc comment.
+ *      it (0023's log entry). Also NOT a backstop for an illegal OPERATION
+ *      PAYLOAD: this check only ever sees the POST-FOLD graph, so a payload
+ *      later overwritten (or attached to an object later deleted) in the SAME
+ *      batch never reaches it at all — `mutate`'s own precondition check,
+ *      `findIllegalOperationPayloads`, is what closes that hole for a slot's
+ *      own `value` (cycle 0026, 0025-REVIEW-phase0 finding 1); see `mutate`'s
+ *      doc comment. `findIllegalOperationPayloads` does NOT yet walk a
+ *      `createObject`/`setSlot` payload's stored AST the same way — a
+ *      disclosed, narrower gap than the one D-025 closed, flagged in
+ *      STATUS.md's Known problems rather than closed here (see this cycle's
+ *      log entry for why).
  *
  *   A genuinely new sub-problem D-017's check hits and D-010/D-015's existing
  *   guidance does not cover: naming an UNDECLARED slot (check 1) needs an
@@ -310,15 +339,15 @@
  *   an application of the "invert `slotKey`" pattern this project has twice
  *   ruled out (D-010; STATUS's "never `key.split(\".\")`"): those rulings
  *   solved "I need a slot's path and something already declares it schema-
- *   side"; this is the one case where nothing does, by construction. Check 2
- *   (the new one) reuses `describeUndeclaredSlot` for the same reason — a
- *   `formula` slot's path need not be schema-declared at all (D-017 already
- *   rejects that combination separately; this check runs regardless). Check 3
- *   (D-018) has no such exception to make — see its own paragraph above.
+ *   side"; this is the one case where nothing does, by construction. Check 4
+ *   reuses `describeUndeclaredSlot` for the same reason — a `formula` slot's
+ *   path need not be schema-declared at all (D-017 already rejects that
+ *   combination separately; this check runs regardless). Check 2 (D-018) has
+ *   no such exception to make — see its own paragraph above.
  *
  * INVARIANTS UPHELD HERE (validateIntegrity)
  *   - Never throws, same as every other function in this module.
- *   - Runs all five checks over the WHOLE graph from scratch, every call
+ *   - Runs all four checks over the WHOLE graph from scratch, every call
  *     (Rule 5) — no diffing against a "previous" object list, matching
  *     `deriveEdges`, `detectCycle`, and `evaluate`'s own from-scratch
  *     discipline.
@@ -420,22 +449,24 @@
  *     table row/column deletion does, Phase 2/4), so `validateIntegrity`'s
  *     dangling check always takes the Reject branch. Nothing here decides
  *     between the two; that belongs to whichever future operation needs it.
- *   - Range expansion (`A1:B4` → concrete cell dependencies, §5.3) and
- *     reference adjustment on table resize (§5.4) — both Phase 2/4 concerns.
- *     `formula/ast.ts` now HAS a `RangeNode` (cycle 0028), but nothing here
- *     expands one into edges yet — `deriveEdges` only walks `ReferenceNode`s
- *     (see `findUnsupportedFormulaAsts`); a formula slot holding a `RangeNode`
- *     is rejected the same way any other unsupported AST shape is.
+ *   - Reference adjustment on table resize (§5.4: inserting/deleting a
+ *     row/column and rewriting every stored AST's affected references) — a
+ *     Phase 2/4 concern, still unbuilt; row/column insert/delete itself does
+ *     not exist yet either (`primitives/table.ts`'s own NOT DONE HERE). Range
+ *     EXPANSION itself (`A1:B4` → concrete cell dependencies, §5.3) IS done
+ *     here as of THIS cycle — see `deriveEdges`'s Source 1, above.
  *   - Undo itself (only the journal DATA this stores it for, per Rule 2 and
  *     PROJECT_BRIEF §8's deferred list, which defers the undo/redo UI only).
  */
 import { formatAddress, isAddressError, type Address } from "./address.ts";
-import { isReferenceNode } from "./formula/ast.ts";
+import type { FormulaAst } from "./formula/ast.ts";
+import { extractDependencies } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
+import { enumerateRangeCellAddresses, isRangeEnumerationError } from "./primitives/table.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasIllegalNumber, resolveSlot, slotKey, type GraphObject, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, isIllegalNumber, resolveSlot, slotKey, type GraphObject, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -464,29 +495,54 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
       continue;
     }
 
-    // Source 1: every formula-kind slot's stored AST. `FormulaAst` is now the
-    // full §5.3 union (Q-005, ANSWERED cycle 0028) — "walking the AST" still
-    // means reading a ReferenceNode's one `address` field; any OTHER AST
-    // shape is skipped here (TEMPORARY, see file header) rather than
-    // producing a wrong or partial edge, because this function has no general
-    // extractDependencies to call yet (Phase 2). `validateIntegrity`'s new
-    // check (see this file's WHAT THIS IS) rejects the whole document before
-    // that gap can matter — see its own doc comment.
+    // Source 1: every formula-kind slot's stored AST, walked for real via
+    // `formula/deps.ts`'s `extractDependencies` (THIS cycle's range-
+    // evaluation wiring — the old ReferenceNode-only narrowing, and the
+    // TEMPORARY `findUnsupportedFormulaAsts` shield that made it safe, are
+    // both gone, D-036 constraint 3: "delete, never extend"). Every
+    // `ReferenceDependency` becomes one edge directly; every
+    // `RangeDependency` expands into one edge PER CELL currently within the
+    // table's extent (D-044), via `primitives/table.ts`'s
+    // `enumerateRangeCellAddresses` — re-resolved from CURRENT `rows`/`cols`
+    // on every call, never cached (D-036 constraint 2), and reading those
+    // dimensions `literal`-only (D-046) inside that one function, not
+    // duplicated here.
     for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
       const slot = object.slots[slotKey(path)];
-      if (slot === undefined || slot.kind !== "formula" || !isReferenceNode(slot.ast)) {
+      if (slot === undefined || slot.kind !== "formula") {
         // Either this path isn't populated on this particular object (a
         // malformed/incomplete fixture — mutation.ts's future object-creation
         // step should never produce one), or it's currently `literal`, which
-        // has no inbound edges (§5.1's slot-kind table), or it's a `formula`
-        // slot holding a non-reference AST (see the comment just above).
-        // Either way: nothing to derive for this path.
+        // has no inbound edges (§5.1's slot-kind table). Either way: nothing
+        // to derive for this path.
         continue;
       }
-      edges.push({
-        sourceSlot: slot.ast.address,
-        dependentSlot: { objectId: object.id, path },
-      });
+      const dependentSlot = { objectId: object.id, path };
+      for (const dependency of extractDependencies(slot.ast)) {
+        if (dependency.kind === "reference") {
+          edges.push({ sourceSlot: dependency.address, dependentSlot });
+          continue;
+        }
+        // dependency.kind === "range": expand to one edge per cell currently
+        // within the named table's extent. If the table cannot be resolved
+        // at all (deleted, or a defensive-only enumeration failure — D-045
+        // already rejects the reachable cross-object case at PARSE time),
+        // fall back to ONE edge from the range's own start address, so
+        // `validateIntegrity`'s dangling-reference check still catches and
+        // names it — the SAME treatment a broken plain reference already
+        // gets. Silently dropping the dependency here instead would let
+        // `delete <table>` succeed while a range elsewhere still names it,
+        // exactly the §5.1.1 hazard that check exists to prevent.
+        const tableObject = objects.find((candidate) => candidate.id === dependency.start.objectId);
+        const cellAddresses = tableObject === undefined ? undefined : enumerateRangeCellAddresses(dependency.start, dependency.end, tableObject);
+        if (cellAddresses === undefined || isRangeEnumerationError(cellAddresses)) {
+          edges.push({ sourceSlot: dependency.start, dependentSlot });
+          continue;
+        }
+        for (const cellAddress of cellAddresses) {
+          edges.push({ sourceSlot: cellAddress, dependentSlot });
+        }
+      }
     }
 
     // Source 2: every schema-declared derived slot's dependencies, resolved
@@ -525,15 +581,6 @@ export function validateIntegrity(objects: readonly GraphObject[], edges: readon
   const undeclaredSlotProblems = findUndeclaredFormulaOrDerivedSlots(objects);
   if (undeclaredSlotProblems.length > 0) {
     return { ok: false, message: undeclaredSlotProblems.join("; ") };
-  }
-
-  // Cycle 0028 (Q-005's widening of FormulaAst): same family as D-017 above —
-  // deriveEdges silently drops a formula slot's edge if its AST is not yet a
-  // shape this build can walk. TEMPORARY, deleted once Phase 2 wires in the
-  // real formula engine — see findUnsupportedFormulaAsts's own doc comment.
-  const unsupportedAstProblems = findUnsupportedFormulaAsts(objects);
-  if (unsupportedAstProblems.length > 0) {
-    return { ok: false, message: unsupportedAstProblems.join("; ") };
   }
 
   // D-018 — the OTHER direction of the same schema<->slot reconciliation:
@@ -1115,62 +1162,6 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
 }
 
 /**
- * Cycle 0028 (Q-005's widening of `FormulaAst` to the full §5.3 grammar):
- * rejects any `formula`-kind slot whose stored AST is not a `ReferenceNode`.
- * Same family as D-017's own check above — both are about whether
- * `deriveEdges`'s output can be trusted — reached through a different door:
- * `deriveEdges` only ever derives an edge from the `ReferenceNode` shape (see
- * its own doc comment), because a real `extractDependencies` for the general
- * grammar does not exist until Phase 2 wires `formula/deps.ts` in. A formula
- * slot holding, say, a `BinaryOpNode` today would get NO edge at all —
- * `deriveEdges` silently dropping a real dependency, D-017's exact failure
- * shape. This check makes that loud instead, before `detectCycle` ever runs
- * on a graph whose edges cannot be trusted to be total.
- *
- * Reachable today only through a hand-edited or foreign save file:
- * `document.ts`'s `reconstructSlot` casts a loaded formula slot's `ast`
- * unchecked (its own doc comment explains why — trusting `mutate` for graph
- * legality is the established boundary, D-027). Nothing else in this build
- * can construct a non-`ReferenceNode` formula AST — there is no parser wired
- * up yet (Phase 1 built `formula/*` standalone; Phase 3 wires a command line
- * to it) — so this check is unreachable via any OTHER path today. That does
- * not make it unnecessary: Rule 5 rechecks the whole graph from scratch every
- * time, the same discipline every other check in this function already uses,
- * not only the paths currently reachable.
- *
- * TEMPORARY: this check exists only because `graph/eval.ts`'s evaluator is
- * narrower than the type system now allows. Delete it (and `deriveEdges`'s
- * matching narrowing, and `graph/eval.ts`'s `evaluateFormula`'s rejection
- * branch) the moment Phase 2 wires in the real formula engine and every
- * `FormulaAst` shape becomes genuinely supported.
- *
- * Named via `describeUndeclaredSlot` (this function's fourth sanctioned call
- * site) rather than `formatAddress`: a `formula` slot need not be
- * schema-declared at all to reach this check (D-017 above rejects THAT
- * combination separately, and already ran before this check), so a real
- * `Address` is not always recoverable via the schema the way check 3
- * (`findSchemaSlotKindMismatches`) can rely on.
- */
-function findUnsupportedFormulaAsts(objects: readonly GraphObject[]): readonly string[] {
-  const problems: string[] = [];
-
-  for (const object of objects) {
-    for (const key of Object.keys(object.slots)) {
-      const slot = object.slots[key];
-      if (slot === undefined || slot.kind !== "formula" || isReferenceNode(slot.ast)) {
-        continue; // noUncheckedIndexedAccess artifact, a non-formula slot, or already the one supported shape.
-      }
-      problems.push(
-        `${describeUndeclaredSlot(object, key)} is a formula slot holding a "${slot.ast.type}" AST, which this ` +
-          `build's evaluator does not yet support (only a bare reference/binding) — Phase 2 wires in the general formula engine`,
-      );
-    }
-  }
-
-  return problems;
-}
-
-/**
  * Names a slot WITHOUT assuming it has a schema-declared path — see the file
  * header's discussion of why this is a deliberate, disclosed exception rather
  * than the "invert `slotKey`" pattern D-010/STATUS rule out elsewhere.
@@ -1184,23 +1175,23 @@ function findUnsupportedFormulaAsts(objects: readonly GraphObject[]): readonly s
  * underlying reason, so that combination cannot arise before Phase 4 revisits
  * the whole mechanism.
  *
- * FOUR call sites now (D-022 confines this raw-key naming style to THIS
- * function — every other site reuses it, never reimplements it):
- * `findUndeclaredFormulaOrDerivedSlots`, where the slot genuinely has no
- * schema-declared path by definition; `findUnsupportedFormulaAsts` (cycle
- * 0028), where the slot IS a `formula`-kind slot but its schema-declared
- * status is irrelevant to what this call site is naming; `findIllegalSlotValues`
+ * THREE call sites now (D-022 confines this raw-key naming style to THIS
+ * function — every other site reuses it, never reimplements it; down from
+ * four — `findUnsupportedFormulaAsts`, this function's own second sanctioned
+ * call site, is DELETED this cycle along with the check itself, D-036
+ * constraint 3): `findUndeclaredFormulaOrDerivedSlots`, where the slot
+ * genuinely has no schema-declared path by definition; `findIllegalSlotValues`
  * (D-025, cycle 0023), where it might or might not be declared — an extra
  * literal slot is legal regardless of the schema (`validateIntegrity` never
  * restricts those), so that check cannot assume a real `Address` is
- * recoverable via the schema the way check 3 (`findSchemaSlotKindMismatches`)
+ * recoverable via the schema the way check 2 (`findSchemaSlotKindMismatches`)
  * can; and `findIllegalOperationPayloads`'s `createObject` branch (cycle
  * 0026), naming a slot on an object that may not even exist in `objects` YET
  * (it is only being proposed by this very operation) — there is no `objects`
  * list to resolve a schema lookup against at all in that case, only the
  * payload's own `object.name`. The bounded correctness claim above (identical
  * to `formatAddress` for every non-table type) is exactly what makes reusing
- * it safe in all four cases, not only the definitely-undeclared one it was
+ * it safe in all three cases, not only the definitely-undeclared one it was
  * built for.
  */
 function describeUndeclaredSlot(object: GraphObject, key: string): string {
@@ -1335,6 +1326,18 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
  * entry at all: unlike D-017/D-018, this check needs no schema knowledge, so
  * there is no "type with no schema yet" exemption.
  *
+ * WIDENED THIS cycle by **D-031**: a `formula`-kind slot's stored AST is ALSO
+ * walked (`collectIllegalAstLiterals` below) for any `LiteralNode` whose
+ * number value fails the SAME `isIllegalNumber` leaf predicate — a number
+ * `slot.value` never happened to reach the cached `formula`/`derived` result
+ * itself, but §5.11 serializes the stored AST as part of the document, so a
+ * `LiteralNode` inside it is document state exactly the same way a slot's
+ * `value` is (D-027's own generalisation: "every number reachable from a
+ * `Document`"). Reachable for the first time this cycle: the TEMPORARY
+ * `findUnsupportedFormulaAsts` check that used to reject every non-reference
+ * AST is deleted (D-036 constraint 3), and D-031's own binding text requires
+ * closing this in the SAME cycle that removes that shield.
+ *
  * Named via `describeUndeclaredSlot` — REUSING the same function
  * `findUndeclaredFormulaOrDerivedSlots` already calls, not a new copy of its
  * raw-key naming (D-022 confines that naming style to this one function; the
@@ -1351,7 +1354,10 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
  *
  * Checks only the POST-FOLD graph — see `mutate`'s doc comment and
  * `findIllegalOperationPayloads` below for the companion check this one does
- * NOT make: an operation's own payload, before it is folded at all.
+ * NOT make: an operation's own payload, before it is folded at all. As of
+ * this cycle that companion check does NOT yet walk a payload's stored AST
+ * the same D-031 way — disclosed as a known, narrower gap (STATUS.md), not
+ * closed here.
  */
 function findIllegalSlotValues(objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
@@ -1362,14 +1368,69 @@ function findIllegalSlotValues(objects: readonly GraphObject[]): readonly string
       if (slot === undefined) {
         continue; // noUncheckedIndexedAccess artifact only — key came from Object.keys of this same record.
       }
-      if (!hasIllegalNumber(slot.value)) {
-        continue;
+      if (hasIllegalNumber(slot.value)) {
+        problems.push(`${describeUndeclaredSlot(object, key)} holds an illegal value (${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`);
       }
-      problems.push(`${describeUndeclaredSlot(object, key)} holds an illegal value (${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`);
+      if (slot.kind === "formula") {
+        // D-031: the stored AST is document state too (§5.11) — walked
+        // separately from `slot.value` above, which is only ever this
+        // formula's last CACHED evaluation result, not what the user wrote.
+        const illegalLiterals = collectIllegalAstLiterals(slot.ast);
+        if (illegalLiterals.length > 0) {
+          problems.push(
+            `${describeUndeclaredSlot(object, key)}'s stored formula holds illegal number literal(s) ` +
+              `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state (D-025/D-031)`,
+          );
+        }
+      }
     }
   }
 
   return problems;
+}
+
+/**
+ * D-031: walks every `LiteralNode` in a formula's stored AST (structural
+ * recursion, mirroring `deps.ts`'s own `walk` and `formula/eval.ts`'s
+ * `evaluateNode` — one exhaustive `switch` on `.type`), collecting the
+ * NUMBER value of any that fails `isIllegalNumber` (`graph/node.ts`'s leaf
+ * predicate — the raw number check, not `hasIllegalNumber`'s `Value`-shaped
+ * wrapper: a `LiteralNode.value` is `number | string | boolean`, ast.ts, so
+ * only the number arm can ever be illegal). Never throws — matches every
+ * other AST walk in this codebase.
+ */
+function collectIllegalAstLiterals(ast: FormulaAst, out: number[] = []): number[] {
+  switch (ast.type) {
+    case "literal":
+      if (typeof ast.value === "number" && isIllegalNumber(ast.value)) {
+        out.push(ast.value);
+      }
+      return out;
+    case "reference":
+    case "range":
+    case "error":
+      return out; // No LiteralNode anywhere in these shapes.
+    case "binaryOp":
+      collectIllegalAstLiterals(ast.left, out);
+      collectIllegalAstLiterals(ast.right, out);
+      return out;
+    case "unaryOp":
+      collectIllegalAstLiterals(ast.operand, out);
+      return out;
+    case "functionCall":
+      for (const arg of ast.args) {
+        collectIllegalAstLiterals(arg, out);
+      }
+      return out;
+    default: {
+      // Compile-time exhaustiveness, WITHOUT a throw — same defensive stance
+      // every other AST walk in this codebase takes against a hand-edited or
+      // loaded AST reaching a shape the compiler believes impossible.
+      const exhaustive: never = ast;
+      void exhaustive;
+      return out;
+    }
+  }
 }
 
 /**

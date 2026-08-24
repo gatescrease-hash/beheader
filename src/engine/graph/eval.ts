@@ -7,24 +7,31 @@
  * function. Evaluation errors produce ErrorValues; they do not roll back the
  * mutation.") and Rule 5's naive-evaluation directive ("re-evaluate the entire
  * graph in topological order. Do not implement real dirty-flag tracking yet.").
- * Load-bearing per Rule 3 (§6 trigger-2 file: graph/*).
+ * As of THIS cycle (the range-evaluation wiring slice STATUS.md named next),
+ * also implements the LAST piece of that same step 7 clause — "formulas
+ * evaluate their AST" now means EVERY `FormulaAst` shape §5.3 admits, not only
+ * a bare reference — by wiring in `formula/eval.ts`'s real evaluator (D-036
+ * constraint 1/3: the old `ReferenceNode`-only bridge is deleted, not
+ * extended). Load-bearing per Rule 3 (§6 trigger-2 file: graph/*).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
  *   Given a document's full object list and an edge set already derived from
- *   every stored formula AST and schema declaration (mutation.ts step 3, not
- *   built yet), evaluate EVERY slot on EVERY object exactly once, in an order
- *   that respects every edge, and return a NEW object list holding the results.
+ *   every stored formula AST and schema declaration (mutation.ts step 3),
+ *   evaluate EVERY slot on EVERY object exactly once, in an order that
+ *   respects every edge, and return a NEW object list holding the results.
  *
  *   - `literal` slots keep their stored value unchanged — nothing computes a
  *     literal; it IS the source of truth (§5.1's table).
- *   - `formula` slots evaluate their AST. `FormulaAst` is now the full §5.3
- *     union (Q-005, ANSWERED cycle 0028) — but this file's `evaluateFormula`
- *     only actually evaluates the `ReferenceNode` shape (a binding is "just
- *     the degenerate formula `= other.slot`", §5.1); every other shape is a
- *     temporary, provably-unreachable `#PARSE` rejection until Phase 2 wires
- *     in the real `formula/eval.ts`. See `evaluateFormula`'s own doc comment.
+ *   - `formula` slots evaluate their AST via `formula/eval.ts`'s real
+ *     `evaluate` (`evaluateFormula` below) — every shape §5.3's grammar
+ *     admits, a binding (a bare reference) included, since a binding is
+ *     "just the degenerate formula `= other.slot`" (§5.1) under the same
+ *     general evaluator. `evaluateFormula`'s own doc comment covers the two
+ *     callbacks it builds and hands through: `read` for plain references,
+ *     `readRange` for a range reached inside an aggregate call (D-036,
+ *     bounded by the table's current extent, D-044).
  *   - `derived` slots call their schema's compute function
  *     (primitives/schema.ts), exactly once, INSIDE this same topological pass
  *     — never in a separate post-pass (§5.1, PROCESS_BRIEF §9).
@@ -77,14 +84,22 @@
  *   - Deriving the Edge[] (mutation.ts step 3) or detecting cycles
  *     (graph/cycles.ts, already built) — both must already have happened
  *     before this file's `evaluate` is called.
- *   - Any real formula grammar beyond a bare reference — `formula/*` (Phase 1,
- *     standalone) builds the grammar; wiring it in HERE is Phase 2's job.
- *   - Cloning/committing/journaling (mutation.ts, not yet built) — this file
- *     only evaluates; it does not decide what becomes the document's new
- *     current state.
+ *   - Any formula-language logic itself (parsing, dependency extraction,
+ *     lazy/short-circuit dispatch, arithmetic) — all `formula/eval.ts`'s job
+ *     (Rule 4: one evaluator). This file's `evaluateFormula` only builds the
+ *     two callbacks that file needs and hands them through.
+ *   - Bounding a range by the table's current extent, or reading a table's
+ *     dimension slots at all — `primitives/table.ts`'s
+ *     `enumerateRangeCellAddresses` (D-044/D-046) is the ONE place that
+ *     happens; this file only calls it and resolves the addresses it returns
+ *     against this pass's own `evaluatedValues`.
+ *   - Cloning/committing/journaling (mutation.ts) — this file only evaluates;
+ *     it does not decide what becomes the document's new current state.
  */
 import type { Address } from "../address.ts";
-import { isReferenceNode, type FormulaAst } from "../formula/ast.ts";
+import type { FormulaAst } from "../formula/ast.ts";
+import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
+import { enumerateRangeCellAddresses, isRangeEnumerationError } from "../primitives/table.ts";
 import { getObjectSchema, type DerivedSlotSchema } from "../primitives/schema.ts";
 import { addressKey, type Edge } from "./edge.ts";
 import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
@@ -193,7 +208,7 @@ export function evaluate(objects: readonly GraphObject[], edges: readonly Edge[]
       continue;
     }
 
-    const value = evaluateSlot(object, key, slot, edges, evaluatedValues);
+    const value = evaluateSlot(object, key, slot, objects, edges, evaluatedValues);
     evaluatedValues.set(nodeKey, value);
     slotsFor(object.id)[key] = nextSlot(slot, value);
   }
@@ -212,6 +227,7 @@ function evaluateSlot(
   object: GraphObject,
   key: string,
   slot: Slot,
+  objects: readonly GraphObject[],
   edges: readonly Edge[],
   evaluatedValues: ReadonlyMap<string, Value>,
 ): Value {
@@ -219,7 +235,7 @@ function evaluateSlot(
     case "literal":
       return slot.value;
     case "formula":
-      return evaluateFormula(slot.ast, evaluatedValues);
+      return evaluateFormula(slot.ast, objects, evaluatedValues);
     case "derived":
       return evaluateDerivedSlot(object, key, edges, evaluatedValues);
   }
@@ -245,52 +261,58 @@ function nextSlot(slot: Slot, value: Value): Slot {
 }
 
 /**
- * `FormulaAst` is now the full §5.3 union (Q-005, ANSWERED cycle 0028) — this
- * function is the narrow, TEMPORARY bridge until Phase 2 wires in the real
- * `formula/eval.ts`. It handles exactly the one shape this build can commit
- * to a document at all: `mutation.ts`'s `validateIntegrity` (cycle 0028's new
- * check) rejects any `formula`-kind slot whose AST is not a `ReferenceNode`
- * BEFORE this function is ever called — so the non-reference branch below is
- * provably unreachable for any document `mutate` accepted.
+ * Evaluates a `formula`-kind slot's stored AST for real, THIS cycle's range-
+ * evaluation wiring — `FormulaAst` is the full §5.3 union (Q-005, cycle 0028)
+ * and `formula/eval.ts`'s `evaluate` now handles every shape it admits, so
+ * the old narrow `ReferenceNode`-only bridge (D-036 constraint 3: "delete,
+ * never extend") is gone. Builds the two callbacks `formula/eval.ts` needs
+ * and hands them straight through — this file has no evaluation logic of its
+ * own beyond building those closures, matching Rule 4 (one evaluator).
  *
- * This function does not get to ASSUME that from here, though (this file
- * cannot see `mutation.ts`'s check run) — it fails closed with an `ErrorValue`
- * rather than throwing or indexing into a field that might not exist, the
- * same defensive stance every other function in this file already takes.
- *
- * Phase 2 replaces the non-reference branch's rejection with a real call into
- * `formula/eval.ts`; the reference branch (`evaluateReference`) does not
- * change shape when that happens (Q-005's binding constraint).
- */
-function evaluateFormula(ast: FormulaAst, evaluatedValues: ReadonlyMap<string, Value>): Value {
-  if (!isReferenceNode(ast)) {
-    return {
-      error: "#PARSE",
-      message: `this build's evaluator only supports a bare reference (a binding); a "${ast.type}" formula is not wired in until Phase 2`,
-    };
-  }
-  return evaluateReference(ast.address, evaluatedValues);
-}
-
-/**
- * A binding: "just the degenerate formula `= other.slot`" (§5.1). Evaluating
- * one means reading the referenced slot's value from THIS SAME pass —
+ * `read` resolves a plain reference from THIS SAME pass's `evaluatedValues` —
  * guaranteed already evaluated, because whatever derived `edges`
  * (mutation.ts step 3) must have produced a sourceSlot=referenced/
  * dependentSlot=this-formula-slot edge for the topological order above to
- * have placed the reference first.
+ * have placed the reference first. `undefined` (never evaluated in this
+ * pass — a dangling reference, or edges that do not actually encode the
+ * dependency) is `formula/eval.ts`'s own job to turn into `#REF`, not this
+ * function's.
  *
- * Rejects (never throws): if the referenced address was never evaluated in
- * this pass — a dangling reference, or a caller-supplied `edges` that does
- * not actually encode the dependency — returns `#REF` rather than `undefined`,
- * since `undefined` is not a member of `Value` (§5.1).
+ * `readRange` resolves a range's two endpoints to the ordered list of Values
+ * every cell WITHIN THE TABLE'S CURRENT EXTENT currently holds (D-044),
+ * bounded by the SAME `enumerateRangeCellAddresses` (`primitives/table.ts`,
+ * D-046's `literal`-only dimension guard) that `mutation.ts`'s `deriveEdges`
+ * already used to decide this formula's edges — calling that SAME function
+ * here, rather than re-deriving the bound independently, is what makes
+ * evaluation and edge derivation structurally unable to disagree about which
+ * cells a range spans (the exact D-017-shaped hazard a second, parallel
+ * bounding computation would risk). `objects` (this pass's full, PRE-
+ * evaluation object list) is what lets this file resolve "which object does
+ * the range's table id name" — `formula/eval.ts` is deliberately never given
+ * that access itself (see its own file header).
  */
-function evaluateReference(address: Address, evaluatedValues: ReadonlyMap<string, Value>): Value {
-  const value = evaluatedValues.get(addressKey(address));
-  if (value === undefined) {
-    return { error: "#REF", message: "formula reference did not resolve to a value" };
-  }
-  return value;
+function evaluateFormula(ast: FormulaAst, objects: readonly GraphObject[], evaluatedValues: ReadonlyMap<string, Value>): Value {
+  const read: ReadSlot = (address) => evaluatedValues.get(addressKey(address));
+  const readRange: ReadRange = (start, end) => {
+    const tableObject = objects.find((candidate) => candidate.id === start.objectId);
+    if (tableObject === undefined) {
+      return { error: "#REF", message: "a range references an object that does not exist" };
+    }
+    const cellAddresses = enumerateRangeCellAddresses(start, end, tableObject);
+    if (isRangeEnumerationError(cellAddresses)) {
+      return cellAddresses; // Already an ErrorValue-shaped { error: "#REF", message }.
+    }
+    const values: Value[] = [];
+    for (const cellAddress of cellAddresses) {
+      const value = evaluatedValues.get(addressKey(cellAddress));
+      if (value === undefined) {
+        return { error: "#REF", message: "a cell within this range did not resolve to a value" };
+      }
+      values.push(value);
+    }
+    return values;
+  };
+  return evaluateFormulaAst(ast, read, readRange);
 }
 
 /**

@@ -21,7 +21,7 @@ import type {
   UnaryOpNode,
 } from "./ast.ts";
 import { FUNCTION_REGISTRY, LAZY_FUNCTION_NAMES } from "./functions.ts";
-import { evaluate, type ReadSlot } from "./eval.ts";
+import { evaluate, type ReadRange, type ReadSlot } from "./eval.ts";
 import type { ErrorValue, Value } from "../graph/node.ts";
 
 const addrA: Address = { objectId: "obj_1", path: ["v"] };
@@ -92,13 +92,15 @@ describe("evaluate — D-028: an ErrorNode evaluates to its ErrorValue, never #P
   });
 });
 
-describe("evaluate — range: disclosed, temporary #PARSE (0035-REVIEW carried constraint 4)", () => {
+describe("evaluate — range: a bare (misplaced) RangeNode stays a defensive #PARSE — never reachable for an authored formula (parser rejects it), only a hand-built/loaded AST", () => {
   it("a bare RangeNode evaluates to #PARSE, never throws", () => {
     const node: RangeNode = { type: "range", start: addrA, end: addrB };
     expectError(evaluate(node, EMPTY_READ), "#PARSE");
   });
+});
 
-  it("SUM over a range therefore also evaluates to #PARSE (propagated as any other argument error would be)", () => {
+describe("evaluate — range: the documented fallback when readRange is OMITTED (D-036, wired THIS cycle)", () => {
+  it("SUM over a correctly-placed range evaluates to #PARSE when no readRange callback is supplied — the documented fallback for a caller with no range-enumeration capability, not a silent gap", () => {
     const call: FunctionCallNode = {
       type: "functionCall",
       name: "SUM",
@@ -106,6 +108,68 @@ describe("evaluate — range: disclosed, temporary #PARSE (0035-REVIEW carried c
     };
     expectError(evaluate(call, EMPTY_READ), "#PARSE");
   });
+});
+
+describe("evaluate — range: real expansion via readRange (D-036, wired THIS cycle)", () => {
+  /** A `readRange` backed by a plain map from `${start}:${end}` to a fixed Value[]/ErrorValue answer — this file's own test double, standing in for `graph/eval.ts`'s real one (bounded by a table's current extent, D-044). */
+  function rangeReader(answers: Record<string, readonly Value[] | ErrorValue>): ReadRange {
+    return (start, end) => {
+      const key = `${start.objectId}.${start.path.join(".")}:${end.objectId}.${end.path.join(".")}`;
+      const answer = answers[key];
+      if (answer === undefined) {
+        throw new Error(`test setup: no readRange answer for "${key}"`);
+      }
+      return answer;
+    };
+  }
+
+  const rangeArg: FormulaAst = { type: "range", start: addrA, end: addrB };
+  const RANGE_KEY = "obj_1.v:obj_2.v";
+
+  it("SUM flattens a range's values into its argument list, alongside ordinary scalar arguments", () => {
+    const call: FunctionCallNode = { type: "functionCall", name: "SUM", args: [num(100), rangeArg] };
+    const readRange = rangeReader({ [RANGE_KEY]: [1, 2, 3] });
+    expect(evaluate(call, EMPTY_READ, readRange)).toBe(106);
+  });
+
+  it("MIN/MAX/AVG each see the range's flattened values too — not just SUM", () => {
+    const readRange = rangeReader({ [RANGE_KEY]: [5, 1, 9] });
+    expect(evaluate({ type: "functionCall", name: "MIN", args: [rangeArg] }, EMPTY_READ, readRange)).toBe(1);
+    expect(evaluate({ type: "functionCall", name: "MAX", args: [rangeArg] }, EMPTY_READ, readRange)).toBe(9);
+    expect(evaluate({ type: "functionCall", name: "AVG", args: [rangeArg] }, EMPTY_READ, readRange)).toBe(5);
+  });
+
+  it("an ErrorValue from readRange itself (the range could not be resolved at all) propagates as the call's result", () => {
+    const err: ErrorValue = { error: "#REF", message: "table gone" };
+    const readRange = rangeReader({ [RANGE_KEY]: err });
+    const call: FunctionCallNode = { type: "functionCall", name: "SUM", args: [rangeArg] };
+    expect(evaluate(call, EMPTY_READ, readRange)).toEqual(err);
+  });
+
+  it("an ErrorValue for one CELL within the range propagates, left to right, the same way a scalar argument's error would", () => {
+    const cellErr: ErrorValue = { error: "#DIV0", message: "cell broke" };
+    const readRange = rangeReader({ [RANGE_KEY]: [1, cellErr, 3] });
+    const call: FunctionCallNode = { type: "functionCall", name: "SUM", args: [rangeArg] };
+    expect(evaluate(call, EMPTY_READ, readRange)).toEqual(cellErr);
+  });
+
+  it("D-044: a clamped-to-empty range (readRange answers with []) reaches MIN/MAX's own zero-argument #TYPE, not a crash", () => {
+    const readRange = rangeReader({ [RANGE_KEY]: [] });
+    expectError(evaluate({ type: "functionCall", name: "MIN", args: [rangeArg] }, EMPTY_READ, readRange), "#TYPE");
+    // SUM's zero-argument identity is 0 — an empty range is a legal, if degenerate, SUM.
+    expect(evaluate({ type: "functionCall", name: "SUM", args: [rangeArg] }, EMPTY_READ, readRange)).toBe(0);
+  });
+
+  it("never calls readRange for a formula with no range in it at all", () => {
+    const readRange: ReadRange = () => {
+      throw new Error("readRange must not be called — this formula has no range");
+    };
+    expect(evaluate(binaryPlus(num(1), num(2)), EMPTY_READ, readRange)).toBe(3);
+  });
+
+  function binaryPlus(left: FormulaAst, right: FormulaAst): BinaryOpNode {
+    return { type: "binaryOp", operator: "+", left, right };
+  }
 });
 
 describe("evaluate — arithmetic (+ - * / % ^)", () => {

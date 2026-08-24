@@ -348,7 +348,20 @@ export const FUNCTION_REGISTRY: Readonly<Record<string, FunctionEntry>> = {
       if (isNumberListError(numbers)) {
         return numbers;
       }
-      return finiteResult("MIN", Math.min(...numbers));
+      // `Math.min(...numbers)` spreads its whole argument list onto the call
+      // stack — a `RangeError` risk once a range expands into a long list
+      // (D-036 constraint 5, 0035-REVIEW Finding 4; reachable as of the cycle
+      // that wires range evaluation in, since that is the first thing able to
+      // make this list arbitrarily long). `.reduce` visits one element at a
+      // time instead. The seed `Infinity` reproduces `Math.min()`'s own
+      // documented answer for zero arguments EXACTLY — D-044 point 2's
+      // "functions.ts's existing zero-argument behaviour" this ruling asks to
+      // keep, reachable when a range clamps to empty (`SUM`-family arity is
+      // checked against the AST's one range ARGUMENT, not its flattened cell
+      // count, so `MIN` over an empty clamped range still reaches here with
+      // zero numbers) — `finiteResult` then correctly reports `#TYPE` for the
+      // non-finite result, unchanged from before this fix.
+      return finiteResult("MIN", numbers.reduce((min, n) => Math.min(min, n), Infinity));
     },
     true,
   ),
@@ -360,7 +373,10 @@ export const FUNCTION_REGISTRY: Readonly<Record<string, FunctionEntry>> = {
       if (isNumberListError(numbers)) {
         return numbers;
       }
-      return finiteResult("MAX", Math.max(...numbers));
+      // See MIN's own comment: same spread hazard, same `.reduce` fix, same
+      // zero-argument answer preserved via the `-Infinity` seed (`Math.max()`'s
+      // own documented answer for zero arguments).
+      return finiteResult("MAX", numbers.reduce((max, n) => Math.max(max, n), -Infinity));
     },
     true,
   ),

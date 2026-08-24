@@ -13,23 +13,52 @@
  * evaluates to its `ErrorValue`, never `#PARSE`) and **D-034** (every registry lookup this file
  * makes goes through `getFunctionEntry`, which already guards with `Object.hasOwn` — this file
  * never indexes `FUNCTION_REGISTRY` directly).
+ *
+ * As of THIS cycle (the range-evaluation wiring **D-036** named as Phase 2's remaining gap):
+ * a `RangeNode` reached as a direct argument of an aggregate call (`SUM`/`MIN`/`MAX`/`AVG` —
+ * `formula/parser.ts`'s `validateRangePlacement` guarantees this is the ONLY place one can be)
+ * is expanded into its bounded list of cell VALUES via a second injected callback, `readRange`
+ * (D-036 constraint 1: "`evaluate` expands the range itself, through its own read callback").
+ * `evaluateRangeNode`'s OLD disclosed `#PARSE` placeholder is DELETED as the general answer (D-036
+ * constraint 3) and now exists only as the honest fallback for a caller that omits `readRange`
+ * (see `ReadRange`'s own doc comment) — the real production caller (`graph/eval.ts`) never omits
+ * it.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * This is Phase 1's LAST file and its phase gate (0035-REVIEW-phase1's carried constraint 5,
  * itself a restatement of PROCESS_BRIEF §6.1 trigger 1) — a review point on completion regardless
- * of size. Nothing is batched behind it.
+ * of size. Nothing is batched behind it. THIS cycle's range-evaluation wiring is an ordinary
+ * extension of an already-reviewed file, not a new subsystem.
  *
  * WHAT THIS IS
- *   One exported function: `evaluate(ast, read)`. `read: (address) => Value | undefined` is the
- *   SAME shape `primitives/schema.ts`'s `DerivedSlotCompute` and `graph/eval.ts`'s own internal
- *   `read` closures already use (D-014-style: one shape for "resolve an address to a value that
- *   already exists," reused rather than reinvented) — it resolves a reference to whatever value an
- *   earlier stage already computed for it. This file has NO opinion on where that value comes from
- *   (a live topological pass, a test fixture, anything) — it only calls `read`, never anything
- *   else external. No `EvalContext`/`TextMeasurer` is threaded through: nothing in §5.3's v1
- *   grammar needs an injected service beyond `read` (`TextMeasurer` is Phase 5's concern, for
- *   text's own embedding, not this file's).
+ *   One exported function: `evaluate(ast, read, readRange?)`. `read: (address) => Value | undefined`
+ *   is the SAME shape `primitives/schema.ts`'s `DerivedSlotCompute` and `graph/eval.ts`'s own
+ *   internal `read` closures already use (D-014-style: one shape for "resolve an address to a
+ *   value that already exists," reused rather than reinvented) — it resolves a reference to
+ *   whatever value an earlier stage already computed for it. `readRange: (start, end) => Value[] |
+ *   ErrorValue` is the range-aggregate analogue, added THIS cycle: it resolves a range's two
+ *   endpoints to the ordered list of Values every cell WITHIN THE TABLE'S CURRENT EXTENT currently
+ *   holds (D-044's bounding), or an `ErrorValue` if the range itself could not be resolved (its
+ *   table no longer exists, or a malformed/cross-object AST — defensive only, D-045 rejects the
+ *   reachable case at parse time). This file has NO opinion on how either callback's answer was
+ *   produced (a live topological pass, a test fixture, anything) — it only calls them, never
+ *   anything else external. `readRange` deliberately does NOT hand this file a `GraphObject` or any
+ *   table-dimension access of its own: bounding by current extent must use the EXACT SAME
+ *   computation `mutation.ts`'s `deriveEdges` already used to decide which cells this formula
+ *   depends on (`primitives/table.ts`'s `enumerateRangeCellAddresses`, D-046's `literal`-only
+ *   dimension guard) — this file staying blind to that machinery is what makes it structurally
+ *   impossible for evaluation and edge derivation to disagree about which cells a range spans,
+ *   rather than merely conventionally so. No `EvalContext`/`TextMeasurer` is threaded through
+ *   beyond these two callbacks: nothing else in §5.3's v1 grammar needs an injected service
+ *   (`TextMeasurer` is Phase 5's concern, for text's own embedding, not this file's).
+ *
+ *   `readRange` is OPTIONAL. A caller with no range-enumeration capability wired (most of this
+ *   file's own test suite, which exercises everything else) may omit it; any `RangeNode` reached
+ *   as a direct aggregate argument then evaluates to the SAME disclosed `#PARSE` this file always
+ *   returned for one — `evaluateRangeNode`'s fallback body, unchanged. This is not a silent gap: it
+ *   is the documented behaviour for a caller that has not wired range support, and the one
+ *   production caller (`graph/eval.ts`) always supplies a real one.
  *
  *   Every `FormulaAst` node is evaluated by structural recursion (`evaluateNode`, one exhaustive
  *   `switch` on `.type`, mirroring `deps.ts`'s own `walk` and `parser.ts`'s
@@ -38,17 +67,12 @@
  *   - `reference` -> `read(address)`; `undefined` (address never resolved) becomes `#REF`, the
  *     same choice `graph/eval.ts`'s own `evaluateReference` already makes, for the same reason
  *     (`undefined` is not a member of `Value`, §5.1).
- *   - `range` -> a disclosed, TEMPORARY `#PARSE` (see `evaluateRangeNode`'s own comment) — a
- *     `RangeNode` is reachable ONLY as a direct argument of an aggregate call
- *     (`parser.ts`'s `validateRangePlacement` guarantees this structurally; nothing else in the
- *     grammar can produce one elsewhere), and expanding it into the individual cell values it
- *     spans needs the target table's actual current structure — 0035-REVIEW-phase1's carried
- *     constraint 4, verbatim: "Phase 2's wiring, not `eval.ts`'s." The SAME cycle that does that
- *     wiring also owns 0035-REVIEW's Finding 4 (`MIN`/`MAX`'s `Math.min(...)` spread throwing on a
- *     very large list), because that is the cycle that makes an aggregate's argument list
- *     arbitrarily long. This mirrors `graph/eval.ts`'s OWN established precedent for a temporary,
- *     not-yet-supported AST shape (`evaluateFormula`'s `#PARSE` branch, deleted only when Phase 2
- *     wires in this very file) — same vocabulary, same disclosure posture, not a new invention.
+ *   - `range` -> `evaluateRangeNode()`'s disclosed `#PARSE` — reachable ONLY through this generic
+ *     recursive path, which means a `RangeNode` sitting somewhere `validateRangePlacement` would
+ *     have rejected (anywhere but a direct aggregate argument). A correctly-placed range never
+ *     reaches `evaluateNode` at all: `evaluateFunctionCall`'s eager argument loop special-cases
+ *     `arg.type === "range"` BEFORE calling `evaluateNode` on it — see below. This defensive arm
+ *     therefore only fires for a hand-built or loaded AST that bypasses the parser.
  *   - `error` (D-028) -> `{ error: ast.error, message: ... }`. The node's `error` field is always
  *     the literal `"#REF"` (D-028's own type), so this is never `#PARSE` — an `ErrorNode` is a
  *     legitimate, already-repaired AST position, not a parse failure.
@@ -59,15 +83,17 @@
  *     binding text).
  *   - `unaryOp` -> `-` (eager numeric negation, same `finiteResult` guard) or `NOT` (delegates to
  *     `functions.ts`'s own `NOT` registry entry via `evaluateNot` — see below).
- *   - `functionCall` -> `evaluateFunctionCall`, the heart of D-029's dispatch (see next section).
+ *   - `functionCall` -> `evaluateFunctionCall`, the heart of D-029's dispatch (see next section) AND
+ *     of this cycle's range expansion (see below).
  *
- *   **`evaluateFunctionCall` — the ONE place D-029 could be violated by accident, and the ONE
- *   function in this file every future reader should re-check first.** Order, exactly:
+ *   **`evaluateFunctionCall` — the ONE place D-029 could be violated by accident, and now also the
+ *   ONE place a `RangeNode` is legally expanded.** Order, exactly:
  *   1. `getFunctionEntry(name)` (D-034-safe lookup). `undefined` -> `#TYPE`, "unknown function" —
  *      never a crash, per 0035-REVIEW's carried constraint 2.
  *   2. `checkArity(entry.name, entry.arity, node.args.length)` — BEFORE evaluating anything,
- *      per that same constraint. A mismatch is `#TYPE`, naming both counts (`checkArity`'s own
- *      message).
+ *      per that same constraint, and against the AST-LEVEL argument count (`SUM(A1:B4)` has
+ *      exactly one argument node, whatever it flattens to) — a mismatch is `#TYPE`, naming both
+ *      counts (`checkArity`'s own message).
  *   3. **`entry.evaluationMode === "lazy"` is checked NEXT, before a single argument is
  *      evaluated and before `entry.implementation` is so much as considered** (it does not exist
  *      for a `LazyFunctionEntry` — TypeScript enforces this at `functions.ts`'s OWN construction
@@ -77,10 +103,22 @@
  *      file that decide which of a `FunctionCallNode`'s `args` gets evaluated AT ALL. A `default`
  *      arm exists only as a defensive, never-throwing guard against `LAZY_FUNCTION_NAMES` drifting
  *      out of sync with this dispatch (pinned by a test in this file AND in `functions.test.ts`).
+ *      None of `IF`/`AND`/`OR` accepts a range argument (`functions.ts`'s registry never sets
+ *      `acceptsRangeArgument` for them, and `parser.ts`'s `RANGE_ACCEPTING_FUNCTION_NAMES` agrees),
+ *      so this branch never needs `readRange`.
  *   4. Only past that gate: every argument is evaluated EAGERLY, left to right, STOPPING at the
  *      first `ErrorValue` (§5.1: "errors propagate" — matches `functions.ts`'s own left-to-right
  *      propagation convention, applied one layer earlier so a later argument that would itself
- *      error is never even evaluated). The finished `Value[]` is handed to
+ *      error is never even evaluated). **A `range`-typed argument is special-cased here, before
+ *      `evaluateNode` is ever called on it**: `readRange(arg.start, arg.end)` resolves it to the
+ *      ordered `Value[]` every cell within the table's current extent holds (or an `ErrorValue`,
+ *      propagated immediately, same as any other argument's error); every value in that list is
+ *      then pushed onto the SAME flattened `argValues` list an ordinary scalar argument would land
+ *      in — so `SUM(A1, B1:B3, 10)` and `SUM(A1, B1, B2, B3, 10)` reach `functions.ts`'s
+ *      `implementation` as the identical five-element list, which is the whole point of "expand to
+ *      concrete slot dependencies," applied here to VALUES rather than edges. A cell's own value
+ *      being an `ErrorValue` propagates the SAME way a scalar argument's would — first one found,
+ *      left to right within the range, stops the whole call. The finished `Value[]` is handed to
  *      `entry.implementation` once.
  *
  *   **`AND`/`OR`'s laziness is ONE shared implementation over an operand ARRAY**
@@ -108,11 +146,13 @@
  *
  * INVARIANTS UPHELD HERE
  *   - `evaluate` NEVER throws. Every failure mode — an unresolved reference, a wrong-typed
- *     operand, an unknown or mis-called function, a range this build cannot expand yet, division
- *     or modulo by zero, a non-finite arithmetic result — returns a typed `ErrorValue`, matching
- *     `deps.ts`/`parser.ts`/`lexer.ts`/`functions.ts`'s own "never throw" discipline (§5.1).
+ *     operand, an unknown or mis-called function, a range that failed to resolve, division
+ *     or modulo by zero, a non-finite arithmetic result — returns a typed `ErrorValue`,
+ *     matching `deps.ts`/`parser.ts`/`lexer.ts`/`functions.ts`'s own "never throw" discipline
+ *     (§5.1).
  *   - Argument evaluation for an ordinary (eager) call is left-to-right and stops at the first
- *     error — deterministic, and it never evaluates an argument past one that already failed.
+ *     error — deterministic, and it never evaluates an argument past one that already failed. A
+ *     range argument's own cells are walked in the SAME left-to-right, stop-at-first-error order.
  *   - `AND`/`OR`/`IF` never evaluate more of their operands/branches than §5.3 requires — pinned
  *     directly by tests using a "poison" operand (one that would itself error if ever evaluated)
  *     in the untaken position.
@@ -122,23 +162,48 @@
  *   - Comparisons (`= <> < > <= >=`) require BOTH operands to already be the SAME primitive type
  *     (`number`, `string`, or `boolean`); a cross-type comparison is `#TYPE`. This is a disclosed
  *     decision, not a brief requirement — see `evaluateComparison`'s own comment.
+ *   - A range never appears anywhere this file's own logic could confuse it with a scalar
+ *     `Value`: it is flattened into `argValues` at exactly one point (`evaluateFunctionCall`'s
+ *     eager loop) and nowhere else recurses into a `RangeNode` expecting one Value back.
  *
  * NOT DONE HERE
- *   Wiring this into `graph/eval.ts` (which still runs its own narrow, temporary
- *   `evaluateFormula` — a `ReferenceNode`-only bridge, per that file's own header) or
- *   `mutation.ts`. Range expansion (see `evaluateRangeNode`'s own comment). Any change to
- *   `deps.ts` — dependency extraction and evaluation are DIFFERENT walks over the same AST shape
- *   and this file does not reuse or alter the other (0035-REVIEW's carried constraint 3).
+ *   Any change to `deps.ts` — dependency extraction and evaluation are DIFFERENT walks over the
+ *   same AST shape and this file does not reuse or alter the other (0035-REVIEW's carried
+ *   constraint 3). Building the REAL `readRange` (bounding by current extent, reading dimensions
+ *   `literal`-only per D-046) — that lives in `primitives/table.ts`'s
+ *   `enumerateRangeCellAddresses` and is wired in by `graph/eval.ts`, which is the one place with
+ *   both the object list and the already-evaluated-values map this file is deliberately never
+ *   handed.
  */
 import type { Address } from "../address.ts";
 import type { BinaryOpNode, FormulaAst, FunctionCallNode, UnaryOpNode } from "./ast.ts";
 import { checkArity, finiteResult, getFunctionEntry } from "./functions.ts";
-import { isErrorValue, type Value } from "../graph/node.ts";
+import { isErrorValue, type ErrorValue, type Value } from "../graph/node.ts";
 
 /** Resolves an already-resolved `Address` to the `Value` an earlier stage computed for it, or
  * `undefined` if it never resolved. Same shape as `primitives/schema.ts`'s `DerivedSlotCompute`'s
  * `read` parameter — see the file header. */
 export type ReadSlot = (address: Address) => Value | undefined;
+
+/**
+ * Resolves a range's two endpoints to the ordered list of Values every cell WITHIN THE TABLE'S
+ * CURRENT EXTENT currently holds (D-044's bounding — a cell beyond the extent is simply omitted
+ * from the list, never reported), or an `ErrorValue` if the range itself could not be resolved
+ * at all (its table no longer exists; a malformed or cross-object endpoint pair — defensive only,
+ * D-045 rejects the reachable case at parse time). See the file header's WHAT THIS IS for why this
+ * file is deliberately given no other way to reach a table's dimensions. Optional on `evaluate` —
+ * see the file header for the documented fallback when it is omitted.
+ */
+export type ReadRange = (start: Address, end: Address) => readonly Value[] | ErrorValue;
+
+/** Narrows `ReadRange`'s result to its error arm. `isErrorValue` itself can't
+ * (its parameter is `Value`, and `readonly Value[]` is not a member of that
+ * union — `Value`'s own array arm is `readonly Point[]`) — same minimal
+ * workaround `primitives/table.ts`'s `isRangeEnumerationError` and
+ * `functions.ts`'s `isNumberListError` already use for an identical shape. */
+function isRangeReadError(result: readonly Value[] | ErrorValue): result is ErrorValue {
+  return !Array.isArray(result);
+}
 
 type ComparisonOperator = "=" | "<>" | "<" | ">" | "<=" | ">=";
 type ArithmeticOperator = "+" | "-" | "*" | "/" | "%" | "^";
@@ -157,30 +222,35 @@ function isArithmeticOperator(operator: BinaryOpNode["operator"]): operator is A
 
 /**
  * Evaluates `ast` to a single `Value`, lazily and with short-circuiting where §5.3 requires it.
- * Never throws — see the file header's INVARIANTS UPHELD HERE.
+ * Never throws — see the file header's INVARIANTS UPHELD HERE. `readRange` is optional — see the
+ * file header's WHAT THIS IS for the documented fallback when it is omitted.
  */
-export function evaluate(ast: FormulaAst, read: ReadSlot): Value {
-  return evaluateNode(ast, read);
+export function evaluate(ast: FormulaAst, read: ReadSlot, readRange?: ReadRange): Value {
+  return evaluateNode(ast, read, readRange);
 }
 
-function evaluateNode(ast: FormulaAst, read: ReadSlot): Value {
+function evaluateNode(ast: FormulaAst, read: ReadSlot, readRange: ReadRange | undefined): Value {
   switch (ast.type) {
     case "literal":
       return ast.value;
     case "reference":
       return evaluateReference(ast.address, read);
     case "range":
+      // Reachable only via a hand-built or loaded AST that bypasses the
+      // parser's placement check — see the file header. A correctly-placed
+      // range is expanded by evaluateFunctionCall directly, before this
+      // function is ever called on it.
       return evaluateRangeNode();
     case "error":
       // D-028: an ErrorNode is a legitimate, already-repaired AST position. Its own `error` field
       // is always the literal "#REF" — this is never `#PARSE`.
       return { error: ast.error, message: "this reference was invalidated by a repair pass (#REF)" };
     case "binaryOp":
-      return evaluateBinaryOp(ast, read);
+      return evaluateBinaryOp(ast, read, readRange);
     case "unaryOp":
-      return evaluateUnaryOp(ast, read);
+      return evaluateUnaryOp(ast, read, readRange);
     case "functionCall":
-      return evaluateFunctionCall(ast, read);
+      return evaluateFunctionCall(ast, read, readRange);
     default: {
       // Compile-time exhaustiveness, WITHOUT a throw — same defensive stance `parser.ts`'s
       // `walkForRangePlacement` and `deps.ts`'s `walk` already take against a hand-edited or
@@ -200,43 +270,41 @@ function evaluateReference(address: Address, read: ReadSlot): Value {
 }
 
 /**
- * A `RangeNode` is reachable ONLY as a direct argument of an aggregate call — see the file
- * header's WHAT THIS IS for the full rationale (0035-REVIEW-phase1's carried constraint 4: range
- * expansion is Phase 2's wiring, not this file's). TEMPORARY, same posture as `graph/eval.ts`'s
- * own `evaluateFormula` `#PARSE` bridge: deleted, not extended, the moment a later cycle wires in
- * real range expansion.
+ * The disclosed fallback for a `RangeNode` reached with no `readRange` wired, OR (defensively)
+ * reached anywhere `validateRangePlacement` would have rejected. See the file header's WHAT THIS
+ * IS for both cases.
  */
 function evaluateRangeNode(): Value {
   return {
     error: "#PARSE",
-    message: "range evaluation is not implemented in this build — SUM/MIN/MAX/AVG over a range need a later cycle's table-aware expansion",
+    message: "range evaluation is not wired in for this caller — no readRange callback was supplied",
   };
 }
 
-function evaluateBinaryOp(node: BinaryOpNode, read: ReadSlot): Value {
+function evaluateBinaryOp(node: BinaryOpNode, read: ReadSlot, readRange: ReadRange | undefined): Value {
   if (node.operator === "AND") {
-    return evaluateAndOperands([node.left, node.right], read);
+    return evaluateAndOperands([node.left, node.right], read, readRange);
   }
   if (node.operator === "OR") {
-    return evaluateOrOperands([node.left, node.right], read);
+    return evaluateOrOperands([node.left, node.right], read, readRange);
   }
   if (isComparisonOperator(node.operator)) {
-    return evaluateComparison(node.operator, node.left, node.right, read);
+    return evaluateComparison(node.operator, node.left, node.right, read, readRange);
   }
   if (isArithmeticOperator(node.operator)) {
-    return evaluateArithmetic(node.operator, node.left, node.right, read);
+    return evaluateArithmetic(node.operator, node.left, node.right, read, readRange);
   }
   // Defensive: BinaryOperator (ast.ts) has exactly 14 members, all handled above (2 + 6 + 6).
   // Unreachable while that stays true; never throws if it ever drifts.
   return { error: "#PARSE", message: `unrecognised binary operator: ${JSON.stringify(node.operator)}` };
 }
 
-function evaluateUnaryOp(node: UnaryOpNode, read: ReadSlot): Value {
+function evaluateUnaryOp(node: UnaryOpNode, read: ReadSlot, readRange: ReadRange | undefined): Value {
   if (node.operator === "NOT") {
-    return evaluateNot([node.operand], read);
+    return evaluateNot([node.operand], read, readRange);
   }
   // node.operator === "-" — UnaryOperator (ast.ts) has exactly these two members.
-  const operandValue = evaluateNode(node.operand, read);
+  const operandValue = evaluateNode(node.operand, read, readRange);
   if (isErrorValue(operandValue)) {
     return operandValue;
   }
@@ -262,12 +330,13 @@ function evaluateComparison(
   left: FormulaAst,
   right: FormulaAst,
   read: ReadSlot,
+  readRange: ReadRange | undefined,
 ): Value {
-  const leftValue = evaluateNode(left, read);
+  const leftValue = evaluateNode(left, read, readRange);
   if (isErrorValue(leftValue)) {
     return leftValue;
   }
-  const rightValue = evaluateNode(right, read);
+  const rightValue = evaluateNode(right, read, readRange);
   if (isErrorValue(rightValue)) {
     return rightValue;
   }
@@ -324,15 +393,16 @@ function evaluateArithmetic(
   left: FormulaAst,
   right: FormulaAst,
   read: ReadSlot,
+  readRange: ReadRange | undefined,
 ): Value {
-  const leftValue = evaluateNode(left, read);
+  const leftValue = evaluateNode(left, read, readRange);
   if (isErrorValue(leftValue)) {
     return leftValue;
   }
   if (typeof leftValue !== "number") {
     return { error: "#TYPE", message: `"${operator}": left operand must be a number, got ${describeValueType(leftValue)}` };
   }
-  const rightValue = evaluateNode(right, read);
+  const rightValue = evaluateNode(right, read, readRange);
   if (isErrorValue(rightValue)) {
     return rightValue;
   }
@@ -376,9 +446,9 @@ function evaluateArithmetic(
  * return `true`. A vacuous, defensive `true` for zero operands (D-035's own `AT_LEAST(1)` means a
  * real call never reaches this with none, but this function never crashes either way).
  */
-function evaluateAndOperands(operands: readonly FormulaAst[], read: ReadSlot): Value {
+function evaluateAndOperands(operands: readonly FormulaAst[], read: ReadSlot, readRange: ReadRange | undefined): Value {
   for (const operand of operands) {
-    const value = evaluateNode(operand, read);
+    const value = evaluateNode(operand, read, readRange);
     if (isErrorValue(value)) {
       return value;
     }
@@ -393,9 +463,9 @@ function evaluateAndOperands(operands: readonly FormulaAst[], read: ReadSlot): V
 }
 
 /** `OR` — the exact mirror of `evaluateAndOperands`: the first `true` short-circuits to `true`; only if every operand is `false` does this return `false`. */
-function evaluateOrOperands(operands: readonly FormulaAst[], read: ReadSlot): Value {
+function evaluateOrOperands(operands: readonly FormulaAst[], read: ReadSlot, readRange: ReadRange | undefined): Value {
   for (const operand of operands) {
-    const value = evaluateNode(operand, read);
+    const value = evaluateNode(operand, read, readRange);
     if (isErrorValue(value)) {
       return value;
     }
@@ -417,12 +487,12 @@ function evaluateOrOperands(operands: readonly FormulaAst[], read: ReadSlot): Va
  * D-035's `EXACTLY(3)` before this is ever called); the `undefined` arms below exist only as a
  * defensive, never-crashing fallback if that invariant is ever violated by a future caller.
  */
-function evaluateIf(args: readonly FormulaAst[], read: ReadSlot): Value {
+function evaluateIf(args: readonly FormulaAst[], read: ReadSlot, readRange: ReadRange | undefined): Value {
   const condition = args[0];
   if (condition === undefined) {
     return { error: "#TYPE", message: "IF: missing condition" };
   }
-  const conditionValue = evaluateNode(condition, read);
+  const conditionValue = evaluateNode(condition, read, readRange);
   if (isErrorValue(conditionValue)) {
     return conditionValue;
   }
@@ -433,7 +503,7 @@ function evaluateIf(args: readonly FormulaAst[], read: ReadSlot): Value {
   if (branch === undefined) {
     return { error: "#TYPE", message: `IF: missing ${conditionValue ? "true" : "false"} branch` };
   }
-  return evaluateNode(branch, read);
+  return evaluateNode(branch, read, readRange);
 }
 
 /**
@@ -446,12 +516,12 @@ function evaluateIf(args: readonly FormulaAst[], read: ReadSlot): Value {
  * the same registry implementation — which is why the two forms agree. (Corrected at
  * 0037-REVIEW-phase1: this comment previously claimed both forms route through here.)
  */
-function evaluateNot(args: readonly FormulaAst[], read: ReadSlot): Value {
+function evaluateNot(args: readonly FormulaAst[], read: ReadSlot, readRange: ReadRange | undefined): Value {
   const operand = args[0];
   if (operand === undefined) {
     return { error: "#TYPE", message: "NOT: missing argument 1" };
   }
-  const operandValue = evaluateNode(operand, read);
+  const operandValue = evaluateNode(operand, read, readRange);
   const entry = getFunctionEntry("NOT");
   if (entry === undefined || entry.evaluationMode !== "eager") {
     // Defensive: NOT is always a registered eager entry (functions.ts). Unreachable in practice;
@@ -462,10 +532,11 @@ function evaluateNot(args: readonly FormulaAst[], read: ReadSlot): Value {
 }
 
 /**
- * `FunctionCallNode` evaluation — the ONE place D-029 could be violated by accident. See the file
- * header's WHAT THIS IS for the exact, ordered rationale; this function's structure IS that order.
+ * `FunctionCallNode` evaluation — the ONE place D-029 could be violated by accident, and the ONE
+ * place a `RangeNode` argument is legally expanded (D-036). See the file header's WHAT THIS IS for
+ * the exact, ordered rationale; this function's structure IS that order.
  */
-function evaluateFunctionCall(node: FunctionCallNode, read: ReadSlot): Value {
+function evaluateFunctionCall(node: FunctionCallNode, read: ReadSlot, readRange: ReadRange | undefined): Value {
   const entry = getFunctionEntry(node.name);
   if (entry === undefined) {
     return { error: "#TYPE", message: `unknown function "${node.name}"` };
@@ -478,15 +549,16 @@ function evaluateFunctionCall(node: FunctionCallNode, read: ReadSlot): Value {
 
   // D-029 / 0035-REVIEW's carried constraint 1: dispatched HERE, before any argument is
   // evaluated and before `entry.implementation` is so much as considered — it does not exist for
-  // a LazyFunctionEntry (functions.ts, TypeScript-enforced).
+  // a LazyFunctionEntry (functions.ts, TypeScript-enforced). None of IF/AND/OR accepts a range
+  // argument, so this branch never touches readRange.
   if (entry.evaluationMode === "lazy") {
     switch (node.name) {
       case "IF":
-        return evaluateIf(node.args, read);
+        return evaluateIf(node.args, read, readRange);
       case "AND":
-        return evaluateAndOperands(node.args, read);
+        return evaluateAndOperands(node.args, read, readRange);
       case "OR":
-        return evaluateOrOperands(node.args, read);
+        return evaluateOrOperands(node.args, read, readRange);
       default:
         // Defensive: unreachable while LAZY_FUNCTION_NAMES is exactly {IF, AND, OR} — pinned by
         // a test in this file and in functions.test.ts. Never throws if that ever drifts.
@@ -497,10 +569,34 @@ function evaluateFunctionCall(node: FunctionCallNode, read: ReadSlot): Value {
     }
   }
 
-  // Eager path: evaluate every argument, left to right, stopping at the first error.
+  // Eager path: evaluate every argument, left to right, stopping at the first error. A
+  // `range`-typed argument is expanded here — D-036 — into every value it spans (bounded to the
+  // table's current extent, D-044) rather than evaluated to one Value via evaluateNode; see the
+  // file header's WHAT THIS IS for the full rationale.
   const argValues: Value[] = [];
   for (const arg of node.args) {
-    const value = evaluateNode(arg, read);
+    if (arg.type === "range") {
+      if (readRange === undefined) {
+        return evaluateRangeNode();
+      }
+      const rangeValues = readRange(arg.start, arg.end);
+      if (isRangeReadError(rangeValues)) {
+        return rangeValues;
+      }
+      let firstRangeError: Value | undefined;
+      for (const cellValue of rangeValues) {
+        if (isErrorValue(cellValue)) {
+          firstRangeError = cellValue;
+          break;
+        }
+        argValues.push(cellValue);
+      }
+      if (firstRangeError !== undefined) {
+        return firstRangeError;
+      }
+      continue;
+    }
+    const value = evaluateNode(arg, read, readRange);
     if (isErrorValue(value)) {
       return value;
     }

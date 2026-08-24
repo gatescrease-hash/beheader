@@ -8,10 +8,13 @@
  * functions, both forms meaning the same thing) and inherits **D-039**'s
  * either-case cell-reference form unchanged (this file makes no new ruling on it —
  * see `address.ts`'s `isCellReferenceForm`, reused here rather than duplicated).
- * As of this cycle, also implements **D-038** (Q-010 answered by the human): a
- * function call naming an unrecognised function, or calling a known one with the
- * wrong argument count, is now a `#PARSE`-time rejection — see
- * `parseFunctionCallExpr` below.
+ * Implements **D-038** (Q-010 answered by the human): a function call naming an
+ * unrecognised function, or calling a known one with the wrong argument count,
+ * is a `#PARSE`-time rejection — see `parseFunctionCallExpr` below. As of THIS
+ * cycle, also implements **D-045**: a range whose two endpoints name different
+ * objects is rejected here too, same `#PARSE`-time reasoning — see
+ * `walkForRangePlacement`'s new check, right beside the placement check it
+ * already ran.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
@@ -576,6 +579,19 @@ function walkForRangePlacement(node: FormulaAst, isDirectAggregateArgument: bool
           message:
             "a range (e.g. A1:B4) is only legal as a direct argument to an aggregate function (SUM, MIN, MAX, AVG)",
           start: 0, // No source position survives into the built AST — see ParseError's own doc comment.
+        };
+      }
+      // D-045: which objects two endpoints name is decidable from the formula
+      // text alone, with no value read — the same D-038 line the placement
+      // check just above already applies. `primitives/table.ts`'s
+      // `enumerateRangeCellAddresses` keeps its own matching check as the
+      // defensive arm for a hand-built or loaded AST; this is the reachable
+      // rejection for anything actually typed.
+      if (node.start.objectId !== node.end.objectId) {
+        return {
+          error: "#PARSE",
+          message: "a range's two endpoints must be cells in the same table",
+          start: 0, // Same reason as above — no source position survives into a RangeNode.
         };
       }
       return undefined;
