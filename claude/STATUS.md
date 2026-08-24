@@ -3,12 +3,11 @@
 STATE: GREEN (compiles under both configs, 545/545 tests pass, 0 skipped, 0 `.only`) — and, as of
 this cycle, the SEMANTICS the build was hiding a gap in (0045-REVIEW's REVISE) are fixed too.
 
-**Process state: 0045-REVIEW's four-item fix list is CLOSED (D-047, D-048).** No `§6.1` trigger
-fired this cycle — the fix list was reviewer-directed, not a new design decision, and no test
-expectation changed (nine tests added, none altered). Batching: cycle 1/3 since 0045-REVIEW-phase2,
-diff ~335 lines / 3 files (cap 800/10). Entry 0046's own assessment: **REVIEW RECOMMENDED, not
-REQUIRED** — the implementer is not starting the resize/creation slice without hearing back first,
-even though the batch cap does not force a stop.
+**Process state: 0045-REVIEW's four-item fix list is CLOSED (D-047, D-048). REVIEW NOT NEEDED —
+continuing.** No `§6.1` trigger fired this cycle — the fix list was reviewer-directed, not a new
+design decision, and no test expectation changed (nine tests added, none altered). Batching: cycle
+1/3 since 0045-REVIEW-phase2, diff ~335 lines / 3 files (cap 800/10), leaving 2 more cycles / ~465
+more lines before a review point is mandatory (§6.3).
 
 Current phase: **2 — Table primitive.** "Wire the formula engine into cell slots. Add reference
 adjustment. Still headless." The formula engine is wired AND now handles the ordinary sparse-table
@@ -76,8 +75,9 @@ omits an absent or `null`-valued cell from its flattened `Value[]` · **D-048**:
 `findIllegalOperationPayloads` walks a `setSlot`/`createObject` formula payload's AST via
 `collectIllegalAstLiterals`, closing the asymmetry with `findIllegalSlotValues`.
 
-**Not yet independently reviewed**: entry 0046 itself (the fix-list implementation) — recommended,
-not required, per its own self-assessment.
+**Not yet independently reviewed**: entry 0046 itself (the fix-list implementation) — no §6.1
+trigger fired and the batch cap is not reached, so per PROCESS_BRIEF §6 this is not a blocking gate;
+work continues into the next slice within the same batch.
 
 ## Not started
 

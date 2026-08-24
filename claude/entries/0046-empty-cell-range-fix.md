@@ -155,8 +155,8 @@ design decisions, and no test EXPECTATION changed (all nine new tests are additi
 assertion was altered or deleted). Batching instead: cycle 1 of up to 3 since 0045-REVIEW-phase2;
 diff since last review ~335 lines / 3 files (cap 800/10) — well under.
 
-Recommend **REVIEW: RECOMMENDED, not REQUIRED** — this closes the exact fix list a review already
-scoped and approved the shape of, with the required tests it asked for and the mutation-test
-discipline confirming each piece. But it is the reviewer's call whether closing a REVISE verdict
-warrants a look before the resize/creation slice (STATUS.md's next slice) begins; I am not treating
-silence as approval to start that larger slice without hearing back.
+**REVIEW: NOT NEEDED.** No §6.1 trigger fired (correcting this entry's earlier draft, which hedged
+with "RECOMMENDED" — not an available verdict; PROCESS_BRIEF's own triggers are objective and this
+cycle does not satisfy any of them, so applying them honestly means saying so plainly rather than
+splitting the difference). Batch remains well under cap (1/3 cycles, ~335/800 lines). Proceeding to
+the next slice.
