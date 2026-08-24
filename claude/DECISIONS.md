@@ -1158,3 +1158,78 @@ by construction and remains open; it is not required, and moving them is not thi
 
 Reconciliation required: none — no `PROVISIONAL` tag. The guard and its two regression tests
 landed with this ruling at 0043-REVIEW.
+
+---
+
+## D-047 — An EMPTY cell inside a range is skipped, not an error; a range never makes a document invalid
+Answers: the gap found at 0045-REVIEW (no `Q-NNN` was raised)   Ruled: entry 0045-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`'s `deriveEdges`, `graph/eval.ts`'s `readRange`, and every future range consumer
+
+**Ruling.** A cell address produced by `enumerateRangeCellAddresses` that has **no slot on the
+object** is SKIPPED — by edge derivation and by evaluation alike:
+
+1. `deriveEdges` MUST NOT emit an edge for an enumerated range cell that does not exist as a slot.
+   A range is bounded by the table's extent (D-044), and within that extent an unpopulated cell is
+   ordinary, expected state — not a dangling reference.
+2. `readRange` MUST omit a cell with no slot from the `Value[]` it returns, rather than returning
+   `#REF` for the whole range.
+3. A cell that EXISTS holding `null` is likewise omitted from a range's `Value[]`. Both
+   representations of "empty" must behave identically, because which one a table uses is decided
+   by the still-unbuilt creation/resize cycle and no aggregate may depend on that choice.
+4. This applies to range expansion ONLY. An explicit scalar argument is untouched: `SUM(a, b)`
+   where `b` is `null` remains `#TYPE`, and a plain `ReferenceNode` to a non-existent slot remains
+   a dangling reference that `validateIntegrity` rejects. The distinction is that a range names a
+   REGION, whose membership the system computed, while a reference names ONE slot the user wrote.
+
+**Rationale — the current behaviour makes the phase gate unreachable.** Verified against entry
+0044's code at 0045-REVIEW:
+
+- A 5×1 table with `A1`, `A2`, `A5` populated and `B1 = SUM(A1:A5)` is REJECTED outright:
+  `deriveEdges` emits edges from the absent `A3`/`A4`, and `validateIntegrity` reports
+  `table_x.B1 references a slot that does not exist` — twice. The document cannot be committed at
+  all.
+- The same table with `A3`/`A4` present holding `null` commits, and `SUM` returns
+  `#TYPE: SUM: argument 3 must be a number, got null`.
+
+So no representation of an empty cell works inside an aggregate. Phase 2's acceptance criterion
+requires "`SUM(A1:A5)` recomputes correctly **after inserting a row inside the range**" — and
+inserting a row inside a range necessarily creates an empty cell inside it. Under the behaviour
+above, that insertion makes the document invalid. The criterion cannot be satisfied without this
+ruling, which is why it is settled here rather than deferred to the resize cycle that would trip
+over it.
+
+Skipping is also the spreadsheet idiom the brief already appeals to elsewhere (§5.4 invokes
+"`#REF` is the expected spreadsheet idiom" for the repair path); every mainstream spreadsheet
+ignores empty cells in `SUM`/`MIN`/`MAX`, and `AVG` divides by the count of non-empty cells, which
+falls out for free once the empties never enter the argument list.
+
+**What this does NOT change.** D-044's bounding stays exactly as built (out-of-extent cells are
+omitted before this rule is ever consulted). The fallback-to-one-edge-from-`start` for an
+UNRESOLVABLE TABLE (entry 0044 Decision 3) stays — that is a different case, correctly rejected,
+and it is what keeps `delete <table>` refused while a range still names the table.
+
+Reconciliation required: no `PROVISIONAL` tag. Fix list at 0045-REVIEW §8, items 1–3.
+
+---
+
+## D-048 — `findIllegalOperationPayloads` walks a payload's stored AST, the same as `findIllegalSlotValues`
+Answers: entry 0044's reviewer question 1   Ruled: entry 0045-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`
+
+**Ruling.** `findIllegalOperationPayloads` MUST walk a `setSlot`/`createObject` payload's
+`formula`-kind slot AST for an illegal `LiteralNode`, reusing the same `collectIllegalAstLiterals`
+D-031 added to `findIllegalSlotValues`. The two checks answer the same question at two moments and
+must not disagree about what is legal.
+
+**Rationale.** Entry 0044 declined this on the reading that D-031's binding text names only the
+post-fold check. That reading is correct and the disclosure was the right call — but the
+implementer's own stated reason for worrying is the stronger argument: D-025/Q-008's history is
+*the same defect found four times* (slot values → journal payloads → camera/`nextObjectId` →
+stored ASTs), and the payload-level hole is a real fifth instance now that a range-containing
+formula is storable. An illegal literal inside a `setSlot` payload's AST that a LATER operation in
+the SAME batch overwrites or deletes never reaches `findIllegalSlotValues` at all, yet the journal
+records every operation in the batch — the exact shape 0025-REVIEW-phase0 finding 1 closed for
+plain slot values. D-031 did not ask for it only because D-031 was written before stored ASTs
+could carry a literal.
+
+Reconciliation required: none. Fix list at 0045-REVIEW §8, item 4.

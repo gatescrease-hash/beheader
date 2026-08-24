@@ -77,13 +77,19 @@
  *   - `LiteralNode` yields NOTHING — a literal has no address to read.
  *
  * NOT DONE HERE
- *   Wiring this into `mutation.ts`'s `deriveEdges` (which still derives an edge only from the
- *   narrower `ReferenceNode` shape, per its own TEMPORARY `findUnsupportedFormulaAsts` check) or
- *   into `graph/eval.ts` — both are Phase 2's job ("wire the formula engine into cell slots"),
- *   the same cycle that expands a `RangeDependency` into concrete per-cell edges using the target
- *   table's actual current dimensions, and the same cycle that deletes `findUnsupportedFormulaAsts`
- *   (STATUS.md's own carried note, extended by D-031: that same cycle must also extend the
- *   value-legality walk to formula ASTs). `functions.ts` and `formula/eval.ts` — not built.
+ *   Turning a `RangeDependency` into concrete per-cell edges. This file reports a range
+ *   PRE-EXPANSION, as its own single dependency — deliberately, and that has not changed.
+ *   Expansion belongs to `mutation.ts`'s `deriveEdges`, which (as of entry 0044) walks this
+ *   function for real and expands a `RangeDependency` through `primitives/table.ts`'s
+ *   `enumerateRangeCellAddresses`, bounded by the target table's current dimensions (D-044)
+ *   read `literal`-only (D-046). Evaluation-side expansion is `graph/eval.ts`'s `readRange`
+ *   closure feeding `formula/eval.ts`. Range PLACEMENT is `parser.ts`'s (D-045). Those four
+ *   concerns stay separate — do not collapse them here.
+ *
+ *   (This block previously said the wiring was unbuilt and named a TEMPORARY
+ *   `findUnsupportedFormulaAsts` shield in `mutation.ts`; all three temporary bridges were
+ *   deleted at entry 0044 and `functions.ts`/`formula/eval.ts` are long built. Corrected at
+ *   0045-REVIEW rather than left to mislead a cold reader.)
  */
 import type { Address } from "../address.ts";
 import type { FormulaAst } from "./ast.ts";
