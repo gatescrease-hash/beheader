@@ -795,7 +795,7 @@ export interface CreateObjectOperation {
 }
 
 /**
- * §5.4's row/column INSERTION (entry 0046) — the first half of "rows and
+ * §5.4's row/column INSERTION (entry 0047) — the first half of "rows and
  * columns can be added or removed." `index` is 1-based: the NEW line
  * occupies this position; every EXISTING row/column at or after it shifts by
  * one (`primitives/table.ts`'s `insertTableLine`/`shiftCoordinates`). Carries
@@ -829,7 +829,7 @@ export interface InsertTableLineOperation {
 /**
  * The full set of operations `mutate` can apply. Four variants now
  * (`SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`,
- * `InsertTableLineOperation`, added entry 0046) — widened, per Q-005/D-020's
+ * `InsertTableLineOperation`, added entry 0047) — widened, per Q-005/D-020's
  * "widen the union, never restructure" stance, not a second entry point.
  */
 export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation | InsertTableLineOperation;
@@ -942,7 +942,7 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * this exact mechanism (never a separate, parallel "just assign the array"
  * path — Rule 2).
  *
- * `insertTableLine` (entry 0046, §5.4): the ONE variant that touches every
+ * `insertTableLine` (entry 0047, §5.4): the ONE variant that touches every
  * object in `objects`, not just its own target — because §5.4's reference-
  * adjustment pass is explicit that a row/column insertion must rewrite
  * affected addresses "over every stored AST in the document... other tables
@@ -1217,7 +1217,7 @@ export function mutate(
     return { ok: false, message: illegalPayloadMessages.join("; ") };
   }
 
-  // Entry 0046, §5.4: an `insertTableLine` naming a non-table object, or an
+  // Entry 0047, §5.4: an `insertTableLine` naming a non-table object, or an
   // out-of-range index, is rejected here with a message naming the problem —
   // see `findInvalidTableResizes`'s own doc comment for the one disclosed
   // gap (a table created earlier in the SAME batch), which `insertTableLine`
@@ -1664,7 +1664,7 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
 }
 
 /**
- * Entry 0046, §5.4's row/column insertion: rejects an `insertTableLine`
+ * Entry 0047, §5.4's row/column insertion: rejects an `insertTableLine`
  * operation whose `objectId` does not name a `"table"`-type object, or whose
  * `index` is out of range for that table's CURRENT extent — with a message
  * naming the operation and the problem, the same style every other

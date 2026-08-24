@@ -76,7 +76,7 @@
  *     contributes no address, "the absence of a dependency, made explicit" (D-028's own words).
  *   - `LiteralNode` yields NOTHING — a literal has no address to read.
  *
- * As of entry 0046, this file ALSO exports `rewriteAddressesInAst` — a second total walk over the
+ * As of entry 0047, this file ALSO exports `rewriteAddressesInAst` — a second total walk over the
  * exact same node shapes, used by §5.4's reference-adjustment pass (`mutation.ts`'s
  * `insertTableLine` handling) to shift every `ReferenceNode`/`RangeNode` address a row/column
  * insertion moves. It is a SIBLING to `extractDependencies` (same shapes, same totality), not a

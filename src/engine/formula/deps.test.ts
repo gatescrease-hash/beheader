@@ -229,7 +229,7 @@ describe("extractDependencies — integration: real ASTs from parseFormula", () 
   });
 });
 
-describe("rewriteAddressesInAst — entry 0046, §5.4's reference-adjustment building block", () => {
+describe("rewriteAddressesInAst — entry 0047, §5.4's reference-adjustment building block", () => {
   const bump = (address: Address): Address => ({ objectId: address.objectId, path: [...address.path, "bumped"] });
 
   it("returns a literal/error node completely unchanged (no address to rewrite)", () => {

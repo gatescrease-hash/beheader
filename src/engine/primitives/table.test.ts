@@ -217,7 +217,7 @@ function tableWithCells(rows: number, cols: number, cells: Record<string, Value>
   return { id: "obj_1", name: "table_x", type: "table", slots };
 }
 
-describe("getTableDimensions — entry 0046, the public reader `insertTableLine`/mutation.ts share", () => {
+describe("getTableDimensions — entry 0047, the public reader `insertTableLine`/mutation.ts share", () => {
   it("reads rows/cols off a literal-dimensioned table", () => {
     expect(getTableDimensions(tableWithDimensions(5, 3))).toEqual({ rows: 5, cols: 3 });
   });
@@ -227,7 +227,7 @@ describe("getTableDimensions — entry 0046, the public reader `insertTableLine`
   });
 });
 
-describe("shiftCellAddressForInsert — entry 0046, §5.4's per-address reference-adjustment arithmetic", () => {
+describe("shiftCellAddressForInsert — entry 0047, §5.4's per-address reference-adjustment arithmetic", () => {
   it("shifts a row at or after the insertion index by one", () => {
     expect(shiftCellAddressForInsert(cell("obj_1", "A3"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A4"));
     expect(shiftCellAddressForInsert(cell("obj_1", "A5"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A6"));
@@ -253,7 +253,7 @@ describe("shiftCellAddressForInsert — entry 0046, §5.4's per-address referenc
   });
 });
 
-describe("insertTableLine — entry 0046, §5.4's row/column insertion primitive", () => {
+describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive", () => {
   it("increments rows and shifts every populated cell at or after the index down by one row", () => {
     const table = tableWithCells(3, 1, { A1: 1, A2: 2, A3: 3 });
     const result = insertTableLine(table, "row", 2);

@@ -18,7 +18,7 @@
  * the range-evaluation wiring slice: bounding `enumerateRangeCellAddresses` by
  * current extent (D-044) and reading dimensions `literal`-only (D-046) the
  * same way `enumerateTableCellSlotPaths` already does; entry 0046 closed
- * D-047/D-048's fix list (0045-REVIEW) and then, in the SAME cycle, built
+ * D-047/D-048's fix list (0045-REVIEW); entry 0047, a SEPARATE cycle, built
  * row/column INSERTION (`insertTableLine`, `getTableDimensions`,
  * `shiftCellAddressForInsert`) — the first piece of §5.4's "rows and columns
  * can be added or removed." See NOT DONE HERE for what is still deliberately
@@ -103,7 +103,7 @@
  *   (step 3) and `validateIntegrity` (step 4) have already run.
  *
  *   `insertTableLine(object, axis, index)` — §5.4's insertion primitive
- *   (entry 0046). Increments the relevant dimension slot and moves every
+ *   (entry 0047). Increments the relevant dimension slot and moves every
  *   EXISTING populated cell at or after `index` to its shifted position, via
  *   the SAME `shiftCoordinates` arithmetic `shiftCellAddressForInsert` uses
  *   for the reference-adjustment pass (`mutation.ts`) — one place the "does
@@ -137,7 +137,7 @@
  * NOT DONE HERE
  *   - Row/column DELETE and its REPAIR path (rewriting inbound references to
  *     `#REF`, a range endpoint clamping to the remaining extent). INSERT
- *     landed at entry 0046 (`insertTableLine`, `shiftCellAddressForInsert`) —
+ *     landed at entry 0047 (`insertTableLine`, `shiftCellAddressForInsert`) —
  *     delete is a genuinely different mutation (it can ORPHAN a reference,
  *     which insert never does) and is deliberately deferred to its own
  *     cycle; see STATUS.md's next slice.
@@ -192,7 +192,7 @@ export function isRangeEnumerationError(
  * at all — a defensive check, not a bounds check (see file header): this
  * rejects a MALFORMED address (wrong prefix, wrong length, an unparseable
  * second segment), never a well-formed one that merely names a cell outside
- * the table's current extent. Exported as of entry 0046 for
+ * the table's current extent. Exported as of entry 0047 for
  * `shiftCellAddressForInsert` below, and for `mutation.ts`'s reference-
  * adjustment pass to reuse rather than re-deriving the same shape check.
  */
@@ -391,7 +391,7 @@ export function enumerateTableCellSlotPaths(object: GraphObject): readonly (read
 }
 
 // ---------------------------------------------------------------------------
-// Row/column INSERTION (entry 0046; §5.4's "rows and columns can be added or
+// Row/column INSERTION (entry 0047; §5.4's "rows and columns can be added or
 // removed" and the reference-adjustment pass it requires). Deletion, the
 // REPAIR path, and the `force` flag are DELIBERATELY NOT built here — see the
 // file header's NOT DONE HERE and STATUS.md's next slice.

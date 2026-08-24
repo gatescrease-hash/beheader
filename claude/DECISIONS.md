@@ -1233,3 +1233,115 @@ plain slot values. D-031 did not ask for it only because D-031 was written befor
 could carry a literal.
 
 Reconciliation required: none. Fix list at 0045-REVIEW §8, item 4.
+
+---
+
+## D-049 — A mutation that REBUILDS an object's `slots` MUST carry through every slot it does not itself own
+Answers: entry 0047's reviewer question 2 (in part)   Ruled: entry 0048-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`, `primitives/*`, every future slot-set-changing mutation
+
+**Ruling.** A mutation that produces a new `slots` record for an object MUST start from that
+object's EXISTING slots and change only the slots its own specification names. It MUST NEVER build
+a fresh record from the slots it happens to know about — every slot it does not recognise is
+carried through untouched. A slot may only disappear from an object as the EXPLICIT, specified
+effect of the mutation, and when it does, §5.1.1 applies to it in full (reject, or repair; never
+silently).
+
+**Rationale.** `insertTableLine` (entry 0047) rebuilt `slots` from exactly three sources — `rows`,
+`cols`, and the cell paths `enumerateTableCellSlotPaths` currently declares — and therefore
+silently DELETED everything else on the object. Three reachable instances, all verified against the
+built code at review:
+
+- A literal slot at any other path (`table_x.note`, committable today: D-017's check only rejects
+  UNDECLARED `formula`/`derived` slots, so an undeclared LITERAL commits `ok: true`) vanishes on the
+  next row insert.
+- A cell slot OUTSIDE the current extent (`cells.A5` on a 2×2 table — the incoherence STATUS.md has
+  carried as a known problem since 0043) vanishes on the next row insert.
+- A table whose `rows` is a `formula` slot and which holds literal cells (also committable today)
+  loses ALL its cells AND has `rows` reset to `literal 1`, committing `ok: true`.
+
+Where the dropped slot had a dependent, the mutation instead fails with `"value_1.value references
+a slot that does not exist"` — state is protected (the §5.1.1 invariant holds), but the user
+inserted a row and was told their formula is broken, which is a diagnosis of the wrong event.
+
+The forward hazard is the decisive one: §5.10's own command line is `table x=0 y=0 rows=8 cols=8`,
+so Phase 3 gives tables `origin.x`/`origin.y` slots. Under the rebuild-from-scratch shape, the
+first row insertion after that lands would silently delete a table's position. A mutation must be
+correct against slots that do not exist yet — that is the whole reason this is a rule and not a
+bug fix.
+
+Reconciliation required: fix list at 0048-REVIEW-phase2 §8, item 1.
+
+## D-050 — A precondition check that consults document state MUST simulate the batch, left to right
+Answers: entry 0047's reviewer question 2   Ruled: entry 0048-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`
+
+**Ruling.** Any pre-fold check in `mutate` that decides an operation's legality by reading document
+state MUST evaluate that operation against the state as of ITS OWN position in the batch — the
+pre-batch state plus every earlier operation's effect — exactly as the existence check already does
+with its `survivingIds` simulation. Checking every operation against PRE-BATCH state is not
+permitted, in either direction: it both misses illegal operations and rejects legal ones.
+
+**Rationale.** `findInvalidTableResizes` (entry 0047) validates every `insertTableLine` against
+pre-batch `objects`. The entry disclosed the resulting FALSE-ACCEPT (a table `createObject`d earlier
+in the same batch is not validated at all) and argued it was tolerable because `insertTableLine`'s
+clamp keeps the document sound. It did not disclose the FALSE-REJECT, verified at review:
+`mutate(table_2x2, [insert row at 1, insert row at 4])` fails with *"row insertion index 4 is out of
+range for table_x (currently 2 rows; must be an integer from 1 to 3)"* — a message that is wrong on
+its own terms, since by the time operation 2 applies the table genuinely has 3 rows. "Insert three
+rows at the end" is an ordinary command-line batch (§5.1 requires batching and names multi-step
+commands as a caller), so this is normal use, not a corner.
+
+A clamp can rescue a false-accept; nothing rescues a false-reject, because the mutation never runs.
+That asymmetry is why the disclosed-gap argument does not carry here, and why one simulation loop —
+the pattern `mutate` already established — replaces both halves of the problem at once.
+
+Reconciliation required: fix list at 0048-REVIEW-phase2 §8, item 2.
+
+## D-051 — Row/column INSERTION and DELETION are separate `Operation` kinds; one axis discriminant each
+Answers: entry 0047's reviewer question 1   Ruled: entry 0048-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`, `primitives/table.ts`
+
+**Ruling.** `InsertTableLineOperation`'s shape is CONFIRMED as built: one operation kind carrying
+`axis: "row" | "column"`, not two kinds. Deletion gets its OWN operation kind, with its own
+precondition check and its own apply branch — NEVER this one with a negative index, a `count`, or a
+`remove` flag. The row/column shift arithmetic stays in exactly one function
+(`primitives/table.ts`'s `shiftCoordinates`); deletion's own arithmetic joins it in that file, and
+neither the cell-slot move nor the formula-reference move may compute a position anywhere else.
+
+**Rationale.** Row and column insertion are the same operation over a transposed grid — the
+arithmetic already takes `axis` as a parameter — so splitting them would duplicate every check and
+every apply branch to express nothing. Insert versus delete is the opposite case: insertion cannot
+orphan a reference and deletion can, which is precisely why §5.1.1 has a REPAIR path at all.
+Unifying them would put REPAIR logic behind a flag insertion can never take, and the resulting
+single branch would be the one place where "did the user mean to break someone's formula" is
+decided by an `if` rather than by which operation they issued.
+
+Reconciliation required: none. Guidance for the deletion cycle, not a change to built code.
+
+## D-052 — Every total walk over `FormulaAst` lives in `formula/deps.ts`, beside the walk that already exists
+Answers: entry 0047's reviewer question 3   Ruled: entry 0048-REVIEW-phase2 (reviewer)
+Binding on: `formula/deps.ts`, and any future AST-walking code
+
+**Ruling.** `rewriteAddressesInAst` STAYS in `formula/deps.ts`. Any further total walk over
+`FormulaAst`'s node shapes — including §5.1.1's `#REF` repair pass for row/column deletion — is
+added to this same file, next to `extractDependencies` and `rewriteAddressesInAst`, never to a new
+module and never inline at a call site.
+
+**Rationale.** The thing being reused is the exhaustive switch over the seven node shapes, not any
+dependency-specific logic. The failure this file exists to prevent is a walk that silently misses a
+node type; keeping every walk adjacent means adding an eighth `FormulaAst` variant breaks all of
+them in one file, in one compile, rather than one of them somewhere else at runtime. The
+implementer's worry — that a MUTATION-time transform is misfiled among pure queries — is real, but
+it is answered by the file header naming REWRITING as its own distinct concern, which entry 0047
+already did.
+
+**Forward note for the deletion cycle, binding as guidance.** `rewriteAddressesInAst`'s
+`(Address) => Address` signature CANNOT express deletion's repair: turning a `ReferenceNode` into an
+`ErrorNode` (D-028) is a NODE-level replacement, and clamping a range endpoint needs both endpoints
+together, which an address-at-a-time callback never sees. Deletion therefore needs a second,
+node-level walk in this file (e.g. one applied at `reference`/`range` nodes returning a
+`FormulaAst`), NOT a widened `rewrite` callback bolted onto this one. Discover that at design time,
+not after the address-level version has been forced halfway.
+
+Reconciliation required: none.

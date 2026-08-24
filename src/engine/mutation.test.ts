@@ -2265,7 +2265,7 @@ describe("mutate — D-048: `findIllegalOperationPayloads` walks a payload's sto
   });
 });
 
-describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry 0046)", () => {
+describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry 0047)", () => {
   it("grows the extent and shifts every populated cell at or after the index down by one row", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 1 },
