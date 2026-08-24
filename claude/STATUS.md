@@ -1,4 +1,4 @@
-# STATUS — as of entry 0055-AUDIT
+# STATUS — as of entry 0056-RULINGS
 
 STATE: GREEN (compiles under both configs, 653/653 tests pass, 0 skipped, 0 `.only`).
 
@@ -8,9 +8,13 @@ clauses re-proved against the built code, clause 5 against the brief's own two-t
 
 **Entry 0055 is an out-of-band AUDIT pass, not an implementer cycle.** It condensed every source
 file's header to a present-tense contract and deleted cycle-by-cycle narration from source —
-comments only, zero executable lines, 653/653 unchanged. It **contradicts D-058**, which had ruled
-that header history paragraphs "stay"; that conflict is raised as **Q-011** and MUST be settled at
-the next review. Read entry 0055 before writing your first header.
+comments only, zero executable lines, 653/653 unchanged.
+
+**Entry 0056 records the human's ruling that settles it: D-060 — comments describe the PRESENT;
+they are not diaries.** D-058 is superseded in its first half (its dating rule survives inside
+D-060). Q-011 is CLOSED. DECISIONS.md and the tree now agree. **Read D-060's three tiers before
+writing your first comment** — note that the `(D-0XX)` citation form is ranked *Okay*, not *Good*:
+a citation supplements a stated reason, it never replaces one.
 
 Current phase: **3 — canvas, camera, geometry, command line.** Nothing in it is started.
 Phase 3 acceptance criterion (§6): *"you can create a polygon and a table by command, see both
@@ -50,8 +54,10 @@ and accepted at 0054-REVIEW-phase2**.
 ## Built this batch, not yet reviewed
 
 No CODE. Entry 0055's comment-and-header condensation is unreviewed prose across all 16 non-test
-source files, plus a PROCESS_BRIEF §5.2 addition (present-tense rule + header line budget) and
-Q-011.
+source files, plus PROCESS_BRIEF §5.2/§5.4 additions and entry 0056's ruling (D-060). **Still
+outstanding for the next review, and NOT discharged by D-060:** audit 0055's prose diff for
+dropped rationale. D-060 sanctions the practice; it does not certify that all 16 rewritten headers
+kept everything worth keeping.
 
 ## Not started
 
@@ -84,24 +90,20 @@ presets — including a table-creation COMMAND; the engine primitive already suf
 - **`rewriteObjectFormulaAddresses`/`repairObjectFormulaAddresses` walk `formula`-kind slots only**
   — total TODAY, but §5.4 requires the pass to cover text boxes too once Phase 5 lands (block-tree
   content, a different AST shape). Do not build for it now; do not forget it.
-- **D-058 and the tree now disagree, pending Q-011.** D-058 ruled header history paragraphs
-  "stay"; entry 0055 removed them at the human's direction. DECISIONS.md was deliberately NOT
-  edited — an auditor may not rule. Settle Q-011 at the next review; until then, follow
-  PROCESS_BRIEF §5.2's present-tense rule, which is what the tree actually reflects.
 - **Carried unchanged:** `camera` has no WRITE-side guard (D-027) · journal STRUCTURE deliberately
   unvalidated beyond `Array.isArray` · `lexer.ts`'s two disclosed edge cases · §5.11's `style` field
   · `nextObjectId` reconciliation · `noUnusedLocals` off · recursion depth.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-059**) is binding without restatement here.
-D-059 is the newest: a repair report never names a slot absent from the committed state.
+Every ruling in `DECISIONS.md` (D-001 through **D-060**) is binding without restatement here.
+D-060 is the newest: comments describe the present and are not diaries — **D-058 is superseded in
+its first half** by it, though D-058's dating rule survives inside it.
 
 ## Live PROVISIONAL tags and open questions
 
-**Q-011 (does D-058 still stand?) blocks nothing but MUST be settled at the next review** — see
-Known problems and entry 0055. It has no source tag: tagging every rewritten header
-`PROVISIONAL(Q-011)` would reintroduce the noise the pass removed. **Q-007 is LIVE.** `PROVISIONAL(Q-007)` →
+**Q-011 is ANSWERED → D-060** (human, entry 0056). Zero open questions block any phase.
+**Q-007 is LIVE.** `PROVISIONAL(Q-007)` →
 `document.ts`'s `CameraState`: the cycle that builds `render/camera.ts` MUST reconcile and remove
 this tag (0054-REVIEW §7 restates the binding constraints). `PROVISIONAL(Q-008)` →
 `graph/node.ts`'s `isIllegalNumber`, still deferred, blocking nothing — but if a Phase 3 drag can
@@ -136,13 +138,12 @@ holds. Next free: **Q-012**.
   pre-filter.
 - **`resolveNonDerivedSlotPaths` is the ONLY sanctioned way to read `nonDerivedSlotPaths`**, and no
   function in `mutation.ts` inverts a `slotKey` (D-010) — forward-resolve and match instead.
-- **Headers are PRESENT TENSE and budgeted now (PROCESS_BRIEF §5.2, added at 0055).** State the
-  contract as it stands; do not narrate your cycle in a header — the log entry is for that (§5.4
-  always said so). 20-40 lines ordinary, ~80 load-bearing. Cite `(D-047)`/`(0045-REVIEW)` freely
-  as pointers; do not retell the story around them. **This is what tripped D-058 into conflict —
-  see Q-011.**
+- **Comments describe the PRESENT (D-060, binding).** State the behaviour and the reason. A
+  `(D-0XX)` citation is a supplement to that reason, never a substitute — ranked *Okay*, not
+  *Good*. Never narrate your cycle in a comment; the log entry is for that. Headers are budgeted:
+  20-40 lines ordinary, ~80 load-bearing (PROCESS_BRIEF §5.2).
 - **State every file you touched in the log entry, comment-only edits included.** If you DO date a
-  design decision in a comment, name the entry number, never a bare "this cycle" (D-058's dating
-  half, which Q-011 does not dispute).
+  design decision in a comment, name the entry number, never a bare "this cycle" (D-058's
+  surviving half, carried into D-060).
 - Each PowerShell call is a fresh process; the Bash tool's `npm`/`npx` resolve directly and don't
   need PowerShell.

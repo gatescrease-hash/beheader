@@ -183,9 +183,9 @@ Keep, always, regardless of budget: hazard notes, rejected alternatives and why 
 were rejected, invariants, and `PROVISIONAL(Q-NNN)` tags. Those are the expensive
 knowledge. Sequencing is not.
 
-*(Budget and present-tense rule added by the audit pass at entry 0055, which found
-headers had drifted to ~6x this size and accumulated stale claims. Reverse this
-paragraph if you disagree with it — but read that entry first.)*
+*(Budget added by the audit pass at entry 0055, which found headers had drifted to ~6x this
+size and accumulated stale claims. The present-tense rule is binding under **D-060**, ruled by the
+human at entry 0056 — it is not this paragraph's own invention.)*
 
 ### 5.3 Function docs
 
@@ -211,6 +211,16 @@ Document **why it exists, what it guarantees, how it fails** — never restate t
   aren't worth one why-comment.
 - NEVER comment the obvious (`// increment i`). NEVER leave commented-out code — git has it.
   NEVER write changelog comments in source — log entries are for that.
+- **D-060 — comments describe the PRESENT; they are not diaries.** Three tiers, and the ranking
+  is the point:
+  - **Good** — `// does X because A needs to read from X`. Behaviour and reason.
+  - **Okay** — `// does X because A needs to read from X, AS PER D-0XX. Change approach only if
+    that decision is overruled.` Same, plus a pointer.
+  - **Bad** — `// Cycle X I did this; cycle X+1 I did that instead; cycle X+2 reverted it...`
+  A `(D-0XX)` is a SUPPLEMENT to a stated reason, never a SUBSTITUTE for one — cite the ruling so
+  the reader knows the reason is binding and where to argue with it, not so they have to go find
+  the reason at all. Where a comment DOES date something, name the entry ("entry 0050"), never a
+  bare "this cycle" (D-058's surviving half).
 - Cross-reference the spec by section: `// §5.3: eager and TOTAL — both IF branches,
   deliberately.` Cheapest legibility mechanism available.
 

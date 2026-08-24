@@ -17,9 +17,12 @@ Next free ID: **Q-012**
 ---
 
 ## Q-011 — Does **D-058** still stand, now that the practice it regulates has been removed from source?
-Raised: entry 0055-AUDIT (auditor)   Brief section: PROCESS_BRIEF §5.2/§5.4   Status: OPEN
-Blocks: nothing. But it MUST be settled at the next review, because until it is, DECISIONS.md and
-the actual tree disagree, and DECISIONS.md is the binding document.
+Raised: entry 0055-AUDIT (auditor)   Brief section: PROCESS_BRIEF §5.2/§5.4
+Status: **ANSWERED → D-060** (ruled by the human directly, 2026-08-24, option (a): supersede D-058.
+Comments describe the present and are not diaries; a pointer back to a ruling is the one sanctioned
+exception, and is a supplement to a stated reason, never a substitute for one. D-058's dating half
+survives inside D-060. Recorded at entry 0056-RULINGS.)
+Blocked: nothing. DECISIONS.md and the tree now agree.
 
 Ambiguity: **D-058 (0051-REVIEW-phase2) ruled that "the per-cycle history paragraphs these file
 headers carry are accepted practice in this repo and stay"**, requiring only that each one name its

@@ -1480,6 +1480,10 @@ slice.
 ## D-058 — A cycle-history comment names its entry number; never a bare "this cycle"
 Answers: —   Ruled: entry 0051-REVIEW-phase2 (reviewer)
 Binding on: every source and test file
+**SUPERSEDED BY D-060** (human, 2026-08-24) — in its FIRST half only. D-058 accepted per-cycle
+history paragraphs in source and required them to be dated; D-060 removes the practice entirely.
+D-058's SECOND half survives inside D-060: any comment that does date something names its entry,
+never a bare "this cycle".
 
 **Ruling.** The per-cycle history paragraphs these file headers carry are accepted practice in this
 repo and stay. But every one of them, and every inline comment dating a design decision, MUST name
@@ -1527,3 +1531,56 @@ knows what the batch finally committed. Per-operation filtering cannot know it, 
 be repeated in every branch that can break a slot.
 
 Reconciliation required: none — landed as a reviewer edit at 0054-REVIEW-phase2, with two tests.
+
+## D-060 — Comments in source describe the PRESENT. They are not diaries
+Answers: Q-011   Ruled: by the human directly, 2026-08-24
+Binding on: every comment in every source and test file
+Supersedes: **D-058**, first half (see that entry)
+
+**Ruling.** A comment states what the code does now and why. It does not narrate how the code got
+here. The one sanctioned exception: a comment may lead back to a previous decision or ruling where
+that is worthwhile.
+
+The human's own three tiers, which are the operative test:
+
+- **Good** — states the behaviour and the reason:
+  `// this function does X, Y, or Z, because A needs to read from X`
+- **Okay** — the same, plus a pointer:
+  `// this function does X, Y, or Z because A needs to read from X AS PER D-0XX. Change approach`
+  `// only if that decision is overruled.`
+- **Bad** — a diary:
+  `// Cycle X, I did this. Cycle X+1 reporting in, I did this instead and updated it based on`
+  `// this. Cycle X+2 reporting in, I did that but reverted this...`
+
+Read the ranking carefully: the citation form is **Okay, not Good**. A `(D-0XX)` is a SUPPLEMENT
+to a stated reason, never a SUBSTITUTE for one. A comment that cites a ruling without saying what
+the code does and why sends the reader to another file to learn something the comment should have
+told them.
+
+D-058's dating requirement survives here unchanged: where a comment does date something, it names
+the entry ("entry 0050"), never a bare "this cycle" or "THIS cycle".
+
+**Rationale.** The practice D-058 preserved had been fixed by hand three times and drifted again
+each time — 15 sites corrected at 0048-REVIEW, 8 more at 0051-REVIEW, and at 0055 the headers
+themselves were found to be internally self-contradicting: `mutation.ts` asserted both that
+`extractDependencies` did not exist yet and that the code walked it, forty lines apart. Both
+statements were true when written. A header that is only correct when read start-to-finish as a
+chronology has failed PROCESS_BRIEF §5's own goal, because every reader who greps or skims lands
+on a statement that is false about the current code.
+
+D-058 fixed the DATING of the practice. This removes the practice. The class of defect goes with
+it, which dating could only ever slow.
+
+Nothing is lost. The chronology has an authoritative home already, and always did: `entries/` for
+what happened when, this file for every ruling, STATUS.md for where things stand. The source was a
+second, unversioned, untested copy of it.
+
+This also settles the standing tension with PROCESS_BRIEF §5.4 ("NEVER write changelog comments in
+source — log entries are for that"), which had forbidden exactly this practice while D-058
+permitted it in headers.
+
+Reconciliation required: **none — already applied.** Entry 0055 rewrote all 16 source headers to
+present tense before this ruling existed, and raised Q-011 rather than editing this file, correctly.
+That pass is now retroactively sanctioned. The 82 `(D-NNN)` citations it left in source are the
+"Okay" form and stay; a spot check found no comment that cites a ruling INSTEAD of stating its
+reason.
