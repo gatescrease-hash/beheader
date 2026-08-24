@@ -12,28 +12,39 @@
  *   The registry `graph/eval.ts` and `mutation.ts` read to know, for a given
  *   object TYPE: which of its slots are `derived` and how to compute each one
  *   (its stored path, the other slots it reads, and the compute function), and
- *   — as of this cycle — the full set of paths its NON-derived (`literal`/
- *   `formula`) slots occupy (`nonDerivedSlotPaths`). This file does not itself
- *   derive edges or evaluate anything — see NOT DONE HERE.
+ *   the full set of paths its NON-derived (`literal`/`formula`) slots occupy
+ *   (`nonDerivedSlotPaths`). This file does not itself derive edges or
+ *   evaluate anything — see NOT DONE HERE.
  *
- *   Scope, deliberately narrow: this cycle covers exactly the two Phase 0 fixture
- *   types PROJECT_BRIEF §6 names — `value` (one non-derived slot, no derived
- *   slots at all) and `add` (two non-derived input slots, one derived
- *   `out.result` reading both), per D-011. The other eight `ObjectType` members
- *   (`circle`, `polygon`, ...) do not have schema entries yet; `getObjectSchema`
- *   returns `undefined` for them, honestly, rather than a placeholder. Their
- *   schemas belong to the phases that introduce them (Phase 3 geometry, Phase 4
- *   table, Phase 5 text, Phase 6 script/image) — building them now would be
- *   building ahead of the brief's §6 build order.
+ *   Scope: the two Phase 0 fixture types PROJECT_BRIEF §6 names — `value` (one
+ *   non-derived slot, no derived slots at all) and `add` (two non-derived
+ *   input slots, one derived `out.result` reading both), per D-011 — plus, as
+ *   of THIS cycle, `table` (§5.4): two fixed non-derived slots (`rows`, `cols`,
+ *   §5.10's own words) and a DYNAMIC non-derived slot FAMILY, `cells.*`, whose
+ *   membership varies with the object's own `rows`/`cols` values. `table`'s
+ *   entry is the reason `nonDerivedSlotPaths`'s TYPE widened this cycle — see
+ *   `NonDerivedSlotPathGroup` below and D-017's forward note (§10 in this
+ *   file's own history). The remaining seven `ObjectType` members (`circle`,
+ *   `polygon`, ...) do not have schema entries yet; `getObjectSchema` returns
+ *   `undefined` for them, honestly, rather than a placeholder. Their schemas
+ *   belong to the phases that introduce them (Phase 3 geometry, Phase 5 text,
+ *   Phase 6 script/image) — building them now would be building ahead of the
+ *   brief's §6 build order.
  *
  * INVARIANTS UPHELD HERE
- *   - Derived slots, and now `nonDerivedSlotPaths`, are declared by PATH
- *     (`["out", "result"]`), never by a hand-built key string (D-010).
- *     `findDerivedSlotSchema` compares paths via `slotKey`, the one sanctioned
- *     way to turn a path into a comparable key — `mutation.ts`'s edge derivation
- *     does the same over `nonDerivedSlotPaths` (see its header): this is the
+ *   - Derived slots, and every `nonDerivedSlotPaths` entry (both `static`'s
+ *     fixed list and `dynamic`'s generated paths), are declared/produced by
+ *     PATH (`["out", "result"]`, `["cells", "A1"]`), never by a hand-built key
+ *     string (D-010). `findDerivedSlotSchema` compares paths via `slotKey`, the
+ *     one sanctioned way to turn a path into a comparable key —
+ *     `mutation.ts`'s edge derivation does the same over
+ *     `resolveNonDerivedSlotPaths`'s output (see its header): this is the
  *     mechanism that lets it recover a formula slot's OWN address without ever
  *     inverting a `GraphObject.slots` key, which has no sanctioned inverse.
+ *     `table`'s `dynamic` group (`primitives/table.ts`'s
+ *     `enumerateTableCellSlotPaths`) upholds the SAME rule the same way: it
+ *     GENERATES paths from the object's own `rows`/`cols` slots rather than
+ *     ever decomposing an existing `cells.*` key back into one.
  *   - Dependencies may be `static` (a fixed list of paths within the SAME object,
  *     §5.1's example: "centroid ← vertices") or `dynamic` (a function of the
  *     object's current state). Both forms are expressible here even though
@@ -75,22 +86,25 @@
  *
  * NOT DONE HERE
  *   - Declaring an object type's default KIND per slot (literal vs. formula) or
- *     its creation-time default value. `ObjectSchema.nonDerivedSlotPaths` (added
- *     this cycle, for `mutation.ts`'s edge derivation — see below) is only the
- *     PATH half of that: which paths exist, not what they default to. §5.1 does
- *     describe schemas as declaring a slot's "default kind," but the concrete
- *     need for THAT — object CREATION — still belongs to a future `mutation.ts`
- *     cycle. Widen this file again when that need is concrete, same principle
- *     as this cycle's own widening.
+ *     its creation-time default value. `ObjectSchema.nonDerivedSlotPaths` is
+ *     only the PATH half of that: which paths exist, not what they default to.
+ *     §5.1 does describe schemas as declaring a slot's "default kind," but the
+ *     concrete need for THAT — object CREATION — still belongs to a future
+ *     `mutation.ts` cycle. Widen this file again when that need is concrete,
+ *     same principle as this cycle's own widening.
  *   - Deriving an actual `Edge[]` from these declarations (that is
  *     `mutation.ts`'s `deriveEdges`, which consumes this file — see its header
  *     for why `nonDerivedSlotPaths` had to be added here rather than solved by
  *     inverting a `GraphObject.slots` key), detecting cycles (graph/cycles.ts),
  *     or topological evaluation (graph/eval.ts).
- *   - Any geometry/table/text/script/image schema entries (Phases 3, 4, 5, 6).
+ *   - Any geometry/text/script/image schema entries (Phases 3, 5, 6). `table`'s
+ *     entry landed this cycle — see `TABLE_SCHEMA` below — but ONLY its slot
+ *     declarations: no table-creation mutation, no row/col insert/delete, no
+ *     range wiring. See `primitives/table.ts`'s own NOT DONE HERE.
  */
 import type { Address } from "../address.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
+import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
 
 // ---------------------------------------------------------------------------
 // Dependency declarations (§5.1: "Dependencies may be declared statically ...
@@ -148,31 +162,98 @@ export interface DerivedSlotSchema {
 }
 
 /**
+ * One declaration inside `ObjectSchema.nonDerivedSlotPaths` (added cycle 0028
+ * one-flat-array-only; widened to this union THIS cycle, D-017/0041-REVIEW-
+ * phase2 §9). Deliberately the SAME `static`/`dynamic` shape as
+ * `DerivedSlotDependencies` above, applied to a different question
+ * ("which non-derived paths does this object currently have," not "which
+ * addresses does this derived slot currently depend on") — reusing the shape
+ * rather than inventing a second one for the same underlying need (a fixed
+ * list is not expressive enough; a function of the object's CURRENT state is).
+ *
+ * - `static` — a fixed list of paths every object of this type has, known from
+ *   the schema alone (`value`'s one slot, `add`'s two, and — new this cycle —
+ *   `table`'s `rows`/`cols`).
+ * - `dynamic` — a function of the object's CURRENT state, returning whatever
+ *   paths currently belong to the family. `table`'s `cells.*` family
+ *   (`primitives/table.ts`'s `enumerateTableCellSlotPaths`) is the first and
+ *   only user: cell paths are NOT fixed per type — they grow and shrink with
+ *   the object's own `rows`/`cols` — so no fixed list can express them (D-017's
+ *   own forward note, see below). MUST be resolved only during edge
+ *   derivation, same "never during evaluation" rule as
+ *   `DerivedSlotDependencies`'s `dynamic` case (Rule 6) — see
+ *   `resolveNonDerivedSlotPaths` below.
+ */
+export type NonDerivedSlotPathGroup =
+  | { readonly kind: "static"; readonly paths: readonly (readonly string[])[] }
+  | { readonly kind: "dynamic"; readonly enumerate: (object: GraphObject) => readonly (readonly string[])[] };
+
+/**
+ * Resolves every `nonDerivedSlotPathGroup` in `groups`, for ONE object, into
+ * the concrete list of paths currently declared — concatenating every
+ * `static` group's fixed list with every `dynamic` group's `enumerate(object)`
+ * result. This is the ONLY place that concatenation happens: `mutation.ts`'s
+ * `deriveEdges`, `findUndeclaredFormulaOrDerivedSlots`, and
+ * `findSchemaSlotKindMismatches` all call this — not
+ * `schema.nonDerivedSlotPaths` directly — so the three can never disagree
+ * about which paths a given object currently declares (the exact
+ * disagreement D-017 exists to prevent, reached through a NEW door if the
+ * three call sites each resolved `dynamic` groups their own way).
+ *
+ * Never throws: a `dynamic` group's `enumerate` function must not throw
+ * either (`enumerateTableCellSlotPaths`'s own doc comment explains why it
+ * cannot), and this function does nothing beyond concatenating its results.
+ */
+export function resolveNonDerivedSlotPaths(
+  object: GraphObject,
+  groups: readonly NonDerivedSlotPathGroup[],
+): readonly (readonly string[])[] {
+  const paths: (readonly string[])[] = [];
+  for (const group of groups) {
+    if (group.kind === "static") {
+      paths.push(...group.paths);
+    } else {
+      paths.push(...group.enumerate(object));
+    }
+  }
+  return paths;
+}
+
+/**
  * Everything a given `ObjectType` declares about its slots.
  *
- * `nonDerivedSlotPaths` — added this cycle, for `mutation.ts`'s edge
- * derivation — is the full set of paths this type's `literal`/`formula`
- * slots occupy. It is PATHS only, not a default-kind declaration: §5.1 says
- * literal and formula slots are interchangeable at runtime (`link`/`unlink`),
- * so which of the two a given path currently holds is read from the object's
- * actual `slots`, never from this list. What this list answers is narrower and
- * purely structural: "does this type have a bindable slot at this path at
- * all" — exactly what `deriveEdges` needs to recover a formula slot's OWN
- * address (see `mutation.ts`'s header for why that need can't be met any
- * other way). Object CREATION (a slot's default kind/value) is a separate,
- * NOT-YET-BUILT concern — see the file header's NOT DONE HERE.
+ * `nonDerivedSlotPaths` — the full set of `NonDerivedSlotPathGroup`
+ * declarations for this type; resolve with `resolveNonDerivedSlotPaths` above
+ * to get concrete paths for a given object. It is PATHS only, not a
+ * default-kind declaration: §5.1 says literal and formula slots are
+ * interchangeable at runtime (`link`/`unlink`), so which of the two a given
+ * path currently holds is read from the object's actual `slots`, never from
+ * this list. What this list answers is narrower and purely structural: "does
+ * this type have a bindable slot at this path at all" — exactly what
+ * `deriveEdges` needs to recover a formula slot's OWN address (see
+ * `mutation.ts`'s header for why that need can't be met any other way).
+ * Object CREATION (a slot's default kind/value) is a separate, NOT-YET-BUILT
+ * concern — see the file header's NOT DONE HERE.
  *
- * TWO LIMITS, BOTH RULED ON AT 0014-REVIEW-phase0 (D-017). First: this list is
- * the ONLY thing `mutation.ts`'s `deriveEdges` walks, so a formula slot an
- * object actually carries but this list omits gets no edges at all — silently,
- * including a cycle running through it. Second: being a fixed list of paths, it
- * cannot express a slot FAMILY (a table's `cells.A1`…, D-005/D-009). Do not
- * extend it for tables without reading D-017 first — the answer there is likely
- * a different mechanism, not more entries in this one.
+ * ONE LIMIT REMAINS, RULED ON AT 0014-REVIEW-phase0 (D-017): a resolved path
+ * list is the ONLY thing `mutation.ts`'s `deriveEdges`/`validateIntegrity`
+ * walk for a given object, so a formula slot an object actually carries but
+ * `resolveNonDerivedSlotPaths` does not currently produce for it gets no edge
+ * at all — silently, including a cycle running through it. THIS is exactly
+ * why `table`'s `cells.*` group is `dynamic` rather than a best-effort fixed
+ * upper bound: a fixed list large enough to "probably" cover every table
+ * would still have this failure mode at its edge, silently, while `dynamic`
+ * has none — it is *defined* as whatever the object's own `rows`/`cols`
+ * currently say. D-017's original forward note ("being a fixed list of paths,
+ * it cannot express a slot FAMILY... do not extend it for tables without
+ * reading D-017 first — the answer there is likely a different mechanism, not
+ * more entries in this one") is resolved BY this widening, not superseded by
+ * it — no `nonDerivedSlotPaths` entry anywhere is a fixed enumeration of a
+ * table's cells, matching that note's own instruction.
  */
 export interface ObjectSchema {
   readonly type: ObjectType;
-  readonly nonDerivedSlotPaths: readonly (readonly string[])[];
+  readonly nonDerivedSlotPaths: readonly NonDerivedSlotPathGroup[];
   readonly derivedSlots: readonly DerivedSlotSchema[];
 }
 
@@ -221,7 +302,7 @@ const VALUE_VALUE_PATH: readonly string[] = ["value"];
  */
 const VALUE_SCHEMA: ObjectSchema = {
   type: "value",
-  nonDerivedSlotPaths: [VALUE_VALUE_PATH],
+  nonDerivedSlotPaths: [{ kind: "static", paths: [VALUE_VALUE_PATH] }],
   derivedSlots: [],
 };
 
@@ -256,7 +337,7 @@ const ADD_OUT_RESULT_PATH: readonly string[] = ["out", "result"];
  */
 const ADD_SCHEMA: ObjectSchema = {
   type: "add",
-  nonDerivedSlotPaths: [ADD_IN_A_PATH, ADD_IN_B_PATH],
+  nonDerivedSlotPaths: [{ kind: "static", paths: [ADD_IN_A_PATH, ADD_IN_B_PATH] }],
   derivedSlots: [
     {
       path: ADD_OUT_RESULT_PATH,
@@ -306,14 +387,38 @@ const ADD_SCHEMA: ObjectSchema = {
 };
 
 /**
- * The full registry. `Partial` because only the Phase 0 fixture types have
- * entries yet (see file header) — every other `ObjectType` genuinely has no
- * schema, and `getObjectSchema` reports that honestly via `undefined` rather
- * than a stand-in entry that would silently pass validation later.
+ * `table` (PROJECT_BRIEF §5.4): "Each cell is a slot, literal or formula" over
+ * a grid whose "rows and columns can be added or removed." Two FIXED
+ * non-derived slots (`rows`, `cols` — §5.10's own command-line words,
+ * ordinary literal number slots, no different in kind from `value`'s one
+ * slot) plus one DYNAMIC non-derived slot FAMILY (`cells.*`), whose
+ * membership is the object's own CURRENT `rows`/`cols` — see
+ * `primitives/table.ts`'s `enumerateTableCellSlotPaths` for why this must be
+ * `dynamic` rather than a fixed list (D-017's forward note). No derived
+ * slots: §5.4 does not give a table object itself any computed slot (a
+ * cell's OWN value may be a `formula` slot, which is a different thing —
+ * `derivedSlots` here is about slots the SCHEMA computes, and nothing about
+ * a table itself is schema-computed in v1).
+ */
+const TABLE_SCHEMA: ObjectSchema = {
+  type: "table",
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [TABLE_ROWS_PATH, TABLE_COLS_PATH] },
+    { kind: "dynamic", enumerate: enumerateTableCellSlotPaths },
+  ],
+  derivedSlots: [],
+};
+
+/**
+ * The full registry. `Partial` because most `ObjectType`s have no schema entry
+ * yet (see file header) — those genuinely have none, and `getObjectSchema`
+ * reports that honestly via `undefined` rather than a stand-in entry that
+ * would silently pass validation later.
  */
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   value: VALUE_SCHEMA,
   add: ADD_SCHEMA,
+  table: TABLE_SCHEMA,
 };
 
 /** Looks up an object type's schema. Pure; never throws. `undefined` for a type with no entry yet (see file header). */

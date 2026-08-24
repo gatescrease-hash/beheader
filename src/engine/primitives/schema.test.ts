@@ -13,7 +13,9 @@ import {
   derivedSlotDependencyAddresses,
   findDerivedSlotSchema,
   getObjectSchema,
+  resolveNonDerivedSlotPaths,
   type DerivedSlotDependencies,
+  type NonDerivedSlotPathGroup,
 } from "./schema.ts";
 
 describe("getObjectSchema", () => {
@@ -30,30 +32,44 @@ describe("getObjectSchema", () => {
     expect(schema?.derivedSlots[0]?.path).toEqual(["out", "result"]);
   });
 
-  // nonDerivedSlotPaths added this cycle (mutation.ts's deriveEdges) — the
-  // full set of paths a type's literal/formula slots occupy, PATHS only (see
-  // schema.ts's header: not a default-kind declaration).
-  it("declares 'value's one non-derived slot path", () => {
-    expect(getObjectSchema("value")?.nonDerivedSlotPaths).toEqual([["value"]]);
+  // nonDerivedSlotPaths (mutation.ts's deriveEdges) is the full set of PATH
+  // GROUPS a type's literal/formula slots occupy — widened this cycle from a
+  // bare path array to `NonDerivedSlotPathGroup[]` (static | dynamic) so a
+  // table's cells family can be expressed (D-017). `value`/`add` still
+  // declare a single `static` group each, resolved via
+  // `resolveNonDerivedSlotPaths` in the describe block below.
+  it("declares 'value's one non-derived slot path, as a single static group", () => {
+    expect(getObjectSchema("value")?.nonDerivedSlotPaths).toEqual([{ kind: "static", paths: [["value"]] }]);
   });
 
-  it("declares 'add's two non-derived slot paths (in.a, in.b) — NOT out.result, which is derived", () => {
-    const paths = getObjectSchema("add")?.nonDerivedSlotPaths;
-    expect(paths).toEqual([
-      ["in", "a"],
-      ["in", "b"],
+  it("declares 'add's two non-derived slot paths (in.a, in.b) as a single static group — NOT out.result, which is derived", () => {
+    const groups = getObjectSchema("add")?.nonDerivedSlotPaths;
+    expect(groups).toEqual([
+      {
+        kind: "static",
+        paths: [
+          ["in", "a"],
+          ["in", "b"],
+        ],
+      },
     ]);
   });
 
   // D-008's lesson: test the unspecified cases, not just the brief's examples.
   // Every non-fixture ObjectType has no schema yet (file header) — this must be
   // an honest `undefined`, not a placeholder that would silently pass a future
-  // validation check.
+  // validation check. `table` is REAL as of this cycle (see its own describe
+  // block below) — it is no longer in this list.
   it("returns undefined for an ObjectType with no schema entry yet", () => {
     expect(getObjectSchema("circle")).toBeUndefined();
     expect(getObjectSchema("polygon")).toBeUndefined();
-    expect(getObjectSchema("table")).toBeUndefined();
     expect(getObjectSchema("script")).toBeUndefined();
+  });
+
+  it("returns a real entry for 'table' (D-017's dynamic-slot-family mechanism), with no derived slots", () => {
+    const schema = getObjectSchema("table");
+    expect(schema).toBeDefined();
+    expect(schema?.derivedSlots).toEqual([]);
   });
 });
 
@@ -75,6 +91,91 @@ describe("findDerivedSlotSchema", () => {
 
   it("returns undefined for 'value', which has no derived slots", () => {
     expect(findDerivedSlotSchema("value", ["value"])).toBeUndefined();
+  });
+});
+
+/** A bare table GraphObject with only its two fixed dimension slots (rows/cols), no cells yet. */
+function tableObject(id: string, name: string, rows: Value, cols: Value): GraphObject {
+  return {
+    id,
+    name,
+    type: "table",
+    slots: {
+      rows: { kind: "literal", value: rows },
+      cols: { kind: "literal", value: cols },
+    },
+  };
+}
+
+describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-017/0041-REVIEW-phase2 §9)", () => {
+  it("resolves a single static group to exactly its fixed paths, ignoring the object entirely ('value')", () => {
+    const groups = getObjectSchema("value")?.nonDerivedSlotPaths;
+    if (groups === undefined) {
+      throw new Error("test setup: expected value's schema to exist");
+    }
+    // The object shape is irrelevant to a static group — pass a table object
+    // to prove resolution does not secretly depend on matching object.type.
+    expect(resolveNonDerivedSlotPaths(tableObject("obj_1", "table_x", 0, 0), groups)).toEqual([["value"]]);
+  });
+
+  it("resolves 'add's single static group with two paths, in declared order", () => {
+    const groups = getObjectSchema("add")?.nonDerivedSlotPaths;
+    if (groups === undefined) {
+      throw new Error("test setup: expected add's schema to exist");
+    }
+    expect(resolveNonDerivedSlotPaths(tableObject("obj_1", "table_x", 0, 0), groups)).toEqual([
+      ["in", "a"],
+      ["in", "b"],
+    ]);
+  });
+
+  it("concatenates a static group's fixed paths with a dynamic group's own enumerate(object) result, in declared order", () => {
+    const groups: readonly NonDerivedSlotPathGroup[] = [
+      { kind: "static", paths: [["fixed", "one"]] },
+      { kind: "dynamic", enumerate: (object) => [["dyn", object.id]] },
+    ];
+    expect(resolveNonDerivedSlotPaths(tableObject("obj_7", "table_x", 0, 0), groups)).toEqual([
+      ["fixed", "one"],
+      ["dyn", "obj_7"],
+    ]);
+  });
+
+  it("table's real schema resolves to rows/cols plus every cell path for a 2x3 table, row-major", () => {
+    const groups = getObjectSchema("table")?.nonDerivedSlotPaths;
+    if (groups === undefined) {
+      throw new Error("test setup: expected table's schema to exist");
+    }
+    const object = tableObject("obj_1", "table_x", 2, 3);
+    expect(resolveNonDerivedSlotPaths(object, groups)).toEqual([
+      ["rows"],
+      ["cols"],
+      ["cells", "A1"],
+      ["cells", "B1"],
+      ["cells", "C1"],
+      ["cells", "A2"],
+      ["cells", "B2"],
+      ["cells", "C2"],
+    ]);
+  });
+
+  it("table's cell family is empty when rows/cols are missing entirely — no cell paths, but rows/cols themselves still resolve (they are the static group)", () => {
+    const object: GraphObject = { id: "obj_1", name: "table_x", type: "table", slots: {} };
+    const groups = getObjectSchema("table")?.nonDerivedSlotPaths;
+    if (groups === undefined) {
+      throw new Error("test setup: expected table's schema to exist");
+    }
+    expect(resolveNonDerivedSlotPaths(object, groups)).toEqual([["rows"], ["cols"]]);
+  });
+
+  it("never throws for a malformed dimension (a string, a negative number, a non-integer)", () => {
+    const groups = getObjectSchema("table")?.nonDerivedSlotPaths;
+    if (groups === undefined) {
+      throw new Error("test setup: expected table's schema to exist");
+    }
+    const malformed = tableObject("obj_1", "table_x", "not a number", -3);
+    expect(() => resolveNonDerivedSlotPaths(malformed, groups)).not.toThrow();
+    // Both dimensions read as 0 (readTableDimension's own fail-safe) — no cell paths, only the two fixed ones.
+    expect(resolveNonDerivedSlotPaths(malformed, groups)).toEqual([["rows"], ["cols"]]);
   });
 });
 

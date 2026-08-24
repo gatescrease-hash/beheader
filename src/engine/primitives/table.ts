@@ -1,16 +1,25 @@
 /**
- * table.ts — Table primitive: default dimensions and range-rectangle enumeration.
+ * table.ts — Table primitive: default dimensions, current-extent cell
+ * enumeration (the dynamic slot family), and range-rectangle enumeration.
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.4's "Default 8×8" fact, and the range
+ * IMPLEMENTS: PROJECT_BRIEF §5.4's "Default 8×8" fact, §5.4's own dimension
+ * fields ("rows and columns can be added or removed"), the range
  * "enumeration... helper" **D-036** (constraint 2) asks for — turning a range's
- * two endpoint `Address`es into the concrete list of cell paths between them.
+ * two endpoint `Address`es into the concrete list of cell paths between them —
+ * and, as of this cycle, the DYNAMIC SLOT FAMILY mechanism D-017/0041-REVIEW-
+ * phase2 §9 named as Phase 2's critical path: `primitives/schema.ts`'s
+ * `TABLE_SCHEMA` entry declares a table's cells via `enumerateTableCellSlotPaths`
+ * below, rather than `ObjectSchema.nonDerivedSlotPaths` needing to become a
+ * table-specific special case.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
- * This is the FIRST FILE of the table primitive subsystem (PROCESS_BRIEF §6.1
- * trigger 2) — the cycle that adds it stops immediately after, per that trigger,
- * before touching `primitives/schema.ts`'s registry or `mutation.ts`. See NOT
- * DONE HERE.
+ * This was the FIRST FILE of the table primitive subsystem (cycle 0040,
+ * PROCESS_BRIEF §6.1 trigger 2) — that cycle stopped immediately after, before
+ * touching `primitives/schema.ts`'s registry or `mutation.ts`. THIS cycle is
+ * the follow-on 0041-REVIEW-phase2 §9 named: solving the dynamic-slot-family
+ * mechanism and registering a real `table` schema entry through it. See NOT
+ * DONE HERE for what is still deliberately absent.
  *
  * WHAT THIS IS
  *   `DEFAULT_TABLE_ROWS`/`DEFAULT_TABLE_COLS` — §5.4's own stated fact ("Default
@@ -55,46 +64,79 @@
  *   a disclosed implementation decision, not a brief-mandated one: nothing in
  *   §5.3/§5.4 discusses this case explicitly.
  *
+ *   `TABLE_ROWS_PATH` / `TABLE_COLS_PATH` — the two ORDINARY, FIXED, literal
+ *   slot paths that hold a table's current row/column count (§5.4: "rows and
+ *   columns can be added or removed"). These are declared as a plain `static`
+ *   `NonDerivedSlotPathGroup` in `TABLE_SCHEMA` (`primitives/schema.ts`) — the
+ *   SAME mechanism `value`'s one slot already uses, no widening needed for
+ *   them. Naming: the brief's own command-line words (§5.10:
+ *   `table x=0 y=0 rows=8 cols=8`), reused rather than inventing a second pair
+ *   of words for the same idea. Nothing in this cycle writes them (no
+ *   table-creation mutation exists yet) or reads them for any purpose beyond
+ *   `enumerateTableCellSlotPaths` below — a disclosed, reversible naming
+ *   choice, not a brief-mandated one.
+ *
+ *   `enumerateTableCellSlotPaths(object)` — the `dynamic`
+ *   `NonDerivedSlotPathGroup.enumerate` function `TABLE_SCHEMA` supplies for
+ *   the cells family. Reads `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` off the
+ *   object's OWN slots (an ordinary, sanctioned forward `slotKey` lookup — see
+ *   `graph/node.ts`'s `getSlot`) and generates every `["cells", ref]` path for
+ *   `1..rows × 1..cols`, row-major, via the SAME `formatCellReference` helper
+ *   `enumerateRangeCellPaths` already uses. This is deliberately NOT "read the
+ *   object's actual `cells.*` slot keys and recover their paths" — D-010
+ *   forbids ever inverting a `slotKey` back into a path array, even where it
+ *   would happen to be safe (a cell reference never contains "."), so the only
+ *   sanctioned way to get a concrete PATH for a slot this file did not just
+ *   build itself is to GENERATE candidates from known state and look each one
+ *   up — precisely the shape `primitives/schema.ts`'s existing `dynamic`
+ *   `DerivedSlotDependencies` already established for `text.resolvedContent`/
+ *   `script.out.*`, applied here to `nonDerivedSlotPaths` instead. Never
+ *   throws: a missing or malformed dimension slot (not yet a number, negative,
+ *   non-integer) reads as `0` rather than guessing or throwing — see
+ *   `readTableDimension`'s own doc comment for why that is safe rather than a
+ *   silently-wrong answer.
+ *
  * INVARIANTS UPHELD HERE
  *   - Never throws. `enumerateRangeCellPaths` returns a typed
  *     `RangeEnumerationError` (`#REF`, matching the code `formula/eval.ts`
  *     already uses for an unresolved reference) for both failure modes
  *     (cross-object endpoints; a malformed or non-cell-shaped endpoint path) —
  *     §5.1: "errors must never throw across the evaluation loop."
+ *     `enumerateTableCellSlotPaths` never throws either — see above.
  *   - Builds every path through `address.ts`'s `TABLE_CELL_PATH_PREFIX` and
  *     `formatCellReference`, never a hand-built `["cells", ...]` array or a
  *     re-derived uppercase/column-arithmetic step — D-010's "declare it once"
  *     principle, and D-039's "normalisation happens at exactly one point"
  *     (which `formatCellReference`/`indexToColumnLetters` already are).
+ *   - `enumerateTableCellSlotPaths` never inverts a `slotKey` (D-010) — see
+ *     its own doc comment above and below.
  *
  * NOT DONE HERE
- *   - A `primitives/schema.ts` entry for the `table` `ObjectType`. A table's
- *     cells are a DYNAMIC slot family (`cells.A1`...`cells.H8`, growing and
- *     shrinking with row/column count) and `ObjectSchema.nonDerivedSlotPaths`
- *     is currently a FIXED list — D-017's own words: "being a fixed list of
- *     paths, it cannot express a slot FAMILY... do not extend it for tables
- *     without reading D-017 first — the answer there is likely a different
- *     mechanism, not more entries in this one." Solving that requires widening
- *     `ObjectSchema`'s shape AND both of `mutation.ts`'s consumers of it
- *     (`deriveEdges`, `validateIntegrity`) — a load-bearing, mutation.ts-
- *     touching design decision that deserves its own dedicated, reviewed
- *     cycle, not a rider on this one. `getObjectSchema("table")` still
- *     returns `undefined` after this cycle, honestly — not a placeholder.
  *   - Row/column insert/delete mutations and §5.4's reference-adjustment pass
  *     (a range endpoint clamping to the remaining extent on delete). Clamping
  *     needs the concrete delete-mutation machinery — which row/column was
  *     removed, how surviving indices shift — that does not exist yet; nothing
  *     about table DIMENSIONS alone (this file's only concern) determines it.
+ *     Nothing here PREVENTS a raw `setSlot` on `TABLE_ROWS_PATH`/
+ *     `TABLE_COLS_PATH` from disagreeing with the cell slots that actually
+ *     exist on the object — see `enumerateTableCellSlotPaths`'s own doc
+ *     comment for why that is self-limiting (D-017's own check catches the
+ *     dangerous half) rather than silently wrong, and why a real row/col
+ *     mutation must not be built as a bare `setSlot` on these two paths.
+ *   - A table-creation mutation/command (`table x=0 y=0 rows=8 cols=8`, §5.10)
+ *     that would actually populate `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` and the
+ *     matching `cells.*` literal slots — Phase 3's command line.
  *   - Wiring `enumerateRangeCellPaths` into `formula/eval.ts` (D-036
- *     constraint 1) or `mutation.ts`'s edge derivation (the other half of
- *     constraint 2) — both are the wiring cycle's job.
+ *     constraint 1) or `mutation.ts`'s edge derivation for RANGE dependencies
+ *     (the other half of D-036 constraint 2 — distinct from THIS cycle's
+ *     `enumerateTableCellSlotPaths`, which is the table's WHOLE current
+ *     extent, not a range's two endpoints) — both are the wiring cycle's job.
  *   - `MIN`/`MAX`'s `Math.min(...)`/`Math.max(...)` spread risk (0035-REVIEW
  *     Finding 4, D-036 constraint 5) — owned by the SAME future cycle, once
  *     this function's output actually reaches a long argument list.
- *   - Any table-specific command (`table x=0 y=0 rows=8 cols=8`, §5.10) —
- *     Phase 3's command line.
  */
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";
+import { getSlot, type GraphObject } from "../graph/node.ts";
 
 /** §5.4: "Default 8×8." A future table-creation mutation reads these; nothing in this file writes them anywhere. */
 export const DEFAULT_TABLE_ROWS = 8;
@@ -183,6 +225,83 @@ export function enumerateRangeCellPaths(
   // Row-major: every column of one row before moving to the next (file header).
   for (let row = minRow; row <= maxRow; row += 1) {
     for (let column = minColumn; column <= maxColumn; column += 1) {
+      paths.push([TABLE_CELL_PATH_PREFIX, formatCellReference({ column, row })]);
+    }
+  }
+  return paths;
+}
+
+// ---------------------------------------------------------------------------
+// The dynamic slot family (cycle after 0040; 0041-REVIEW-phase2 §9's critical
+// path): a table's current CELL EXTENT, not a range's two endpoints. See the
+// file header's WHAT THIS IS for why this generates candidate paths from known
+// dimension slots rather than ever inverting a `slotKey` back into a path.
+// ---------------------------------------------------------------------------
+
+/**
+ * The stored path of a table's current ROW count — an ORDINARY literal slot,
+ * declared as a plain `static` `NonDerivedSlotPathGroup` entry in
+ * `primitives/schema.ts`'s `TABLE_SCHEMA`, the same mechanism `value`'s one
+ * slot already uses. Named after §5.10's own command-line word (`rows=8`).
+ */
+export const TABLE_ROWS_PATH: readonly string[] = ["rows"];
+
+/** The stored path of a table's current COLUMN count. See `TABLE_ROWS_PATH`. */
+export const TABLE_COLS_PATH: readonly string[] = ["cols"];
+
+/**
+ * Reads one of `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` off `object`'s own slots —
+ * an ordinary forward lookup (`graph/node.ts`'s `getSlot`), never an inversion
+ * of anything. `0` for anything that is not a non-negative integer: missing
+ * entirely (no table-creation mutation exists yet to have populated it), the
+ * wrong slot kind, or a value that is not a `number` at all — this function
+ * must never throw and has no `#`-shaped failure to report (it runs during
+ * edge derivation, §5.1 step 3, BEFORE `validateIntegrity`'s own checks have
+ * had a chance to reject a malformed document), so it fails to the SAFEST
+ * empty answer — zero rows/columns means `enumerateTableCellSlotPaths` below
+ * declares NO cells for this object, which is what makes an actually-present
+ * formula/derived cell slot on a malformed table get caught by
+ * `mutation.ts`'s D-017 check (`findUndeclaredFormulaOrDerivedSlots`) as
+ * undeclared, rather than this function silently guessing a dimension and
+ * hiding the malformed document instead.
+ */
+function readTableDimension(object: GraphObject, path: readonly string[]): number {
+  const slot = getSlot(object, path);
+  if (slot === undefined || typeof slot.value !== "number" || !Number.isInteger(slot.value) || slot.value < 0) {
+    return 0;
+  }
+  return slot.value;
+}
+
+/**
+ * The `dynamic` `NonDerivedSlotPathGroup.enumerate` function `TABLE_SCHEMA`
+ * (`primitives/schema.ts`) supplies for a table's `cells.*` family — THE
+ * dynamic-slot-family mechanism D-017/0041-REVIEW-phase2 §9 named as Phase 2's
+ * critical path. Generates every `["cells", ref]` path for the object's
+ * CURRENT `1..rows × 1..cols` extent (read via `readTableDimension` above),
+ * row-major (matching `enumerateRangeCellPaths`'s own convention, though this
+ * is a DIFFERENT operation — the table's WHOLE extent, not a range's two
+ * endpoints — and does not call that function).
+ *
+ * Called by `mutation.ts`'s `deriveEdges`/`findUndeclaredFormulaOrDerivedSlots`/
+ * `findSchemaSlotKindMismatches` — the SAME resolved list every time, per
+ * object, so the three checks and edge derivation can never disagree about
+ * which cell paths are currently declared (see `primitives/schema.ts`'s
+ * `resolveNonDerivedSlotPaths` for why this must be the ONE place that
+ * decision is made, not re-derived at each call site).
+ *
+ * Never throws: `readTableDimension` never throws, and this function only
+ * loops and calls `formatCellReference` (pure string/integer arithmetic) —
+ * `rows`/`cols` of `0` simply produce zero paths, which is the correct,
+ * empty answer for a table with no declared dimensions yet, not an error.
+ */
+export function enumerateTableCellSlotPaths(object: GraphObject): readonly (readonly string[])[] {
+  const rows = readTableDimension(object, TABLE_ROWS_PATH);
+  const cols = readTableDimension(object, TABLE_COLS_PATH);
+
+  const paths: (readonly string[])[] = [];
+  for (let row = 1; row <= rows; row += 1) {
+    for (let column = 1; column <= cols; column += 1) {
       paths.push([TABLE_CELL_PATH_PREFIX, formatCellReference({ column, row })]);
     }
   }

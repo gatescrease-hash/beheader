@@ -1,62 +1,60 @@
-# STATUS — as of entry 0041-REVIEW-phase2
+# STATUS — as of entry 0042-dynamic-slot-family
 
-STATE: GREEN (compiles under both configs, 474/474 tests pass, 0 skipped, 0 `.only`).
+STATE: GREEN (compiles under both configs, 499/499 tests pass, 0 skipped, 0 `.only`).
 
-**Cycles 0039 and 0040 are REVIEWED — verdict ACCEPT WITH EDITS (entry 0041-REVIEW-phase2).**
-Two defects fixed in `address.ts` (both the same one-spelling-per-cell invariant, reached from two
-routes cycle 0039 left open), three rulings: **D-043** (exactly one spelling of a cell exists; the
-form enforces it), **D-044** (range expansion is bounded by the table's current dimensions),
-**D-045** (a cross-object range is rejected at parse time). Phase 2 continues.
+**Process state: REVIEW REQUIRED before the next cycle begins.** Cycle 0042 solved the
+`ObjectSchema` dynamic-slot-family mechanism 0041-REVIEW-phase2 §9 named as Phase 2's critical
+path, and registered a real `table` schema entry through it (`getObjectSchema("table")` no longer
+returns `undefined`). This touches two load-bearing files (`primitives/schema.ts`, `mutation.ts`)
+with a design nothing in the brief specifies by name — §6.1 trigger 3, plus trigger 5 (three
+`schema.test.ts` expectations intentionally changed by the type widening). Do not start a new
+slice — the real range-evaluation wiring above all — until entry 0042 lands review.
 
 **PHASE 1 IS COMPLETE AND SIGNED OFF** (0037-REVIEW-phase1). **Phase 2 — Table primitive — is
-OPEN.** D-039/D-038 (entry 0039) are done. Entry 0040 added standalone, UNWIRED table-primitive
-logic (default dimensions; a range's rectangle-enumeration helper) — nothing consumes it yet, and
-`getObjectSchema("table")` still returns `undefined`. One Phase 1 criterion clause is still carried
-into Phase 2 by name: **range EVALUATION** (`SUM(A1:B4)` still returns a placeholder `#PARSE`) —
-see **D-036**, which gives it a home and four binding constraints. Phase 2's own criterion already
-demands the proof.
+OPEN.** D-039/D-038 (entry 0039) done. Entry 0040 added standalone table-primitive logic
+(dimensions, range-rectangle enumeration) with two defects entry 0041-REVIEW fixed (D-043) and two
+rulings (D-044, D-045). Entry 0042 (this one) is the dynamic-slot-family mechanism: `table` now has
+real `nonDerivedSlotPaths` (`rows`/`cols` fixed, `cells.*` dynamic) — but NOTHING is wired yet: no
+table-creation command, no row/col mutations, and range EVALUATION (`SUM(A1:B4)` still returns a
+placeholder `#PARSE`) is still carried — see D-036, which gives it a home and four binding
+constraints. Phase 2's own acceptance criterion already demands that proof.
 
 Current phase: **2 — Table primitive.** "Wire the formula engine into cell slots. Add reference
 adjustment. Still headless."
-Last review point: **0041-REVIEW-phase2, ACCEPT WITH EDITS.** Before it: 0037-REVIEW-phase1 (Phase
-1 gate), entry 0038-RULINGS (human, closed Q-010/Q-004/Q-002/Q-001 → D-038..D-042), entries 0039
-and 0040 (implementer).
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
-State the counting convention next batch — insertions, or insertions + deletions (0041-REVIEW §6).
+Last review point: **0041-REVIEW-phase2, ACCEPT WITH EDITS** (cycles 0039/0040). Entry 0042
+(this one) awaits its own review.
+Cycles since last review: **1/3** · diff since last review: **819 lines (723 insertions + 96
+deletions) / 6 files** (cap 800/10) — **using the insertions+deletions convention**, per
+0041-REVIEW's own request to state which one is in use; by that count this single cycle is
+already at the cap. Moot: §6.1 triggers fired independently regardless.
 
-## Next slice — the DYNAMIC SLOT FAMILY, not the wiring
-`table` cannot enter `primitives/schema.ts`'s `SCHEMAS` while `ObjectSchema.nonDerivedSlotPaths` is
-a fixed list, and D-017 says that mechanism is its own decision. That is now the critical path:
-`deriveEdges` and `validateIntegrity` both consume the schema shape, so **nothing about tables can
-be wired until it exists.** It touches `mutation.ts` and `primitives/schema.ts` — both load-bearing
-(§6.2) — so expect a reviewed cycle of its own, and write the design down before the code.
-Read 0041-REVIEW-phase2 §9 first; it lists what bites and in what order.
-
-- **The `ObjectSchema` dynamic-slot-family mechanism.** A table's cells (`cells.A1`...`cells.H8`,
-  growing/shrinking with row/column count) cannot be expressed by `ObjectSchema.nonDerivedSlotPaths`
-  today — it's a FIXED list (D-017: "cannot express a slot FAMILY... do not extend it for tables
-  without reading D-017 first"). This is THE central design decision of the wiring cycle: widening
-  `ObjectSchema`'s shape AND both of `mutation.ts`'s consumers of it (`deriveEdges`,
-  `validateIntegrity`). Entry 0040's own header/log entry disclose this explicitly as deferred.
-- Register a real `table: TABLE_SCHEMA` entry once that mechanism exists.
-- `evaluate` expands a range through its own `read` callback (D-036 constraint 1), calling entry
-  0040's `enumerateRangeCellPaths` — `evaluateRangeNode`'s placeholder is DELETED, not extended
-  (constraint 3).
-- `deriveEdges` expands a `RangeDependency` via the SAME function, from CURRENT table dimensions on
-  every mutation, never cached (constraint 2's other half).
+## Next slice — BLOCKED pending review of entry 0042
+Once reviewed, the real Phase 2 wiring cycle begins:
+- `evaluate` expands a range through its own `read` callback (D-036 constraint 1), calling
+  `enumerateRangeCellPaths` (cycle 0040) — bounded by the table's current extent per **D-044**
+  (the enumerator's SIGNATURE changes when this lands: decide `Address[]` vs. paths at the same
+  time, per 0041-REVIEW §5's own design note).
+- `deriveEdges` expands a `RangeDependency` via the SAME function, from CURRENT table dimensions
+  on every mutation, never cached (D-036 constraint 2's other half) — this can now read `rows`/
+  `cols` the SAME way `enumerateTableCellSlotPaths` (cycle 0042) already does.
+- `evaluateRangeNode`'s placeholder is DELETED, not extended (D-036 constraint 3).
+- A cross-object range is rejected at PARSE time (**D-045**) — `enumerateRangeCellPaths`'s own
+  check stays as the defensive arm.
 - A formula containing a range must not be storable until evaluation works, in the SAME cycle
-  (constraint 4) — the outcome D-036 forbids is a cell that accepts `= SUM(A1:A5)` and shows
-  `#PARSE` forever.
+  (D-036 constraint 4).
 - `MIN`/`MAX`'s `Math.min(...)` spread (0035-REVIEW Finding 4) — this same cycle's problem once
-  ranges flatten into long argument lists (constraint 5).
+  ranges flatten into long argument lists (D-036 constraint 5).
 - **The three temporary bridges** — `mutation.ts`'s `findUnsupportedFormulaAsts`, `graph/eval.ts`'s
   `evaluateFormula` `#PARSE` branch, `deriveEdges`'s `ReferenceNode`-only narrowing — come down
   TOGETHER, not one at a time.
 - **D-031's value-legality walk** must reach a stored AST's `LiteralNode`s in the same cycle that
   makes formulas storable.
-- Row/column insert/delete + §5.4's reference-adjustment/clamping pass — needs its own design too;
-  entry 0040 deliberately built nothing towards this (clamping depends on the delete-mutation
-  mechanics, not on dimensions alone).
+- Row/column insert/delete + §5.4's reference-adjustment/clamping pass — its own design; entry
+  0042 deliberately left `rows`/`cols` as ordinary, unprotected literal slots (see its Decision 3
+  and reviewer question 2) — do not build a resize mutation as a bare `setSlot` on them.
+- A table-creation command/mutation (§5.10) that actually populates `rows`/`cols` and a fresh
+  `cells.*` slot set — Phase 3's command line, but the underlying `createObject` primitive
+  (cycle 0024) already suffices for it, proven this cycle by hand-built fixtures.
 
 ## Built and reviewed (all of Phase 0 and Phase 1)
 - Scaffold, `graph/node.ts`, `graph/edge.ts`, `primitives/schema.ts`, `graph/cycles.ts`,
@@ -66,25 +64,31 @@ Read 0041-REVIEW-phase2 §9 first; it lists what bites and in what order.
   (52 tests, D-038 as of cycle 0039), **`formula/deps.ts`** (20 tests), **`formula/functions.ts`**
   (44 tests), **`formula/eval.ts`** (47 tests) — the full formula engine, Phase 1, signed off at
   0037-REVIEW-phase1.
+- **`address.ts`** (D-039 cycle 0039; column arithmetic + `parseCellReference`/`formatCellReference`
+  cycle 0040; D-043 fixed at 0041-REVIEW) and **`primitives/table.ts`**'s `enumerateRangeCellPaths`
+  (cycle 0040) — reviewed at 0041-REVIEW-phase2 (ACCEPT WITH EDITS).
 
-## Built and reviewed at 0041-REVIEW (cycles 0039–0040)
-- **`address.ts` (D-039, cycle 0039; D-043, 0041-REVIEW)** — `CELL_REFERENCE_PATTERN` accepts
-  either case and rejects leading zeros/row 0; ONE regex defines the form and `parseCellReference`
-  `exec`s it; every route into a stored cell path normalises through `normalizeCellReference`,
-  including the written-out `table_x.cells.a1` form.
-- **`formula/parser.ts` (D-038, cycle 0039)** — rejects an unrecognised function name or wrong
-  argument count at `#PARSE` time, naming the function and its position.
-- **`address.ts` (cycle 0040)** — exported `TABLE_CELL_PATH_PREFIX`; added
-  `columnLettersToIndex`/`indexToColumnLetters` (bijective base-26) and
-  `parseCellReference`/`formatCellReference` (splits/builds an A1-form ref).
-- **`primitives/table.ts` (NEW, cycle 0040, 190 lines)** — `DEFAULT_TABLE_ROWS`/`COLS` = 8;
-  `enumerateRangeCellPaths(start, end)` expands a range's two endpoints into every cell path in
-  the rectangle between them (row-major, no table-dimension bounds check by design, rejects a
-  cross-object range — both now ruled: D-044 bounds it, D-045 moves the cross-object check to
-  parse time). **Not yet wired into anything** — no `ObjectSchema` entry, no `eval.ts`/
-  `mutation.ts` consumer. See "Next slice" above for exactly what's deferred and why.
-- All mutation-tested (entries 0039/0040), verified at 0041-REVIEW; §6.1 trigger 5 (0039,
-  pre-authorised) and trigger 2 (0040) are the only triggers that fired.
+## Built this batch, not yet reviewed (cycle 0042)
+- **`primitives/schema.ts`** — `ObjectSchema.nonDerivedSlotPaths` widened to
+  `readonly NonDerivedSlotPathGroup[]` (`static | dynamic`, mirrors `DerivedSlotDependencies`);
+  new `resolveNonDerivedSlotPaths(object, groups)`; `VALUE_SCHEMA`/`ADD_SCHEMA` updated to the new
+  shape (no behaviour change); new `TABLE_SCHEMA` registered as `table` in `SCHEMAS`.
+- **`primitives/table.ts`** (extended, not a new subsystem file) — `TABLE_ROWS_PATH`/
+  `TABLE_COLS_PATH`, `enumerateTableCellSlotPaths(object)` (the `dynamic` group's `enumerate`
+  function: generates every current cell path from the object's own `rows`/`cols`, never inverts
+  a `slotKey`).
+- **`mutation.ts`** — `deriveEdges`, `findUndeclaredFormulaOrDerivedSlots` (D-017),
+  `findSchemaSlotKindMismatches` (D-018) all now resolve non-derived paths via
+  `resolveNonDerivedSlotPaths` instead of walking a flat array.
+- 25 new tests across `schema.test.ts`/`table.test.ts`/`mutation.test.ts`; 3 mutation-checks run
+  and reverted (dynamic-branch disabled: 9 named failures; dimension guard loosened: 1 named
+  failure; `table` unregistered: 12 named failures).
+- A genuinely new, disclosed-not-fixed finding: **D-022's bounded-correctness claim
+  ("`describeUndeclaredSlot` matches `formatAddress`") no longer holds for `table`** — a stray
+  out-of-extent cell is named `table_x.cells.C5` (raw key) by D-017's check but `table_x.C5`
+  (surface form) by `formatAddress` for the identical `Address`. Both resolve to the same slot
+  (D-043); pinned by a test per D-022's own explicit ask, not fixed. See entry 0042's own
+  "genuinely new finding" section and reviewer question 1.
 
 ## Acceptance criteria
 - **Phase 0** — all four PASSING and REVIEWED (0027-REVIEW).
@@ -95,13 +99,15 @@ Read 0041-REVIEW-phase2 §9 first; it lists what bites and in what order.
 
 ## Known problems
 - **Range evaluation is a placeholder `#PARSE`** (D-036). See "Next slice" above.
-- **`enumerateRangeCellPaths` is unbounded and must not be wired as it stands** — RULED, **D-044**:
-  it takes the table's current extent when it is wired, cells outside it are omitted rather than
-  `#REF`, and that same change removes the `A1:ZZ999999` resource hazard. An unbounded expansion in
-  `deriveEdges` would build edges to slots that do not exist (dangling edges).
-- **A cross-object range is still only rejected at `enumerateRangeCellPaths`** — RULED, **D-045**:
-  the check also belongs in `parser.ts` at `#PARSE` time (decidable from the text alone, D-038's
-  line); the enumeration check stays as the defensive arm. Found and disclosed by cycle 0040.
+- **D-022's bounded-correctness claim is false for `table`** (this cycle's new finding, disclosed
+  not fixed) — see reviewer question 1.
+- **`rows`/`cols` are ordinary, unprotected literal slots** — a raw `setSlot` on either could
+  disagree with the cells that actually exist. Self-limiting for the dangerous half (a stray
+  formula/derived cell is still caught by D-017); silently orphans the harmless half (a stray
+  literal cell). A future resize mutation must not be a bare `setSlot` on these paths.
+- **No bound on how large `rows`/`cols` may be set** — nothing can write to them yet (D-044's own
+  "costs nothing to leave unbounded" reasoning, same shape). Flag for the table-creation/resize
+  design.
 - **`MIN`/`MAX` spread their argument list** (`Math.min(...numbers)`), `RangeError` risk on a large
   one — unreachable until ranges flatten into arguments, owned by the wiring cycle (0035-REVIEW
   Finding 4, carried).
@@ -121,54 +127,58 @@ Read 0041-REVIEW-phase2 §9 first; it lists what bites and in what order.
   case-sensitive uppercase-only · `CONCAT` takes strings with no coercion · a `RangeNode` is
   reported pre-expansion by `deps.ts` · `IF` is exactly 3 args, `AND`/`OR` at least 1 (D-035) ·
   a computed `-0` normalises to `+0` (D-033) · `%` follows Excel's `MOD`, comparisons are
-  same-type-only (D-037) · a typo'd formula is refused at entry (D-038, implemented cycle 0039) ·
-  lowercase cell refs accepted/normalised (D-039, implemented cycle 0039) · column letters are
-  bijective base-26, either case in, uppercase out (cycle 0040) · an explicit write replaces a
-  formula, dragging unchanged (D-040, Phase 3 — nothing to build yet) · `unlink` keeps what was
-  displayed (D-041, Phase 3 — nothing to build yet) · this is a one-user tool, no product/market
-  reasoning (D-042) · exactly one stored spelling per cell — no leading zeros, no row 0, one regex
-  defines the form (D-043, fixed at 0041-REVIEW) · the column arithmetic stays in `address.ts`,
-  rectangle enumeration in `table.ts` (0041-REVIEW answer 3) · everything 0029/0032/0035-REVIEW
-  listed settled.
+  same-type-only (D-037) · a typo'd formula is refused at entry (D-038) · lowercase cell refs
+  accepted/normalised (D-039) · column letters are bijective base-26 (cycle 0040) · exactly one
+  stored spelling per cell (D-043) · range expansion is bounded by current table dimensions
+  (D-044) · cross-object range rejection belongs at parse time (D-045) · an explicit write
+  replaces a formula (D-040, Phase 3 — nothing to build yet) · `unlink` keeps what was displayed
+  (D-041, Phase 3) · this is a one-user tool, no product/market reasoning (D-042) ·
+  `ObjectSchema.nonDerivedSlotPaths` is a `NonDerivedSlotPathGroup[]` (`static`/`dynamic`), resolved
+  per-object via `resolveNonDerivedSlotPaths` — never walked as a flat array directly (cycle 0042)
+  · a table's cell family is generated from `rows`/`cols`, never by inverting a `slotKey` (cycle
+  0042) · everything 0029/0032/0035/0041-REVIEW listed settled.
 
 ## Live PROVISIONAL tags and open questions
 **Zero open questions block any phase.** Q-010 → D-038, Q-004 → D-039, Q-002 → D-040, Q-001 → D-041
-(0038-RULINGS; D-038/D-039 implemented cycle 0039). D-042 standing: this is a tool with one user.
+(0038-RULINGS). D-042 standing: this is a tool with one user.
 
 Still open, blocking nothing: **`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`;
 **`PROVISIONAL(Q-008)`** → `graph/node.ts`'s `isIllegalNumber` (compute side narrowed by D-033).
 Answered earlier: **Q-003** → D-007, **Q-005**, **Q-006** → D-025, **Q-009** → D-029.
-**Three reviewer questions from entry 0040 (not `Q-NNN` — implementer questions for the reviewer,
-not brief ambiguities):** bounds-checking in `enumerateRangeCellPaths`; cross-table range
-rejection point; the `address.ts`/`table.ts` split. Next free: **Q-011**.
+**Three reviewer questions from entry 0042 (implementer questions, not brief ambiguities):**
+the D-022 divergence's disposition; whether `rows`/`cols` belong as slots or as structural
+`GraphObject` state; whether `NonDerivedSlotPathGroup`'s `static`/`dynamic` split is the right
+shape versus a single always-a-function form. (Entry 0040's own three questions were all answered
+at 0041-REVIEW — see D-043/D-044/D-045 and that entry's §7.) Next free: **Q-011**.
 
 ## Gotchas for the next model
-- **D-043: one spelling per cell, and the test for it is not "the new spelling is accepted".** It
-  is that EVERY route into the stored form lands on the same string. There were three routes
-  (shorthand, written-out `cells.<ref>`, and the row's digits); cycle 0039 closed one. Enumerate
-  the routes before claiming a normalisation ruling is done.
-- **`enumerateRangeCellPaths` is not wired-ready (D-044)** — it needs the table's extent, and its
-  signature changes when you wire it. Decide `Address[]` vs paths at the same time.
-- **The next slice is the dynamic slot family, NOT the wiring** — nothing about tables can be
-  wired while `getObjectSchema("table")` returns `undefined`. Read 0041-REVIEW-phase2 §9.
-- **The `ObjectSchema` dynamic-slot-family problem is THE design question waiting at the top of
-  the wiring cycle.** Read D-017 in full before touching `primitives/schema.ts` or `mutation.ts`'s
-  `deriveEdges`/`validateIntegrity`. Do not extend `nonDerivedSlotPaths` with more fixed entries —
-  that is explicitly the wrong move.
-- **`primitives/table.ts`'s `enumerateRangeCellPaths` takes two `Address` endpoints and needs no
-  table-dimension input** — bounds-checking happens for free at the `read` callback. Don't
-  reintroduce a redundant bounds check without reading entry 0040's Decision 1 first.
+- **`resolveNonDerivedSlotPaths` is now the ONLY sanctioned way to read
+  `ObjectSchema.nonDerivedSlotPaths`.** Never iterate `schema.nonDerivedSlotPaths` as if it were a
+  flat path array — it is a `NonDerivedSlotPathGroup[]` as of cycle 0042. All three of
+  `mutation.ts`'s consumers already route through it; a fourth call site must too, or it will
+  disagree with the other three about a table's current cell family.
+- **`enumerateTableCellSlotPaths` generates paths from `rows`/`cols`; it never reads a table's
+  actual `cells.*` slot keys back into a path.** D-010 forbids inverting a `slotKey`, even where
+  it happens to be safe (a cell ref never contains "."). Do not "simplify" this by scanning
+  `Object.keys(object.slots)` for the dynamic family.
+- **D-022's bounded-correctness claim is now FALSE for `table`** — `describeUndeclaredSlot`'s
+  raw-key naming and `formatAddress`'s surface form diverge for a table cell (`table_x.cells.C5`
+  vs. `table_x.A1`-style short form). Both resolve to the same slot; this is disclosed, not fixed
+  (reviewer question 1). Do not "fix" it without reading entry 0042's own reasoning for why both
+  obvious fixes (inverting a key, or teaching `mutation.ts` about table-shaped keys) have real
+  costs.
+- **The next slice is the range-evaluation wiring, NOT another schema/mutation.ts design change.**
+  Read D-036's four constraints and 0041-REVIEW-phase2 §9's ordering before starting it.
+- **`rows`/`cols` are unprotected literal slots today.** A future resize mutation must not be a
+  bare `setSlot` on them — see entry 0042's Decision 3 and reviewer question 2.
 - **Cell-reference case normalisation happens at exactly one point (D-039): `normalizeCellReference`
-  in `address.ts`.** Column-letter arithmetic (`columnLettersToIndex`/`indexToColumnLetters`,
-  cycle 0040) is a SEPARATE, already-solved concern — don't reintroduce a second implementation of
-  either inside `primitives/table.ts` or `mutation.ts`.
-- **A formula's name/arity is validated at parse time (D-038)** — `formula/eval.ts`'s own "unknown
-  function"/"wrong arity" arms are DEFENSIVE ONLY (unreachable from typed input, still reachable
-  from a loaded document's stored AST). Do not remove them.
+  in `address.ts`.** Column-letter arithmetic is a SEPARATE, already-solved concern.
+- **A formula's name/arity is validated at parse time (D-038)** — `formula/eval.ts`'s own
+  defensive arms stay; do not remove them.
 - **D-042: this is a TOOL with exactly one user.** Justify a choice by correctness, simplicity
-  (Rule 5), and cheapness to change (§9) — never "users will expect."
-- **D-040 covers the `set` command only.** Dragging still behaves per §5.9. Do not widen one into
-  the other.
+  (Rule 5), and cheapness to change — never "users will expect."
+- **D-040 covers the `set` command only; D-041 covers `unlink` only.** Neither is built yet
+  (Phase 3). Dragging still behaves per §5.9.
 - **D-029 is still the rule most likely to be broken by accident**: when `graph/eval.ts` calls
   `formula/eval.ts`, do not "simplify" `IF`/`AND`/`OR` dispatch into a registry lookup.
 - **`evaluate(ast, read)` takes a `read` callback and nothing else** — no `EvalContext` yet.
@@ -178,8 +188,8 @@ rejection point; the `address.ts`/`table.ts` split. Next free: **Q-011**.
 - **Range placement (`parser.ts`), range DEPENDENCY reporting (`deps.ts`), range EVALUATION
   (`eval.ts`, unbuilt), and range ENUMERATION (`table.ts`, unwired) are FOUR different concerns.**
   Do not collapse them.
-- **Batch discipline is fixed and should stay fixed:** cycle 0036 stopped at its phase gate; cycle
-  0039 stopped short of the big wiring slice; cycle 0040 built exactly what a subsystem's first
-  file can honestly claim (standalone, unwired, pure logic) and stopped at trigger 2 rather than
-  reaching into `mutation.ts` to finish the job in the same cycle. Keep that pattern.
+- **Batch discipline is fixed and should stay fixed:** cycle 0036 stopped at its phase gate; 0039
+  stopped short of the wiring slice; 0040 built exactly what a subsystem's first file can honestly
+  claim and stopped at trigger 2; 0042 (this cycle) solved exactly the one named mechanism and
+  stopped rather than continuing into the wiring cycle in the same batch. Keep that pattern.
 - Each PowerShell call is a fresh process; the Bash tool's `npm` is not on PATH — use PowerShell.

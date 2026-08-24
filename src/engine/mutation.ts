@@ -62,6 +62,26 @@
  * — rejected here, loudly, before that can matter. See WHAT THIS IS,
  * `validateIntegrity`, check 2, and `findUnsupportedFormulaAsts`'s own doc
  * comment for why this check is deleted, not extended, once Phase 2 lands.
+ * Cycles 0039/0040 (address.ts, primitives/table.ts) did not touch this file.
+ * THIS cycle closes 0041-REVIEW-phase2 §9's named critical path: the DYNAMIC
+ * SLOT FAMILY mechanism D-017's own forward note asked for. `deriveEdges`'s
+ * source 1 and `validateIntegrity`'s checks 1 and 3 (`findUndeclaredFormula
+ * OrDerivedSlots`, `findSchemaSlotKindMismatches`) no longer walk
+ * `schema.nonDerivedSlotPaths` directly — they call `primitives/schema.ts`'s
+ * new `resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)`, which
+ * resolves PER OBJECT rather than per type, because `table`'s `cells.*` group
+ * is now `dynamic` (a function of the object's own CURRENT `rows`/`cols`
+ * slots, `primitives/table.ts`'s `enumerateTableCellSlotPaths`) rather than a
+ * fixed list. Calling the SAME resolver at all three sites is the whole point
+ * (see `primitives/schema.ts`'s own doc comment): it is what makes edge
+ * derivation and both integrity checks agree, for a dynamic family, exactly
+ * as they already agreed for a fixed one — the disagreement D-017 itself
+ * exists to catch, reached through a new door if each site resolved
+ * `dynamic` groups independently. `table` is now a real `SCHEMAS` entry
+ * (`getObjectSchema("table")` no longer returns `undefined`) — but ONLY its
+ * slot declarations; nothing here creates a table, inserts/deletes a row or
+ * column, or wires range expansion — see `primitives/table.ts`'s own NOT DONE
+ * HERE for the full list still deferred to the wiring cycle.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -132,10 +152,14 @@
  *      `detectCycle` reports `{ hasCycle: false }` on, so step 5 ACCEPTS the
  *      document and step 7 then quietly fills all three slots with `#REF`.
  *      Nothing in THIS file can detect that; making it loud is step 4's job
- *      (§5.1.1), and D-017 requires it. Note also that `nonDerivedSlotPaths`
- *      is a fixed list of paths and so cannot express a slot FAMILY (a table's
- *      `cells.A1`…, D-005/D-009): Phase 4 must revisit this mechanism, not
- *      merely add entries to it.
+ *      (§5.1.1), and D-017 requires it. `nonDerivedSlotPaths` used to be a bare
+ *      fixed list of paths and so could not express a slot FAMILY (a table's
+ *      `cells.A1`…, D-005/D-009) — RESOLVED as of this cycle:
+ *      `resolveNonDerivedSlotPaths` (`primitives/schema.ts`) also accepts a
+ *      `dynamic` group, a function of the object's own current state, which
+ *      is what `table`'s `cells.*` family now is (`primitives/table.ts`'s
+ *      `enumerateTableCellSlotPaths`). This function calls that resolver, not
+ *      `schema.nonDerivedSlotPaths` directly, for exactly this reason.
  *   2. Every schema-declared derived slot's dependencies, resolved via
  *      `primitives/schema.ts`'s `derivedSlotDependencyAddresses` (which is the
  *      ONLY place a dynamic dependency resolver may run, per that file's own
@@ -407,7 +431,7 @@
  */
 import { formatAddress, isAddressError, type Address } from "./address.ts";
 import { isReferenceNode } from "./formula/ast.ts";
-import { derivedSlotDependencyAddresses, getObjectSchema } from "./primitives/schema.ts";
+import { derivedSlotDependencyAddresses, getObjectSchema, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
@@ -448,7 +472,7 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
     // extractDependencies to call yet (Phase 2). `validateIntegrity`'s new
     // check (see this file's WHAT THIS IS) rejects the whole document before
     // that gap can matter — see its own doc comment.
-    for (const path of schema.nonDerivedSlotPaths) {
+    for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
       const slot = object.slots[slotKey(path)];
       if (slot === undefined || slot.kind !== "formula" || !isReferenceNode(slot.ast)) {
         // Either this path isn't populated on this particular object (a
@@ -1063,9 +1087,13 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
     // Re-derive the declared KEY set from the schema's declared PATHS via
     // slotKey — never the reverse (D-010) — mirroring exactly how
     // `deriveEdges` above already re-derives `slotKey(path)` from each
-    // `nonDerivedSlotPaths` entry rather than inverting anything.
+    // resolved `nonDerivedSlotPaths` path rather than inverting anything.
+    // `resolveNonDerivedSlotPaths` resolves per-OBJECT (not per-type), because
+    // a `dynamic` group (table's `cells.*`) depends on THIS object's own
+    // current `rows`/`cols` — see `primitives/schema.ts`'s own doc comment for
+    // why this must be the one place that resolution happens.
     const declaredKeys = new Set<string>([
-      ...schema.nonDerivedSlotPaths.map((path) => slotKey(path)),
+      ...resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).map((path) => slotKey(path)),
       ...schema.derivedSlots.map((entry) => slotKey(entry.path)),
     ]);
 
@@ -1220,7 +1248,7 @@ function findSchemaSlotKindMismatches(objects: readonly GraphObject[]): readonly
       problems.push(`${name} ${reason}`);
     }
 
-    for (const path of schema.nonDerivedSlotPaths) {
+    for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
       const slot = object.slots[slotKey(path)];
       if (slot === undefined || slot.kind !== "derived") {
         continue; // Absent (a separate, tolerated gap — see deriveEdges's header) or correctly non-derived.

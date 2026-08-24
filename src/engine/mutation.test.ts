@@ -15,7 +15,7 @@
  * convention `graph/eval.test.ts` and `graph/cycles.test.ts` use.
  */
 import { describe, expect, it } from "vitest";
-import type { Address } from "./address.ts";
+import { formatAddress, type Address } from "./address.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
@@ -1471,5 +1471,214 @@ describe("mutate — D-025/Q-008 on the OPERATION PAYLOAD, before staging, closi
     const result = mutate(initial, [operation], []);
 
     expect(result.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The DYNAMIC SLOT FAMILY (D-017's own forward note; solved this cycle, per
+// 0041-REVIEW-phase2 §9's naming of it as Phase 2's critical path):
+// `primitives/schema.ts`'s `table` entry declares `rows`/`cols` as a fixed
+// `static` group and `cells.*` as a `dynamic` one
+// (`primitives/table.ts`'s `enumerateTableCellSlotPaths`). These tests prove
+// `deriveEdges`/`validateIntegrity` treat a table's cells exactly the way they
+// already treat `value`/`add`'s fixed slots — including the D-017 failure mode
+// (a formula slot the object carries but the CURRENT resolution does not
+// declare) reached, for the first time, through a family whose membership
+// depends on the object's own state rather than a compile-time list.
+// ---------------------------------------------------------------------------
+
+/** A table object (§5.4): `rows`/`cols` as literal number slots, plus whatever cell slots are given. */
+function tableObject(id: string, name: string, rows: number, cols: number, cellSlots: Record<string, Slot> = {}): GraphObject {
+  return {
+    id,
+    name,
+    type: "table",
+    slots: {
+      rows: { kind: "literal", value: rows },
+      cols: { kind: "literal", value: cols },
+      ...cellSlots,
+    },
+  };
+}
+
+describe("deriveEdges — table's dynamic cell family (D-017/0041-REVIEW-phase2 §9)", () => {
+  it("derives a binding edge for a formula cell within the table's current rows/cols, and none for a literal cell", () => {
+    const objects = [
+      valueObject("obj_1", "value_1", 42),
+      tableObject("obj_2", "table_x", 2, 2, {
+        "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+        "cells.B1": { kind: "literal", value: 7 },
+      }),
+    ];
+
+    const edges = deriveEdges(objects);
+
+    expectSameEdges(edges, [{ sourceSlot: addr("obj_1", "value"), dependentSlot: addr("obj_2", "cells", "A1") }]);
+  });
+
+  it("derives edges for every populated cell across the table's whole current extent, not just A1", () => {
+    const objects = [
+      valueObject("obj_1", "value_1", 1),
+      valueObject("obj_2", "value_2", 2),
+      tableObject("obj_3", "table_x", 2, 2, {
+        "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+        "cells.B2": { kind: "formula", ast: { type: "reference", address: addr("obj_2", "value") }, value: null },
+      }),
+    ];
+
+    expectSameEdges(deriveEdges(objects), [
+      { sourceSlot: addr("obj_1", "value"), dependentSlot: addr("obj_3", "cells", "A1") },
+      { sourceSlot: addr("obj_2", "value"), dependentSlot: addr("obj_3", "cells", "B2") },
+    ]);
+  });
+
+  it("derives no edge for a formula cell OUTSIDE the table's current rows/cols — the dynamic-family analogue of D-017's fixed-list gap", () => {
+    // rows=1, cols=1 declares only cells.A1 — cells.C5 is a formula slot the
+    // OBJECT carries but the current resolution does not produce.
+    const objects = [
+      valueObject("obj_1", "value_1", 9),
+      tableObject("obj_2", "table_x", 1, 1, {
+        "cells.C5": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+      }),
+    ];
+
+    expect(deriveEdges(objects)).not.toContainEqual({
+      sourceSlot: addr("obj_1", "value"),
+      dependentSlot: addr("obj_2", "cells", "C5"),
+    });
+  });
+
+  it("a formula cell in one table may reference a cell in a DIFFERENT table (§5.4: tables are self-contained but may reference each other)", () => {
+    const objects = [
+      tableObject("obj_1", "table_a", 1, 1, { "cells.A1": { kind: "literal", value: 3 } }),
+      tableObject("obj_2", "table_b", 1, 1, {
+        "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: null },
+      }),
+    ];
+
+    expectSameEdges(deriveEdges(objects), [
+      { sourceSlot: addr("obj_1", "cells", "A1"), dependentSlot: addr("obj_2", "cells", "A1") },
+    ]);
+  });
+});
+
+describe("validateIntegrity — D-017 rejects a table's stray out-of-extent formula cell", () => {
+  it("rejects a formula cell the object carries but the table's current rows/cols do not declare, naming it", () => {
+    const objects = [
+      valueObject("obj_1", "value_1", 9),
+      tableObject("obj_2", "table_x", 1, 1, {
+        "cells.C5": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+      }),
+    ];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("table_x.cells.C5");
+    }
+  });
+
+  it("accepts the same table once its rows/cols actually cover the formula cell", () => {
+    const objects = [
+      valueObject("obj_1", "value_1", 9),
+      tableObject("obj_2", "table_x", 5, 5, {
+        "cells.C5": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+      }),
+    ];
+    const edges = deriveEdges(objects);
+
+    expect(validateIntegrity(objects, edges)).toEqual({ ok: true });
+  });
+
+  it("D-018's other direction still applies: a cell WITHIN the declared extent that is 'derived'-kind is rejected (tables declare no derived slots)", () => {
+    const objects: GraphObject[] = [
+      tableObject("obj_1", "table_x", 1, 1, {
+        "cells.A1": { kind: "derived", value: 5 },
+      }),
+    ];
+    const edges = deriveEdges(objects);
+
+    const result = validateIntegrity(objects, edges);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // formatAddress prints the table cell's SURFACE form (D-005/D-008), not
+      // the written-out "cells.A1" stored path — "table_x.A1", not
+      // "table_x.cells.A1".
+      expect(result.message).toContain("table_x.A1");
+      expect(result.message).toContain("derived");
+    }
+  });
+
+  // D-022's own instruction, pinned here for the first time it applies: "Pin
+  // it with a test comparing the two for every registered type, so the day a
+  // table gets a schema entry the divergence fails loudly instead of shipping
+  // a wrong name." That day is this cycle. `describeUndeclaredSlot`'s raw-key
+  // style (D-017's own naming for a slot with no schema-declared path to
+  // format) produces "table_x.cells.C5" for the stray cell above; formatAddress
+  // would print the shorter surface form, "table_x.C5" (D-005/D-008's cell
+  // shorthand), for the IDENTICAL Address. Both spellings resolve to the same
+  // stored slot (D-043) — nothing is factually wrong, and D-017's rejection is
+  // still correct — but the bounded-correctness CLAIM D-022 relied on
+  // ("identical to formatAddress's") no longer holds for `table`. Disclosed in
+  // this cycle's log entry rather than silently fixed: closing it cleanly
+  // needs either inverting a slot key (D-010 forbids it) or teaching
+  // mutation.ts itself which keys belong to a table's cell family, which
+  // reintroduces the exact table-specific special-casing this cycle's design
+  // was written to avoid.
+  it("D-022's bounded-correctness claim (describeUndeclaredSlot matches formatAddress) no longer holds for table — disclosed, not fixed", () => {
+    const objects = [tableObject("obj_2", "table_x", 1, 1, {})];
+    const rawKeyNaming = "table_x.cells.C5"; // what findUndeclaredFormulaOrDerivedSlots's message contains, above
+    const surfaceForm = formatAddress(addr("obj_2", "cells", "C5"), objects);
+    expect(rawKeyNaming).not.toBe(surfaceForm);
+    expect(surfaceForm).toBe("table_x.C5");
+  });
+});
+
+describe("mutate — end-to-end through a real table object (D-017/0041-REVIEW-phase2 §9)", () => {
+  it("creates a table and a value, binds a cell to the value by formula, and evaluates it live", () => {
+    const value = valueObject("obj_1", "value_1", 42);
+    const table = tableObject("obj_2", "table_x", 1, 1, {
+      "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: null },
+    });
+
+    const result = mutate([], [{ kind: "createObject", object: value }, { kind: "createObject", object: table }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const tableResult = result.objects.find((object) => object.id === "obj_2");
+      expect(tableResult?.slots["cells.A1"]).toMatchObject({ kind: "formula", value: 42 });
+    }
+  });
+
+  it("rejects creating a table whose formula cell falls outside its own declared rows/cols", () => {
+    const table = tableObject("obj_1", "table_x", 1, 1, {
+      "cells.B2": { kind: "formula", ast: { type: "reference", address: addr("obj_9", "value") }, value: null },
+    });
+
+    const result = mutate([], [{ kind: "createObject", object: table }], []);
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a genuine cycle running entirely through two tables' cells", () => {
+    // table_a.A1 = table_b.A1, table_b.A1 = table_a.A1 — a real self-inclusive
+    // cycle through the dynamic family, the same class D-016 requires a
+    // fixture whose own order does not already look sorted.
+    const tableA = tableObject("obj_1", "table_a", 1, 1, {
+      "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_2", "cells", "A1") }, value: null },
+    });
+    const tableB = tableObject("obj_2", "table_b", 1, 1, {
+      "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: null },
+    });
+
+    const result = mutate([], [{ kind: "createObject", object: tableA }, { kind: "createObject", object: tableB }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("cyclic dependency");
+    }
   });
 });
