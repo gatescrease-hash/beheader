@@ -336,7 +336,10 @@ describe("verticesDerivedSlots", () => {
     // computeCentroid's own division is 0 / (a negative number) = -0 before
     // finiteOrTypeError ever sees it. Verified by mutation-test: with
     // finiteOrTypeError's `-0` branch removed, this test is the one that
-    // fails (see the geometry cycle's log entry).
+    // fails (see entry 0059). Note this -0 arrives through a CLOCKWISE
+    // winding, which no PRESET produces (D-064) — it is reachable through
+    // this bundle's stated contract (an arbitrary Point[]), which is what
+    // polyline will hand it.
     const clockwiseSquare: readonly Point[] = [
       { x: -1, y: -1 },
       { x: -1, y: 1 },

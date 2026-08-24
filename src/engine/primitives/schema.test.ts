@@ -58,10 +58,10 @@ describe("getObjectSchema", () => {
   // D-008's lesson: test the unspecified cases, not just the brief's examples.
   // Every non-fixture ObjectType has no schema yet (file header) — this must be
   // an honest `undefined`, not a placeholder that would silently pass a future
-  // validation check. `table`/`circle`/`polygon`/`rect` are REAL as of this
-  // cycle (see their own describe blocks below) — they are no longer in this
-  // list (PROCESS_BRIEF §6.1 trigger 5: this narrows a previously-passing
-  // expectation, disclosed in the geometry cycle's log entry).
+  // validation check. `table`/`circle`/`polygon`/`rect` have real entries
+  // (their own describe blocks below), so they are not in this list;
+  // `polyline` and `script` are the remaining unregistered types. Narrowed
+  // at entry 0059 — PROCESS_BRIEF §6.1 trigger 5.
   it("returns undefined for an ObjectType with no schema entry yet", () => {
     expect(getObjectSchema("polyline")).toBeUndefined();
     expect(getObjectSchema("script")).toBeUndefined();
@@ -115,9 +115,9 @@ describe("findDerivedSlotSchema", () => {
   });
 
   it("returns undefined for a type with no schema at all", () => {
-    // "circle" was this test's example until the geometry cycle registered
-    // it a real schema entry (see the describe block below) — "polyline" is
-    // the current still-unregistered example.
+    // "polyline" is the example type with no schema entry at all;
+    // circle/polygon/rect all have real ones (the describe block below).
+    // Switched from "circle" at entry 0059.
     expect(findDerivedSlotSchema("polyline", ["centroid", "x"])).toBeUndefined();
   });
 

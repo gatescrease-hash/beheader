@@ -117,9 +117,9 @@ describe("deriveEdges — integration with graph/eval.ts", () => {
 
 describe("deriveEdges — objects of a type with no schema entry yet", () => {
   it("derives no edges for them and does not throw, matching getObjectSchema's own honest 'undefined' stance", () => {
-    // "circle" was this fixture's type until the geometry cycle registered it
-    // a real schema entry (primitives/geometry.ts) — "polyline" is the
-    // current still-unregistered example (schema.ts's own file header).
+    // "polyline" is the current type with no schema entry (schema.ts's own
+    // file header); circle/polygon/rect all have real ones. Switched from
+    // "circle" at entry 0059.
     const noSchemaYet: GraphObject = {
       id: "obj_1",
       name: "polyline_1",
@@ -281,9 +281,9 @@ describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot
   });
 
   it("does not flag an object whose type has no schema entry at all (D-017's one permitted exception)", () => {
-    // "circle" was this fixture's type until the geometry cycle registered
-    // it a real schema entry — "polyline" is the current still-unregistered
-    // example (schema.ts's own file header).
+    // "polyline" is the current type with no schema entry (schema.ts's own
+    // file header); circle/polygon/rect all have real ones. Switched from
+    // "circle" at entry 0059.
     const noSchemaYet: GraphObject = {
       id: "obj_1",
       name: "polyline_1",

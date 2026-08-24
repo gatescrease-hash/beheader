@@ -4,14 +4,17 @@
  * (centroid, area, length, bounds).
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.5 — "The primitive is the geometry itself.
- * Named shapes are presets over it." This cycle builds the three PARAMETRIC
- * presets (`circle`, `polygon`, `rect`) and their derived slots.
+ * Named shapes are presets over it." The three PARAMETRIC presets
+ * (`circle`, `polygon`, `rect`) and their derived slots live here.
  * `primitives/schema.ts` registers the `ObjectSchema` entries this file's
  * functions feed, matching the split `primitives/table.ts` already
  * establishes (pure domain logic here, the type-keyed registry there).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
- * Load-bearing per Rule 3 (§6 trigger-2 file — first file of this subsystem).
+ * First file of this subsystem, so §6.1 trigger 2 governs when it is
+ * reviewed. NOT on §6.2's load-bearing list: Rule 3 governs the ADDRESSING
+ * scheme, which this file only consumes (`primitives/table.ts`, the exact
+ * analogue, claims no such status either).
  *
  * WHAT THIS IS
  *   §5.5's slot-exposure rule (Rule 6's own worked example): "Preset shapes
@@ -92,8 +95,8 @@
  *     true arc" from `origin`/`radius` directly; `vertices` here is
  *     explicitly the polygonal APPROXIMATION used for bounds/hit-testing
  *     only, per that same sentence.
- *   - Registering these three in `primitives/schema.ts`'s `SCHEMAS` — done in
- *     the SAME cycle (see that file's own diff), not deferred, because unlike
+ *   - Registering these three in `primitives/schema.ts`'s `SCHEMAS` — that is
+ *     that file's job, and it is done (entry 0059), not deferred, because unlike
  *     `table`'s dynamic family (D-017), nothing here needs a new `schema.ts`
  *     mechanism: three more `static`-only entries are the same shape
  *     `VALUE_SCHEMA`/`ADD_SCHEMA` already use.

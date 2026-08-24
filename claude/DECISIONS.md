@@ -1657,3 +1657,58 @@ camera that needed clamping — and neither raises an error anywhere.
 This generalises deliberately. `nextObjectId` is the same class of field: `isIllegalNumber` lets a
 non-integer or a negative `nextObjectId` load. Where a field's domain is narrower than "a legal
 number," the owner of the domain enforces it, at the boundary where the value is first used.
+
+---
+
+## D-063 — A file header states what the file IS, never that "this cycle" built it
+Ruled: entry 0060-REVIEW-phase3 (reviewer)   Binding on: every source and test file, headers and
+body comments alike. Extends **D-060** rather than replacing it.
+
+D-060 already bans the diary comment, and its examples are all about REVISION history ("cycle X I
+did this; cycle X+1 reverted it"). The gap it left, found twice now, is the CREATION sentence: a
+brand-new file whose header opens "This cycle builds X." That is the same defect wearing different
+clothes — it is false to every reader who arrives after that cycle, which is all of them.
+
+Ruling: a header describes the file's present contract in the present tense. **Never "this cycle",
+"as of this cycle", "the <slug> cycle", or a pointer to "that file's own diff"** — in a header, a
+body comment, or a test comment. Where a comment genuinely needs to date something, name the entry
+by NUMBER ("entry 0059"), per D-058's surviving half. A cross-file pointer names the FILE, never
+the diff that touched it: diffs are git's, entries are the log's, and a comment that points at
+either as its own justification has outsourced the reason D-060 requires it to state.
+
+Rationale: the same authoring instinct produces this every cycle — a model writing a file is
+thinking about the cycle it is in, and the header is where that leaks. Entry 0059 added eight such
+sites (one in NEW non-test source, `geometry.ts`'s own opening sentence) while
+0058-REVIEW-phase3 Finding 2's sweep of thirteen older ones was still outstanding, which is what
+makes this a recurring misunderstanding worth a ruling rather than a third round of the same code
+fix. Fixed at this review in all eight.
+
+Reconciliation required: none beyond 0058-REVIEW-phase3 Finding 2's existing sweep, which this
+ruling now also governs.
+
+---
+
+## D-064 — Every geometry PRESET winds counterclockwise, and that is an invariant, not an accident
+Ruled: entry 0060-REVIEW-phase3 (reviewer)   Binding on: `primitives/geometry.ts`, the renderer,
+hit-testing, and `explode`
+
+`computePolygonVertices` (increasing angle), `computeCircleVertices` (delegating to it), and
+`computeRectVertices` (origin → +x → +x+y → +y) all produce a strictly POSITIVE doubled signed
+area for every legal parameter set — verified at this review across `rotation` values of
+`0, 1, -1, 2.5, π` and a degenerate zero-width rect. Counterclockwise in a y-up frame.
+
+Ruling: this winding is a STATED invariant of the three presets. A cycle that changes a preset's
+corner order or angle direction changes it deliberately, says so, and updates every consumer —
+it does not get to be a silent refactor. **A pinning test is owed** (fix list item 3, entry
+0060-REVIEW-phase3).
+
+Rationale: three later consumers already depend on it without knowing they do. The renderer's fill
+rule, any winding-number hit test, and `explode` — which snapshots `vertices` into literal
+per-vertex slots in exactly this order, making the winding user-visible and thereafter
+user-editable — all inherit it. It also bounds a claim: because no preset can wind clockwise,
+`computeCentroid`'s negative-signed-area branch, and therefore `finiteOrTypeError`'s `-0` guard,
+are unreachable through any preset TODAY. That guard is still correct and still required —
+`verticesDerivedSlots` is explicitly a shared bundle whose contract is an arbitrary `Point[]`, and
+`polyline` will hand it one — but the reachability lives in the CONTRACT, not in the current
+pipeline. Entry 0059's Decision 4 got the code right and overstated the asymmetry; see
+0060-REVIEW-phase3 §5.
