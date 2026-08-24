@@ -1512,6 +1512,59 @@ describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing P
     expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]); // once, not twice.
   });
 
+  // D-059 (0054-REVIEW-phase2, reviewer edit): the report must name only
+  // slots that still EXIST once the whole batch has committed. Both tests
+  // below reported a slot on an already-deleted object before the fix —
+  // probed against the built code at review, then re-run after it.
+  it("does NOT report a slot broken by an EARLIER operation when a LATER operation in the SAME batch deletes the object carrying it (D-059)", () => {
+    const table = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 1 } });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: 1 } },
+    };
+
+    const result = mutate(
+      [table, dependent],
+      [
+        { kind: "deleteObject", objectId: "obj_1", force: true },
+        { kind: "deleteObject", objectId: "obj_2", force: true },
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects).toEqual([]);
+    // obj_2.value WAS rewritten to #REF by operation 1 — but operation 2
+    // removed the object carrying it, so there is nothing left to repair and
+    // nothing `formatAddress` could name.
+    expect(result.brokenSlots).toEqual([]);
+  });
+
+  it("does NOT report a cell broken by a row deletion when the SAME batch then force-deletes that whole table (D-059)", () => {
+    const table = tableObject("obj_1", "table_x", 3, 2, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.B1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A2") }, value: 2 },
+    });
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 2 },
+        { kind: "deleteObject", objectId: "obj_1", force: true },
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects).toEqual([]);
+    expect(result.brokenSlots).toEqual([]);
+  });
+
   // D-016 mutation check: confirm the `force` gate is genuinely load-bearing,
   // not merely exercised. Temporarily inverted `operation.force !== true` to
   // `operation.force === true` (swapping which branch runs) directly in

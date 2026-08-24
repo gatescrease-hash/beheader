@@ -1497,3 +1497,33 @@ by hand is the signal PROCESS_BRIEF §8 names: it becomes a ruling, not a third 
 
 Reconciliation required: none. The 8 sites in this batch's diff were corrected at review
 (0051-REVIEW-phase2 §7).
+
+## D-059 — A repair report NEVER names a slot that is absent from the committed state
+Answers: —   Ruled: entry 0054-REVIEW-phase2 (reviewer)
+Binding on: `mutation.ts`'s `brokenSlots`, and every future report channel that names an `Address`
+
+**Ruling.** `MutationResult.brokenSlots` (D-057's channel) reports only slots that still EXIST in
+the state the batch actually commits. A slot broken by one operation and then removed by a LATER
+operation in the SAME batch — its object force-deleted, or the slot itself deleted — is dropped
+from the report, not reported. The filter runs once, in `mutate`, against the committed
+`objects`, and checks the SLOT, not just the object. Any future channel that returns an `Address`
+to a caller inherits this: an address a caller cannot resolve is not a report.
+
+**Rationale.** The report exists so a user can go and fix the formulas a repair broke (§5.1.1:
+"The command must report which slots were broken"; §5.4: "The command reports every slot it
+broke"). A slot that no longer exists cannot be fixed, and `formatAddress` — the only sanctioned
+way to display an `Address` (Rule 3) — cannot even name it: it resolves no object and returns an
+`AddressError`, so the report itself would print as `#REF`.
+
+`applyOperation`'s `deleteObject`-with-`force` branch already drops reports about the object THAT
+operation deletes ("the deleted object, and any report about ITS OWN slots, leave together"). That
+is right and stays; it simply cannot see the rest of the batch. Verified reachable at review
+against the built code: `[deleteObject A force, deleteObject B force]` where B read A reported
+`B.value` on a committed state holding no objects at all, and `[deleteTableLine table_x row 2,
+deleteObject table_x force]` reported `table_x.cells.B1` the same way.
+
+The correct place is `mutate`, for the same reason dedup lives there: only the whole-batch site
+knows what the batch finally committed. Per-operation filtering cannot know it, and would have to
+be repeated in every branch that can break a slot.
+
+Reconciliation required: none — landed as a reviewer edit at 0054-REVIEW-phase2, with two tests.

@@ -204,7 +204,7 @@
  * both widen to also return `brokenSlots: readonly Address[]`, threaded
  * through `mutate`'s fold and exposed on `MutationResult`'s `ok: true` arm —
  * ONE channel, fed by BOTH repair sites (row/column deletion's existing call
- * to `repairObjectFormulaAddresses`, and this cycle's whole-object call to
+ * to `repairObjectFormulaAddresses`, and entry 0053's whole-object call to
  * the SAME function), per D-057's own binding text. A slot's `Address` for
  * the report is recovered via a new `resolveSlotPathForKey` — forward
  * schema resolution, matching a key, never inverting one (D-010) — see that
@@ -535,10 +535,13 @@
  *     whatever calls it (a future `document.ts`, or a command handler) owns
  *     the current `objects`/`journal` pair and decides what to do with a
  *     rejection.
- *   - Any operation kind beyond `SetSlotOperation`/`DeleteObjectOperation`/
- *     `CreateObjectOperation` (`explode`, vertex add/remove, table resize) —
+ *   - Any operation kind beyond the FIVE now built (`SetSlotOperation`/
+ *     `DeleteObjectOperation`/`CreateObjectOperation`/
+ *     `InsertTableLineOperation`/`DeleteTableLineOperation`) — `explode` and
+ *     vertex add/remove (table resize landed at entries 0047/0050; this
+ *     bullet still listed it as unbuilt as of entry 0053) —
  *     those belong to the phases that introduce the state they touch
- *     (Phase 2-6), same stance `primitives/schema.ts` already takes on its
+ *     (Phase 3-6), same stance `primitives/schema.ts` already takes on its
  *     own per-type entries. A user-facing "add a new circle" COMMAND (§5.10,
  *     Phase 3 — choosing a fresh id from `nextObjectId`, a type's default
  *     slot values) is a different, NOT-YET-BUILT concern layered on top of
@@ -1646,7 +1649,22 @@ export function mutate(
     // (`repairAddressesInAst`'s own `"error"` case returns it as-is), so this
     // can only fire for two DIFFERENT references inside the SAME slot's
     // formula, broken by two DIFFERENT operations in the SAME batch.
-    brokenSlots: dedupeAddresses(folded.brokenSlots),
+    //
+    // **D-059** (0054-REVIEW-phase2, reviewer edit): the report is then
+    // filtered against the COMMITTED state — a broken slot that no longer
+    // exists once the WHOLE batch has been applied is dropped, never
+    // reported. `applyOperation`'s own `deleteObject` branch already drops
+    // reports about the object THAT operation deletes, but it cannot see a
+    // LATER operation in the same batch deleting the object whose slot an
+    // EARLIER one broke (`[deleteObject A force, deleteObject B force]`
+    // where B read A; `[deleteTableLine table_x …, deleteObject table_x
+    // force]`). Such an address names nothing the user can repair, and
+    // `formatAddress` cannot even render it — it resolves no object, so it
+    // returns an `AddressError` and the report would print as `#REF`.
+    brokenSlots: dedupeAddresses(folded.brokenSlots).filter((address) => {
+      const object = result.objects.find((candidate) => candidate.id === address.objectId);
+      return object !== undefined && object.slots[slotKey(address.path)] !== undefined;
+    }),
   };
 }
 
