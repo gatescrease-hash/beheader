@@ -474,9 +474,15 @@
  */
 import { formatAddress, isAddressError, type Address } from "./address.ts";
 import type { FormulaAst } from "./formula/ast.ts";
-import { extractDependencies } from "./formula/deps.ts";
+import { extractDependencies, rewriteAddressesInAst } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
-import { enumerateRangeCellAddresses, isRangeEnumerationError } from "./primitives/table.ts";
+import {
+  enumerateRangeCellAddresses,
+  getTableDimensions,
+  insertTableLine,
+  isRangeEnumerationError,
+  shiftCellAddressForInsert,
+} from "./primitives/table.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
@@ -789,12 +795,44 @@ export interface CreateObjectOperation {
 }
 
 /**
- * The full set of operations `mutate` can apply. Three variants now
- * (`SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`) —
- * widened, per Q-005/D-020's "widen the union, never restructure" stance, not
- * a second entry point.
+ * §5.4's row/column INSERTION (entry 0046) — the first half of "rows and
+ * columns can be added or removed." `index` is 1-based: the NEW line
+ * occupies this position; every EXISTING row/column at or after it shifts by
+ * one (`primitives/table.ts`'s `insertTableLine`/`shiftCoordinates`). Carries
+ * no payload beyond WHERE to insert — unlike `SetSlotOperation`/
+ * `CreateObjectOperation`, there is no slot content to supply: the new
+ * line's cells are simply absent (D-047-legal empty state), and every
+ * EXISTING cell's own content moves with it unchanged.
+ *
+ * Deletion is a DIFFERENT operation kind, not the same one with a negative
+ * `index` or a `remove: true` flag — deletion can ORPHAN a reference (the
+ * §5.1.1 REPAIR path) in a way insertion structurally cannot, so the two
+ * do not share a validation or apply story. See STATUS.md's next slice for
+ * why deletion is deliberately not built alongside this.
+ *
+ * PRECONDITION, enforced by `mutate` before this is ever folded (mirroring
+ * every other variant's own precondition doc comment): `objectId` names an
+ * EXISTING object of type `"table"`. `findInvalidTableResizes` is the
+ * primary check (a clear rejection message naming the problem);
+ * `insertTableLine`'s own CLAMPING of an out-of-range `index` is the
+ * defensive arm for the one case that check cannot see — see that function's
+ * own doc comment for the disclosed, narrow gap this splits on (an object
+ * created earlier in the SAME batch).
  */
-export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation;
+export interface InsertTableLineOperation {
+  readonly kind: "insertTableLine";
+  readonly objectId: string;
+  readonly axis: "row" | "column";
+  readonly index: number;
+}
+
+/**
+ * The full set of operations `mutate` can apply. Four variants now
+ * (`SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`,
+ * `InsertTableLineOperation`, added entry 0046) — widened, per Q-005/D-020's
+ * "widen the union, never restructure" stance, not a second entry point.
+ */
+export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation | InsertTableLineOperation;
 
 /** The object id an operation targets, whichever variant it is — shared by the existence check and the message-building below. */
 function operationTargetId(operation: Operation): string {
@@ -803,6 +841,9 @@ function operationTargetId(operation: Operation): string {
   }
   if (operation.kind === "createObject") {
     return operation.object.id;
+  }
+  if (operation.kind === "insertTableLine") {
+    return operation.objectId;
   }
   return operation.address.objectId;
 }
@@ -900,6 +941,24 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * saved document means creating every one of its objects, from nothing, via
  * this exact mechanism (never a separate, parallel "just assign the array"
  * path — Rule 2).
+ *
+ * `insertTableLine` (entry 0046, §5.4): the ONE variant that touches every
+ * object in `objects`, not just its own target — because §5.4's reference-
+ * adjustment pass is explicit that a row/column insertion must rewrite
+ * affected addresses "over every stored AST in the document... other tables
+ * and text boxes may point into it." Two DIFFERENT things move here, and
+ * they are computed from ONE shared `clampedIndex` so they cannot disagree:
+ * (1) the target table's OWN cell slots shift position
+ * (`primitives/table.ts`'s `insertTableLine`); (2) EVERY object's formula
+ * slots (the target table's own included — a cell can reference a sibling
+ * cell in the SAME table) get their stored ASTs rewritten via
+ * `rewriteObjectFormulaAddresses` below, which is entirely blind to WHICH
+ * object it is walking — it rewrites whatever `ReferenceNode`/`RangeNode`
+ * addresses happen to name the resized table, on every object, uniformly.
+ * `target === undefined` is defensive-only (the existence check already
+ * guarantees `operation.objectId` resolves by the time this runs); returning
+ * `objects` unchanged rather than throwing matches this file's "never
+ * throws" discipline everywhere else.
  */
 function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
   if (operation.kind === "deleteObject") {
@@ -909,6 +968,20 @@ function applyOperation(objects: readonly GraphObject[], operation: Operation): 
     // D-024: the caller's own GraphObject never enters committed state by
     // reference — same reasoning as setSlot's payload below.
     return [...objects, deepClone(operation.object)];
+  }
+  if (operation.kind === "insertTableLine") {
+    const target = objects.find((object) => object.id === operation.objectId);
+    if (target === undefined) {
+      return objects; // Defensive only — see doc comment above.
+    }
+    const { rows, cols } = getTableDimensions(target);
+    const bound = operation.axis === "row" ? rows : cols;
+    const clampedIndex = Math.max(1, Math.min(operation.index, bound + 1));
+    const shiftAddress = (address: Address): Address => shiftCellAddressForInsert(address, operation.objectId, operation.axis, clampedIndex);
+    return objects.map((object) => {
+      const resized = object.id === operation.objectId ? insertTableLine(object, operation.axis, clampedIndex) : object;
+      return rewriteObjectFormulaAddresses(resized, shiftAddress);
+    });
   }
   return objects.map((object) => {
     if (object.id !== operation.address.objectId) {
@@ -923,6 +996,28 @@ function applyOperation(objects: readonly GraphObject[], operation: Operation): 
       slots: { ...object.slots, [slotKey(operation.address.path)]: deepClone(operation.slot) },
     };
   });
+}
+
+/**
+ * Rebuilds `object`'s `slots`, passing every `formula`-kind slot's AST
+ * through `formula/deps.ts`'s `rewriteAddressesInAst` with `shiftAddress` —
+ * `literal`/`derived` slots are returned completely unchanged (neither has
+ * an AST to rewrite). Called once per object, for EVERY object, by
+ * `applyOperation`'s `insertTableLine` branch above — `shiftAddress` itself
+ * already knows to leave any address alone that does not name the resized
+ * table, so this function needs no notion of "is this object even
+ * relevant."
+ */
+function rewriteObjectFormulaAddresses(object: GraphObject, shiftAddress: (address: Address) => Address): GraphObject {
+  const newSlots: Record<string, Slot> = {};
+  for (const key of Object.keys(object.slots)) {
+    const slot = object.slots[key];
+    if (slot === undefined) {
+      continue; // noUncheckedIndexedAccess artifact only.
+    }
+    newSlots[key] = slot.kind === "formula" ? { ...slot, ast: rewriteAddressesInAst(slot.ast, shiftAddress) } : slot;
+  }
+  return { ...object, slots: newSlots };
 }
 
 /**
@@ -1091,12 +1186,15 @@ export function mutate(
     if (!survivingIds.has(targetId)) {
       // D-023: the object id appears here, LABELLED as an id, because no
       // name exists to print — the whole rejection is that nothing resolves.
-      missingTargetMessages.push(
-        operation.kind === "deleteObject"
-          ? `${prefix} attempts to delete object id "${targetId}", which does not exist in this document (D-021)`
-          : `${prefix} targets slot "${slotKey(operation.address.path)}" on object id "${targetId}", ` +
-              `which does not exist in this document (D-021)`,
-      );
+      let detail: string;
+      if (operation.kind === "deleteObject") {
+        detail = `attempts to delete object id "${targetId}"`;
+      } else if (operation.kind === "insertTableLine") {
+        detail = `attempts to insert a ${operation.axis} into object id "${targetId}"`;
+      } else {
+        detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
+      }
+      missingTargetMessages.push(`${prefix} ${detail}, which does not exist in this document (D-021)`);
       return; // Nothing to remove from the simulation — this id was never in it.
     }
     if (operation.kind === "deleteObject") {
@@ -1117,6 +1215,16 @@ export function mutate(
   const illegalPayloadMessages = findIllegalOperationPayloads(operations, objects);
   if (illegalPayloadMessages.length > 0) {
     return { ok: false, message: illegalPayloadMessages.join("; ") };
+  }
+
+  // Entry 0046, §5.4: an `insertTableLine` naming a non-table object, or an
+  // out-of-range index, is rejected here with a message naming the problem —
+  // see `findInvalidTableResizes`'s own doc comment for the one disclosed
+  // gap (a table created earlier in the SAME batch), which `insertTableLine`
+  // (`primitives/table.ts`) covers defensively by clamping instead.
+  const invalidResizeMessages = findInvalidTableResizes(operations, objects);
+  if (invalidResizeMessages.length > 0) {
+    return { ok: false, message: invalidResizeMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -1547,7 +1655,63 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
       return;
     }
 
-    // deleteObject: no value payload to check.
+    // deleteObject / insertTableLine: neither carries a Slot/Value payload to
+    // check — insertTableLine's own precondition (a valid target/index) is
+    // `findInvalidTableResizes`'s job, below, not this function's.
+  });
+
+  return problems;
+}
+
+/**
+ * Entry 0046, §5.4's row/column insertion: rejects an `insertTableLine`
+ * operation whose `objectId` does not name a `"table"`-type object, or whose
+ * `index` is out of range for that table's CURRENT extent — with a message
+ * naming the operation and the problem, the same style every other
+ * precondition check in this file uses. Runs BEFORE staging (mirroring
+ * `findIllegalOperationPayloads`'s own placement), against the PRE-BATCH
+ * `objects`.
+ *
+ * DISCLOSED GAP, same shape as `findIllegalOperationPayloads`'s own
+ * `formatAddress` note: if `objectId` names an object `createObject`d
+ * EARLIER IN THE SAME BATCH, `objects.find` here finds nothing (the created
+ * object exists only in the batch's simulated existence set, not yet in
+ * `objects`), so this check is SKIPPED for that operation rather than
+ * validated. `insertTableLine` (`primitives/table.ts`) is written to be safe
+ * regardless — it CLAMPS an out-of-range index rather than corrupting state
+ * — so the worst outcome of this gap is a silently-clamped index instead of
+ * a clear rejection message, never a wrong or corrupted document. Not closed
+ * here: batches that create a table and resize it in the same breath are
+ * not a scenario any existing caller (a test fixture, `document.ts`'s
+ * loader) produces yet, and building full batch-simulated dimension
+ * tracking to cover it is disproportionate to a case nothing currently
+ * exercises — revisit if/when the command line (§5.10, Phase 3) starts
+ * composing batches this way.
+ */
+function findInvalidTableResizes(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+
+  operations.forEach((operation, index) => {
+    if (operation.kind !== "insertTableLine") {
+      return;
+    }
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+    const target = objects.find((candidate) => candidate.id === operation.objectId);
+    if (target === undefined) {
+      return; // See this function's own doc comment — the disclosed same-batch-creation gap.
+    }
+    if (target.type !== "table") {
+      problems.push(`${prefix}: object "${target.name}" is not a table, so its ${operation.axis}s cannot be resized`);
+      return;
+    }
+    const { rows, cols } = getTableDimensions(target);
+    const bound = operation.axis === "row" ? rows : cols;
+    if (!Number.isInteger(operation.index) || operation.index < 1 || operation.index > bound + 1) {
+      problems.push(
+        `${prefix}: ${operation.axis} insertion index ${operation.index} is out of range for "${target.name}" ` +
+          `(currently ${bound} ${operation.axis}s; must be an integer from 1 to ${bound + 1})`,
+      );
+    }
   });
 
   return problems;

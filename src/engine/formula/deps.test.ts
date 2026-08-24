@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";
 import { isParseError, parseFormula } from "./parser.ts";
 import type { BinaryOpNode, ErrorNode, FormulaAst, FunctionCallNode, RangeNode, ReferenceNode, UnaryOpNode } from "./ast.ts";
-import { extractDependencies } from "./deps.ts";
+import { extractDependencies, rewriteAddressesInAst } from "./deps.ts";
 
 const addrA: Address = { objectId: "obj_1", path: ["v"] };
 const addrB: Address = { objectId: "obj_2", path: ["v"] };
@@ -226,5 +226,56 @@ describe("extractDependencies — integration: real ASTs from parseFormula", () 
         end: { objectId: "obj_9", path: ["cells", "B4"] },
       },
     ]);
+  });
+});
+
+describe("rewriteAddressesInAst — entry 0046, §5.4's reference-adjustment building block", () => {
+  const bump = (address: Address): Address => ({ objectId: address.objectId, path: [...address.path, "bumped"] });
+
+  it("returns a literal/error node completely unchanged (no address to rewrite)", () => {
+    const literal: FormulaAst = { type: "literal", value: 42 };
+    const errorNode: ErrorNode = { type: "error", error: "#REF" };
+    expect(rewriteAddressesInAst(literal, bump)).toBe(literal); // same reference — nothing to rebuild.
+    expect(rewriteAddressesInAst(errorNode, bump)).toBe(errorNode);
+  });
+
+  it("rewrites a bare reference's address", () => {
+    expect(rewriteAddressesInAst(refA, bump)).toEqual({ type: "reference", address: { objectId: "obj_1", path: ["v", "bumped"] } });
+  });
+
+  it("rewrites BOTH of a range's endpoints independently", () => {
+    const range: RangeNode = { type: "range", start: addrA, end: addrB };
+    expect(rewriteAddressesInAst(range, bump)).toEqual({
+      type: "range",
+      start: { objectId: "obj_1", path: ["v", "bumped"] },
+      end: { objectId: "obj_2", path: ["v", "bumped"] },
+    });
+  });
+
+  it("recurses into both sides of a binaryOp, both operands of a unaryOp, and every functionCall argument", () => {
+    const tree: FormulaAst = {
+      type: "functionCall",
+      name: "SUM",
+      args: [
+        { type: "binaryOp", operator: "+", left: refA, right: refB },
+        { type: "unaryOp", operator: "-", operand: refC },
+      ],
+    };
+    const rewritten = rewriteAddressesInAst(tree, bump) as FunctionCallNode;
+    const binary = rewritten.args[0] as BinaryOpNode;
+    const unary = rewritten.args[1] as UnaryOpNode;
+    expect((binary.left as ReferenceNode).address).toEqual({ objectId: "obj_1", path: ["v", "bumped"] });
+    expect((binary.right as ReferenceNode).address).toEqual({ objectId: "obj_2", path: ["v", "bumped"] });
+    expect((unary.operand as ReferenceNode).address).toEqual({ objectId: "obj_3", path: ["v", "bumped"] });
+  });
+
+  it("an identity rewrite (returns the address unchanged) still produces a well-formed, equal AST", () => {
+    const identity = (address: Address): Address => address;
+    expect(rewriteAddressesInAst(refA, identity)).toEqual(refA);
+  });
+
+  it("never throws, including on a deeply nested tree", () => {
+    const deep: FormulaAst = { type: "unaryOp", operator: "-", operand: { type: "unaryOp", operator: "-", operand: refA } };
+    expect(() => rewriteAddressesInAst(deep, bump)).not.toThrow();
   });
 });

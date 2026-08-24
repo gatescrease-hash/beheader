@@ -14,11 +14,15 @@
  *
  * This was the FIRST FILE of the table primitive subsystem (cycle 0040,
  * PROCESS_BRIEF §6.1 trigger 2). Cycle 0042/0043 solved the dynamic-slot-
- * family mechanism and registered a real `table` schema entry. THIS cycle is
- * the range-evaluation wiring slice STATUS.md named next: bounding
- * `enumerateRangeCellAddresses` by current extent (D-044) and reading
- * dimensions `literal`-only (D-046) the same way `enumerateTableCellSlotPaths`
- * already does. See NOT DONE HERE for what is still deliberately absent.
+ * family mechanism and registered a real `table` schema entry. Entry 0044 was
+ * the range-evaluation wiring slice: bounding `enumerateRangeCellAddresses` by
+ * current extent (D-044) and reading dimensions `literal`-only (D-046) the
+ * same way `enumerateTableCellSlotPaths` already does; entry 0046 closed
+ * D-047/D-048's fix list (0045-REVIEW) and then, in the SAME cycle, built
+ * row/column INSERTION (`insertTableLine`, `getTableDimensions`,
+ * `shiftCellAddressForInsert`) — the first piece of §5.4's "rows and columns
+ * can be added or removed." See NOT DONE HERE for what is still deliberately
+ * absent (delete, its REPAIR path, and table creation's future command word).
  *
  * WHAT THIS IS
  *   `DEFAULT_TABLE_ROWS`/`DEFAULT_TABLE_COLS` — §5.4's own stated fact ("Default
@@ -98,6 +102,18 @@
  *   formula slot's value is written at §5.1 step 7 — after edge derivation
  *   (step 3) and `validateIntegrity` (step 4) have already run.
  *
+ *   `insertTableLine(object, axis, index)` — §5.4's insertion primitive
+ *   (entry 0046). Increments the relevant dimension slot and moves every
+ *   EXISTING populated cell at or after `index` to its shifted position, via
+ *   the SAME `shiftCoordinates` arithmetic `shiftCellAddressForInsert` uses
+ *   for the reference-adjustment pass (`mutation.ts`) — one place the "does
+ *   row/column N move" question is answered, so the cell-slot shift and the
+ *   formula-reference shift can never disagree. The newly inserted line gets
+ *   no cell slots at all: an in-extent cell with no slot is exactly the
+ *   ordinary, legal "empty" case **D-047** (0045-REVIEW) closed, which is
+ *   what makes insertion buildable without also inventing a placeholder
+ *   value for the new line's cells.
+ *
  * INVARIANTS UPHELD HERE
  *   - Never throws. `enumerateRangeCellAddresses` returns a typed
  *     `RangeEnumerationError` (`#REF`, matching the code `formula/eval.ts`
@@ -119,23 +135,27 @@
  *     reasoning.
  *
  * NOT DONE HERE
- *   - Row/column insert/delete mutations and §5.4's reference-adjustment pass
- *     (a range endpoint clamping to the remaining extent on delete). Clamping
- *     needs the concrete delete-mutation machinery — which row/column was
- *     removed, how surviving indices shift — that does not exist yet; nothing
- *     about table DIMENSIONS alone (this file's only concern) determines it.
- *     Nothing here PREVENTS a raw `setSlot` on `TABLE_ROWS_PATH`/
+ *   - Row/column DELETE and its REPAIR path (rewriting inbound references to
+ *     `#REF`, a range endpoint clamping to the remaining extent). INSERT
+ *     landed at entry 0046 (`insertTableLine`, `shiftCellAddressForInsert`) —
+ *     delete is a genuinely different mutation (it can ORPHAN a reference,
+ *     which insert never does) and is deliberately deferred to its own
+ *     cycle; see STATUS.md's next slice.
+ *   - Nothing here PREVENTS a raw `setSlot` on `TABLE_ROWS_PATH`/
  *     `TABLE_COLS_PATH` from disagreeing with the cell slots that actually
  *     exist on the object — see `enumerateTableCellSlotPaths`'s own doc
  *     comment for why that is self-limiting (D-017's own check catches the
- *     dangerous half) rather than silently wrong, and why a real row/col
- *     mutation must not be built as a bare `setSlot` on these two paths.
+ *     dangerous half) rather than silently wrong, and why `insertTableLine`
+ *     above (not a bare `setSlot`) is the sanctioned way to grow a table.
  *   - A table-creation mutation/command (`table x=0 y=0 rows=8 cols=8`, §5.10)
  *     that would actually populate `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` and the
- *     matching `cells.*` literal slots — Phase 3's command line.
+ *     matching `cells.*` literal slots — Phase 3's command line. Note that
+ *     `createObject` (`mutation.ts`) already suffices to build one BY HAND
+ *     (every test fixture in this project does exactly that); what is
+ *     missing is only the future command-line word, not an engine primitive.
  */
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";
-import { getSlot, type GraphObject } from "../graph/node.ts";
+import { getSlot, slotKey, type GraphObject, type Slot } from "../graph/node.ts";
 
 /** §5.4: "Default 8×8." A future table-creation mutation reads these; nothing in this file writes them anywhere. */
 export const DEFAULT_TABLE_ROWS = 8;
@@ -172,9 +192,11 @@ export function isRangeEnumerationError(
  * at all — a defensive check, not a bounds check (see file header): this
  * rejects a MALFORMED address (wrong prefix, wrong length, an unparseable
  * second segment), never a well-formed one that merely names a cell outside
- * the table's current extent.
+ * the table's current extent. Exported as of entry 0046 for
+ * `shiftCellAddressForInsert` below, and for `mutation.ts`'s reference-
+ * adjustment pass to reuse rather than re-deriving the same shape check.
  */
-function cellAddressToCoordinates(address: Address): { readonly column: number; readonly row: number } | undefined {
+export function cellAddressToCoordinates(address: Address): { readonly column: number; readonly row: number } | undefined {
   if (address.path.length !== 2 || address.path[0] !== TABLE_CELL_PATH_PREFIX) {
     return undefined;
   }
@@ -366,4 +388,137 @@ export function enumerateTableCellSlotPaths(object: GraphObject): readonly (read
     }
   }
   return paths;
+}
+
+// ---------------------------------------------------------------------------
+// Row/column INSERTION (entry 0046; §5.4's "rows and columns can be added or
+// removed" and the reference-adjustment pass it requires). Deletion, the
+// REPAIR path, and the `force` flag are DELIBERATELY NOT built here — see the
+// file header's NOT DONE HERE and STATUS.md's next slice.
+// ---------------------------------------------------------------------------
+
+/** `getTableDimensions`'s return shape — the same pair `readTableDimension` reads, bundled for a caller that needs both. */
+export interface TableDimensions {
+  readonly rows: number;
+  readonly cols: number;
+}
+
+/**
+ * The public, `literal`-only-safe (D-046) way for `mutation.ts` to read a
+ * table's current `rows`/`cols` without a second, hand-rolled copy of
+ * `readTableDimension`'s guard. Same fail-safe-to-`0` behaviour as every
+ * other reader of these two slots in this file — see `readTableDimension`'s
+ * own doc comment.
+ */
+export function getTableDimensions(object: GraphObject): TableDimensions {
+  return {
+    rows: readTableDimension(object, TABLE_ROWS_PATH),
+    cols: readTableDimension(object, TABLE_COLS_PATH),
+  };
+}
+
+/**
+ * Excel-style insertion (§5.4): given a table's CURRENT extent, returns the
+ * new `{ column, row }` an existing cell address should occupy after a row or
+ * column is inserted at `index` (1-based; the NEW line occupies `index`,
+ * every existing line at or after it shifts by one) — or the SAME coordinates
+ * unchanged if this cell is entirely before the insertion point. This is the
+ * ONE place the shift arithmetic lives; both `insertTableLine` below (moving
+ * a cell's SLOT) and `mutation.ts`'s reference-adjustment pass (moving what a
+ * FORMULA's address points AT) call this, so the two can never disagree about
+ * where row 5 goes when a row is inserted at index 3 (D-010's "declare it
+ * once" principle, applied to this new piece of arithmetic the same way it
+ * already applies to cell-reference formatting/parsing).
+ */
+function shiftCoordinates(
+  coordinates: { readonly column: number; readonly row: number },
+  axis: "row" | "column",
+  index: number,
+): { readonly column: number; readonly row: number } {
+  if (axis === "row" && coordinates.row >= index) {
+    return { column: coordinates.column, row: coordinates.row + 1 };
+  }
+  if (axis === "column" && coordinates.column >= index) {
+    return { column: coordinates.column + 1, row: coordinates.row };
+  }
+  return coordinates;
+}
+
+/**
+ * Shifts ONE stored `Address` for §5.4's reference-adjustment pass, if and
+ * only if it names a cell on `tableId` — every other address (a different
+ * object, or a non-cell path on the SAME table, e.g. `table_x.rows` itself)
+ * is returned completely UNCHANGED. `mutation.ts` calls this once per
+ * `ReferenceNode`/`RangeNode` endpoint address in the ENTIRE document
+ * (`formula/deps.ts`'s `rewriteAddressesInAst`), so it must stay generic over
+ * "is this address even relevant to this insertion" rather than assuming its
+ * caller already filtered — the same defensive stance `enumerateRangeCellAddresses`
+ * already takes for a malformed endpoint.
+ */
+export function shiftCellAddressForInsert(address: Address, tableId: string, axis: "row" | "column", index: number): Address {
+  if (address.objectId !== tableId) {
+    return address;
+  }
+  const coordinates = cellAddressToCoordinates(address);
+  if (coordinates === undefined) {
+    return address; // Not a cell address at all (e.g. `rows`/`cols` themselves) — nothing to shift.
+  }
+  const shifted = shiftCoordinates(coordinates, axis, index);
+  if (shifted.row === coordinates.row && shifted.column === coordinates.column) {
+    return address; // Entirely before the insertion point — unchanged, same reference identity.
+  }
+  return { objectId: address.objectId, path: [TABLE_CELL_PATH_PREFIX, formatCellReference(shifted)] };
+}
+
+/**
+ * Returns a NEW table `GraphObject` with a row or column inserted at `index`
+ * (clamped to `1..currentExtent+1` — see below): the relevant dimension slot
+ * increments by one, and every EXISTING populated cell at or after `index`
+ * moves to its shifted position via `shiftCoordinates` above. The newly
+ * inserted line's cells get NO slots at all — an empty row/column is exactly
+ * the ordinary, D-047-legal "no slot within the extent" case (0045-REVIEW's
+ * whole point: this is what makes insertion safe to build at all), so there
+ * is nothing to populate.
+ *
+ * Reads the CURRENT cell set via `enumerateTableCellSlotPaths` — the ONE
+ * sanctioned way to enumerate a table's candidate cell paths (D-010: never
+ * invert a `slotKey`) — and does a plain forward `getSlot`/`slotKey` lookup
+ * per candidate, exactly the pattern that function's own doc comment
+ * establishes. Builds a WHOLE NEW `slots` record rather than mutating
+ * `object.slots` in place (Rule 2: every field is `readonly`).
+ *
+ * `index` is CLAMPED, not rejected, to `1..currentCount+1` — this function is
+ * the DEFENSIVE arm; the PRIMARY validation (a clear rejection message naming
+ * the out-of-range index) is `mutation.ts`'s `findInvalidTableResizes`, which
+ * runs before this is ever called, mirroring the same primary-validation/
+ * defensive-arm split D-045 already established for range placement. Both
+ * `rows` and `cols` are (re)written as `literal` regardless of whatever kind
+ * they held before (D-046 — a resize is exactly the moment to re-assert that
+ * invariant, not merely preserve a possibly-non-literal kind).
+ */
+export function insertTableLine(object: GraphObject, axis: "row" | "column", index: number): GraphObject {
+  const { rows, cols } = getTableDimensions(object);
+  const bound = axis === "row" ? rows : cols;
+  const clampedIndex = Math.max(1, Math.min(index, bound + 1));
+
+  const newSlots: Record<string, Slot> = {
+    [slotKey(TABLE_ROWS_PATH)]: { kind: "literal", value: axis === "row" ? rows + 1 : rows },
+    [slotKey(TABLE_COLS_PATH)]: { kind: "literal", value: axis === "column" ? cols + 1 : cols },
+  };
+
+  for (const path of enumerateTableCellSlotPaths(object)) {
+    const slot = getSlot(object, path);
+    if (slot === undefined) {
+      continue; // No slot at this candidate cell — nothing to move (D-047: already legally empty).
+    }
+    const cellReference = path[1]; // enumerateTableCellSlotPaths always yields [TABLE_CELL_PATH_PREFIX, ref].
+    const coordinates = cellReference === undefined ? undefined : parseCellReference(cellReference);
+    if (coordinates === undefined) {
+      continue; // Defensive only — cannot actually happen for a path this file just generated.
+    }
+    const shifted = shiftCoordinates(coordinates, axis, clampedIndex);
+    newSlots[slotKey([TABLE_CELL_PATH_PREFIX, formatCellReference(shifted)])] = slot;
+  }
+
+  return { ...object, slots: newSlots };
 }

@@ -2264,3 +2264,222 @@ describe("mutate — D-048: `findIllegalOperationPayloads` walks a payload's sto
     expect(result.ok).toBe(true);
   });
 });
+
+describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry 0046)", () => {
+  it("grows the extent and shifts every populated cell at or after the index down by one row", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+
+    const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const resized = result.objects.find((o) => o.id === "obj_1");
+    expect(resized?.slots.rows).toMatchObject({ value: 4 });
+    expect(resized?.slots["cells.A1"]).toMatchObject({ value: 1 }); // before the index: unchanged.
+    expect(resized?.slots["cells.A2"]).toBeUndefined(); // the NEW row: empty (D-047-legal).
+    expect(resized?.slots["cells.A3"]).toMatchObject({ value: 2 }); // old A2 moved here.
+    expect(resized?.slots["cells.A4"]).toMatchObject({ value: 3 }); // old A3 moved here.
+  });
+
+  it("§5.4: a reference from ANOTHER object into the resized table shifts too — the WHOLE document, not just the table's own formulas", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+    const reader: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A3") }, value: null } },
+    };
+
+    const result = mutate([table, reader], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const rewritten = result.objects.find((o) => o.id === "obj_2");
+    expect(rewritten?.slots.value).toMatchObject({
+      kind: "formula",
+      ast: { type: "reference", address: addr("obj_1", "cells", "A4") }, // A3 shifted to A4 with everything else.
+    });
+    expect(rewritten?.slots.value).toMatchObject({ value: 3 }); // and it still resolves to old A3's value, live.
+  });
+
+  it("a reference that named a row BEFORE the insertion point is left completely unchanged", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+    const reader: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: null } },
+    };
+
+    const result = mutate([table, reader], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const rewritten = result.objects.find((o) => o.id === "obj_2");
+      expect(rewritten?.slots.value).toMatchObject({ ast: { type: "reference", address: addr("obj_1", "cells", "A1") } });
+    }
+  });
+
+  it("a reference into a table OTHER than the one being resized is completely untouched", () => {
+    const tableX = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } });
+    const tableZ = tableObject("obj_3", "table_z", 2, 1, { "cells.A1": { kind: "literal", value: 9 } });
+    const tableY = tableObject("obj_2", "table_y", 2, 1, {
+      // Points into table_z, NOT table_x — insertion on table_x must not touch this at all.
+      "cells.A2": { kind: "formula", ast: { type: "reference", address: addr("obj_3", "cells", "A1") }, value: null },
+    });
+
+    const result = mutate([tableX, tableY, tableZ], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const untouched = result.objects.find((o) => o.id === "obj_2");
+      expect(untouched?.slots["cells.A2"]).toMatchObject({ ast: { type: "reference", address: addr("obj_3", "cells", "A1") } });
+    }
+  });
+
+  it("column insertion shifts columns, independent of rows", () => {
+    const table = tableObject("obj_1", "table_x", 1, 3, {
+      "cells.A1": { kind: "literal", value: "a" },
+      "cells.B1": { kind: "literal", value: "b" },
+      "cells.C1": { kind: "literal", value: "c" },
+    });
+
+    const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "column", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const resized = result.objects.find((o) => o.id === "obj_1");
+    expect(resized?.slots.cols).toMatchObject({ value: 4 });
+    expect(resized?.slots["cells.A1"]).toMatchObject({ value: "a" });
+    expect(resized?.slots["cells.B1"]).toBeUndefined();
+    expect(resized?.slots["cells.C1"]).toMatchObject({ value: "b" });
+    expect(resized?.slots["cells.D1"]).toMatchObject({ value: "c" });
+  });
+
+  it("rejects an insertion index out of range, naming the operation and the problem", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+    const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 99 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 1 of 1");
+      expect(result.message).toContain("out of range");
+    }
+  });
+
+  it("rejects an insertion index of 0 (not 1-based) and leaves prior state untouched", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+    const snapshotBefore = JSON.parse(JSON.stringify([table])) as unknown;
+    const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 0 }], []);
+
+    expect(result.ok).toBe(false);
+    expect([table]).toEqual(snapshotBefore);
+  });
+
+  it("rejects an insertion targeting a non-table object", () => {
+    const result = mutate([valueObject("obj_1", "value_1", 1)], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("is not a table");
+    }
+  });
+
+  it("rejects an insertion targeting an object id that does not exist (D-021)", () => {
+    const result = mutate([], [{ kind: "insertTableLine", objectId: "obj_missing", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("does not exist in this document");
+    }
+  });
+
+  it("composes with an ordinary setSlot in the SAME batch, folding left-to-right", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+    });
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 },
+        { kind: "setSlot", address: addr("obj_1", "cells", "A1"), slot: { kind: "literal", value: 100 } }, // the NEW, empty row.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const resized = result.objects.find((o) => o.id === "obj_1");
+      expect(resized?.slots["cells.A1"]).toMatchObject({ value: 100 }); // the new row, now set.
+      expect(resized?.slots["cells.A2"]).toMatchObject({ value: 1 }); // old A1, shifted down.
+      expect(resized?.slots["cells.A3"]).toMatchObject({ value: 2 }); // old A2, shifted down.
+    }
+  });
+});
+
+describe("mutate — Phase 2 acceptance criterion clause 3, completed: SUM(A1:A5) recomputes correctly AFTER INSERTING A ROW INSIDE THE RANGE", () => {
+  it("insertion WIDENS the formula's stored range to include the new row, and the new row's cell participates live once set", () => {
+    const table = tableObject("obj_1", "table_x", 5, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+      "cells.A4": { kind: "literal", value: 4 },
+      "cells.A5": { kind: "literal", value: 5 },
+    });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A5") }] },
+          value: null,
+        },
+      },
+    };
+
+    const created = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 15 }); // 1+2+3+4+5.
+
+    // Insert a row INSIDE the range (index 3 — strictly between A1 and A5, so
+    // §5.4's "a range that spans an insertion point widens" clause applies).
+    const inserted = mutate(created.objects, [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 3 }], created.journal);
+    expect(inserted.ok).toBe(true);
+    if (!inserted.ok) return;
+
+    // The stored range widened from A1:A5 to A1:A6 — A1/A2 (before the
+    // insertion point) stayed put; A5 (at/after it) shifted to A6.
+    expect(inserted.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({
+      kind: "formula",
+      ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A6") }] },
+    });
+    // The new row (A3) is empty (D-047) — the sum is UNCHANGED, still 15, not #REF and not rejected.
+    expect(inserted.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 15 });
+
+    // Now the row-insert acceptance clause's whole point: editing the NEWLY
+    // INSERTED cell recomputes the sum live, because the widened range
+    // genuinely includes it.
+    const edited = mutate(inserted.objects, [{ kind: "setSlot", address: addr("obj_1", "cells", "A3"), slot: { kind: "literal", value: 100 } }], inserted.journal);
+    expect(edited.ok).toBe(true);
+    if (edited.ok) {
+      expect(edited.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 115 }); // 15 + 100.
+    }
+  });
+});

@@ -14,7 +14,7 @@
  * file — §6.1 trigger 2 does not apply.
  *
  * WHAT THIS IS
- *   One exported function, `extractDependencies(ast)`, that walks the ENTIRE `FormulaAst` and
+ *   `extractDependencies(ast)`, that walks the ENTIRE `FormulaAst` and
  *   returns every address it *could* read — including BOTH branches of every `IF` and BOTH
  *   syntactic forms of `AND`/`OR`/`NOT` (D-029) — never just the branch that would actually run.
  *   §5.3 is explicit that this is not a bug: "You cannot know which branch is live without
@@ -76,6 +76,15 @@
  *     contributes no address, "the absence of a dependency, made explicit" (D-028's own words).
  *   - `LiteralNode` yields NOTHING — a literal has no address to read.
  *
+ * As of entry 0046, this file ALSO exports `rewriteAddressesInAst` — a second total walk over the
+ * exact same node shapes, used by §5.4's reference-adjustment pass (`mutation.ts`'s
+ * `insertTableLine` handling) to shift every `ReferenceNode`/`RangeNode` address a row/column
+ * insertion moves. It is a SIBLING to `extractDependencies` (same shapes, same totality), not a
+ * variant of it — one EXTRACTS addresses into a flat list, the other REBUILDS the AST with each
+ * address passed through a caller-supplied function. Kept in this file rather than a third
+ * location because the "walk every FormulaAst shape" switch is the thing being reused, not any
+ * dependency-specific logic.
+ *
  * NOT DONE HERE
  *   Turning a `RangeDependency` into concrete per-cell edges. This file reports a range
  *   PRE-EXPANSION, as its own single dependency — deliberately, and that has not changed.
@@ -126,6 +135,44 @@ export function extractDependencies(ast: FormulaAst): readonly Dependency[] {
   const dependencies: Dependency[] = [];
   walk(ast, dependencies);
   return dependencies;
+}
+
+/**
+ * Rebuilds `ast` with every `ReferenceNode.address` and `RangeNode.start`/`end` passed through
+ * `rewrite`, recursing into every operand/argument the same way `walk` above does — the SAME
+ * total switch over `FormulaAst`'s shapes, doing a REBUILD instead of an EXTRACT. Used by §5.4's
+ * reference-adjustment pass: `rewrite` is typically "shift this address if it names the resized
+ * table and its row/column is at-or-after the insertion point; otherwise return it unchanged" —
+ * `formula/deps.ts` has no notion of tables, rows, or insertion points itself, matching the same
+ * separation of concerns the file header already draws between range PLACEMENT/DEPENDENCY/
+ * EVALUATION/ENUMERATION: this is a fifth, distinct concern (address REWRITING) and stays generic
+ * over `rewrite` rather than growing table-specific logic here.
+ *
+ * A `LiteralNode`/`ErrorNode` has no address and is returned AS-IS (not even shallow-copied —
+ * nothing about it can change). Never throws, matching `walk`'s own discipline; the `default` arm
+ * exists for the identical reason (compile-time exhaustiveness, defensive against a hand-edited or
+ * loaded AST).
+ */
+export function rewriteAddressesInAst(ast: FormulaAst, rewrite: (address: Address) => Address): FormulaAst {
+  switch (ast.type) {
+    case "literal":
+    case "error":
+      return ast;
+    case "reference":
+      return { ...ast, address: rewrite(ast.address) };
+    case "range":
+      return { ...ast, start: rewrite(ast.start), end: rewrite(ast.end) };
+    case "binaryOp":
+      return { ...ast, left: rewriteAddressesInAst(ast.left, rewrite), right: rewriteAddressesInAst(ast.right, rewrite) };
+    case "unaryOp":
+      return { ...ast, operand: rewriteAddressesInAst(ast.operand, rewrite) };
+    case "functionCall":
+      return { ...ast, args: ast.args.map((arg) => rewriteAddressesInAst(arg, rewrite)) };
+    default: {
+      const exhaustive: never = ast;
+      return exhaustive;
+    }
+  }
 }
 
 function walk(node: FormulaAst, out: Dependency[]): void {

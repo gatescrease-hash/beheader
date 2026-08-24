@@ -11,7 +11,10 @@ import {
   DEFAULT_TABLE_ROWS,
   enumerateRangeCellAddresses,
   enumerateTableCellSlotPaths,
+  getTableDimensions,
+  insertTableLine,
   isRangeEnumerationError,
+  shiftCellAddressForInsert,
   TABLE_COLS_PATH,
   TABLE_ROWS_PATH,
   type RangeEnumerationError,
@@ -199,5 +202,112 @@ describe("enumerateTableCellSlotPaths — the dynamic slot family (D-017/0041-RE
 
   it("D-046: a formula-kind dimension slot is treated as 0, the SAME guard enumerateRangeCellAddresses now shares", () => {
     expect(enumerateTableCellSlotPaths(tableWithFormulaDimensions(8, 8))).toEqual([]);
+  });
+});
+
+/** A table with the given cells populated as literals — `cells` keyed by cell reference ("A1"), not a full path. */
+function tableWithCells(rows: number, cols: number, cells: Record<string, Value>): GraphObject {
+  const slots: Record<string, { kind: "literal"; value: Value }> = {
+    [TABLE_ROWS_PATH.join(".")]: { kind: "literal", value: rows },
+    [TABLE_COLS_PATH.join(".")]: { kind: "literal", value: cols },
+  };
+  for (const [ref, value] of Object.entries(cells)) {
+    slots[`cells.${ref}`] = { kind: "literal", value };
+  }
+  return { id: "obj_1", name: "table_x", type: "table", slots };
+}
+
+describe("getTableDimensions — entry 0046, the public reader `insertTableLine`/mutation.ts share", () => {
+  it("reads rows/cols off a literal-dimensioned table", () => {
+    expect(getTableDimensions(tableWithDimensions(5, 3))).toEqual({ rows: 5, cols: 3 });
+  });
+
+  it("is {0, 0} for a table with no dimension slots at all", () => {
+    expect(getTableDimensions({ id: "obj_1", name: "table_x", type: "table", slots: {} })).toEqual({ rows: 0, cols: 0 });
+  });
+});
+
+describe("shiftCellAddressForInsert — entry 0046, §5.4's per-address reference-adjustment arithmetic", () => {
+  it("shifts a row at or after the insertion index by one", () => {
+    expect(shiftCellAddressForInsert(cell("obj_1", "A3"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A4"));
+    expect(shiftCellAddressForInsert(cell("obj_1", "A5"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A6"));
+  });
+
+  it("leaves a row strictly before the insertion index unchanged", () => {
+    expect(shiftCellAddressForInsert(cell("obj_1", "A2"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A2"));
+  });
+
+  it("shifts a column the same way, independent of row", () => {
+    expect(shiftCellAddressForInsert(cell("obj_1", "C1"), "obj_1", "column", 3)).toEqual(cell("obj_1", "D1"));
+    expect(shiftCellAddressForInsert(cell("obj_1", "B1"), "obj_1", "column", 3)).toEqual(cell("obj_1", "B1"));
+  });
+
+  it("leaves an address on a DIFFERENT object completely unchanged", () => {
+    const other = cell("obj_2", "A5");
+    expect(shiftCellAddressForInsert(other, "obj_1", "row", 3)).toBe(other); // same reference, not just equal
+  });
+
+  it("leaves a non-cell address on the SAME table unchanged (e.g. a reference to `rows` itself)", () => {
+    const rowsAddress: Address = { objectId: "obj_1", path: ["rows"] };
+    expect(shiftCellAddressForInsert(rowsAddress, "obj_1", "row", 3)).toBe(rowsAddress);
+  });
+});
+
+describe("insertTableLine — entry 0046, §5.4's row/column insertion primitive", () => {
+  it("increments rows and shifts every populated cell at or after the index down by one row", () => {
+    const table = tableWithCells(3, 1, { A1: 1, A2: 2, A3: 3 });
+    const result = insertTableLine(table, "row", 2);
+
+    expect(getTableDimensions(result)).toEqual({ rows: 4, cols: 1 });
+    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: 1 }); // before the index: unchanged.
+    expect(result.slots["cells.A2"]).toBeUndefined(); // the NEW row: no slot at all (D-047-legal empty).
+    expect(result.slots["cells.A3"]).toEqual({ kind: "literal", value: 2 }); // old A2 moved here.
+    expect(result.slots["cells.A4"]).toEqual({ kind: "literal", value: 3 }); // old A3 moved here.
+  });
+
+  it("does the same for a column insertion, independent of rows", () => {
+    const table = tableWithCells(1, 3, { A1: "a", B1: "b", C1: "c" });
+    const result = insertTableLine(table, "column", 2);
+
+    expect(getTableDimensions(result)).toEqual({ rows: 1, cols: 4 });
+    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: "a" });
+    expect(result.slots["cells.B1"]).toBeUndefined();
+    expect(result.slots["cells.C1"]).toEqual({ kind: "literal", value: "b" }); // old B1.
+    expect(result.slots["cells.D1"]).toEqual({ kind: "literal", value: "c" }); // old C1.
+  });
+
+  it("inserting AFTER every existing row (index = rows+1) appends an empty row and moves nothing", () => {
+    const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
+    const result = insertTableLine(table, "row", 3);
+
+    expect(getTableDimensions(result)).toEqual({ rows: 3, cols: 1 });
+    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: 1 });
+    expect(result.slots["cells.A2"]).toEqual({ kind: "literal", value: 2 });
+    expect(result.slots["cells.A3"]).toBeUndefined();
+  });
+
+  it("clamps an out-of-range index rather than producing a nonsensical result (defensive arm — see doc comment)", () => {
+    const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
+    const tooHigh = insertTableLine(table, "row", 999);
+    expect(getTableDimensions(tooHigh)).toEqual({ rows: 3, cols: 1 }); // clamped to rows+1 = 3, an append.
+
+    const tooLow = insertTableLine(table, "row", -5);
+    expect(getTableDimensions(tooLow)).toEqual({ rows: 3, cols: 1 }); // clamped to 1, everything shifts.
+    expect(tooLow.slots["cells.A1"]).toBeUndefined();
+    expect(tooLow.slots["cells.A2"]).toEqual({ kind: "literal", value: 1 });
+  });
+
+  it("re-asserts rows as literal even if it was some other kind before (D-046) — and, per THAT SAME guard, a formula-kind rows/cols already read as 0, so inserting a row on a table read this way starts from 0, not the formula's cached value", () => {
+    const result = insertTableLine(tableWithFormulaDimensions(2, 2), "row", 1);
+    // D-046: a formula-kind dimension slot reads as 0 (readTableDimension's fail-safe), so
+    // getTableDimensions sees rows=0 here, NOT the formula's cached value of 2 — insertion
+    // starts from that same fail-safe 0, landing at 0+1=1, and the result is LITERAL either way.
+    expect(result.slots[TABLE_ROWS_PATH.join(".")]).toEqual({ kind: "literal", value: 1 });
+  });
+
+  it("never throws, including on a table with no dimension slots at all", () => {
+    const bare: GraphObject = { id: "obj_1", name: "table_x", type: "table", slots: {} };
+    expect(() => insertTableLine(bare, "row", 1)).not.toThrow();
+    expect(getTableDimensions(insertTableLine(bare, "row", 1))).toEqual({ rows: 1, cols: 0 });
   });
 });
