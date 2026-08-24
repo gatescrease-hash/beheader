@@ -2431,6 +2431,137 @@ describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry
   });
 });
 
+describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 2 (D-050): simulates the batch LEFT-TO-RIGHT", () => {
+  it("two inserts on the SAME table in one batch both commit — the false-reject D-050 closes", () => {
+    // Verified false-reject at 0048-REVIEW: against pre-batch state alone,
+    // operation 2's index 4 looked out of range for a table that (by the
+    // time it actually applies) genuinely has 3 rows.
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 },
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 4 }, // legal: rows is 3 by now.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const resized = result.objects.find((o) => o.id === "obj_1");
+      expect(resized?.slots.rows).toMatchObject({ value: 4 });
+    }
+  });
+
+  it("an out-of-range index in a LATER operation is still rejected, against the state AS OF ITS OWN position", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 }, // legal: rows becomes 3.
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 10 }, // illegal even against 3 rows.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 2 of 2");
+      expect(result.message).toContain("out of range");
+    }
+  });
+
+  it("an insertTableLine on a table created EARLIER IN THE SAME BATCH is now VALIDATED, not skipped", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+
+    const result = mutate(
+      [],
+      [
+        { kind: "createObject", object: table },
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 99 }, // out of range for the 2-row table just created.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 2 of 2");
+      expect(result.message).toContain("out of range");
+    }
+  });
+
+  it("...and a LEGAL insertTableLine on a same-batch-created table commits", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } });
+
+    const result = mutate(
+      [],
+      [
+        { kind: "createObject", object: table },
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 3 }, // legal: bound+1 = 3.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const resized = result.objects.find((o) => o.id === "obj_1");
+      expect(resized?.slots.rows).toMatchObject({ value: 3 });
+    }
+  });
+});
+
+describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 3: rejects an insert whose dimension is not literal (D-046)", () => {
+  it("rejects an insert whose ROWS slot is formula-kind, naming D-046, leaving prior state bit-for-bit unchanged", () => {
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_x",
+      type: "table",
+      slots: {
+        rows: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 },
+        cols: { kind: "literal", value: 1 },
+        "cells.A1": { kind: "literal", value: 1 },
+      },
+    };
+    const snapshotBefore = JSON.parse(JSON.stringify([table])) as unknown;
+
+    const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("not \"literal\"");
+      expect(result.message).toContain("D-046");
+    }
+    expect([table]).toEqual(snapshotBefore); // step 6: prior state provably untouched.
+  });
+
+  it("rejects a COLUMN insert whose COLS slot is formula-kind", () => {
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_x",
+      type: "table",
+      slots: {
+        rows: { kind: "literal", value: 1 },
+        cols: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 },
+      },
+    };
+
+    const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "column", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("not \"literal\"");
+    }
+  });
+
+  it("a literal-dimensioned table is unaffected by fix 3 — an ordinary insert still commits", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+    const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("mutate — Phase 2 acceptance criterion clause 3, completed: SUM(A1:A5) recomputes correctly AFTER INSERTING A ROW INSIDE THE RANGE", () => {
   it("insertion WIDENS the formula's stored range to include the new row, and the new row's cell participates live once set", () => {
     const table = tableObject("obj_1", "table_x", 5, 1, {

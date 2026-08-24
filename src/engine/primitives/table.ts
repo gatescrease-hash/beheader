@@ -21,8 +21,14 @@
  * D-047/D-048's fix list (0045-REVIEW); entry 0047, a SEPARATE cycle, built
  * row/column INSERTION (`insertTableLine`, `getTableDimensions`,
  * `shiftCellAddressForInsert`) — the first piece of §5.4's "rows and columns
- * can be added or removed." See NOT DONE HERE for what is still deliberately
- * absent (delete, its REPAIR path, and table creation's future command word).
+ * can be added or removed." 0048-REVIEW-phase2 REVISED entry 0047: verdict
+ * REVISE, three fixes, all landing THIS cycle (0049) — **D-049**,
+ * `insertTableLine` now preserves every slot it does not own, never rebuilding
+ * `slots` from scratch (see its own doc comment); **D-046 fix 3**,
+ * `isTableDimensionResizable` (new, below) lets `mutation.ts` reject an insert
+ * whose `rows`/`cols` cannot be coherently resized rather than silently
+ * resetting it. See NOT DONE HERE for what is still deliberately absent
+ * (delete, its REPAIR path, and table creation's future command word).
  *
  * WHAT THIS IS
  *   `DEFAULT_TABLE_ROWS`/`DEFAULT_TABLE_COLS` — §5.4's own stated fact ("Default
@@ -112,7 +118,18 @@
  *   no cell slots at all: an in-extent cell with no slot is exactly the
  *   ordinary, legal "empty" case **D-047** (0045-REVIEW) closed, which is
  *   what makes insertion buildable without also inventing a placeholder
- *   value for the new line's cells.
+ *   value for the new line's cells. As of **D-049** (0048-REVIEW-phase2 fix
+ *   1), it builds its new `slots` record starting from `object.slots` in
+ *   full, never from scratch — see its own doc comment.
+ *
+ *   `isTableDimensionResizable(object, axis)` — 0048-REVIEW-phase2 fix 3
+ *   (naming **D-046**). `true` for an absent dimension slot or a `literal`
+ *   one; `false` only when the slot is present and NOT `literal`. Lets
+ *   `mutation.ts`'s `findInvalidTableResizes` REJECT an insert into a table
+ *   whose extent cannot be coherently read, instead of what `insertTableLine`
+ *   used to do before this fix: silently treat the unreadable dimension as
+ *   `0` (D-046's own fail-safe, correctly working as designed) and resize
+ *   from there, deleting every existing cell along the way.
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws. `enumerateRangeCellAddresses` returns a typed
@@ -147,6 +164,12 @@
  *     comment for why that is self-limiting (D-017's own check catches the
  *     dangerous half) rather than silently wrong, and why `insertTableLine`
  *     above (not a bare `setSlot`) is the sanctioned way to grow a table.
+ *     0048-REVIEW-phase2 fix 3 NARROWS this where it is now reachable (a raw
+ *     `setSlot` making a dimension non-`literal` is now rejected the moment
+ *     an insert is attempted against it, `isTableDimensionResizable` above) —
+ *     it does not close the gap in general; a `setSlot` that merely writes an
+ *     INCOHERENT `literal` count (disagreeing with actual cell slots) is
+ *     still unguarded, and closing that is the deletion cycle's call.
  *   - A table-creation mutation/command (`table x=0 y=0 rows=8 cols=8`, §5.10)
  *     that would actually populate `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` and the
  *     matching `cells.*` literal slots — Phase 3's command line. Note that
@@ -418,6 +441,23 @@ export function getTableDimensions(object: GraphObject): TableDimensions {
 }
 
 /**
+ * `mutation.ts`'s `findInvalidTableResizes` (0048-REVIEW-phase2 fix 3, D-046)
+ * asks a narrower question than `readTableDimension` answers: not "how many
+ * rows does this table currently have" but "CAN this dimension be resized at
+ * all." `true` for an ABSENT dimension slot (an ordinary, not-yet-populated
+ * table — no table-creation command exists yet to have written one) or a
+ * `literal`-kind one; `false` ONLY when the slot is PRESENT and NOT `literal`
+ * (a `formula`/`derived` dimension) — the one case `readTableDimension`
+ * reads as a fail-safe `0` (D-046) rather than the table's real extent, which
+ * is exactly what let `insertTableLine` silently reset such a dimension to
+ * `literal 1` before this fix (0048-REVIEW §4 case 3).
+ */
+export function isTableDimensionResizable(object: GraphObject, axis: "row" | "column"): boolean {
+  const slot = getSlot(object, axis === "row" ? TABLE_ROWS_PATH : TABLE_COLS_PATH);
+  return slot === undefined || slot.kind === "literal";
+}
+
+/**
  * Excel-style insertion (§5.4): given a table's CURRENT extent, returns the
  * new `{ column, row }` an existing cell address should occupy after a row or
  * column is inserted at `index` (1-based; the NEW line occupies `index`,
@@ -492,33 +532,52 @@ export function shiftCellAddressForInsert(address: Address, tableId: string, axi
  * the out-of-range index) is `mutation.ts`'s `findInvalidTableResizes`, which
  * runs before this is ever called, mirroring the same primary-validation/
  * defensive-arm split D-045 already established for range placement. Both
- * `rows` and `cols` are (re)written as `literal` regardless of whatever kind
- * they held before (D-046 — a resize is exactly the moment to re-assert that
- * invariant, not merely preserve a possibly-non-literal kind).
+ * `rows` and `cols` are (re)written as `literal` — safe unconditionally as of
+ * 0048-REVIEW-phase2 fix 3: `findInvalidTableResizes` now REJECTS any insert
+ * whose `rows`/`cols` slot is present and not already `literal` (D-046,
+ * `isTableDimensionResizable` above) before this function is ever reached, so
+ * re-asserting `literal` here confirms an invariant the precondition just
+ * guaranteed, never silently overwrites a different kind.
+ *
+ * **D-049 (0048-REVIEW-phase2 fix 1).** Builds the new `slots` record by
+ * starting from `object.slots` IN FULL — never a fresh record assembled from
+ * only the paths this function happens to know about. Only the CURRENT
+ * extent's cell keys (`enumerateTableCellSlotPaths`) are removed, and each
+ * only because it is about to be re-written at its shifted position; every
+ * other slot on the object (a literal at an unrecognised path, a cell OUTSIDE
+ * the current extent, a future `origin.x`) is carried through completely
+ * untouched. Before this fix, the record was rebuilt from exactly `rows`,
+ * `cols`, and the in-extent cells, which silently DELETED everything else —
+ * see D-049's ruling in `DECISIONS.md` for the three reachable ways that bit,
+ * verified at review.
  */
 export function insertTableLine(object: GraphObject, axis: "row" | "column", index: number): GraphObject {
   const { rows, cols } = getTableDimensions(object);
   const bound = axis === "row" ? rows : cols;
   const clampedIndex = Math.max(1, Math.min(index, bound + 1));
 
-  const newSlots: Record<string, Slot> = {
-    [slotKey(TABLE_ROWS_PATH)]: { kind: "literal", value: axis === "row" ? rows + 1 : rows },
-    [slotKey(TABLE_COLS_PATH)]: { kind: "literal", value: axis === "column" ? cols + 1 : cols },
-  };
+  // D-049: start from every slot this object already carries — nothing not
+  // named below is ever removed.
+  const newSlots: Record<string, Slot> = { ...object.slots };
+  newSlots[slotKey(TABLE_ROWS_PATH)] = { kind: "literal", value: axis === "row" ? rows + 1 : rows };
+  newSlots[slotKey(TABLE_COLS_PATH)] = { kind: "literal", value: axis === "column" ? cols + 1 : cols };
 
+  const shiftedCells: Record<string, Slot> = {};
   for (const path of enumerateTableCellSlotPaths(object)) {
     const slot = getSlot(object, path);
     if (slot === undefined) {
       continue; // No slot at this candidate cell — nothing to move (D-047: already legally empty).
     }
+    delete newSlots[slotKey(path)]; // Only an in-extent cell actually being MOVED is removed here — D-049.
     const cellReference = path[1]; // enumerateTableCellSlotPaths always yields [TABLE_CELL_PATH_PREFIX, ref].
     const coordinates = cellReference === undefined ? undefined : parseCellReference(cellReference);
     if (coordinates === undefined) {
       continue; // Defensive only — cannot actually happen for a path this file just generated.
     }
     const shifted = shiftCoordinates(coordinates, axis, clampedIndex);
-    newSlots[slotKey([TABLE_CELL_PATH_PREFIX, formatCellReference(shifted)])] = slot;
+    shiftedCells[slotKey([TABLE_CELL_PATH_PREFIX, formatCellReference(shifted)])] = slot;
   }
+  Object.assign(newSlots, shiftedCells);
 
   return { ...object, slots: newSlots };
 }

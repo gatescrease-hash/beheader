@@ -125,6 +125,21 @@
  * `createObject` payload's `formula`-kind AST via the same
  * `collectIllegalAstLiterals` `findIllegalSlotValues` already used.
  *
+ * 0048-REVIEW-phase2 REVISED entry 0047's row/column insertion: verdict
+ * REVISE, a three-item fix list, all closed THIS cycle (0049). **D-050**:
+ * `findInvalidTableResizes` now simulates the batch LEFT-TO-RIGHT (one
+ * `Map<objectId, TrackedTableState>`, the same pattern the existence check's
+ * `survivingIds` already established) rather than validating every operation
+ * against pre-batch `objects` alone — closing both a verified FALSE-REJECT
+ * (a legal `[insert row at 1, insert row at 4]` batch) and the previously
+ * DISCLOSED false-accept (a table `createObject`d earlier in the same
+ * batch). Fix 3, naming **D-046**: the same function now REJECTS an insert
+ * whose targeted dimension is not `literal` (`primitives/table.ts`'s new
+ * `isTableDimensionResizable`), rather than letting `insertTableLine` read
+ * it as a fail-safe `0` and silently reset it. **D-049** is
+ * `primitives/table.ts`'s own fix (`insertTableLine` no longer rebuilds
+ * `slots` from scratch) — see that file's header.
+ *
 
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -481,6 +496,7 @@ import {
   getTableDimensions,
   insertTableLine,
   isRangeEnumerationError,
+  isTableDimensionResizable,
   shiftCellAddressForInsert,
 } from "./primitives/table.ts";
 import { detectCycle } from "./graph/cycles.ts";
@@ -812,12 +828,14 @@ export interface CreateObjectOperation {
  *
  * PRECONDITION, enforced by `mutate` before this is ever folded (mirroring
  * every other variant's own precondition doc comment): `objectId` names an
- * EXISTING object of type `"table"`. `findInvalidTableResizes` is the
- * primary check (a clear rejection message naming the problem);
- * `insertTableLine`'s own CLAMPING of an out-of-range `index` is the
- * defensive arm for the one case that check cannot see — see that function's
- * own doc comment for the disclosed, narrow gap this splits on (an object
- * created earlier in the SAME batch).
+ * EXISTING object of type `"table"` whose `rows`/`cols` can be coherently
+ * resized (D-046, `isTableDimensionResizable`), and `index` is in range for
+ * the table's state AS OF THIS OPERATION'S OWN POSITION in the batch —
+ * `findInvalidTableResizes` (**D-050**, 0048-REVIEW-phase2 fix 2) is the
+ * primary check, simulating the whole batch left-to-right, the same way the
+ * existence check above already does; `insertTableLine`'s own CLAMPING of an
+ * out-of-range `index` remains the defensive arm, now purely a backstop
+ * against a bug in this check rather than a documented gap in it.
  */
 export interface InsertTableLineOperation {
   readonly kind: "insertTableLine";
@@ -1217,11 +1235,10 @@ export function mutate(
     return { ok: false, message: illegalPayloadMessages.join("; ") };
   }
 
-  // Entry 0047, §5.4: an `insertTableLine` naming a non-table object, or an
-  // out-of-range index, is rejected here with a message naming the problem —
-  // see `findInvalidTableResizes`'s own doc comment for the one disclosed
-  // gap (a table created earlier in the SAME batch), which `insertTableLine`
-  // (`primitives/table.ts`) covers defensively by clamping instead.
+  // Entry 0047/0048-REVIEW-phase2, §5.4: an `insertTableLine` naming a
+  // non-table object, a non-resizable dimension (D-046), or an out-of-range
+  // index — validated against the batch as simulated LEFT-TO-RIGHT (D-050) —
+  // is rejected here with a message naming the problem.
   const invalidResizeMessages = findInvalidTableResizes(operations, objects);
   if (invalidResizeMessages.length > 0) {
     return { ok: false, message: invalidResizeMessages.join("; ") };
@@ -1664,53 +1681,134 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
 }
 
 /**
- * Entry 0047, §5.4's row/column insertion: rejects an `insertTableLine`
- * operation whose `objectId` does not name a `"table"`-type object, or whose
- * `index` is out of range for that table's CURRENT extent — with a message
- * naming the operation and the problem, the same style every other
- * precondition check in this file uses. Runs BEFORE staging (mirroring
- * `findIllegalOperationPayloads`'s own placement), against the PRE-BATCH
- * `objects`.
+ * One `insertTableLine` target's state AS SIMULATED THROUGH THE BATCH so
+ * far — `findInvalidTableResizes` below's per-object tracking record. `rows`/
+ * `cols` and the two `*Resizable` flags are read ONCE, when a table is FIRST
+ * encountered (from `objects` or from a same-batch `createObject` payload —
+ * see `resolveTrackedTableState`), then only `rows`/`cols` change, by +1,
+ * after each subsequent VALID `insertTableLine` targeting it. Literal-ness is
+ * never re-read: `insertTableLine` only ever RE-ASSERTS `literal` on both
+ * dimensions (never converts one away from it), so nothing this function
+ * tracks can turn a resizable dimension non-resizable mid-batch — see this
+ * function's own doc comment for the one thing that CAN, and is deliberately
+ * not tracked here.
+ */
+interface TrackedTableState {
+  readonly name: string;
+  readonly isTable: boolean;
+  readonly rowsResizable: boolean;
+  readonly colsResizable: boolean;
+  rows: number;
+  cols: number;
+}
+
+/**
+ * Entry 0047/0048-REVIEW-phase2's row/column insertion precondition: rejects
+ * an `insertTableLine` operation whose `objectId` does not name a
+ * `"table"`-type object, whose targeted dimension cannot be coherently
+ * resized (fix 3, D-046 — see `isTableDimensionResizable`), or whose `index`
+ * is out of range — with a message naming the operation and the problem, the
+ * same style every other precondition check in this file uses. Runs BEFORE
+ * staging (mirroring `findIllegalOperationPayloads`'s own placement).
  *
- * DISCLOSED GAP, same shape as `findIllegalOperationPayloads`'s own
- * `formatAddress` note: if `objectId` names an object `createObject`d
- * EARLIER IN THE SAME BATCH, `objects.find` here finds nothing (the created
- * object exists only in the batch's simulated existence set, not yet in
- * `objects`), so this check is SKIPPED for that operation rather than
- * validated. `insertTableLine` (`primitives/table.ts`) is written to be safe
- * regardless — it CLAMPS an out-of-range index rather than corrupting state
- * — so the worst outcome of this gap is a silently-clamped index instead of
- * a clear rejection message, never a wrong or corrupted document. Not closed
- * here: batches that create a table and resize it in the same breath are
- * not a scenario any existing caller (a test fixture, `document.ts`'s
- * loader) produces yet, and building full batch-simulated dimension
- * tracking to cover it is disproportionate to a case nothing currently
- * exercises — revisit if/when the command line (§5.10, Phase 3) starts
- * composing batches this way.
+ * **D-050 (0048-REVIEW-phase2 fix 2).** Every `insertTableLine` is validated
+ * against the table's state AS OF THIS OPERATION'S OWN POSITION in the
+ * batch — pre-batch `objects` PLUS every earlier `insertTableLine` in the
+ * SAME batch that targeted the SAME table — via one `Map<objectId,
+ * TrackedTableState>`, seeded lazily (`resolveTrackedTableState`) and
+ * updated after each operation this function accepts. Before this fix, every
+ * operation was checked against PRE-BATCH `objects` alone, which both
+ * FALSELY REJECTED a legal multi-insert batch (`[insert row at 1, insert row
+ * at 4]` on a 2-row table — by the time operation 2 applies the table
+ * genuinely has 3 rows) and FALSELY SKIPPED validation of an insert into a
+ * table `createObject`d earlier in the same batch (that table does not exist
+ * in `objects` yet). One simulation loop — the same pattern the existence
+ * check above (`survivingIds`) already established — closes both at once;
+ * see D-050's ruling in `DECISIONS.md` for the verified false-reject.
+ *
+ * Residual, narrower gap, NOT closed by this fix and not previously
+ * reachable at all (so not a regression): a `setSlot` EARLIER IN THE SAME
+ * BATCH that changes a table's `rows`/`cols` VALUE or KIND after this
+ * function's per-table state was seeded is not tracked — this function only
+ * simulates the effect of `insertTableLine` operations, not arbitrary
+ * `setSlot`s. That is the same "a dimension write is not checked for
+ * COHERENCE" known problem `STATUS.md` already carries (a raw `setSlot` on a
+ * table's dimension is generally unguarded against the cells that actually
+ * exist), reached through a new door rather than a new hole; closing it in
+ * general remains the deletion cycle's business.
  */
 function findInvalidTableResizes(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
+  const tracked = new Map<string, TrackedTableState>();
+
+  const resolveTrackedTableState = (objectId: string): TrackedTableState | undefined => {
+    const existing = tracked.get(objectId);
+    if (existing !== undefined) {
+      return existing;
+    }
+    // Seed from pre-batch `objects`, or — closing D-050's other half — from
+    // an earlier `createObject` operation in this SAME batch naming this id
+    // (D-021's own existence check, which runs before this function, already
+    // guarantees any `insertTableLine` reaching here targets an id that
+    // exists by its position in the batch — either already in `objects`, or
+    // validly `createObject`d earlier).
+    const fromObjects = objects.find((candidate) => candidate.id === objectId);
+    const fromCreate = fromObjects === undefined
+      ? operations.find((candidate): candidate is CreateObjectOperation => candidate.kind === "createObject" && candidate.object.id === objectId)?.object
+      : undefined;
+    const source = fromObjects ?? fromCreate;
+    if (source === undefined) {
+      return undefined; // Genuinely does not exist anywhere in the batch — D-021 rejects this separately.
+    }
+    const { rows, cols } = getTableDimensions(source);
+    const state: TrackedTableState = {
+      name: source.name,
+      isTable: source.type === "table",
+      rowsResizable: isTableDimensionResizable(source, "row"),
+      colsResizable: isTableDimensionResizable(source, "column"),
+      rows,
+      cols,
+    };
+    tracked.set(objectId, state);
+    return state;
+  };
 
   operations.forEach((operation, index) => {
     if (operation.kind !== "insertTableLine") {
       return;
     }
     const prefix = `operation ${index + 1} of ${operations.length}`;
-    const target = objects.find((candidate) => candidate.id === operation.objectId);
-    if (target === undefined) {
-      return; // See this function's own doc comment — the disclosed same-batch-creation gap.
+    const state = resolveTrackedTableState(operation.objectId);
+    if (state === undefined) {
+      return; // D-021's existence check rejects the whole batch for this operation separately.
     }
-    if (target.type !== "table") {
-      problems.push(`${prefix}: object "${target.name}" is not a table, so its ${operation.axis}s cannot be resized`);
+    if (!state.isTable) {
+      problems.push(`${prefix}: object "${state.name}" is not a table, so its ${operation.axis}s cannot be resized`);
       return;
     }
-    const { rows, cols } = getTableDimensions(target);
-    const bound = operation.axis === "row" ? rows : cols;
+    const resizable = operation.axis === "row" ? state.rowsResizable : state.colsResizable;
+    if (!resizable) {
+      const dimensionName = operation.axis === "row" ? "rows" : "cols";
+      problems.push(
+        `${prefix}: "${state.name}"'s ${dimensionName} slot is not "literal" (D-046) — its extent cannot be coherently resized`,
+      );
+      return;
+    }
+    const bound = operation.axis === "row" ? state.rows : state.cols;
     if (!Number.isInteger(operation.index) || operation.index < 1 || operation.index > bound + 1) {
       problems.push(
-        `${prefix}: ${operation.axis} insertion index ${operation.index} is out of range for "${target.name}" ` +
+        `${prefix}: ${operation.axis} insertion index ${operation.index} is out of range for "${state.name}" ` +
           `(currently ${bound} ${operation.axis}s; must be an integer from 1 to ${bound + 1})`,
       );
+      return;
+    }
+    // Accepted — the next operation in this batch targeting the same table
+    // (if any) must see this table's extent as ALREADY one line bigger
+    // (D-050).
+    if (operation.axis === "row") {
+      state.rows += 1;
+    } else {
+      state.cols += 1;
     }
   });
 

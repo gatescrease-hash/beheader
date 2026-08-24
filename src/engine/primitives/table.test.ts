@@ -14,6 +14,7 @@ import {
   getTableDimensions,
   insertTableLine,
   isRangeEnumerationError,
+  isTableDimensionResizable,
   shiftCellAddressForInsert,
   TABLE_COLS_PATH,
   TABLE_ROWS_PATH,
@@ -227,6 +228,40 @@ describe("getTableDimensions — entry 0047, the public reader `insertTableLine`
   });
 });
 
+describe("isTableDimensionResizable — 0048-REVIEW-phase2 fix 3, naming D-046", () => {
+  it("is true for a literal dimension", () => {
+    const table = tableWithDimensions(3, 3);
+    expect(isTableDimensionResizable(table, "row")).toBe(true);
+    expect(isTableDimensionResizable(table, "column")).toBe(true);
+  });
+
+  it("is true for an ABSENT dimension slot (an ordinary, not-yet-populated table)", () => {
+    const bare: GraphObject = { id: "obj_1", name: "table_x", type: "table", slots: {} };
+    expect(isTableDimensionResizable(bare, "row")).toBe(true);
+    expect(isTableDimensionResizable(bare, "column")).toBe(true);
+  });
+
+  it("is false for a formula-kind dimension slot — the one case readTableDimension reads as a fail-safe 0", () => {
+    const table = tableWithFormulaDimensions(2, 2);
+    expect(isTableDimensionResizable(table, "row")).toBe(false);
+    expect(isTableDimensionResizable(table, "column")).toBe(false);
+  });
+
+  it("checks each axis independently", () => {
+    const mixed: GraphObject = {
+      id: "obj_1",
+      name: "table_x",
+      type: "table",
+      slots: {
+        [TABLE_ROWS_PATH.join(".")]: { kind: "literal", value: 2 },
+        [TABLE_COLS_PATH.join(".")]: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 },
+      },
+    };
+    expect(isTableDimensionResizable(mixed, "row")).toBe(true);
+    expect(isTableDimensionResizable(mixed, "column")).toBe(false);
+  });
+});
+
 describe("shiftCellAddressForInsert — entry 0047, §5.4's per-address reference-adjustment arithmetic", () => {
   it("shifts a row at or after the insertion index by one", () => {
     expect(shiftCellAddressForInsert(cell("obj_1", "A3"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A4"));
@@ -309,5 +344,40 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
     const bare: GraphObject = { id: "obj_1", name: "table_x", type: "table", slots: {} };
     expect(() => insertTableLine(bare, "row", 1)).not.toThrow();
     expect(getTableDimensions(insertTableLine(bare, "row", 1))).toEqual({ rows: 1, cols: 0 });
+  });
+
+  describe("D-049 (0048-REVIEW-phase2 fix 1) — a slot this function does not own survives a resize", () => {
+    it("a literal slot at an UNRECOGNISED path (not rows/cols/a cell) survives an insert", () => {
+      const table = tableWithCells(1, 1, { A1: 1 });
+      const withNote: GraphObject = { ...table, slots: { ...table.slots, note: { kind: "literal", value: "hello" } } };
+      const result = insertTableLine(withNote, "row", 1);
+      expect(result.slots.note).toEqual({ kind: "literal", value: "hello" });
+    });
+
+    it("a cell slot OUTSIDE the table's current declared extent survives an insert", () => {
+      // A 2x1 table (extent = A1, A2) with an incoherent extra slot at A5 —
+      // the coherence gap STATUS.md carries as a known problem, unrelated to
+      // this fix: the point here is only that insertTableLine must not DELETE
+      // a slot it does not recognise as part of the declared extent.
+      const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
+      const withOutOfExtentCell: GraphObject = { ...table, slots: { ...table.slots, "cells.A5": { kind: "literal", value: 99 } } };
+      const result = insertTableLine(withOutOfExtentCell, "row", 1);
+      expect(result.slots["cells.A5"]).toEqual({ kind: "literal", value: 99 });
+    });
+
+    it("stands in for Phase 3's future origin.x/origin.y: an arbitrary extra slot is carried through a resize untouched, not just the two named in this test file", () => {
+      const table = tableWithCells(1, 1, { A1: 1 });
+      const withPosition: GraphObject = {
+        ...table,
+        slots: {
+          ...table.slots,
+          "origin.x": { kind: "literal", value: 10 },
+          "origin.y": { kind: "literal", value: 20 },
+        },
+      };
+      const result = insertTableLine(withPosition, "column", 1);
+      expect(result.slots["origin.x"]).toEqual({ kind: "literal", value: 10 });
+      expect(result.slots["origin.y"]).toEqual({ kind: "literal", value: 20 });
+    });
   });
 });

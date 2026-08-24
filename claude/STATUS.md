@@ -1,62 +1,55 @@
-# STATUS — as of entry 0048-REVIEW-phase2
+# STATUS — as of entry 0049-insertion-fix-list
 
-STATE: GREEN (compiles under both configs, 575/575 tests pass, 0 skipped, 0 `.only` — re-verified
-by the reviewer, not taken from the log).
+STATE: GREEN (compiles under both configs, 589/589 tests pass, 0 skipped, 0 `.only`).
 
-**Process state: REVIEWED. Verdict REVISE — a three-item fix list at 0048-REVIEW-phase2 §8 is the
-next slice, before row/column DELETION.** The batch cap and §6.1 trigger 3 that entry 0047 raised
-are both cleared; the review has landed.
+**Process state: REVIEW NOT NEEDED — the 0048-REVIEW fix list is CLOSED (D-049, D-050, fix 3).**
+No `PROCESS_BRIEF.md` §6.1 trigger fired this cycle and the batch is well under cap. The
+implementer chose to STOP here anyway rather than start the DELETE slice in the same cycle — see
+"Next slice" below for why, and entry 0049's own "Review point" section for the full reasoning.
+This is a judgment call, not a block: starting the delete slice next is fine.
 
-Current phase: **2 — Table primitive.** Row/column INSERTION is built and now reviewed (0047,
-reviewed at 0048); the DELETE half (REPAIR path, `force` flag) is not built.
-Last review point: **0048-REVIEW-phase2, REVISE** (covering entries 0046 + 0047).
-Cycles since last review: **0/3** · diff since last review: 0 lines (reviewer's comment-only edits
-excluded).
+Current phase: **2 — Table primitive.** Row/column INSERTION is built, reviewed, and its fix list
+is closed (0047, reviewed 0048, fixed 0049). The DELETE half (REPAIR path, `force` flag) is not
+built.
+Last review point: **0048-REVIEW-phase2, REVISE** (covering entries 0046 + 0047; its fix list is
+now closed by entry 0049, not yet re-reviewed).
+Cycles since last review: **1/3** · diff since last review: ~462 lines / 4 files (cap 800/10).
 Convention: insertions + deletions (settled 0042).
 
-## Next slice — 0048-REVIEW's fix list. Read that entry's §4 and §5 before touching the code.
+## Next slice — row/column DELETION, which closes Phase 2's gate
 
-Three fixes, all in `primitives/table.ts` / `mutation.ts`, all with tests named in §8:
+Read entry 0047's three reviewer questions (now answered as D-050/D-051/D-052) and
+0048-REVIEW-phase2 §6/§9 before starting — they bear directly on how deletion's `Operation`(s)
+should be shaped.
 
-1. **`insertTableLine` must preserve every slot it does not own (D-049).** It currently rebuilds
-   `slots` from scratch — `rows`, `cols`, and in-extent cells — and silently DELETES everything
-   else. Verified reachable today (an unrecognised literal slot; an out-of-extent cell; a
-   formula-dimensioned table losing all cells while `rows` resets to `literal 1`). Build the new
-   record FROM `object.slots`, removing only the cell keys being moved.
-2. **`findInvalidTableResizes` must simulate the batch left-to-right (D-050).** It validates every
-   operation against PRE-BATCH state, which falsely REJECTS a legal two-insert batch (`[insert at
-   1, insert at 4]` on a 2-row table). Track each target's `{rows, cols}` through the check the way
-   the existence check already tracks `survivingIds` — the same loop also closes the disclosed
-   same-batch-`createObject` gap, whose disclosure paragraphs then come OUT of both doc comments.
-3. **Reject an insert into a table whose `rows`/`cols` is not `literal`** (naming D-046), instead of
-   silently resetting the dimension and dropping the cells.
-
-## Then — the DELETE half, which closes Phase 2's gate
-
-- Row/column **deletion**, taking the §5.1.1 **REPAIR** path, not rejection: every inbound reference
-  to the deleted row/column becomes a `#REF` `ErrorNode` (D-028) at that position — including
-  references from OTHER tables and future text boxes — and every broken slot is reported. A range
-  whose endpoint was deleted clamps to the remaining extent; a range deleted entirely becomes
-  `#REF`. Its own `Operation` kind, own precondition check, own apply branch — **D-051**, do not
-  retrofit `InsertTableLineOperation`.
+- Row/column **deletion**, taking the §5.1.1 **REPAIR** path, not rejection: every inbound
+  reference to the deleted row/column becomes a `#REF` `ErrorNode` (D-028) at that position —
+  including references from OTHER tables and future text boxes — and every broken slot is
+  reported. A range whose endpoint was deleted clamps to the remaining extent; a range deleted
+  entirely becomes `#REF`. Its own `Operation` kind, own precondition check, own apply branch —
+  **D-051**, do not retrofit `InsertTableLineOperation`. This is the FIRST real use of the
+  §5.1.1 REPAIR path anywhere in this codebase — nothing to copy from, design it from the brief.
 - **Read D-052's forward note first.** `rewriteAddressesInAst`'s `(Address) => Address` signature
   CANNOT express deletion's repair: `#REF` replacement is a NODE-level rewrite and range clamping
-  needs both endpoints at once. Deletion needs a SECOND, node-level walk in `formula/deps.ts`, not a
-  widened callback on the existing one. Design that up front.
+  needs both endpoints at once. Deletion needs a SECOND, node-level walk in `formula/deps.ts`, not
+  a widened callback on the existing one. Design that up front.
 - The `force` flag on `delete <table>`: today `DeleteObjectOperation` unconditionally takes the
   REJECT path (§5.1.1 clause 1). Phase 2 requires rejected BY DEFAULT and succeeding (repairing
   dependents to `#REF`) when `force` is passed — a new field on `DeleteObjectOperation` (widen the
   union, per Q-005/D-020) and a REPAIR code path that exists nowhere in this codebase yet.
+- This is a genuinely larger, more design-heavy slice than 0047/0049 — expect it to trigger
+  `PROCESS_BRIEF.md` §6.1 (a brief-silent design decision on load-bearing files, at minimum) partway
+  through. That is expected, not a sign something went wrong; stop and log honestly when it does.
 
 ## Phase 2 acceptance criterion — PARTIAL, one clause left
 
-Quoted in full at entry 0044/0045-REVIEW §4. Clause status, all re-verified at 0048-REVIEW:
+Quoted in full at entry 0044/0045-REVIEW §4. Clause status, re-verified at 0048-REVIEW, unchanged
+by entry 0049 (re-run only, nothing in this cycle touched these paths):
 
 - Two tables, cross-table formula, live update — **PASSING**.
 - Circular reference rejected, including through range-derived edges — **PASSING**.
 - `SUM(A1:A5)` recomputes correctly after inserting a row inside the range — **PASSING** (0047,
-  accepted at 0048-REVIEW §1: the test asserts the STORED range widened to `A1:A6`, that the empty
-  new row leaves the sum unchanged (D-047), and that setting the new row's cell moves it live).
+  accepted at 0048-REVIEW §1).
 - Row/column delete with `#REF` repair, `delete <table>` rejected-until-`force` — **NOT YET**. The
   only remaining clause. The gate review happens when it lands.
 
@@ -70,8 +63,18 @@ Phase 0 in full (0027-REVIEW) · the full formula engine, `formula/ast.ts` … `
 temporary bridges deleted, D-045/D-031/D-047/D-048 (0044+0046, reviewed 0045 and 0048) · row/column
 INSERTION: `InsertTableLineOperation`, `insertTableLine`/`getTableDimensions`/
 `shiftCellAddressForInsert`/`shiftCoordinates`, `rewriteAddressesInAst`,
-`rewriteObjectFormulaAddresses`, `findInvalidTableResizes` (0047, reviewed 0048 — **REVISE**, the
-three fixes above outstanding; the DESIGN is confirmed, the slot bookkeeping is not).
+`rewriteObjectFormulaAddresses`, `findInvalidTableResizes`, D-051/D-052 (0047, reviewed 0048 —
+REVISE, three fixes required).
+
+## Built this batch, NOT YET reviewed (entry 0049)
+
+- **D-049**: `insertTableLine` (`primitives/table.ts`) now preserves every slot it does not own —
+  builds `slots` from `object.slots` in full, removing only the in-extent cell keys being moved.
+- **D-050**: `findInvalidTableResizes` (`mutation.ts`) now simulates the batch left-to-right (a
+  `Map<objectId, TrackedTableState>`), closing both a verified false-reject (two same-table
+  inserts in one batch) and the previously disclosed same-batch-`createObject` false-accept.
+- **Fix 3** (naming D-046): the same function now rejects an `insertTableLine` whose targeted
+  dimension is not `literal`, via new `isTableDimensionResizable` (`primitives/table.ts`).
 
 ## Not started
 
@@ -80,17 +83,18 @@ primitive already suffices via `createObject`) · everything in Phases 3–7.
 
 ## Known problems
 
-- **The three 0048-REVIEW fix-list items above** are known defects in committed code, not
-  hypotheticals. Until fixed: a row insert can silently delete a table slot it does not recognise,
-  and a legal multi-insert batch is rejected.
 - **`rewriteObjectFormulaAddresses` walks `formula`-kind slots only** — total TODAY (a `formula`
   slot's `ast` is the only stored AST), but §5.4 requires the adjustment pass to cover text boxes,
   and Phase 4 stores text content as a block tree in a different shape. The pass silently stops
   being total the day text lands (0048-REVIEW §9). Do not build for it now; do not forget it.
-- **A dimension write is not checked for COHERENCE with the cells that exist.** D-046 settles the
-  KIND; a raw `setSlot` on a *literal* `rows`/`cols` can still disagree with actual cell slots.
-  `insertTableLine` is the SANCTIONED way to grow a table; a raw `setSlot` remains un-guarded. Fix 3
-  narrows this where it is now reachable; closing it in general is the deletion cycle's call.
+- **A dimension write is not checked for COHERENCE with the cells that exist, in general.** D-046
+  settles the KIND; fix 3 (entry 0049) now also rejects an `insertTableLine` against a non-literal
+  dimension. What remains unguarded: (a) a raw `setSlot` writing an INCOHERENT `literal` count
+  (disagreeing with actual cell slots), and (b) a `setSlot` EARLIER IN THE SAME BATCH that changes
+  a table's `rows`/`cols` value or kind AFTER `findInvalidTableResizes` has already seeded its
+  per-table tracked state for that table — entry 0049's own disclosed residual gap, reached
+  through the new D-050 tracking rather than a new hole. Closing either in general is the deletion
+  cycle's business.
 - **No bound on how large `rows`/`cols` may be set** via a raw `setSlot`.
 - **The dangling-reference message names the DEPENDENT, not the missing SOURCE**, and repeats once
   per missing cell (0045-REVIEW Finding 4, carried). 0048-REVIEW §4 case 4 is a fresh example of how
@@ -105,9 +109,9 @@ primitive already suffices via `createObject`) · everything in Phases 3–7.
   L-6–L-15 cosmetics, recursion depth.
 - **SETTLED, do not re-raise:** D-030 `^` left-assoc · uppercase-only function names · strict
   `CONCAT` · `deps.ts` reports a range PRE-expansion · D-035 · D-033 `-0` · D-037 `%` · D-038 ·
-  D-039 · bijective base-26 columns · D-043 · D-044 · D-045 · D-046 · D-047 · D-048 · **D-049** ·
-  **D-050** · **D-051** (insert/delete are separate `Operation` kinds; `axis` stays unified) ·
-  **D-052** (every total `FormulaAst` walk lives in `formula/deps.ts`) ·
+  D-039 · bijective base-26 columns · D-043 · D-044 · D-045 · D-046 · D-047 · D-048 · D-049 ·
+  D-050 · D-051 (insert/delete are separate `Operation` kinds; `axis` stays unified) ·
+  D-052 (every total `FormulaAst` walk lives in `formula/deps.ts`) ·
   `enumerateRangeCellAddresses` returns `Address[]` · the unresolvable-table fallback stays ·
   `readRange` stays OPTIONAL until a 2nd production caller · dimensions stay SLOTS · the
   `static`/`dynamic` union stays · D-040/D-041 (Phase 3) · D-042 · everything
@@ -115,24 +119,33 @@ primitive already suffices via `createObject`) · everything in Phases 3–7.
 
 ## Live PROVISIONAL tags and open questions
 
-**Zero open questions block any phase.** Entries 0046/0047 raised none; 0047's three reviewer
-questions are answered as D-050/D-051/D-052. Still open, blocking nothing: **`PROVISIONAL(Q-007)`**
-→ `document.ts`'s `CameraState`; **`PROVISIONAL(Q-008)`** → `graph/node.ts`'s `isIllegalNumber`.
-Answered earlier: Q-001 → D-041, Q-002 → D-040, Q-003 → D-007, Q-004 → D-039, Q-005, Q-006 → D-025,
-Q-009 → D-029, Q-010 → D-038. Next free: **Q-011**.
+**Zero open questions block any phase.** Entry 0049 raised none. Still open, blocking nothing:
+**`PROVISIONAL(Q-007)`** → `document.ts`'s `CameraState`; **`PROVISIONAL(Q-008)`** →
+`graph/node.ts`'s `isIllegalNumber`. Answered earlier: Q-001 → D-041, Q-002 → D-040, Q-003 →
+D-007, Q-004 → D-039, Q-005, Q-006 → D-025, Q-009 → D-029, Q-010 → D-038. Next free: **Q-011**.
 
 ## Gotchas for the next model
 
-- **A mutation that rebuilds an object's `slots` must start FROM the existing slots (D-049).** The
-  0047 defect was not a typo — it is what "build the record from what I know about" always does to
-  slots you have not thought of yet. Phase 3's `origin.x` on a table is the one waiting to be
-  deleted by it.
+- **A mutation that rebuilds an object's `slots` must start FROM the existing slots (D-049).**
+  Confirmed by entry 0049's own mutation-test: reverting to a fresh-record rebuild instantly
+  breaks all three of the tests written to defend it. Phase 3's `origin.x` on a table is still the
+  next thing waiting to exercise this for real.
 - **A precondition check that reads document state must simulate the batch (D-050).** Pre-batch
   state both misses illegal operations and rejects legal ones, and only the first of those is
-  rescuable by a downstream clamp.
+  rescuable by a downstream clamp. `findInvalidTableResizes`'s `TrackedTableState` map
+  (`mutation.ts`) is the second time this pattern has been needed (`survivingIds` was the first);
+  reuse the shape again rather than re-deriving it a third time.
+- **A "simulate the batch" tracker only needs to track what its OWN checks can change.**
+  `findInvalidTableResizes`'s tracked `{rows, cols}` only updates in response to `insertTableLine`
+  operations, not `setSlot` — deliberately narrower than a full batch fold. Extending it to also
+  watch `setSlot` mid-batch is real, disclosed, additional scope (see Known Problems), not an
+  oversight — don't "fix" it without deciding that's worth the cost first.
 - **A `false && narrowingCondition` mutation-test gate breaks TypeScript's control-flow narrowing**
   for the rest of that block, sometimes even for code ABOVE the gate. Use the flag-after-narrowing
-  pattern (`condition && !MUTATION_TEST_FLAG`, a named `const`) — confirmed twice now (0046, 0047).
+  pattern (`condition && !MUTATION_TEST_FLAG`, a named `const`) — confirmed three times now (0046,
+  0047; sidestepped cleanly in 0049 by disabling a whole boolean-producing line instead, e.g.
+  `const resizable = true; // MUTATION-TEST`, which never needed the pattern at all — prefer that
+  shape when the check IS a single boolean).
 - **`shiftCoordinates` (`primitives/table.ts`) is the ONE place row/column shift arithmetic lives**
   (D-051). Both the cell-SLOT shift and the formula-REFERENCE shift call it; deletion's arithmetic
   joins it there. Never a second call site, or the two can silently disagree about where row N goes.
@@ -145,8 +158,9 @@ Q-009 → D-029, Q-010 → D-038. Next free: **Q-011**.
   dangling.
 - **`readRange` runs DURING evaluation and reads `rows`/`cols` — only safe because D-046 makes
   dimensions `literal`-only.** Do not relax D-046 without re-reading this. `insertTableLine`
-  re-asserts `literal` on both dimension slots — keep that, but per fix 3 it must REFUSE a
-  non-literal dimension rather than overwrite it.
+  re-asserts `literal` on both dimension slots, and as of entry 0049's fix 3,
+  `findInvalidTableResizes` REFUSES the insert before that if either dimension is already
+  non-`literal` — the precondition and the primitive agree, don't let them drift apart again.
 - **`readRange` is OPTIONAL by ruling (0045-REVIEW §7 Q3).** Make it REQUIRED the moment a second
   production caller appears.
 - **Range placement (`parser.ts`), range DEPENDENCY reporting (`deps.ts`, pre-expansion), range
@@ -162,7 +176,6 @@ Q-009 → D-029, Q-010 → D-038. Next free: **Q-011**.
   "simplify" `IF`/`AND`/`OR` dispatch into a registry (D-029) · one number guard, `finiteResult`
   (D-033) · registry lookup by `Object.hasOwn` (D-034) · `src/engine/` contains no `throw` ·
   one user, justify by correctness and cheapness to change (D-042).
-- **Batch discipline:** the cap is cumulative SINCE LAST REVIEW, not per-cycle. 0046+0047 were each
-  individually well scoped (~335 and ~812 lines) and together blew through it. Check the running
+- **Batch discipline:** the cap is cumulative SINCE LAST REVIEW, not per-cycle. Check the running
   total, not just this cycle's diff.
 - Each PowerShell call is a fresh process; the Bash tool's `npm` is not on PATH — use PowerShell.
