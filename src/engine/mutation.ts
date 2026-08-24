@@ -140,6 +140,30 @@
  * `primitives/table.ts`'s own fix (`insertTableLine` no longer rebuilds
  * `slots` from scratch) — see that file's header.
  *
+ * Entry 0050 adds `Operation`'s FIFTH variant, `DeleteTableLineOperation` —
+ * §5.4's other half of "rows and columns can be added or removed," and the
+ * FIRST real use of §5.1.1's REPAIR path anywhere in this codebase (D-052's
+ * forward note called this out at 0048-REVIEW-phase2 §6 item 3). Unlike
+ * insertion, deletion can ORPHAN a reference, so `applyOperation`'s new
+ * `deleteTableLine` branch does not just shift addresses document-wide — it
+ * REPAIRS them, via `formula/deps.ts`'s new node-level `repairAddressesInAst`
+ * (a `(Address) => Address` callback cannot express turning a `ReferenceNode`
+ * into an `ErrorNode`, or clamping a range endpoint using BOTH endpoints at
+ * once — D-052's own reasoning for why this needed a second walk, not a
+ * widened `rewrite`). `findInvalidTableResizes` is WIDENED (never a second,
+ * parallel check — the same "widen, don't duplicate" stance D-020/D-026/D-027
+ * already established) to simulate `deleteTableLine` operations in the SAME
+ * left-to-right walk as `insertTableLine` (D-050's own binding text: "every
+ * future operation kind that changes it extends that same simulation"), so a
+ * batch that INTERLEAVES inserts and deletes on one table is validated
+ * against each operation's own position, not against pre-batch state alone.
+ * `deleteTableLine` carries no `force` flag and no REJECT branch of its own —
+ * §5.4 states the repair path unconditionally for row/column deletion,
+ * unlike `delete <table>` (`DeleteObjectOperation`), which still rejects a
+ * deletion with live dependents by default; a `force` flag widening THAT
+ * operation to take the repair path too is explicitly NOT built this cycle —
+ * see NOT DONE HERE.
+ *
 
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -473,30 +497,35 @@
  *     Phase 3 — choosing a fresh id from `nextObjectId`, a type's default
  *     slot values) is a different, NOT-YET-BUILT concern layered on top of
  *     `CreateObjectOperation`, not the same thing as it.
- *   - The slot-deletion REPAIR path (§5.1.1's second legal option, rewriting
- *     inbound references to `#REF`) — Phase 0 has no type that uses it (only
- *     table row/column deletion does, Phase 2/4), so `validateIntegrity`'s
- *     dangling check always takes the Reject branch. Nothing here decides
- *     between the two; that belongs to whichever future operation needs it.
- *   - Reference adjustment on table resize (§5.4: inserting/deleting a
- *     row/column and rewriting every stored AST's affected references) — a
- *     Phase 2/4 concern, still unbuilt; row/column insert/delete itself does
- *     not exist yet either (`primitives/table.ts`'s own NOT DONE HERE). Range
- *     EXPANSION itself (`A1:B4` → concrete cell dependencies, §5.3) IS done
- *     here as of THIS cycle — see `deriveEdges`'s Source 1, above.
+ *   - The `force` flag on `DeleteObjectOperation` (`delete <table>`) — §5.1.1's
+ *     REPAIR path for a WHOLE-OBJECT deletion, widening that (existing)
+ *     operation to rewrite live dependents to `#REF` instead of unconditionally
+ *     rejecting them, the way it does today. Row/column deletion (THIS cycle,
+ *     `DeleteTableLineOperation`) is a DIFFERENT operation with its own,
+ *     unconditional repair path — see that operation's own doc comment for why
+ *     the two do not share a mechanism. Phase 2's acceptance criterion needs
+ *     both; only the row/column half lands this cycle — see STATUS.md.
+ *   - Reference adjustment on table resize (§5.4) is now DONE for both
+ *     directions: insertion (entry 0047) and deletion (THIS cycle). Range
+ *     EXPANSION itself (`A1:B4` → concrete cell dependencies, §5.3) has been
+ *     done since the range-evaluation wiring cycle — see `deriveEdges`'s
+ *     Source 1, above.
  *   - Undo itself (only the journal DATA this stores it for, per Rule 2 and
  *     PROJECT_BRIEF §8's deferred list, which defers the undo/redo UI only).
  */
 import { formatAddress, isAddressError, type Address } from "./address.ts";
 import type { FormulaAst } from "./formula/ast.ts";
-import { extractDependencies, rewriteAddressesInAst } from "./formula/deps.ts";
+import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
 import {
+  deleteTableLine,
   enumerateRangeCellAddresses,
   getTableDimensions,
   insertTableLine,
   isRangeEnumerationError,
   isTableDimensionResizable,
+  repairCellAddressForDelete,
+  repairRangeEndpointsForDelete,
   shiftCellAddressForInsert,
 } from "./primitives/table.ts";
 import { detectCycle } from "./graph/cycles.ts";
@@ -845,12 +874,52 @@ export interface InsertTableLineOperation {
 }
 
 /**
- * The full set of operations `mutate` can apply. Four variants now
- * (`SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`,
- * `InsertTableLineOperation`, added entry 0047) — widened, per Q-005/D-020's
- * "widen the union, never restructure" stance, not a second entry point.
+ * §5.4's row/column DELETION (entry 0050) — the other half of "rows and
+ * columns can be added or removed," and the FIRST operation kind in this
+ * codebase to take §5.1.1's REPAIR path. `index` is 1-based and names the
+ * EXISTING row/column to remove; every row/column after it shifts back by one
+ * (`primitives/table.ts`'s `deleteTableLine`/`shiftCoordinatesForDelete`).
+ *
+ * Carries no `force` flag and takes the repair path UNCONDITIONALLY — §5.4's
+ * own words: "Row/column deletion... proceeds even when other objects depend
+ * on the deleted cells, rewriting each inbound reference to `#REF`." This is
+ * deliberately DIFFERENT from `DeleteObjectOperation` (`delete <table>`),
+ * which still rejects by default and will gain a separate `force` flag (NOT
+ * built this cycle — see the file header's NOT DONE HERE) to opt into repair
+ * instead. The two operations do not share a mechanism because they answer
+ * different questions: this one always repairs (§5.4 states it as the ONLY
+ * behaviour for a row/column), while whole-object deletion's default is still
+ * to protect a formula elsewhere by refusing (§5.1.1's REJECT-by-default
+ * stance for `delete <object>`).
+ *
+ * PRECONDITION, enforced by `mutate` before this is ever folded (mirroring
+ * `InsertTableLineOperation`'s own precondition doc comment): `objectId`
+ * names an EXISTING object of type `"table"` whose `rows`/`cols` can be
+ * coherently resized (D-046, `isTableDimensionResizable`), and `index` names
+ * an EXISTING row/column AS OF THIS OPERATION'S OWN POSITION in the batch —
+ * `findInvalidTableResizes` (widened THIS cycle to simulate both insertion
+ * and deletion together, in one left-to-right walk, per D-050's own binding
+ * text) is the primary check. Unlike insertion, `deleteTableLine` (the
+ * primitive) does NOT clamp an out-of-range index — there is no "nearest
+ * line" to delete instead of a nonexistent one — so this precondition is the
+ * ONLY thing standing between a malformed operation and a malformed table;
+ * see that primitive's own doc comment.
  */
-export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation | InsertTableLineOperation;
+export interface DeleteTableLineOperation {
+  readonly kind: "deleteTableLine";
+  readonly objectId: string;
+  readonly axis: "row" | "column";
+  readonly index: number;
+}
+
+/**
+ * The full set of operations `mutate` can apply. Five variants now
+ * (`SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`,
+ * `InsertTableLineOperation`, `DeleteTableLineOperation`, added entry 0050) —
+ * widened, per Q-005/D-020's "widen the union, never restructure" stance, not
+ * a second entry point.
+ */
+export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation | InsertTableLineOperation | DeleteTableLineOperation;
 
 /** The object id an operation targets, whichever variant it is — shared by the existence check and the message-building below. */
 function operationTargetId(operation: Operation): string {
@@ -860,7 +929,7 @@ function operationTargetId(operation: Operation): string {
   if (operation.kind === "createObject") {
     return operation.object.id;
   }
-  if (operation.kind === "insertTableLine") {
+  if (operation.kind === "insertTableLine" || operation.kind === "deleteTableLine") {
     return operation.objectId;
   }
   return operation.address.objectId;
@@ -977,6 +1046,19 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * guarantees `operation.objectId` resolves by the time this runs); returning
  * `objects` unchanged rather than throwing matches this file's "never
  * throws" discipline everywhere else.
+ *
+ * `deleteTableLine` (entry 0050, §5.4): the DELETE-side sibling of
+ * `insertTableLine` above, and the FIRST branch in this file to take §5.1.1's
+ * REPAIR path. Also touches every object in `objects`, for the same reason:
+ * (1) the target table's OWN cell slots shift/drop (`primitives/table.ts`'s
+ * `deleteTableLine`); (2) EVERY object's formula slots get their stored ASTs
+ * REPAIRED via `repairObjectFormulaAddresses` below — an address naming the
+ * removed line becomes `#REF` (D-028), one entirely after it shifts back, one
+ * entirely before it is untouched. Unlike insertion, there is no shared
+ * "clampedIndex" to compute here: `findInvalidTableResizes` already
+ * guarantees `operation.index` names a real row/column at this operation's
+ * position in the batch, and `deleteTableLine`/`repairCellAddressForDelete`/
+ * `repairRangeEndpointsForDelete` all read `operation.index` directly.
  */
 function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
   if (operation.kind === "deleteObject") {
@@ -999,6 +1081,23 @@ function applyOperation(objects: readonly GraphObject[], operation: Operation): 
     return objects.map((object) => {
       const resized = object.id === operation.objectId ? insertTableLine(object, operation.axis, clampedIndex) : object;
       return rewriteObjectFormulaAddresses(resized, shiftAddress);
+    });
+  }
+  if (operation.kind === "deleteTableLine") {
+    const target = objects.find((object) => object.id === operation.objectId);
+    if (target === undefined) {
+      return objects; // Defensive only — the existence check already guarantees this resolves.
+    }
+    // §5.1.1 REPAIR path, unconditional (DeleteTableLineOperation's own doc
+    // comment) — no clamping the way insertion does: `findInvalidTableResizes`
+    // is what guarantees `operation.index` names a real row/column before this
+    // ever runs.
+    const repairReference = (address: Address): Address | "deleted" =>
+      repairCellAddressForDelete(address, operation.objectId, operation.axis, operation.index);
+    const repairRange = (start: Address, end: Address) => repairRangeEndpointsForDelete(start, end, operation.objectId, operation.axis, operation.index);
+    return objects.map((object) => {
+      const resized = object.id === operation.objectId ? deleteTableLine(object, operation.axis, operation.index) : object;
+      return repairObjectFormulaAddresses(resized, repairReference, repairRange);
     });
   }
   return objects.map((object) => {
@@ -1034,6 +1133,34 @@ function rewriteObjectFormulaAddresses(object: GraphObject, shiftAddress: (addre
       continue; // noUncheckedIndexedAccess artifact only.
     }
     newSlots[key] = slot.kind === "formula" ? { ...slot, ast: rewriteAddressesInAst(slot.ast, shiftAddress) } : slot;
+  }
+  return { ...object, slots: newSlots };
+}
+
+/**
+ * The DELETE-side sibling of `rewriteObjectFormulaAddresses` above: rebuilds
+ * `object`'s `slots`, passing every `formula`-kind slot's AST through
+ * `formula/deps.ts`'s node-level `repairAddressesInAst` with
+ * `repairReference`/`repairRange` — `literal`/`derived` slots are returned
+ * completely unchanged (neither has an AST to repair). Called once per
+ * object, for EVERY object, by `applyOperation`'s `deleteTableLine` branch —
+ * `repairReference`/`repairRange` already know to leave any address alone
+ * that does not name the deleted table, so this function needs no notion of
+ * "is this object even relevant," the same posture `rewriteObjectFormulaAddresses`
+ * already takes.
+ */
+function repairObjectFormulaAddresses(
+  object: GraphObject,
+  repairReference: (address: Address) => Address | "deleted",
+  repairRange: (start: Address, end: Address) => { readonly start: Address; readonly end: Address } | "deleted",
+): GraphObject {
+  const newSlots: Record<string, Slot> = {};
+  for (const key of Object.keys(object.slots)) {
+    const slot = object.slots[key];
+    if (slot === undefined) {
+      continue; // noUncheckedIndexedAccess artifact only.
+    }
+    newSlots[key] = slot.kind === "formula" ? { ...slot, ast: repairAddressesInAst(slot.ast, repairReference, repairRange) } : slot;
   }
   return { ...object, slots: newSlots };
 }
@@ -1209,6 +1336,8 @@ export function mutate(
         detail = `attempts to delete object id "${targetId}"`;
       } else if (operation.kind === "insertTableLine") {
         detail = `attempts to insert a ${operation.axis} into object id "${targetId}"`;
+      } else if (operation.kind === "deleteTableLine") {
+        detail = `attempts to delete a ${operation.axis} from object id "${targetId}"`;
       } else {
         detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
       }
@@ -1235,10 +1364,11 @@ export function mutate(
     return { ok: false, message: illegalPayloadMessages.join("; ") };
   }
 
-  // Entry 0047/0048-REVIEW-phase2, §5.4: an `insertTableLine` naming a
-  // non-table object, a non-resizable dimension (D-046), or an out-of-range
-  // index — validated against the batch as simulated LEFT-TO-RIGHT (D-050) —
-  // is rejected here with a message naming the problem.
+  // Entry 0047/0048-REVIEW-phase2/0050, §5.4: an `insertTableLine` or
+  // `deleteTableLine` naming a non-table object, a non-resizable dimension
+  // (D-046), or an out-of-range index — both validated TOGETHER against the
+  // batch as simulated LEFT-TO-RIGHT (D-050) — is rejected here with a
+  // message naming the problem.
   const invalidResizeMessages = findInvalidTableResizes(operations, objects);
   if (invalidResizeMessages.length > 0) {
     return { ok: false, message: invalidResizeMessages.join("; ") };
@@ -1672,26 +1802,28 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
       return;
     }
 
-    // deleteObject / insertTableLine: neither carries a Slot/Value payload to
-    // check — insertTableLine's own precondition (a valid target/index) is
-    // `findInvalidTableResizes`'s job, below, not this function's.
+    // deleteObject / insertTableLine / deleteTableLine: none carry a
+    // Slot/Value payload to check — insertTableLine's and deleteTableLine's
+    // own preconditions (a valid target/index) are `findInvalidTableResizes`'s
+    // job, below, not this function's.
   });
 
   return problems;
 }
 
 /**
- * One `insertTableLine` target's state AS SIMULATED THROUGH THE BATCH so
- * far — `findInvalidTableResizes` below's per-object tracking record. `rows`/
- * `cols` and the two `*Resizable` flags are read ONCE, when a table is FIRST
+ * One table's state AS SIMULATED THROUGH THE BATCH so far —
+ * `findInvalidTableResizes` below's per-object tracking record, shared by
+ * `insertTableLine` AND (as of entry 0050) `deleteTableLine`. `rows`/`cols`
+ * and the two `*Resizable` flags are read ONCE, when a table is FIRST
  * encountered (from `objects` or from a same-batch `createObject` payload —
- * see `resolveTrackedTableState`), then only `rows`/`cols` change, by +1,
- * after each subsequent VALID `insertTableLine` targeting it. Literal-ness is
- * never re-read: `insertTableLine` only ever RE-ASSERTS `literal` on both
- * dimensions (never converts one away from it), so nothing this function
- * tracks can turn a resizable dimension non-resizable mid-batch — see this
- * function's own doc comment for the one thing that CAN, and is deliberately
- * not tracked here.
+ * see `resolveTrackedTableState`), then only `rows`/`cols` change — by +1
+ * after each subsequent VALID `insertTableLine` targeting it, by -1 after
+ * each subsequent VALID `deleteTableLine`. Literal-ness is never re-read:
+ * both primitives only ever RE-ASSERT `literal` on both dimensions (never
+ * convert one away from it), so nothing this function tracks can turn a
+ * resizable dimension non-resizable mid-batch — see this function's own doc
+ * comment for the one thing that CAN, and is deliberately not tracked here.
  */
 interface TrackedTableState {
   readonly name: string;
@@ -1703,39 +1835,39 @@ interface TrackedTableState {
 }
 
 /**
- * Entry 0047/0048-REVIEW-phase2's row/column insertion precondition: rejects
- * an `insertTableLine` operation whose `objectId` does not name a
- * `"table"`-type object, whose targeted dimension cannot be coherently
- * resized (fix 3, D-046 — see `isTableDimensionResizable`), or whose `index`
- * is out of range — with a message naming the operation and the problem, the
- * same style every other precondition check in this file uses. Runs BEFORE
+ * Entry 0047/0048-REVIEW-phase2/0050's row/column resize precondition:
+ * rejects an `insertTableLine` OR `deleteTableLine` operation whose
+ * `objectId` does not name a `"table"`-type object, whose targeted dimension
+ * cannot be coherently resized (fix 3, D-046 — see `isTableDimensionResizable`),
+ * or whose `index` is out of range for its OWN kind (insertion: `1..count+1`;
+ * deletion: `1..count`, since it must name a row/column that actually
+ * exists) — with a message naming the operation and the problem, the same
+ * style every other precondition check in this file uses. Runs BEFORE
  * staging (mirroring `findIllegalOperationPayloads`'s own placement).
  *
- * **D-050 (0048-REVIEW-phase2 fix 2).** Every `insertTableLine` is validated
- * against the table's state AS OF THIS OPERATION'S OWN POSITION in the
- * batch — pre-batch `objects` PLUS every earlier `insertTableLine` in the
- * SAME batch that targeted the SAME table — via one `Map<objectId,
- * TrackedTableState>`, seeded lazily (`resolveTrackedTableState`) and
- * updated after each operation this function accepts. Before this fix, every
- * operation was checked against PRE-BATCH `objects` alone, which both
- * FALSELY REJECTED a legal multi-insert batch (`[insert row at 1, insert row
- * at 4]` on a 2-row table — by the time operation 2 applies the table
- * genuinely has 3 rows) and FALSELY SKIPPED validation of an insert into a
- * table `createObject`d earlier in the same batch (that table does not exist
- * in `objects` yet). One simulation loop — the same pattern the existence
- * check above (`survivingIds`) already established — closes both at once;
- * see D-050's ruling in `DECISIONS.md` for the verified false-reject.
+ * **D-050 (0048-REVIEW-phase2 fix 2), WIDENED entry 0050 to cover deletion
+ * too.** Every `insertTableLine`/`deleteTableLine` is validated against the
+ * table's state AS OF THIS OPERATION'S OWN POSITION in the batch — pre-batch
+ * `objects` PLUS every earlier resize operation in the SAME batch that
+ * targeted the SAME table, insert OR delete, walked in ONE left-to-right
+ * pass — via one `Map<objectId, TrackedTableState>`, seeded lazily
+ * (`resolveTrackedTableState`) and updated after each operation this
+ * function accepts. D-050's own binding text requires this: "every future
+ * operation kind that changes [table dimension count] MUST extend that same
+ * simulation" — a SEPARATE simulation pass per operation kind would silently
+ * mis-validate an INTERLEAVED batch (`[insert row at 1, delete row at 2]`),
+ * since each pass would be blind to the other kind's effect on the same
+ * table's count.
  *
- * Residual, narrower gap, NOT closed by this fix and not previously
- * reachable at all (so not a regression): a `setSlot` EARLIER IN THE SAME
- * BATCH that changes a table's `rows`/`cols` VALUE or KIND after this
- * function's per-table state was seeded is not tracked — this function only
- * simulates the effect of `insertTableLine` operations, not arbitrary
- * `setSlot`s. That is the same "a dimension write is not checked for
- * COHERENCE" known problem `STATUS.md` already carries (a raw `setSlot` on a
- * table's dimension is generally unguarded against the cells that actually
- * exist), reached through a new door rather than a new hole; closing it in
- * general remains the deletion cycle's business.
+ * Residual, narrower gap, NOT closed here and not previously reachable at all
+ * (so not a regression): a `setSlot` EARLIER IN THE SAME BATCH that changes a
+ * table's `rows`/`cols` VALUE or KIND after this function's per-table state
+ * was seeded is not tracked — this function only simulates the effect of
+ * `insertTableLine`/`deleteTableLine` operations, not arbitrary `setSlot`s.
+ * That is the same "a dimension write is not checked for COHERENCE" known
+ * problem `STATUS.md` already carries (a raw `setSlot` on a table's dimension
+ * is generally unguarded against the cells that actually exist), reached
+ * through the same door as before, not a new one.
  */
 function findInvalidTableResizes(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
@@ -1774,9 +1906,11 @@ function findInvalidTableResizes(operations: readonly Operation[], objects: read
   };
 
   operations.forEach((operation, index) => {
-    if (operation.kind !== "insertTableLine") {
+    if (operation.kind !== "insertTableLine" && operation.kind !== "deleteTableLine") {
       return;
     }
+    const isInsert = operation.kind === "insertTableLine";
+    const verb = isInsert ? "insertion" : "deletion";
     const prefix = `operation ${index + 1} of ${operations.length}`;
     const state = resolveTrackedTableState(operation.objectId);
     if (state === undefined) {
@@ -1795,20 +1929,28 @@ function findInvalidTableResizes(operations: readonly Operation[], objects: read
       return;
     }
     const bound = operation.axis === "row" ? state.rows : state.cols;
-    if (!Number.isInteger(operation.index) || operation.index < 1 || operation.index > bound + 1) {
+    // Insertion's new line may occupy any position 1..count+1 (including
+    // "after the last line"); deletion's index must name an EXISTING line,
+    // 1..count — there is nothing to delete at count+1, and a bound of 0
+    // correctly makes every index invalid (D-050's own reasoning: this
+    // simulation is what makes "existing" mean "as of THIS operation's own
+    // position in the batch," not merely at the batch's start).
+    const maxValidIndex = isInsert ? bound + 1 : bound;
+    if (!Number.isInteger(operation.index) || operation.index < 1 || operation.index > maxValidIndex) {
       problems.push(
-        `${prefix}: ${operation.axis} insertion index ${operation.index} is out of range for "${state.name}" ` +
-          `(currently ${bound} ${operation.axis}s; must be an integer from 1 to ${bound + 1})`,
+        `${prefix}: ${operation.axis} ${verb} index ${operation.index} is out of range for "${state.name}" ` +
+          `(currently ${bound} ${operation.axis}s; must be an integer from 1 to ${maxValidIndex})`,
       );
       return;
     }
     // Accepted — the next operation in this batch targeting the same table
-    // (if any) must see this table's extent as ALREADY one line bigger
-    // (D-050).
+    // (if any) must see this table's extent as already one line bigger or
+    // smaller (D-050, widened to cover both directions entry 0050).
+    const delta = isInsert ? 1 : -1;
     if (operation.axis === "row") {
-      state.rows += 1;
+      state.rows += delta;
     } else {
-      state.cols += 1;
+      state.cols += delta;
     }
   });
 

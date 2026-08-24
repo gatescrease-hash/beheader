@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";
 import { isParseError, parseFormula } from "./parser.ts";
 import type { BinaryOpNode, ErrorNode, FormulaAst, FunctionCallNode, RangeNode, ReferenceNode, UnaryOpNode } from "./ast.ts";
-import { extractDependencies, rewriteAddressesInAst } from "./deps.ts";
+import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./deps.ts";
 
 const addrA: Address = { objectId: "obj_1", path: ["v"] };
 const addrB: Address = { objectId: "obj_2", path: ["v"] };
@@ -277,5 +277,84 @@ describe("rewriteAddressesInAst — entry 0047, §5.4's reference-adjustment bui
   it("never throws, including on a deeply nested tree", () => {
     const deep: FormulaAst = { type: "unaryOp", operator: "-", operand: { type: "unaryOp", operator: "-", operand: refA } };
     expect(() => rewriteAddressesInAst(deep, bump)).not.toThrow();
+  });
+});
+
+describe("repairAddressesInAst — entry 0050, §5.4's DELETE-side reference-adjustment/REPAIR building block (D-052's node-level walk)", () => {
+  const identityReference = (address: Address): Address => address;
+  const identityRange = (start: Address, end: Address): { readonly start: Address; readonly end: Address } => ({ start, end });
+
+  it("returns a literal/error node completely unchanged (no address to repair)", () => {
+    const literal: FormulaAst = { type: "literal", value: 42 };
+    const errorNode: ErrorNode = { type: "error", error: "#REF" };
+    expect(repairAddressesInAst(literal, identityReference, identityRange)).toBe(literal);
+    expect(repairAddressesInAst(errorNode, identityReference, identityRange)).toBe(errorNode);
+  });
+
+  it("rewrites a bare reference's address when repairReference reports a repaired Address", () => {
+    const bump = (address: Address): Address => ({ objectId: address.objectId, path: [...address.path, "bumped"] });
+    expect(repairAddressesInAst(refA, bump, identityRange)).toEqual({ type: "reference", address: { objectId: "obj_1", path: ["v", "bumped"] } });
+  });
+
+  it("turns a reference into a fresh ErrorNode (D-028) when repairReference reports \"deleted\" — never a widened LiteralNode", () => {
+    const deleteA = (address: Address): Address | "deleted" => (address.objectId === "obj_1" ? "deleted" : address);
+    expect(repairAddressesInAst(refA, deleteA, identityRange)).toEqual({ type: "error", error: "#REF" });
+  });
+
+  it("leaves a reference alone when repairReference reports it unaffected", () => {
+    expect(repairAddressesInAst(refB, identityReference, identityRange)).toEqual(refB);
+  });
+
+  it("rewrites both of a range's endpoints when repairRange reports a repaired pair", () => {
+    const range: RangeNode = { type: "range", start: addrA, end: addrB };
+    const bumpBoth = (start: Address, end: Address) => ({
+      start: { objectId: start.objectId, path: [...start.path, "bumped"] },
+      end: { objectId: end.objectId, path: [...end.path, "bumped"] },
+    });
+    expect(repairAddressesInAst(range, identityReference, bumpBoth)).toEqual({
+      type: "range",
+      start: { objectId: "obj_1", path: ["v", "bumped"] },
+      end: { objectId: "obj_2", path: ["v", "bumped"] },
+    });
+  });
+
+  it("turns a whole RangeNode into a fresh ErrorNode when repairRange reports \"deleted\" (§5.4: a range deleted entirely becomes #REF)", () => {
+    const range: RangeNode = { type: "range", start: addrA, end: addrB };
+    const deleteWhole = (): "deleted" => "deleted";
+    expect(repairAddressesInAst(range, identityReference, deleteWhole)).toEqual({ type: "error", error: "#REF" });
+  });
+
+  it("repairRange is called with BOTH endpoints together, not one at a time", () => {
+    const range: RangeNode = { type: "range", start: addrA, end: addrB };
+    const seen: Address[][] = [];
+    const recordBoth = (start: Address, end: Address) => {
+      seen.push([start, end]);
+      return { start, end };
+    };
+    repairAddressesInAst(range, identityReference, recordBoth);
+    expect(seen).toEqual([[addrA, addrB]]);
+  });
+
+  it("recurses into both sides of a binaryOp, both operands of a unaryOp, and every functionCall argument", () => {
+    const deleteA = (address: Address): Address | "deleted" => (address.objectId === "obj_1" ? "deleted" : address);
+    const tree: FormulaAst = {
+      type: "functionCall",
+      name: "SUM",
+      args: [
+        { type: "binaryOp", operator: "+", left: refA, right: refB },
+        { type: "unaryOp", operator: "-", operand: refC },
+      ],
+    };
+    const repaired = repairAddressesInAst(tree, deleteA, identityRange) as FunctionCallNode;
+    const binary = repaired.args[0] as BinaryOpNode;
+    const unary = repaired.args[1] as UnaryOpNode;
+    expect(binary.left).toEqual({ type: "error", error: "#REF" }); // refA's object was "deleted".
+    expect((binary.right as ReferenceNode).address).toEqual(addrB); // refB untouched.
+    expect((unary.operand as ReferenceNode).address).toEqual(addrC); // refC untouched.
+  });
+
+  it("never throws, including on a deeply nested tree", () => {
+    const deep: FormulaAst = { type: "unaryOp", operator: "-", operand: { type: "unaryOp", operator: "-", operand: refA } };
+    expect(() => repairAddressesInAst(deep, identityReference, identityRange)).not.toThrow();
   });
 });

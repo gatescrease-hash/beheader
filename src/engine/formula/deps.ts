@@ -85,6 +85,16 @@
  * location because the "walk every FormulaAst shape" switch is the thing being reused, not any
  * dependency-specific logic.
  *
+ * As of entry 0050, this file ALSO exports `repairAddressesInAst` — a THIRD total walk, for
+ * row/column DELETION's reference-adjustment pass and §5.1.1's REPAIR path (D-028), per D-052's own
+ * forward note: `rewriteAddressesInAst`'s `(Address) => Address` signature cannot express deletion's
+ * repair, because turning a `ReferenceNode` into an `ErrorNode` is a NODE-level replacement (not an
+ * address-level edit) and a range endpoint's clamped value depends on BOTH endpoints at once. So
+ * this walk is NODE-level: its two callbacks (`repairReference`, `repairRange`) may each report
+ * `"deleted"`, which this function — not the caller — turns into a fresh `ErrorNode` at exactly that
+ * position (D-028: "its OWN AST node, never a widened LiteralNode"). See `repairAddressesInAst`'s own
+ * doc comment.
+ *
  * NOT DONE HERE
  *   Turning a `RangeDependency` into concrete per-cell edges. This file reports a range
  *   PRE-EXPANSION, as its own single dependency — deliberately, and that has not changed.
@@ -168,6 +178,68 @@ export function rewriteAddressesInAst(ast: FormulaAst, rewrite: (address: Addres
       return { ...ast, operand: rewriteAddressesInAst(ast.operand, rewrite) };
     case "functionCall":
       return { ...ast, args: ast.args.map((arg) => rewriteAddressesInAst(arg, rewrite)) };
+    default: {
+      const exhaustive: never = ast;
+      return exhaustive;
+    }
+  }
+}
+
+/**
+ * The DELETE-side sibling of `rewriteAddressesInAst` (see the file header) —
+ * repairs `ast` for §5.4's reference-adjustment pass on a row/column deletion,
+ * where an address must sometimes be REPLACED, not merely shifted:
+ *
+ *   - `repairReference` is called with a `ReferenceNode`'s address and returns
+ *     either a repaired `Address` (unchanged or shifted) or the literal string
+ *     `"deleted"`. This function turns `"deleted"` into a fresh `ErrorNode`
+ *     (`{ type: "error", error: "#REF" }`, D-028) at exactly that position —
+ *     never a widened `LiteralNode`, never a whole-formula replacement — so
+ *     the rest of the formula, and every edge it derives, survives untouched.
+ *   - `repairRange` is called with BOTH of a `RangeNode`'s endpoints AT ONCE,
+ *     because which new value an endpoint takes (§5.4's "clamps to the
+ *     remaining extent") depends on where the OTHER endpoint sits, not on
+ *     either endpoint alone — an address-at-a-time callback cannot express
+ *     this (D-052's forward note). It returns a repaired `{ start, end }`
+ *     pair, or `"deleted"` for a range that named only the removed line
+ *     (§5.4: "a range deleted entirely becomes `#REF`"), turned into the same
+ *     kind of `ErrorNode`.
+ *
+ * Like `rewriteAddressesInAst`, this file has no notion of tables, rows, or
+ * deletion indices — `repairReference`/`repairRange` carry all of that (see
+ * `primitives/table.ts`'s `repairCellAddressForDelete`/
+ * `repairRangeEndpointsForDelete`); this function only knows how to walk
+ * `FormulaAst`'s seven shapes and where to place an `ErrorNode`. A
+ * `LiteralNode`/`ErrorNode` has nothing to repair and is returned AS-IS.
+ * Never throws, matching every other walk in this file.
+ */
+export function repairAddressesInAst(
+  ast: FormulaAst,
+  repairReference: (address: Address) => Address | "deleted",
+  repairRange: (start: Address, end: Address) => { readonly start: Address; readonly end: Address } | "deleted",
+): FormulaAst {
+  switch (ast.type) {
+    case "literal":
+    case "error":
+      return ast;
+    case "reference": {
+      const repaired = repairReference(ast.address);
+      return repaired === "deleted" ? { type: "error", error: "#REF" } : { ...ast, address: repaired };
+    }
+    case "range": {
+      const repaired = repairRange(ast.start, ast.end);
+      return repaired === "deleted" ? { type: "error", error: "#REF" } : { ...ast, start: repaired.start, end: repaired.end };
+    }
+    case "binaryOp":
+      return {
+        ...ast,
+        left: repairAddressesInAst(ast.left, repairReference, repairRange),
+        right: repairAddressesInAst(ast.right, repairReference, repairRange),
+      };
+    case "unaryOp":
+      return { ...ast, operand: repairAddressesInAst(ast.operand, repairReference, repairRange) };
+    case "functionCall":
+      return { ...ast, args: ast.args.map((arg) => repairAddressesInAst(arg, repairReference, repairRange)) };
     default: {
       const exhaustive: never = ast;
       return exhaustive;

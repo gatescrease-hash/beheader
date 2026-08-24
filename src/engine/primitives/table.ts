@@ -151,13 +151,18 @@
  *     `readTableDimension` (D-046) — one guard, not two copies of the Rule 6
  *     reasoning.
  *
+ * Entry 0050 builds the DELETE half: `deleteTableLine`,
+ * `repairCellAddressForDelete`, `repairRangeEndpointsForDelete` — the FIRST
+ * real use of §5.1.1's REPAIR path anywhere in this codebase. Deletion can
+ * ORPHAN a reference (insertion structurally cannot), so an address naming the
+ * removed line cannot simply shift — it must become `#REF` (a plain
+ * reference, D-028) or clamp to the surviving extent (a range endpoint,
+ * §5.4). `formula/deps.ts`'s new `repairAddressesInAst` is the node-level walk
+ * this needs (D-052's forward note); this file supplies its two callbacks,
+ * with no notion of `FormulaAst` shapes itself, mirroring the insert side's
+ * separation of concerns exactly.
+ *
  * NOT DONE HERE
- *   - Row/column DELETE and its REPAIR path (rewriting inbound references to
- *     `#REF`, a range endpoint clamping to the remaining extent). INSERT
- *     landed at entry 0047 (`insertTableLine`, `shiftCellAddressForInsert`) —
- *     delete is a genuinely different mutation (it can ORPHAN a reference,
- *     which insert never does) and is deliberately deferred to its own
- *     cycle; see STATUS.md's next slice.
  *   - Nothing here PREVENTS a raw `setSlot` on `TABLE_ROWS_PATH`/
  *     `TABLE_COLS_PATH` from disagreeing with the cell slots that actually
  *     exist on the object — see `enumerateTableCellSlotPaths`'s own doc
@@ -575,6 +580,221 @@ export function insertTableLine(object: GraphObject, axis: "row" | "column", ind
       continue; // Defensive only — cannot actually happen for a path this file just generated.
     }
     const shifted = shiftCoordinates(coordinates, axis, clampedIndex);
+    shiftedCells[slotKey([TABLE_CELL_PATH_PREFIX, formatCellReference(shifted)])] = slot;
+  }
+  Object.assign(newSlots, shiftedCells);
+
+  return { ...object, slots: newSlots };
+}
+
+// ---------------------------------------------------------------------------
+// Row/column DELETION (entry 0050; §5.4's other half of "rows and columns can
+// be added or removed" — and the FIRST real use of §5.1.1's REPAIR path
+// anywhere in this codebase). Mirrors insertion's shape wherever the two are
+// symmetric (D-051's shared shift-arithmetic lineage) and diverges only where
+// deletion's ability to ORPHAN a reference forces it to: an address naming the
+// removed line cannot simply shift, it must become `#REF` (a plain reference,
+// D-028) or clamp to the surviving extent (a range endpoint, §5.4) — decisions
+// this file makes and hands to `formula/deps.ts`'s node-level
+// `repairAddressesInAst` as plain data (`Address | "deleted"`), never by
+// constructing an `ErrorNode` here: this file has no notion of `FormulaAst`
+// shapes, matching the separation the insert side already keeps.
+// ---------------------------------------------------------------------------
+
+/**
+ * The delete-side counterpart to `shiftCoordinates`: given a cell's CURRENT
+ * coordinates and the row/column being removed at `index`, returns the
+ * literal string `"deleted"` if this cell's own row/column IS the one being
+ * removed, or the shifted coordinates otherwise — unchanged if entirely
+ * before `index`, moved back by one if entirely after it. The mirror image of
+ * insertion's "at or after shifts by one," except delete's boundary is
+ * strictly `>` (not `>=`): the line AT `index` no longer exists at all, unlike
+ * insertion's new line, which occupies `index`. D-051: this arithmetic joins
+ * `shiftCoordinates` in this file rather than living anywhere else.
+ */
+function shiftCoordinatesForDelete(
+  coordinates: { readonly column: number; readonly row: number },
+  axis: "row" | "column",
+  index: number,
+): { readonly column: number; readonly row: number } | "deleted" {
+  const value = axis === "row" ? coordinates.row : coordinates.column;
+  if (value === index) {
+    return "deleted";
+  }
+  if (value > index) {
+    return axis === "row"
+      ? { column: coordinates.column, row: coordinates.row - 1 }
+      : { column: coordinates.column - 1, row: coordinates.row };
+  }
+  return coordinates;
+}
+
+/**
+ * Shifts (or reports the deletion of) ONE stored cell `Address` for §5.4's
+ * reference-adjustment pass on a DELETION — the delete-side sibling of
+ * `shiftCellAddressForInsert`. Any address not on `tableId`, or not a cell
+ * address at all, is returned completely UNCHANGED (same defensive stance as
+ * the insert-side function — e.g. `rows`/`cols` themselves, or a reference
+ * into a different table). Returns the literal string `"deleted"` — never an
+ * `ErrorNode` itself — for `formula/deps.ts`'s `repairAddressesInAst` to turn
+ * into one; this file stays blind to `FormulaAst` shapes, mirroring
+ * `shiftCellAddressForInsert`'s own separation.
+ */
+export function repairCellAddressForDelete(address: Address, tableId: string, axis: "row" | "column", index: number): Address | "deleted" {
+  if (address.objectId !== tableId) {
+    return address;
+  }
+  const coordinates = cellAddressToCoordinates(address);
+  if (coordinates === undefined) {
+    return address; // Not a cell address at all (e.g. `rows`/`cols` themselves) — nothing to repair.
+  }
+  const shifted = shiftCoordinatesForDelete(coordinates, axis, index);
+  if (shifted === "deleted") {
+    return "deleted";
+  }
+  if (shifted.row === coordinates.row && shifted.column === coordinates.column) {
+    return address; // Entirely before the deleted line — unchanged, same reference identity.
+  }
+  return { objectId: address.objectId, path: [TABLE_CELL_PATH_PREFIX, formatCellReference(shifted)] };
+}
+
+/**
+ * One range endpoint's new coordinate along the axis being deleted, given the
+ * OTHER endpoint's coordinate along the SAME axis — the tie-break §5.4's
+ * "clamps to the remaining extent" needs when THIS endpoint's own line is the
+ * one deleted. `thisValue === index` can mean one of two things depending on
+ * which SIDE of the range this endpoint is on, and role is decided by VALUE
+ * against the other endpoint, never by which AST field ("start"/"end") this
+ * endpoint happens to occupy — a `RangeNode`'s two fields carry no min/max
+ * guarantee (a user may legally write `A5:A1`):
+ *
+ *   - `otherValue > index`: this endpoint is the range's LOWER bound. The
+ *     deleted line's successor (`index + 1`) becomes the new lower bound, and
+ *     that successor shifts DOWN to `index` under deletion — so the new value
+ *     is `index` itself, numerically unchanged.
+ *   - `otherValue < index`: this endpoint is the range's UPPER bound. The
+ *     deleted line's predecessor (`index - 1`) becomes the new upper bound,
+ *     unaffected by the shift (it was already before `index`) — so the new
+ *     value is `index - 1`.
+ *   - `otherValue === index` too: both endpoints name the deleted line —
+ *     handled by the CALLER before this function is ever reached (the whole
+ *     range is deleted, §5.4's other clause); never called with this case.
+ */
+function clampRangeEndpointValue(thisValue: number, otherValue: number, index: number): number {
+  if (thisValue < index) {
+    return thisValue;
+  }
+  if (thisValue > index) {
+    return thisValue - 1;
+  }
+  return otherValue > index ? index : index - 1; // thisValue === index — see doc comment above.
+}
+
+/**
+ * The range-endpoint sibling of `repairCellAddressForDelete`: given a
+ * `RangeNode`'s two stored endpoint `Address`es, returns their repaired pair,
+ * or the literal string `"deleted"` if the WHOLE range named only the removed
+ * line (§5.4: "a range deleted entirely becomes `#REF`" — the single-cell
+ * range `A3:A3` deleting row 3 is the concrete shape of this). Endpoints not
+ * naming `tableId`, or not well-formed cell addresses, pass through as an
+ * UNCHANGED pair — defensive only, mirroring `enumerateRangeCellAddresses`'s
+ * own stance on a malformed or cross-object range (D-045's defensive arm).
+ *
+ * Only the axis being deleted is ever touched, on either endpoint — the other
+ * axis's coordinate (the column, for a row deletion) carries through
+ * unchanged on each endpoint independently: a range spans a rectangle, and
+ * deleting a row never moves a column.
+ */
+export function repairRangeEndpointsForDelete(
+  start: Address,
+  end: Address,
+  tableId: string,
+  axis: "row" | "column",
+  index: number,
+): { readonly start: Address; readonly end: Address } | "deleted" {
+  if (start.objectId !== tableId || end.objectId !== tableId) {
+    return { start, end };
+  }
+  const startCoordinates = cellAddressToCoordinates(start);
+  const endCoordinates = cellAddressToCoordinates(end);
+  if (startCoordinates === undefined || endCoordinates === undefined) {
+    return { start, end };
+  }
+
+  const startValue = axis === "row" ? startCoordinates.row : startCoordinates.column;
+  const endValue = axis === "row" ? endCoordinates.row : endCoordinates.column;
+
+  if (startValue === index && endValue === index) {
+    return "deleted"; // §5.4: a range naming only the deleted line becomes #REF entirely.
+  }
+
+  const newStartValue = clampRangeEndpointValue(startValue, endValue, index);
+  const newEndValue = clampRangeEndpointValue(endValue, startValue, index);
+
+  const newStartCoordinates =
+    axis === "row" ? { column: startCoordinates.column, row: newStartValue } : { column: newStartValue, row: startCoordinates.row };
+  const newEndCoordinates =
+    axis === "row" ? { column: endCoordinates.column, row: newEndValue } : { column: newEndValue, row: endCoordinates.row };
+
+  return {
+    start: { objectId: start.objectId, path: [TABLE_CELL_PATH_PREFIX, formatCellReference(newStartCoordinates)] },
+    end: { objectId: end.objectId, path: [TABLE_CELL_PATH_PREFIX, formatCellReference(newEndCoordinates)] },
+  };
+}
+
+/**
+ * Returns a NEW table `GraphObject` with the row/column at `index` REMOVED
+ * (§5.4's other half of "rows and columns can be added or removed"): the
+ * relevant dimension slot decrements by one, every populated cell AT `index`
+ * is DROPPED (its content is gone — the line itself no longer exists), and
+ * every populated cell AFTER `index` shifts back by one, via the SAME
+ * per-cell arithmetic (`shiftCoordinatesForDelete`) `repairCellAddressForDelete`
+ * uses for the reference-adjustment pass — so the cell-slot move and the
+ * formula-reference move can never disagree about where row N goes, the same
+ * discipline D-051 already established for insertion.
+ *
+ * **D-049 applies here exactly as it does to `insertTableLine`.** The new
+ * `slots` record starts from `object.slots` IN FULL — a slot this function
+ * does not recognise (an unrecognised literal, a cell outside the current
+ * extent, a future `origin.x`) is carried through untouched, never rebuilt
+ * from scratch. Only the CURRENT extent's cell keys are removed, and each
+ * only because it is either being dropped (at `index`) or re-written at its
+ * shifted position (after `index`).
+ *
+ * `index` MUST already be validated (an integer in `1..currentCount`) by the
+ * caller — `mutation.ts`'s `findInvalidTableResizes` is the primary,
+ * message-bearing check, mirroring the same primary-validation/defensive-arm
+ * split `insertTableLine` already uses. Unlike insertion, this function does
+ * NOT clamp an out-of-range index: there is no sensible "nearest line" to
+ * delete instead of a nonexistent one, so an unvalidated call simply
+ * decrements the dimension and moves whatever cells happen to satisfy
+ * `shiftCoordinatesForDelete`'s arithmetic. A caller that only ever reaches
+ * this after the precondition check passes never observes that distinction.
+ */
+export function deleteTableLine(object: GraphObject, axis: "row" | "column", index: number): GraphObject {
+  const { rows, cols } = getTableDimensions(object);
+
+  // D-049: start from every slot this object already carries.
+  const newSlots: Record<string, Slot> = { ...object.slots };
+  newSlots[slotKey(TABLE_ROWS_PATH)] = { kind: "literal", value: axis === "row" ? Math.max(0, rows - 1) : rows };
+  newSlots[slotKey(TABLE_COLS_PATH)] = { kind: "literal", value: axis === "column" ? Math.max(0, cols - 1) : cols };
+
+  const shiftedCells: Record<string, Slot> = {};
+  for (const path of enumerateTableCellSlotPaths(object)) {
+    const slot = getSlot(object, path);
+    if (slot === undefined) {
+      continue; // No slot at this candidate cell — nothing to move or drop.
+    }
+    delete newSlots[slotKey(path)]; // This cell is either dropped or moved — either way it leaves its old key.
+    const cellReference = path[1]; // enumerateTableCellSlotPaths always yields [TABLE_CELL_PATH_PREFIX, ref].
+    const coordinates = cellReference === undefined ? undefined : parseCellReference(cellReference);
+    if (coordinates === undefined) {
+      continue; // Defensive only — cannot actually happen for a path this file just generated.
+    }
+    const shifted = shiftCoordinatesForDelete(coordinates, axis, index);
+    if (shifted === "deleted") {
+      continue; // §5.4: this cell's own row/column was removed — its content goes with it.
+    }
     shiftedCells[slotKey([TABLE_CELL_PATH_PREFIX, formatCellReference(shifted)])] = slot;
   }
   Object.assign(newSlots, shiftedCells);

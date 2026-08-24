@@ -9,12 +9,15 @@ import type { GraphObject, Value } from "../graph/node.ts";
 import {
   DEFAULT_TABLE_COLS,
   DEFAULT_TABLE_ROWS,
+  deleteTableLine,
   enumerateRangeCellAddresses,
   enumerateTableCellSlotPaths,
   getTableDimensions,
   insertTableLine,
   isRangeEnumerationError,
   isTableDimensionResizable,
+  repairCellAddressForDelete,
+  repairRangeEndpointsForDelete,
   shiftCellAddressForInsert,
   TABLE_COLS_PATH,
   TABLE_ROWS_PATH,
@@ -376,6 +379,167 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
         },
       };
       const result = insertTableLine(withPosition, "column", 1);
+      expect(result.slots["origin.x"]).toEqual({ kind: "literal", value: 10 });
+      expect(result.slots["origin.y"]).toEqual({ kind: "literal", value: 20 });
+    });
+  });
+});
+
+describe("repairCellAddressForDelete — entry 0050, §5.4's per-address DELETE-side reference-adjustment arithmetic", () => {
+  it("reports \"deleted\" for a cell whose own row is the one being removed", () => {
+    expect(repairCellAddressForDelete(cell("obj_1", "A3"), "obj_1", "row", 3)).toBe("deleted");
+  });
+
+  it("shifts a row strictly after the deleted index back by one", () => {
+    expect(repairCellAddressForDelete(cell("obj_1", "A5"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A4"));
+  });
+
+  it("leaves a row strictly before the deleted index unchanged", () => {
+    const address = cell("obj_1", "A2");
+    expect(repairCellAddressForDelete(address, "obj_1", "row", 3)).toBe(address); // same reference, not just equal
+  });
+
+  it("does the same for a column deletion, independent of row", () => {
+    expect(repairCellAddressForDelete(cell("obj_1", "D1"), "obj_1", "column", 2)).toEqual(cell("obj_1", "C1"));
+    expect(repairCellAddressForDelete(cell("obj_1", "B1"), "obj_1", "column", 2)).toBe("deleted");
+    const before = cell("obj_1", "A1");
+    expect(repairCellAddressForDelete(before, "obj_1", "column", 2)).toBe(before);
+  });
+
+  it("leaves an address on a DIFFERENT object completely unchanged", () => {
+    const other = cell("obj_2", "A5");
+    expect(repairCellAddressForDelete(other, "obj_1", "row", 3)).toBe(other);
+  });
+
+  it("leaves a non-cell address on the SAME table unchanged (e.g. a reference to `rows` itself)", () => {
+    const rowsAddress: Address = { objectId: "obj_1", path: ["rows"] };
+    expect(repairCellAddressForDelete(rowsAddress, "obj_1", "row", 3)).toBe(rowsAddress);
+  });
+});
+
+describe("repairRangeEndpointsForDelete — entry 0050, §5.4's \"clamps to the remaining extent\" / \"deleted entirely becomes #REF\"", () => {
+  it("leaves both endpoints unchanged when the deleted row is entirely AFTER the range", () => {
+    const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 8);
+    expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A5") });
+  });
+
+  it("shifts BOTH endpoints back by one when the deleted row is entirely BEFORE the range", () => {
+    const result = repairRangeEndpointsForDelete(cell("obj_1", "A5"), cell("obj_1", "A8"), "obj_1", "row", 1);
+    expect(result).toEqual({ start: cell("obj_1", "A4"), end: cell("obj_1", "A7") });
+  });
+
+  it("narrows a range that spans the deleted row (deleted line is strictly INTERIOR): lower bound unchanged, upper bound -1", () => {
+    // A1:A5, delete row 3 (interior) -> remaining rows {1,2,4,5} renumber to {1,2,3,4} = A1:A4.
+    const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 3);
+    expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A4") });
+  });
+
+  it("clamps when the deleted row IS the range's lower bound", () => {
+    // A1:A5, delete row 1 -> remaining {2,3,4,5} renumber to {1,2,3,4} = A1:A4.
+    const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 1);
+    expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A4") });
+  });
+
+  it("clamps when the deleted row IS the range's upper bound", () => {
+    // A1:A5, delete row 5 -> remaining {1,2,3,4} unchanged = A1:A4.
+    const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 5);
+    expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A4") });
+  });
+
+  it("returns \"deleted\" for a single-cell range that names only the deleted line (§5.4: deleted entirely becomes #REF)", () => {
+    expect(repairRangeEndpointsForDelete(cell("obj_1", "A3"), cell("obj_1", "A3"), "obj_1", "row", 3)).toBe("deleted");
+  });
+
+  it("decides which endpoint is the lower/upper bound by VALUE, not by which AST field holds it (a reversed A5:A1 range)", () => {
+    // start=A5 (the numerically larger), end=A1 (the numerically smaller) — a legal, reversed range.
+    // Deleting row 5 (the "start" field's own value, but the UPPER bound by value) must clamp to A4:A1... i.e. new start=A4, end unchanged.
+    const result = repairRangeEndpointsForDelete(cell("obj_1", "A5"), cell("obj_1", "A1"), "obj_1", "row", 5);
+    expect(result).toEqual({ start: cell("obj_1", "A4"), end: cell("obj_1", "A1") });
+  });
+
+  it("only touches the axis being deleted — the other axis's coordinate survives on each endpoint independently", () => {
+    const result = repairRangeEndpointsForDelete(cell("obj_1", "B1"), cell("obj_1", "D5"), "obj_1", "row", 3);
+    expect(result).toEqual({ start: cell("obj_1", "B1"), end: cell("obj_1", "D4") });
+  });
+
+  it("leaves BOTH endpoints unchanged, as a pair, when the range names a DIFFERENT object", () => {
+    const start = cell("obj_2", "A1");
+    const end = cell("obj_2", "A5");
+    expect(repairRangeEndpointsForDelete(start, end, "obj_1", "row", 3)).toEqual({ start, end });
+  });
+
+  it("leaves both endpoints unchanged, defensively, when an endpoint is not a well-formed cell address", () => {
+    const start: Address = { objectId: "obj_1", path: ["rows"] };
+    const end = cell("obj_1", "A5");
+    expect(repairRangeEndpointsForDelete(start, end, "obj_1", "row", 3)).toEqual({ start, end });
+  });
+});
+
+describe("deleteTableLine — entry 0050, §5.4's row/column deletion primitive (the FIRST §5.1.1 REPAIR-path primitive)", () => {
+  it("decrements rows, drops the cell AT the deleted index, and shifts every cell after it back by one row", () => {
+    const table = tableWithCells(4, 1, { A1: 1, A2: 2, A3: 3, A4: 4 });
+    const result = deleteTableLine(table, "row", 2);
+
+    expect(getTableDimensions(result)).toEqual({ rows: 3, cols: 1 });
+    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: 1 }); // before the index: unchanged.
+    expect(result.slots["cells.A2"]).toEqual({ kind: "literal", value: 3 }); // old A3 moved here.
+    expect(result.slots["cells.A3"]).toEqual({ kind: "literal", value: 4 }); // old A4 moved here.
+    expect(result.slots["cells.A4"]).toBeUndefined(); // no longer within the extent.
+  });
+
+  it("does the same for a column deletion, independent of rows", () => {
+    const table = tableWithCells(1, 4, { A1: "a", B1: "b", C1: "c", D1: "d" });
+    const result = deleteTableLine(table, "column", 2);
+
+    expect(getTableDimensions(result)).toEqual({ rows: 1, cols: 3 });
+    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: "a" });
+    expect(result.slots["cells.B1"]).toEqual({ kind: "literal", value: "c" }); // old C1.
+    expect(result.slots["cells.C1"]).toEqual({ kind: "literal", value: "d" }); // old D1.
+    expect(result.slots["cells.D1"]).toBeUndefined();
+  });
+
+  it("deleting the LAST remaining row leaves a 0-row table with no cells", () => {
+    const table = tableWithCells(1, 1, { A1: 1 });
+    const result = deleteTableLine(table, "row", 1);
+    expect(getTableDimensions(result)).toEqual({ rows: 0, cols: 1 });
+    expect(result.slots["cells.A1"]).toBeUndefined();
+  });
+
+  it("re-asserts rows/cols as literal even if it was some other kind before (D-046), same posture as insertTableLine", () => {
+    const result = deleteTableLine(tableWithFormulaDimensions(2, 2), "row", 1);
+    // D-046: a formula-kind dimension slot reads as 0 (readTableDimension's fail-safe) — the
+    // Math.max(0, ...) floor keeps this from going negative, and the result is LITERAL either way.
+    expect(result.slots[TABLE_ROWS_PATH.join(".")]).toEqual({ kind: "literal", value: 0 });
+  });
+
+  it("never throws, including on a table with no dimension slots at all", () => {
+    const bare: GraphObject = { id: "obj_1", name: "table_x", type: "table", slots: {} };
+    expect(() => deleteTableLine(bare, "row", 1)).not.toThrow();
+    expect(getTableDimensions(deleteTableLine(bare, "row", 1))).toEqual({ rows: 0, cols: 0 });
+  });
+
+  describe("D-049 parity — a slot this function does not own survives a deletion", () => {
+    it("a literal slot at an UNRECOGNISED path survives a delete", () => {
+      const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
+      const withNote: GraphObject = { ...table, slots: { ...table.slots, note: { kind: "literal", value: "hello" } } };
+      const result = deleteTableLine(withNote, "row", 1);
+      expect(result.slots.note).toEqual({ kind: "literal", value: "hello" });
+    });
+
+    it("a cell slot OUTSIDE the table's current declared extent survives a delete", () => {
+      const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
+      const withOutOfExtentCell: GraphObject = { ...table, slots: { ...table.slots, "cells.A5": { kind: "literal", value: 99 } } };
+      const result = deleteTableLine(withOutOfExtentCell, "row", 1);
+      expect(result.slots["cells.A5"]).toEqual({ kind: "literal", value: 99 });
+    });
+
+    it("stands in for Phase 3's future origin.x/origin.y: an arbitrary extra slot survives a delete", () => {
+      const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
+      const withPosition: GraphObject = {
+        ...table,
+        slots: { ...table.slots, "origin.x": { kind: "literal", value: 10 }, "origin.y": { kind: "literal", value: 20 } },
+      };
+      const result = deleteTableLine(withPosition, "row", 1);
       expect(result.slots["origin.x"]).toEqual({ kind: "literal", value: 10 });
       expect(result.slots["origin.y"]).toEqual({ kind: "literal", value: 20 });
     });

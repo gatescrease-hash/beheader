@@ -2614,3 +2614,414 @@ describe("mutate — Phase 2 acceptance criterion clause 3, completed: SUM(A1:A5
     }
   });
 });
+
+describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FIRST §5.1.1 REPAIR-path operation (entry 0050)", () => {
+  it("shrinks the extent, drops the cell AT the deleted index, and shifts every populated cell AFTER it back by one row", () => {
+    const table = tableObject("obj_1", "table_x", 4, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+      "cells.A4": { kind: "literal", value: 4 },
+    });
+
+    const result = mutate([table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const resized = result.objects.find((o) => o.id === "obj_1");
+    expect(resized?.slots.rows).toMatchObject({ value: 3 });
+    expect(resized?.slots["cells.A1"]).toMatchObject({ value: 1 }); // before the index: unchanged.
+    expect(resized?.slots["cells.A2"]).toMatchObject({ value: 3 }); // old A3, shifted back.
+    expect(resized?.slots["cells.A3"]).toMatchObject({ value: 4 }); // old A4, shifted back.
+    expect(resized?.slots["cells.A4"]).toBeUndefined(); // no longer within the extent.
+  });
+
+  it("§5.1.1 REPAIR: a reference from ANOTHER object into the DELETED cell becomes #REF, live — never a dangling edge, never a rejection", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+    const reader: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A2") }, value: null } },
+    };
+
+    const result = mutate([table, reader], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const repaired = result.objects.find((o) => o.id === "obj_2");
+    expect(repaired?.slots.value).toMatchObject({ kind: "formula", ast: { type: "error", error: "#REF" } });
+    expect((repaired?.slots.value as { value: unknown })?.value).toMatchObject({ error: "#REF" }); // evaluates live too (D-028).
+  });
+
+  it("§5.4: a reference from ANOTHER object into a row AFTER the deleted one shifts back — the WHOLE document, not just the table's own formulas", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+    const reader: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A3") }, value: null } },
+    };
+
+    const result = mutate([table, reader], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const rewritten = result.objects.find((o) => o.id === "obj_2");
+    expect(rewritten?.slots.value).toMatchObject({ ast: { type: "reference", address: addr("obj_1", "cells", "A2") } }); // A3 shifted to A2.
+    expect(rewritten?.slots.value).toMatchObject({ value: 3 }); // still resolves to the old A3's value, live.
+  });
+
+  it("a reference that named a row BEFORE the deletion point is left completely unchanged", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+    const reader: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: null } },
+    };
+
+    const result = mutate([table, reader], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const untouched = result.objects.find((o) => o.id === "obj_2");
+      expect(untouched?.slots.value).toMatchObject({ ast: { type: "reference", address: addr("obj_1", "cells", "A1") } });
+    }
+  });
+
+  it("a reference into a table OTHER than the one being resized is completely untouched", () => {
+    const tableX = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } });
+    const tableZ = tableObject("obj_3", "table_z", 2, 1, { "cells.A1": { kind: "literal", value: 9 } });
+    const tableY = tableObject("obj_2", "table_y", 2, 1, {
+      "cells.A2": { kind: "formula", ast: { type: "reference", address: addr("obj_3", "cells", "A1") }, value: null },
+    });
+
+    const result = mutate([tableX, tableY, tableZ], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const untouched = result.objects.find((o) => o.id === "obj_2");
+      expect(untouched?.slots["cells.A2"]).toMatchObject({ ast: { type: "reference", address: addr("obj_3", "cells", "A1") } });
+    }
+  });
+
+  it("column deletion shifts columns, independent of rows", () => {
+    const table = tableObject("obj_1", "table_x", 1, 4, {
+      "cells.A1": { kind: "literal", value: "a" },
+      "cells.B1": { kind: "literal", value: "b" },
+      "cells.C1": { kind: "literal", value: "c" },
+      "cells.D1": { kind: "literal", value: "d" },
+    });
+
+    const result = mutate([table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "column", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const resized = result.objects.find((o) => o.id === "obj_1");
+    expect(resized?.slots.cols).toMatchObject({ value: 3 });
+    expect(resized?.slots["cells.A1"]).toMatchObject({ value: "a" });
+    expect(resized?.slots["cells.B1"]).toMatchObject({ value: "c" }); // old C1.
+    expect(resized?.slots["cells.C1"]).toMatchObject({ value: "d" }); // old D1.
+    expect(resized?.slots["cells.D1"]).toBeUndefined();
+  });
+
+  it("a RANGE spanning the deleted row narrows (clamps) and keeps computing correctly — §5.4's other repair clause", () => {
+    const table = tableObject("obj_1", "table_x", 5, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+      "cells.A4": { kind: "literal", value: 4 },
+      "cells.A5": { kind: "literal", value: 5 },
+    });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A5") }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([table, consumer], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 3 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // A1:A5, delete row 3 (interior) -> clamps to A1:A4 (§5.4's own words).
+    expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({
+      ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A4") }] },
+    });
+    // Remaining rows (old A1,A2,A4,A5 -> new A1,A2,A3,A4) sum to 1+2+4+5 = 12.
+    expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 12 });
+  });
+
+  it("a range naming ONLY the deleted line becomes #REF entirely (§5.4: \"a range deleted entirely becomes #REF\")", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, { "cells.A2": { kind: "literal", value: 2 } });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A2"), end: addr("obj_1", "cells", "A2") }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([table, consumer], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({
+      ast: { type: "functionCall", name: "SUM", args: [{ type: "error", error: "#REF" }] },
+    });
+  });
+
+  it("rejects a deletion index out of range, naming the operation and the problem", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+    const result = mutate([table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 99 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 1 of 1");
+      expect(result.message).toContain("out of range");
+    }
+  });
+
+  it("rejects a deletion index of 0 (not 1-based) and leaves prior state untouched", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+    const snapshotBefore = JSON.parse(JSON.stringify([table])) as unknown;
+    const result = mutate([table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 0 }], []);
+
+    expect(result.ok).toBe(false);
+    expect([table]).toEqual(snapshotBefore);
+  });
+
+  it("rejects a deletion from an already-empty (0-row) table — unlike insertion, there is no valid index at all", () => {
+    const table = tableObject("obj_1", "table_x", 0, 1, {});
+    const result = mutate([table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("out of range");
+    }
+  });
+
+  it("rejects a deletion targeting a non-table object", () => {
+    const result = mutate([valueObject("obj_1", "value_1", 1)], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("is not a table");
+    }
+  });
+
+  it("rejects a deletion targeting an object id that does not exist (D-021)", () => {
+    const result = mutate([], [{ kind: "deleteTableLine", objectId: "obj_missing", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("does not exist in this document");
+    }
+  });
+
+  it("rejects a deletion whose dimension is not literal (D-046), same guard as insertion", () => {
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_x",
+      type: "table",
+      slots: { rows: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 }, cols: { kind: "literal", value: 1 } },
+    };
+    const result = mutate([table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("D-046");
+    }
+  });
+
+  it("composes with an ordinary setSlot in the SAME batch, folding left-to-right", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 },
+        { kind: "setSlot", address: addr("obj_1", "cells", "A1"), slot: { kind: "literal", value: 100 } }, // old A2, now shifted to A1.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const resized = result.objects.find((o) => o.id === "obj_1");
+      expect(resized?.slots["cells.A1"]).toMatchObject({ value: 100 }); // overwritten by the setSlot.
+      expect(resized?.slots["cells.A2"]).toMatchObject({ value: 3 }); // old A3, shifted back.
+    }
+  });
+});
+
+describe("mutate — findInvalidTableResizes widened for deleteTableLine (D-050, entry 0050): one simulation covers insert AND delete together", () => {
+  it("two deletes on the same table in one batch both commit, each validated against the state as of its own position", () => {
+    const table = tableObject("obj_1", "table_x", 4, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+      "cells.A4": { kind: "literal", value: 4 },
+    });
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 4 }, // legal: rows is 4.
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 3 }, // legal: rows is 3 by now.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const resized = result.objects.find((o) => o.id === "obj_1");
+      expect(resized?.slots.rows).toMatchObject({ value: 2 });
+    }
+  });
+
+  it("an INTERLEAVED insert-then-delete batch on one table is validated against each operation's own position, not pre-batch state", () => {
+    // Starts at 2 rows. Insert at index 3 (append) -> 3 rows, legal only
+    // because the simulation already knows about the insert. Then delete
+    // index 3 (the row just inserted) -> back to 2 rows.
+    const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 }, "cells.A2": { kind: "literal", value: 2 } });
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 3 },
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 3 },
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const resized = result.objects.find((o) => o.id === "obj_1");
+      expect(resized?.slots.rows).toMatchObject({ value: 2 });
+      expect(resized?.slots["cells.A1"]).toMatchObject({ value: 1 });
+      expect(resized?.slots["cells.A2"]).toMatchObject({ value: 2 });
+    }
+  });
+
+  it("a delete-then-insert batch: the delete's out-of-range check runs against PRE-delete state, the insert's against POST-delete state", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {});
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 3 }, // legal: rows is 3 -> 2.
+        { kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 3 }, // legal: bound+1 = 3, against the NOW-2-row table.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_1")?.slots.rows).toMatchObject({ value: 3 });
+    }
+  });
+
+  it("a SECOND delete beyond what remains is rejected, validated against the state AS OF ITS OWN POSITION — not the table's original row count", () => {
+    // Starts at 1 row. Delete index 1 (legal: rows becomes 0). A second
+    // delete at index 1 must now be rejected — there is nothing left to
+    // delete — even though index 1 WAS legal against the table's original
+    // (pre-batch) row count.
+    const table = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 1 } });
+
+    const result = mutate(
+      [table],
+      [
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 },
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 },
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 2 of 2");
+      expect(result.message).toContain("out of range");
+    }
+  });
+
+  it("a deletion targeting a table created EARLIER IN THE SAME BATCH is validated, not skipped", () => {
+    const freshTable = tableObject("obj_1", "table_x", 2, 1, {});
+
+    const result = mutate(
+      [],
+      [
+        { kind: "createObject", object: freshTable },
+        { kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 99 }, // out of range for the 2-row table just created.
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("out of range");
+    }
+  });
+});
+
+describe("mutate — Phase 2 acceptance criterion clause 4, DELETE half: row/column DELETE with #REF repair (entry 0050)", () => {
+  it("§5.4/§5.1.1: deleting a row whose cells have external dependents rewrites those references to #REF (repair path) rather than leaving a dangling edge, and NEVER rejects", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 10 },
+      "cells.A2": { kind: "literal", value: 20 },
+      "cells.A3": { kind: "literal", value: 30 },
+    });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "text_1",
+      type: "value", // stands in for a Phase 5 text box — any object with a formula slot demonstrates the same edge.
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A2") }, value: null } },
+    };
+
+    const result = mutate([table, dependent], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 2 }], []);
+
+    // The defining assertion: this commits. §5.1.1's REJECT path (used by
+    // plain `delete <object>` today) is NOT what row/column deletion does —
+    // it repairs, unconditionally, per §5.4's own words.
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const repaired = result.objects.find((o) => o.id === "obj_2");
+    expect(repaired?.slots.value).toMatchObject({ kind: "formula", ast: { type: "error", error: "#REF" } });
+    expect((repaired?.slots.value as { value: unknown }).value).toMatchObject({ error: "#REF" });
+
+    // No dangling edge either: re-deriving and re-validating the COMMITTED
+    // result must still be internally consistent (D-018's own "committed
+    // state must always be valid on its own terms" standard).
+    const rechecked = deriveValidateAndEvaluate(result.objects);
+    expect(rechecked.ok).toBe(true);
+  });
+});
