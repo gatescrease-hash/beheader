@@ -6,53 +6,45 @@
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   Two layers of naming. Objects have opaque, stable, never-reused IDs (obj_7, per
- *   D-002 — the counter itself lives in document.ts, not here). Users write mutable
- *   names (polygon_1). Names resolve to IDs at parse time and stored ASTs hold IDs
- *   only, which is why renaming an object rewrites no formulas.
+ *   Two layers of naming. Objects have opaque, stable, never-reused IDs (`obj_7`,
+ *   D-002 — the counter itself lives in `document.ts`). Users write mutable names
+ *   (`polygon_1`). Names resolve to IDs at parse time and stored ASTs hold IDs only,
+ *   which is why renaming an object rewrites no formulas.
  *
- *   graph/node.ts does not exist yet (Phase 0, later in this cycle set). Every
- *   function here therefore takes the object list it needs to resolve against as a
- *   plain `readonly AddressableObject[]` parameter, rather than reading a `document`
- *   this module does not own. This mirrors the eventual shape: the resolver reads
- *   document state, it does not own it (STATUS.md gotcha, cycle 0000).
+ *   Every function here takes the object list to resolve against as a plain
+ *   `readonly AddressableObject[]`, rather than reading a document this module does
+ *   not own: the resolver READS document state, it does not own it.
  *
- *   The path a user types and the path a slot is stored under are NOT always the
- *   same string (D-005). The one case specified so far: a table cell is written as
- *   `table_x.A1` but stored as `path: ["cells", "A1"]`, because §5.4 says "each cell
- *   is a slot" and that slot lives under the table's `cells` family, not bare at the
- *   object's root (§5.2's own address table states this explicitly, and §5.1 names
- *   the slot `cells.A1`, not `A1`). `parseAddress`/`formatAddress` apply that mapping
- *   by object `type` — see `toStoredPath`/`toSurfacePath` below. This is a stand-in
- *   for `primitives/schema.ts`, which does not exist yet: when it lands, the mapping
- *   should be driven by the schema's slot declarations rather than a hardcoded
- *   type check here, but the *contract* (surface string vs. stored path can differ)
- *   is settled now and must not be re-litigated per-object-type later.
+ *   **The path a user types and the path a slot is stored under are NOT always the
+ *   same string (D-005).** The one case specified so far: a table cell is written as
+ *   `table_x.A1` but stored as `["cells", "A1"]`, because §5.4 says "each cell is a
+ *   slot" and that slot lives under the table's `cells` family, not bare at the
+ *   object's root. `parseAddress`/`formatAddress` apply that mapping by object `type`
+ *   (`toStoredPath`/`toSurfacePath`). Driving the mapping from `primitives/schema.ts`'s
+ *   declarations instead of a type check here would be the tidier home for it, but the
+ *   CONTRACT — surface string and stored path can differ — is settled and must not be
+ *   re-litigated per object type.
  *
  * INVARIANTS UPHELD HERE
- *   - A stored Address NEVER contains a user-facing name — it is `{ objectId, path }`
- *     only. Renaming an object never touches a stored Address.
- *   - Address strings are only ever produced by formatAddress(); never concatenated
+ *   - A stored `Address` NEVER contains a user-facing name — it is `{ objectId, path }`
+ *     only. Renaming an object never touches a stored `Address`.
+ *   - Address strings are only ever produced by `formatAddress()`, never concatenated
  *     ad hoc elsewhere.
  *   - `formatAddress` is the exact inverse of `parseAddress`: for every address form
- *     specified in §5.2's table, `formatAddress(parseAddress(s, os), os) === s`.
+ *     in §5.2's table, `formatAddress(parseAddress(s, os), os) === s`.
  *
  * NOT DONE HERE
- *   - Validating that `path` names a slot that actually exists on the object's schema
- *     (e.g. that `A1` is within the table's current bounds, or that `origin` is a
- *     real slot on this object's type). `primitives/schema.ts` does not exist yet;
- *     that check is layered on top of parseAddress in a later cycle, per §5.1's
- *     mutation-loop step 4. What IS done here (D-005) is narrower and structural:
- *     mapping a known type's surface path shape to its stored path shape, not
- *     verifying the resulting slot exists.
- *   - Resolving a BARE cell reference (`A1`, no leading `name.`) — legal only inside
- *     a table cell formula (§5.3), meaning "this table, that cell." That context
- *     (which table) belongs to `formula/parser.ts` (cycle 0031), which calls
- *     `isCellReferenceForm` below to detect the shape and builds the `Address`
- *     directly (there is no name to resolve — the table is already known), then
- *     falls through to `parseAddress` here for every other case (a real `name.path`).
- *   - Dependency extraction, cycle detection, mutation (formula/deps.ts,
- *     graph/cycles.ts, mutation.ts).
+ *   - Validating that `path` names a slot that actually EXISTS on the object's schema
+ *     (that `A1` is within the table's bounds, that `origin` is a real slot on this
+ *     type). That is `mutation.ts`'s step-4 job. What IS done here (D-005) is narrower
+ *     and structural: mapping a known type's surface path shape to its stored path
+ *     shape, not verifying the resulting slot exists.
+ *   - Resolving a BARE cell reference (`A1`, no leading `name.`), legal only inside a
+ *     table cell formula (§5.3). Which table that is belongs to `formula/parser.ts`,
+ *     which calls `isCellReferenceForm` here to detect the shape and builds the
+ *     `Address` directly (there is no name to resolve), then falls through to
+ *     `parseAddress` for every real `name.path`.
+ *   - Dependency extraction, cycle detection, mutation.
  */
 import { type ObjectType, TABLE_TYPE } from "./graph/node.ts";
 
@@ -212,7 +204,7 @@ export function generateDefaultName(typePrefix: string, objects: readonly Addres
 
 // TABLE_TYPE ("table") is imported from graph/node.ts, not redeclared here — the
 // object type vocabulary is defined exactly once, per D-009 (0004-REVIEW-phase0).
-// Exported (cycle 0040) so `primitives/table.ts` builds a `["cells", ref]` path
+// Exported so `primitives/table.ts` builds a `["cells", ref]` path
 // against the SAME constant this file's own `toStoredPath`/`bareCellAddress` use,
 // rather than a second copy of the string `"cells"` — D-010's "declare vocabulary
 // once" principle, applied to this literal the same way `TABLE_TYPE` already applies
@@ -299,7 +291,7 @@ export function bareCellAddress(tableObjectId: string, cellReference: string): A
 }
 
 // ---------------------------------------------------------------------------
-// Column-letter <-> index arithmetic and cell-reference splitting (cycle 0040)
+// Column-letter <-> index arithmetic and cell-reference splitting
 //
 // §5.4's A1 form is bijective base-26 over columns ("Excel" numbering): A=1,
 // B=2, ..., Z=26, AA=27, AB=28, .... `address.ts` already owns every other

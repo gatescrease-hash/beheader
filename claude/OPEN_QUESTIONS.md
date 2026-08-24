@@ -8,11 +8,57 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-011**
+Next free ID: **Q-012**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-011 — Does **D-058** still stand, now that the practice it regulates has been removed from source?
+Raised: entry 0055-AUDIT (auditor)   Brief section: PROCESS_BRIEF §5.2/§5.4   Status: OPEN
+Blocks: nothing. But it MUST be settled at the next review, because until it is, DECISIONS.md and
+the actual tree disagree, and DECISIONS.md is the binding document.
+
+Ambiguity: **D-058 (0051-REVIEW-phase2) ruled that "the per-cycle history paragraphs these file
+headers carry are accepted practice in this repo and stay"**, requiring only that each one name its
+entry number rather than saying "this cycle". The audit pass at entry 0055 — run at the human's
+direct instruction, after presenting exactly this recommendation — **removed those paragraphs
+instead.** That is a change to a binding ruling made by someone with no authority to make one: an
+auditor is neither the reviewer nor the human, and DECISIONS.md says plainly "NEVER write to it."
+So this question is raised rather than the ruling being edited.
+
+Note that D-058's own RATIONALE argues for removal rather than against it. It records that
+0048-REVIEW had to hand-correct 15 comment sites, and 0051-REVIEW another 8, because a dated
+history paragraph drifts; it concludes "a comment that cannot be dated is worse than no comment,
+because it reads as precise." Entry 0055 found the same class a third time in a different form —
+headers that were internally self-contradicting, correct only when read start-to-finish as a
+chronology (`mutation.ts` asserted both that `extractDependencies` did not exist yet and that the
+code walked it, forty lines apart). D-058 fixed the DATING of the practice. The audit removed the
+practice. Both are answers to the same recurring defect.
+
+Options:
+(a) **Supersede D-058.** Header history paragraphs are no longer accepted practice; headers state
+    the present contract, and chronology lives in `entries/` + DECISIONS.md. PROCESS_BRIEF §5.2's
+    new present-tense rule and line budget (added at 0055) become the standing convention.
+(b) **Reaffirm D-058 and revert entry 0055's header pass.** The chronology returns to source, dated
+    by entry number as D-058 requires.
+(c) **Split.** D-058's dating requirement stands for any comment that does date a decision, but
+    headers are exempted from carrying history at all. In practice this is (a) plus an explicit
+    rule for the inline sites that remain.
+
+Recommendation: (a), or (c) if the reviewer wants D-058's dating discipline preserved by name for
+the ~46 inline provenance citations entry 0055 deliberately left in place. Reason: the defect
+D-058 exists to prevent has now recurred three times under two different rules, and every recurrence
+was found by hand. Removing the practice removes the class; dating it only slows the drift.
+
+Reversible? Yes, but expensively — reverting is `git revert` of one commit, so it is cheap
+mechanically, and the removed prose is fully preserved in git history and in `entries/` regardless
+of which way this is ruled. Provisional choice taken: yes — the removal is already in the tree
+(entry 0055). Tagged at: not tagged in source. Tagging every rewritten header `PROVISIONAL(Q-011)`
+would reintroduce exactly the noise the pass removed; this entry, STATUS.md, and entry 0055 carry
+the disclosure instead.
 
 ---
 

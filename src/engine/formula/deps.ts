@@ -1,114 +1,70 @@
 /**
- * deps.ts — Eager, total dependency extraction over a `FormulaAst` (PROJECT_BRIEF §5.3/§9).
+ * deps.ts — Total walks over a `FormulaAst`: dependency extraction, and the two
+ * address-adjustment passes table resize needs (PROJECT_BRIEF §5.3/§5.4/§9).
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.3's "Eager total dependency extraction vs. lazy short-circuit
- * evaluation" section, and D-029's binding rider on it ("`deps.ts` treats both forms IDENTICALLY
- * and remains EAGER and TOTAL over both" — `AND`/`OR`/`NOT`'s infix/prefix form and their call
- * form). Also upholds D-028 (`extractDependencies` yields NOTHING for an `ErrorNode` — "the
- * absence of a dependency, made explicit").
+ * IMPLEMENTS: §5.3's "eager total dependency extraction vs. lazy short-circuit
+ * evaluation" section — the EAGER half — plus **D-029**'s rider ("`deps.ts` treats
+ * both forms IDENTICALLY and remains EAGER and TOTAL over both") and **D-028**
+ * (`extractDependencies` yields NOTHING for an `ErrorNode`: "the absence of a
+ * dependency, made explicit").
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
- * This is an ORDINARY file inside the already-reviewed `formula/` subsystem (0032-REVIEW signed
- * off `parser.ts`; STATUS.md's own words: "`deps.ts` is UNBLOCKED"), not a new subsystem's first
- * file — §6.1 trigger 2 does not apply.
- *
  * WHAT THIS IS
- *   `extractDependencies(ast)`, that walks the ENTIRE `FormulaAst` and
- *   returns every address it *could* read — including BOTH branches of every `IF` and BOTH
- *   syntactic forms of `AND`/`OR`/`NOT` (D-029) — never just the branch that would actually run.
- *   §5.3 is explicit that this is not a bug: "You cannot know which branch is live without
- *   evaluating, and which branch is live changes constantly — so the graph must subscribe to all
- *   of them." Nothing here evaluates anything or knows what a branch's condition currently is;
- *   this file has no notion of "taken" at all, which is exactly what makes it eager and total by
- *   construction rather than by a special case.
+ *   `extractDependencies(ast)` walks the ENTIRE AST and returns every address it
+ *   *could* read — BOTH branches of every `IF`, BOTH syntactic forms of `AND`/`OR`/
+ *   `NOT` — never just the branch that would run. §5.3 is explicit this is not a bug:
+ *   "You cannot know which branch is live without evaluating, and which branch is live
+ *   changes constantly — so the graph must subscribe to all of them." Nothing here
+ *   evaluates anything or has any notion of "taken", which is what makes it eager and
+ *   total BY CONSTRUCTION rather than by a special case: the walk recurses into every
+ *   child unconditionally, so `a AND b` and `AND(a, b)` produce identical dependency
+ *   sets without this file ever knowing `"AND"` is special.
  *
- *   D-029's own rider is why this file needs NO special-casing of `IF`/`AND`/`OR`/`NOT` by name,
- *   in either form: the walk below recurses into every `FunctionCallNode`'s `args` and every
- *   `BinaryOpNode`/`UnaryOpNode`'s operands UNCONDITIONALLY. `a.v AND b.v` (a `BinaryOpNode`) and
- *   `AND(a.v, b.v)` (a `FunctionCallNode` named `"AND"`) are walked by two different `switch` arms
- *   that both, unconditionally, recurse into every child — so the two forms produce identical
- *   dependency sets for free, without this file ever needing to know `"AND"` is special. The same
- *   is true of `IF(cond, whenTrue, whenFalse)`: it is an ordinary `FunctionCallNode`, and its
- *   three args are walked exactly like any other function's arguments — both branches, always.
- *   This mirrors `parser.ts`'s own `isFunctionNameToken` note that treating a name generically
- *   until something ELSE needs to distinguish it is the simpler, more correct default.
+ *   `RangeNode` is reported as its OWN shape — a `RangeDependency` holding the two
+ *   endpoint addresses — never flattened per cell. §5.3: "Store a range in the AST as
+ *   an endpoint pair... **Expand to concrete slot dependencies at edge-derivation
+ *   time**." That is `mutation.ts`, a different and later moment, and expanding needs
+ *   the table's CURRENT dimensions — graph state this file is never handed
+ *   (`extractDependencies` takes only an `ast`, so the same walk serves cell formulas,
+ *   text formulas, and bindings alike). Collapsing a range to just its two endpoints
+ *   would silently lose every cell BETWEEN them — the D-017 failure class (an edge
+ *   silently missing) reached from a new angle.
  *
- *   `RangeNode` (`start:end`, §5.3) is reported as its OWN dependency shape — a `RangeDependency`
- *   holding the two endpoint `Address`es — rather than flattened into a `ReferenceDependency` per
- *   cell the range spans. This is a direct, disclosed reading of §5.3's own words: "Store a range
- *   in the AST as an endpoint pair... **Expand to concrete slot dependencies at edge-derivation
- *   time** (step 3 of the mutation loop)." Edge-derivation time is `mutation.ts`'s `deriveEdges`,
- *   a DIFFERENT file and a DIFFERENT, later moment — not this one — and expanding a range into the
- *   individual cells it spans needs the table's CURRENT dimensions (how many rows/columns exist
- *   right now), which is graph state this file is never handed (`extractDependencies` takes only
- *   an `ast`, per §5.3's own "write it once, use it identically for cell formulas, text formulas,
- *   and bindings" — none of which is a table object). Collapsing a `RangeNode` into two
- *   `ReferenceDependency` entries (just its endpoints) would silently lose every cell BETWEEN
- *   them — exactly the D-017 failure class (an edge silently missing) reached from a new angle.
- *   Reporting it as a distinct, disclosed shape keeps that expansion possible later without this
- *   file guessing at it now. `deriveEdges` does not consume this file yet (see NOT DONE HERE);
- *   this is a genuine, disclosed design decision this cycle makes for whichever future cycle wires
- *   the two together, not a mechanical translation of the brief's one sentence on it.
+ *   Dependencies are NOT deduplicated: `a.v + a.v` yields two entries. A duplicate
+ *   edge is harmless to every consumer (`detectCycle` and `evaluate` both build their
+ *   own adjacency), and deduplicating would be extra work for a property nothing
+ *   needs (Rule 5).
  *
- *   Dependencies are NOT deduplicated. `a.v + a.v` yields TWO `ReferenceDependency` entries for
- *   `a.v`, not one. This matches the only existing precedent for a dependency list in this
- *   codebase: `mutation.ts`'s `deriveEdges` pushes one `Edge` per resolved address from
- *   `derivedSlotDependencyAddresses` with no dedup step of its own, and a duplicate edge is
- *   harmless to every graph algorithm that consumes `Edge[]` (`detectCycle`, `evaluate`) — both
- *   build their own adjacency and neither cares about a repeated entry. Deduplicating here would
- *   be extra work (Rule 5: the dumbest correct implementation, not the shortest data structure)
- *   for a property nothing downstream currently needs.
+ *   `rewriteAddressesInAst` and `repairAddressesInAst` are two more total walks over
+ *   the same shapes, for §5.4's reference adjustment. They are SIBLINGS of
+ *   `extractDependencies` (same shapes, same totality) — the reused thing is the
+ *   "walk every `FormulaAst` shape" switch, not any dependency-specific logic — and
+ *   they are two, not one, for a reason (**D-052**): `rewriteAddressesInAst` is
+ *   ADDRESS-level, `(Address) => Address`, which is all INSERTION needs; DELETION
+ *   cannot be expressed that way, because turning a `ReferenceNode` into an
+ *   `ErrorNode` is a NODE-level replacement and a range endpoint's clamped value
+ *   depends on BOTH endpoints at once. So `repairAddressesInAst` is node-level: its
+ *   callbacks may report `"deleted"`, which the WALK — not the caller — turns into a
+ *   fresh `ErrorNode` at exactly that position (D-028: "its OWN AST node, never a
+ *   widened `LiteralNode`").
  *
  * INVARIANTS UPHELD HERE
- *   - `extractDependencies` NEVER throws and never fails — there is no way for a well-formed
- *     `FormulaAst` (the only input this file's type signature admits) to be "malformed" from this
- *     file's point of view the way source text or a token stream can be; every node either
- *     contributes a dependency or delegates to its children. The `default` arm below exists only
- *     for compile-time exhaustiveness (mirrors `parser.ts`'s own `walkForRangePlacement`) and for
- *     defence against a hand-edited/loaded AST bypassing the type system (`document.ts` casts a
- *     loaded formula slot's `ast` unchecked, per 0032-REVIEW-phase1's own finding about that file)
- *     — it contributes no dependency rather than throwing, consistent with every other stage's
- *     "never throw" discipline even though this file has no error return channel to report through.
- *   - Order is NOT significant — a fresh walk every call (Rule 5), same stance `deriveEdges`
- *     itself documents for its own output.
- *   - An `ErrorNode` (D-028) yields NOTHING — walking into `#REF` where a reference used to be
- *     contributes no address, "the absence of a dependency, made explicit" (D-028's own words).
- *   - `LiteralNode` yields NOTHING — a literal has no address to read.
- *
- * As of entry 0047, this file ALSO exports `rewriteAddressesInAst` — a second total walk over the
- * exact same node shapes, used by §5.4's reference-adjustment pass (`mutation.ts`'s
- * `insertTableLine` handling) to shift every `ReferenceNode`/`RangeNode` address a row/column
- * insertion moves. It is a SIBLING to `extractDependencies` (same shapes, same totality), not a
- * variant of it — one EXTRACTS addresses into a flat list, the other REBUILDS the AST with each
- * address passed through a caller-supplied function. Kept in this file rather than a third
- * location because the "walk every FormulaAst shape" switch is the thing being reused, not any
- * dependency-specific logic.
- *
- * As of entry 0050, this file ALSO exports `repairAddressesInAst` — a THIRD total walk, for
- * row/column DELETION's reference-adjustment pass and §5.1.1's REPAIR path (D-028), per D-052's own
- * forward note: `rewriteAddressesInAst`'s `(Address) => Address` signature cannot express deletion's
- * repair, because turning a `ReferenceNode` into an `ErrorNode` is a NODE-level replacement (not an
- * address-level edit) and a range endpoint's clamped value depends on BOTH endpoints at once. So
- * this walk is NODE-level: its two callbacks (`repairReference`, `repairRange`) may each report
- * `"deleted"`, which this function — not the caller — turns into a fresh `ErrorNode` at exactly that
- * position (D-028: "its OWN AST node, never a widened LiteralNode"). See `repairAddressesInAst`'s own
- * doc comment.
+ *   - Never throws and never fails. Every node either contributes a dependency or
+ *     delegates to its children. The `default` arm exists for compile-time
+ *     exhaustiveness and as defence against a hand-edited or loaded AST bypassing the
+ *     type system (`document.ts` casts a loaded formula slot's `ast` unchecked) — it
+ *     contributes nothing rather than throwing, consistent with every other stage.
+ *   - Order is not significant — a fresh walk every call (Rule 5).
+ *   - An `ErrorNode` yields NOTHING (D-028); a `LiteralNode` yields nothing (it has no
+ *     address to read).
  *
  * NOT DONE HERE
- *   Turning a `RangeDependency` into concrete per-cell edges. This file reports a range
- *   PRE-EXPANSION, as its own single dependency — deliberately, and that has not changed.
- *   Expansion belongs to `mutation.ts`'s `deriveEdges`, which (as of entry 0044) walks this
- *   function for real and expands a `RangeDependency` through `primitives/table.ts`'s
- *   `enumerateRangeCellAddresses`, bounded by the target table's current dimensions (D-044)
- *   read `literal`-only (D-046). Evaluation-side expansion is `graph/eval.ts`'s `readRange`
- *   closure feeding `formula/eval.ts`. Range PLACEMENT is `parser.ts`'s (D-045). Those four
- *   concerns stay separate — do not collapse them here.
- *
- *   (This block previously said the wiring was unbuilt and named a TEMPORARY
- *   `findUnsupportedFormulaAsts` shield in `mutation.ts`; all three temporary bridges were
- *   deleted at entry 0044 and `functions.ts`/`formula/eval.ts` are long built. Corrected at
- *   0045-REVIEW rather than left to mislead a cold reader.)
+ *   Turning a `RangeDependency` into concrete per-cell edges. Four concerns stay
+ *   separate and must not be collapsed here: EDGE expansion is `mutation.ts`'s
+ *   `deriveEdges`; VALUE expansion is `graph/eval.ts`'s `readRange` feeding
+ *   `formula/eval.ts`; the bounded enumeration both share is `primitives/table.ts`'s
+ *   `enumerateRangeCellAddresses`; range PLACEMENT is `parser.ts`'s (D-045).
  */
 import type { Address } from "../address.ts";
 import type { FormulaAst } from "./ast.ts";

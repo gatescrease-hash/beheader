@@ -1,115 +1,83 @@
 /**
  * functions.ts — The built-in function registry (PROJECT_BRIEF §5.3).
  *
- * IMPLEMENTS: §5.3's built-ins list in full ("IF, AND, OR, NOT, SUM, MIN, MAX, AVG, ABS,
- * ROUND(n, digits), FLOOR, CEIL, SQRT, POW, CONCAT, LEN, PI(), SIN, COS, TAN, ATAN2, DEG, RAD")
- * as one table-driven registry ("name → arity → implementation... so adding one is a single
- * line"), and **D-029**'s binding rider on it: `IF`/`AND`/`OR` are registered by NAME and ARITY
- * only — this file MUST NOT give them an implementation that computes from pre-evaluated
- * arguments, because §5.3 requires them to be evaluated LAZILY (`IF` evaluates only the taken
- * branch; `AND`/`OR` short-circuit) by `formula/eval.ts` itself, at the call site, in BOTH
- * syntactic forms (operator and call). `NOT` is D-029's one exception — one argument, no branch
- * to skip — and gets an ordinary eager implementation like every other entry here.
+ * IMPLEMENTS: §5.3's built-ins list in full (`IF, AND, OR, NOT, SUM, MIN, MAX, AVG,
+ * ABS, ROUND, FLOOR, CEIL, SQRT, POW, CONCAT, LEN, PI, SIN, COS, TAN, ATAN2, DEG,
+ * RAD`) as one table-driven registry ("name → arity → implementation... so adding one
+ * is a single line"), and **D-029**'s rider on it: `IF`/`AND`/`OR` are registered by
+ * NAME and ARITY only and MUST NOT have an implementation computing from
+ * pre-evaluated arguments, because §5.3 requires them evaluated LAZILY by
+ * `formula/eval.ts` at the call site, in both syntactic forms. `NOT` is D-029's one
+ * exception — one argument, no branch to skip — and is an ordinary eager entry.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
- * This is an ORDINARY file inside the already-reviewed `formula/` subsystem (STATUS.md, as of
- * entry 0033: "`functions.ts` is UNBLOCKED") — §6.1 trigger 2 does not apply. It DOES touch
- * `parser.ts`, an already-reviewed file, in one small, disclosed way — see WHAT THIS IS.
- *
  * WHAT THIS IS
- *   `FUNCTION_REGISTRY`, a `Record<string, FunctionEntry>` covering all 23 built-in names, plus:
- *   - `getFunctionEntry(name)` — exact lookup (case-sensitive; see the case-sensitivity note
- *     below).
- *   - `checkArity(name, arity, argCount)` — a pure, standalone arity check returning a
- *     human-readable message on mismatch, same "report which rule failed" shape
- *     `address.ts`'s `checkNameAvailable` already establishes.
- *   - `RANGE_ACCEPTING_FUNCTION_NAMES` — every name whose entry accepts a `RangeNode` argument
- *     (today: `SUM`, `MIN`, `MAX`, `AVG`). `parser.ts`'s `validateRangePlacement` used to keep its
- *     OWN small `AGGREGATE_FUNCTION_NAMES` set for exactly this, with its own header note that it
- *     was "a disclosed, minimal duplication expected to fold into `functions.ts`'s registry once
- *     it exists." That moment is now: `parser.ts` imports this constant instead of hardcoding a
- *     second copy — same behaviour, one source of truth, D-009/D-014's "declare vocabulary once"
- *     principle applied to a new case. This is the one place this file changes an already-reviewed
- *     file, and it is a pure refactor: no parser test's expectations changed, because the set of
- *     names it recognises is identical before and after.
- *   - `LAZY_FUNCTION_NAMES` — every name D-029 forbids an eager implementation for (today: `IF`,
- *     `AND`, `OR`). Consumed as of cycle 0036 by `formula/eval.ts`, which special-cases exactly
- *     this set at the `FunctionCallNode` site rather than dispatching
- *     into this registry's `implementation`.
- *   - `finiteResult(name, value)` — exported as of cycle 0036 so `formula/eval.ts`'s own
- *     arithmetic operators route through the SAME D-033 guard rather than a second copy. See its
- *     own doc comment.
+ *   `FUNCTION_REGISTRY` plus:
+ *   - `getFunctionEntry(name)` — exact, guarded lookup (D-034); nothing indexes the
+ *     registry directly.
+ *   - `checkArity(name, arity, argCount)` — a pure, standalone check returning a
+ *     human-readable message, deliberately SEPARATE from `implementation` so a caller
+ *     checks before calling.
+ *   - `RANGE_ACCEPTING_FUNCTION_NAMES` — every name accepting a `RangeNode` argument
+ *     (`SUM`, `MIN`, `MAX`, `AVG`). `parser.ts` imports this rather than keeping a
+ *     second copy: one source of truth (D-009/D-014).
+ *   - `LAZY_FUNCTION_NAMES` — every name D-029 forbids an eager implementation for.
+ *     `formula/eval.ts` special-cases exactly this set.
+ *   - `finiteResult(name, value)` — exported so `formula/eval.ts`'s own arithmetic
+ *     routes through the SAME D-033 guard rather than a second copy.
  *
- *   Every EAGER implementation follows `primitives/schema.ts`'s `add` compute function's own
- *   established shape (same file, same precedent, same rationale — not reinvented here):
- *   1. Propagate the FIRST argument that is already an `ErrorValue`, left to right, so a
+ *   Every EAGER implementation follows `primitives/schema.ts`'s `add` compute
+ *   function's shape — same precedent, not reinvented:
+ *   1. Propagate the FIRST already-`ErrorValue` argument, left to right, so a
  *      multiply-erroring call is deterministic (§5.1: "errors propagate").
- *   2. Type-check every remaining argument against what the function actually needs, one #TYPE
- *      message per bad argument, naming its 1-based position.
- *   3. Compute, then run the result through `finiteResult` — the SAME `isIllegalNumber` predicate
- *      (`graph/node.ts`, D-014) `mutation.ts`'s D-025/Q-008 checks already use, so no result that
- *      cannot survive §5.11's JSON format ever leaves this file. Its two halves get DIFFERENT
- *      answers, per **D-033**: a non-finite result becomes `#TYPE` (as `add`'s compute already
- *      does, D-025), while a `-0` result is normalised to `+0` — `CEIL(-0.5)` and `ROUND(-0.4, 0)`
- *      have a correct, representable answer, and erroring would replace it with a lie. See
- *      `finiteResult`'s own comment; see `add`'s header for why `+` alone can never reach either.
+ *   2. Type-check every remaining argument, one `#TYPE` per bad one, naming its
+ *      1-based position.
+ *   3. Compute, then route the result through `finiteResult` — the same
+ *      `isIllegalNumber` predicate (`graph/node.ts`, D-014) `mutation.ts`'s checks
+ *      use, so nothing that cannot survive §5.11's JSON format leaves this file. Its
+ *      two halves get DIFFERENT answers per **D-033**: a non-finite result is `#TYPE`,
+ *      while a `-0` result NORMALISES to `+0` — `CEIL(-0.5)` has a correct,
+ *      representable answer, and erroring would replace it with a lie.
  *
- *   Every FIXED-ARITY implementation is ALSO defensive against being called with too FEW arguments
- *   (a missing `args[index]` reads as `undefined`, `noUncheckedIndexedAccess`) — it returns a
- *   `#TYPE` naming the missing argument rather than crashing. The VARIADIC ones have no fixed
- *   position to miss: called with zero arguments they return their own identity or a caught
- *   illegal result (`SUM()` is `0`, `CONCAT()` is `""`, `MIN()`/`MAX()`/`AVG()` are `#TYPE` via
- *   `finiteResult`), never a crash — their `atLeast(1)` minimum is enforced by `checkArity`, not
- *   by the implementation. This is deliberate belt-and-braces: `checkArity` exists precisely so a
- *   real caller (`eval.ts`, later) checks BEFORE calling `implementation`, but this file does not
- *   trust that a future caller always will (the same layered-validation posture `address.ts`/
- *   `mutation.ts` already establish, D-017's precedent: a check upstream is necessary, not a
- *   license for the function underneath to assume it ran).
+ *   Every FIXED-ARITY implementation is ALSO defensive against too FEW arguments (a
+ *   missing `args[i]` reads as `undefined` under `noUncheckedIndexedAccess`) and
+ *   returns `#TYPE` rather than crashing. The VARIADIC ones have no fixed position to
+ *   miss: called with zero arguments they return their identity or a caught illegal
+ *   result (`SUM()` is `0`, `CONCAT()` is `""`, `MIN()`/`MAX()`/`AVG()` are `#TYPE`),
+ *   never a crash. This is deliberate belt-and-braces: `checkArity` exists so a real
+ *   caller checks first, but this file does not trust that a future one always will —
+ *   the same layered posture D-017 establishes elsewhere (a check upstream is
+ *   necessary, not a license for the function underneath to assume it ran).
  *
- *   **Function names are matched case-sensitively, uppercase only** (`getFunctionEntry("sum")` is
- *   `undefined`; only `"SUM"` resolves). This is not a fresh guess: `parser.ts`'s own
- *   `AGGREGATE_FUNCTION_NAMES` (now `RANGE_ACCEPTING_FUNCTION_NAMES`, folded in here) was ALREADY
- *   case-sensitive-uppercase in already-reviewed, shipped code — a case-insensitive registry here
- *   would silently create an inconsistency where `sum(...)` recognises as a function call but
- *   loses its range-placement legality. Matching the existing precedent is the only choice that
- *   does not introduce that inconsistency; it is also the safe, reversible direction (Q-004's own
- *   standing: uppercase-only today, lowercase-acceptance is purely additive later).
+ *   **Names match case-sensitively, uppercase only.** Not a fresh guess: the
+ *   range-accepting set was already case-sensitive-uppercase in shipped code, and a
+ *   case-insensitive registry here would create an inconsistency where `sum(...)`
+ *   recognises as a call but loses its range-placement legality. Also the reversible
+ *   direction (Q-004's standing: lowercase acceptance is purely additive later).
  *
  *   **`CONCAT` requires every argument to already be a `string`** — no implicit
- *   number/boolean-to-string coercion. The brief does not specify either way; PROJECT_BRIEF §9's
- *   own tie-breaker order picks strict-typing here: "(4) whatever is simplest to delete later."
- *   Adding coercion later is a pure widening (Q-005/D-020's own "widen, never restructure" stance);
- *   removing coercion after formulas exist that depend on it would not be. Strict is also the
- *   uniform posture every other typed argument here already takes (`NOT`'s boolean, every numeric
- *   function's number) — CONCAT is not a special case.
+ *   coercion. The brief does not specify; §9's tie-breaker picks strict ("whatever is
+ *   simplest to delete later"): adding coercion later is a pure widening, removing it
+ *   after formulas depend on it is not. Strict is also the uniform posture every other
+ *   typed argument here takes.
  *
  * INVARIANTS UPHELD HERE
- *   - No entry here ever throws. Every failure mode — wrong arity (checked by the SEPARATE
- *     `checkArity`, never inside `implementation`), wrong argument type, a missing argument, a
- *     propagated upstream error, a non-finite or `-0` result — returns a typed `ErrorValue`
- *     (§5.1: "errors must never throw across the evaluation loop").
- *   - `implementation` is `(args: readonly Value[]) => Value` for every eager entry — it receives
- *     ALREADY-EVALUATED arguments (§5.3's own words: "table-driven... receives arguments that have
- *     already been evaluated"), never a `FormulaAst`. A `RangeNode` argument (legal only for
- *     `RANGE_ACCEPTING_FUNCTION_NAMES`, enforced by `parser.ts`, not here) is therefore ALREADY
- *     flattened into individual evaluated numbers by the time an implementation here ever sees
- *     it — that flattening is `eval.ts`'s job (not yet built), not this file's.
- *   - A `LazyFunctionEntry` structurally CANNOT carry an `implementation` field (TypeScript's
- *     excess-property check on the discriminated union catches an attempt to add one at this
- *     file's own construction sites) — D-029 enforced by the compiler, not only by convention,
- *     the same stance D-006 already takes for Rule 1.
- *   - `FUNCTION_REGISTRY` is a plain `Record<string, FunctionEntry>` — data, not behaviour beyond
- *     the one pure function per entry (Rule 2/§2: plain, serializable graph state stays clean of
- *     this registry entirely; nothing here is ever stored in a `Document`).
+ *   - No entry ever throws. Every failure — wrong arity, wrong type, a missing
+ *     argument, a propagated upstream error, a non-finite or `-0` result — returns a
+ *     typed `ErrorValue` (§5.1).
+ *   - `implementation` is `(args: readonly Value[]) => Value`: it receives ALREADY-
+ *     EVALUATED arguments, never a `FormulaAst`. A range argument is already flattened
+ *     into individual values by the time an implementation sees it — that flattening
+ *     is `eval.ts`'s job.
+ *   - A `LazyFunctionEntry` structurally CANNOT carry an `implementation` field —
+ *     TypeScript's excess-property check catches an attempt to add one at this file's
+ *     own construction sites. D-029 enforced by the compiler, not only by convention.
+ *   - `FUNCTION_REGISTRY` is plain data. Nothing here is ever stored in a `Document`.
  *
  * NOT DONE HERE
- *   Actually CALLING any of this from a live evaluator — `formula/eval.ts` (checks arity via
- *   `checkArity`, dispatches `LAZY_FUNCTION_NAMES` specially, calls `implementation` for
- *   everything else) does not exist yet and is the next cycle. Nothing in `mutation.ts` or
- *   `graph/eval.ts` is wired to this file this cycle — the same "standalone, heavily unit-tested"
- *   posture every `formula/*` file before this one has taken (PROJECT_BRIEF §6's own words for
- *   this phase).
+ *   Dispatching any of this. `formula/eval.ts` checks arity, special-cases
+ *   `LAZY_FUNCTION_NAMES`, and calls `implementation` for everything else.
  */
 import { isErrorValue, isIllegalNumber, type ErrorValue, type Value } from "../graph/node.ts";
 
@@ -277,7 +245,7 @@ function asStringList(name: string, args: readonly Value[]): readonly string[] |
  * still rejects an authored `-0` literal exactly as before. Every eager arithmetic implementation
  * below routes its result through this rather than returning a raw `number` directly.
  *
- * EXPORTED (cycle 0036) so `formula/eval.ts`'s own arithmetic operators (`+ - * / % ^` and unary
+ * EXPORTED so `formula/eval.ts`'s own arithmetic operators (`+ - * / % ^` and unary
  * `-`) route through the SAME guard rather than a second copy — D-033's own binding text: "A future
  * compute path that can produce `-0` MUST route through a guard of THAT SHAPE rather than deciding
  * for itself." Reusing the literal function, not merely its shape, is the stronger reading and

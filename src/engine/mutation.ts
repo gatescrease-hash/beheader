@@ -1,558 +1,153 @@
 /**
  * mutation.ts — THE single transactional channel for state change (PROJECT_BRIEF
- * Rule 2). Edge derivation (§5.1 step 3, cycle 0013), integrity validation
- * (step 4, §5.1.1, cycle 0015; widened to check schema<->slot reconciliation
- * in BOTH directions, D-018, cycle 0019), their composition with the already-
- * built `detectCycle` (step 5) and `evaluate` (step 7) into
- * `deriveValidateAndEvaluate` (cycle 0016), and `mutate(objects, operations,
- * journal)` wrapping that composition with the remaining steps — stage/clone
- * (step 1, a real recursive clone as of D-019/cycle 0019), apply every
- * operation in the batch to that ONE clone (step 2), discard-on-reject
- * (step 6), and commit + journal (step 8, cycle 0017) — all exist already,
- * making this file's public surface the FULL §5.1 mutation loop. Cycle 0020
- * closed 0018-REVIEW-phase0's last REVISE item, **D-020** (the batch form):
- * `mutate` accepts a LIST of operations, applied to a single clone, validated
- * and evaluated once, committing all-or-nothing, appending exactly one
- * journal entry holding the whole list — never N separate single-operation
- * calls. THIS cycle (0022) adds `Operation`'s SECOND variant,
- * `DeleteObjectOperation` (§5.1.1's `delete <object>`), closing Phase 0
- * acceptance clause 3 ("deleting a slot with dependents is rejected") — no
- * new rejection mechanism needed, `validateIntegrity`'s existing
- * dangling-reference check already IS that mechanism (see
- * `DeleteObjectOperation`'s own doc comment) — and makes the batch's
- * target-existence check (D-021/D-023) fold-aware: 0018-REVIEW-phase0's
- * carried forward-hazard note (0021-REVIEW, constraint 1) warned that ANY
- * operation kind able to add or remove an object invalidates checking
- * targets once, up front, against the pre-batch `objects` — this is the
- * first such kind, so this cycle fixes it (see `mutate`'s doc comment for the
- * simulated-existence walk) rather than deferring it again. Cycle 0023 adds
- * `validateIntegrity`'s FOURTH check, **D-025** (Q-006, ruled by the human
- * directly): non-finite numbers (`NaN`/`Infinity`/`-Infinity`) are not legal
- * document state — see WHAT THIS IS, `validateIntegrity`, check 4. Cycle
- * 0024 adds `Operation`'s THIRD variant, `CreateObjectOperation` — the
- * primitive `document.ts`'s loader needs (§5.11: "Loading applies objects
- * through the mutation API"), which also finally exercises the OTHER half of
- * 0021-REVIEW's carried forward-hazard note (constraint 1): a batch that can
- * GROW the object set mid-fold, not just shrink it — see WHAT THIS IS,
- * `CreateObjectOperation`, and `mutate`'s own doc comment for how the
- * existence simulation now handles both directions. Cycle 0026 answers
- * 0025-REVIEW-phase0's REVISE verdict (three findings; finding 1 blocking):
- * D-025 (cycle 0023) only ever checked the POST-FOLD graph, so an illegal
- * value living in an operation's own PAYLOAD — one later overwritten in the
- * SAME batch, or one attached to an object also deleted in the SAME batch —
- * still reached the journal untouched, because nothing re-checked a payload
- * once the fold moved past it. `mutate` now rejects any such operation BEFORE
- * staging (a precondition on the operation, same shape as D-021's existence
- * check — see `findIllegalOperationPayloads` and `mutate`'s own doc comment).
- * This closes the WRITE side; `document.ts`'s own cycle-0026 changes close
- * the READ side (a loaded file's journal never passes through `mutate` at
- * all). Cycle 0026 also settles **Q-008** (is `-0` legal document state?
- * PROVISIONAL, recommendation (a): no) by widening the SAME predicate D-025
- * already added rather than writing a parallel one — see `graph/node.ts`'s
- * `hasIllegalNumber` (renamed from `hasNonFiniteNumber`) for the widened
- * check itself. 0027-REVIEW-phase0 (ACCEPT WITH EDITS) closed the last gap in
- * that same defect class (`camera`/`nextObjectId`, D-027) and **SIGNED OFF
- * THE PHASE 0 GATE**. Cycle 0028 begins Phase 1 (`formula/*`) and answers
- * **Q-005**: `formula/ast.ts`'s `FormulaAst` is now the full §5.3 grammar
- * (seven variants with D-028's, was one) — `validateIntegrity` gains a FIFTH,
- * TEMPORARY check, `findUnsupportedFormulaAsts`, closing the D-017 hazard shape
- * one more time: `deriveEdges` still only derives an edge from the
- * `ReferenceNode` shape (no general `extractDependencies` exists until Phase
- * 2), so a formula slot holding any other AST shape would get NO edge at all
- * — rejected here, loudly, before that can matter. See WHAT THIS IS,
- * `validateIntegrity`, check 2, and `findUnsupportedFormulaAsts`'s own doc
- * comment for why this check is deleted, not extended, once Phase 2 lands.
- * Cycles 0039/0040 (address.ts, primitives/table.ts) did not touch this file.
- * THIS cycle closes 0041-REVIEW-phase2 §9's named critical path: the DYNAMIC
- * SLOT FAMILY mechanism D-017's own forward note asked for. `deriveEdges`'s
- * source 1 and `validateIntegrity`'s checks 1 and 3 (`findUndeclaredFormula
- * OrDerivedSlots`, `findSchemaSlotKindMismatches`) no longer walk
- * `schema.nonDerivedSlotPaths` directly — they call `primitives/schema.ts`'s
- * new `resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)`, which
- * resolves PER OBJECT rather than per type, because `table`'s `cells.*` group
- * is now `dynamic` (a function of the object's own CURRENT `rows`/`cols`
- * slots, `primitives/table.ts`'s `enumerateTableCellSlotPaths`) rather than a
- * fixed list. Calling the SAME resolver at all three sites is the whole point
- * (see `primitives/schema.ts`'s own doc comment): it is what makes edge
- * derivation and both integrity checks agree, for a dynamic family, exactly
- * as they already agreed for a fixed one — the disagreement D-017 itself
- * exists to catch, reached through a new door if each site resolved
- * `dynamic` groups independently. `table` is now a real `SCHEMAS` entry
- * (`getObjectSchema("table")` no longer returns `undefined`) — but ONLY its
- * slot declarations; nothing here creates a table, inserts/deletes a row or
- * column, or wires range expansion — see `primitives/table.ts`'s own NOT DONE
- * HERE for the full list still deferred to the wiring cycle.
+ * Rule 2). Nothing else in this codebase mutates document state.
  *
- * THIS cycle IS that wiring cycle — STATUS.md's "Next slice — the
- * range-evaluation wiring," 0041-REVIEW-phase2 §9's ordering, D-036's five
- * binding constraints. `deriveEdges`'s Source 1 no longer reads a formula
- * slot's AST by hand (the `ReferenceNode`-only narrowing D-036 constraint 3
- * named for deletion): it walks `formula/deps.ts`'s `extractDependencies` for
- * real, over EVERY `FormulaAst` shape, turning each `ReferenceDependency`
- * into one edge and each `RangeDependency` into one edge per cell currently
- * within the named table's extent (D-044), via `primitives/table.ts`'s
- * `enumerateRangeCellAddresses` — bounded, re-resolved every call, reading
- * dimensions `literal`-only (D-046). `validateIntegrity`'s TEMPORARY
- * `findUnsupportedFormulaAsts` check — the shield that made the old narrowing
- * safe — is DELETED, not merely unused: every `FormulaAst` shape is genuinely
- * supported now, so there is nothing left for it to guard against. Deleting
- * it is also what makes **D-031** reachable (a `LiteralNode`'s value inside a
- * stored AST is document state the SAME way a slot's own `value` is) — closed
- * in the SAME cycle, per D-031's own binding text: `findIllegalSlotValues`
- * (validateIntegrity's value-legality check) now ALSO walks every
- * `formula`-kind slot's stored AST and rejects an illegal `LiteralNode`, the
- * widened existing check, not a parallel one. `graph/eval.ts`'s
- * `ReferenceNode`-only bridge is likewise deleted (that file's own header),
- * and `formula/eval.ts` gains real range-aggregate expansion (that file's own
- * header) — the THREE temporary bridges STATUS.md named come down together,
- * in this one cycle, as D-036 required. A range-containing formula is
- * therefore storable as of this cycle (D-036 constraint 4) — nothing here
- * withheld that separately. `formula/parser.ts` gains **D-045** (a
- * cross-object range is rejected at PARSE time, not left to
- * `enumerateRangeCellAddresses`'s own defensive check), and `functions.ts`'s
- * `MIN`/`MAX` lose their `Math.min(...)`/`Math.max(...)` spread risk (D-036
- * constraint 5) — both landed in this cycle because this is the first cycle
- * able to make a range's flattened argument list arbitrarily long.
- *
- * 0045-REVIEW-phase2 REVISED the above: a range spanning an EMPTY cell (no
- * slot at all, within the table's bound) made the document unconditionally
- * unrejectable. **D-047**, fixed THIS cycle (0046): `deriveEdges`'s Source 1
- * skips an enumerated range cell with no slot on the table object — no edge
- * at all, not a dangling one (see the loop below); the matching skip on the
- * evaluation side lives in `graph/eval.ts`'s `readRange`, not here. Also
- * **D-048** (0045-REVIEW's Finding 3, answering entry 0044's own reviewer
- * question 1): `findIllegalOperationPayloads` now walks a `setSlot`/
- * `createObject` payload's `formula`-kind AST via the same
- * `collectIllegalAstLiterals` `findIllegalSlotValues` already used.
- *
- * 0048-REVIEW-phase2 REVISED entry 0047's row/column insertion: verdict
- * REVISE, a three-item fix list, all closed at entry 0049. **D-050**:
- * `findInvalidTableResizes` now simulates the batch LEFT-TO-RIGHT (one
- * `Map<objectId, TrackedTableState>`, the same pattern the existence check's
- * `survivingIds` already established) rather than validating every operation
- * against pre-batch `objects` alone — closing both a verified FALSE-REJECT
- * (a legal `[insert row at 1, insert row at 4]` batch) and the previously
- * DISCLOSED false-accept (a table `createObject`d earlier in the same
- * batch). Fix 3, naming **D-046**: the same function now REJECTS an insert
- * whose targeted dimension is not `literal` (`primitives/table.ts`'s new
- * `isTableDimensionResizable`), rather than letting `insertTableLine` read
- * it as a fail-safe `0` and silently reset it. **D-049** is
- * `primitives/table.ts`'s own fix (`insertTableLine` no longer rebuilds
- * `slots` from scratch) — see that file's header.
- *
- * Entry 0050 adds `Operation`'s FIFTH variant, `DeleteTableLineOperation` —
- * §5.4's other half of "rows and columns can be added or removed," and the
- * FIRST real use of §5.1.1's REPAIR path anywhere in this codebase (D-052's
- * forward note called this out at 0048-REVIEW-phase2 §6 item 3). Unlike
- * insertion, deletion can ORPHAN a reference, so `applyOperation`'s new
- * `deleteTableLine` branch does not just shift addresses document-wide — it
- * REPAIRS them, via `formula/deps.ts`'s new node-level `repairAddressesInAst`
- * (a `(Address) => Address` callback cannot express turning a `ReferenceNode`
- * into an `ErrorNode`, or clamping a range endpoint using BOTH endpoints at
- * once — D-052's own reasoning for why this needed a second walk, not a
- * widened `rewrite`). `findInvalidTableResizes` is WIDENED (never a second,
- * parallel check — the same "widen, don't duplicate" stance D-020/D-026/D-027
- * already established) to simulate `deleteTableLine` operations in the SAME
- * left-to-right walk as `insertTableLine` (D-050's own binding text: "every
- * future operation kind that changes it extends that same simulation"), so a
- * batch that INTERLEAVES inserts and deletes on one table is validated
- * against each operation's own position, not against pre-batch state alone.
- * `deleteTableLine` carries no `force` flag and no REJECT branch of its own —
- * §5.4 states the repair path unconditionally for row/column deletion,
- * unlike `delete <table>` (`DeleteObjectOperation`), which still rejects a
- * deletion with live dependents by default; a `force` flag widening THAT
- * operation to take the repair path too was NOT built as of entry 0050 —
- * see entry 0053, below, for when it lands.
- *
- * 0051-REVIEW-phase2 REVISED entries 0049+0050: verdict REVISE, a five-item
- * fix list. Entry 0052 closes the code items. **D-053**: 0048-REVIEW-phase2
- * fix 3 landed on only the axis being resized —
- * `isTableDimensionResizable(object, operation.axis)` — so a ROW resize on a
- * table whose `cols` slot was `formula`-kind committed `ok: true` and silently
- * reset that slot to `literal 0` (destroying its AST, cached value, and
- * inbound edge), reached from the axis nobody was checking. Fixed here:
- * `findInvalidTableResizes` now rejects when EITHER `rowsResizable` or
- * `colsResizable` is false, naming every offending dimension, never only the
- * flag for `operation.axis` — see that function's own doc comment and its
- * body below. **D-053's companion ruling** — the address-repair pass and the
- * cell-slot walk must stay identically bounded on insert AND delete until the
- * dimension/cell coherence gap closes for both at once — is why entry 0052
- * does NOT bound `repairCellAddressForDelete`/`repairRangeEndpointsForDelete`
- * by extent to stop deletion's own carried "can still reject" gap (0051-REVIEW
- * §5): that gap is pinned by a test instead (`mutation.test.ts`), not patched.
- * **D-057** (the repair path must report every slot it broke, through ONE
- * channel built once) is RULED but deliberately NOT built at entry 0052 — it
- * was the `force`-flag slice's job; `DeleteTableLineOperation`'s own doc
- * comment recorded the gap in the meantime.
- *
- * Entry 0053 is that `force`-flag slice, closing PROJECT_BRIEF §6 Phase 2's
- * LAST acceptance clause: `DeleteObjectOperation` gains `force?: boolean`
- * (widened, per D-020's "widen, never restructure" stance — the union member
- * grows a field, the operation kind does not split in two). `force` absent
- * (default) is UNCHANGED — reject via `validateIntegrity`'s existing
- * dangling-reference check, cycle 0022's own mechanism. `force: true` takes
- * §5.1.1's REPAIR path via `applyOperation`'s new `deleteObject` branch,
- * running BEFORE the object is removed and BEFORE `validateIntegrity` ever
- * sees the candidate — so no dangling edge is ever produced, rather than one
- * being produced and then excused. **D-056** is applied literally:
- * `repairObjectFormulaAddresses` (entry 0050) is reused UNCHANGED, called
- * with new whole-object callbacks (`repairReferenceForDeletedObject`/
- * `repairRangeForDeletedObject`, both a single equality check — no shifting
- * exists for a whole object going away) — no third `*ObjectFormulaAddresses`
- * helper. **D-057** is built in this SAME cycle, closing the gap entry 0052
- * deliberately left open: `applyOperation` and `repairObjectFormulaAddresses`
- * both widen to also return `brokenSlots: readonly Address[]`, threaded
- * through `mutate`'s fold and exposed on `MutationResult`'s `ok: true` arm —
- * ONE channel, fed by BOTH repair sites (row/column deletion's existing call
- * to `repairObjectFormulaAddresses`, and entry 0053's whole-object call to
- * the SAME function), per D-057's own binding text. A slot's `Address` for
- * the report is recovered via a new `resolveSlotPathForKey` — forward
- * schema resolution, matching a key, never inverting one (D-010) — see that
- * function's own doc comment.
- *
-
- * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
- * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
- * rebuild the whole edge set rather than tracking which slots were affected.")
- * and step 4 / §5.1.1 ("Validate integrity. Reject if any formula references a
- * slot that does not exist, or if the mutation would delete a slot that still
- * has inbound dependents without repairing them."), plus **D-017 part 2**
- * (closed cycle 0015) and **D-018** (both directions of the same
- * reconciliation, closed cycle 0019 — see WHAT THIS IS, `validateIntegrity`);
- * step 5 ("Validate acyclicity... reject on cycle, naming every slot in the
- * cycle.") and step 7 ("Evaluate...") composed at cycle 0016 in
- * `deriveValidateAndEvaluate`; step 1 ("Stage. Deep-clone the current
- * document state.") — **D-019**-faithful, closed cycle 0019 — step 2 ("Apply
- * the mutation to the clone."), step 6 ("On rejection: discard the clone
- * entirely... Prior state is untouched."), and step 8 ("Commit. Swap the
- * clone in... append the mutation to the journal"), plus Rule 2's journal
- * requirement ("the mutation API MUST record an append-only journal of
- * committed mutations from day one") and **D-021** (an operation naming a
- * nonexistent object is rejected, not journalled as a no-op, closed cycle
- * 0019) — see WHAT THIS IS, `mutate`. Also §5.1's **"Batch mutations
- * (required)"** subsection ("The API must accept a list of operations
- * applied to a single clone, validated and evaluated once, committing
- * all-or-nothing... Document loading MUST use a batch.") — **D-020**, closed
- * cycle 0020. THIS cycle (0022) implements §5.1.1's own worked example of the
- * REJECT path ("`delete <object>`... where a silent break would go
- * unnoticed") via `DeleteObjectOperation`, closing PROJECT_BRIEF §6 Phase 0
- * acceptance clause 3 ("deleting a slot with dependents is rejected") — see
- * WHAT THIS IS, `DeleteObjectOperation`'s own doc comment. Cycle 0023
- * implements **D-025** (Q-006, answered by the human directly): non-finite
- * numbers are not legal document state, per §5.1's `Value` union admitting
- * them at the type level while §6 clause 4 requires an identical JSON
- * round-trip, which none of the three can survive — see WHAT THIS IS,
- * `validateIntegrity`, check 4. §5.1.1's REPAIR
- * path (table row/column deletion rewriting references to `#REF`) is
- * deliberately NOT implemented here — see NOT DONE HERE.
- * Load-bearing per Rule 3 (§6 trigger-2 file: mutation.ts) and PROCESS_BRIEF §6
- * trigger-3 (new engine file).
+ * IMPLEMENTS: PROJECT_BRIEF §5.1's mutation loop in full — step 1 (stage/deep-clone),
+ * step 2 (apply to the clone), step 3 (re-derive ALL edges), step 4/§5.1.1 (validate
+ * integrity), step 5 (validate acyclicity), step 6 (discard on reject), step 7
+ * (evaluate), step 8 (commit + journal) — plus §5.1's "Batch mutations (required)"
+ * subsection and Rule 2's append-only journal.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
+ * Load-bearing per Rule 3 (§6 trigger-2 file).
  *
  * WHAT THIS IS
- *   `deriveEdges(objects)` rebuilds the ENTIRE `Edge[]` for a document from
- *   scratch (Rule 5 — no incremental tracking), by walking two sources for
- *   every object, per §5.1:
  *
- *   1. Every `formula`-kind slot AT A SCHEMA-DECLARED NON-DERIVED PATH — not,
- *      as §5.1 step 3's own wording ("re-derive ALL edges from stored formula
- *      ASTs") would have it, every formula slot the object actually carries.
- *      `FormulaAst` is the full §5.3 union (Q-005, cycle 0028), and as of THIS
- *      cycle "walking the AST" means calling `formula/deps.ts`'s
- *      `extractDependencies` for real — every `ReferenceDependency` becomes
- *      one edge directly; every `RangeDependency` expands into one edge PER
- *      CELL currently within the named table's extent (D-044) THAT HAS A
- *      SLOT (D-047 — an in-bounds cell with no slot is empty, ordinary state
- *      and gets no edge at all), via `primitives/table.ts`'s
- *      `enumerateRangeCellAddresses`, re-resolved from CURRENT `rows`/`cols`
- *      on every call (D-036 constraint 2 — never a cached expansion). The
- *      formula slot's OWN address becomes every resulting edge's
- *      `dependentSlot`.
+ * `deriveEdges(objects)` — step 3. Rebuilds the ENTIRE `Edge[]` from scratch every
+ * call (Rule 5 — no incremental tracking), from two sources per object:
  *
- *      READ THAT NARROWING AS A HAZARD, NOT A DETAIL — see D-017. This
- *      function's domain is the SCHEMA's slot set; `graph/eval.ts`'s domain is
- *      the OBJECT's own `Object.keys(object.slots)`. Where the two disagree —
- *      an object carrying a formula slot its schema does not declare — the
- *      slot still gets evaluated, but it is never ordered and its edges never
- *      exist. Verified by probe at 0014-REVIEW-phase0: a genuine three-slot
- *      cycle running through one undeclared slot produces an edge set that
- *      `detectCycle` reports `{ hasCycle: false }` on, so step 5 ACCEPTS the
- *      document and step 7 then quietly fills all three slots with `#REF`.
- *      Nothing in THIS file can detect that; making it loud is step 4's job
- *      (§5.1.1), and D-017 requires it. `nonDerivedSlotPaths` used to be a bare
- *      fixed list of paths and so could not express a slot FAMILY (a table's
- *      `cells.A1`…, D-005/D-009) — RESOLVED as of this cycle:
- *      `resolveNonDerivedSlotPaths` (`primitives/schema.ts`) also accepts a
- *      `dynamic` group, a function of the object's own current state, which
- *      is what `table`'s `cells.*` family now is (`primitives/table.ts`'s
- *      `enumerateTableCellSlotPaths`). This function calls that resolver, not
- *      `schema.nonDerivedSlotPaths` directly, for exactly this reason.
- *   2. Every schema-declared derived slot's dependencies, resolved via
- *      `primitives/schema.ts`'s `derivedSlotDependencyAddresses` (which is the
- *      ONLY place a dynamic dependency resolver may run, per that file's own
- *      header — precisely because this IS edge-derivation time). Each resolved
- *      address becomes a `sourceSlot`; the derived slot's own path (already
- *      known from the schema entry) becomes `dependentSlot`.
+ *   1. Every `formula`-kind slot AT A SCHEMA-DECLARED NON-DERIVED PATH — not, as
+ *      §5.1 step 3's wording ("re-derive ALL edges from stored formula ASTs") would
+ *      have it, every formula slot the object actually carries. Paths come from
+ *      `primitives/schema.ts`'s `resolveNonDerivedSlotPaths(object, ...)`, which
+ *      resolves PER OBJECT (a `dynamic` group like `table`'s `cells.*` is a function
+ *      of that object's own current `rows`/`cols`), never from `nonDerivedSlotPaths`
+ *      directly. Each slot's AST is walked by `formula/deps.ts`'s
+ *      `extractDependencies`: a `ReferenceDependency` becomes one edge; a
+ *      `RangeDependency` becomes one edge per cell currently within the named table's
+ *      extent (D-044) that HAS a slot (D-047 — an in-bounds cell with no slot is
+ *      ordinary empty state, not a dangling reference), via `primitives/table.ts`'s
+ *      `enumerateRangeCellAddresses`, re-resolved from CURRENT dimensions on every
+ *      call (D-036: never a cached expansion) and reading them `literal`-only (D-046).
+ *      An unresolvable table falls back to ONE edge from the range's start address so
+ *      the dangling-reference check below still catches and names it.
  *
- *   THE PROBLEM CASE 1 ABOVE ACTUALLY SOLVES: a formula slot's OWN address
- *   needs a real PATH (`readonly string[]`), not just the string key it is
- *   stored under in `GraphObject.slots` (`slotKey(path)`, node.ts). There is no
- *   sanctioned inverse of `slotKey` (STATUS.md's gotchas; 0011's own log
- *   entry hit this exact wall for derived slots and solved it by going through
- *   the schema instead of decomposing a key — see `findDerivedSlotSchemaByKey`
- *   in `graph/eval.ts`). Derived slots already had an escape hatch: their path
- *   is declared directly on `DerivedSlotSchema.path`. Formula slots had no such
- *   declaration anywhere — `primitives/schema.ts` explicitly deferred "an
- *   object type's FULL slot set" as NOT DONE, pending a concrete need.
+ *      READ THAT NARROWING AS A HAZARD, NOT A DETAIL — D-017. This function's domain
+ *      is the SCHEMA's slot set; `graph/eval.ts`'s is the OBJECT's own
+ *      `Object.keys(object.slots)`. Where they disagree — an object carrying a formula
+ *      slot its schema does not declare — the slot is still evaluated, but it is never
+ *      ordered and its edges never exist. Verified by probe (0014-REVIEW): a genuine
+ *      three-slot cycle running through one undeclared slot yields an edge set
+ *      `detectCycle` reports `{ hasCycle: false }` on, so step 5 ACCEPTS and step 7
+ *      quietly fills all three slots with `#REF`. Nothing here can detect that; making
+ *      it loud is step 4's job (check 1 below). Calling the SAME resolver at all three
+ *      sites (here, check 1, check 2) is what keeps edge derivation and both integrity
+ *      checks in agreement for a dynamic family — resolving `dynamic` groups
+ *      independently per site would reopen D-017 through a new door.
  *
- *   This cycle IS that concrete need, so `primitives/schema.ts` was widened
- *   (not this file) with `ObjectSchema.nonDerivedSlotPaths`: the full list of
- *   paths a type's `literal`/`formula` slots occupy (PATHS only — not a
- *   default-kind declaration; see that file's header). `deriveEdges` below
- *   walks THAT list, re-derives each path's key via `slotKey` (never inverts
- *   one), looks the slot up, and only emits an edge if what it finds is
- *   currently `formula`-kind (a `literal` slot has no inbound edges — same
- *   table, §5.1). This is the same "re-derive the key you need, never invert
- *   the one you have" discipline D-010 already established, applied to a case
- *   that had no schema-side escape hatch until now.
+ *      WHY THE SCHEMA IS CONSULTED AT ALL: a formula slot's own address needs a real
+ *      PATH, not just the string key it is stored under in `GraphObject.slots`. There
+ *      is no sanctioned inverse of `slotKey` (D-010). Derived slots have an escape
+ *      hatch (`DerivedSlotSchema.path`); formula slots had none until
+ *      `ObjectSchema.nonDerivedSlotPaths` was added for exactly this. Re-derive the
+ *      key you need; never invert the one you have.
+ *
+ *   2. Every schema-declared derived slot's dependencies, via
+ *      `primitives/schema.ts`'s `derivedSlotDependencyAddresses` — the ONLY place a
+ *      dynamic dependency resolver may run, precisely because this IS edge-derivation
+ *      time (Rule 6).
+ *
+ * `validateIntegrity(objects, edges)` — step 4 / §5.1.1. Takes a candidate post-apply
+ * object list and its freshly derived edge set, and rejects with a human-readable
+ * message, in FOUR checks, in this order:
+ *
+ *   1. **D-017 part 2** (`findUndeclaredFormulaOrDerivedSlots`). For every object that
+ *      HAS a schema entry, every `formula`/`derived` slot must sit at a
+ *      schema-declared path. A mismatch means `deriveEdges` silently dropped its edges
+ *      — reject before `detectCycle` runs on a graph that cannot be trusted to be
+ *      total. This must run FIRST (0014-REVIEW). An object whose type has no schema
+ *      entry is skipped, not flagged — D-017's one permitted exception.
+ *   2. **D-018, the other direction** (`findSchemaSlotKindMismatches`): a
+ *      schema-declared derived path missing its `derived`-kind slot (exactly what a
+ *      §5.11 load produces, since `DerivedSlot.value` is never serialized), or a slot
+ *      whose kind disagrees with its schema position (§5.1: "`derived` is fixed by
+ *      schema and can never be converted").
+ *   3. **Dangling references** (`findDanglingReferences`): every edge's `sourceSlot`
+ *      must resolve. `dependentSlot` is deliberately NOT checked — checks 1 and 2 are
+ *      what make that safe. This one check is both halves of §5.1.1's sentence at
+ *      once: a typo'd reference and "the mutation would delete a slot that still has
+ *      inbound dependents" are the same failure from opposite ends of one edge. The
+ *      message names the DEPENDENT side (§5.1.1 clause 1's "naming every dependent") —
+ *      the source's object may be gone, and D-015 forbids leaking a raw `objectId`.
+ *   4. **Illegal slot values** (`findIllegalSlotValues`, D-025/Q-006, widened by Q-008
+ *      and D-031). Every slot's `value` is checked via `graph/node.ts`'s
+ *      `hasIllegalNumber` (`NaN`/`±Infinity`/`-0`, bare or nested in a `Point`), and
+ *      every `formula` slot's stored AST is walked for a `LiteralNode` failing the
+ *      same predicate (D-031 — a stored literal is document state the same way a
+ *      slot's `value` is). Orthogonal to checks 1-3, so it runs last. It is NOT a
+ *      backstop for a freshly-computed `derived` value (this runs BEFORE `evaluate`;
+ *      an illegal result is the compute function's own responsibility, see
+ *      `primitives/schema.ts`) nor for an illegal OPERATION PAYLOAD (this only ever
+ *      sees the post-fold graph — `mutate`'s `findIllegalOperationPayloads` closes
+ *      that, D-048).
+ *
+ *   Naming an UNDECLARED slot (check 1) needs an `Address`, but by definition no
+ *   schema declares its path. `describeUndeclaredSlot` is a deliberate, disclosed
+ *   exception to D-010's "never invert a `slotKey`" — that ruling solved "I need a
+ *   path and something declares it schema-side"; this is the one case where nothing
+ *   does, by construction. Check 4 reuses it for the same reason.
+ *
+ * `deriveValidateAndEvaluate(objects)` — composes steps 3, 4, 5, 7 in that fixed
+ * order. The ORDER is the entire point (0014-REVIEW): D-017/D-018 must see the graph
+ * before `detectCycle` does, or a document whose only cycle runs through an undeclared
+ * slot gets a false "no cycle" pass instead of the rejection those checks exist to give.
+ *
+ * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. FIVE
+ * operation kinds: `setSlot`, `deleteObject`, `createObject`, `insertTableLine`,
+ * `deleteTableLine`. Four PRECONDITIONS run over the whole batch before staging even
+ * starts — an empty batch, a target that does not resolve (D-021; simulated
+ * LEFT-TO-RIGHT so a batch that creates or deletes objects mid-fold is checked against
+ * each operation's own position, not pre-batch state alone), an illegal payload value
+ * or stored AST literal (D-048), and an invalid table resize (D-050/D-046/D-053,
+ * simulated in that same left-to-right walk). Then: deep-clone once (D-019 — a real
+ * recursive clone, not a JSON round-trip), fold every operation onto that ONE clone,
+ * validate and evaluate ONCE, commit all-or-nothing with exactly one journal entry
+ * holding the whole list (D-020).
+ *
+ * §5.1.1's two paths both live here. REJECT is the default for `delete <object>` —
+ * check 3 above IS that mechanism, no separate machinery. REPAIR is taken by
+ * `deleteTableLine` unconditionally (§5.4 states it so) and by `deleteObject` when
+ * `force: true` (D-056), both through the SAME `repairObjectFormulaAddresses` with
+ * different callbacks, running BEFORE the object is removed and BEFORE
+ * `validateIntegrity` sees the candidate — so no dangling edge is ever produced rather
+ * than produced and then excused. Every slot a repair broke is reported through ONE
+ * channel, `MutationResult`'s `brokenSlots` (D-057), fed by both repair sites.
  *
  * INVARIANTS UPHELD HERE
- *   - Full rebuild from scratch, every call (Rule 5) — no memoization, no
- *     incremental bookkeeping, mirrors `graph/cycles.ts` and `graph/eval.ts`'s
- *     own from-scratch-every-call discipline.
- *   - Dynamic dependency resolution happens HERE and only here (per
- *     `primitives/schema.ts`'s header) — `derivedSlotDependencyAddresses` is
- *     called from this function and nowhere else in this cycle's code.
- *   - An object of a type with no schema entry yet (every `ObjectType` besides
- *     `value`/`add` today) contributes no edges at all — honest, not a
- *     placeholder, same stance `getObjectSchema` itself takes.
- *   - Never throws. A `nonDerivedSlotPaths` entry with nothing (or a
- *     `derived`/malformed slot) at its key is skipped, not indexed into
- *     blindly — a document mutation.ts's own future object-creation step
- *     would never produce, but this function does not trust that.
+ *   - Never throws — any function in this file, any input.
+ *   - Full rebuild from scratch every call (Rule 5): no memoization, no diffing
+ *     against a previous object list, no incremental edge bookkeeping.
+ *   - Dynamic dependency resolution happens HERE and only here (Rule 6,
+ *     `primitives/schema.ts`'s header) — never during evaluation.
+ *   - An object of a type with no schema entry contributes no edges and is skipped by
+ *     check 1 — honest, not a placeholder.
+ *   - Rejection cannot touch prior state: `objects` and `journal` are never reassigned
+ *     on the `ok: false` path, and the clone is simply dropped (step 6).
+ *   - Every schema-declared path this file compares is re-derived via `slotKey`; no
+ *     `GraphObject.slots` key is ever decomposed back into a path (D-010), with
+ *     `describeUndeclaredSlot`'s one disclosed exception above.
  *
- * `validateIntegrity(objects, edges)` — §5.1 step 4 / §5.1.1, and where D-017
- * part 2, D-018, D-025, AND (as of THIS cycle) D-031 all land. Takes a
- * candidate post-apply object list and its freshly `deriveEdges`-derived edge
- * set (step 2's "apply" and step 3 are NOT this function's job — see NOT DONE
- * HERE; it is handed the result), and rejects with a human-readable message,
- * or passes, in FOUR checks, run in this order — down from five: the
- * TEMPORARY `findUnsupportedFormulaAsts` check (cycle 0028) is DELETED THIS
- * cycle, per D-036 constraint 3, now that `deriveEdges` genuinely supports
- * every `FormulaAst` shape and there is nothing left for it to guard:
- *
- *   1. **D-017 part 2, first** (per 0014-REVIEW-phase0's own constraint: "the
- *      first thing step 4 must do"). For every object THAT HAS a schema entry,
- *      every slot currently `formula` or `derived` kind must have a key
- *      matching one of that schema's declared paths
- *      (`nonDerivedSlotPaths`/`derivedSlots`, both re-derived via `slotKey` —
- *      never compared by inverting the OBJECT's key, same discipline as
- *      `deriveEdges` itself). A mismatch means `deriveEdges` silently dropped
- *      this slot's edges (D-017's own finding) — reject before `detectCycle`
- *      ever runs on a graph that cannot be trusted to be total. An object
- *      whose type has NO schema entry at all is skipped, not flagged — D-017's
- *      one permitted exception, because §6's build order guarantees such a
- *      type carries no formula slots yet.
- *   2. **D-018, the OTHER direction** (`findSchemaSlotKindMismatches`,
- *      0018-REVIEW-phase0). D-017 above rejects a slot the object carries that
- *      its schema does NOT declare; this rejects the reverse two mismatches:
- *      (a) a schema-declared derived path that is missing its `derived`-kind
- *      slot entirely — the exact shape a §5.11 load produces, since
- *      `DerivedSlot.value` is never serialized — which is precisely what
- *      makes `dependentSlot` dangling in check 3 below WITHOUT this check
- *      catching it first; and (b) a slot whose actual kind disagrees with
- *      its schema position at all (`derived` at a `nonDerivedSlotPaths` path,
- *      or non-`derived` at a schema-declared derived path) — §5.1: "`derived`
- *      is fixed by schema and can never be converted." Named via
- *      `formatAddress` directly (`formatSchemaAddress` below): unlike D-017's
- *      case, every path this check inspects comes FROM the schema, so a real
- *      `Address` always exists — no `describeUndeclaredSlot`-style exception
- *      needed here.
- *   3. **Dangling references** (§5.1.1's stated wording: "any formula
- *      references a slot that does not exist"). For every edge, its
- *      `sourceSlot` must `resolveSlot` (`graph/node.ts`) against `objects`.
- *      `dependentSlot` is deliberately NOT checked here — checks 1 and 2
- *      above are what make that safe: an edge's `dependentSlot` can only be
- *      dangling via D-017's or D-018's own failure modes, both already
- *      rejected earlier in this same call. This ONE check is both halves of
- *      §5.1.1's step-4 sentence at once: a plain bad reference (a formula
- *      typo'd at an object that never existed) and "the mutation would
- *      delete a slot that still has inbound dependents" are the SAME failure
- *      viewed from opposite ends of the same edge — deleting a slot that
- *      formulas elsewhere still reference makes exactly this check fail,
- *      with no separate before/after diff needed (Rule 5: recheck the whole
- *      graph, don't track what changed). §5.1.1 clause 1's own wording —
- *      "naming every dependent" — is why the message names the DEPENDENT
- *      side via `formatAddress`, never the missing source: the source's
- *      object may be gone, so there is nothing safe to format there, and
- *      D-015 forbids leaking its raw `objectId` into the message anyway. A
- *      range dependency whose table could not be resolved (or, defensively,
- *      failed to enumerate) reaches this check via `deriveEdges`'s own
- *      fallback edge (that function's own doc comment) rather than a special
- *      case here — the same dangling-reference machinery, no new mechanism.
- *   4. **Illegal slot values** (`findIllegalSlotValues`, D-025/Q-006, cycle
- *      0023, WIDENED by Q-008 at cycle 0026 — "non-finite numbers, and `-0`,
- *      are not legal document state" — and WIDENED AGAIN this cycle by
- *      **D-031**). Every slot's `value` field (all three kinds carry one) is
- *      checked via `graph/node.ts`'s `hasIllegalNumber` — a bare `NaN`/
- *      `Infinity`/`-Infinity`/`-0`, or one nested inside a `Point`/`Point[]`'s
- *      `x`/`y`. As of D-031, every `formula`-kind slot's stored AST is ALSO
- *      walked (`collectIllegalAstLiterals` below) for a `LiteralNode` whose
- *      `number` value fails the SAME leaf predicate — reachable for the first
- *      time this cycle, since the TEMPORARY `findUnsupportedFormulaAsts`
- *      check that used to reject every non-reference AST (and so kept a
- *      `LiteralNode` deep inside one from ever being stored) is gone; D-031's
- *      own binding text requires closing this in the SAME cycle. Runs LAST
- *      and independently of checks 1-3: value legality is orthogonal to
- *      schema/edge structure, so there is no ordering hazard to reason about
- *      the way check 1 before check 3 needs one. Applies to `literal`,
- *      `formula`, and `derived` slots alike, but NOT as a backstop for a
- *      freshly-computed `derived` value: this function runs BEFORE `evaluate`
- *      (see `deriveValidateAndEvaluate` below) and `evaluate`'s result is
- *      returned as-is, never re-validated — so this check can only ever see
- *      an illegal number in a LITERAL (freshly written or already sitting in
- *      `objects`), a STORED AST LITERAL (D-031), or a STALE formula/derived
- *      cached value from a prior pass. An illegal result a compute function
- *      returns THIS pass is entirely that function's own responsibility
- *      (`add`'s is the only one that exists, and does — see
- *      `primitives/schema.ts`); verified by mutation-test that removing
- *      `add`'s own guard commits a raw `Infinity` with nothing here to catch
- *      it (0023's log entry). Also NOT a backstop for an illegal OPERATION
- *      PAYLOAD: this check only ever sees the POST-FOLD graph, so a payload
- *      later overwritten (or attached to an object later deleted) in the SAME
- *      batch never reaches it at all — `mutate`'s own precondition check,
- *      `findIllegalOperationPayloads`, is what closes that hole for a slot's
- *      own `value` (cycle 0026, 0025-REVIEW-phase0 finding 1); see `mutate`'s
- *      doc comment. As of D-048 (0045-REVIEW, closing entry 0044's disclosed
- *      gap), `findIllegalOperationPayloads` ALSO walks a `createObject`/
- *      `setSlot` payload's stored `formula`-kind AST via the same
- *      `collectIllegalAstLiterals` — the same defect (D-025/Q-008's history)
- *      found a fifth time, this time at the payload/AST intersection.
- *
- *   A genuinely new sub-problem D-017's check hits and D-010/D-015's existing
- *   guidance does not cover: naming an UNDECLARED slot (check 1) needs an
- *   `Address` for `formatAddress`, but by definition no schema declares this
- *   slot's path — there is nothing to look up. `describeUndeclaredSlot` below
- *   is a deliberate, disclosed exception (see its own doc comment) rather than
- *   an application of the "invert `slotKey`" pattern this project has twice
- *   ruled out (D-010; STATUS's "never `key.split(\".\")`"): those rulings
- *   solved "I need a slot's path and something already declares it schema-
- *   side"; this is the one case where nothing does, by construction. Check 4
- *   reuses `describeUndeclaredSlot` for the same reason — a `formula` slot's
- *   path need not be schema-declared at all (D-017 already rejects that
- *   combination separately; this check runs regardless). Check 2 (D-018) has
- *   no such exception to make — see its own paragraph above.
- *
- * INVARIANTS UPHELD HERE (validateIntegrity)
- *   - Never throws, same as every other function in this module.
- *   - Runs all four checks over the WHOLE graph from scratch, every call
- *     (Rule 5) — no diffing against a "previous" object list, matching
- *     `deriveEdges`, `detectCycle`, and `evaluate`'s own from-scratch
- *     discipline.
- *   - Does not call `detectCycle` or `evaluate` itself — acyclicity (step 5)
- *     and evaluation (step 7) are separate, already-built steps this function
- *     does not duplicate or anticipate.
- *
- * `deriveValidateAndEvaluate(objects)` — composes all four pieces above
- * (`deriveEdges` → `validateIntegrity` → `detectCycle` → `evaluate`) into the
- * one sequence §5.1 steps 3-5 and 7 describe, in that order. See its own doc
- * comment for why the ORDER is the entire point (0014-REVIEW-phase0's
- * constraint 1) rather than something worth leaving to each future call site.
- * This is the first point where Phase 0 acceptance clause 2's REJECTION half
- * ("a cycle is rejected with the offending slots named") is demonstrable
- * end-to-end — see STATUS.md for why the clause's OTHER half ("prior state
- * provably unchanged", D-016) is NOT claimed by this cycle.
- *
- * INVARIANTS UPHELD HERE (deriveValidateAndEvaluate)
- *   - Runs the four steps in the fixed order §5.1 specifies and
- *     0014-REVIEW-phase0 requires: validateIntegrity's D-017/D-018 checks
- *     MUST see the graph before detectCycle does, or a document whose only
- *     cycle runs through an undeclared or schema-mismatched slot gets a false
- *     "no cycle" pass instead of the rejection those checks exist to give it.
- *   - Never mutates `objects`. Every step it calls is pure and returns new
- *     data; a rejection here means the candidate `objects` this function
- *     received are simply never returned as the `ok: true` arm's evaluated
- *     result — there is nothing here for a caller's own prior state to be
- *     corrupted by, because this function was never given write access to it.
- *   - Never throws, matching every function it composes.
- *
- * `mutate(objects, operations, journal)` — §5.1 steps 1, 2, 6, 8, wrapping
- * `deriveValidateAndEvaluate` (steps 3-5, 7), widened to the BATCH form
- * (D-020, closed cycle 0020). See its own doc comment for the full sequence,
- * INCLUDING the empty-batch and D-021 target-existence checks that now run
- * before step 1 even starts, over every operation in the list. THREE
- * operation kinds exist: `SetSlotOperation` (`{ kind: "setSlot", address,
- * slot }`, the minimal primitive underneath what §5.10's `link`/`unlink`/
- * `set` commands will eventually call — building those commands themselves
- * is Phase 3's job), `DeleteObjectOperation` (cycle 0022, §5.1.1's
- * `delete <object>`), and `CreateObjectOperation` (cycle 0024, §5.11's
- * document loading — see its own doc comment).
- *
- * INVARIANTS UPHELD HERE (mutate)
- *   - **D-020, closed THIS cycle**: accepts a LIST of operations, applies all
- *     of them to ONE clone (folded left-to-right, so a later operation in the
- *     batch sees an earlier one's effect), then derives edges / validates /
- *     evaluates exactly ONCE over the fully-applied candidate — never once
- *     per operation. "Committing all-or-nothing" holds structurally: nothing
- *     between the fold and the single `deriveValidateAndEvaluate` call can
- *     partially commit, because nothing is committed until that one call
- *     returns `ok: true`.
- *   - **D-021, closed cycle 0019, made variant-aware at 0022/0024**: ANY
- *     operation in the batch whose target does not resolve — for `setSlot`/
- *     `deleteObject`, an id that does NOT exist; for `createObject` (cycle
- *     0024), the MIRROR — an id that ALREADY exists — rejects the WHOLE
- *     batch before anything else runs — never applied as a no-op for that one
- *     operation while the rest proceed, and never journalled. An empty batch
- *     (`operations.length === 0`) is rejected the same way, for the same
- *     "no false record in the journal" reason. See `mutate`'s own doc comment
- *     for both messages' D-015-respecting shape.
- *   - Implements Rule 5's staging mechanism literally: `cloneObjects` performs
- *     a real recursive deep clone (D-019, closed cycle 0019 — see its own doc
- *     comment for why a JSON round-trip was not faithful enough) ONCE, before
- *     any operation in the batch is applied, so "applying to the clone" (§5.1
- *     step 2) never touches the caller's original `objects` reference even in
- *     principle, not merely by the accident of every downstream function
- *     already being pure.
- *   - On rejection, returns `deriveValidateAndEvaluate`'s own `{ ok: false,
- *     message }` untouched (step 6: "discard the clone entirely... return a
- *     failure"). `objects` and `journal` are both simply never reassigned —
- *     the caller's references are exactly what they were before the call.
- *   - On success, appends exactly one `MutationJournalEntry` — holding the
- *     WHOLE operation list just committed, not one entry per operation — to
- *     `journal` (Rule 2, "from day one"; D-020: "one committed batch is one
- *     journal entry") and returns the evaluated result as the new state
- *     (step 8's "swap in"). This file does not itself hold "the current
- *     document" between calls — see NOT DONE HERE — so "commit" here means
- *     "return the new state for whichever caller owns it to adopt," not an
- *     internal assignment.
- *   - Never throws, matching every function it composes.
- *
- * NOT DONE HERE (the rest of `mutation.ts`, later cycles)
- *   - Holding "the current document" as persistent state across calls —
- *     Rule 2 forbids exactly that ("no closures... stored inside graph
- *     state"): `mutate` is a pure function of its three arguments, and
- *     whatever calls it (a future `document.ts`, or a command handler) owns
- *     the current `objects`/`journal` pair and decides what to do with a
- *     rejection.
- *   - Any operation kind beyond the FIVE now built (`SetSlotOperation`/
- *     `DeleteObjectOperation`/`CreateObjectOperation`/
- *     `InsertTableLineOperation`/`DeleteTableLineOperation`) — `explode` and
- *     vertex add/remove (table resize landed at entries 0047/0050; this
- *     bullet still listed it as unbuilt as of entry 0053) —
- *     those belong to the phases that introduce the state they touch
- *     (Phase 3-6), same stance `primitives/schema.ts` already takes on its
- *     own per-type entries. A user-facing "add a new circle" COMMAND (§5.10,
- *     Phase 3 — choosing a fresh id from `nextObjectId`, a type's default
- *     slot values) is a different, NOT-YET-BUILT concern layered on top of
- *     `CreateObjectOperation`, not the same thing as it.
- *   - Reference adjustment on table resize (§5.4) is now DONE for both
- *     directions: insertion (entry 0047) and deletion (entry 0050). Range
- *     EXPANSION itself (`A1:B4` → concrete cell dependencies, §5.3) has been
- *     done since the range-evaluation wiring cycle — see `deriveEdges`'s
- *     Source 1, above.
- *   - Undo itself (only the journal DATA this stores it for, per Rule 2 and
- *     PROJECT_BRIEF §8's deferred list, which defers the undo/redo UI only).
+ * NOT DONE HERE
+ *   - Holding "the current document" across calls — Rule 2 forbids it. `mutate` is a
+ *     pure function of its three arguments; the caller owns the `objects`/`journal`
+ *     pair and decides what to do with a rejection.
+ *   - Operation kinds beyond the five above (`explode`, vertex add/remove) — they
+ *     belong to the phases that introduce the state they touch.
+ *   - A user-facing "add a new circle" COMMAND (§5.10, Phase 3): choosing a fresh id
+ *     from `nextObjectId` and a type's default slot values is a command-layer concern
+ *     layered ON TOP of `CreateObjectOperation`, not the same thing as it.
+ *   - Undo/redo (PROJECT_BRIEF §8) — this stores the journal data undo will need, and
+ *     nothing replays it.
  */
 import { formatAddress, isAddressError, type Address } from "./address.ts";
 import type { FormulaAst } from "./formula/ast.ts";
@@ -601,12 +196,9 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
       continue;
     }
 
-    // Source 1: every formula-kind slot's stored AST, walked for real via
-    // `formula/deps.ts`'s `extractDependencies` (THIS cycle's range-
-    // evaluation wiring — the old ReferenceNode-only narrowing, and the
-    // TEMPORARY `findUnsupportedFormulaAsts` shield that made it safe, are
-    // both gone, D-036 constraint 3: "delete, never extend"). Every
-    // `ReferenceDependency` becomes one edge directly; every
+    // Source 1: every formula-kind slot's stored AST, walked via
+    // `formula/deps.ts`'s `extractDependencies` over EVERY `FormulaAst`
+    // shape. Each `ReferenceDependency` becomes one edge directly; each
     // `RangeDependency` expands into one edge PER CELL currently within the
     // table's extent (D-044), via `primitives/table.ts`'s
     // `enumerateRangeCellAddresses` — re-resolved from CURRENT `rows`/`cols`
@@ -683,14 +275,14 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
 
 /**
  * The result of `validateIntegrity` (§5.1 step 4 / §5.1.1). `ok: false` means
- * reject the mutation outright — the caller (a later cycle's full loop)
- * discards the clone entirely (§5.1 step 6) rather than proceeding to step 5.
+ * reject the mutation outright — the caller discards the clone entirely
+ * (§5.1 step 6) rather than proceeding to step 5.
  */
 export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false; readonly message: string };
 
 /**
  * §5.1 step 4 / §5.1.1 — see the file header's `validateIntegrity` section
- * for all FIVE checks, their order, and why D-017's undeclared-slot check
+ * for all FOUR checks, their order, and why D-017's undeclared-slot check
  * must run before the dangling-reference check. Never throws.
  *
  * `edges` MUST already be `deriveEdges(objects)` for the SAME `objects` — this
@@ -762,12 +354,10 @@ export type GraphEvaluationResult =
  * itself was one layer of that same mistake. One function makes the order
  * impossible to get wrong by omission.
  *
- * This is the first place Phase 0 acceptance clause 2's REJECTION half (§6:
- * "a cycle is rejected with the offending slots named") is demonstrable
- * end-to-end. The clause's OTHER half ("prior state provably unchanged",
- * D-016) is deliberately NOT claimed here: it needs step 1's clone to exist
- * before a snapshot comparison means anything, and that clone is not built yet
- * — see STATUS.md.
+ * This function does NOT stage, clone, commit, or journal — it is steps 3-5
+ * and 7 only. "Prior state provably unchanged" (D-016) is `mutate`'s
+ * guarantee, not this one's; there is nothing here for a caller's prior state
+ * to be corrupted by, because this function is never given write access to it.
  *
  * Never throws, matching every function it composes. Never mutates `objects`
  * — every step here is pure and returns new data.
@@ -837,10 +427,9 @@ export interface SetSlotOperation {
  * has at once, so there is no single slot to name — see `applyOperation`'s
  * doc comment for how the removal itself is applied.
  *
- * **Two paths, chosen by `force` (entry 0053, closing Phase 2's `delete
- * <table>` clause):**
+ * **Two paths, chosen by `force`:**
  *
- * - **`force` absent/false (default) — REJECT**, unchanged since cycle 0022.
+ * - **`force` absent/false (default) — REJECT.**
  *   `validateIntegrity`'s existing dangling-reference check (§5.1.1 clause 1)
  *   is what rejects it — deleting an object simply removes it from `objects`
  *   before `deriveEdges`/`validateIntegrity` ever run over the candidate, so
@@ -947,9 +536,8 @@ export interface InsertTableLineOperation {
  * own words: "Row/column deletion... proceeds even when other objects depend
  * on the deleted cells, rewriting each inbound reference to `#REF`." This is
  * deliberately DIFFERENT from `DeleteObjectOperation` (`delete <table>`),
- * which still rejects by default and will gain a separate `force` flag (NOT
- * built as of entry 0050 — see the file header's NOT DONE HERE) to opt into
- * repair instead. The two operations do not share a mechanism because they
+ * which rejects by default and takes the repair path only under its own
+ * `force` flag. The two operations do not share a mechanism because they
  * answer different questions: this one always repairs (§5.4 states it as the ONLY
  * behaviour for a row/column), while whole-object deletion's default is still
  * to protect a formula elsewhere by refusing (§5.1.1's REJECT-by-default
@@ -961,21 +549,20 @@ export interface InsertTableLineOperation {
  * `rows` AND `cols`, not only the axis this operation targets — can be
  * coherently read (D-046/**D-053**, `isTableDimensionResizable`), and `index`
  * names an EXISTING row/column AS OF THIS OPERATION'S OWN POSITION in the
- * batch — `findInvalidTableResizes` (widened at entry 0050 to simulate both
- * insertion and deletion together, in one left-to-right walk, per D-050's own
- * binding text; widened again at entry 0052 per D-053 to check both
- * dimensions) is the primary check. Unlike insertion, `deleteTableLine` (the
+ * batch — `findInvalidTableResizes` (which simulates insertion and deletion
+ * together, in ONE left-to-right walk, per D-050's binding text, and checks
+ * both dimensions per D-053) is the primary check. Unlike insertion,
+ * `deleteTableLine` (the
  * primitive) does NOT clamp an out-of-range index — there is no "nearest
  * line" to delete instead of a nonexistent one — so this precondition is the
  * ONLY thing standing between a malformed operation and a malformed table;
  * see that primitive's own doc comment.
  *
- * **D-057 is BUILT as of entry 0053**: §5.1.1/§5.4's "report every slot it
- * broke" is now a real field, `MutationResult`'s `brokenSlots` — ONE channel
- * shared with `DeleteObjectOperation`'s `force` repair site, per D-057's own
- * binding text. This operation's repair pass reports through the SAME
- * widened `repairObjectFormulaAddresses` every other repair site now uses;
- * nothing deletion-specific was added.
+ * **D-057**: §5.1.1/§5.4's "report every slot it broke" is `MutationResult`'s
+ * `brokenSlots` — ONE channel, shared with `DeleteObjectOperation`'s `force`
+ * repair site. This operation reports through the same
+ * `repairObjectFormulaAddresses` every other repair site uses; nothing
+ * deletion-specific.
  *
  * KNOWN GAP (0051-REVIEW-phase2 §5, NOT patched here — see D-053's companion
  * ruling): this operation's repair pass is unbounded (any inbound reference
@@ -999,11 +586,9 @@ export interface DeleteTableLineOperation {
 }
 
 /**
- * The full set of operations `mutate` can apply. Five variants now
- * (`SetSlotOperation`, `DeleteObjectOperation`, `CreateObjectOperation`,
- * `InsertTableLineOperation`, `DeleteTableLineOperation`, added entry 0050) —
- * widened, per Q-005/D-020's "widen the union, never restructure" stance, not
- * a second entry point.
+ * The full set of operations `mutate` can apply. A new kind WIDENS this union,
+ * per Q-005/D-020's "widen the union, never restructure" stance — never a
+ * second entry point.
  */
 export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation | InsertTableLineOperation | DeleteTableLineOperation;
 
@@ -1162,8 +747,8 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * position in the batch, and `deleteTableLine`/`repairCellAddressForDelete`/
  * `repairRangeEndpointsForDelete` all read `operation.index` directly.
  *
- * RETURN SHAPE (widened entry 0053, D-057): every branch returns
- * `brokenSlots` alongside `objects` now — the `Address` of every slot a
+ * RETURN SHAPE (D-057): every branch returns
+ * `brokenSlots` alongside `objects` — the `Address` of every slot a
  * REPAIR (never a plain shift) rewrote at least one reference inside, empty
  * for every branch that cannot break anything (`setSlot`, `deleteObject`
  * without `force`, `createObject`, `insertTableLine` — insertion only ever
@@ -1303,7 +888,7 @@ function rewriteObjectFormulaAddresses(object: GraphObject, shiftAddress: (addre
  * `repairReference`/`repairRange` — `literal`/`derived` slots are returned
  * completely unchanged (neither has an AST to repair). Called once per
  * object, for EVERY object, by `applyOperation`'s `deleteTableLine` branch
- * AND (entry 0053) its `deleteObject`-with-`force` branch —
+ * AND its `deleteObject`-with-`force` branch —
  * `repairReference`/`repairRange` already know to leave any address alone
  * that does not name the deleted table/object, so this function needs no
  * notion of "is this object even relevant," the same posture
@@ -1311,7 +896,7 @@ function rewriteObjectFormulaAddresses(object: GraphObject, shiftAddress: (addre
  * ONLY in which callbacks they pass (table-cell-shifting vs.
  * whole-object-equality, D-056) — this function itself stays blind to which.
  *
- * **D-057, widened entry 0053: also returns `brokenSlots`**, the `Address`
+ * **D-057: also returns `brokenSlots`**, the `Address`
  * of every formula slot that had at least one reference/range turned into
  * `"deleted"` during ITS OWN walk — tracked by wrapping `repairReference`/
  * `repairRange` in a per-slot closure flag, rather than changing
@@ -1412,8 +997,8 @@ export interface MutationJournalEntry {
  * "unchanged" field: the caller's own references already are unchanged.
  * `ok: true` carries the new committed `objects` (step 7's evaluated result),
  * `journal` (with exactly one new entry appended, step 8, holding every
- * operation in the batch that was just committed), and (widened entry 0053,
- * **D-057**) `brokenSlots`: every slot ANY repair in this batch turned at
+ * operation in the batch that was just committed), and (**D-057**)
+ * `brokenSlots`: every slot ANY repair in this batch turned at
  * least one reference/range inside into `#REF` — §5.1.1's "the command must
  * report which slots were broken" / §5.4's "the command reports every slot
  * it broke," ONE field serving BOTH repair sites (row/column deletion,
@@ -1457,12 +1042,12 @@ export type MutationResult =
  *   which is a false record of history (Rule 2's journal exists to be
  *   replayed/inverted, and an empty entry is nothing to invert).
  * - **D-021** (0018-REVIEW-phase0, answering cycle 0017's own question 2),
- *   made variant-aware THIS cycle for `DeleteObjectOperation`: ANY operation
+ *   made variant-aware for every kind that can add or remove one: ANY operation
  *   in the batch whose target does not exist AT THE MOMENT it would be folded
  *   rejects the WHOLE batch — never a silent no-op for that one operation
  *   while the rest proceed, matching "committing all-or-nothing." A single
- *   `objects.find`/`findObjectById` against the ORIGINAL, pre-batch `objects`
- *   (0019/0020's version) is no longer sufficient on its own: a
+ *   `objects.find` against the ORIGINAL, pre-batch `objects` is not
+ *   sufficient on its own: a
  *   `DeleteObjectOperation` can remove an id mid-batch, so a LATER operation
  *   naming that same id must be rejected even though the id was present when
  *   the batch started. The check below walks the operations in order against
@@ -1749,11 +1334,9 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
  * underlying reason, so that combination cannot arise before Phase 4 revisits
  * the whole mechanism.
  *
- * THREE call sites now (D-022 confines this raw-key naming style to THIS
- * function — every other site reuses it, never reimplements it; down from
- * four — `findUnsupportedFormulaAsts`, this function's own second sanctioned
- * call site, is DELETED this cycle along with the check itself, D-036
- * constraint 3): `findUndeclaredFormulaOrDerivedSlots`, where the slot
+ * THREE call sites (D-022 confines this raw-key naming style to THIS
+ * function — every other site reuses it, never reimplements
+ * it): `findUndeclaredFormulaOrDerivedSlots`, where the slot
  * genuinely has no schema-declared path by definition; `findIllegalSlotValues`
  * (D-025, cycle 0023), where it might or might not be declared — an extra
  * literal slot is legal regardless of the schema (`validateIntegrity` never
@@ -1900,17 +1483,14 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
  * entry at all: unlike D-017/D-018, this check needs no schema knowledge, so
  * there is no "type with no schema yet" exemption.
  *
- * WIDENED THIS cycle by **D-031**: a `formula`-kind slot's stored AST is ALSO
+ * WIDENED by **D-031**: a `formula`-kind slot's stored AST is ALSO
  * walked (`collectIllegalAstLiterals` below) for any `LiteralNode` whose
  * number value fails the SAME `isIllegalNumber` leaf predicate — a number
  * `slot.value` never happened to reach the cached `formula`/`derived` result
  * itself, but §5.11 serializes the stored AST as part of the document, so a
  * `LiteralNode` inside it is document state exactly the same way a slot's
  * `value` is (D-027's own generalisation: "every number reachable from a
- * `Document`"). Reachable for the first time this cycle: the TEMPORARY
- * `findUnsupportedFormulaAsts` check that used to reject every non-reference
- * AST is deleted (D-036 constraint 3), and D-031's own binding text requires
- * closing this in the SAME cycle that removes that shield.
+ * `Document`").
  *
  * Named via `describeUndeclaredSlot` — REUSING the same function
  * `findUndeclaredFormulaOrDerivedSlots` already calls, not a new copy of its
@@ -2106,7 +1686,7 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
 /**
  * One table's state AS SIMULATED THROUGH THE BATCH so far —
  * `findInvalidTableResizes` below's per-object tracking record, shared by
- * `insertTableLine` AND (as of entry 0050) `deleteTableLine`. `rows`/`cols`
+ * `insertTableLine` AND `deleteTableLine`. `rows`/`cols`
  * and the two `*Resizable` flags are read ONCE, when a table is FIRST
  * encountered (from `objects` or from a same-batch `createObject` payload —
  * see `resolveTrackedTableState`), then only `rows`/`cols` change — by +1

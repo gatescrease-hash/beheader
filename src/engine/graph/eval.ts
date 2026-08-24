@@ -1,104 +1,79 @@
 /**
  * eval.ts — Naive full topological evaluation over an already-acyclic edge set.
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.1, mutation-loop step 7 ("Evaluate. Topologically
- * sort all slots and evaluate every one: literals return their stored value,
- * formulas evaluate their AST, derived slots call their schema compute
- * function. Evaluation errors produce ErrorValues; they do not roll back the
- * mutation.") and Rule 5's naive-evaluation directive ("re-evaluate the entire
- * graph in topological order. Do not implement real dirty-flag tracking yet.").
- * As of THIS cycle (the range-evaluation wiring slice STATUS.md named next),
- * also implements the LAST piece of that same step 7 clause — "formulas
- * evaluate their AST" now means EVERY `FormulaAst` shape §5.3 admits, not only
- * a bare reference — by wiring in `formula/eval.ts`'s real evaluator (D-036
- * constraint 1/3: the old `ReferenceNode`-only bridge is deleted, not
- * extended). Load-bearing per Rule 3 (§6 trigger-2 file: graph/*).
+ * IMPLEMENTS: PROJECT_BRIEF §5.1, mutation-loop step 7 ("Evaluate. Topologically sort
+ * all slots and evaluate every one: literals return their stored value, formulas
+ * evaluate their AST, derived slots call their schema compute function. Evaluation
+ * errors produce ErrorValues; they do not roll back the mutation.") and Rule 5's
+ * naive-evaluation directive ("re-evaluate the entire graph in topological order. Do
+ * not implement real dirty-flag tracking yet.").
+ * Load-bearing per Rule 3 (§6 trigger-2 file: graph/*).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   Given a document's full object list and an edge set already derived from
- *   every stored formula AST and schema declaration (mutation.ts step 3),
- *   evaluate EVERY slot on EVERY object exactly once, in an order that
- *   respects every edge, and return a NEW object list holding the results.
+ *   Given a document's full object list and an edge set already derived by
+ *   `mutation.ts` step 3, evaluate EVERY slot on EVERY object exactly once, in an
+ *   order respecting every edge, and return a NEW object list holding the results.
  *
- *   - `literal` slots keep their stored value unchanged — nothing computes a
- *     literal; it IS the source of truth (§5.1's table).
- *   - `formula` slots evaluate their AST via `formula/eval.ts`'s real
- *     `evaluate` (`evaluateFormula` below) — every shape §5.3's grammar
- *     admits, a binding (a bare reference) included, since a binding is
- *     "just the degenerate formula `= other.slot`" (§5.1) under the same
- *     general evaluator. `evaluateFormula`'s own doc comment covers the two
- *     callbacks it builds and hands through: `read` for plain references,
- *     `readRange` for a range reached inside an aggregate call (D-036,
- *     bounded by the table's current extent, D-044). `readRange` OMITS an
- *     empty cell — one with no slot at all, or one holding `null` — from the
- *     flattened values it returns, rather than erroring (D-047, entry 0045-
- *     REVIEW's fix list items 2-3); a plain `read` miss is unaffected and
- *     still becomes `#REF` via `formula/eval.ts`'s own handling.
- *   - `derived` slots call their schema's compute function
- *     (primitives/schema.ts), exactly once, INSIDE this same topological pass
- *     — never in a separate post-pass (§5.1, PROCESS_BRIEF §9).
+ *   - `literal` slots keep their stored value — nothing computes a literal; it IS the
+ *     source of truth (§5.1's slot-kind table).
+ *   - `formula` slots evaluate their AST via `formula/eval.ts`'s real `evaluate`,
+ *     covering every shape §5.3 admits — a binding included, since a binding is "just
+ *     the degenerate formula `= other.slot`" (§5.1) under the same general evaluator.
+ *     `evaluateFormula` builds the two callbacks that file needs: `read` for plain
+ *     references, `readRange` for a range inside an aggregate call (bounded by the
+ *     table's current extent, D-044). `readRange` OMITS an empty cell — no slot at
+ *     all, or one holding `null` — from the values it returns rather than erroring
+ *     (D-047); a plain `read` miss is unaffected and still becomes `#REF`.
+ *   - `derived` slots call their schema's compute function exactly once, INSIDE this
+ *     same topological pass — never in a separate post-pass (§5.1, PROCESS_BRIEF §9).
  *
- *   Topological order is a DFS postorder reversal — the standard construction
- *   for a DAG, and the same traversal FAMILY `graph/cycles.ts` uses (same
- *   direction, sourceSlot -> dependentSlot), but simpler: this file assumes
- *   its input is already acyclic (mutation.ts step 5 runs `detectCycle` before
- *   step 7 calls this), so there is no gray/white/black bookkeeping to detect
- *   a back-edge here — only visited/unvisited.
+ *   Topological order is a DFS postorder reversal — the standard DAG construction, and
+ *   the same traversal FAMILY `graph/cycles.ts` uses (same direction), but simpler:
+ *   this file assumes acyclic input, so there is no gray/white/black bookkeeping to
+ *   detect a back-edge, only visited/unvisited.
  *
  * INVARIANTS UPHELD HERE
- *   - Rule 6: the slot SET is never touched. The universe of slots evaluated
- *     is read once, up front, from `objects` — every returned object has
- *     EXACTLY the same slot keys as its input; only a slot's `value` (or, for
- *     `formula`, its cached last-evaluated `value`) changes.
- *   - Derived slots are evaluated INSIDE the topological pass, interleaved
- *     with literal and formula slots in one single order — there is no
- *     separate recompute() call anywhere in this file (PROCESS_BRIEF §9's
- *     forbidden move, and the single most important thing this file must get
- *     right).
- *   - D-013: a derived slot's compute function may read ONLY the addresses
- *     that count as ITS OWN declared dependencies. Enforced mechanically, not
- *     by convention: the `read` callback passed to `compute` is built, per
- *     derived slot, from the subset of `edges` whose `dependentSlot` is that
- *     slot's own address — the very edges mutation.ts already derived via
- *     `derivedSlotDependencyAddresses` at edge-derivation time. This file
- *     never calls that function itself (Rule 6 / primitives/schema.ts's own
- *     header: dynamic dependency resolution happens at edge-derivation time
- *     only, never during evaluation). Reading anything outside that subset
- *     returns a `#REF` ErrorValue, not the real value.
- *   - Never throws. A dangling formula reference, a derived slot with no
- *     matching schema entry, or a compute function's own reported error all
- *     become an `ErrorValue` in the result — never a rejected mutation and
- *     never an unwound exception (§5.1).
- *   - Assumes ACYCLIC input and does not re-check. `mutation.ts` runs
- *     `detectCycle` before ever calling this (step 5 before step 7); adding a
- *     defensive cycle check here would duplicate that work for no reason.
- *     Note how this fails if step 5 is ever skipped, because it is NOT the
- *     loud failure it looks like: `visit` marks a node visited BEFORE it
- *     recurses, so a back-edge returns immediately rather than looping. The
- *     pass therefore COMPLETES on cyclic input and simply emits an order that
- *     violates some edge — the slots in the cycle read values that are not
- *     there yet and quietly become `#REF` (verified by probe at
- *     0012-REVIEW-phase0). That is the same "flaky reactivity" class of bug
- *     D-013 and PROCESS_BRIEF §9 exist to prevent, and it is why step 5 is
- *     load-bearing here rather than merely conventional.
+ *   - Rule 6: the slot SET is never touched. The universe of slots is read once, up
+ *     front, from `objects` — every returned object has EXACTLY the same slot keys as
+ *     its input; only a slot's `value` changes.
+ *   - Derived slots are evaluated INSIDE the topological pass, interleaved with
+ *     literal and formula slots in one single order. There is no `recompute()` call
+ *     anywhere in this file — PROCESS_BRIEF §9's forbidden move, and the single most
+ *     important thing this file must get right.
+ *   - **D-013**: a derived slot's compute function may read ONLY its OWN declared
+ *     dependencies. Enforced mechanically, not by convention: the `read` callback
+ *     passed to `compute` is built, per derived slot, from the subset of `edges` whose
+ *     `dependentSlot` is that slot's own address — the very edges `mutation.ts`
+ *     already derived. This file never calls `derivedSlotDependencyAddresses` itself
+ *     (Rule 6: dynamic dependency resolution happens at edge-derivation time only).
+ *     Reading anything outside that subset returns `#REF`, not the real value.
+ *   - Never throws. A dangling reference, a derived slot with no matching schema
+ *     entry, or a compute function's own reported error all become an `ErrorValue` —
+ *     never a rejected mutation, never an unwound exception (§5.1).
+ *   - **Assumes ACYCLIC input and does not re-check.** `mutation.ts` runs
+ *     `detectCycle` at step 5 before ever calling this, and a defensive check here
+ *     would duplicate that work. Note how this fails if step 5 is ever skipped,
+ *     because it is NOT the loud failure it looks like: `visit` marks a node visited
+ *     BEFORE it recurses, so a back-edge returns immediately rather than looping. The
+ *     pass therefore COMPLETES on cyclic input and simply emits an order violating
+ *     some edge — the slots in the cycle read values that are not there yet and
+ *     quietly become `#REF` (verified by probe, 0012-REVIEW). That is exactly the
+ *     "flaky reactivity" class D-013 and PROCESS_BRIEF §9 exist to prevent, and it is
+ *     why step 5 is load-bearing here rather than merely conventional.
  *
  * NOT DONE HERE
- *   - Deriving the Edge[] (mutation.ts step 3) or detecting cycles
- *     (graph/cycles.ts, already built) — both must already have happened
- *     before this file's `evaluate` is called.
- *   - Any formula-language logic itself (parsing, dependency extraction,
- *     lazy/short-circuit dispatch, arithmetic) — all `formula/eval.ts`'s job
- *     (Rule 4: one evaluator). This file's `evaluateFormula` only builds the
- *     two callbacks that file needs and hands them through.
- *   - Bounding a range by the table's current extent, or reading a table's
- *     dimension slots at all — `primitives/table.ts`'s
- *     `enumerateRangeCellAddresses` (D-044/D-046) is the ONE place that
- *     happens; this file only calls it and resolves the addresses it returns
- *     against this pass's own `evaluatedValues`.
- *   - Cloning/committing/journaling (mutation.ts) — this file only evaluates;
- *     it does not decide what becomes the document's new current state.
+ *   - Deriving the `Edge[]` or detecting cycles — both must already have happened.
+ *   - Any formula-language logic (parsing, dependency extraction, lazy dispatch,
+ *     arithmetic) — all `formula/eval.ts`'s job (Rule 4: one evaluator). This file
+ *     only builds the two callbacks and hands them through.
+ *   - Bounding a range by the table's extent, or reading a table's dimension slots at
+ *     all — `primitives/table.ts`'s `enumerateRangeCellAddresses` (D-044/D-046) is the
+ *     ONE place that happens; this file only calls it and resolves the addresses it
+ *     returns against this pass's own `evaluatedValues`.
+ *   - Cloning, committing, journaling (`mutation.ts`) — this file only evaluates; it
+ *     does not decide what becomes the document's new current state.
  */
 import type { Address } from "../address.ts";
 import type { FormulaAst } from "../formula/ast.ts";
@@ -113,7 +88,7 @@ import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
  * every edge in `edges`, and returns a NEW object list with each slot's value
  * (or, for `derived` slots, its only value) updated to this pass's result.
  *
- * Preconditions the CALLER (mutation.ts, not yet built) is responsible for:
+ * Preconditions the CALLER (`mutation.ts`) is responsible for:
  * `edges` is already derived from every current formula AST and schema
  * declaration (§5.1 step 3), and `edges` is already known to be acyclic
  * (§5.1 step 5). This function does not re-derive edges and does not
@@ -265,11 +240,9 @@ function nextSlot(slot: Slot, value: Value): Slot {
 }
 
 /**
- * Evaluates a `formula`-kind slot's stored AST for real, THIS cycle's range-
- * evaluation wiring — `FormulaAst` is the full §5.3 union (Q-005, cycle 0028)
- * and `formula/eval.ts`'s `evaluate` now handles every shape it admits, so
- * the old narrow `ReferenceNode`-only bridge (D-036 constraint 3: "delete,
- * never extend") is gone. Builds the two callbacks `formula/eval.ts` needs
+ * Evaluates a `formula`-kind slot's stored AST via `formula/eval.ts`'s
+ * `evaluate`, over every shape the full §5.3 union admits (Q-005).
+ * Builds the two callbacks `formula/eval.ts` needs
  * and hands them straight through — this file has no evaluation logic of its
  * own beyond building those closures, matching Rule 4 (one evaluator).
  *

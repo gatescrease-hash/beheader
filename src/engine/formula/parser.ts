@@ -1,169 +1,99 @@
 /**
  * parser.ts — Token stream -> FormulaAst (PROJECT_BRIEF §5.3, stage 2 of 4).
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.3's full v1 grammar: literals, references (dotted
- * `name.path` AND bare cell refs), the entire operator precedence chain, function
- * calls, and ranges restricted to an aggregate function's direct argument. Also
- * implements **D-029** (`AND`/`OR`/`NOT` as BOTH infix/prefix operators and callable
- * functions, both forms meaning the same thing) and inherits **D-039**'s
- * either-case cell-reference form unchanged (this file makes no new ruling on it —
- * see `address.ts`'s `isCellReferenceForm`, reused here rather than duplicated).
- * Implements **D-038** (Q-010 answered by the human): a function call naming an
- * unrecognised function, or calling a known one with the wrong argument count,
- * is a `#PARSE`-time rejection — see `parseFunctionCallExpr` below. As of THIS
- * cycle, also implements **D-045**: a range whose two endpoints name different
- * objects is rejected here too, same `#PARSE`-time reasoning — see
- * `walkForRangePlacement`'s new check, right beside the placement check it
- * already ran.
+ * IMPLEMENTS: §5.3's full v1 grammar — literals, references (dotted `name.path` AND
+ * bare cell refs), the entire operator precedence chain, function calls, and ranges
+ * restricted to an aggregate function's direct argument. Also **D-029** (`AND`/`OR`/
+ * `NOT` as BOTH infix/prefix operators and callable functions, both meaning the same
+ * thing), **D-038** (an unrecognised function name, or a known one with the wrong
+ * argument count, is a `#PARSE`-time rejection), and **D-045** (a range whose two
+ * endpoints name different objects is rejected here too). Inherits **D-039**'s
+ * either-case cell-reference form unchanged, via `address.ts`'s `isCellReferenceForm`
+ * — reused, never duplicated.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
- * This is an ORDINARY file inside the now-reviewed `formula/` subsystem (0029-REVIEW
- * signed off `ast.ts`; entry 0030 added `lexer.ts` with no trigger firing), not a new
- * subsystem's first file. 0029-REVIEW's own carried note predicted this file would be
- * denser than `lexer.ts` — "parser.ts is where D-029, Q-004, and range placement all
- * land at once" — and it was; see the cycle's own log entry for why REVIEW:
- * RECOMMENDED is the honest self-assessment here even though no single §6.1 trigger
- * cleanly fired.
- *
  * WHAT THIS IS
- *   Two exported entry points:
- *   - `parseFormulaTokens(tokens, objects, tableObjectId?)` — the real parser,
- *     consuming an already-`lex`ed `Token[]` (stage-separation: this file never scans
- *     characters). Returns a `FormulaAst` or a `ParseError`; NEVER throws.
+ *   Two entry points, neither of which ever throws:
+ *   - `parseFormulaTokens(tokens, objects, tableObjectId?)` — the real parser, over an
+ *     already-`lex`ed `Token[]`. This file never scans characters (stage separation).
  *   - `parseFormula(source, objects, tableObjectId?)` — the convenience wrapper real
- *     callers (a future `link`/`set` command, table cell input, text's `{= }`
- *     embedding — all later cycles) will actually use: calls `lex`, then
- *     `parseFormulaTokens`. A `LexError` from the lex stage is returned as-is — it is
- *     structurally identical to this file's own `ParseError` (both are `#PARSE`-
- *     shaped; see `ParseError`'s own doc comment for why that's declared fresh here
- *     rather than imported, following `LexError`'s and `AddressError`'s own precedent).
+ *     callers use: `lex`, then parse. A `LexError` is returned as-is, being
+ *     structurally identical to this file's own `ParseError` (both `#PARSE`-shaped).
  *
- *   `objects` is the same `AddressableObject[]` shape `address.ts` already defines —
- *   §5.2: "A resolver maps name -> ID at parse time; stored ASTs hold IDs, not
- *   names," so THIS file is where that resolution happens for formulas, exactly the
- *   way `parseAddress` already does it for a bare address string. An unresolvable
- *   name is therefore a hard `#PARSE` here, immediately, regardless of which branch of
- *   an `IF` it sits in (§5.3: "An unresolvable reference is a PARSE-time error
- *   regardless of branch, because names are resolved to IDs at parse time").
+ *   `objects` is `address.ts`'s `AddressableObject[]`. §5.2: "A resolver maps name ->
+ *   ID at parse time; stored ASTs hold IDs, not names" — so THIS is where that happens
+ *   for formulas. An unresolvable name is a hard `#PARSE` immediately, regardless of
+ *   which branch of an `IF` it sits in (§5.3 says so explicitly, because names resolve
+ *   at parse time, not evaluation time).
  *
- *   `tableObjectId` is how a caller supplies "the table this formula lives in" (§5.3:
- *   bare cell refs are "legal only inside a table cell formula and mean 'this table,
- *   that cell'"). Omitted (or `undefined`) for every other context — §5.3: "Bare refs
- *   in text formulas are a parse error," which falls out for free here: with no table
- *   context, a bare single-segment cell-shaped word has nowhere to resolve against and
- *   falls through to `address.ts`'s ordinary `name.path` rejection (see
- *   `parseReferenceAddress`). This file TRUSTS that a caller-supplied `tableObjectId`
- *   names a real table — it does not re-verify that against `objects` — the same
- *   layered-validation posture `address.ts` itself documents (a schema/graph-shape
- *   check belongs to a later validation layer, ultimately `mutation.ts`'s
- *   `validateIntegrity`, D-017's own precedent: parse-time correctness is necessary,
- *   not sufficient, and the mutation layer re-checks independently regardless).
+ *   `tableObjectId` supplies "the table this formula lives in", for §5.3's bare cell
+ *   refs. Omitted in every other context, which makes "bare refs in text formulas are
+ *   a parse error" fall out for free: with no table context a bare cell-shaped word
+ *   has nowhere to resolve and falls through to the ordinary `name.path` rejection.
+ *   This file TRUSTS a caller-supplied `tableObjectId` names a real table rather than
+ *   re-verifying it — the same layered-validation posture `address.ts` documents, and
+ *   D-017's precedent: parse-time correctness is necessary, not sufficient, and
+ *   `mutation.ts` re-checks independently regardless.
  *
- *   The full precedence chain (§5.3, loosest to tightest), each its own tier function,
- *   all but the two tightest built from ONE shared left-associative-binary-op helper
- *   (`parseLeftAssociativeExpr`) rather than five near-identical loops:
+ *   The precedence chain (§5.3, loosest to tightest), each its own tier function, all
+ *   but the two tightest built from ONE shared left-associative helper rather than
+ *   five near-identical loops:
  *   `OR -> AND -> comparison -> + - -> * / % -> ^ -> unary - / NOT -> primary`.
- *   `^` is LEFT-associative — the brief is silent on this, and this project's own
- *   stated model for the formula language is Excel (§1), whose `^` is itself
- *   left-associative (`2^3^2` = `(2^3)^2` = 64, not 512) — so this is not an arbitrary
- *   pick, it is the one reading consistent with the brief's own chosen precedent.
- *   Reversible either way: nothing is stored as re-parseable source text (§5.11 stores
- *   the AST, never source), so a future change to this choice would affect only
- *   NEWLY-typed formulas, never a previously-saved document.
+ *   `^` is LEFT-associative. The brief is silent; this project's stated model for the
+ *   formula language is Excel (§1), whose `^` is itself left-associative (`2^3^2` =
+ *   64, not 512) — the one reading consistent with the brief's own chosen precedent,
+ *   and reversible either way, since §5.11 stores the AST and never re-parseable
+ *   source text, so a change would affect only newly-typed formulas.
  *
- *   `A1:B4` (§5.3's range grammar) is parsed WHEREVER it is syntactically reachable —
- *   a bare reference immediately followed by `:` and a second bare reference, with no
- *   restriction on POSITION at parse time (see `parseReferenceOrRangeExpr`) — and its
- *   §5.3 placement restriction ("only as an argument to an aggregate function") is
- *   enforced SEPARATELY, by `validateRangePlacement`, a single tree walk over the
- *   finished AST run once by `parseFormulaTokens` right before returning success. This
- *   two-pass split (permissive parse, then a placement check) is deliberately simpler
- *   than threading an "am I a direct aggregate argument" flag through every precedence
- *   tier function, and it has one disclosed, deliberate consequence: because
- *   parentheses add NO node to this AST (§5.3's grammar has no `ParenNode` — a
- *   parenthesized sub-expression parses to exactly the tree its contents would have
- *   produced unparenthesized), `SUM((A1:B4))` is indistinguishable, post-parse, from
- *   `SUM(A1:B4)` and is therefore ACCEPTED, identically. This is judged the right,
- *   simpler reading of "only as an argument to an aggregate function" — nothing in
- *   §5.3 suggests a redundant paren should specifically defeat that.
+ *   RANGE PLACEMENT IS A SEPARATE PASS. `A1:B4` parses wherever it is syntactically
+ *   reachable, and §5.3's "only as an argument to an aggregate function" restriction
+ *   is enforced by `validateRangePlacement`, one walk over the finished AST run just
+ *   before returning success. Simpler than threading an "am I a direct aggregate
+ *   argument" flag through every tier, with one disclosed consequence: parentheses add
+ *   no node to this AST (§5.3's grammar has no `ParenNode`), so `SUM((A1:B4))` is
+ *   post-parse indistinguishable from `SUM(A1:B4)` and is ACCEPTED identically. Judged
+ *   the right reading — nothing in §5.3 suggests a redundant paren should defeat it.
  *
- *   `AND`/`OR`/`NOT` (D-029) work in BOTH forms because `lexer.ts` gives them their
- *   own keyword token types (`and`/`or`/`not`, never `identifier`) and this file
- *   checks, at every point a NAME could start either an infix/prefix operator OR a
- *   function call, whether the token immediately after is `(`: if so, it is a call
- *   (`parsePrimaryExpr` dispatches to `parseFunctionCallExpr`, using the keyword
- *   token's own `text` — already exactly `"AND"`/`"OR"`/`"NOT"` — as the function
- *   name); if not, it is the operator form (`parseAndExpr`/`parseOrExpr`'s ordinary
- *   infix loop, or `parseUnaryExpr`'s prefix handling for `NOT`). `IF` needs none of
- *   this special-casing — it was never a keyword token to begin with (`lexer.ts`'s own
- *   header: `IF` lexes as a plain `identifier`), so `IF(...)` is handled by the exact
- *   same "identifier followed by `(`" path every other built-in function name is.
+ *   `AND`/`OR`/`NOT` work in both forms because `lexer.ts` gives them their own
+ *   keyword token types, and this file checks at every point a name could start either
+ *   whether the next token is `(`: if so it is a call, using the keyword token's own
+ *   text as the function name; if not, the operator form. `IF` needs none of this — it
+ *   was never a keyword token, so `IF(...)` takes the same "identifier followed by `(`"
+ *   path as `SUM`.
  *
- *   This file DOES validate a function's NAME and ARITY, as of D-038 (Q-010 answered
- *   by the human, 2026-08-23, option (b)): `FOO(1,2,3)` for an unrecognised `"FOO"`,
- *   or `ROUND(1)` for a known name with the wrong argument count, is now a `#PARSE`
- *   rejection, using `functions.ts`'s own `getFunctionEntry`/`checkArity` — the exact
- *   two functions cycle 0034 built and nothing consumed until now. This is anything
- *   "decidable from the AST alone, without reading a single value" (D-038's own
- *   words) — the same posture this file already takes for an unresolvable reference
- *   and a misplaced range. `parseFunctionCallExpr` runs the check once the full
- *   argument list is known, and reports the offending name AND its position (the
- *   function-name token's `start`) in the returned `ParseError` — D-038's binding
- *   condition that this must not foreclose a later autocomplete/did-you-mean pass,
- *   which needs both. `functions.ts`'s registry stays enumerable by name
- *   (`Object.keys(FUNCTION_REGISTRY)`) for the same reason.
- *
- *   This file still has exactly one, narrow, brief-mandated exception it decides on
- *   its own rather than deferring to the registry: which names may take a range
- *   argument (`SUM`/`MIN`/`MAX`/`AVG`, §5.3's own words), needed to enforce the
- *   range-placement rule — imported as `functions.ts`'s `RANGE_ACCEPTING_FUNCTION_NAMES`
- *   rather than a second local copy (cycle 0034's fold-in).
+ *   Which names may take a range argument (`SUM`/`MIN`/`MAX`/`AVG`) is imported as
+ *   `functions.ts`'s `RANGE_ACCEPTING_FUNCTION_NAMES`, never kept as a second local
+ *   copy — the same "declare vocabulary once" principle as D-009/D-014.
  *
  * INVARIANTS UPHELD HERE
- *   - `parseFormulaTokens`/`parseFormula` NEVER throw. Every malformed input is a
- *     returned `ParseError`, never an exception — matching `lexer.ts`'s own discipline
- *     and §5.1's "errors must never throw across the evaluation loop."
- *   - Every `ReferenceNode` this file produces holds a resolved `Address` — an ID, not
- *     a name (§5.2) — via `address.ts`'s own `parseAddress`, or (bare cell refs only)
- *     built directly against the caller-supplied `tableObjectId`. No path is ever
- *     hand-built from string concatenation outside those two, already-reviewed call
- *     sites.
- *   - A `RangeNode` this file produces always has `start`/`end` that are themselves
- *     resolved `Address`es (via the same `parseReferenceAddress` bare references go
- *     through) — never an arbitrary expression, matching `RangeNode`'s own type shape.
+ *   - Never throws. Every malformed input is a returned `ParseError`, matching
+ *     `lexer.ts`'s discipline and §5.1's "errors must never throw across the
+ *     evaluation loop."
+ *   - Every `ReferenceNode` produced here holds a RESOLVED `Address` — an ID, not a
+ *     name (§5.2) — via `address.ts`'s `parseAddress`, or (bare cell refs only) built
+ *     against the caller-supplied `tableObjectId`. No path is ever hand-built from
+ *     string concatenation outside those two call sites.
+ *   - Every `RangeNode`'s `start`/`end` are themselves resolved `Address`es, through
+ *     the same path bare references take — never an arbitrary expression.
  *
  * NOT DONE HERE
- *   - `extractDependencies` (`formula/deps.ts`), evaluation (`formula/eval.ts`) — later
- *     cycles. The function registry itself (`formula/functions.ts`) already exists and
- *     is now consumed here for name/arity validation (D-038) — see WHAT THIS IS.
- *   - Deciding WHEN this file runs relative to typing: D-038's condition is that
- *     validation happens "when a formula is committed, never per keystroke" — that is
- *     a caller-level policy (whoever wires formula entry to the UI, a later cycle),
- *     not something `parseFormula`/`parseFormulaTokens` can enforce; this file simply
- *     validates whatever it is called with. Likewise, keeping a rejected formula's
- *     source text alive for editing (D-038's fourth constraint) is the caller's job —
- *     this file returns a `ParseError`, never mutates or discards its `source` input.
- *   - Text's `{= }` / `{? }{:}{?}` embedding syntax (§5.6) — a block-tree concern,
- *     Phase 5, layered ON TOP of this file (a text dependency walker calls into this
- *     parser for each embedded formula's inner expression text; it does not change
- *     anything about how that inner text itself is parsed).
- *   - The leading `=` that marks a table cell's raw text as a formula rather than a
- *     literal (§5.3's own examples, e.g. `= polygon_1.origin.x * 2`) is NOT part of
- *     this file's grammar at all — `=` inside an expression is the EQUALITY
- *     comparison operator (§5.3's own precedence chain). Deciding "does this cell's
- *     raw text need to go through `parseFormula` at all" is a caller-level policy
- *     (whoever wires this into table cell input, a later cycle) that strips any
- *     leading `=` BEFORE calling this file, exactly as it must decide "is this
- *     literal text or a formula" in the first place.
- *   - A known, disclosed limitation inherited from `lexer.ts`'s own design: two
- *     directly-adjacent purely-numeric path segments merge into one decimal NUMBER
- *     token at the lexer stage (`a.1.5.b` lexes as `identifier(a) dot number(1.5) dot
- *     identifier(b)`, not four segments) — see `lexer.ts`'s own header. This never
- *     arises for any address this schema actually produces (`vertex.N.x`/`vertex.N.y`
- *     is the only numeric-segment shape in the whole brief, always a single index,
- *     never two consecutive numeric segments), so it is not fixed here — fixing it
- *     would require the lexer to carry grammar context it is deliberately free of.
+ *   - Deciding WHEN this runs relative to typing. D-038 requires validation "when a
+ *     formula is committed, never per keystroke" — a caller-level policy, not
+ *     something this file can enforce; it validates whatever it is called with.
+ *     Keeping a rejected formula's source alive for editing is likewise the caller's
+ *     job: this returns a `ParseError` and never mutates or discards its input.
+ *   - Text's `{= }` / `{? }{:}{?}` embedding (§5.6) — a block-tree concern, Phase 5,
+ *     layered ON TOP of this file.
+ *   - The leading `=` marking a cell's raw text as a formula. Inside an expression `=`
+ *     is the EQUALITY operator; deciding "does this text go through `parseFormula` at
+ *     all" is caller-level policy that strips any leading `=` first.
+ *   - A disclosed limitation inherited from `lexer.ts`: two directly-adjacent
+ *     purely-numeric path segments merge into one decimal NUMBER token (`a.1.5.b`
+ *     lexes as three segments, not four). This never arises for any address the schema
+ *     produces (`vertex.N.x` is the only numeric-segment shape in the brief, always a
+ *     single index), and fixing it would require the lexer to carry grammar context it
+ *     is deliberately free of.
  */
 import { type Address, type AddressableObject, bareCellAddress, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";
 import type { BinaryOperator, FormulaAst } from "./ast.ts";

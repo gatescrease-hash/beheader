@@ -167,6 +167,26 @@ how two models end up building two different mental models of the same system.
  */
 ```
 
+**Write it in the PRESENT TENSE — state the contract as it stands now.** §5.4's
+no-changelog rule binds headers too: a header is not a changelog, and "as of this cycle
+X, then cycle Y widened it" belongs in your log entry. A header that is only correct
+read start-to-finish as a chronology has failed §5's goal, because every reader who
+skims or greps lands on a statement that is false about the current code.
+
+**Budget: 20-40 lines for an ordinary file, up to ~80 for a load-bearing one.** Over
+budget is a signal to check what the extra lines are doing. Cite `(D-047)` or
+`(0045-REVIEW)` freely — those are cheap, stable pointers into DECISIONS.md and
+`entries/`, which are where the chronology actually lives. Do not retell the story
+around them.
+
+Keep, always, regardless of budget: hazard notes, rejected alternatives and why they
+were rejected, invariants, and `PROVISIONAL(Q-NNN)` tags. Those are the expensive
+knowledge. Sequencing is not.
+
+*(Budget and present-tense rule added by the audit pass at entry 0055, which found
+headers had drifted to ~6x this size and accumulated stale claims. Reverse this
+paragraph if you disagree with it — but read that entry first.)*
+
 ### 5.3 Function docs
 
 Document **why it exists, what it guarantees, how it fails** — never restate the signature.

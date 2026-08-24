@@ -1,106 +1,80 @@
 /**
- * schema.ts — Per-type derived-slot declarations and compute functions.
+ * schema.ts — Per-type slot declarations and derived-slot compute functions.
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 ("Each object type's schema declares, for every
  * derived slot: its address path, its dependencies, and its compute function.").
- * Load-bearing per Rule 3 (§6 trigger-2 file) and PROCESS_BRIEF §6 trigger-3 (new
- * engine file).
+ * Load-bearing per Rule 3 (§6 trigger-2 file).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   The registry `graph/eval.ts` and `mutation.ts` read to know, for a given
- *   object TYPE: which of its slots are `derived` and how to compute each one
- *   (its stored path, the other slots it reads, and the compute function), and
- *   the full set of paths its NON-derived (`literal`/`formula`) slots occupy
- *   (`nonDerivedSlotPaths`). This file does not itself derive edges or
- *   evaluate anything — see NOT DONE HERE.
+ *   The registry `graph/eval.ts` and `mutation.ts` read to know, for a given object
+ *   TYPE: which slots are `derived` and how to compute each (path, dependencies,
+ *   compute function), and the full set of paths its NON-derived (`literal`/`formula`)
+ *   slots occupy. Nothing here derives edges or evaluates anything.
  *
- *   Scope: the two Phase 0 fixture types PROJECT_BRIEF §6 names — `value` (one
- *   non-derived slot, no derived slots at all) and `add` (two non-derived
- *   input slots, one derived `out.result` reading both), per D-011 — plus, as
- *   of THIS cycle, `table` (§5.4): two fixed non-derived slots (`rows`, `cols`,
- *   §5.10's own words) and a DYNAMIC non-derived slot FAMILY, `cells.*`, whose
- *   membership varies with the object's own `rows`/`cols` values. `table`'s
- *   entry is the reason `nonDerivedSlotPaths`'s TYPE widened this cycle — see
- *   `NonDerivedSlotPathGroup` below and D-017's forward note (§10 in this
- *   file's own history). The remaining seven `ObjectType` members (`circle`,
- *   `polygon`, ...) do not have schema entries yet; `getObjectSchema` returns
- *   `undefined` for them, honestly, rather than a placeholder. Their schemas
- *   belong to the phases that introduce them (Phase 3 geometry, Phase 5 text,
- *   Phase 6 script/image) — building them now would be building ahead of the
- *   brief's §6 build order.
+ *   `nonDerivedSlotPaths` is a list of GROUPS, each either `static` (a fixed path
+ *   list) or `dynamic` (a function of the object's own current state).
+ *   `resolveNonDerivedSlotPaths(object, groups)` is how every consumer resolves them —
+ *   PER OBJECT, never per type. `table`'s `cells.*` is the dynamic case: its
+ *   membership varies with that object's own `rows`/`cols`
+ *   (`primitives/table.ts`'s `enumerateTableCellSlotPaths`).
+ *
+ *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
+ *   D-011) and `table` (§5.4). The remaining `ObjectType` members have no entry;
+ *   `getObjectSchema` returns `undefined` for them, honestly, rather than a
+ *   placeholder. Their schemas belong to the phases that introduce them — building
+ *   them now would be building ahead of the brief's §6 build order.
  *
  * INVARIANTS UPHELD HERE
- *   - Derived slots, and every `nonDerivedSlotPaths` entry (both `static`'s
- *     fixed list and `dynamic`'s generated paths), are declared/produced by
- *     PATH (`["out", "result"]`, `["cells", "A1"]`), never by a hand-built key
- *     string (D-010). `findDerivedSlotSchema` compares paths via `slotKey`, the
- *     one sanctioned way to turn a path into a comparable key —
- *     `mutation.ts`'s edge derivation does the same over
- *     `resolveNonDerivedSlotPaths`'s output (see its header): this is the
- *     mechanism that lets it recover a formula slot's OWN address without ever
- *     inverting a `GraphObject.slots` key, which has no sanctioned inverse.
- *     `table`'s `dynamic` group (`primitives/table.ts`'s
- *     `enumerateTableCellSlotPaths`) upholds the SAME rule the same way: it
- *     GENERATES paths from the object's own `rows`/`cols` slots rather than
- *     ever decomposing an existing `cells.*` key back into one.
+ *   - Everything is declared by PATH (`["out", "result"]`), never by a hand-built key
+ *     string (D-010). Comparison goes through `slotKey`, the one sanctioned way to
+ *     turn a path into a comparable key. A `dynamic` group upholds the same rule the
+ *     same way: it GENERATES paths from the object's own state, never decomposes an
+ *     existing key back into one. This is the mechanism that lets `mutation.ts`
+ *     recover a formula slot's OWN address without inverting a `GraphObject.slots`
+ *     key, which has no sanctioned inverse.
  *   - Dependencies may be `static` (a fixed list of paths within the SAME object,
- *     §5.1's example: "centroid ← vertices") or `dynamic` (a function of the
- *     object's current state). Both forms are expressible here even though
- *     neither Phase 0 fixture needs `dynamic` — §5.1 names two later primitives
- *     that require it (`text.resolvedContent`, `script.out.*`), so the mechanism
- *     must support it now rather than being retrofitted.
- *   - `derivedSlotDependencyAddresses` is the ONLY place a static path list is
- *     turned into a full `Address` (by pairing it with the object's own id) or a
- *     dynamic resolver is invoked. Per §5.1, dynamic resolution happens during
- *     EDGE DERIVATION (mutation step 3), never during evaluation — callers MUST
- *     call this while building the edge set, not from inside the topological
- *     pass, or Rule 6 (slot set fixed during evaluation) is violated in spirit:
- *     a dynamic resolver reads the object's CURRENT state, and calling it mid-
- *     evaluation would let the dependency set drift while slots are being
- *     computed.
- *   - No `recompute()` phase is implied or supported here. A `compute` function
- *     is a pure function of (object, resolved inputs) that `graph/eval.ts` calls
- *     ONCE per derived slot, inside the same topological pass as every other
- *     slot kind (§5.1: "derived slots are first-class graph nodes and are
- *     evaluated inside the topological pass, exactly like formula slots").
- *   - `compute` never throws. `add`'s compute function demonstrates the required
- *     shape: propagate an upstream `ErrorValue` unchanged, then fail closed with
- *     a typed `ErrorValue` (`#REF` for a dependency that did not resolve, `#TYPE`
- *     for a wrong-shaped value, ALSO `#TYPE` for a non-finite result — D-025/
- *     Q-006, cycle 0023: `NaN`/`Infinity`/`-Infinity` are not legal document
- *     state) rather than throwing or returning `NaN`/`undefined` (§5.1: "Errors
- *     must never throw across the evaluation loop"). Every FUTURE derived
- *     slot's compute function that does arithmetic must map a non-finite
- *     result to `#TYPE` the same way — `graph/node.ts`'s `hasIllegalNumber`
- *     is the shared predicate (D-014's principle) for checking this. `add`
- *     does NOT additionally guard against a `-0` result (Q-008, cycle 0026):
- *     its two inputs are themselves already-legal `Value`s by the time this
- *     function ever sees them (mutation.ts rejects `-0` before it can enter
- *     committed state — see that file's cycle 0026 header), and IEEE 754
- *     addition of two finite, non-`-0` operands can never itself produce
- *     `-0` — only `-0 + -0` does, which cannot arise here. A future compute
- *     function using multiplication or division MUST reason about this
- *     freshly; the guarantee is specific to `+`.
+ *     §5.1's "centroid ← vertices") or `dynamic`. Both forms are expressible even
+ *     though neither Phase 0 fixture needs `dynamic` — §5.1 names two later primitives
+ *     that require it (`text.resolvedContent`, `script.out.*`), so the mechanism must
+ *     support it now rather than be retrofitted.
+ *   - `derivedSlotDependencyAddresses` is the ONLY place a static path list becomes a
+ *     full `Address` or a dynamic resolver is invoked. Per §5.1, dynamic resolution
+ *     happens during EDGE DERIVATION, never during evaluation — callers MUST call this
+ *     while building the edge set, not from inside the topological pass, or Rule 6 is
+ *     violated in spirit: a dynamic resolver reads the object's CURRENT state, and
+ *     calling it mid-evaluation would let the dependency set drift while slots are
+ *     being computed.
+ *   - No `recompute()` phase is implied or supported. A `compute` function is a pure
+ *     function of (object, resolved inputs) that `graph/eval.ts` calls ONCE per
+ *     derived slot, inside the same topological pass as every other slot kind (§5.1:
+ *     "derived slots are first-class graph nodes and are evaluated inside the
+ *     topological pass, exactly like formula slots").
+ *   - `compute` NEVER throws. `add`'s implementation demonstrates the required shape:
+ *     propagate an upstream `ErrorValue` unchanged, then fail closed with a typed
+ *     `ErrorValue` — `#REF` for an unresolved dependency, `#TYPE` for a wrong-shaped
+ *     value, and ALSO `#TYPE` for a non-finite result (D-025/Q-006) — rather than
+ *     throwing or returning `NaN`/`undefined` (§5.1: "Errors must never throw across
+ *     the evaluation loop"). Every FUTURE compute function doing arithmetic must map a
+ *     non-finite result to `#TYPE` the same way, via `graph/node.ts`'s
+ *     `hasIllegalNumber` (D-014's shared-predicate principle).
+ *   - `add` does NOT additionally guard against a `-0` result (Q-008), and that
+ *     exemption is SPECIFIC TO `+`: its inputs are already-legal `Value`s by the time
+ *     it sees them (`mutation.ts` rejects `-0` before it can enter committed state),
+ *     and IEEE 754 addition of two finite non-`-0` operands cannot produce `-0` — only
+ *     `-0 + -0` does, which cannot arise. A future compute function using
+ *     multiplication or division MUST reason about this freshly.
  *
  * NOT DONE HERE
- *   - Declaring an object type's default KIND per slot (literal vs. formula) or
- *     its creation-time default value. `ObjectSchema.nonDerivedSlotPaths` is
- *     only the PATH half of that: which paths exist, not what they default to.
- *     §5.1 does describe schemas as declaring a slot's "default kind," but the
- *     concrete need for THAT — object CREATION — still belongs to a future
- *     `mutation.ts` cycle. Widen this file again when that need is concrete,
- *     same principle as this cycle's own widening.
- *   - Deriving an actual `Edge[]` from these declarations (that is
- *     `mutation.ts`'s `deriveEdges`, which consumes this file — see its header
- *     for why `nonDerivedSlotPaths` had to be added here rather than solved by
- *     inverting a `GraphObject.slots` key), detecting cycles (graph/cycles.ts),
- *     or topological evaluation (graph/eval.ts).
- *   - Any geometry/text/script/image schema entries (Phases 3, 5, 6). `table`'s
- *     entry landed this cycle — see `TABLE_SCHEMA` below — but ONLY its slot
- *     declarations: no table-creation mutation, no row/col insert/delete, no
- *     range wiring. See `primitives/table.ts`'s own NOT DONE HERE.
+ *   - An object type's default KIND per slot (literal vs. formula) or its
+ *     creation-time default value. `nonDerivedSlotPaths` is only the PATH half: which
+ *     paths exist, not what they default to. §5.1 does describe schemas as declaring a
+ *     "default kind", but the concrete need for that is object CREATION — a future
+ *     command-layer concern. Widen this file when that need is concrete.
+ *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
+ *     which consumes this file), cycle detection, or topological evaluation.
+ *   - Geometry/text/script/image schema entries (Phases 3, 5, 6).
  */
 import type { Address } from "../address.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
@@ -162,9 +136,8 @@ export interface DerivedSlotSchema {
 }
 
 /**
- * One declaration inside `ObjectSchema.nonDerivedSlotPaths` (added cycle 0028
- * one-flat-array-only; widened to this union THIS cycle, D-017/0041-REVIEW-
- * phase2 §9). Deliberately the SAME `static`/`dynamic` shape as
+ * One declaration inside `ObjectSchema.nonDerivedSlotPaths` (D-017).
+ * Deliberately the SAME `static`/`dynamic` shape as
  * `DerivedSlotDependencies` above, applied to a different question
  * ("which non-derived paths does this object currently have," not "which
  * addresses does this derived slot currently depend on") — reusing the shape
@@ -172,8 +145,7 @@ export interface DerivedSlotSchema {
  * list is not expressive enough; a function of the object's CURRENT state is).
  *
  * - `static` — a fixed list of paths every object of this type has, known from
- *   the schema alone (`value`'s one slot, `add`'s two, and — new this cycle —
- *   `table`'s `rows`/`cols`).
+ *   the schema alone (`value`'s one slot, `add`'s two, `table`'s `rows`/`cols`).
  * - `dynamic` — a function of the object's CURRENT state, returning whatever
  *   paths currently belong to the family. `table`'s `cells.*` family
  *   (`primitives/table.ts`'s `enumerateTableCellSlotPaths`) is the first and
@@ -263,7 +235,7 @@ export interface ObjectSchema {
 
 /**
  * Resolves a derived slot's declared dependencies, for one object, into the
- * concrete `Address`es a future `mutation.ts` wires into the edge set.
+ * concrete `Address`es `mutation.ts` wires into the edge set.
  *
  * Why this exists as shared code rather than being inlined at each call site:
  * both branches need to happen at the SAME moment (edge derivation, §5.1 step
@@ -329,11 +301,8 @@ const ADD_OUT_RESULT_PATH: readonly string[] = ["out", "result"];
  * D-025 validateIntegrity check runs BEFORE `evaluate` in the mutation loop
  * and never re-inspects what `evaluate` itself just produced, so THIS is the
  * only guard a non-finite `derived`-slot result ever passes through —
- * verified by mutation-test (this cycle's log entry): removing it lets
- * `mutate` commit a raw `Infinity` with `ok: true`. An earlier draft of this
- * comment claimed the two checks were redundant; that was wrong and is
- * corrected here rather than left standing (see 0018-REVIEW-phase0's finding
- * 1 and 0020's own self-caught test-comment lesson — same failure shape).
+ * verified by mutation-test: removing it lets `mutate` commit a raw
+ * `Infinity` with `ok: true`.
  */
 const ADD_SCHEMA: ObjectSchema = {
   type: "add",
@@ -373,8 +342,8 @@ const ADD_SCHEMA: ObjectSchema = {
         // detectCycle -> evaluate) and its result is returned AS-IS, never
         // re-validated. A non-finite `sum` returned here would commit straight
         // into `out.result`'s cached value with nothing downstream to catch
-        // it — verified by mutation-test (see this cycle's log entry): with
-        // this check removed, `mutate` returns `ok: true` holding a raw
+        // it — verified by mutation-test: with this check
+        // removed, `mutate` returns `ok: true` holding a raw
         // `Infinity`. This function is the ONLY guard against that; it is not
         // a backstop for one that already exists elsewhere.
         if (!Number.isFinite(sum)) {

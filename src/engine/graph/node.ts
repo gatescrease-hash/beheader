@@ -6,52 +6,45 @@
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   §5.1's central claim: "the dependency graph is over addressable slots
- *   (individual properties), not over whole objects." This file defines both
- *   halves of that: the Object shape and the three Slot kinds it's built from.
+ *   §5.1's central claim: "the dependency graph is over addressable slots (individual
+ *   properties), not over whole objects." This file defines both halves of that — the
+ *   object shape and the three slot kinds it is built from.
  *
- *   A GraphObject's `slots` is a flat map from a slot's *stored path*, joined with
- *   "." (`slotKey`), to that slot's data — e.g. an object might have slot keys
- *   "origin.x", "origin.y", "cells.A1", "out.result". Path segments never contain
- *   "." (address.ts's PATH_SEGMENT_PATTERN forbids it), so this join is a safe,
- *   collision-free canonical key. An `Address { objectId, path }` resolves to a
- *   slot via `getSlot(documentObjects[address.objectId], address.path)`.
+ *   A `GraphObject`'s `slots` is a flat map from a slot's stored path, joined with "."
+ *   (`slotKey`), to that slot's data: `"origin.x"`, `"cells.A1"`, `"out.result"`. Path
+ *   segments never contain "." (`address.ts`'s `PATH_SEGMENT_PATTERN` forbids it), so
+ *   the join is a safe, collision-free canonical key. An `Address` resolves to a slot
+ *   via `getSlot`. There is no sanctioned inverse (D-010) — never `key.split(".")`.
  *
- *   Value/Point/ErrorValue (§5.1's Value union) live here because they are what a
- *   Slot holds — every other module that produces a Value (formula evaluation,
- *   geometry compute functions, script stubs) imports these rather than
- *   redefining them.
+ *   `Value`/`Point`/`ErrorValue` (§5.1's `Value` union) live here because they are what
+ *   a Slot holds. Every module that produces a Value imports these rather than
+ *   redefining them, and `isIllegalNumber`/`hasIllegalNumber` are the ONE shared
+ *   predicate for "this number is not legal document state" (D-014's principle),
+ *   covering non-finite values (D-025/Q-006) and `-0` (PROVISIONAL(Q-008)).
  *
  * INVARIANTS UPHELD HERE
  *   - `literal`/`formula`/`derived` are the only three slot kinds (§5.1's table).
  *     `derived` has no user-settable content field — it is computed, never written.
- *   - GraphObject, Slot, Value, Point, ErrorValue are all plain, readonly data:
- *     no closures, no class instances, no `Map`s. Everything here is trivially
+ *   - `GraphObject`, `Slot`, `Value`, `Point`, `ErrorValue` are all plain, readonly
+ *     data: no closures, no class instances, no `Map`s. Everything here is trivially
  *     serializable and could be written in Rust unchanged (PROJECT_BRIEF §2).
+ *   - **D-007**: a `GraphObject`'s `type` is MUTABLE STATE ACROSS MUTATIONS — `explode`
+ *     changes a preset's type to its editable-path type in place, same id, same name.
+ *     Each `GraphObject` VALUE is still immutable data (Rule 5's clone-based
+ *     transactionality): such a mutation produces a NEW value with a different `type`,
+ *     never an in-place write. "Mutable state on the object" means across the
+ *     document's mutation history, not within one JS object.
  *
- * A NOTE ON "Object" — this file's exported type is named `GraphObject`, not
- * `Object`, purely to avoid shadowing TypeScript's own global `Object` type. The
- * brief's vocabulary word is still "object" everywhere in comments and docs — this
- * is a naming-collision workaround, not a synonym (PROCESS_BRIEF §5.1).
- *
- * D-007 (0002-REVIEW-phase0): a GraphObject's `type` is MUTABLE STATE ACROSS
- * MUTATIONS — `explode` changes a preset's type to its editable-path type in
- * place, same id, same name. Each individual GraphObject *value* here is still
- * immutable data (Rule 5's clone-based transactionality): a mutation that changes
- * an object's type produces a NEW GraphObject value with a different `type`
- * field, it does not mutate a GraphObject in place at the language level. "Mutable
- * state on the object" means across the document's mutation history, not within
- * one JS object.
+ * A NOTE ON "Object" — the exported type is `GraphObject`, not `Object`, purely to
+ * avoid shadowing TypeScript's global. The brief's vocabulary word is still "object"
+ * everywhere; this is a naming-collision workaround, not a synonym (PROCESS_BRIEF §5.1).
  *
  * NOT DONE HERE
- *   - Deriving edges from ASTs/schema declarations, evaluating slots, detecting
- *     cycles, or any mutation at all (graph/edge.ts, graph/cycles.ts,
- *     graph/eval.ts, mutation.ts — none exist yet).
- *   - Per-type schema declarations (which derived slots a given ObjectType has,
- *     their compute functions, their dependencies) — primitives/schema.ts, next.
- *   - Validating that a GraphObject's `slots` actually match what its `type`'s
- *     schema declares. Nothing here rejects a malformed object; construction and
- *     validation are mutation.ts's job.
+ *   - Deriving edges, evaluating slots, detecting cycles, or any mutation at all —
+ *     `graph/edge.ts`, `graph/cycles.ts`, `graph/eval.ts`, `mutation.ts`.
+ *   - Per-type schema declarations (`primitives/schema.ts`).
+ *   - Validating that a `GraphObject`'s `slots` match what its `type`'s schema
+ *     declares. Nothing here rejects a malformed object; that is `mutation.ts`'s job.
  */
 import type { Address, AddressableObject } from "../address.ts";
 import type { FormulaAst } from "../formula/ast.ts";
@@ -145,10 +138,9 @@ export function isIllegalNumber(n: number): boolean {
  * `isErrorValue` is (D-014's principle: a predicate over the `Value` union is
  * declared once and imported everywhere, never redeclared) — `mutation.ts`'s
  * D-025/Q-008 checks and `primitives/schema.ts`'s compute functions both need
- * it. Named `hasIllegalNumber`, not `hasNonFiniteNumber` (its name through
- * cycle 0025) — cycle 0026 widened it to also catch `-0` (Q-008), and this is
- * the SAME predicate widened, per this project's own "widen, never add a
- * parallel one" stance (D-020, D-026), not a second check beside it.
+ * it. It covers BOTH non-finite values and `-0` (Q-008) as ONE widened
+ * predicate, per this project's "widen, never add a parallel one" stance
+ * (D-020, D-026) — never a second check beside it.
  *
  * `string`, `boolean`, `null`, and `ErrorValue` trivially cannot contain a
  * number at all, so they always return `false` — checked via `isErrorValue`
@@ -240,7 +232,7 @@ export interface FormulaSlot {
 
 /**
  * `derived`: value comes from an object-type-specific compute function declared
- * in the object's schema (`primitives/schema.ts`, not yet built). NEVER writable
+ * in the object's schema (`primitives/schema.ts`). NEVER writable
  * — attempting to `link` or `set` a derived slot is rejected (§5.1). Accordingly
  * there is no user-settable content field here at all, only the cached result of
  * the last evaluation pass; unlike `FormulaSlot`, there is no separate "what the

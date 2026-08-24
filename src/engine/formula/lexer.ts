@@ -1,112 +1,77 @@
 /**
  * lexer.ts — Formula source text -> token stream (PROJECT_BRIEF §5.3, stage 1 of 4).
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.3 ("Lexer -> recursive-descent (or Pratt) parser -> AST
- * -> evaluator. Keep those four stages genuinely separate"). This is that first stage,
- * and the whole of it: turning a formula's raw source text into a flat list of `Token`s.
- * It has NO grammar knowledge — it does not know that `IF` takes 2-3 arguments, that a
- * range may only appear inside an aggregate call, or that a bare `A1` is only legal
- * inside a table cell formula. All of that is `parser.ts`'s job (a later, unbatched
- * cycle — 0029-REVIEW-phase1's carried constraint 1: do not batch it behind this file).
+ * IMPLEMENTS: §5.3 ("Lexer -> recursive-descent (or Pratt) parser -> AST -> evaluator.
+ * Keep those four stages genuinely separate") — the whole of that first stage and
+ * nothing more. It has NO grammar knowledge: it does not know that `IF` takes 2-3
+ * arguments, that a range may only appear inside an aggregate call, or that a bare
+ * `A1` is only legal inside a table cell formula. All of that is `parser.ts`'s job.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
- * This is an ORDINARY file inside the now-reviewed `formula/` subsystem (0029-REVIEW
- * signed off `ast.ts`), not a new subsystem's first file — §6.4's expected verdict for
- * this cycle is REVIEW: NOT NEEDED, unless something below actually fires a §6.1
- * trigger.
- *
  * WHAT THIS IS
- *   `lex(source)` scans `source` left to right and returns either the complete token
- *   list (always ending in an "eof" token) or a single `LexError`. It NEVER throws —
- *   §6's Phase 1 criterion requires "malformed input yields #PARSE rather than
- *   throwing," and a thrown exception from any stage that can run during a mutation
- *   would violate §5.1's "errors must never throw across the evaluation loop" (Rule 2).
+ *   `lex(source)` scans left to right and returns either the complete token list
+ *   (always ending in an `eof` token) or a single `LexError`. It NEVER throws — §6's
+ *   Phase 1 criterion requires "malformed input yields #PARSE rather than throwing".
  *
- *   Token kinds, and why there are exactly four SHAPES (not one per punctuation
- *   character):
- *   - `NumberToken` / `StringToken` / `BooleanToken` — carry a `value` already parsed
- *     out of the source text (a JS `number`/`string`/`boolean`), because the scan that
- *     finds each token's extent (walking digits, resolving the one string escape) has
- *     already computed it — recomputing it a second time in `parser.ts` would be the
- *     same work done twice, in two places that could disagree.
- *   - `WordOrSymbolToken` — every keyword, operator, punctuation mark, name-shaped
- *     word, and the trailing `eof` marker. None of these need anything beyond `type` to
- *     be meaningful, so one shape covers all of them — Rule 5's "dumbest correct" shape,
- *     the same reasoning `formula/ast.ts`'s `LiteralNode` already applies to AST nodes
- *     (one type for three literal kinds, not three near-identical interfaces).
- *   `Token = NumberToken | StringToken | BooleanToken | WordOrSymbolToken`, discriminated
- *   on `type` — D-014's principle (a predicate/union is declared once, narrowed by
- *   `type`, never by structural shape) extended to a new union.
+ *   Four token SHAPES, not one per punctuation character:
+ *   - `NumberToken`/`StringToken`/`BooleanToken` carry a `value` already parsed out of
+ *     the text, because the scan that found the token's extent already computed it —
+ *     recomputing it in `parser.ts` would be the same work in two places that could
+ *     disagree.
+ *   - `WordOrSymbolToken` covers every keyword, operator, punctuation mark,
+ *     name-shaped word, and the `eof` marker. None need anything beyond `type`, so one
+ *     shape covers all of them (Rule 5, the same reasoning `ast.ts`'s `LiteralNode`
+ *     applies to AST nodes).
+ *   Discriminated on `type`, never by structural shape (D-014).
  *
- *   Design decisions this file settles, all reversible (nothing here is stored —
- *   formula ASTs are what §5.11 serializes, never source text, so a lexing-policy
- *   change later migrates nothing):
- *
- *   - **Numbers are unsigned in the grammar this lexer implements**:
- *     `[0-9]+(\.[0-9]+)?` — no leading dot, no exponent notation, and critically NO
- *     leading `-`. §5.3 lists `-2` as a literal example, but `-` is also the FIRST
- *     character of the unary-minus production in the SAME precedence chain ("unary - /
- *     NOT") — the brief's own grammar already resolves this by making `-2` a
- *     `UnaryOpNode("-", LiteralNode(2))`, not a signed number literal (see `ast.ts`).
- *     A minus sign is therefore always lexed as a standalone `minus` token, in every
- *     position; `parser.ts` decides whether a given occurrence is binary or unary.
- *   - **Keywords (`AND`, `OR`, `NOT`, `TRUE`, `FALSE`) are recognised case-sensitively,
- *     exact uppercase only.** Every occurrence in §5.3 is written uppercase, and D-008
- *     already set this project's forward-safe default for a similar keyword-like token
- *     (the A1 cell-reference form): uppercase now, lowercase acceptance is purely
- *     additive later. `and`/`And`/`FALSE ` (trailing space aside) lexes as an ordinary
- *     `identifier` when not exactly matching, recoverable later without migrating
- *     anything stored.
- *   - **`IF` gets no keyword token.** Unlike `AND`/`OR`/`NOT`, `IF` appears ONLY in
- *     §5.3's built-ins list, never in the operator precedence chain — it is exclusively
- *     `FunctionCallNode`-shaped (`ast.ts`'s own header says so), so `IF` lexes as a
- *     plain `identifier`, exactly like `SUM` or `ROUND`. This is what keeps this file
- *     free of any built-in-function name list to hardcode — that vocabulary belongs to
- *     `functions.ts`'s registry (§5.3: "table-driven... so adding one is a single
- *     line"), not to the lexer.
+ *   Decisions this file settles. All are reversible: nothing here is ever stored —
+ *   §5.11 serializes ASTs, never source text — so a lexing-policy change migrates
+ *   nothing.
+ *   - **Numbers are unsigned**: `[0-9]+(\.[0-9]+)?`, no leading dot, no exponent, and
+ *     critically no leading `-`. §5.3 lists `-2` as a literal example, but `-` also
+ *     starts the unary-minus production in the same precedence chain; the brief's own
+ *     grammar resolves this by making `-2` a `UnaryOpNode`. A minus is therefore always
+ *     a standalone token, in every position, and `parser.ts` decides binary vs. unary.
+ *   - **Keywords (`AND`/`OR`/`NOT`/`TRUE`/`FALSE`) are exact-uppercase, case-
+ *     sensitive.** Every occurrence in §5.3 is uppercase, and D-008 set this project's
+ *     forward-safe default for a similar keyword-like token: uppercase now, lowercase
+ *     acceptance is purely additive later. Anything not matching exactly lexes as an
+ *     ordinary `identifier`.
+ *   - **`IF` gets no keyword token.** Unlike `AND`/`OR`/`NOT` it appears only in
+ *     §5.3's built-ins list, never in the precedence chain, so it lexes as a plain
+ *     `identifier` exactly like `SUM`. This is what keeps a built-in-function name
+ *     list out of this file entirely — that vocabulary belongs to `functions.ts`.
  *   - **The one specified string escape, `\"`, is honoured; nothing else is.** A
- *     backslash not immediately followed by `"` is copied through literally as its own
- *     character, not consumed as part of a pair — §5.3 specifies exactly one escape and
- *     no general backslash-escaping scheme, so this file invents no others. One
- *     disclosed consequence: a string literal cannot end in a literal backslash
- *     immediately before its closing quote (that backslash always pairs with the quote
- *     as the one defined escape instead) — an obscure edge the brief gives no guidance
- *     on and not worth a Q-NNN for.
- *   - **A token stream always ends in one `eof` token.** `parser.ts` can therefore
- *     always peek one token ahead without a bounds check of its own.
+ *     backslash not followed by `"` is copied through literally. §5.3 specifies
+ *     exactly one escape, so this file invents no others. Disclosed consequence: a
+ *     string cannot end in a literal backslash immediately before its closing quote.
+ *   - **A token stream always ends in one `eof` token**, so `parser.ts` can always
+ *     peek one ahead without a bounds check.
  *
  * INVARIANTS UPHELD HERE
- *   - `lex` NEVER throws. Every malformed input (an unrecognised character, an
- *     unterminated string) is a returned `LexError`, never an exception — pinned by a
- *     dedicated test wrapping calls in try/catch.
- *   - `lex`'s output, read start-to-end, accounts for every character of `source`:
- *     each one is either consumed into some token's `text` or is whitespace skipped
- *     between tokens — pinned by a test asserting exact `start` offsets across a mixed
- *     fixture, so a future change cannot silently drop or duplicate a character.
+ *   - `lex` NEVER throws. Every malformed input (unrecognised character, unterminated
+ *     string) is a returned `LexError` — pinned by a test wrapping calls in try/catch.
+ *   - `lex`'s output accounts for EVERY character of `source`: each is either consumed
+ *     into some token's `text` or is skipped whitespace — pinned by a test asserting
+ *     exact `start` offsets across a mixed fixture, so a future change cannot silently
+ *     drop or duplicate a character.
  *
  * NOT DONE HERE
- *   - Grammar, precedence, and AST construction (`parser.ts` — later, unbatched cycle).
- *   - Whether a numeric token's `value` is legal DOCUMENT state (D-025/D-027's
- *     `isIllegalNumber`) — a long enough digit run lexes to `Infinity` here exactly the
- *     way `Number("1" + "0".repeat(400))` does in plain JS. Correctly not this file's
- *     job: nothing this file produces is document state until a later mutation writes
- *     it in. `mutation.ts`'s `findIllegalSlotValues` is what catches it — as of **D-031**
- *     (closed at the range-evaluation wiring cycle, entry 0044), that check walks a
- *     `formula`-kind slot's stored AST for exactly this shape, not only a slot's cached
- *     `value` field, so an `Infinity` `LiteralNode` this file might produce is rejected
- *     before it can ever serialize to `null` (§6 clause 4's round-trip claim, D-025's
- *     own reasoning).
- *   - Recognising `A1`-shaped identifiers as cell references, resolving any identifier
- *     to an `Address`, or deciding whether a numeric-looking path segment (the `0` in
- *     `vertex.0.x`) is part of a reference rather than an arithmetic literal — all of
- *     that needs grammar context this file deliberately has none of. One consequence
- *     flagged for `parser.ts`: because this lexer's `identifier` pattern requires a
- *     LEADING letter or underscore (matching `address.ts`'s own `NAME_PATTERN`), a
- *     purely-numeric path segment scans as a `number` token, not an `identifier` — a
- *     reference like `vertex.0.x` therefore arrives at the parser as
- *     `identifier(vertex) dot number(0) dot identifier(x)`, and the parser must accept
- *     a `number` token's `text` as a path segment when reassembling a dotted reference.
+ *   - Grammar, precedence, AST construction (`parser.ts`).
+ *   - Whether a numeric token's `value` is legal DOCUMENT state. A long enough digit
+ *     run lexes to `Infinity` here exactly as `Number(...)` would. Correctly not this
+ *     file's job — nothing here is document state until a mutation writes it in;
+ *     `mutation.ts`'s `findIllegalSlotValues` catches it, and as of D-031 that check
+ *     walks a stored AST's literals too, so such a token is rejected before it could
+ *     serialize to `null`.
+ *   - Recognising `A1`-shaped identifiers as cell references or resolving any
+ *     identifier to an `Address` — all needs grammar context this file has none of.
+ *     One consequence flagged for `parser.ts`: because `identifier` requires a LEADING
+ *     letter or underscore (matching `address.ts`'s `NAME_PATTERN`), a purely-numeric
+ *     path segment scans as a `number` token, so `vertex.0.x` arrives as
+ *     `identifier dot number dot identifier` and the parser must accept a `number`
+ *     token's `text` as a path segment when reassembling a dotted reference.
  */
 
 /** Every `WordOrSymbolToken` variant: keywords, operators, punctuation, plain words, and `eof`. */

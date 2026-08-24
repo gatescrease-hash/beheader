@@ -1,186 +1,103 @@
 /**
- * table.ts — Table primitive: default dimensions, current-extent cell
- * enumeration (the dynamic slot family), and range-rectangle enumeration.
+ * table.ts — Table primitive: default dimensions, current-extent cell enumeration
+ * (the dynamic slot family), range-rectangle enumeration, and row/column resize.
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.4's "Default 8×8" fact, §5.4's own dimension
- * fields ("rows and columns can be added or removed"), the DYNAMIC SLOT
- * FAMILY mechanism D-017/0041-REVIEW-phase2 §9 named as Phase 2's critical
- * path (`enumerateTableCellSlotPaths`, cycle 0042/0043), and — as of THIS
- * cycle — the range "enumeration... helper" **D-036** (constraint 2) asked
- * for, now BOUNDED by the table's current extent per **D-044** and wired into
- * both `mutation.ts`'s `deriveEdges` and `graph/eval.ts`'s range-value lookup.
+ * IMPLEMENTS: PROJECT_BRIEF §5.4 — "Default 8×8", the `rows`/`cols` dimension slots,
+ * "rows and columns can be added or removed", and the reference-repair half of
+ * §5.1.1 for a deleted line. Also the DYNAMIC SLOT FAMILY mechanism D-017 called for
+ * and the range-enumeration helper D-036 asked for, bounded per D-044.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
- * This was the FIRST FILE of the table primitive subsystem (cycle 0040,
- * PROCESS_BRIEF §6.1 trigger 2). Cycle 0042/0043 solved the dynamic-slot-
- * family mechanism and registered a real `table` schema entry. Entry 0044 was
- * the range-evaluation wiring slice: bounding `enumerateRangeCellAddresses` by
- * current extent (D-044) and reading dimensions `literal`-only (D-046) the
- * same way `enumerateTableCellSlotPaths` already does; entry 0046 closed
- * D-047/D-048's fix list (0045-REVIEW); entry 0047, a SEPARATE cycle, built
- * row/column INSERTION (`insertTableLine`, `getTableDimensions`,
- * `shiftCellAddressForInsert`) — the first piece of §5.4's "rows and columns
- * can be added or removed." 0048-REVIEW-phase2 REVISED entry 0047: verdict
- * REVISE, three fixes, all landing at entry 0049 — **D-049**,
- * `insertTableLine` now preserves every slot it does not own, never rebuilding
- * `slots` from scratch (see its own doc comment); **D-046 fix 3**,
- * `isTableDimensionResizable` (new, below) lets `mutation.ts` reject an insert
- * whose `rows`/`cols` cannot be coherently resized rather than silently
- * resetting it. See NOT DONE HERE for what is still deliberately absent
- * (delete, its REPAIR path, and table creation's future command word).
- *
  * WHAT THIS IS
- *   `DEFAULT_TABLE_ROWS`/`DEFAULT_TABLE_COLS` — §5.4's own stated fact ("Default
- *   8×8"), as plain constants a future table-creation mutation will read.
+ *   `DEFAULT_TABLE_ROWS`/`DEFAULT_TABLE_COLS` — §5.4's "Default 8×8", as plain
+ *   constants a future table-creation command will read.
  *
- *   `enumerateRangeCellAddresses(start, end, tableObject)` — the pure function
- *   `graph/eval.ts` calls to expand a `RangeNode` for evaluation (D-036
- *   constraint 1: "`evaluate` expands the range itself, through its `read`
- *   callback, over addresses enumerated from the endpoint pair") and
- *   `mutation.ts`'s `deriveEdges` calls to expand a `RangeDependency` from the
- *   table's CURRENT state (D-036: "never a cached expansion") — both wired THIS
- *   cycle. Given two cell `Address`es and the `GraphObject` they name cells on,
- *   it returns every cell `Address` in the rectangle between them, inclusive,
- *   BOUNDED by that object's current `rows`/`cols` (D-044), in row-major order
- *   (every column of row `minRow`, then every column of `minRow + 1`, ...).
- *   Order is deterministic but not otherwise meaningful — every brief-specified
- *   aggregate (`SUM`/`MIN`/`MAX`/`AVG`) is order-independent over its inputs,
- *   so nothing downstream may depend on it beyond determinism (needed for test
- *   assertions and stable dependency lists).
+ *   `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` — the two ordinary, fixed, literal slot paths
+ *   holding a table's current row/column count, declared as a `static` group in
+ *   `TABLE_SCHEMA` (`primitives/schema.ts`). Named after the brief's own command-line
+ *   words (§5.10: `table x=0 y=0 rows=8 cols=8`) rather than inventing a second pair
+ *   of words for the same idea — a disclosed, reversible naming choice.
  *
- *   Table dimensions ("is B10 within this table's current row count") ARE this
- *   function's concern as of D-044 (0041-REVIEW-phase2), reversing cycle
- *   0040's original stance: a range's expansion happens at EDGE DERIVATION
- *   time (§5.3), so an unbounded expansion would make `deriveEdges` produce
- *   edges pointing at slots that do not exist — a dangling edge a later
- *   evaluation-time `#REF` cannot repair, because the edge was already built.
- *   Cells outside the extent are OMITTED, never reported as `#REF` — see this
- *   function's own doc comment for D-044's full reasoning, including why this
- *   is also what keeps `A1:ZZ999999` a bounded loop rather than a
- *   millions-of-paths hazard.
+ *   `enumerateRangeCellAddresses(start, end, tableObject)` — expands a `RangeNode`
+ *   endpoint pair into every cell `Address` in the rectangle between them, inclusive,
+ *   row-major, BOUNDED by the object's current `rows`/`cols` (D-044). Called by
+ *   `graph/eval.ts` (for values) and `mutation.ts`'s `deriveEdges` (for edges), so
+ *   both agree by construction. Order is deterministic but not otherwise meaningful —
+ *   every brief-specified aggregate is order-independent, so nothing downstream may
+ *   depend on it beyond determinism.
  *
- *   A range whose two endpoints name DIFFERENT objects (`SUM(table_x.A1:
- *   table_y.B4)`) is rejected here, with a `RangeEnumerationError`, rather
- *   than silently enumerating a nonsensical cross-table rectangle — but this
- *   is now the DEFENSIVE arm only: the reachable case (an authored formula) is
- *   rejected at PARSE time as of **D-045** (`formula/parser.ts`'s
- *   `validateRangePlacement`), because which objects two endpoints name is
- *   decidable from the formula text alone. §5.4 frames a table as "a
- *   self-contained grid... without being regions of one giant sheet," and
- *   every range example the brief gives names one table on both sides — a
- *   range spanning two tables has no coherent rectangle to enumerate at all
- *   (rows/columns of DIFFERENT tables are not comparable quantities).
+ *   WHY IT IS BOUNDED (D-044, reversing cycle 0040's original stance): a range expands
+ *   at EDGE DERIVATION time, so an unbounded expansion would make `deriveEdges`
+ *   produce edges pointing at slots that do not exist — a dangling edge a later
+ *   evaluation-time `#REF` cannot repair, because the edge was already built. Cells
+ *   outside the extent are OMITTED, never reported as `#REF`. Bounding is also what
+ *   keeps `A1:ZZ999999` a bounded loop rather than a millions-of-paths hazard.
  *
- *   `TABLE_ROWS_PATH` / `TABLE_COLS_PATH` — the two ORDINARY, FIXED, literal
- *   slot paths that hold a table's current row/column count (§5.4: "rows and
- *   columns can be added or removed"). These are declared as a plain `static`
- *   `NonDerivedSlotPathGroup` in `TABLE_SCHEMA` (`primitives/schema.ts`) — the
- *   SAME mechanism `value`'s one slot already uses, no widening needed for
- *   them. Naming: the brief's own command-line words (§5.10:
- *   `table x=0 y=0 rows=8 cols=8`), reused rather than inventing a second pair
- *   of words for the same idea. Nothing in this cycle writes them (no
- *   table-creation mutation exists yet) or reads them for any purpose beyond
- *   `enumerateTableCellSlotPaths` below — a disclosed, reversible naming
- *   choice, not a brief-mandated one.
+ *   A range whose endpoints name DIFFERENT objects is rejected here with a
+ *   `RangeEnumerationError` — but this is the DEFENSIVE arm only: the reachable case
+ *   (an authored formula) is rejected at PARSE time by D-045, since which objects two
+ *   endpoints name is decidable from the formula text alone. §5.4 frames a table as
+ *   "a self-contained grid... without being regions of one giant sheet", and rows and
+ *   columns of DIFFERENT tables are not comparable quantities, so there is no coherent
+ *   rectangle to enumerate.
  *
- *   `enumerateTableCellSlotPaths(object)` — the `dynamic`
- *   `NonDerivedSlotPathGroup.enumerate` function `TABLE_SCHEMA` supplies for
- *   the cells family. Reads `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` off the
- *   object's OWN slots (an ordinary, sanctioned forward `slotKey` lookup — see
- *   `graph/node.ts`'s `getSlot`) and generates every `["cells", ref]` path for
- *   `1..rows × 1..cols`, row-major, via the SAME `formatCellReference` helper
- *   `enumerateRangeCellAddresses` above also uses. This is deliberately NOT "read the
- *   object's actual `cells.*` slot keys and recover their paths" — D-010
- *   forbids ever inverting a `slotKey` back into a path array, even where it
- *   would happen to be safe (a cell reference never contains "."), so the only
- *   sanctioned way to get a concrete PATH for a slot this file did not just
- *   build itself is to GENERATE candidates from known state and look each one
- *   up — precisely the shape `primitives/schema.ts`'s existing `dynamic`
- *   `DerivedSlotDependencies` already established for `text.resolvedContent`/
- *   `script.out.*`, applied here to `nonDerivedSlotPaths` instead. Never
- *   throws: a missing or malformed dimension slot (not a `literal` kind, not a
- *   number, negative, non-integer) reads as `0` rather than guessing or
- *   throwing — see `readTableDimension`'s own doc comment for why that is safe
- *   rather than a silently-wrong answer. The `literal`-kind clause is **D-046**
- *   (0043-REVIEW) and is a RULE 6 guard, not a tidy-up: a `formula` dimension
- *   slot would let EVALUATION resize the declared cell family, because a
- *   formula slot's value is written at §5.1 step 7 — after edge derivation
- *   (step 3) and `validateIntegrity` (step 4) have already run.
+ *   `enumerateTableCellSlotPaths(object)` — the `dynamic` `NonDerivedSlotPathGroup`
+ *   enumerator `TABLE_SCHEMA` supplies for the `cells.*` family. Reads the dimension
+ *   slots off the object and GENERATES every `["cells", ref]` path for `1..rows ×
+ *   1..cols`. Deliberately NOT "read the object's actual `cells.*` keys and recover
+ *   their paths": D-010 forbids inverting a `slotKey` even where it would happen to be
+ *   safe, so the only sanctioned way to get a concrete PATH is to generate candidates
+ *   from known state and look each one up.
  *
- *   `insertTableLine(object, axis, index)` — §5.4's insertion primitive
- *   (entry 0047). Increments the relevant dimension slot and moves every
- *   EXISTING populated cell at or after `index` to its shifted position, via
- *   the SAME `shiftCoordinates` arithmetic `shiftCellAddressForInsert` uses
- *   for the reference-adjustment pass (`mutation.ts`) — one place the "does
- *   row/column N move" question is answered, so the cell-slot shift and the
- *   formula-reference shift can never disagree. The newly inserted line gets
- *   no cell slots at all: an in-extent cell with no slot is exactly the
- *   ordinary, legal "empty" case **D-047** (0045-REVIEW) closed, which is
- *   what makes insertion buildable without also inventing a placeholder
- *   value for the new line's cells. As of **D-049** (0048-REVIEW-phase2 fix
- *   1), it builds its new `slots` record starting from `object.slots` in
- *   full, never from scratch — see its own doc comment.
+ *   `getTableDimensions` / `isTableDimensionResizable` — both dimension reads route
+ *   through one `literal`-kind-only `readTableDimension` (**D-046**). That clause is a
+ *   RULE 6 GUARD, not a tidy-up: a `formula` dimension slot would let EVALUATION
+ *   resize the declared cell family, because a formula slot's value is written at §5.1
+ *   step 7 — after edge derivation (step 3) and `validateIntegrity` (step 4) have
+ *   already run. A missing or malformed dimension reads as `0` rather than throwing or
+ *   guessing; `isTableDimensionResizable` is what lets `mutation.ts` REJECT a resize
+ *   against an unreadable dimension instead of silently resizing from that fail-safe
+ *   `0` and destroying every existing cell along the way.
  *
- *   `isTableDimensionResizable(object, axis)` — 0048-REVIEW-phase2 fix 3
- *   (naming **D-046**). `true` for an absent dimension slot or a `literal`
- *   one; `false` only when the slot is present and NOT `literal`. Lets
- *   `mutation.ts`'s `findInvalidTableResizes` REJECT an insert into a table
- *   whose extent cannot be coherently read, instead of what `insertTableLine`
- *   used to do before this fix: silently treat the unreadable dimension as
- *   `0` (D-046's own fail-safe, correctly working as designed) and resize
- *   from there, deleting every existing cell along the way.
+ *   `insertTableLine` / `deleteTableLine` — §5.4's two resize primitives, plus the
+ *   address adjustment each implies: `shiftCellAddressForInsert` for insertion,
+ *   `repairCellAddressForDelete`/`repairRangeEndpointsForDelete` for deletion. Cell
+ *   slots and formula references shift through the SAME arithmetic, so the two can
+ *   never disagree about whether line N moved. An inserted line gets no cell slots at
+ *   all — an in-extent cell with no slot is the ordinary legal "empty" case (D-047),
+ *   which is what makes insertion buildable without inventing a placeholder value.
+ *   `insertTableLine` builds its new `slots` starting from `object.slots` in full,
+ *   never from scratch (**D-049**), so it cannot drop a slot it does not own.
+ *
+ *   DELETION IS THE ASYMMETRIC ONE and the first real use of §5.1.1's REPAIR path in
+ *   this codebase: it can ORPHAN a reference where insertion structurally cannot, so
+ *   an address naming the removed line cannot simply shift — it becomes `#REF` (a
+ *   plain reference, D-028) or clamps to the surviving extent (a range endpoint,
+ *   §5.4). This file supplies the two callbacks `formula/deps.ts`'s
+ *   `repairAddressesInAst` needs and has no notion of `FormulaAst` shapes itself,
+ *   mirroring the insert side's separation exactly.
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws. `enumerateRangeCellAddresses` returns a typed
- *     `RangeEnumerationError` (`#REF`, matching the code `formula/eval.ts`
- *     already uses for an unresolved reference) for both failure modes
- *     (cross-object endpoints — defensive only, see D-045; a malformed or
- *     non-cell-shaped endpoint path) — §5.1: "errors must never throw across
- *     the evaluation loop." `enumerateTableCellSlotPaths` never throws either
- *     — see above.
- *   - Builds every address through `address.ts`'s `TABLE_CELL_PATH_PREFIX` and
- *     `formatCellReference`, never a hand-built `["cells", ...]` array or a
- *     re-derived uppercase/column-arithmetic step — D-010's "declare it once"
- *     principle, and D-039's "normalisation happens at exactly one point"
- *     (which `formatCellReference`/`indexToColumnLetters` already are).
- *   - `enumerateTableCellSlotPaths` never inverts a `slotKey` (D-010) — see
- *     its own doc comment above and below.
- *   - Both dimension-reading functions (`enumerateRangeCellAddresses`,
- *     `enumerateTableCellSlotPaths`) route through the SAME `literal`-kind-only
- *     `readTableDimension` (D-046) — one guard, not two copies of the Rule 6
- *     reasoning.
- *
- * Entry 0050 builds the DELETE half: `deleteTableLine`,
- * `repairCellAddressForDelete`, `repairRangeEndpointsForDelete` — the FIRST
- * real use of §5.1.1's REPAIR path anywhere in this codebase. Deletion can
- * ORPHAN a reference (insertion structurally cannot), so an address naming the
- * removed line cannot simply shift — it must become `#REF` (a plain
- * reference, D-028) or clamp to the surviving extent (a range endpoint,
- * §5.4). `formula/deps.ts`'s new `repairAddressesInAst` is the node-level walk
- * this needs (D-052's forward note); this file supplies its two callbacks,
- * with no notion of `FormulaAst` shapes itself, mirroring the insert side's
- * separation of concerns exactly.
+ *     `RangeEnumerationError` (`#REF`) for both failure modes — cross-object endpoints
+ *     and a malformed/non-cell-shaped endpoint path (§5.1: errors never throw across
+ *     the evaluation loop).
+ *   - Every address is built through `address.ts`'s `TABLE_CELL_PATH_PREFIX` and
+ *     `formatCellReference` — never a hand-built `["cells", ...]` array, never a
+ *     re-derived column-arithmetic step (D-010; D-039's "normalisation happens at
+ *     exactly one point").
+ *   - No `slotKey` is ever inverted (D-010).
  *
  * NOT DONE HERE
- *   - Nothing here PREVENTS a raw `setSlot` on `TABLE_ROWS_PATH`/
- *     `TABLE_COLS_PATH` from disagreeing with the cell slots that actually
- *     exist on the object — see `enumerateTableCellSlotPaths`'s own doc
- *     comment for why that is self-limiting (D-017's own check catches the
- *     dangerous half) rather than silently wrong, and why `insertTableLine`
- *     above (not a bare `setSlot`) is the sanctioned way to grow a table.
- *     0048-REVIEW-phase2 fix 3 NARROWS this where it is now reachable (a raw
- *     `setSlot` making a dimension non-`literal` is now rejected the moment
- *     an insert is attempted against it, `isTableDimensionResizable` above) —
- *     it does not close the gap in general; a `setSlot` that merely writes an
- *     INCOHERENT `literal` count (disagreeing with actual cell slots) is
- *     still unguarded, and closing that is the deletion cycle's call.
- *   - A table-creation mutation/command (`table x=0 y=0 rows=8 cols=8`, §5.10)
- *     that would actually populate `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` and the
- *     matching `cells.*` literal slots — Phase 3's command line. Note that
- *     `createObject` (`mutation.ts`) already suffices to build one BY HAND
- *     (every test fixture in this project does exactly that); what is
- *     missing is only the future command-line word, not an engine primitive.
+ *   - **A dimension slot is not checked for COHERENCE with the cells that exist.** A
+ *     raw `setSlot` writing an INCOHERENT `literal` count is still unguarded; D-046
+ *     settles only the KIND, and D-053 makes a resize reject unless BOTH dimensions
+ *     are literal. `insertTableLine`/`deleteTableLine`, not a bare `setSlot`, are the
+ *     sanctioned way to resize a table. See STATUS.md's known problems.
+ *   - A table-creation command (`table x=0 y=0 rows=8 cols=8`, §5.10) — Phase 3.
+ *     `createObject` already suffices to build one by hand (every test fixture does);
+ *     what is missing is the command word, not an engine primitive.
  */
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";
 import { getSlot, slotKey, type GraphObject, type Slot } from "../graph/node.ts";
@@ -238,11 +155,10 @@ export function cellAddressToCoordinates(address: Address): { readonly column: n
 /**
  * Expands a range's two endpoint `Address`es into every cell `Address` in the
  * inclusive rectangle between them (§5.3/§5.4), BOUNDED by `tableObject`'s
- * CURRENT `rows`/`cols` extent — **D-044**, ruled at 0041-REVIEW-phase2 and
- * wired THIS cycle. Returns `Address[]`, not bare paths (a signature decided
- * at the moment of wiring, per that review's §9 note): both this cycle's
- * consumers (`mutation.ts`'s `deriveEdges`, `graph/eval.ts`'s range-value
- * lookup) need a full `Address` — `{ objectId: start.objectId, path }` — to
+ * CURRENT `rows`/`cols` extent (**D-044**). Returns `Address[]`, not bare
+ * paths: both consumers (`mutation.ts`'s `deriveEdges`, `graph/eval.ts`'s
+ * range-value lookup) need a full `Address` — `{ objectId: start.objectId,
+ * path }` — to
  * build an `Edge` or a `read` lookup key, and building that pair at both call
  * sites would be the exact kind of small duplication D-010's "declare once"
  * principle argues against; this file already knows `start.objectId` is the
