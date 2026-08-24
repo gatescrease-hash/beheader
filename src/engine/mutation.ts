@@ -161,8 +161,8 @@
  * §5.4 states the repair path unconditionally for row/column deletion,
  * unlike `delete <table>` (`DeleteObjectOperation`), which still rejects a
  * deletion with live dependents by default; a `force` flag widening THAT
- * operation to take the repair path too is explicitly NOT built as of entry
- * 0050 — see NOT DONE HERE.
+ * operation to take the repair path too was NOT built as of entry 0050 —
+ * see entry 0053, below, for when it lands.
  *
  * 0051-REVIEW-phase2 REVISED entries 0049+0050: verdict REVISE, a five-item
  * fix list. Entry 0052 closes the code items. **D-053**: 0048-REVIEW-phase2
@@ -181,9 +181,34 @@
  * by extent to stop deletion's own carried "can still reject" gap (0051-REVIEW
  * §5): that gap is pinned by a test instead (`mutation.test.ts`), not patched.
  * **D-057** (the repair path must report every slot it broke, through ONE
- * channel built once) is RULED but deliberately NOT built this cycle — it is
- * the `force`-flag slice's job; `DeleteTableLineOperation`'s own doc comment
- * records the gap in the meantime.
+ * channel built once) is RULED but deliberately NOT built at entry 0052 — it
+ * was the `force`-flag slice's job; `DeleteTableLineOperation`'s own doc
+ * comment recorded the gap in the meantime.
+ *
+ * Entry 0053 is that `force`-flag slice, closing PROJECT_BRIEF §6 Phase 2's
+ * LAST acceptance clause: `DeleteObjectOperation` gains `force?: boolean`
+ * (widened, per D-020's "widen, never restructure" stance — the union member
+ * grows a field, the operation kind does not split in two). `force` absent
+ * (default) is UNCHANGED — reject via `validateIntegrity`'s existing
+ * dangling-reference check, cycle 0022's own mechanism. `force: true` takes
+ * §5.1.1's REPAIR path via `applyOperation`'s new `deleteObject` branch,
+ * running BEFORE the object is removed and BEFORE `validateIntegrity` ever
+ * sees the candidate — so no dangling edge is ever produced, rather than one
+ * being produced and then excused. **D-056** is applied literally:
+ * `repairObjectFormulaAddresses` (entry 0050) is reused UNCHANGED, called
+ * with new whole-object callbacks (`repairReferenceForDeletedObject`/
+ * `repairRangeForDeletedObject`, both a single equality check — no shifting
+ * exists for a whole object going away) — no third `*ObjectFormulaAddresses`
+ * helper. **D-057** is built in this SAME cycle, closing the gap entry 0052
+ * deliberately left open: `applyOperation` and `repairObjectFormulaAddresses`
+ * both widen to also return `brokenSlots: readonly Address[]`, threaded
+ * through `mutate`'s fold and exposed on `MutationResult`'s `ok: true` arm —
+ * ONE channel, fed by BOTH repair sites (row/column deletion's existing call
+ * to `repairObjectFormulaAddresses`, and this cycle's whole-object call to
+ * the SAME function), per D-057's own binding text. A slot's `Address` for
+ * the report is recovered via a new `resolveSlotPathForKey` — forward
+ * schema resolution, matching a key, never inverting one (D-010) — see that
+ * function's own doc comment.
  *
 
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
@@ -518,14 +543,6 @@
  *     Phase 3 — choosing a fresh id from `nextObjectId`, a type's default
  *     slot values) is a different, NOT-YET-BUILT concern layered on top of
  *     `CreateObjectOperation`, not the same thing as it.
- *   - The `force` flag on `DeleteObjectOperation` (`delete <table>`) — §5.1.1's
- *     REPAIR path for a WHOLE-OBJECT deletion, widening that (existing)
- *     operation to rewrite live dependents to `#REF` instead of unconditionally
- *     rejecting them, the way it does today. Row/column deletion (entry 0050,
- *     `DeleteTableLineOperation`) is a DIFFERENT operation with its own,
- *     unconditional repair path — see that operation's own doc comment for why
- *     the two do not share a mechanism. Phase 2's acceptance criterion needs
- *     both; only the row/column half lands at entry 0050 — see STATUS.md.
  *   - Reference adjustment on table resize (§5.4) is now DONE for both
  *     directions: insertion (entry 0047) and deletion (entry 0050). Range
  *     EXPANSION itself (`A1:B4` → concrete cell dependencies, §5.3) has been
@@ -812,27 +829,49 @@ export interface SetSlotOperation {
 }
 
 /**
- * Removes the whole object named by `objectId` — §5.1.1's `delete <object>`,
- * the general slot-deletion rule's primary example (this cycle's fixture has
- * no per-slot deletion below the whole-object level; `value`/`add` each
- * disappear entirely or not at all). Carries no `Address`/slot path: deleting
- * an object removes every slot it has at once, so there is no single slot to
- * name — see `applyOperation`'s doc comment for how the removal itself is
- * applied, and `mutate`'s for how §5.1.1's REJECT path (a slot elsewhere still
- * depends on one of THIS object's slots) is enforced — not here, but by
- * `validateIntegrity`'s existing dangling-reference check (§5.1.1 clause 1),
- * unchanged by this operation kind: deleting an object simply removes it from
- * `objects` before `deriveEdges`/`validateIntegrity` ever run over the
- * candidate, so an edge some OTHER object still has pointing at one of this
- * object's slots dangles exactly the way a typo'd formula reference already
- * does — no new mechanism, the existing one closes Phase 0 acceptance clause 3
- * for free. The REPAIR path (§5.1.1's other legal option, rewriting inbound
- * references to `#REF`) is explicitly NOT implemented here — see the file
- * header's NOT DONE HERE; Phase 0 has no type that needs it.
+ * Removes the whole object named by `objectId` — §5.1.1's `delete <object>`.
+ * Carries no `Address`/slot path: deleting an object removes every slot it
+ * has at once, so there is no single slot to name — see `applyOperation`'s
+ * doc comment for how the removal itself is applied.
+ *
+ * **Two paths, chosen by `force` (entry 0053, closing Phase 2's `delete
+ * <table>` clause):**
+ *
+ * - **`force` absent/false (default) — REJECT**, unchanged since cycle 0022.
+ *   `validateIntegrity`'s existing dangling-reference check (§5.1.1 clause 1)
+ *   is what rejects it — deleting an object simply removes it from `objects`
+ *   before `deriveEdges`/`validateIntegrity` ever run over the candidate, so
+ *   an edge some OTHER object still has pointing at one of this object's
+ *   slots dangles exactly the way a typo'd formula reference already does —
+ *   no new mechanism.
+ * - **`force: true` — REPAIR**, §5.1.1's other legal option: every inbound
+ *   reference to ANY slot on the deleted object is rewritten to `#REF`
+ *   (D-028), the SAME `ErrorNode` shape row/column deletion already uses.
+ *   **D-056: reuses `repairObjectFormulaAddresses` AS IT STANDS**, called
+ *   with whole-object callbacks (`repairReferenceForDeletedObject`/
+ *   `repairRangeForDeletedObject`, below `applyOperation`) instead of
+ *   `primitives/table.ts`'s cell-shifting ones — no third
+ *   `*ObjectFormulaAddresses` helper, no per-object-type primitive file
+ *   involved (there is nothing table-specific about "does this address name
+ *   a slot on the object being deleted"). Unlike row/column deletion, there
+ *   is no shifting: an address either names a slot on the deleted object, or
+ *   it does not — no partial adjustment exists for a whole object going away.
+ *   `applyOperation`'s `deleteObject` branch runs this repair pass over
+ *   EVERY object (document-wide, unconditional, no relevance pre-filter —
+ *   the same posture `insertTableLine`/`deleteTableLine` already take)
+ *   BEFORE filtering the deleted object out, so `validateIntegrity`'s
+ *   dangling-reference check never sees a dangling edge in the first place —
+ *   the edge was already rewritten to a self-contained `#REF`, not removed.
+ *
+ * **D-057: the broken-slot REPORT is now built**, ONE channel serving THIS
+ * repair site and row/column deletion's, never two — see `MutationResult`'s
+ * `brokenSlots` field. Both repair sites route through the SAME widened
+ * `repairObjectFormulaAddresses`, which is what makes one channel possible.
  */
 export interface DeleteObjectOperation {
   readonly kind: "deleteObject";
   readonly objectId: string;
+  readonly force?: boolean;
 }
 
 /**
@@ -928,17 +967,12 @@ export interface InsertTableLineOperation {
  * ONLY thing standing between a malformed operation and a malformed table;
  * see that primitive's own doc comment.
  *
- * KNOWN GAP (D-057, recorded not built at 0051-REVIEW-phase2 §6, still
- * outstanding as of entry 0052): §5.1.1 and §5.4 both require the repair path
- * to "report which slots were broken" / "report every slot it broke."
- * Nothing here does — `applyOperation` returns `readonly GraphObject[]`, with
- * no channel for such a report, and this operation's own repair pass
- * (`repairObjectFormulaAddresses` walking every inbound reference to `#REF`)
- * discards exactly that information once it has applied it. D-057 assigns
- * building ONE reporting channel — serving this repair site AND `delete
- * <table>`'s future `force`-flag repair site, never two — to the cycle that
- * adds `force` to `DeleteObjectOperation`. Do not build a deletion-specific
- * report here first; see D-057 and D-056 in `DECISIONS.md`.
+ * **D-057 is BUILT as of entry 0053**: §5.1.1/§5.4's "report every slot it
+ * broke" is now a real field, `MutationResult`'s `brokenSlots` — ONE channel
+ * shared with `DeleteObjectOperation`'s `force` repair site, per D-057's own
+ * binding text. This operation's repair pass reports through the SAME
+ * widened `repairObjectFormulaAddresses` every other repair site now uses;
+ * nothing deletion-specific was added.
  *
  * KNOWN GAP (0051-REVIEW-phase2 §5, NOT patched here — see D-053's companion
  * ruling): this operation's repair pass is unbounded (any inbound reference
@@ -1046,7 +1080,8 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * `deriveValidateAndEvaluate`, called once after the WHOLE batch has been
  * applied) exists to catch — this function does not duplicate that check.
  *
- * `deleteObject`: removes the whole object named by `operation.objectId` —
+ * `deleteObject`, `operation.force` absent/false (default, unchanged since
+ * cycle 0022): removes the whole object named by `operation.objectId` —
  * `.filter`, not `.map`, since this variant shrinks the array rather than
  * rewriting one entry in place. Nothing checks here whether some OTHER
  * object's formula still points at one of the removed object's slots — that
@@ -1055,6 +1090,21 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * looks for, and it runs over the candidate AFTER this whole batch has been
  * folded, so it sees the object genuinely gone (§5.1.1 clause 1's REJECT path,
  * closing Phase 0 acceptance clause 3).
+ *
+ * `deleteObject`, `operation.force: true` (entry 0053, D-056): takes §5.1.1's
+ * REPAIR path instead. Touches every object in `objects`, the same posture
+ * `insertTableLine`/`deleteTableLine` already take, for the same reason —
+ * §5.1.1's repair contract is document-wide, not scoped to the object being
+ * deleted. `repairObjectFormulaAddresses` runs with
+ * `repairReferenceForDeletedObject`/`repairRangeForDeletedObject` (below) —
+ * NOT `primitives/table.ts`'s cell-shifting callbacks — over EVERY object
+ * INCLUDING the one about to be deleted (repairing its own self-references is
+ * harmless busywork, discarded a line later; the alternative, a
+ * relevance pre-filter, is exactly what the established posture forbids).
+ * THEN the deleted object is filtered out of the repaired result, and its own
+ * `brokenSlots` entries (if it had any formula naming its own other slots)
+ * are dropped from the report — reporting a broken slot on an object that no
+ * longer exists is not useful to anyone.
  *
  * PRECONDITION, enforced by `mutate` before this is EVER called, once per
  * operation in the WHOLE batch: `operationTargetId(operation)` names an
@@ -1108,34 +1158,56 @@ function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
  * guarantees `operation.index` names a real row/column at this operation's
  * position in the batch, and `deleteTableLine`/`repairCellAddressForDelete`/
  * `repairRangeEndpointsForDelete` all read `operation.index` directly.
+ *
+ * RETURN SHAPE (widened entry 0053, D-057): every branch returns
+ * `brokenSlots` alongside `objects` now — the `Address` of every slot a
+ * REPAIR (never a plain shift) rewrote at least one reference inside, empty
+ * for every branch that cannot break anything (`setSlot`, `deleteObject`
+ * without `force`, `createObject`, `insertTableLine` — insertion only ever
+ * shifts, per D-051/D-052). `mutate` accumulates this across the whole
+ * batch's fold — see its own doc comment.
  */
-function applyOperation(objects: readonly GraphObject[], operation: Operation): readonly GraphObject[] {
+function applyOperation(
+  objects: readonly GraphObject[],
+  operation: Operation,
+): { readonly objects: readonly GraphObject[]; readonly brokenSlots: readonly Address[] } {
   if (operation.kind === "deleteObject") {
-    return objects.filter((object) => object.id !== operation.objectId);
+    if (operation.force !== true) {
+      return { objects: objects.filter((object) => object.id !== operation.objectId), brokenSlots: [] };
+    }
+    const repairReference = (address: Address): Address | "deleted" => repairReferenceForDeletedObject(address, operation.objectId);
+    const repairRange = (start: Address, end: Address) => repairRangeForDeletedObject(start, end, operation.objectId);
+    const repaired = objects
+      .map((object) => repairObjectFormulaAddresses(object, repairReference, repairRange))
+      .filter((entry) => entry.object.id !== operation.objectId); // The deleted object itself, and any report about ITS OWN slots, leave together.
+    return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
   }
   if (operation.kind === "createObject") {
     // D-024: the caller's own GraphObject never enters committed state by
     // reference — same reasoning as setSlot's payload below.
-    return [...objects, deepClone(operation.object)];
+    return { objects: [...objects, deepClone(operation.object)], brokenSlots: [] };
   }
   if (operation.kind === "insertTableLine") {
     const target = objects.find((object) => object.id === operation.objectId);
     if (target === undefined) {
-      return objects; // Defensive only — see doc comment above.
+      return { objects, brokenSlots: [] }; // Defensive only — see doc comment above.
     }
     const { rows, cols } = getTableDimensions(target);
     const bound = operation.axis === "row" ? rows : cols;
     const clampedIndex = Math.max(1, Math.min(operation.index, bound + 1));
     const shiftAddress = (address: Address): Address => shiftCellAddressForInsert(address, operation.objectId, operation.axis, clampedIndex);
-    return objects.map((object) => {
-      const resized = object.id === operation.objectId ? insertTableLine(object, operation.axis, clampedIndex) : object;
-      return rewriteObjectFormulaAddresses(resized, shiftAddress);
-    });
+    return {
+      objects: objects.map((object) => {
+        const resized = object.id === operation.objectId ? insertTableLine(object, operation.axis, clampedIndex) : object;
+        return rewriteObjectFormulaAddresses(resized, shiftAddress);
+      }),
+      brokenSlots: [], // Insertion only ever shifts an address — it never breaks one (D-051/D-052).
+    };
   }
   if (operation.kind === "deleteTableLine") {
     const target = objects.find((object) => object.id === operation.objectId);
     if (target === undefined) {
-      return objects; // Defensive only — the existence check already guarantees this resolves.
+      return { objects, brokenSlots: [] }; // Defensive only — the existence check already guarantees this resolves.
     }
     // §5.1.1 REPAIR path, unconditional (DeleteTableLineOperation's own doc
     // comment) — no clamping the way insertion does: `findInvalidTableResizes`
@@ -1144,24 +1216,59 @@ function applyOperation(objects: readonly GraphObject[], operation: Operation): 
     const repairReference = (address: Address): Address | "deleted" =>
       repairCellAddressForDelete(address, operation.objectId, operation.axis, operation.index);
     const repairRange = (start: Address, end: Address) => repairRangeEndpointsForDelete(start, end, operation.objectId, operation.axis, operation.index);
-    return objects.map((object) => {
+    const repaired = objects.map((object) => {
       const resized = object.id === operation.objectId ? deleteTableLine(object, operation.axis, operation.index) : object;
       return repairObjectFormulaAddresses(resized, repairReference, repairRange);
     });
+    return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
   }
-  return objects.map((object) => {
-    if (object.id !== operation.address.objectId) {
-      return object;
-    }
-    return {
-      ...object,
-      // D-024: the caller's own `Slot` object never enters committed state by
-      // reference. Cloning here is what makes "nothing outside mutation.ts
-      // mutates graph state" (Rule 2) structural rather than dependent on
-      // every caller leaving its payload alone after the call.
-      slots: { ...object.slots, [slotKey(operation.address.path)]: deepClone(operation.slot) },
-    };
-  });
+  return {
+    objects: objects.map((object) => {
+      if (object.id !== operation.address.objectId) {
+        return object;
+      }
+      return {
+        ...object,
+        // D-024: the caller's own `Slot` object never enters committed state by
+        // reference. Cloning here is what makes "nothing outside mutation.ts
+        // mutates graph state" (Rule 2) structural rather than dependent on
+        // every caller leaving its payload alone after the call.
+        slots: { ...object.slots, [slotKey(operation.address.path)]: deepClone(operation.slot) },
+      };
+    }),
+    brokenSlots: [],
+  };
+}
+
+/**
+ * Whole-object repair callbacks for `DeleteObjectOperation`'s `force` flag
+ * (entry 0053, **D-056**: reuse `repairObjectFormulaAddresses` AS IT STANDS,
+ * different callbacks — no third `*ObjectFormulaAddresses` helper). Unlike
+ * row/column deletion's callbacks (`primitives/table.ts`), these have NO
+ * notion of shifting: an address either names a slot on the deleted object,
+ * or it does not — there is no partial adjustment for a whole object going
+ * away, so both callbacks are a single equality check.
+ */
+function repairReferenceForDeletedObject(address: Address, deletedObjectId: string): Address | "deleted" {
+  return address.objectId === deletedObjectId ? "deleted" : address;
+}
+
+/**
+ * D-056 / 0051-REVIEW-phase2 §9 answer 3: a `RangeNode` with EITHER endpoint
+ * naming the deleted object reports `"deleted"` ENTIRELY — no remaining
+ * extent to clamp to, unlike `primitives/table.ts`'s
+ * `repairRangeEndpointsForDelete`, which clamps a range within a table that
+ * still exists. D-045 already guarantees a range's two endpoints always name
+ * the SAME object, so checking either is equivalent to checking both — this
+ * checks both anyway, matching the ruling's own literal wording rather than
+ * relying on a guarantee this function itself has no way to verify.
+ */
+function repairRangeForDeletedObject(
+  start: Address,
+  end: Address,
+  deletedObjectId: string,
+): { readonly start: Address; readonly end: Address } | "deleted" {
+  return start.objectId === deletedObjectId || end.objectId === deletedObjectId ? "deleted" : { start, end };
 }
 
 /**
@@ -1192,26 +1299,91 @@ function rewriteObjectFormulaAddresses(object: GraphObject, shiftAddress: (addre
  * `formula/deps.ts`'s node-level `repairAddressesInAst` with
  * `repairReference`/`repairRange` — `literal`/`derived` slots are returned
  * completely unchanged (neither has an AST to repair). Called once per
- * object, for EVERY object, by `applyOperation`'s `deleteTableLine` branch —
+ * object, for EVERY object, by `applyOperation`'s `deleteTableLine` branch
+ * AND (entry 0053) its `deleteObject`-with-`force` branch —
  * `repairReference`/`repairRange` already know to leave any address alone
- * that does not name the deleted table, so this function needs no notion of
- * "is this object even relevant," the same posture `rewriteObjectFormulaAddresses`
- * already takes.
+ * that does not name the deleted table/object, so this function needs no
+ * notion of "is this object even relevant," the same posture
+ * `rewriteObjectFormulaAddresses` already takes. The two call sites differ
+ * ONLY in which callbacks they pass (table-cell-shifting vs.
+ * whole-object-equality, D-056) — this function itself stays blind to which.
+ *
+ * **D-057, widened entry 0053: also returns `brokenSlots`**, the `Address`
+ * of every formula slot that had at least one reference/range turned into
+ * `"deleted"` during ITS OWN walk — tracked by wrapping `repairReference`/
+ * `repairRange` in a per-slot closure flag, rather than changing
+ * `repairAddressesInAst`'s own signature (which would make it a DIFFERENT
+ * shape from `rewriteAddressesInAst`'s, breaking the pair D-052/D-056 keep
+ * deliberately parallel). A slot's Address is recovered via
+ * `resolveSlotPathForKey` — never by inverting the stored key (D-010).
  */
 function repairObjectFormulaAddresses(
   object: GraphObject,
   repairReference: (address: Address) => Address | "deleted",
   repairRange: (start: Address, end: Address) => { readonly start: Address; readonly end: Address } | "deleted",
-): GraphObject {
+): { readonly object: GraphObject; readonly brokenSlots: readonly Address[] } {
   const newSlots: Record<string, Slot> = {};
+  const brokenSlots: Address[] = [];
   for (const key of Object.keys(object.slots)) {
     const slot = object.slots[key];
     if (slot === undefined) {
       continue; // noUncheckedIndexedAccess artifact only.
     }
-    newSlots[key] = slot.kind === "formula" ? { ...slot, ast: repairAddressesInAst(slot.ast, repairReference, repairRange) } : slot;
+    if (slot.kind !== "formula") {
+      newSlots[key] = slot;
+      continue;
+    }
+    let broke = false;
+    const trackedReference = (address: Address): Address | "deleted" => {
+      const repaired = repairReference(address);
+      if (repaired === "deleted") {
+        broke = true;
+      }
+      return repaired;
+    };
+    const trackedRange = (start: Address, end: Address): { readonly start: Address; readonly end: Address } | "deleted" => {
+      const repaired = repairRange(start, end);
+      if (repaired === "deleted") {
+        broke = true;
+      }
+      return repaired;
+    };
+    newSlots[key] = { ...slot, ast: repairAddressesInAst(slot.ast, trackedReference, trackedRange) };
+    if (broke) {
+      const path = resolveSlotPathForKey(object, key);
+      // `path === undefined` is defensive-only: cannot happen for a real
+      // formula slot on a schema-registered type, which every product
+      // primitive is (D-011). Silently omitting rather than throwing matches
+      // this file's "never throws" discipline; there is nothing better to do
+      // with an address that cannot be named.
+      if (path !== undefined) {
+        brokenSlots.push({ objectId: object.id, path });
+      }
+    }
   }
-  return { ...object, slots: newSlots };
+  return { object: { ...object, slots: newSlots }, brokenSlots };
+}
+
+/**
+ * Recovers a `formula`-kind slot's declared PATH from its stored KEY, so a
+ * repair report (D-057) can name a real `Address` — never by inverting
+ * `slotKey` (D-010: no module builds a path by splitting a key string), but
+ * by resolving the object's schema-declared paths FORWARD (the same
+ * `resolveNonDerivedSlotPaths` call `findUndeclaredFormulaOrDerivedSlots`
+ * already makes, D-017) and finding the one whose OWN `slotKey` matches —
+ * D-022's own "declare it schema-side" escape hatch, taken structurally
+ * rather than by string surgery. Returns `undefined` only if `object`'s type
+ * has no schema, or the schema does not declare this key — cannot happen in
+ * practice for a real product primitive (D-011: every registered type has a
+ * real schema entry), but repair runs during step 2, before step 4 ever
+ * re-validates D-017, so this stays defensive rather than assumed.
+ */
+function resolveSlotPathForKey(object: GraphObject, key: string): readonly string[] | undefined {
+  const schema = getObjectSchema(object.type);
+  if (schema === undefined) {
+    return undefined;
+  }
+  return resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).find((path) => slotKey(path) === key);
 }
 
 /**
@@ -1235,12 +1407,26 @@ export interface MutationJournalEntry {
  * mirrors `deriveValidateAndEvaluate`'s own rejection shape exactly — see
  * `mutate`'s doc comment for why `objects`/`journal` need no separate
  * "unchanged" field: the caller's own references already are unchanged.
- * `ok: true` carries the new committed `objects` (step 7's evaluated result)
- * and `journal` (with exactly one new entry appended, step 8, holding every
- * operation in the batch that was just committed).
+ * `ok: true` carries the new committed `objects` (step 7's evaluated result),
+ * `journal` (with exactly one new entry appended, step 8, holding every
+ * operation in the batch that was just committed), and (widened entry 0053,
+ * **D-057**) `brokenSlots`: every slot ANY repair in this batch turned at
+ * least one reference/range inside into `#REF` — §5.1.1's "the command must
+ * report which slots were broken" / §5.4's "the command reports every slot
+ * it broke," ONE field serving BOTH repair sites (row/column deletion,
+ * `delete <table> force`), deduplicated by address (a batch that breaks TWO
+ * DIFFERENT references inside the SAME slot, via two different operations,
+ * reports that slot once — see `mutate`'s own doc comment). Empty for a batch
+ * that repaired nothing, which is the common case (most operations cannot
+ * break anything at all).
  */
 export type MutationResult =
-  | { readonly ok: true; readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] }
+  | {
+      readonly ok: true;
+      readonly objects: readonly GraphObject[];
+      readonly journal: readonly MutationJournalEntry[];
+      readonly brokenSlots: readonly Address[];
+    }
   | { readonly ok: false; readonly message: string };
 
 /**
@@ -1428,9 +1614,20 @@ export function mutate(
   // clone") — each operation sees every earlier operation's effect, unlike N
   // independent single-operation mutate() calls, which would each re-derive
   // edges, re-validate, and re-evaluate the whole graph from scratch.
-  const candidate = operations.reduce<readonly GraphObject[]>((current, operation) => applyOperation(current, operation), staged);
+  //
+  // D-057 (entry 0053): `brokenSlots` accumulates alongside `objects` in the
+  // SAME fold, for the SAME reason `objects` itself does — a later
+  // operation's repair pass must be able to add to what earlier operations in
+  // this batch already broke, not start a parallel, disconnected report.
+  const folded = operations.reduce<{ readonly objects: readonly GraphObject[]; readonly brokenSlots: readonly Address[] }>(
+    (current, operation) => {
+      const applied = applyOperation(current.objects, operation);
+      return { objects: applied.objects, brokenSlots: [...current.brokenSlots, ...applied.brokenSlots] };
+    },
+    { objects: staged, brokenSlots: [] },
+  );
 
-  const result = deriveValidateAndEvaluate(candidate);
+  const result = deriveValidateAndEvaluate(folded.objects);
   if (!result.ok) {
     return result; // step 6: `objects`/`journal` were never touched.
   }
@@ -1442,7 +1639,35 @@ export function mutate(
     // a caller who reuses or edits the array it passed in must not be able to
     // rewrite what this call recorded.
     journal: [...journal, { operations: deepClone([...operations]) }],
+    // D-057: deduplicated by address (`addressKey`, D-015: internal keying
+    // only, never printed) — the SAME slot broken by two DIFFERENT
+    // references/operations in one batch is reported once, not twice. An
+    // already-`#REF` reference is never re-broken by a later repair pass
+    // (`repairAddressesInAst`'s own `"error"` case returns it as-is), so this
+    // can only fire for two DIFFERENT references inside the SAME slot's
+    // formula, broken by two DIFFERENT operations in the SAME batch.
+    brokenSlots: dedupeAddresses(folded.brokenSlots),
   };
+}
+
+/**
+ * Dedupes a list of `Address`es by identity (`objectId` + `path`), keeping
+ * the first occurrence — `mutate`'s own doc comment explains why `brokenSlots`
+ * needs this. Uses `graph/edge.ts`'s `addressKey` purely as an internal
+ * `Set` key (D-015's sanctioned use — never printed, never returned).
+ */
+function dedupeAddresses(addresses: readonly Address[]): readonly Address[] {
+  const seen = new Set<string>();
+  const deduped: Address[] = [];
+  for (const address of addresses) {
+    const key = addressKey(address);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(address);
+  }
+  return deduped;
 }
 
 /**

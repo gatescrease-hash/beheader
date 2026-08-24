@@ -1397,6 +1397,133 @@ describe("mutate — DeleteObjectOperation (§5.1.1's `delete <object>`, closes 
   });
 });
 
+describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing Phase 2's LAST acceptance clause: `delete <table>` rejected-until-force)", () => {
+  it("rejects `delete <table>` BY DEFAULT (force absent) when a live formula depends on one of its cells — the REJECT half, unchanged since cycle 0022", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, { "cells.A1": { kind: "literal", value: 10 } });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: 10 } },
+    };
+    const snapshotBefore = JSON.parse(JSON.stringify([table, dependent])) as unknown;
+
+    const result = mutate([table, dependent], [{ kind: "deleteObject", objectId: "obj_1" }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+    expect([table, dependent]).toEqual(snapshotBefore); // step 6: prior state provably unchanged.
+  });
+
+  it("`force: true` REPAIRS a live REFERENCE dependent to #REF instead of rejecting, removes the table, and reports the broken slot in `brokenSlots` (D-056/D-057) — the force half, closing the clause", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, { "cells.A1": { kind: "literal", value: 10 } });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: 10 } },
+    };
+
+    const result = mutate([table, dependent], [{ kind: "deleteObject", objectId: "obj_1", force: true }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.map((object) => object.id)).toEqual(["obj_2"]); // table gone.
+
+    const repaired = result.objects.find((object) => object.id === "obj_2");
+    expect(repaired?.slots.value).toMatchObject({ kind: "formula", ast: { type: "error", error: "#REF" } });
+    expect((repaired?.slots.value as { value: unknown }).value).toMatchObject({ error: "#REF" });
+
+    expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]);
+
+    // No dangling edge either — re-deriving and re-validating the COMMITTED
+    // result must still be internally consistent (D-018's own standard),
+    // same check the row/column deletion demonstration test already makes.
+    expect(deriveValidateAndEvaluate(result.objects).ok).toBe(true);
+  });
+
+  it("`force: true` repairs a RANGE dependent with an endpoint on the deleted table to #REF ENTIRELY, per D-056/0051-REVIEW §9 answer 3 — no remaining extent to clamp to", () => {
+    const table = tableObject("obj_1", "table_x", 3, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.A3": { kind: "literal", value: 3 },
+    });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A3") }] },
+          value: 6,
+        },
+      },
+    };
+
+    const result = mutate([table, dependent], [{ kind: "deleteObject", objectId: "obj_1", force: true }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const repaired = result.objects.find((object) => object.id === "obj_2");
+    // D-028: the ErrorNode replaces the RangeNode AT ITS OWN POSITION, not the
+    // whole formula — the SUM(...) call survives, its one argument becomes #REF.
+    expect(repaired?.slots.value).toMatchObject({ kind: "formula", ast: { type: "functionCall", name: "SUM", args: [{ type: "error", error: "#REF" }] } });
+    expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]);
+  });
+
+  it("`force: true` on an object with NO dependents simply removes it, reporting an empty `brokenSlots`", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {});
+
+    const result = mutate([table], [{ kind: "deleteObject", objectId: "obj_1", force: true }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects).toEqual([]);
+    expect(result.brokenSlots).toEqual([]);
+  });
+
+  it("`force: true` reports a slot broken by TWO DIFFERENT references into the deleted table only ONCE (dedup, `mutate`'s own doc comment)", () => {
+    const table = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 1 } });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: {
+            type: "binaryOp",
+            operator: "+",
+            left: { type: "reference", address: addr("obj_1", "cells", "A1") },
+            right: { type: "reference", address: addr("obj_1", "rows") },
+          },
+          value: 2,
+        },
+      },
+    };
+
+    const result = mutate([table, dependent], [{ kind: "deleteObject", objectId: "obj_1", force: true }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]); // once, not twice.
+  });
+
+  // D-016 mutation check: confirm the `force` gate is genuinely load-bearing,
+  // not merely exercised. Temporarily inverted `operation.force !== true` to
+  // `operation.force === true` (swapping which branch runs) directly in
+  // mutation.ts and re-ran this whole describe block — 4 of the 5 tests above
+  // failed (the exception: "on an object with NO dependents" passes under
+  // EITHER branch, since there is nothing to reject or repair either way —
+  // expected, not a gap). Restored the real condition and re-ran the full
+  // suite (green, see this entry's log). Recorded here rather than automated:
+  // the mutant is a one-line manual edit to `applyOperation`, not a fixture
+  // this test file can express on its own.
+});
+
 describe("mutate — D-025's rejection says WHICH non-finite value it found (reviewer edit, 0025-REVIEW-phase0)", () => {
   // The message interpolated the offending value directly, so a non-finite
   // number nested inside a Point/Point[] printed as "[object Object]" — a
@@ -3078,6 +3205,11 @@ describe("mutate — Phase 2 acceptance criterion clause 4, DELETE half: row/col
     const repaired = result.objects.find((o) => o.id === "obj_2");
     expect(repaired?.slots.value).toMatchObject({ kind: "formula", ast: { type: "error", error: "#REF" } });
     expect((repaired?.slots.value as { value: unknown }).value).toMatchObject({ error: "#REF" });
+
+    // D-057 (built entry 0053): this repair site now reports through the
+    // SAME channel `delete <table> force` uses — proving "ONE channel serving
+    // BOTH repair sites" is real, not merely a claim in a doc comment.
+    expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]);
 
     // No dangling edge either: re-deriving and re-validating the COMMITTED
     // result must still be internally consistent (D-018's own "committed
