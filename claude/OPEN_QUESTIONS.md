@@ -222,9 +222,23 @@ IEEE 754 `+` of two finite, non-`-0` operands cannot itself produce `-0` — see
 
 ## Q-007 — What shape does the document's serialized "camera state" (§5.11) have in Phase 0?
 Raised: entry 0024-document (implementer)   Brief section: §5.11, §5.9
-Status: OPEN (provisional choice taken, reversible)
-Blocks: nothing — `render/camera.ts` (Phase 3) is the real consumer; Phase 0 only needs SOMETHING
-plain and serializable to round-trip.
+Status: **RESOLVED BY IMPLEMENTATION, entry 0057 — awaiting reviewer confirmation to close as
+ANSWERED → D-NNN.** `render/camera.ts` now exists as the real consumer 0025-REVIEW-phase0 named,
+and needs no widening: `{ x, y, zoom }` (camera.x/y as the world point at the screen's top-left
+corner, zoom as a scale factor) is sufficient for `worldToScreen`/`screenToWorld`/
+`panByScreenDelta`/`zoomAtScreenPoint`, because none of them need a viewport size. Every binding
+constraint 0025-REVIEW-phase0 set is met: `CameraState` was not replaced with a differently-named
+concept (only its doc comment changed); it stays plain and serializable; `document.ts` gained no
+second reader of it (`render/camera.ts` is the sole interpreter of what the fields mean, imported
+from `document.ts`, never redeclared); `deserializeDocument`'s malformed-camera rejection is
+untouched. The `PROVISIONAL(Q-007)` tags (`document.ts`, 3 sites) are removed per 0054-REVIEW-
+phase2 §7's explicit instruction to do so in this same cycle — but note an implementer cannot write
+`DECISIONS.md` (PROCESS_BRIEF §2), so no `D-NNN` is minted here; this status line is not itself a
+ruling, only a record that PROCESS_BRIEF §7 clause 4's tag-removal step ran ahead of the formal
+answer, on the reviewer's own prior instruction. §6.1 trigger 2 (`render/camera.ts` is the first
+file of a new subsystem) already forces a review point this cycle regardless, so formal closure
+follows promptly.
+Blocks: nothing — `render/camera.ts` is now built.
 
 Ambiguity: §5.11 lists "camera state" as one of the document's top-level fields, but `render/
 camera.ts` (§5.9: "world → screen and screen → world," pan/zoom) is Phase 3 work and does not exist

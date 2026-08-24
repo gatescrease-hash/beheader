@@ -1,46 +1,37 @@
-# STATUS — as of entry 0056-RULINGS
+# STATUS — as of entry 0057-render-camera
 
-STATE: GREEN (compiles under both configs, 653/653 tests pass, 0 skipped, 0 `.only`).
+STATE: GREEN (compiles under both configs, 667/667 tests pass, 0 skipped, 0 `.only`).
 
-**Process state: PHASE 2 GATE CLEARED — PHASE 3 IS OPEN.** Entry 0054-REVIEW-phase2 reviewed
-entries 0052 + 0053: verdict **ACCEPT WITH EDITS**, no fix list. All five §6 Phase 2 acceptance
-clauses re-proved against the built code, clause 5 against the brief's own two-table wording.
+**Process state: PHASE 3 OPEN, first slice built, REVIEW REQUIRED before the next.**
+`render/camera.ts` (world<->screen transform, pan, zoom-to-cursor — §5.9) is built and tested, with
+its own mutation-checked tests (D-016) — see entry 0057. This is `render/`'s first file, which
+fires **§6.1 trigger 2** on its own: no further Phase 3 work should start until this is reviewed.
 
-**Entry 0055 is an out-of-band AUDIT pass, not an implementer cycle.** It condensed every source
-file's header to a present-tense contract and deleted cycle-by-cycle narration from source —
-comments only, zero executable lines, 653/653 unchanged.
+**Q-007 (`CameraState`'s shape) is resolved by implementation, entry 0057, pending reviewer
+confirmation.** `render/camera.ts` is the real consumer 0025-REVIEW-phase0 named; `{ x, y, zoom }`
+needed no widening. `document.ts`'s three `PROVISIONAL(Q-007)` tags are removed, per
+0054-REVIEW-phase2 §7's own instruction to do so in this same cycle — but no `D-NNN` exists yet
+(implementers cannot write `DECISIONS.md`). See entry 0057's "Decisions I made" and its two
+questions for the reviewer. `OPEN_QUESTIONS.md`'s Q-007 entry is updated, not deleted.
 
-**Entry 0056 records the human's ruling that settles it: D-060 — comments describe the PRESENT;
-they are not diaries.** D-058 is superseded in its first half (its dating rule survives inside
-D-060). Q-011 is CLOSED. DECISIONS.md and the tree now agree. **Read D-060's three tiers before
-writing your first comment** — note that the `(D-0XX)` citation form is ranked *Okay*, not *Good*:
-a citation supplements a stated reason, it never replaces one.
-
-Current phase: **3 — canvas, camera, geometry, command line.** Nothing in it is started.
+Current phase: **3 — canvas, camera, geometry, command line.** One file built
+(`render/camera.ts`); the rest is unstarted.
 Phase 3 acceptance criterion (§6): *"you can create a polygon and a table by command, see both
-drawn, pan/zoom, select, and drag the polygon."*
+drawn, pan/zoom, select, and drag the polygon."* Camera math (the pan/zoom half) exists; nothing
+else does. NOT claimed as passing — no pixels yet.
 
-Last review point: **0054-REVIEW-phase2, ACCEPT WITH EDITS** (covering 0052 + 0053).
-Cycles since last review: **0/3** · diff since last review: **0 executable lines** / 0 files
-(cap 800/10). Convention: insertions + deletions (settled 0042).
-
-**The batch counter is deliberately 0, and here is exactly why** — audit it, do not assume it.
-Entry 0055's raw diff is **2,973 changed lines across 16 source files**, far past the cap. Every
-one is a comment line; both typechecks are clean and the test count did not move. §6.3's cap bounds
-unreviewed *executable* risk, and this pass carries none, so the implementer allowance starts
-clean. The prose diff is NOT waived: the next review should audit it for dropped rationale, which
-is the one real risk it carries.
+Last review point: **0054-REVIEW-phase2, ACCEPT WITH EDITS** (covering 0052 + 0053; Phase 2 gate).
+Cycles since last review: **1/3** · diff since last review: **~283 lines / 4 files** (cap
+800/10) — moot, since §6.1 trigger 2 already forces a review point regardless of the cap.
 
 ## Next slice (recommended)
 
-`render/camera.ts` — world↔screen, pan/zoom — with its tests, and nothing else. It is the smallest
-first file of Phase 3, it has no canvas dependency at all (pure coordinate math), and it is the one
-that closes **Q-007**: widen `document.ts`'s `CameraState` rather than replacing it, keep it plain
-and serializable, do not add a second reader of it in `document.ts`, keep `deserializeDocument`'s
-malformed-camera rejection, and remove the `PROVISIONAL(Q-007)` tag in that same cycle. Expect a
-review point at the end of it: §6.1 trigger 2, first file of a new subsystem — which every Phase 3
-subsystem's first file fires separately (`render/renderer.ts`, `command/parser.ts`,
-`primitives/geometry.ts`).
+**Do not start it before this cycle is reviewed** (§6.1 trigger 2, and Q-007's pending
+confirmation). Once reviewed, the next candidate is `render/renderer.ts` or `primitives/geometry.ts`
+— either is Phase 3's next first-of-subsystem file and gets its own review point in turn
+(0054-REVIEW-phase2 §8). `command/parser.ts` is the third. Geometry first is likely the more
+natural order (something to render before a renderer is useful to test against), but this is the
+reviewer's call to confirm or redirect.
 
 ## Built and reviewed
 
@@ -49,21 +40,23 @@ arithmetic, `primitives/table.ts`'s first file (0041-REVIEW) · the dynamic slot
 · range evaluation wired end-to-end (0044+0046, reviewed 0045/0048) · row/column INSERTION (0047,
 reviewed 0048/0049) · row/column DELETION (0050, reviewed 0051, fix list closed 0052) ·
 `delete <table>` reject-until-`force` + D-057's broken-slot report channel (0053) — **all reviewed
-and accepted at 0054-REVIEW-phase2**.
+and accepted at 0054-REVIEW-phase2.** Entry 0055's comment/header condensation and entry 0056's
+D-060 ruling are prose-only, not code, and carry no unreviewed executable risk (0055's own
+disclosure); 0055's prose diff is still flagged for audit at the next review, per 0056.
 
 ## Built this batch, not yet reviewed
 
-No CODE. Entry 0055's comment-and-header condensation is unreviewed prose across all 16 non-test
-source files, plus PROCESS_BRIEF §5.2/§5.4 additions and entry 0056's ruling (D-060). **Still
-outstanding for the next review, and NOT discharged by D-060:** audit 0055's prose diff for
-dropped rationale. D-060 sanctions the practice; it does not certify that all 16 rewritten headers
-kept everything worth keeping.
+- **`render/camera.ts` + `render/camera.test.ts` (entry 0057).** New file, new subsystem
+  (`render/`). §6.1 trigger 2.
+- **`document.ts`'s three `PROVISIONAL(Q-007)` doc-comment sites (entry 0057).** Comment-only;
+  same fields, same validation.
+- **`OPEN_QUESTIONS.md`'s Q-007 status line (entry 0057).** Updated in place, not deleted.
+- 0055's prose diff — still outstanding for review, unchanged from before this cycle.
 
 ## Not started
 
-All of Phase 3 (canvas, camera, hit-testing, drag interaction, command line, geometry primitive and
-presets — including a table-creation COMMAND; the engine primitive already suffices via
-`createObject`) · Phases 4–7.
+`render/renderer.ts`, `render/hittest.ts`, `render/interaction.ts`, `render/measure.ts`,
+`command/*`, `primitives/geometry.ts` (all of Phase 3 besides camera math) · Phases 4–7.
 
 ## Known problems
 
@@ -73,8 +66,7 @@ presets — including a table-creation COMMAND; the engine primitive already suf
   dangles. Reachable only through a raw `setSlot` writing an out-of-extent cell. **Pinned by a test**
   (`mutation.test.ts`, "KNOWN INCOHERENCE" describe block, entry 0052). **D-053's companion ruling
   forbids fixing one side** — insertion has the identical divergence (0048-REVIEW case 4); both
-  close together or not at all. Does NOT affect `delete <table> force` (pure identity checks, no
-  extent or shifting involved).
+  close together or not at all.
 - **A dimension write is not checked for COHERENCE with the cells that exist, in general.** D-046
   settles the KIND; D-053 makes a resize reject unless BOTH dimensions are literal. Still unguarded:
   (a) a raw `setSlot` writing an INCOHERENT `literal` count, (b) a `setSlot` EARLIER IN THE SAME
@@ -88,62 +80,46 @@ presets — including a table-creation COMMAND; the engine primitive already suf
 - **`describeValueType` is duplicated verbatim** in `functions.ts` and `eval.ts` (0037-REVIEW
   Finding 4, carried).
 - **`rewriteObjectFormulaAddresses`/`repairObjectFormulaAddresses` walk `formula`-kind slots only**
-  — total TODAY, but §5.4 requires the pass to cover text boxes too once Phase 5 lands (block-tree
-  content, a different AST shape). Do not build for it now; do not forget it.
-- **Carried unchanged:** `camera` has no WRITE-side guard (D-027) · journal STRUCTURE deliberately
-  unvalidated beyond `Array.isArray` · `lexer.ts`'s two disclosed edge cases · §5.11's `style` field
-  · `nextObjectId` reconciliation · `noUnusedLocals` off · recursion depth.
+  — total TODAY, but §5.4 requires the pass to cover text boxes too once Phase 5 lands.
+- **Carried unchanged:** `camera` has no WRITE-side guard inside `mutate` itself (D-027; guarded at
+  the write site, `render/camera.ts`, as of this entry — see D-027's own binding) · journal
+  STRUCTURE deliberately unvalidated beyond `Array.isArray` · `lexer.ts`'s two disclosed edge cases
+  · §5.11's `style` field · `nextObjectId` reconciliation · `noUnusedLocals` off · recursion depth.
 
 ## Settled — do not re-raise
 
 Every ruling in `DECISIONS.md` (D-001 through **D-060**) is binding without restatement here.
-D-060 is the newest: comments describe the present and are not diaries — **D-058 is superseded in
-its first half** by it, though D-058's dating rule survives inside it.
 
 ## Live PROVISIONAL tags and open questions
 
-**Q-011 is ANSWERED → D-060** (human, entry 0056). Zero open questions block any phase.
-**Q-007 is LIVE.** `PROVISIONAL(Q-007)` →
-`document.ts`'s `CameraState`: the cycle that builds `render/camera.ts` MUST reconcile and remove
-this tag (0054-REVIEW §7 restates the binding constraints). `PROVISIONAL(Q-008)` →
-`graph/node.ts`'s `isIllegalNumber`, still deferred, blocking nothing — but if a Phase 3 drag can
-author `-0` into `origin.x`/`origin.y`, that cycle raises it rather than assuming the deferral
-holds. Next free: **Q-012**.
+**Q-007 is RESOLVED BY IMPLEMENTATION (entry 0057), pending reviewer confirmation** — see above.
+Its tags are removed; do not re-add them without a reviewer ruling first.
+`PROVISIONAL(Q-008)` → `graph/node.ts`'s `isIllegalNumber`, still deferred, blocking nothing —
+entry 0057's camera math introduces no new `-0` authoring path (proved in its own file header/log
+entry); a future drag writing straight into `origin.x`/`origin.y` still raises it if that path
+appears. Next free: **Q-012**.
 
 ## Gotchas for the next model
 
-- **Phase 3 is the first non-`engine/` code.** Rule 1 stops being free: the canvas lives in
-  `render/`, `TextMeasurer` is injected, and `npx tsc --noEmit -p tsconfig.engine.json` is the
-  mechanical check. Run BOTH configs, every cycle.
-- **Every Phase 3 subsystem's first file is its own §6.1 trigger-2 review point** —
-  `render/camera.ts`, `render/renderer.ts`, `command/parser.ts`, `primitives/geometry.ts`. Do not
-  batch them.
-- **Dragging calls the mutation API, per component (§5.9).** A `formula`/`derived` component is
-  SKIPPED with feedback, never written. All-or-nothing dragging is the normalisation this rule
-  exists to prevent, and Phase 4(c) grades it.
-- **A repair report never names a slot the batch removed (D-059)** — filtered once in `mutate`
-  against committed state, checking the slot, not just the object.
-- **D-057's report shape: `Address[]`, recovered via schema-forward resolution
-  (`resolveSlotPathForKey`), never by inverting a `slotKey` (D-010).** A future repair site that
-  must report a broken slot calls `repairObjectFormulaAddresses` (generic over its callbacks)
-  rather than reinventing tracking — its per-slot `broke` flag is the reference shape.
-- **A range endpoint's role is decided by comparing its VALUE against the OTHER endpoint's, never by
-  which AST field it occupies** (D-055) — `primitives/table.ts`'s `clampRangeEndpointValue` is the
-  reference implementation.
-- **A precondition check that reads document state must simulate the batch, and when TWO operation
-  kinds change the SAME tracked quantity they share ONE simulation** — `findInvalidTableResizes` is
-  the standing example (D-050, widened at 0052 for D-053).
-- **`applyOperation`'s `insertTableLine`/`deleteTableLine`/`deleteObject`-with-`force` branches all
-  touch EVERY object in the document**, per §5.1.1/§5.4. Do not add an "is this object relevant"
-  pre-filter.
-- **`resolveNonDerivedSlotPaths` is the ONLY sanctioned way to read `nonDerivedSlotPaths`**, and no
-  function in `mutation.ts` inverts a `slotKey` (D-010) — forward-resolve and match instead.
+- **`render/` is the first non-`engine/` code — Rule 1 stops being free.** `render/camera.ts`
+  itself imports only `engine/document.ts` (type-only) and `engine/graph/node.ts` (type-only) — no
+  DOM, no canvas. Run BOTH typecheck configs every cycle; `tsconfig.engine.json` covers `src/engine`
+  only, so `render/` is checked only by the root config.
+- **Every Phase 3 subsystem's first file is its own §6.1 trigger-2 review point** — camera math is
+  done; `render/renderer.ts`, `render/hittest.ts`/`interaction.ts`, `command/parser.ts`,
+  `primitives/geometry.ts` remain. Do not batch them.
+- **Camera convention: `camera.x`/`camera.y` is the world point at the screen's TOP-LEFT corner**,
+  not the viewport center (`render/camera.ts`'s own file header states why). A geometry/renderer
+  file assuming a center-based convention would be wrong.
+- **A camera-producing function must guard against a non-finite result (D-027)** — `camera.ts`'s
+  `finiteOrFallback` is the reference shape: fall back to the camera's own PRIOR value, not an
+  arbitrary constant. No separate `-0` guard is needed there — see its doc comment for the proof
+  (mirrors D-033's `add` reasoning) before assuming one is missing.
+- **Dragging calls the mutation API, per component (§5.9).** Still not built — carried forward
+  from 0054-REVIEW-phase2, unchanged by this cycle.
 - **Comments describe the PRESENT (D-060, binding).** State the behaviour and the reason. A
-  `(D-0XX)` citation is a supplement to that reason, never a substitute — ranked *Okay*, not
-  *Good*. Never narrate your cycle in a comment; the log entry is for that. Headers are budgeted:
-  20-40 lines ordinary, ~80 load-bearing (PROCESS_BRIEF §5.2).
-- **State every file you touched in the log entry, comment-only edits included.** If you DO date a
-  design decision in a comment, name the entry number, never a bare "this cycle" (D-058's
-  surviving half, carried into D-060).
+  `(D-0XX)` citation is a supplement, never a substitute — ranked *Okay*, not *Good*. Headers are
+  budgeted: 20-40 lines ordinary, ~80 load-bearing (PROCESS_BRIEF §5.2).
+- **State every file you touched in the log entry, comment-only edits included.**
 - Each PowerShell call is a fresh process; the Bash tool's `npm`/`npx` resolve directly and don't
   need PowerShell.

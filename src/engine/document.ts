@@ -18,8 +18,9 @@
  * WHAT THIS IS
  *   `Document` — the bundle §5.11 describes: `formatVersion`, `nextObjectId` (D-002's
  *   counter, round-tripped as-is, never recomputed from the object list), `objects`,
- *   `journal`, and `camera` (PROVISIONAL(Q-007) — see `CameraState`'s own comment).
- *   Like `mutate`, nothing here holds "the current document" as live state across
+ *   `journal`, and `camera` (see `CameraState`'s own comment — `render/camera.ts`
+ *   is the shape's real consumer, Q-007). Like `mutate`, nothing here holds "the
+ *   current document" as live state across
  *   calls (Rule 2): every function is a pure transform of the `Document` it is given.
  *
  *   `serializeDocument`/`deserializeDocument` convert between a `Document` and a
@@ -85,9 +86,11 @@
  *   - Allocating a fresh object id from `nextObjectId` (incrementing the counter,
  *     choosing a type's default slot values) — a FUTURE command-layer concern (§5.10,
  *     Phase 3), layered on top of `CreateObjectOperation`.
- *   - `CameraState`'s real shape — PROVISIONAL(Q-007): `render/camera.ts` does not
- *     exist yet. `{ x, y, zoom }` is a minimal, reversible placeholder Phase 3 may
- *     widen.
+ *   - World<->screen transform math, pan, and zoom-to-cursor — `render/camera.ts`
+ *     (§5.9). This file only declares and serializes the `CameraState` shape;
+ *     `render/camera.ts` is the sole reader that interprets its fields as a
+ *     coordinate transform, and the sole producer of a new `CameraState` outside
+ *     `DEFAULT_CAMERA`.
  */
 import { mutate, type MutationJournalEntry, type Operation } from "./mutation.ts";
 import type { FormulaAst } from "./formula/ast.ts";
@@ -97,12 +100,16 @@ import { isIllegalNumber, type GraphObject, type ObjectType, type Slot, type Val
 export const FORMAT_VERSION = 1;
 
 /**
- * PROVISIONAL(Q-007): a minimal, reversible placeholder so a document can
- * round-trip SOMETHING — `render/camera.ts` (Phase 3, §5.9: "world → screen
- * and screen → world," pan/zoom) does not exist yet. A plain world-space pan
- * offset plus a zoom factor is the direct reading of §5.9's own vocabulary.
- * Phase 3 may widen this; nothing outside `document.ts` reads it, so doing so
- * costs nothing.
+ * §5.11's "camera state," §5.9's own vocabulary: a world-space pan offset
+ * (`x`, `y` — the world point at the screen's top-left corner) plus a zoom
+ * factor. `render/camera.ts` is the shape's real owner — it defines the
+ * `screen = (world - camera) * zoom` transform this shape exists to serve, and
+ * is the only place a `CameraState` is ever produced besides `DEFAULT_CAMERA`
+ * below. `{ x, y, zoom }` needed no widening to support it (Q-007, resolved by
+ * `render/camera.ts`): the transform needs no viewport size, so this shape is
+ * already sufficient. This file's own job stays narrow — declare the shape and
+ * serialize/deserialize it (D-027's numeric-legality guard included) — never a
+ * second reader that interprets what the fields mean.
  */
 export interface CameraState {
   readonly x: number;
@@ -353,7 +360,7 @@ type CameraReconstructionResult = { readonly ok: true; readonly camera: CameraSt
 
 function reconstructCamera(raw: unknown): CameraReconstructionResult {
   if (!isPlainObject(raw) || typeof raw.x !== "number" || typeof raw.y !== "number" || typeof raw.zoom !== "number") {
-    return { ok: false, message: "camera must be an object with numeric x, y, and zoom (PROVISIONAL(Q-007))" };
+    return { ok: false, message: "camera must be an object with numeric x, y, and zoom (see CameraState's doc comment)" };
   }
   // D-027 (0027-REVIEW): the camera is document state like anything else, and
   // its three numbers go through the same JSON — a file holding `1e999` parses
