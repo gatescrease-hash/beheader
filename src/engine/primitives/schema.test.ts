@@ -58,11 +58,12 @@ describe("getObjectSchema", () => {
   // D-008's lesson: test the unspecified cases, not just the brief's examples.
   // Every non-fixture ObjectType has no schema yet (file header) — this must be
   // an honest `undefined`, not a placeholder that would silently pass a future
-  // validation check. `table` is REAL as of this cycle (see its own describe
-  // block below) — it is no longer in this list.
+  // validation check. `table`/`circle`/`polygon`/`rect` are REAL as of this
+  // cycle (see their own describe blocks below) — they are no longer in this
+  // list (PROCESS_BRIEF §6.1 trigger 5: this narrows a previously-passing
+  // expectation, disclosed in the geometry cycle's log entry).
   it("returns undefined for an ObjectType with no schema entry yet", () => {
-    expect(getObjectSchema("circle")).toBeUndefined();
-    expect(getObjectSchema("polygon")).toBeUndefined();
+    expect(getObjectSchema("polyline")).toBeUndefined();
     expect(getObjectSchema("script")).toBeUndefined();
   });
 
@@ -70,6 +71,34 @@ describe("getObjectSchema", () => {
     const schema = getObjectSchema("table");
     expect(schema).toBeDefined();
     expect(schema?.derivedSlots).toEqual([]);
+  });
+
+  // primitives/geometry.ts's own file owns the compute-function behaviour;
+  // this only confirms the registry wiring — nine derived slots each
+  // (`vertices` plus the eight `verticesDerivedSlots` shares across every
+  // closed preset), and the right non-derived parameter paths per §5.5.
+  it.each([
+    ["circle", [["origin", "x"], ["origin", "y"], ["radius"]]],
+    ["polygon", [["sides"], ["radius"], ["origin", "x"], ["origin", "y"], ["rotation"]]],
+    ["rect", [["origin", "x"], ["origin", "y"], ["width"], ["height"]]],
+  ] as const)("returns a real entry for '%s', with vertices + the eight shared derived slots, and its own %s parameter paths", (type, paths) => {
+    const schema = getObjectSchema(type);
+    expect(schema).toBeDefined();
+    expect(schema?.derivedSlots).toHaveLength(9);
+    expect(schema?.derivedSlots.map((slot) => slot.path)).toEqual(
+      expect.arrayContaining([
+        ["vertices"],
+        ["centroid", "x"],
+        ["centroid", "y"],
+        ["area"],
+        ["length"],
+        ["bounds", "minX"],
+        ["bounds", "minY"],
+        ["bounds", "maxX"],
+        ["bounds", "maxY"],
+      ]),
+    );
+    expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type, slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual(paths);
   });
 });
 
@@ -86,7 +115,10 @@ describe("findDerivedSlotSchema", () => {
   });
 
   it("returns undefined for a type with no schema at all", () => {
-    expect(findDerivedSlotSchema("circle", ["centroid", "x"])).toBeUndefined();
+    // "circle" was this test's example until the geometry cycle registered
+    // it a real schema entry (see the describe block below) — "polyline" is
+    // the current still-unregistered example.
+    expect(findDerivedSlotSchema("polyline", ["centroid", "x"])).toBeUndefined();
   });
 
   it("returns undefined for 'value', which has no derived slots", () => {

@@ -21,10 +21,14 @@
  *   (`primitives/table.ts`'s `enumerateTableCellSlotPaths`).
  *
  *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
- *   D-011) and `table` (§5.4). The remaining `ObjectType` members have no entry;
- *   `getObjectSchema` returns `undefined` for them, honestly, rather than a
- *   placeholder. Their schemas belong to the phases that introduce them — building
- *   them now would be building ahead of the brief's §6 build order.
+ *   D-011), `table` (§5.4), and the three PARAMETRIC geometry presets `circle`/
+ *   `polygon`/`rect` (§5.5 — `primitives/geometry.ts` owns their pure math and
+ *   `DerivedSlotCompute` functions; this file only wires them into the registry,
+ *   the same split `table`'s own entry already uses). `polyline`, `text`,
+ *   `script`, and `image` have no entry; `getObjectSchema` returns `undefined`
+ *   for them, honestly, rather than a placeholder. Their schemas belong to the
+ *   phases/cycles that introduce them — building them now would be building
+ *   ahead of the brief's §6 build order.
  *
  * INVARIANTS UPHELD HERE
  *   - Everything is declared by PATH (`["out", "result"]`), never by a hand-built key
@@ -74,10 +78,25 @@
  *     command-layer concern. Widen this file when that need is concrete.
  *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
  *     which consumes this file), cycle detection, or topological evaluation.
- *   - Geometry/text/script/image schema entries (Phases 3, 5, 6).
+ *   - `polyline`/text/script/image schema entries (later Phase 3 cycles, Phases
+ *     5, 6).
  */
 import type { Address } from "../address.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
+import {
+  computeCircleVerticesSlot,
+  computePolygonVerticesSlot,
+  computeRectVerticesSlot,
+  ORIGIN_X_PATH,
+  ORIGIN_Y_PATH,
+  POLYGON_ROTATION_PATH,
+  POLYGON_SIDES_PATH,
+  RADIUS_PATH,
+  RECT_HEIGHT_PATH,
+  RECT_WIDTH_PATH,
+  VERTICES_PATH,
+  verticesDerivedSlots,
+} from "./geometry.ts";
 import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
 
 // ---------------------------------------------------------------------------
@@ -379,6 +398,54 @@ const TABLE_SCHEMA: ObjectSchema = {
 };
 
 /**
+ * `circle`/`polygon`/`rect` (§5.5): the three PARAMETRIC geometry presets.
+ * Each declares a `vertices` derived slot (its own `DerivedSlotCompute`,
+ * imported from `primitives/geometry.ts`, statically depending on that
+ * type's own parameter paths) plus the eight shared slots
+ * `geometry.ts`'s `verticesDerivedSlots` bundles (`centroid.x/y`, `area`,
+ * `length`, `bounds.*` — all statically depending on `["vertices"]` alone,
+ * §5.1's own worked example). Unlike `table`, none of these three needed a
+ * `dynamic` `NonDerivedSlotPathGroup`: a preset's parameter COUNT never
+ * changes (Rule 6; §5.5's own reason presets expose one `vertices` slot
+ * rather than per-vertex ones), so a `static` list is the correct — not
+ * merely convenient — declaration for every non-derived path below.
+ */
+const CIRCLE_SCHEMA: ObjectSchema = {
+  type: "circle",
+  nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] }],
+  derivedSlots: [
+    { path: VERTICES_PATH, dependencies: { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] }, compute: computeCircleVerticesSlot },
+    ...verticesDerivedSlots("circle"),
+  ],
+};
+
+const POLYGON_SCHEMA: ObjectSchema = {
+  type: "polygon",
+  nonDerivedSlotPaths: [{ kind: "static", paths: [POLYGON_SIDES_PATH, RADIUS_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, POLYGON_ROTATION_PATH] }],
+  derivedSlots: [
+    {
+      path: VERTICES_PATH,
+      dependencies: { kind: "static", paths: [POLYGON_SIDES_PATH, RADIUS_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, POLYGON_ROTATION_PATH] },
+      compute: computePolygonVerticesSlot,
+    },
+    ...verticesDerivedSlots("polygon"),
+  ],
+};
+
+const RECT_SCHEMA: ObjectSchema = {
+  type: "rect",
+  nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RECT_WIDTH_PATH, RECT_HEIGHT_PATH] }],
+  derivedSlots: [
+    {
+      path: VERTICES_PATH,
+      dependencies: { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RECT_WIDTH_PATH, RECT_HEIGHT_PATH] },
+      compute: computeRectVerticesSlot,
+    },
+    ...verticesDerivedSlots("rect"),
+  ],
+};
+
+/**
  * The full registry. `Partial` because most `ObjectType`s have no schema entry
  * yet (see file header) — those genuinely have none, and `getObjectSchema`
  * reports that honestly via `undefined` rather than a stand-in entry that
@@ -388,6 +455,9 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   value: VALUE_SCHEMA,
   add: ADD_SCHEMA,
   table: TABLE_SCHEMA,
+  circle: CIRCLE_SCHEMA,
+  polygon: POLYGON_SCHEMA,
+  rect: RECT_SCHEMA,
 };
 
 /** Looks up an object type's schema. Pure; never throws. `undefined` for a type with no entry yet (see file header). */
