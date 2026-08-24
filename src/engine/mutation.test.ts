@@ -29,6 +29,7 @@ import {
   type MutationJournalEntry,
   type Operation,
 } from "./mutation.ts";
+import { enumerateTableCellSlotPaths } from "./primitives/table.ts";
 
 /** Matches graph/eval.test.ts's / graph/cycles.test.ts's own shorthand. */
 function addr(objectId: string, ...path: readonly string[]): Address {
@@ -1680,5 +1681,63 @@ describe("mutate — end-to-end through a real table object (D-017/0041-REVIEW-p
     if (!result.ok) {
       expect(result.message).toContain("cyclic dependency");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-046 (0043-REVIEW finding 1) — RULE 6: a table's dimension slots must be
+// `literal`, so the declared cell family can never be a function of an
+// EVALUATED value. Before the `readTableDimension` guard these two tests
+// pinned real, reachable defects: `rows` as a formula slot let evaluation
+// (step 7, after edge derivation and validateIntegrity have run) grow or
+// shrink the declared extent, and `mutate` committed `ok: true` on a document
+// that its OWN validateIntegrity rejected on the next pass.
+// ---------------------------------------------------------------------------
+
+describe("table dimensions are literal-only — Rule 6 (D-046)", () => {
+  /** A table whose `rows` is a FORMULA slot with the given cached value. */
+  function tableWithFormulaRows(cachedRows: number, cellSlots: Record<string, Slot>): GraphObject {
+    return {
+      id: "obj_2",
+      name: "table_x",
+      type: "table",
+      slots: {
+        rows: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: cachedRows },
+        cols: { kind: "literal", value: 1 },
+        ...cellSlots,
+      },
+    };
+  }
+
+  it("declares no cells at all for a table whose rows slot is a formula, rather than trusting its cached value", () => {
+    const table = tableWithFormulaRows(3, {});
+
+    // Not "three rows' worth of paths from the cached 3" — none, because a
+    // formula slot's value is written by evaluation and must never size the
+    // slot set (Rule 6).
+    expect(enumerateTableCellSlotPaths(table)).toEqual([]);
+  });
+
+  it("rejects a formula cell on a formula-dimensioned table instead of committing state its own validateIntegrity would reject", () => {
+    const value = valueObject("obj_1", "value_1", 3);
+    const other = valueObject("obj_3", "value_2", 99);
+    const table = tableWithFormulaRows(3, {
+      "cells.A3": { kind: "formula", ast: { type: "reference", address: addr("obj_3", "value") }, value: 99 },
+    });
+    const objects = [value, other, table];
+
+    // The document is refused up front: with no declared cells, D-017's check
+    // catches `cells.A3` as an undeclared formula slot.
+    const rejection = validateIntegrity(objects, deriveEdges(objects));
+    expect(rejection.ok).toBe(false);
+    if (!rejection.ok) {
+      expect(rejection.message).toContain("table_x.cells.A3");
+    }
+
+    // And the mutation that used to commit `ok: true` here — shrinking the
+    // table by evaluation alone — is refused too, so no committed document can
+    // fail its own re-validation.
+    const result = mutate(objects, [{ kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 1 } }], []);
+    expect(result.ok).toBe(false);
   });
 });

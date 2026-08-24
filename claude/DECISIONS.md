@@ -1112,3 +1112,49 @@ Rationale beyond consistency: a range is the one construct where the brief's mod
 self-contained grid... not regions of one giant sheet") makes a cross-object span meaningless
 rather than merely unusual, and an error the operator sees while typing is worth more than one
 that surfaces as `#REF` in a cell later.
+
+---
+
+## D-046 — A slot that SIZES a dynamic slot family must be `literal`; the slot set may never depend on an evaluated value
+Answers: 0042's reviewer question 2 (the sharp half)   Ruled: entry 0043-REVIEW-phase2 (reviewer)
+Binding on: `primitives/table.ts`, `primitives/schema.ts`, and every future `dynamic`
+`NonDerivedSlotPathGroup`
+
+**Ruling.** Any slot whose value determines the MEMBERSHIP of a dynamic slot family — today
+`table`'s `rows`/`cols`, tomorrow whatever sizes `script.in.*` or an editable path's vertex list —
+MUST be read as `literal`-kind only. A `formula` or `derived` slot at such a path reads as its
+fail-closed empty value (`0` for a dimension), never its cached `value`. A `dynamic`
+`enumerate`/`resolve` function MUST NOT let an evaluated value size the set it returns.
+
+**Rationale — this is Rule 6, not a style preference.** Rule 6: "Evaluation never creates or
+destroys slots. Only mutations change which slots exist," and the brief names *table resizing* as
+one of the two specifications "shaped specifically to preserve it." A `formula` slot's `value` is
+written at §5.1 **step 7 (Evaluate)** — after **step 3 (derive edges)** and **step 4 (validate
+integrity)** have already run, and nothing re-validates afterwards. So a formula-valued dimension
+makes the declared family a function of an evaluated value, with two demonstrated consequences
+(both reproduced against cycle 0042's code before the guard landed, both now pinned by tests in
+`mutation.test.ts`):
+
+1. **Evaluation resizes the slot set.** A table with a formula `rows` cached at 1 declared
+   `[cells.A1]`; one unrelated mutation later, evaluation wrote `rows = 3` and the same table
+   declared `[cells.A1, cells.A2, cells.A3]`. No mutation touched the table.
+2. **`mutate` committed a document that its own `validateIntegrity` rejects.** With `rows` cached
+   at 3 and a formula `cells.A3`, the mutation passed steps 3–5, evaluation shrank `rows` to 1,
+   and `mutate` returned `ok: true` — after which re-deriving and re-validating the *committed*
+   state failed with `table_x.cells.A3 is a "formula" slot that object type "table"'s schema does
+   not declare (D-017)`. Committed state must always be valid on its own terms; a mutation the
+   user never made would have been blamed for it.
+
+**Why fail-closed to `0` rather than a new rejection check.** It reuses the answer
+`readTableDimension` already gives a malformed dimension, and it lands somewhere loud: zero
+declared cells means D-017's existing check rejects any formula/derived cell the object actually
+carries. The dangerous half is refused; the harmless half (a stray *literal* cell) is orphaned,
+which is the already-disclosed known problem, not a new one.
+
+**Scope — what this does NOT rule.** Dimensions stay ORDINARY SLOTS at
+`TABLE_ROWS_PATH`/`TABLE_COLS_PATH` (0042 Decision 1 upheld — see 0043-REVIEW §7 Q2). This ruling
+constrains their KIND, not their home. A future `GraphObject`-structural home would preserve Rule 6
+by construction and remains open; it is not required, and moving them is not this ruling.
+
+Reconciliation required: none — no `PROVISIONAL` tag. The guard and its two regression tests
+landed with this ruling at 0043-REVIEW.

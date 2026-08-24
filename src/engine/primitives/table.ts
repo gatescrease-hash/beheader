@@ -91,10 +91,14 @@
  *   up — precisely the shape `primitives/schema.ts`'s existing `dynamic`
  *   `DerivedSlotDependencies` already established for `text.resolvedContent`/
  *   `script.out.*`, applied here to `nonDerivedSlotPaths` instead. Never
- *   throws: a missing or malformed dimension slot (not yet a number, negative,
- *   non-integer) reads as `0` rather than guessing or throwing — see
- *   `readTableDimension`'s own doc comment for why that is safe rather than a
- *   silently-wrong answer.
+ *   throws: a missing or malformed dimension slot (not a `literal` kind, not a
+ *   number, negative, non-integer) reads as `0` rather than guessing or
+ *   throwing — see `readTableDimension`'s own doc comment for why that is safe
+ *   rather than a silently-wrong answer. The `literal`-kind clause is **D-046**
+ *   (0043-REVIEW) and is a RULE 6 guard, not a tidy-up: a `formula` dimension
+ *   slot would let EVALUATION resize the declared cell family, because a
+ *   formula slot's value is written at §5.1 step 7 — after edge derivation
+ *   (step 3) and `validateIntegrity` (step 4) have already run.
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws. `enumerateRangeCellPaths` returns a typed
@@ -252,9 +256,11 @@ export const TABLE_COLS_PATH: readonly string[] = ["cols"];
 /**
  * Reads one of `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` off `object`'s own slots —
  * an ordinary forward lookup (`graph/node.ts`'s `getSlot`), never an inversion
- * of anything. `0` for anything that is not a non-negative integer: missing
- * entirely (no table-creation mutation exists yet to have populated it), the
- * wrong slot kind, or a value that is not a `number` at all — this function
+ * of anything. `0` for anything that is not a `literal` slot holding a
+ * non-negative integer: missing entirely (no table-creation mutation exists yet
+ * to have populated it), a NON-LITERAL slot kind (`formula`/`derived` — D-046,
+ * the Rule 6 guard; see the body comment for why this is the load-bearing
+ * clause, not a tidy-up), or a value that is not a `number` at all — this function
  * must never throw and has no `#`-shaped failure to report (it runs during
  * edge derivation, §5.1 step 3, BEFORE `validateIntegrity`'s own checks have
  * had a chance to reject a malformed document), so it fails to the SAFEST
@@ -267,7 +273,26 @@ export const TABLE_COLS_PATH: readonly string[] = ["cols"];
  */
 function readTableDimension(object: GraphObject, path: readonly string[]): number {
   const slot = getSlot(object, path);
-  if (slot === undefined || typeof slot.value !== "number" || !Number.isInteger(slot.value) || slot.value < 0) {
+  // RULE 6, and the whole reason this reads `kind` and not just `value`
+  // (0043-REVIEW finding 1, D-046): a dimension slot MUST be `literal`. A
+  // `formula` slot's `value` is written by EVALUATION (§5.1 step 7), which runs
+  // AFTER edge derivation (step 3) and `validateIntegrity` (step 4) — so
+  // honouring one here would make the declared cell family a function of an
+  // evaluated value, letting EVALUATION grow or shrink the slot set. Rule 6
+  // forbids exactly that ("Evaluation never creates or destroys slots"), and
+  // the brief names table resizing as one of the specs "shaped specifically to
+  // preserve it." Demonstrated before this guard existed: a table whose `rows`
+  // was a formula committed with `ok: true` and then failed its OWN
+  // `validateIntegrity` on the very next pass.
+  //
+  // Reading a non-literal dimension as `0` is the SAME fail-closed answer this
+  // function already gives a malformed one, and it lands in the same loud
+  // place — zero cells declared means D-017's check rejects any formula/derived
+  // cell the object actually carries, rather than this file guessing.
+  if (slot === undefined || slot.kind !== "literal") {
+    return 0;
+  }
+  if (typeof slot.value !== "number" || !Number.isInteger(slot.value) || slot.value < 0) {
     return 0;
   }
   return slot.value;
