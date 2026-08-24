@@ -164,6 +164,27 @@
  * operation to take the repair path too is explicitly NOT built as of entry
  * 0050 — see NOT DONE HERE.
  *
+ * 0051-REVIEW-phase2 REVISED entries 0049+0050: verdict REVISE, a five-item
+ * fix list. Entry 0052 closes the code items. **D-053**: 0048-REVIEW-phase2
+ * fix 3 landed on only the axis being resized —
+ * `isTableDimensionResizable(object, operation.axis)` — so a ROW resize on a
+ * table whose `cols` slot was `formula`-kind committed `ok: true` and silently
+ * reset that slot to `literal 0` (destroying its AST, cached value, and
+ * inbound edge), reached from the axis nobody was checking. Fixed here:
+ * `findInvalidTableResizes` now rejects when EITHER `rowsResizable` or
+ * `colsResizable` is false, naming every offending dimension, never only the
+ * flag for `operation.axis` — see that function's own doc comment and its
+ * body below. **D-053's companion ruling** — the address-repair pass and the
+ * cell-slot walk must stay identically bounded on insert AND delete until the
+ * dimension/cell coherence gap closes for both at once — is why entry 0052
+ * does NOT bound `repairCellAddressForDelete`/`repairRangeEndpointsForDelete`
+ * by extent to stop deletion's own carried "can still reject" gap (0051-REVIEW
+ * §5): that gap is pinned by a test instead (`mutation.test.ts`), not patched.
+ * **D-057** (the repair path must report every slot it broke, through ONE
+ * channel built once) is RULED but deliberately NOT built this cycle — it is
+ * the `force`-flag slice's job; `DeleteTableLineOperation`'s own doc comment
+ * records the gap in the meantime.
+ *
 
  * IMPLEMENTS: PROJECT_BRIEF §5.1 step 3 ("Re-derive ALL edges from stored
  * formula ASTs and schema declarations (static and dynamic). Per Rule 5,
@@ -894,16 +915,44 @@ export interface InsertTableLineOperation {
  *
  * PRECONDITION, enforced by `mutate` before this is ever folded (mirroring
  * `InsertTableLineOperation`'s own precondition doc comment): `objectId`
- * names an EXISTING object of type `"table"` whose `rows`/`cols` can be
- * coherently resized (D-046, `isTableDimensionResizable`), and `index` names
- * an EXISTING row/column AS OF THIS OPERATION'S OWN POSITION in the batch —
- * `findInvalidTableResizes` (widened at entry 0050 to simulate both insertion
- * and deletion together, in one left-to-right walk, per D-050's own binding
- * text) is the primary check. Unlike insertion, `deleteTableLine` (the
+ * names an EXISTING object of type `"table"` whose WHOLE extent — BOTH
+ * `rows` AND `cols`, not only the axis this operation targets — can be
+ * coherently read (D-046/**D-053**, `isTableDimensionResizable`), and `index`
+ * names an EXISTING row/column AS OF THIS OPERATION'S OWN POSITION in the
+ * batch — `findInvalidTableResizes` (widened at entry 0050 to simulate both
+ * insertion and deletion together, in one left-to-right walk, per D-050's own
+ * binding text; widened again at entry 0052 per D-053 to check both
+ * dimensions) is the primary check. Unlike insertion, `deleteTableLine` (the
  * primitive) does NOT clamp an out-of-range index — there is no "nearest
  * line" to delete instead of a nonexistent one — so this precondition is the
  * ONLY thing standing between a malformed operation and a malformed table;
  * see that primitive's own doc comment.
+ *
+ * KNOWN GAP (D-057, recorded not built at 0051-REVIEW-phase2 §6, still
+ * outstanding as of entry 0052): §5.1.1 and §5.4 both require the repair path
+ * to "report which slots were broken" / "report every slot it broke."
+ * Nothing here does — `applyOperation` returns `readonly GraphObject[]`, with
+ * no channel for such a report, and this operation's own repair pass
+ * (`repairObjectFormulaAddresses` walking every inbound reference to `#REF`)
+ * discards exactly that information once it has applied it. D-057 assigns
+ * building ONE reporting channel — serving this repair site AND `delete
+ * <table>`'s future `force`-flag repair site, never two — to the cycle that
+ * adds `force` to `DeleteObjectOperation`. Do not build a deletion-specific
+ * report here first; see D-057 and D-056 in `DECISIONS.md`.
+ *
+ * KNOWN GAP (0051-REVIEW-phase2 §5, NOT patched here — see D-053's companion
+ * ruling): this operation's repair pass is unbounded (any inbound reference
+ * to a cell on this table is repaired, in-extent or not) while its cell-slot
+ * walk is extent-bounded (D-049), so a reference to an out-of-extent cell
+ * slot shifts to an empty position and dangles, rejecting the WHOLE batch —
+ * contradicting §5.4's "it proceeds even when other objects depend on the
+ * deleted cells." Reachable only through the carried dimension/cell coherence
+ * gap (an out-of-extent cell slot, creatable only by a raw `setSlot`). Fixing
+ * this on the delete side alone would leave insertion's identical divergence
+ * (accepted at 0048-REVIEW as case 4) disagreeing with it — forbidden by
+ * D-053's companion ruling. Pinned by a test in `mutation.test.ts`, not
+ * patched; closes only when the coherence gap closes for both operations at
+ * once, in its own slice.
  */
 export interface DeleteTableLineOperation {
   readonly kind: "deleteTableLine";
@@ -1835,11 +1884,13 @@ interface TrackedTableState {
 }
 
 /**
- * Entry 0047/0048-REVIEW-phase2/0050's row/column resize precondition:
+ * Entry 0047/0048-REVIEW-phase2/0050/0052's row/column resize precondition:
  * rejects an `insertTableLine` OR `deleteTableLine` operation whose
- * `objectId` does not name a `"table"`-type object, whose targeted dimension
- * cannot be coherently resized (fix 3, D-046 — see `isTableDimensionResizable`),
- * or whose `index` is out of range for its OWN kind (insertion: `1..count+1`;
+ * `objectId` does not name a `"table"`-type object, whose WHOLE extent cannot
+ * be coherently read — EITHER `rows` OR `cols` not `literal` (**D-053**, fix
+ * 3/D-046 — see `isTableDimensionResizable`), never only the dimension named
+ * by `operation.axis` — or whose `index` is out of range for its OWN kind
+ * (insertion: `1..count+1`;
  * deletion: `1..count`, since it must name a row/column that actually
  * exists) — with a message naming the operation and the problem, the same
  * style every other precondition check in this file uses. Runs BEFORE
@@ -1920,11 +1971,21 @@ function findInvalidTableResizes(operations: readonly Operation[], objects: read
       problems.push(`${prefix}: object "${state.name}" is not a table, so its ${operation.axis}s cannot be resized`);
       return;
     }
-    const resizable = operation.axis === "row" ? state.rowsResizable : state.colsResizable;
-    if (!resizable) {
-      const dimensionName = operation.axis === "row" ? "rows" : "cols";
+    // D-053: the WHOLE extent must be readable, not just the axis this
+    // operation targets — both primitives re-assert `literal` on BOTH
+    // dimensions on every call (the untouched axis's count still has to be
+    // written back), so checking only `operation.axis`'s flag let a resize on
+    // one axis silently destroy a `formula`-kind slot on the OTHER axis (its
+    // AST, cached value, and inbound edge), reached from the axis nobody was
+    // looking at. Name every offending dimension, not just one.
+    const badDimensions: string[] = [];
+    if (!state.rowsResizable) badDimensions.push("rows");
+    if (!state.colsResizable) badDimensions.push("cols");
+    if (badDimensions.length > 0) {
+      const verbAgreement = badDimensions.length > 1 ? "slots are" : "slot is";
       problems.push(
-        `${prefix}: "${state.name}"'s ${dimensionName} slot is not "literal" (D-046) — its extent cannot be coherently resized`,
+        `${prefix}: "${state.name}"'s ${badDimensions.join(" and ")} ${verbAgreement} not "literal" (D-046) — ` +
+          "its extent cannot be coherently resized on any axis",
       );
       return;
     }

@@ -2560,6 +2560,38 @@ describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 3: rejects 
     const result = mutate([table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
     expect(result.ok).toBe(true);
   });
+
+  // D-053 (0051-REVIEW-phase2 §4/§8 item 1): fix 3 originally checked only
+  // `operation.axis`'s own dimension flag, so a ROW insert on a table whose
+  // UNTOUCHED `cols` slot was formula-kind committed `ok: true` and silently
+  // reset `cols` to `literal 0` — destroying its AST, cached value, and
+  // inbound edge from `value_1.value`. This is the cross-axis case fix 3's
+  // own tests above never exercised (both targeted the SAME axis as the
+  // non-literal dimension).
+  it("rejects a ROW insert whose UNTOUCHED cols slot is formula-kind (D-053 — a resize checks the WHOLE extent, not only its own axis), leaving prior state bit-for-bit unchanged", () => {
+    const source: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 0 } } };
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_x",
+      type: "table",
+      slots: {
+        rows: { kind: "literal", value: 3 },
+        cols: { kind: "formula", ast: { type: "reference", address: addr("obj_2", "value") }, value: 0 },
+        "cells.A1": { kind: "literal", value: 1 },
+      },
+    };
+    const snapshotBefore = JSON.parse(JSON.stringify([source, table])) as unknown;
+
+    const result = mutate([source, table], [{ kind: "insertTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("cols");
+      expect(result.message).toContain("not \"literal\"");
+      expect(result.message).toContain("D-046");
+    }
+    expect([source, table]).toEqual(snapshotBefore); // step 6: prior state provably untouched — cols never became literal 0.
+  });
 });
 
 describe("mutate — Phase 2 acceptance criterion clause 3, completed: SUM(A1:A5) recomputes correctly AFTER INSERTING A ROW INSIDE THE RANGE", () => {
@@ -2858,6 +2890,35 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     }
   });
 
+  // D-053 (0051-REVIEW-phase2 §4/§8 item 1) — the same cross-axis defect fix
+  // 3 missed on the insert side, verified LIVE on deletion too (0051-REVIEW
+  // §4's own probe): a ROW delete on a table whose UNTOUCHED cols slot is
+  // formula-kind must not silently reset it to literal 0.
+  it("rejects a ROW delete whose UNTOUCHED cols slot is formula-kind (D-053 — a resize checks the WHOLE extent, not only its own axis), leaving prior state bit-for-bit unchanged", () => {
+    const source: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 0 } } };
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_x",
+      type: "table",
+      slots: {
+        rows: { kind: "literal", value: 3 },
+        cols: { kind: "formula", ast: { type: "reference", address: addr("obj_2", "value") }, value: 0 },
+        "cells.A1": { kind: "literal", value: 1 },
+      },
+    };
+    const snapshotBefore = JSON.parse(JSON.stringify([source, table])) as unknown;
+
+    const result = mutate([source, table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("cols");
+      expect(result.message).toContain("not \"literal\"");
+      expect(result.message).toContain("D-046");
+    }
+    expect([source, table]).toEqual(snapshotBefore); // step 6: prior state provably untouched — cols never became literal 0.
+  });
+
   it("composes with an ordinary setSlot in the SAME batch, folding left-to-right", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -3023,5 +3084,49 @@ describe("mutate — Phase 2 acceptance criterion clause 4, DELETE half: row/col
     // state must always be valid on its own terms" standard).
     const rechecked = deriveValidateAndEvaluate(result.objects);
     expect(rechecked.ok).toBe(true);
+  });
+});
+
+// KNOWN INCOHERENCE, PINNED not fixed — 0051-REVIEW-phase2 §5, D-053's
+// companion ruling. This is NOT a desired outcome: §5.4 says row/column
+// deletion "proceeds even when other objects depend on the deleted cells,"
+// unconditionally. This test documents the one route by which it currently
+// can still reject anyway, so a future change to this behaviour is a
+// deliberate, visible diff against a named test — not a silent regression.
+describe("mutate — KNOWN INCOHERENCE (pinned, not fixed): row/column deletion CAN still reject, contradicting §5.4's unconditional repair (0051-REVIEW-phase2 §5)", () => {
+  it("rejects a row deletion when an OUT-OF-EXTENT cell slot has an external dependent, because the address-repair pass is unbounded while the cell-slot walk is extent-bounded (D-049) — the repaired reference points at a shifted position with no slot, dangling. Reachable only via the carried dimension/cell coherence gap (a raw setSlot; the eventual command line's extent-bounded resolution would refuse to write an out-of-extent cell). Do NOT patch this on the delete side alone — D-053's companion ruling forbids it until insertion's identical divergence (accepted at 0048-REVIEW as case 4) closes with it", () => {
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_x",
+      type: "table",
+      slots: {
+        rows: { kind: "literal", value: 3 },
+        cols: { kind: "literal", value: 1 },
+        "cells.A1": { kind: "literal", value: 1 },
+        // Out-of-extent (rows is 3): only reachable by constructing the
+        // object directly, as this fixture does — no sanctioned command
+        // path can write it, since address resolution is extent-bounded.
+        "cells.A5": { kind: "literal", value: 5 },
+      },
+    };
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "text_1",
+      type: "value", // stands in for a Phase 5 text box, same as the demonstration test above.
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A5") }, value: null } },
+    };
+
+    // The pre-state is itself internally valid — the rejection below is
+    // caused by the deletion, not by an already-broken fixture.
+    expect(deriveValidateAndEvaluate([table, dependent]).ok).toBe(true);
+
+    const result = mutate([table, dependent], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
+
+    // The address-repair pass rewrites A5 -> A4 (shiftCoordinatesForDelete,
+    // unbounded); the cell-slot walk never moved A5 in the first place
+    // (enumerateTableCellSlotPaths, bounded to the CURRENT 1..3 extent) —
+    // so "cells.A4" names no slot, and validateIntegrity's dangling-
+    // reference check rejects the whole batch. Contradicts §5.4.
+    expect(result.ok).toBe(false);
   });
 });
