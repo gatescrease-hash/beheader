@@ -1867,3 +1867,90 @@ not a gap for an implementer to close quietly against this ruling.
 
 Reconciliation required: none. `renderer.ts`'s NOT DONE HERE and HAZARD blocks and
 `interaction.ts`'s NOT DONE HERE were corrected at entries 0066 and 0067 and already say this.
+
+---
+
+## D-069 — `command/` resolves nothing before `commands.ts`. Grammar failures belong to the parser, identity failures to the handler
+Answers: entry 0068 Decision 1 and Decision 2 (implementer asked for this one to be checked)
+Ruled: entry 0069-REVIEW-phase3 (reviewer)   Binding on: every file in `command/`
+
+`command/parser.ts` takes a line and returns a `Command`. It **takes no document, no object list,
+and no `nextObjectId`**, and a `Command` carries the object names and address strings the operator
+typed, **verbatim**. `parseAddress`, `checkNameAvailable`, `parseFormula`, `Operation` building and
+`mutate` are all `command/commands.ts`'s.
+
+The line between the two files is which KIND of failure is being reported:
+
+- **Grammar — the parser's.** How many arguments, which `key=value` keys, whether a token is a
+  number, whether a quote closes, whether a flag repeats.
+- **Identity — the handler's.** No object of that name, a name already taken, a slot the schema
+  does not declare, a value the slot may not hold.
+
+**Rationale.** §4's own structure table already draws it: `parser.ts` is "command string -> command
+object", `commands.ts` is "command handlers -> mutation API calls". Resolution is part of building
+the `Operation`, which is by that table the handler's work.
+
+§5.2's "a resolver maps name → ID **at parse time**" does **not** bind here and must stop being
+read as though it does. It is a statement about **stored ASTs** — the sentence it sits in ends
+"stored ASTs hold IDs, not names," and its purpose is that renaming rewrites no formulas. A command
+object is transient input to resolution: never stored, never journaled, never serialized. Holding a
+name in one breaks no invariant, and the moment it becomes graph state it holds an ID.
+
+Resolving in the parser would also **split** resolution rather than centralise it, which is the
+opposite of what it looks like: a creation command's fresh id and default name come from
+`nextObjectId`, which lives in the document the parser would still not have — so `circle` would
+resolve in one file and `link` in another.
+
+The grammar/identity line is `address.ts`'s own (L-4, 0002-REVIEW-phase0), applied one layer out:
+**one failure path per problem, owned by the file that owns the form.** A parser that re-checked
+`NAME_PATTERN` or the address form would be a second definition of it, free to drift — the drift
+D-043 rules against. So `set polygon_1 42` (no dot) and `rename polygon_1 3bad` (ungrammatical
+name) both PARSE, and are refused once, by the file that owns that form.
+
+Corollary, binding on `commands.ts`: it is the **only** place a `Command` meets a `Document`. A
+later command file that needs resolution calls into it rather than teaching the parser about
+documents.
+
+Reconciliation required: none — entry 0068 built it this way. `command/parser.ts`'s header may cite
+this ruling and drop the rationale it currently restates in full (see 0069-REVIEW fix 1).
+
+---
+
+## D-070 — A creation command's counts are bounded by the HANDLER, and an out-of-range count is a mutation REJECTION, not an `ErrorValue`
+Answers: the carried "`sides` has no upper bound, nor `rows`/`cols`" problem (0060-, 0062-,
+0064-REVIEW all deferred it: "one ruling covers all three or none")
+Ruled: entry 0069-REVIEW-phase3 (reviewer)   Binding on: the cycle that builds
+`command/commands.ts`'s creation handlers — the same cycle, not a later one
+
+Entry 0068 makes `polygon sides=<n>` and `table rows=<n> cols=<n>` typeable, and the reviewer's
+probe confirms the parser passes **fractional, zero and negative** counts through unchanged
+(`table x=0 y=0 rows=-3 cols=0` and `polygon sides=2.5 …` both parse). That is **correct of the
+parser** — D-031 clause 3 keeps document-state policy out of a text-scanning stage, and D-069 makes
+it the handler's. It is not correct of the system, and the deferral expires when the handler lands,
+because that is the cycle in which a typed line first builds slots.
+
+Binding, all three counts under one rule:
+
+1. **The check lives in the creation handler**, before any `Operation` is built. Not in the parser
+   (D-069, D-031 clause 3), and not only in a derived slot.
+2. **Out of range REJECTS the mutation.** It does not create the object and then let a derived slot
+   hold `#TYPE`. The slot SET is what is at stake, not a slot's value: `rows=1000000` builds a
+   million cell slots before anything evaluates, and Rule 6 fixes the slot set during evaluation, so
+   an error value cannot stand in for "I already built them." `polygon`'s existing `#TYPE` for
+   `sides < 3` (`primitives/geometry.ts`, `MIN_POLYGON_SIDES`) **stays** as the defensive arm for an
+   AST arriving from a loaded file — the same shape D-038 left `eval.ts`'s branches in.
+3. **The rejection names the argument and the range** (`sides must be a whole number from 3 to
+   1000, got 2.5`), per §5.10's "every rejection message must name the specific slots involved."
+4. **Each count is a whole number.** `Number.isInteger`, the check `geometry.ts` already applies.
+
+**The bounds themselves are the reviewer's provisional pick and the human may overrule them**
+without disturbing clauses 1–4: `sides` ∈ [3, 1000], `rows`/`cols` ∈ [1, 1000]. Declare them as
+named constants beside the code that enforces them, the way `render/camera.ts` already declares
+`MIN_ZOOM`/`MAX_ZOOM` for a range the brief likewise never states — that precedent is why picking a
+number here is not an amendment to the design.
+
+**Rationale.** Three reviews deferred this correctly, on the ground that nothing could reach it.
+Something can now. The failure mode is not a wrong value, it is an unbounded slot allocation from
+one typed line — which under Rule 5's deliberately un-optimised mutation loop (a deep clone per
+mutation) is a hang with no error, the one class of failure this project's error-value idiom cannot
+express. A bound picked badly costs an argument; no bound costs a wedged tool with a clean log.

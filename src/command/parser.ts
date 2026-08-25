@@ -525,10 +525,12 @@ type TokenizeResult = { readonly ok: true; readonly tokens: readonly CommandToke
 /**
  * Splits a line into tokens on whitespace, keeping a double-quoted run whole.
  *
- * A token is either a bare word or a WHOLE quoted string; a quote inside a bare word
- * is rejected rather than given shell-like concatenation semantics. That keeps the one
- * thing quoting decides — whether `42` is a number or a string — legible at a glance
- * instead of dependent on where the quote sits inside a word.
+ * A token is either a bare word or a WHOLE quoted string, and arguments are separated
+ * by whitespace with nothing else allowed to join them: a quote inside a bare word
+ * (`a"b"`) and a bare word running on from a closing quote (`"a"b`) are BOTH rejected
+ * rather than given shell-like concatenation semantics. That keeps the one thing
+ * quoting decides — whether `42` is a number or a string — legible at a glance instead
+ * of dependent on where the quote sits inside a word.
  */
 function tokenize(line: string): TokenizeResult {
   const tokens: CommandToken[] = [];
@@ -546,6 +548,14 @@ function tokenize(line: string): TokenizeResult {
       const scanned = scanQuoted(line, index);
       if (!scanned.ok) {
         return scanned;
+      }
+      // A closing quote ends the whole argument. Without this, `delete "a"force`
+      // splits into two tokens and silently sets the flag — §5.1.1's repair path
+      // chosen by a line the operator never wrote as two words. It is the same
+      // shell-style concatenation the bare-word branch below refuses, arriving from
+      // the other side, so both directions refuse it or neither does (0069-REVIEW).
+      if (scanned.next < line.length && !isWhitespace(line[scanned.next])) {
+        return failure("a quoted argument ends at its closing quote — separate arguments with a space", scanned.next);
       }
       tokens.push(scanned.token);
       index = scanned.next;

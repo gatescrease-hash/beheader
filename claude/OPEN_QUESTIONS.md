@@ -18,8 +18,43 @@ Next free ID: **Q-014**
 
 ## Q-013 — How is a general formula authored, given §5.10 has no command that takes one and Phase 4(b) requires one?
 Raised: entry 0068 (implementer)   Brief section: §5.10, §5.4, §6 (Phase 4b)
-Status: **OPEN — provisional choice taken, reversible.** Blocks nothing in Phase 3; comes due before
+Status: **OPEN — provisional choice taken, reversible. ESCALATED TO THE HUMAN at 0069-REVIEW-phase3;
+the reviewer endorses (a) but declines to rule it.** Blocks nothing in Phase 3; comes due before
 Phase 4's gate can be claimed.
+
+**Reviewer's position (0069-REVIEW-phase3) — read this before implementing anything here.**
+
+The question is correctly raised and correctly left open. It is *escalated, not answered*, because
+it asks what the operator's command line should be able to SAY, and D-042 makes the operator the
+arbiter of exactly that — the same reason Q-001/Q-002/Q-004/Q-010 were all ruled by the human
+(D-041/D-040/D-039/D-038) rather than by a reviewer. §8's "**command-language gold-plating**" does
+NOT forbid the answer: its own sentence is "Add commands as needed, one registry entry each," and a
+surface Phase 4's gate cannot be reached without is needed, not gold-plating.
+
+**Endorsed: (a), `set <address> = <formula source>`.** It is the spreadsheet's own gesture (typing
+`=` into a cell is what makes it a formula, and §5.4's formula bar will do the same thing, so one
+spelling serves both surfaces); D-040 has already settled what happens when `set` writes over a
+formula slot, so (a) needs no new semantics, where (c)'s separate `formula` command would fork
+D-040/D-041 across two command words for no gain the operator can see. (b) is rejected on the
+ground the question already gives: it makes the project's validation moment hostage to an unbuilt,
+unscheduled render slice.
+
+**Three constraints hold whichever way the human rules — these ARE the reviewer's to state, and
+they are binding now:**
+
+1. **The formula source is the RAW SUBSTRING of the line from the `=` to the end, taken verbatim.**
+   Never re-joined from tokens: re-joining discards the operator's own spacing and the character
+   offsets that `CommandParseFailure.start` and `ParseError`'s position are built on, and D-038
+   clause 4 forbids the layer that rejects a formula from discarding its source text.
+2. **The parser stays document-free (D-069).** The command object carries the source; `commands.ts`
+   calls `parseFormula`. D-038's four conditions come due at that call, wherever it lands.
+3. **`link` and a formula-writing `set` build their slot through ONE shared path in `commands.ts`.**
+   `link a.b c.d` is `set a.b = c.d`'s degenerate case (§5.1), and two code paths writing a formula
+   slot will drift on what D-040 says they must report and on what D-041 leaves behind.
+
+Until the human rules, the provisional refusal below stands unchanged and the `PROVISIONAL(Q-013)`
+tag stays live — it is a genuinely open question with a reversible choice taken at one site, which
+is what §7 asks for.
 
 Ambiguity: §5.10 lists no command that takes a formula EXPRESSION. `link polygon_1.origin.x
 table_x.A1` makes only §5.1's degenerate formula `= other.slot`. `set polygon_1.radius 42` is shown

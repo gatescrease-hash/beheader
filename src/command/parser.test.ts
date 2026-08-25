@@ -125,6 +125,18 @@ describe("tokenising", () => {
     expect(rejected('set a"b 1').start).toBe(5);
     expect(rejected('set a"b 1').message).toContain("a quote must open an argument");
   });
+
+  it("rejects a bare word running on from a closing quote, so `delete \"a\"force` cannot silently select §5.1.1's repair path", () => {
+    expect(rejected('delete "a"force')).toEqual({
+      message: "a quoted argument ends at its closing quote — separate arguments with a space",
+      start: 10,
+    });
+  });
+
+  it("rejects a second quoted run touching the first, refusing concatenation from the same side", () => {
+    expect(rejected('set a.b "x""y"').start).toBe(11);
+    expect(rejected('set a.b "x"y').message).toContain("ends at its closing quote");
+  });
 });
 
 describe("named arguments (the creation commands)", () => {

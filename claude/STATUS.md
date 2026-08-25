@@ -1,46 +1,38 @@
-# STATUS — as of entry 0068-command-parser
+# STATUS — as of entry 0069-REVIEW-phase3
 
-STATE: GREEN (compiles under both configs, 835/835 tests pass, 0 skipped, 0 `.only`).
+STATE: GREEN (compiles under both configs, 837/837 tests pass, 0 skipped, 0 `.only`).
 
-**Process state: PHASE 3 OPEN, and `command/parser.ts` is BUILT BUT NOT REVIEWED. Review is REQUIRED
-before the next slice — §6.1 trigger 2 (first file of the `command/` subsystem) and §6.3's diff cap
-(~1103 lines in one cycle, against ~800) both fire. Do not start `command/commands.ts` until 0068 is
-reviewed.**
+Current phase: **3 — canvas, camera, geometry, command line.** `render/` and `command/parser.ts` are
+both COMPLETE and REVIEWED. **Nothing executes a command yet** — `command/commands.ts` and `main.ts`
+are unstarted. Phase 3 criterion (§6): *"you can create a polygon and a table by command, see both
+drawn, pan/zoom, select, and drag the polygon."* `polygon …` and `table …` PARSE; no pixel has ever
+come from a typed line. NOT claimed.
 
-Current phase: **3 — canvas, camera, geometry, command line.** `render/` is COMPLETE and reviewed.
-`command/parser.ts` turns a typed line into a typed command object; **nothing executes one** —
-`command/commands.ts` and `main.ts` are unstarted. Phase 3 criterion (§6): *"you can create a polygon
-and a table by command, see both drawn, pan/zoom, select, and drag the polygon."* `polygon …` and
-`table …` now PARSE; no pixel has ever come from a typed line. NOT claimed.
+Last review point: **0069-REVIEW-phase3, ACCEPT WITH EDITS** (entry 0068). Cycles since last review:
+**0/3** · diff since last review: **0 lines / 0 files** (cap 800/10). No gate is blocking; the next
+slice may start immediately.
 
-Last review point: **0067-REVIEW-phase3, ACCEPT WITH EDITS** (entry 0066). Cycles since last review:
-**1/3** · diff since last review: **~1103 lines / 4 files (cap 800/10 — over on lines)**.
-
-## Next slice (recommended, AFTER 0068 is reviewed)
+## Next slice (recommended)
 
 **`command/commands.ts`** (§5.10: handlers → mutation API calls) — the first file that resolves
-anything: `parseAddress`/`checkNameAvailable` over the strings `parser.ts` passes through verbatim,
-then `Operation` building and `mutate`. **D-040/D-041 come due there, not in the parser**: `set` over
-a formula slot REPLACES it and must report what it replaced; `unlink` keeps the value last displayed,
-errors included. It owes §5.10's "name the specific slots involved" with real slots for the first
-time, and reads D-057's `brokenSlots` for a `delete … force` echo. Then `main.ts` — read 0067-REVIEW
-§10's carry-ins 1–3 first (ONE clamped camera to all three render consumers; reset the canvas
-transform; `TABLE_SCHEMA` owes `origin.x`/`origin.y`).
+anything. **Read 0069-REVIEW §11 before starting; it owes five things.** The two that will bite:
+**D-040/D-041 come due** (reconcile Q-001/Q-002, do not re-decide — `set` over a formula slot
+REPLACES it and reports what it replaced; `unlink` keeps the value last displayed, errors included),
+and **D-070 lands in the SAME cycle** (creation handlers bound `sides`/`rows`/`cols` before building
+an `Operation`, or `table rows=1000000` allocates a million slots from one typed line). Also owed:
+D-069 governs the file · the table-creation handler owes `TABLE_SCHEMA` an `origin.x`/`origin.y`
+pair · §5.10's "name the specific slots involved" gets real slots for the first time.
+
+Then `main.ts` — ONE clamped camera to all three of `renderDocument`, `hitTest` and
+`pointerDown`/`pointerMove` (D-062), and reset the canvas transform before screen-space chrome.
 
 ## Built and reviewed
 
 Phase 0 (0027-REVIEW) · formula engine (0037) · the whole table primitive through row/column
 insert/delete and `delete <table> force` (0054) · `render/camera.ts` + entry 0055's header audit
 (0058) · `primitives/geometry.ts` (0060) · `render/renderer.ts` (0062) · `render/hittest.ts` (0064) ·
-entry 0065's header audit · `render/interaction.ts` (0067).
-
-## Built this batch, NOT yet reviewed
-
-**`src/command/parser.ts` (801) + `src/command/parser.test.ts` (284, 59 tests)** — §5.10's parsing
-half; sixteen commands registered (`circle`, `polygon`, `rect`, `table`, `link`, `unlink`, `set`,
-`rename`, `delete [force]`, `refs`, `list`, `select`, `zoom`, `fit`, `save`, `load`). Plus two
-comment-only edits owed under D-065 (`main.ts` said `command/` did not exist; `primitives/table.ts`
-said a table command's missing piece was the command word).
+entry 0065's header audit · `render/interaction.ts` (0067) · **`src/command/parser.ts` (811) +
+`parser.test.ts` (296, 61 tests) — §5.10's parsing half, sixteen commands (0069)**.
 
 ## Not started
 
@@ -61,20 +53,17 @@ clauses in one document plus pixels, and **clause (b) has no authoring path yet:
 - **A loaded camera is not range-checked (D-062)** — `main.ts` owes ONE clamped camera to all three
   of `renderDocument`, `hitTest`, `pointerDown`/`pointerMove`. At `zoom: 0` the hit test silently
   returns the topmost object; the drag refuses loudly. Clamp at the boundary, once (0062-REVIEW §9).
-- **`sides` has no upper bound, nor `rows`/`cols` via a raw `setSlot`** — and `polygon`/`table` now
-  parse arbitrary counts, so handlers make it reachable from a typed line. One ruling covers all
-  three or none. **Do not fix in isolation** (0060/0062/0064-REVIEW).
-- **A `table` has no `origin.x`/`origin.y` schema entry** (0061 Decision 4) — `renderer`/`hittest`
-  fall back to `(0,0)` and `interaction.ts` calls every table undraggable; the table-creation HANDLER
-  adds the pair. Those same three files pin their table paths against FIXTURES only, and are owed an
-  end-to-end test through a table-creation command (0067-REVIEW fix 2).
+- **An arity error names a parameter its own usage line never shows** — `"link" needs <source> —
+  usage: link <address> <address>` (0069-REVIEW F3). One pass over sixteen `usage` strings.
 - **Row/column deletion CAN still be REJECTED**, contradicting §5.4 — repair unbounded, slot walk
   extent-bounded; reachable only via a raw `setSlot`, pinned by `mutation.test.ts`'s "KNOWN
   INCOHERENCE" test, and D-053 forbids a one-sided fix. Relatedly a dimension write is not checked
   for COHERENCE with the cells that exist.
-- **The §5.2 header budget (20-40 ordinary) is not reachable** (entry 0065) — `command/parser.ts`
-  arrived at 65; ten others are over (`mutation.ts` 151 against 80, `table.ts` 101, `parser.ts` 97,
-  `document.ts` 94, `interaction.ts` 76…). **0065 recommends ~60-70; the amendment is the human's.**
+- **The §5.2 header budget (20-40 ordinary) is not reachable** — `command/parser.ts` arrived at 65;
+  ten others are over (`mutation.ts` 151 against 80, `table.ts` 101, `parser.ts` 97, `document.ts`
+  94, `interaction.ts` 76…). Entry 0065 and 0069-REVIEW §7 both recommend **~60-70 for a
+  first-of-subsystem file; the amendment is the human's.** `parser.ts`'s header may separately drop
+  ~10 lines by citing D-069 instead of restating it (0069-REVIEW fix 1).
 - **Three carried render gaps, all deliberate:** one `mutate` per pointer move, each deep-cloning the
   document (§5.9's perf note — any fix MUST throttle, never write outside `mutation.ts`) · cell text
   is not clipped to its cell (§5.4 silent, Rule 5) · `readNumber`/`asPointArray` still have two
@@ -83,6 +72,8 @@ clauses in one document plus pixels, and **clause (b) has no authoring path yet:
   stale "`graph/eval.ts` does not exist yet" claims in `schema.test.ts` (0058-REVIEW F2) — owned by
   whoever next touches those files. Plus ~20 "see the file header" pointers, of which only those
   deferring a function's OWN contract upward are defects (0065 F2).
+- **An end-to-end test through a table-creation command** is still owed by `renderer`, `hittest` and
+  `interaction`, which pin their table paths against FIXTURES only. Needs the handler.
 - **Carried unchanged, each with its pointer:** mixed line endings in the WORKING TREE only
   (`core.autocrlf=true`; a `.gitattributes` is a §6.1 trigger-6 escalation) · dangling-reference
   messages name the DEPENDENT, not the missing SOURCE (0045-REVIEW F4) · D-022's bounded-correctness
@@ -94,69 +85,68 @@ clauses in one document plus pixels, and **clause (b) has no authoring path yet:
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-068**) binds without restatement here. Newest:
-**D-066** an object that draws nothing is not hittable · **D-067** stroke-only hit-testing is correct
-while nothing can be filled and does NOT block Phase 3's gate · **D-068** §5.9's visual-feedback trio
-lands in ONE cycle, in the renderer, and `render/interaction.ts` is not its home.
+Every ruling in `DECISIONS.md` (D-001 through **D-070**) binds without restatement here. Newest:
+**D-069** `command/parser.ts` resolves NOTHING and takes no document — grammar failures are the
+parser's, identity failures the handler's, and `commands.ts` is the only place a `Command` meets a
+`Document` · **D-070** a creation command's `sides`/`rows`/`cols` are bounded by the HANDLER, and
+out of range REJECTS the mutation rather than producing an `ErrorValue` — bounds are provisional
+(`sides` 3–1000, `rows`/`cols` 1–1000) and the human may overrule the numbers, not the structure.
 
 ## Live PROVISIONAL tags and open questions
 
 **`PROVISIONAL(Q-013)` → `src/command/parser.ts`** (`matchArguments`'s formula guard). How is a
-general formula (`= polygon_b.origin.x * 2`) authored, when §5.10 has no command that takes one and
-§5.4's formula bar is unbuilt? Provisional: **refuse any unquoted argument beginning with `=`**,
-naming `link` in the message. Reversible — accepting `=` later changes the meaning of nothing that
-parses today. **Phase 4(b) cannot be authored until this is answered.**
+general formula (`= polygon_b.origin.x * 2`) authored, when §5.10 has no command that takes one?
+**ESCALATED TO THE HUMAN at 0069-REVIEW — awaiting a ruling, tag stays live; full text and the
+reviewer's endorsement of (a) `set <address> = <formula source>` are in `OPEN_QUESTIONS.md`.** Three
+constraints bind either way: the source is the RAW SUBSTRING from `=` to end-of-line, never
+re-joined tokens (D-038 clause 4) · the parser stays document-free (D-069) · `link` and a
+formula-writing `set` share ONE path. **Phase 4(b) cannot be authored until this is answered.**
 
 **`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** (`DEFAULT_SHAPE_STROKE_WIDTH`, the
 `TABLE_CELL_*` constants): world units or screen pixels? Provisional (a) world units. Due with the
-`style`-slots cycle — and now also blocking `pan`'s argument grammar.
+`style`-slots cycle — and also blocking `pan`'s argument grammar.
 
-Q-008 stays OPEN, deferred, blocking nothing; 0068 did not reopen it (a `-0` typed into `set` reaches
-the command object and `mutate` refuses it, exactly as option (a) says). **Q-001/Q-002 are ANSWERED
-(D-041, D-040) and come due at `command/commands.ts`** — reconcile, do not re-decide. Next free:
-**Q-014**.
+Q-008 stays OPEN, deferred, blocking nothing. **Q-001/Q-002 are ANSWERED (D-041, D-040) and come due
+at `command/commands.ts`** — reconcile, do not re-decide. Next free: **Q-014**.
 
 ## Gotchas for the next model
 
-- **`command/parser.ts` resolves NOTHING and takes no document — deliberate** (0068 Decision 1). Do
-  not add an `objects` parameter: a creation command's fresh id and default name come from
-  `nextObjectId`, so resolving there splits resolution across two files. §5.2's "resolve at parse
-  time" governs a STORED AST; a command object is never stored. **Grammar failures are the parser's,
-  identity failures the handler's** — `set polygon_1 42` (no dot) and `rename polygon_1 3bad` both
-  PARSE, following `address.ts`'s L-4 precedent; re-checking the address form in `command/` would be
-  a second definition of it (D-043).
-- **`command/parser.ts` does NOT call `parseFormula`, contradicting 0067-REVIEW §10 item 4** — no
-  §5.10 command takes a formula expression (0068 "Where I got stuck" #1). D-038's four conditions
-  come due wherever it IS first called: `commands.ts` if Q-013 lands as (a), else the formula-bar
-  cycle. **Read that disclosure before assuming either way.**
+- **`command/parser.ts` resolves NOTHING and takes no document — this is D-069 now, not a preference.**
+  Do not add an `objects` parameter. `set polygon_1 42` (no dot) and `rename polygon_1 3bad` both
+  PARSE by design, following `address.ts`'s L-4 precedent; re-checking the address form in `command/`
+  would be a second definition of it (D-043).
+- **`command/parser.ts` does NOT call `parseFormula`. 0067-REVIEW §10 item 4 said it would; that
+  carry-in was WRONG and is withdrawn** (0069-REVIEW §5). D-038's four conditions come due wherever
+  `parseFormula` IS first called — `commands.ts` if Q-013 lands as (a), else the formula-bar cycle.
 - **Quoting decides TYPE on the command line**: `set v.x 42` is the number, `"42"` the string, and a
-  quoted token is refused where a number is declared; a token is a bare word or a WHOLE quoted string
-  (no shell-style concatenation). **Positionals fill BEFORE flags**, so `delete force` deletes the
-  object *named* `force` — reordering makes such an object silently undeletable. **`COMMAND_NAMES`
-  and `COMMANDS_SPECIFIED_BUT_NOT_BUILT` must stay disjoint**; a test pins it.
+  quoted token is refused where a number is declared. **A quoted argument ends at its closing quote**
+  — `a"b` and `"a"b` are both rejected (0069-REVIEW F1 fixed the second; it used to parse
+  `delete "a"force` as `force: true` silently). **Positionals fill BEFORE flags**, so `delete force`
+  deletes the object *named* `force`. **`COMMAND_NAMES` and `COMMANDS_SPECIFIED_BUT_NOT_BUILT` must
+  stay disjoint**; a test pins it.
 - **A non-finite or `-0` number typed into `set` reaches the command object unchanged** — D-031
   clause 3: a text-scanning stage does not enforce document-state policy, `mutate` refuses it
-  (D-025). Do not add a guard in `command/`.
+  (D-025). Do not add a guard in `command/`. **D-070 is the one exception and it is the HANDLER's,
+  not the parser's.**
 - **`render/interaction.ts` draws NOTHING and touches no canvas — D-068 binds it.** The trio goes in
-  ONE cycle, in the renderer, and `renderDocument` widens to carry the selection. **`main.ts` must
-  reset the canvas transform** before screen-space chrome; `renderDocument` returns with the camera
-  transform standing. **A rejected drag step does not advance `lastWorldPoint`** (the delta is
-  retried, not lost), and a drag **holds the object's `id`, never the `GraphObject`**.
+  ONE cycle, in the renderer. **`main.ts` must reset the canvas transform** before screen-space
+  chrome. **A rejected drag step does not advance `lastWorldPoint`**, and a drag holds the object's
+  `id`, never the `GraphObject`.
 - **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it
-  (D-065)**; 0068 grepped for `command` before logging, fixed two sites and left four alone. And
-  **`createObject` requires ALL derived-slot placeholders** — nine for a preset (D-018), built from
-  `getObjectSchema`; **an object with a slot shape its schema FORBIDS cannot go through `mutate` at
-  all**, so fixture one on `polyline`, which has no schema (D-017's exception).
+  (D-065).** Entry 0068 swept for this and still missed one in a file it was already editing
+  (0069-REVIEW F2): grep the whole file, not just the line you came for. And **`createObject`
+  requires ALL derived-slot placeholders** — nine for a preset (D-018); **an object with a slot shape
+  its schema FORBIDS cannot go through `mutate` at all**.
 - **Three different reasons to read a slot, and they do NOT unify** (0062-REVIEW §2, 0067-REVIEW
   §11): to DRAW/HIT-TEST (`readNumber`, kind-blind), to SIZE the slot set (`readTableDimension`,
   `literal`-only), to decide whether it may be WRITTEN (`interaction.ts`, kind-aware).
-- **Four rulings the code depends on constantly, stated in DECISIONS.md and not restated here:**
-  D-064 (all three presets wind counterclockwise, pinned) · D-005 (a slot's stored key is the PATH
-  joined with `.` — `cells.A1`, never `A1`) · D-066 (a degenerate extent needs its OWN guard, tested
-  at the ORIGIN of the box) · D-061 (`camera.x`/`camera.y` is the world point at the screen's
-  TOP-LEFT corner, not centre). Also house style: close every discriminated-union `switch` with
-  `const exhaustive: never = x; void exhaustive;`, and **`render/` and `command/` are not `engine/`**
-  — `command/` is outside `tsconfig.engine.json`, so run BOTH configs anyway.
-- **When a suite passes on its first run, mutation-check it.** 0068 neutralised six load-bearing
-  lines one at a time; each was caught by a named test — the only evidence a green suite
-  discriminates (D-016's own lesson).
+- **Cite the ruling you actually mean.** Entry 0068 attributed "declare vocabulary once" to D-010,
+  which is about `slotKey()` (0069-REVIEW F4). A wrong `(D-0XX)` sends the next reader to the wrong
+  argument. Also standing: D-064 (presets wind counterclockwise) · D-005 (a slot's stored key is the
+  PATH joined with `.`) · D-066 (a degenerate extent needs its OWN guard) · D-061 (`camera.x`/`.y` is
+  the world point at the screen's TOP-LEFT corner). House style: close every discriminated-union
+  `switch` with `const exhaustive: never = x; void exhaustive;`, and **`render/` and `command/` are
+  not `engine/`** — `command/` is outside `tsconfig.engine.json`, so run BOTH configs anyway.
+- **When a suite passes on its first run, mutation-check it.** Entry 0068 neutralised six
+  load-bearing lines; 0069-REVIEW neutralised its own new guard. Every mutant was caught by a NAMED
+  test — the only evidence a green suite discriminates (D-016's own lesson).

@@ -11,7 +11,8 @@
  *
  * WHAT THIS IS
  *   `DEFAULT_TABLE_ROWS`/`DEFAULT_TABLE_COLS` — §5.4's "Default 8×8", as plain
- *   constants a future table-creation command will read.
+ *   constants; `command/parser.ts` applies them when a `table` command omits
+ *   `rows`/`cols`, and nothing in this file writes them anywhere.
  *
  *   `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` — the two ordinary, fixed, literal slot paths
  *   holding a table's current row/column count, declared as a `static` group in
