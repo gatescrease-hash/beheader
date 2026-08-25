@@ -122,9 +122,16 @@ import { worldToScreen } from "./camera.ts";
 const DEFAULT_SHAPE_STROKE_STYLE = "#1a1a1a";
 const DEFAULT_SHAPE_STROKE_WIDTH = 1;
 
-/** §5.4: "fixed-size cells." World-unit constants — untuned (Rule 5), scale on screen with zoom like everything else drawn here. PROVISIONAL(Q-012), same reading as the stroke width above. */
-const TABLE_CELL_WIDTH = 80;
-const TABLE_CELL_HEIGHT = 24;
+/**
+ * §5.4: "fixed-size cells." World-unit constants — untuned (Rule 5), scale on
+ * screen with zoom like everything else drawn here. PROVISIONAL(Q-012), same
+ * reading as the stroke width above. Exported: `render/hittest.ts`'s table
+ * bounding-box test (§5.9) needs the SAME cell size this file draws with —
+ * D-010's "declare once" principle, so a future resize of these two constants
+ * can never leave the picture and the click box disagreeing.
+ */
+export const TABLE_CELL_WIDTH = 80;
+export const TABLE_CELL_HEIGHT = 24;
 const TABLE_CELL_TEXT_PADDING = 4;
 const TABLE_GRID_STROKE_STYLE = "#999999";
 const TABLE_CELL_TEXT_STYLE = "#1a1a1a";
@@ -204,8 +211,13 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   }
 }
 
-/** A slot's current value, narrowed to `number` — `undefined` for anything else (missing, wrong-typed, an `ErrorValue`). Never throws. */
-function readNumber(object: GraphObject, path: readonly string[]): number | undefined {
+/**
+ * A slot's current value, narrowed to `number` — `undefined` for anything else
+ * (missing, wrong-typed, an `ErrorValue`). Never throws. Exported: `render/
+ * hittest.ts` reads the same `origin.x`/`origin.y` paths for its table
+ * bounding-box test and must not re-derive this narrowing separately (D-010).
+ */
+export function readNumber(object: GraphObject, path: readonly string[]): number | undefined {
   const value = getSlot(object, path)?.value;
   return typeof value === "number" ? value : undefined;
 }
@@ -236,9 +248,11 @@ function drawCircle(ctx: CanvasRenderingContext2D, object: GraphObject): void {
  * else, an `ErrorValue` included. `readonly Point[]` is the ONLY array arm of
  * `Value` (§5.1, `graph/node.ts`), so `Array.isArray` alone excludes every
  * other member and no separate `isErrorValue` guard is needed here (an
- * `ErrorValue` is not an array). Never throws.
+ * `ErrorValue` is not an array). Never throws. Exported: `render/hittest.ts`
+ * reads the same `vertices` slot for its stroke distance-to-segment test and
+ * must not re-derive this narrowing separately (D-010).
  */
-function asPointArray(value: Value | undefined): readonly Point[] | undefined {
+export function asPointArray(value: Value | undefined): readonly Point[] | undefined {
   if (value === undefined || !Array.isArray(value)) {
     return undefined;
   }
