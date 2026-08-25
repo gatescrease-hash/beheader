@@ -8,11 +8,54 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-012**
+Next free ID: **Q-013**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-012 — Is a stroke width (and the table's cell size / font size) measured in WORLD units or in SCREEN pixels?
+Raised: entry 0062-REVIEW-phase3 (reviewer)   Brief section: §5.5 (`style.strokeWidth`), §5.9
+Status: **OPEN — deferred to the cycle that declares real `style` slots.** Blocks nothing today:
+`primitives/geometry.ts` declares no `style` slots at all, so nothing can yet author a width.
+
+Ambiguity: `render/renderer.ts` applies the camera as a single canvas transform and then draws in
+raw world coordinates (entry 0061 Decision 2 — the right call, and the reason `renderer.ts` cannot
+compute a different mapping than `camera.ts` does). Everything downstream of that transform is
+therefore in WORLD units, `ctx.lineWidth` and `ctx.font` included. §5.5 puts `strokeWidth` inside
+the shape's own `style` block and never says which space it is in. §5.9 attaches the only
+pixel-denominated measurement in the brief to a different thing: hit-testing's "distance-to-segment
+with **pixel tolerance** for strokes."
+
+The consequence is real and currently invisible only because nothing can create an object yet: a
+1-unit stroke is 0.01 screen px at `MIN_ZOOM` and 100 px at `MAX_ZOOM`. Zoomed out, every shape's
+outline vanishes; zoomed in, it becomes a slab.
+
+Options:
+(a) **World units.** A stroke is a property of the shape, so it scales with the shape. Nothing to
+    build — this is what the tree does. §5.9's pixel tolerance stays a hit-testing concept and
+    never touches drawing.
+(b) **Screen pixels.** Stroke width (and the table's grid lines / font) stay constant on screen at
+    every zoom — the CAD/Figma convention, and the one that keeps a hairline a hairline. Costs
+    `ctx.lineWidth = width / camera.zoom` before each stroke, which reintroduces a per-draw-call
+    dependency on `camera.zoom` in a file that currently has exactly one.
+(c) **Split:** shape strokes in world units (a); table CHROME — grid lines, cell size, font — in
+    screen pixels, on the grounds that a table is a widget rather than a drawing. Costs a second
+    coordinate convention inside one file.
+
+Recommendation: **(a)**, and note that (a) and §5.9's pixel-tolerance hit-testing do not conflict —
+drawing and hit-testing are allowed to measure differently, and the brief already says they do.
+Reason: it is what §5.5's own placement of `strokeWidth` implies, it is the smaller diff (zero),
+and it is the easiest to reverse — (b) is a one-line change at two call sites, made once the width
+comes from a slot instead of a constant. Flagging rather than ruling because "do outlines get
+thinner as you zoom out" is a product-visual call, and PROCESS_BRIEF §1 makes the human the arbiter
+of those.
+
+Reversible? Yes — cheaply, and nothing in document state depends on it either way. Provisional
+choice taken: yes, (a), already in the tree. Tagged at: `src/render/renderer.ts`
+(`DEFAULT_SHAPE_STROKE_WIDTH` and the `TABLE_CELL_*` constants).
 
 ---
 

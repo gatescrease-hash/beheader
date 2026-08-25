@@ -5,10 +5,11 @@
  * LAYER: application entry. May touch the DOM — this is the one file allowed to.
  *
  * WHAT THIS IS
- *   A stub. `render/` holds camera math only (`render/camera.ts`, §5.9) and there is
- *   no renderer or `command/` yet, so nothing here has anything to wire together.
- *   This file exists so the Vite scaffold has a valid entry point and `npm run dev` /
- *   `npm run build` succeed.
+ *   A stub. `render/` holds camera math (`render/camera.ts`) and a ready-to-wire
+ *   `renderDocument` (`render/renderer.ts`, §5.9), but there is no `command/` yet —
+ *   so there is no way for a user to create an object, and nothing for this file to
+ *   put on screen but an empty canvas. This file exists so the Vite scaffold has a
+ *   valid entry point and `npm run dev` / `npm run build` succeed.
  *
  * NOT DONE HERE
  *   Everything, including injecting the Canvas2D `TextMeasurer` the engine takes

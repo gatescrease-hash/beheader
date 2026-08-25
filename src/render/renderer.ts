@@ -63,6 +63,12 @@
  *     so one broken object cannot take the whole frame down.
  *   - No engine state is ever written here (Rule 2) — every function below
  *     only READS `GraphObject`/`Value` and calls `ctx` methods.
+ *   - `ctx` is left holding the CAMERA transform on return, not identity —
+ *     harmless frame to frame (`clearScreen` resets to identity first thing
+ *     next frame), but a caller drawing SCREEN-space chrome after this
+ *     function — a selection handle, an error badge, a HUD — must reset the
+ *     transform itself first or it will be drawn camera-warped. Flagged for
+ *     `render/interaction.ts` (0062-REVIEW edit 3).
  *
  * NOT DONE HERE
  *   - Selection highlight, error badges, and "formula-driven" slot indicators
@@ -103,11 +109,20 @@ import { formatCellReference, TABLE_CELL_PATH_PREFIX } from "../engine/address.t
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
 
-/** World-unit defaults — no `style` slot exists yet (see file header). Round, untuned (Rule 5). */
+/**
+ * World-unit defaults — no `style` slot exists yet (see file header). Round,
+ * untuned (Rule 5).
+ *
+ * PROVISIONAL(Q-012): the WIDTH is in world units, so it scales with zoom —
+ * 1 world unit is 0.01 screen px at `MIN_ZOOM` and 100 px at `MAX_ZOOM`.
+ * §5.5 puts `strokeWidth` inside the shape's own `style` (a property of the
+ * shape, not of the view), which is why this is the taken reading; the cycle
+ * that declares real `style` slots settles it.
+ */
 const DEFAULT_SHAPE_STROKE_STYLE = "#1a1a1a";
 const DEFAULT_SHAPE_STROKE_WIDTH = 1;
 
-/** §5.4: "fixed-size cells." World-unit constants — untuned (Rule 5), scale on screen with zoom like everything else drawn here. */
+/** §5.4: "fixed-size cells." World-unit constants — untuned (Rule 5), scale on screen with zoom like everything else drawn here. PROVISIONAL(Q-012), same reading as the stroke width above. */
 const TABLE_CELL_WIDTH = 80;
 const TABLE_CELL_HEIGHT = 24;
 const TABLE_CELL_TEXT_PADDING = 4;
@@ -175,6 +190,17 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject): void {
     case "value":
     case "add":
       return; // No schema/visual definition yet (see file header's NOT DONE HERE).
+    default: {
+      // Compile-time exhaustiveness, WITHOUT a throw — the same arm every other
+      // discriminated-union switch in this codebase carries (`formula/deps.ts`,
+      // `formula/eval.ts`, `formula/parser.ts`, `mutation.ts`). It is what makes
+      // a NEW `ObjectType` a compile error here instead of an object that
+      // silently draws nothing: §5.5's `polyline` and §5.6's `text` are both
+      // already promised, so this arm has a caller coming (0062-REVIEW edit 1).
+      const exhaustive: never = object.type;
+      void exhaustive;
+      return;
+    }
   }
 }
 
@@ -205,9 +231,15 @@ function drawCircle(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   ctx.stroke();
 }
 
-/** Narrows a slot's current value to a `Point[]` — `undefined` for anything else, including an `ErrorValue` (checked first: `isErrorValue` before `Array.isArray`, since neither test alone excludes the other member). Never throws. */
+/**
+ * Narrows a slot's current value to a `Point[]` — `undefined` for everything
+ * else, an `ErrorValue` included. `readonly Point[]` is the ONLY array arm of
+ * `Value` (§5.1, `graph/node.ts`), so `Array.isArray` alone excludes every
+ * other member and no separate `isErrorValue` guard is needed here (an
+ * `ErrorValue` is not an array). Never throws.
+ */
 function asPointArray(value: Value | undefined): readonly Point[] | undefined {
-  if (value === undefined || isErrorValue(value) || !Array.isArray(value)) {
+  if (value === undefined || !Array.isArray(value)) {
     return undefined;
   }
   return value as readonly Point[];

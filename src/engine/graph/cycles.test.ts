@@ -1,9 +1,9 @@
 /**
  * cycles.test.ts — Tests for naive DFS cycle detection (§5.1 step 5).
  *
- * Colocated with cycles.ts per D-001. `mutation.ts` does not exist yet, so
- * these tests build `Edge[]` fixtures by hand rather than deriving them from
- * real formula ASTs.
+ * Colocated with cycles.ts per D-001. These tests build `Edge[]` fixtures by
+ * hand rather than deriving them from real formula ASTs through `mutation.ts`,
+ * so they exercise cycle detection itself and nothing upstream of it.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";

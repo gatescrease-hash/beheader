@@ -97,6 +97,27 @@ describe("renderDocument — clear and camera transform", () => {
     expect(calls[2]).toEqual({ op: "setTransform", a: 2, b: 0, c: 0, d: 2, e: -20, f: -40 });
   });
 
+  it("passes RAW WORLD coordinates to every draw call under a non-identity camera — the canvas transform does the conversion, never a second per-vertex worldToScreen", () => {
+    const { ctx, calls } = createFakeContext();
+    const camera: CameraState = { x: 10, y: 20, zoom: 2 };
+    const circle: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 3 },
+        "origin.y": { kind: "literal", value: 4 },
+        radius: { kind: "literal", value: 10 },
+      },
+    };
+    renderDocument(ctx, 800, 600, [circle], camera);
+    // World (3,4) r=10 stays (3,4) r=10 — NOT worldToScreen'd to (-14,-32) r=20.
+    // Double-transforming is exactly what the single setTransform above exists
+    // to prevent, and every OTHER shape test here uses an identity camera, where
+    // the two are indistinguishable (0062-REVIEW edit 2).
+    expect(calls.filter((call) => call.op === "arc")).toEqual([{ op: "arc", x: 3, y: 4, radius: 10, startAngle: 0, endAngle: Math.PI * 2 }]);
+  });
+
   it("draws objects in array order (z-order, disclosed as document order — see file header)", () => {
     const { ctx, calls } = createFakeContext();
     const circleA: GraphObject = {

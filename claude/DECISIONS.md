@@ -1712,3 +1712,42 @@ are unreachable through any preset TODAY. That guard is still correct and still 
 `polyline` will hand it one — but the reachability lives in the CONTRACT, not in the current
 pipeline. Entry 0059's Decision 4 got the code right and overstated the asymmetry; see
 0060-REVIEW-phase3 §5.
+
+---
+
+## D-065 — A cycle owns every comment its own work makes false, not only the comments it writes
+Ruled: entry 0062-REVIEW-phase3 (reviewer)   Binding on: every cycle. Extends **D-060**/**D-063**
+rather than replacing either.
+
+D-060 bans the diary comment. D-063 requires a header to state its own file's present contract.
+Both regulate a file's description of **itself**. The gap, found four times now and twice in entry
+0061's own blast radius: a comment's claim about **another** file. `main.ts` said "there is no
+renderer or `command/` yet"; `primitives/geometry.ts` said "nothing consumes `style` yet (no
+renderer)"; `graph/cycles.test.ts` and `graph/eval.test.ts` both said "`mutation.ts` does not exist
+yet." Every one was true when written. Every one was false the moment the named file landed — and
+the cycle that landed it is the only cycle in a position to notice.
+
+**Ruling.** Before writing your log entry, grep the tree for the name of every file, subsystem, or
+capability you just created, and correct every existing comment that asserts it does not exist.
+**A cross-file existence claim is owned by whoever falsifies it, not by whoever wrote it** — it is
+part of your slice, not a drive-by refactor, and PROCESS_BRIEF §4's "never refactor code you did
+not write" does not shield it (that rule is about CODE; this is about a statement your own work
+made untrue). State it in the log entry the same way you state any other file you touched.
+
+Second half, preventive: **prefer a sentence that cannot go stale.** Say what the code here does
+and why, not what elsewhere lacks. `graph/eval.test.ts`'s corrected header says these tests build
+fixtures by hand "so they exercise the topological pass itself and nothing upstream of it" — a
+reason that stays true forever, where "`mutation.ts` does not exist yet" was a fact with a
+one-cycle shelf life. Where the absence really is the point (this file's `NOT DONE HERE` blocks),
+name the file that will own it rather than asserting the world's current inventory.
+
+**Rationale.** This is the same defect D-060 and D-063 were each ruled for, arriving from the one
+direction neither covers, and it is the most harmful tier of the three: not a comment that is
+merely dated, but a comment that is FALSE, sitting in a file a reader opens precisely to find out
+what exists. A model orienting off `main.ts` in the next cycle would have been told the renderer
+it is about to wire does not exist. The reader who skims or greps — PROCESS_BRIEF §5.2's own stated
+worry — has no way to catch it.
+
+Reconciliation required: none outstanding. All four sites above are fixed at this review. The
+thirteen bare "this cycle" sites in test files (0058-REVIEW Finding 2) are a DIFFERENT class —
+D-063's, still open, still blocking nothing.

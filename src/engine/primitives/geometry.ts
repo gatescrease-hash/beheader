@@ -87,10 +87,11 @@
  *   - `Segment`/`closed`/`style` as slots. §5.5's general `Path` shape names
  *     all three, but none is needed by a preset: a preset's shape is fully
  *     parametric (no per-segment data), always closed (not user-toggled),
- *     and nothing consumes `style` yet (no renderer). Building them now would
- *     be building ahead of the phase that needs them, with no default-kind
- *     mechanism yet to give them a creation-time value (`schema.ts`'s own
- *     NOT DONE HERE).
+ *     and nothing consumes `style` yet — `render/renderer.ts` draws every
+ *     shape with one hardcoded default stroke, for want of these. Building
+ *     them now would be building ahead of the phase that needs them, with no
+ *     default-kind mechanism yet to give them a creation-time value
+ *     (`schema.ts`'s own NOT DONE HERE).
  *   - The circle's TRUE arc for rendering — §5.5: "the renderer still draws a
  *     true arc" from `origin`/`radius` directly; `vertices` here is
  *     explicitly the polygonal APPROXIMATION used for bounds/hit-testing

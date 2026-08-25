@@ -1,10 +1,10 @@
 /**
  * eval.test.ts — Tests for naive full topological evaluation (§5.1 step 7).
  *
- * Colocated with eval.ts per D-001. `mutation.ts` does not exist yet, so these
- * tests build `GraphObject[]`/`Edge[]` fixtures by hand — exactly what
- * mutation.ts step 3 would eventually derive — rather than deriving them from
- * real formula ASTs or schema declarations end-to-end.
+ * Colocated with eval.ts per D-001. These tests build `GraphObject[]`/`Edge[]`
+ * fixtures by hand — exactly what `mutation.ts` step 3 derives — rather than
+ * going through real formula ASTs or schema declarations end-to-end, so they
+ * exercise the topological pass itself and nothing upstream of it.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
