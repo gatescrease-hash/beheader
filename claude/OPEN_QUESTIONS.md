@@ -18,11 +18,16 @@ Next free ID: **Q-014**
 
 ## Q-013 — How is a general formula authored, given §5.10 has no command that takes one and Phase 4(b) requires one?
 Raised: entry 0068 (implementer)   Brief section: §5.10, §5.4, §6 (Phase 4b)
-Status: **OPEN — provisional choice taken, reversible. ESCALATED TO THE HUMAN at 0069-REVIEW-phase3;
-the reviewer endorses (a) but declines to rule it.** Blocks nothing in Phase 3; comes due before
-Phase 4's gate can be claimed.
+Status: **ANSWERED → D-071.** The human ruled **option (a)** at entry 0070: `set <address> =
+<formula source>`. Escalated at 0069-REVIEW-phase3 with the reviewer endorsing (a); the human
+confirmed it and added the direction that became **D-072**. Built and reconciled at entry 0070 —
+the `PROVISIONAL(Q-013)` tag is gone and `matchArguments`'s guard is now the formula path itself.
+**Phase 4(b) has an authoring path.**
 
-**Reviewer's position (0069-REVIEW-phase3) — read this before implementing anything here.**
+The reviewer's reasoning below is kept because its three constraints became D-071's clauses 1, 2
+and 4 and still bind. Nothing here is open.
+
+**Reviewer's position (0069-REVIEW-phase3) — the argument D-071 rests on.**
 
 The question is correctly raised and correctly left open. It is *escalated, not answered*, because
 it asks what the operator's command line should be able to SAY, and D-042 makes the operator the
@@ -52,9 +57,8 @@ they are binding now:**
    `link a.b c.d` is `set a.b = c.d`'s degenerate case (§5.1), and two code paths writing a formula
    slot will drift on what D-040 says they must report and on what D-041 leaves behind.
 
-Until the human rules, the provisional refusal below stands unchanged and the `PROVISIONAL(Q-013)`
-tag stays live — it is a genuinely open question with a reversible choice taken at one site, which
-is what §7 asks for.
+*(Superseded by the ruling: the provisional refusal described below is gone, replaced at entry 0070
+by the formula path itself. Kept in place per §2 — an answered question is marked, not deleted.)*
 
 Ambiguity: §5.10 lists no command that takes a formula EXPRESSION. `link polygon_1.origin.x
 table_x.A1` makes only §5.1's degenerate formula `= other.slot`. `set polygon_1.radius 42` is shown

@@ -1954,3 +1954,98 @@ Something can now. The failure mode is not a wrong value, it is an unbounded slo
 one typed line — which under Rule 5's deliberately un-optimised mutation loop (a deep clone per
 mutation) is a hang with no error, the one class of failure this project's error-value idiom cannot
 express. A bound picked badly costs an argument; no bound costs a wedged tool with a clean log.
+
+---
+
+## D-071 — A formula is authored with `set <address> = <formula source>` (Q-013 answered by the human: option (a))
+Answers: Q-013   Ruled: entry 0070 (human, 2026-08-25)   Binding on: `command/parser.ts`,
+`command/commands.ts`, and §5.4's formula bar when it lands
+
+`set` writes a literal when its value is a literal and a **formula** when the value position begins
+with `=`. This is the spreadsheet's own gesture and §5.4's formula bar will do the same thing, so
+one spelling serves both surfaces. The provisional refusal taken at entry 0068 is lifted.
+
+Binding on the implementation:
+
+1. **The formula source is the RAW SUBSTRING of the line from the `=` character to the end of the
+   line, verbatim** — never re-joined from tokens. Re-joining discards the operator's own spacing
+   and the character offsets that `CommandParseFailure.start` and `ParseError`'s position are built
+   on, and D-038 clause 4 forbids the layer that rejects a formula from discarding its source.
+2. **The parser does not parse it (D-069).** `SetCommand` carries the source text; `commands.ts`
+   calls `parseFormula`, which is where D-038's four conditions come due.
+3. **A quoted value is never a formula.** `set text_1.content "= not a formula"` writes the string.
+   Quoting decides type, as it already did.
+4. **`link` and a formula-writing `set` build their slot through ONE path in `commands.ts`.**
+   `link a.b c.d` is the degenerate case of `set a.b = c.d` (§5.1), and two paths writing a formula
+   slot will drift on what D-040 makes them report and what D-041 leaves behind.
+
+Reconciliation required: grep `PROVISIONAL(Q-013)` and resolve — done at entry 0070.
+
+---
+
+## D-072 — A command word typed alone ENTERS an AutoCAD-style prompt sequence. Every prompt accepts a typed value or a picked point
+Ruled: entry 0070 (human direction, 2026-08-25)   Binding on: `command/`, `main.ts`, and every
+command added from here
+
+**The human's direction, verbatim in substance:** the command line's job is to invoke placement and
+creation with minimal typing. AutoCAD's `CIRCLE` is the model — type the word, get prompted for a
+centre point (pick it, or type coordinates), then for a radius (pick a point at that distance, or
+type a number). That system works; build it.
+
+This extends §5.10, which shows only complete one-line forms. It does not replace them.
+
+### The shape
+
+1. **`command/prompt.ts` holds a pure state machine.** It takes a command word and a stream of
+   responses, and yields either the next prompt or a finished `Command`. It is the same layer as
+   `parser.ts` and inherits D-069 unchanged: **no document, no canvas, no DOM, no `render/` import.**
+   A pick reaches it as a WORLD point `{ x, y }`; screen-to-world is `render/camera.ts`'s and
+   `main.ts` does the conversion. This is Rule 1's reasoning applied one layer out — the machine
+   must be testable without a canvas fake, the property entry 0066 earned for `render/interaction.ts`
+   and D-068 protects.
+
+2. **The prompt sequence is declared in the SAME registry entry.** §5.10's "adding a command is one
+   registry entry" survives this: a spec gains an optional `prompts` array, and a command with no
+   `prompts` behaves exactly as it does today. There is no second registry and no dispatch switch.
+
+3. **A line is a sequence of prompt responses.** `circle`, `circle 100,100`, and `circle 100,100 20`
+   are the same command at three stages of completion — this is AutoCAD's space-is-enter behaviour
+   and it makes the partial-input case fall out rather than being special-cased. The `key=value`
+   form (`circle x=100 y=100 r=20`) stays as an alternative COMPLETE form, unchanged and still
+   pinned by its §5.10 tests. **Both forms MUST produce the identical `Command`.**
+
+4. **The typed point literal is `x,y`** — the brief's own syntax, taken from §5.10's
+   `polyline 0,0 100,0 100,100` and `addvertex polyline_1 100,100`. It is not invented here.
+   AutoCAD's relative form (`@10,10`) is NOT built: §5.10 shows none, Rule 5 governs, and adding one
+   later is additive.
+
+5. **A step may read an earlier step's answer.** `radius` is "distance from the centre you just
+   gave", so a picked point at a `distance` step becomes `Math.hypot` from the point a named earlier
+   step produced. This is the whole reason the machine holds gathered values rather than converting
+   each response in isolation, and it is the gesture the human's direction is actually about.
+
+6. **Empty input takes the default, and the prompt shows it** — `specify rows <8>:`, AutoCAD's own
+   convention. A step with no default and no input re-prompts.
+
+7. **Bad input re-prompts the SAME step and does not abort the command.** AutoCAD's behaviour, and
+   the correct one: an operator three picks into a command must not lose them to one typo. A command
+   is abandoned only by an explicit cancel.
+
+8. **`rect` prompts for two corners**, as AutoCAD's RECTANG does, and derives
+   `x = min`, `y = min`, `w = |dx|`, `h = |dy|`. The preset is corner-anchored and `#TYPE`s on a
+   negative `width`/`height` (`primitives/geometry.ts`), so normalising here means a pick in any
+   direction draws a rectangle instead of an error value.
+
+### Deferred, explicitly
+
+**Object-selection prompts** (`select`, `delete`, `refs` prompting "select an object:") are the same
+machine with an `object` accept kind, and they are NOT built here: resolving a pick to an object
+needs `render/hittest.ts` and a document, which is `main.ts`'s wiring cycle. Until then those
+commands keep their typed-name form only. A `prompts` entry is how they will be added — one
+registry entry, per clause 2.
+
+**Rationale.** The alternative — leaving every creation command a full typed line — makes the tool
+unusable for the thing it is for. A drawing tool where placing a circle means typing four numbers
+you would rather point at is a spreadsheet with a canvas attached. The design cost of this ruling is
+one pure module and one optional field on a registry entry; the cost of not making it is paid at
+every single object the operator ever creates.

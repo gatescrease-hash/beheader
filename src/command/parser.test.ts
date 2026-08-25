@@ -178,7 +178,7 @@ describe("named arguments (the creation commands)", () => {
 
   it("rejects a key with no value and a value with no key", () => {
     expect(rejected("circle x= y=0 r=1").message).toContain('"x=" is not a key=value argument');
-    expect(rejected("circle =1 y=0 r=1").message).toContain('may not begin with "="');
+    expect(rejected("circle =1 y=0 r=1").message).toContain('"=1" is not a key=value argument');
   });
 
   it("rejects a non-numeric value, pointing at the argument that carries it", () => {
@@ -206,7 +206,7 @@ describe("positional arguments", () => {
   });
 
   it("rejects a bare word that is no literal at all, naming the parameter and the usage", () => {
-    expect(rejected("set v.x hello").message).toBe('<value> must be a number, a quoted string, TRUE, or FALSE, got "hello" — usage: set <address> <value>');
+    expect(rejected("set v.x hello").message).toBe('<value> must be a number, a quoted string, TRUE, or FALSE, got "hello" — usage: set <address> <value> | set <address> = <formula>');
   });
 
   it("refuses a quoted number where a number is declared, because quoting means the value is text", () => {
@@ -276,21 +276,54 @@ describe("what this parser deliberately leaves to command/commands.ts", () => {
   });
 });
 
-describe("formula syntax on the command line (Q-013, provisional)", () => {
-  it("refuses an argument that begins with = and says where a binding comes from instead", () => {
-    const line = "set table_x.B1 = polygon_b.origin.x * 2";
-    const failed = rejected(line);
-    expect(failed.start).toBe(line.indexOf("="));
-    expect(failed.message).toContain('may not begin with "="');
-    expect(failed.message).toContain("link <address> <address>");
-    expect(failed.message).toContain("Q-013");
+describe("formula syntax on the command line (D-071 — Q-013 answered by the human: option (a))", () => {
+  it("makes `set <address> = <formula>` a formula command rather than a literal one", () => {
+    expect(parsed("set table_x.B1 = polygon_b.origin.x * 2")).toEqual({
+      kind: "set-formula",
+      target: "table_x.B1",
+      source: "= polygon_b.origin.x * 2",
+    });
   });
 
-  it("refuses it with no space after the equals sign too, so the shape rather than the spacing is what is refused", () => {
-    expect(rejected("set table_x.B1 =polygon_b.origin.x").message).toContain('may not begin with "="');
+  it("carries the RAW substring of the line, spacing and all, because re-joining tokens would discard what a #PARSE message points at (D-071 clause 1, D-038 clause 4)", () => {
+    expect(parsed("set a.b =   SUM(A1:A5)  *  2  ")).toEqual({
+      kind: "set-formula",
+      target: "a.b",
+      source: "=   SUM(A1:A5)  *  2  ",
+    });
   });
 
-  it("accepts an equals sign inside a quoted value, which is text and not an attempt at a formula", () => {
+  it("does not require a space after the equals sign, so the shape rather than the spacing decides", () => {
+    expect(parsed("set table_x.B1 =polygon_b.origin.x")).toEqual({
+      kind: "set-formula",
+      target: "table_x.B1",
+      source: "=polygon_b.origin.x",
+    });
+  });
+
+  it("parses nothing in the source — commands.ts calls parseFormula, so a syntactically broken formula still reaches it (D-069, D-071 clause 2)", () => {
+    expect(parsed("set a.b = ((( not a formula")).toEqual({
+      kind: "set-formula",
+      target: "a.b",
+      source: "= ((( not a formula",
+    });
+  });
+
+  it("keeps an equals sign inside a quoted value a string, because quoting decides type everywhere on this line (D-071 clause 3)", () => {
     expect(parsed('set text_1.content "= not a formula"')).toEqual({ kind: "set", target: "text_1.content", value: "= not a formula" });
+  });
+
+  it("rejects an equals sign with no formula after it, which is arity and therefore this file's", () => {
+    expect(rejected("set a.b =").message).toContain('needs a formula after "="');
+    expect(rejected("set a.b =    ").message).toContain('needs a formula after "="');
+  });
+
+  it("refuses a formula to a command that takes none, naming the one command that does", () => {
+    expect(rejected("rename polygon_1 =other").message).toBe('"rename" takes no formula — only "set <address> = <formula>" does (D-071)');
+    expect(rejected("link a.b =c.d").message).toContain("takes no formula");
+  });
+
+  it("lets a keyless key=value explain itself rather than blaming a formula, which is the better of the two messages", () => {
+    expect(rejected("circle =1 y=0 r=1").message).toContain('"=1" is not a key=value argument');
   });
 });
