@@ -775,6 +775,13 @@ function matchArguments(
   // distributed, because the tokens after the `=` belong to the formula, not to the
   // command. The source keeps the `=` and the operator's spacing: `commands.ts` calls
   // `parseFormula` (D-069), and D-038 clause 4 forbids discarding the text it rejects.
+  //
+  // HAZARD — `tokens[formulaAt]` indexes the RAW token list by a POSITIONAL index, and
+  // those two agree only while the command has no named parameters and no flags to
+  // interleave. `set` is the only `literal-or-formula` command and has neither, so the
+  // indices coincide today. A command declaring a formula position ALONGSIDE `key=value`
+  // arguments would read the wrong token here — distribute first and locate the formula
+  // in `positionalTokens` if one is ever added (0071-REVIEW F5).
   const formulaAt = spec.positional.findIndex((parameter) => parameter.kind === "literal-or-formula");
   const formulaToken = formulaAt >= 0 ? tokens[formulaAt] : undefined;
   const isFormula = formulaToken !== undefined && !formulaToken.quoted && formulaToken.text.startsWith("=");

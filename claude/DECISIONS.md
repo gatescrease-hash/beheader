@@ -2049,3 +2049,50 @@ unusable for the thing it is for. A drawing tool where placing a circle means ty
 you would rather point at is a spreadsheet with a canvas attached. The design cost of this ruling is
 one pure module and one optional field on a registry entry; the cost of not making it is paid at
 every single object the operator ever creates.
+
+---
+
+## D-073 — A formula's source text is NEVER subject to command-line tokenization. The command lexer stops at the `=`
+Answers: 0071-REVIEW F1   Ruled: entry 0071-REVIEW-phase3 (reviewer)
+Binding on: `command/parser.ts`, `command/prompt.ts`, §5.4's formula bar, and every future
+surface that authors a formula from typed text
+
+D-071 clause 1 says the formula source is "the RAW SUBSTRING of the line from the `=` character to
+the end of the line, verbatim." Entry 0070 implements the slice correctly and still fails the
+clause's purpose, because `parseCommand` tokenizes the WHOLE line before `matchArguments` discovers
+there is a formula in it. The command lexer's quoting rules therefore run over formula text they do
+not govern:
+
+```
+set a.b = CONCAT("a", "b")              REJECTED — "a quote must open an argument, not sit inside one"
+set a.b = CONCAT( "a" , "b" )           ACCEPTED — the same formula, spaced differently
+set a.b = IF(t.c > 1, "big", "small")   REJECTED — "a quoted argument ends at its closing quote"
+set a.b = ((( not a formula             ACCEPTED — a test pins this, correctly
+```
+
+Binding:
+
+1. **Once a `literal-or-formula` position is known to hold a formula, the rest of the line is
+   opaque to the command layer.** It is not tokenized, not quote-checked, not scanned. It is
+   sliced and carried.
+2. **The two lexers stay separate.** §5.3's string escapes and the command line's happen to be
+   spelled the same way (`scanQuoted`'s doc comment says so), and that coincidence must not be
+   allowed to become a dependency: `formula/lexer.ts` owns what a quote means inside a formula,
+   `tokenize` owns what it means inside an argument, and neither validates the other's text.
+3. **Whether a formula is well-formed is `parseFormula`'s answer, given at `commands.ts`
+   (D-069, D-071 clause 2).** The command layer may reject a formula for arity — "you typed
+   nothing after the `=`" — and for nothing else. A `#PARSE` with an offset into the source is the
+   only formula rejection the operator should ever see.
+
+**Rationale.** §5.3 gives the formula language string literals and ships `CONCAT` and `LEN` in the
+v1 built-ins; a formula containing one must be typeable. The failure this rules out is worse than a
+plain rejection, because acceptance depends on incidental spacing around commas and parens — the
+operator gets a message about command quoting, pointing into their formula, advising the quoting
+that just failed. There is no rule they could learn from it.
+
+Note what this does NOT reverse: 0069-REVIEW's F1 fix — a closing quote must be followed by
+whitespace — is correct and stays. It is a rule about command ARGUMENTS. This ruling says only that
+formula source is not one.
+
+Reconciliation required: 0071-REVIEW fix-list item 1. Until it lands, a formula containing a string
+literal parses only if every quoted run is surrounded by spaces.
