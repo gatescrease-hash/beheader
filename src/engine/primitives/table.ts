@@ -96,13 +96,14 @@
  *     are literal. `insertTableLine`/`deleteTableLine`, not a bare `setSlot`, are the
  *     sanctioned way to resize a table. See STATUS.md's known problems.
  *   - A table-creation command (`table x=0 y=0 rows=8 cols=8`, §5.10) — Phase 3.
- *     `createObject` already suffices to build one by hand (every test fixture does);
- *     what is missing is the command word, not an engine primitive.
+ *     `createObject` already suffices to build one by hand (every test fixture does)
+ *     and `command/parser.ts` reads the line; what is missing is the handler between
+ *     those two, not an engine primitive.
  */
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";
 import { getSlot, slotKey, type GraphObject, type Slot } from "../graph/node.ts";
 
-/** §5.4: "Default 8×8." A future table-creation mutation reads these; nothing in this file writes them anywhere. */
+/** §5.4: "Default 8×8." `command/parser.ts` applies these when a `table` command omits `rows`/`cols`; nothing in this file writes them anywhere. */
 export const DEFAULT_TABLE_ROWS = 8;
 export const DEFAULT_TABLE_COLS = 8;
 

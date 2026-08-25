@@ -8,10 +8,13 @@
  *   A stub: nothing is wired here yet. `render/` is ready to be — camera math
  *   (`render/camera.ts`), `renderDocument` (`render/renderer.ts`, §5.9), hit-testing
  *   (`render/hittest.ts`) and the selection/drag state machine
- *   (`render/interaction.ts`) all exist and all take plain arguments — but there is
- *   no `command/`, so nothing can create an object and there is nothing for this
- *   file to put on screen but an empty canvas. This file exists so the Vite scaffold
- *   has a valid entry point and `npm run dev` / `npm run build` succeed.
+ *   (`render/interaction.ts`) all exist and all take plain arguments, and
+ *   `command/parser.ts` turns a typed line into a command object. What is missing is
+ *   on this side of the seam: nothing here listens for a pointer, a key, or a command
+ *   line, and no command HANDLER exists to turn a command object into a mutation — so
+ *   nothing can create an object and there is nothing for this file to put on screen
+ *   but an empty canvas. It exists so the Vite scaffold has a valid entry point and
+ *   `npm run dev` / `npm run build` succeed.
  *
  * NOT DONE HERE
  *   Everything, including injecting the Canvas2D `TextMeasurer` the engine takes

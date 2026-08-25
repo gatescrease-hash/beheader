@@ -8,11 +8,57 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-013**
+Next free ID: **Q-014**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-013 — How is a general formula authored, given §5.10 has no command that takes one and Phase 4(b) requires one?
+Raised: entry 0068 (implementer)   Brief section: §5.10, §5.4, §6 (Phase 4b)
+Status: **OPEN — provisional choice taken, reversible.** Blocks nothing in Phase 3; comes due before
+Phase 4's gate can be claimed.
+
+Ambiguity: §5.10 lists no command that takes a formula EXPRESSION. `link polygon_1.origin.x
+table_x.A1` makes only §5.1's degenerate formula `= other.slot`. `set polygon_1.radius 42` is shown
+writing a literal, and D-040 describes it the same way ("the slot becomes a literal holding what was
+typed"). `text x=0 y=0 "Hello {= table_x.A1 }"` embeds formula syntax inside a **literal** `content`
+slot, parsed later by the text primitive (§5.6), not by the command line. But Phase 4(b) requires
+`table_x.B1` to hold `= polygon_b.origin.x * 2`, and §5.4's formula bar / in-place cell editing —
+the only other candidate surface the brief names — is unbuilt render work with no cycle scheduled.
+So today nothing in the specified system can author that cell.
+
+Options:
+(a) **`set <address> = <formula source>`.** The command line grows the formula path: one registry
+    entry's value-reading branch, plus one `Command` arm carrying the raw SOURCE text, with
+    `commands.ts` calling `parseFormula` — which keeps `command/parser.ts` document-free (it takes
+    no object list) and satisfies D-038 clause 4 structurally, since the rejected source is what the
+    command object holds. D-038's other three conditions are met at that call site: validation runs
+    on commit (a typed line is a commit), `ParseError` already carries name and position, and
+    `FUNCTION_REGISTRY` is untouched.
+(b) **§5.4's formula bar is the only formula surface**, and the command line never authors one.
+    Faithful to §5.10 as written, but it makes Phase 4's gate depend on an unbuilt render slice
+    (in-place cell editing), and leaves `link` — a binding with no arithmetic — as the only way to
+    drive a slot from another one until then.
+(c) **A separate command**, e.g. `formula <address> <source>`, keeping `set` literal-only and
+    D-040's wording untouched. Same cost as (a), one more command word, and it makes "write a
+    value" and "write a formula" visibly different acts.
+
+Recommendation: **(a)**. It is the smallest thing that unblocks Phase 4 without waiting on render
+work, it puts the formula where the operator is already typing, and D-040 already settled the
+semantics of writing over a formula slot from the `set` path, so nothing new has to be ruled about
+what happens to what was there. The reason this is a question and not an implementation decision:
+§5.10's grammar does not show it, §8 defers "command-language gold-plating", and D-042 makes the
+operator the arbiter of what the command line should be able to say.
+
+Reversible? Yes — accepting a leading `=` later changes the meaning of nothing that parses today,
+and no stored data depends on the answer either way.
+Provisional choice taken: **refuse it**, at exactly one site. `matchArguments` rejects any unquoted
+argument beginning with `=`, with a message naming `link` and this question — chosen over a generic
+"not a value" so the refusal reads as a missing surface rather than a typo. Tagged at:
+`src/command/parser.ts` (`matchArguments`'s formula guard).
 
 ---
 
