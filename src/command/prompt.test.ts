@@ -100,10 +100,14 @@ describe("a line is a sequence of answers (D-072 clause 3: AutoCAD's space-is-En
     expect(completed(beginCommand("circle x=100 y=100 r=20"))).toEqual({ kind: "circle", x: 100, y: 100, radius: 20 });
   });
 
-  it("reports too many arguments with the parser's own message rather than a second one", () => {
-    const session = beginCommand("circle 1,1 2 3");
-    expect(session.status).toBe("failed");
-    expect(session.status === "failed" && session.message).toContain("does not take the argument");
+  it("names the SURPLUS token, not the first one the sequence already read correctly (0071-REVIEW F2)", () => {
+    const line = "circle 100,100 20 extra";
+    const session = beginCommand(line);
+    expect(session).toEqual({
+      status: "failed",
+      message: '"circle" does not take the argument "extra" — usage: circle x=<number> y=<number> r=<number>',
+      start: line.indexOf("extra"),
+    });
   });
 
   it("hands a command with no prompt sequence straight to the parser, unchanged", () => {
@@ -222,6 +226,36 @@ describe("polygon walks sides, then centre, then radius (AutoCAD's POLYGON order
     const radius = prompting(respond(center.pending, picked(10, 10)));
     expect(radius.message).toBe("specify radius:");
     expect(completed(respond(radius.pending, picked(10, 60)))).toEqual({ kind: "polygon", sides: 6, x: 10, y: 10, radius: 50 });
+  });
+});
+
+describe("a quoted token is refused as a prompt answer, not silently reinterpreted (0071-REVIEW F4)", () => {
+  it("refuses a quoted point, deferring to parseCommand's own grammar rather than accepting it", () => {
+    const line = 'circle "100,100" "20"';
+    expect(beginCommand(line)).toEqual({
+      status: "failed",
+      message: '"circle" does not take the argument "100,100" — usage: circle x=<number> y=<number> r=<number>',
+      start: line.indexOf('"100,100"'),
+    });
+  });
+
+  it("refuses a quoted number the same way", () => {
+    const line = 'polygon "5" 0,0 20';
+    expect(beginCommand(line)).toEqual({
+      status: "failed",
+      message: '"polygon" does not take the argument "5" — usage: polygon sides=<number> x=<number> y=<number> r=<number>',
+      start: line.indexOf('"5"'),
+    });
+  });
+});
+
+describe("a typed formula reaches parseCommand without this file tokenizing it first (D-073, one layer up from parser.ts's own fix)", () => {
+  it("completes a `set ... = <formula>` line whose formula contains quoted strings, which `set` has no prompt sequence for", () => {
+    expect(completed(beginCommand('set a.b = CONCAT("a", "b")'))).toEqual({
+      kind: "set-formula",
+      target: "a.b",
+      source: '= CONCAT("a", "b")',
+    });
   });
 });
 

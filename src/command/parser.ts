@@ -46,6 +46,12 @@
  *   - A number produced here may be non-finite (a long digit run overflows). That is
  *     deliberate: D-031 clause 3 keeps document-state policy in `mutate` rather than
  *     in a text-scanning stage, and `mutate` refuses it (D-025).
+ *   - This file's OWN lexer stops at a formula's `=` (D-073): tokens are read ONE AT A
+ *     TIME, in line order, and the moment a `literal-or-formula` position's token is
+ *     seen to start with an unquoted `=`, everything from there to end of line is
+ *     sliced and carried WITHOUT being tokenized, quote-checked, or scanned. A
+ *     formula's own quoting (`CONCAT("a", "b")`) is `formula/lexer.ts`'s to read, at
+ *     `commands.ts` — never this file's.
  *
  * NOT DONE HERE
  *   - Command HANDLERS: resolution, `Operation` building, `mutate`, and the echo text
@@ -65,7 +71,8 @@
  *   - PROMPTING. A bare command word starts an AutoCAD-style prompt sequence (D-072),
  *     and that state machine is `command/prompt.ts`'s. This file still answers only
  *     the one-shot question "is this complete line a command?" — `prompt.ts` calls it
- *     for the complete forms and drives the incomplete ones itself.
+ *     for the complete forms and drives the incomplete ones itself, and reads its own
+ *     head word through this file's single-token reader for the same reason (D-073).
  */
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
 
@@ -630,11 +637,11 @@ export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
  * lookup; D-043 owns the cell form).
  */
 export function parseCommand(line: string): CommandParseResult {
-  const tokenized = tokenize(line);
-  if (!tokenized.ok) {
-    return tokenized;
+  const headScan = nextToken(line, 0);
+  if (!headScan.ok) {
+    return headScan;
   }
-  const [head, ...rest] = tokenized.tokens;
+  const head = headScan.token;
   if (head === undefined) {
     return failure("empty command", 0);
   }
@@ -646,7 +653,7 @@ export function parseCommand(line: string): CommandParseResult {
     }
     return failure(`unknown command "${head.text}"`, head.start);
   }
-  const matched = matchArguments(spec, rest, line);
+  const matched = matchArguments(spec, line, headScan.next);
   if (!matched.ok) {
     return matched;
   }
@@ -662,8 +669,20 @@ interface CommandToken {
 
 type TokenizeResult = { readonly ok: true; readonly tokens: readonly CommandToken[] } | CommandParseFailure;
 
+/** One token read from a line, or none where only whitespace (or nothing) remained — that is not a failure, just the end. */
+type NextTokenResult = { readonly ok: true; readonly token: CommandToken | undefined; readonly next: number } | CommandParseFailure;
+
 /**
- * Splits a line into tokens on whitespace, keeping a double-quoted run whole.
+ * Reads the next token starting at `index`, skipping leading whitespace — a bare word,
+ * or a WHOLE double-quoted run — and nothing past it.
+ *
+ * This is the ONE lexer this file has, called one token at a time rather than run to
+ * end of line, which is what D-073 requires: `matchArguments` stops calling it the
+ * moment a `literal-or-formula` position's token is seen to start with an unquoted
+ * `=`, so a formula's own quoting is never read by this function at all — reading it
+ * to find that out would be the defect D-073 rules against, reached from inside the
+ * fix instead of around it. `parseCommand` calls it once, for the command word, before
+ * it even knows which spec — and therefore which position is the formula's — applies.
  *
  * A token is either a bare word or a WHOLE quoted string, and arguments are separated
  * by whitespace with nothing else allowed to join them: a quote inside a bare word
@@ -672,47 +691,40 @@ type TokenizeResult = { readonly ok: true; readonly tokens: readonly CommandToke
  * quoting decides — whether `42` is a number or a string — legible at a glance instead
  * of dependent on where the quote sits inside a word.
  */
-function tokenize(line: string): TokenizeResult {
-  const tokens: CommandToken[] = [];
-  let index = 0;
-  while (index < line.length) {
-    const character = line[index];
-    if (character === undefined) {
-      break;
-    }
-    if (isWhitespace(character)) {
-      index += 1;
-      continue;
-    }
-    if (character === '"') {
-      const scanned = scanQuoted(line, index);
-      if (!scanned.ok) {
-        return scanned;
-      }
-      // A closing quote ends the whole argument. Without this, `delete "a"force`
-      // splits into two tokens and silently sets the flag — §5.1.1's repair path
-      // chosen by a line the operator never wrote as two words. It is the same
-      // shell-style concatenation the bare-word branch below refuses, arriving from
-      // the other side, so both directions refuse it or neither does (0069-REVIEW).
-      if (scanned.next < line.length && !isWhitespace(line[scanned.next])) {
-        return failure("a quoted argument ends at its closing quote — separate arguments with a space", scanned.next);
-      }
-      tokens.push(scanned.token);
-      index = scanned.next;
-      continue;
-    }
-    const start = index;
-    while (index < line.length && !isWhitespace(line[index])) {
-      index += 1;
-    }
-    const word = line.slice(start, index);
-    const quoteOffset = word.indexOf('"');
-    if (quoteOffset >= 0) {
-      return failure('a quote must open an argument, not sit inside one — write set text_1.content "a b"', start + quoteOffset);
-    }
-    tokens.push({ text: word, start, quoted: false });
+function nextToken(line: string, index: number): NextTokenResult {
+  let cursor = index;
+  while (cursor < line.length && isWhitespace(line[cursor])) {
+    cursor += 1;
   }
-  return { ok: true, tokens };
+  if (cursor >= line.length) {
+    return { ok: true, token: undefined, next: cursor };
+  }
+  const character = line[cursor];
+  if (character === '"') {
+    const scanned = scanQuoted(line, cursor);
+    if (!scanned.ok) {
+      return scanned;
+    }
+    // A closing quote ends the whole argument. Without this, `delete "a"force`
+    // splits into two tokens and silently sets the flag — §5.1.1's repair path
+    // chosen by a line the operator never wrote as two words. It is the same
+    // shell-style concatenation the bare-word branch below refuses, arriving from
+    // the other side, so both directions refuse it or neither does (0069-REVIEW).
+    if (scanned.next < line.length && !isWhitespace(line[scanned.next])) {
+      return failure("a quoted argument ends at its closing quote — separate arguments with a space", scanned.next);
+    }
+    return { ok: true, token: scanned.token, next: scanned.next };
+  }
+  const start = cursor;
+  while (cursor < line.length && !isWhitespace(line[cursor])) {
+    cursor += 1;
+  }
+  const word = line.slice(start, cursor);
+  const quoteOffset = word.indexOf('"');
+  if (quoteOffset >= 0) {
+    return failure('a quote must open an argument, not sit inside one — write set text_1.content "a b"', start + quoteOffset);
+  }
+  return { ok: true, token: { text: word, start, quoted: false }, next: cursor };
 }
 
 /** Reads the double-quoted run starting at `openIndex`, unescaping `\"` and `\\` — §5.3's own string escapes, so one spelling serves both surfaces. */
@@ -756,56 +768,71 @@ function isWhitespace(character: string | undefined): boolean {
 const NUMBER_PATTERN = /^[+-]?[0-9]+(\.[0-9]+)?$/;
 
 /**
- * Matches a command's tokens against its declared arguments, converting each to the
- * value its parameter's kind asks for.
+ * Matches a command's arguments against its declared parameters, reading tokens ONE AT
+ * A TIME from `line` starting at `startIndex` — never a pre-built array — and
+ * converting each to the value its parameter's kind asks for.
  *
- * Takes the whole `line` because D-071's formula source is a RAW SUBSTRING of it, not
- * a re-join of tokens; `line.length` also points at "you never typed this argument",
- * the one failure with no token of its own to blame.
+ * Takes `line` itself, not tokens, for two reasons: D-071's formula source is a RAW
+ * SUBSTRING of it, not a re-join of tokens; and D-073 requires that nothing past a
+ * formula's `=` is ever handed to `nextToken` at all, which is only possible if this
+ * function decides "the rest of the line is a formula" BEFORE reading the token that
+ * would contain it. `line.length` is also what a missing-argument failure points at —
+ * "you never typed this argument" has no token of its own to blame.
  */
 function matchArguments(
   spec: CommandSpec,
-  tokens: readonly CommandToken[],
   line: string,
+  startIndex: number,
 ): { readonly ok: true; readonly args: MatchedArguments } | CommandParseFailure {
   const endOffset = line.length;
-
-  // D-071: at a `literal-or-formula` position, an unquoted leading `=` means the rest
-  // of the LINE is the formula's source — so it is taken before tokens are
-  // distributed, because the tokens after the `=` belong to the formula, not to the
-  // command. The source keeps the `=` and the operator's spacing: `commands.ts` calls
-  // `parseFormula` (D-069), and D-038 clause 4 forbids discarding the text it rejects.
-  //
-  // HAZARD — `tokens[formulaAt]` indexes the RAW token list by a POSITIONAL index, and
-  // those two agree only while the command has no named parameters and no flags to
-  // interleave. `set` is the only `literal-or-formula` command and has neither, so the
-  // indices coincide today. A command declaring a formula position ALONGSIDE `key=value`
-  // arguments would read the wrong token here — distribute first and locate the formula
-  // in `positionalTokens` if one is ever added (0071-REVIEW F5).
   const formulaAt = spec.positional.findIndex((parameter) => parameter.kind === "literal-or-formula");
-  const formulaToken = formulaAt >= 0 ? tokens[formulaAt] : undefined;
-  const isFormula = formulaToken !== undefined && !formulaToken.quoted && formulaToken.text.startsWith("=");
-  const formula = isFormula && formulaToken !== undefined ? line.slice(formulaToken.start) : undefined;
-  if (formula !== undefined && formula.slice(1).trim().length === 0) {
-    return failure(`"${spec.name}" needs a formula after "=" — usage: ${spec.usage}`, endOffset);
-  }
-  const argumentTokens = isFormula ? tokens.slice(0, formulaAt) : tokens;
-
-  // Everywhere else a leading `=` is still refused, but only where a malformed
-  // `key=value` cannot already explain it: `circle =1` is a keyless pair and
-  // `matchNamedToken` says so precisely, which is the better message of the two.
-  if (spec.named.length === 0) {
-    const stray = argumentTokens.find((token) => !token.quoted && token.text.startsWith("="));
-    if (stray !== undefined) {
-      return failure(`"${spec.name}" takes no formula — only "set <address> = <formula>" does (D-071)`, stray.start);
-    }
-  }
 
   const positionalTokens: CommandToken[] = [];
   const namedTokens: NamedTokenMatch[] = [];
   const flags: string[] = [];
+  let formula: string | undefined;
 
-  for (const token of argumentTokens) {
+  let cursor = startIndex;
+  for (;;) {
+    let tokenStart = cursor;
+    while (tokenStart < line.length && isWhitespace(line[tokenStart])) {
+      tokenStart += 1;
+    }
+    if (tokenStart >= line.length) {
+      break;
+    }
+
+    // D-073: once the position about to be filled is the `literal-or-formula` one,
+    // an unquoted leading `=` means the rest of the LINE is the formula's source —
+    // decided from a single character, BEFORE `nextToken` ever runs on it, so a
+    // formula's own quoting (`CONCAT("a", "b")`) is never read by this file's lexer.
+    // `positionalTokens.length` is the count already DISTRIBUTED, not a raw token
+    // index, so this reads correctly even past an interleaved `key=value` or flag
+    // (0071-REVIEW F5, resolved by this restructuring rather than left a hazard).
+    if (formulaAt >= 0 && positionalTokens.length === formulaAt && line[tokenStart] === "=") {
+      formula = line.slice(tokenStart);
+      break;
+    }
+
+    const scanned = nextToken(line, cursor);
+    if (!scanned.ok) {
+      return scanned;
+    }
+    const token = scanned.token;
+    if (token === undefined) {
+      break;
+    }
+    cursor = scanned.next;
+
+    // Everywhere else a leading `=` is still refused, but only where a malformed
+    // `key=value` cannot already explain it: `circle =1` is a keyless pair and
+    // `matchNamedToken` below says so precisely, which is the better message of the
+    // two. A quoted token is exempt — quoting decides type everywhere on this line
+    // (D-071 clause 3), so `"=x"` is a string, never a stray formula marker.
+    if (spec.named.length === 0 && !token.quoted && token.text.startsWith("=")) {
+      return failure(`"${spec.name}" takes no formula — only "set <address> = <formula>" does (D-071)`, token.start);
+    }
+
     if (spec.named.length > 0 && !token.quoted && token.text.includes("=")) {
       const matched = matchNamedToken(spec, token, namedTokens);
       if (!matched.ok) {
@@ -832,11 +859,15 @@ function matchArguments(
     return failure(`"${spec.name}" does not take the argument "${token.text}" — usage: ${spec.usage}`, token.start);
   }
 
+  if (formula !== undefined && formula.slice(1).trim().length === 0) {
+    return failure(`"${spec.name}" needs a formula after "=" — usage: ${spec.usage}`, endOffset);
+  }
+
   const positional: MatchedArgument[] = [];
   for (const [index, parameter] of spec.positional.entries()) {
     // The formula swallowed this position and every one after it (there are none
     // after it today — a formula runs to end of line, so nothing can follow).
-    if (isFormula && index >= formulaAt) {
+    if (formula !== undefined && index >= formulaAt) {
       break;
     }
     const token = positionalTokens[index];
@@ -1019,12 +1050,49 @@ export function parseCommandNumber(text: string): number | undefined {
   return NUMBER_PATTERN.test(text) ? Number(text) : undefined;
 }
 
-/** Splits a command line into tokens (see `tokenize`). Exported for `command/prompt.ts`, which must apply the same quoting rules rather than a second copy of them. */
-export function tokenizeCommandLine(line: string): TokenizeResult {
-  return tokenize(line);
+/**
+ * Splits a line into tokens from `startIndex` to its end (see `nextToken`). Exported
+ * for `command/prompt.ts`, which must apply the same quoting rules rather than a
+ * second copy of them.
+ *
+ * `startIndex` defaults to the start of the line, but `prompt.ts` passes the offset
+ * just past the command word — D-073 again: a word tokenized in isolation reports
+ * offsets relative to itself, and re-slicing the line to tokenize "the rest" would
+ * make every failure inside it point at the wrong character. Reading from an offset
+ * INTO the original line keeps every `CommandToken.start` absolute.
+ */
+export function tokenizeCommandLine(line: string, startIndex = 0): TokenizeResult {
+  const tokens: CommandToken[] = [];
+  let cursor = startIndex;
+  for (;;) {
+    const scanned = nextToken(line, cursor);
+    if (!scanned.ok) {
+      return scanned;
+    }
+    if (scanned.token === undefined) {
+      return { ok: true, tokens };
+    }
+    tokens.push(scanned.token);
+    cursor = scanned.next;
+  }
 }
 
-export type { CommandSpec, CommandToken, PromptStep };
+/**
+ * Reads ONLY the first token of a line — the command word — without tokenizing
+ * anything past it.
+ *
+ * Exported so `command/prompt.ts`'s `beginCommand` can learn which spec applies
+ * before deciding whether to tokenize the rest of the line at all. That ordering is
+ * what D-073 needs one layer up from `matchArguments`: `beginCommand` must not run a
+ * whole-line tokenize (as `tokenizeCommandLine(line)` would) ahead of knowing that the
+ * spec is `set`'s — the one command with a `literal-or-formula` position and no
+ * `prompts` — because a formula's own quoting would already have been read by then.
+ */
+export function readCommandHead(line: string): NextTokenResult {
+  return nextToken(line, 0);
+}
+
+export type { CommandSpec, CommandToken, NextTokenResult, PromptStep };
 
 function failure(message: string, start: number): CommandParseFailure {
   return { ok: false, message, start };

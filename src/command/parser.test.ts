@@ -327,3 +327,42 @@ describe("formula syntax on the command line (D-071 — Q-013 answered by the hu
     expect(rejected("circle =1 y=0 r=1").message).toContain('"=1" is not a key=value argument');
   });
 });
+
+describe("the command lexer stops at a formula's `=` (D-073) — §5.3's string literals are typeable", () => {
+  it("carries a formula containing a quoted string argument, spaced around its parens the way an operator naturally would", () => {
+    expect(parsed('set a.b = CONCAT("a", "b")')).toEqual({
+      kind: "set-formula",
+      target: "a.b",
+      source: '= CONCAT("a", "b")',
+    });
+  });
+
+  it("carries a formula whose quoted strings sit right against a comma, which the command lexer's own quoting rules would otherwise reject", () => {
+    expect(parsed('set a.b = IF(t.c > 1, "big", "small")')).toEqual({
+      kind: "set-formula",
+      target: "a.b",
+      source: '= IF(t.c > 1, "big", "small")',
+    });
+  });
+
+  it("carries a formula whose closing quote is immediately followed by more formula text, not whitespace", () => {
+    expect(parsed('set a.b = LEN("hello") > 3')).toEqual({
+      kind: "set-formula",
+      target: "a.b",
+      source: '= LEN("hello") > 3',
+    });
+  });
+
+  it("takes the whole line raw even with no space between the `=` and the quote", () => {
+    expect(parsed('set a.b =CONCAT("a","b")')).toEqual({
+      kind: "set-formula",
+      target: "a.b",
+      source: '=CONCAT("a","b")',
+    });
+  });
+
+  it("still applies the command lexer's quoting rules to everything BEFORE the formula's `=`, unchanged", () => {
+    expect(rejected('set a"b = CONCAT("x")').start).toBe(5);
+    expect(rejected('set a"b = CONCAT("x")').message).toContain("a quote must open an argument");
+  });
+});

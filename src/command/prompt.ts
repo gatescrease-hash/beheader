@@ -38,6 +38,16 @@
  *     `render/interaction.ts` and the reason Rule 1 exists one layer down.
  *   - The prompt sequence lives in `parser.ts`'s registry entry, not here. There is no
  *     second table and no dispatch switch; adding a command stays one entry (§5.10).
+ *   - `beginCommand` reads only the line's HEAD WORD before deciding how to route it —
+ *     never a whole-line tokenize (D-073, one layer up from `parseCommand`'s own fix):
+ *     `set`, the one command with a formula position, declares no `prompts`, so
+ *     tokenizing the rest of the line ahead of that check would read a formula's own
+ *     quoting before this file ever gets to defer to the file that owns reading it.
+ *   - Every extra token past a finished sequence is named directly, at its own offset
+ *     (0071-REVIEW F2) — never blamed on the first token the sequence read correctly.
+ *     A quoted token is refused the same way a step that cannot read it is (F4):
+ *     quoting decides type everywhere else on this line (D-071 clause 3), and no
+ *     prompt step accepts a string.
  *
  * NOT DONE HERE
  *   - Object-selection prompts. `select`/`delete`/`refs` prompting "select an object"
@@ -55,9 +65,12 @@ import {
   isCommandParseFailure,
   parseCommand,
   parseCommandNumber,
+  readCommandHead,
   tokenizeCommandLine,
   type Command,
   type CommandParseFailure,
+  type CommandSpec,
+  type CommandToken,
   type PromptAnswers,
   type PromptPoint,
   type PromptStep,
@@ -108,30 +121,60 @@ export type CommandSession =
  * Routing, in order: a line whose command word has no prompt sequence, or which uses
  * the `key=value` form, is `parseCommand`'s unchanged. Anything else walks the prompt
  * sequence, with the line's remaining tokens applied as the first answers.
+ *
+ * Reads only the HEAD word before deciding — never a whole-line tokenize — which is
+ * D-073 one layer up from `parseCommand`'s own fix: `set`, the one command with a
+ * `literal-or-formula` position, declares no `prompts`, so it always belongs to
+ * `parseCommand` below. Tokenizing the rest of the line first (as a single
+ * `tokenizeCommandLine(line)` call would) reads a formula's own quoting before this
+ * function ever gets to defer to the file that owns reading it.
  */
 export function beginCommand(line: string): CommandSession {
-  const tokenized = tokenizeCommandLine(line);
-  if (!tokenized.ok) {
-    return failed(tokenized);
+  const headScan = readCommandHead(line);
+  if (!headScan.ok) {
+    return failed(headScan);
   }
-  const [head, ...rest] = tokenized.tokens;
+  const head = headScan.token;
   if (head === undefined) {
     return failed({ ok: false, message: "empty command", start: 0 });
   }
   const spec = findCommandSpec(head.text);
   const prompts = spec?.prompts;
-  // No prompt sequence, or the operator wrote the `key=value` form: this is a complete
-  // line and `parseCommand` owns it, including saying what is wrong with it.
-  if (spec === undefined || prompts === undefined || usesNamedForm(rest)) {
+  // No prompt sequence: this is a complete line and `parseCommand` owns it whole,
+  // including any `literal-or-formula` position — reached without this file ever
+  // tokenizing past the head word either.
+  if (spec === undefined || prompts === undefined) {
+    return fromParse(line);
+  }
+  // A command WITH a prompt sequence never declares a `literal-or-formula` position
+  // (D-072's deferred clause — see the header), so tokenizing its remaining tokens has
+  // no formula to protect; `headScan.next` keeps every offset absolute (D-073).
+  const restTokenized = tokenizeCommandLine(line, headScan.next);
+  if (!restTokenized.ok) {
+    return failed(restTokenized);
+  }
+  const rest = restTokenized.tokens;
+  // The operator wrote the `key=value` form: also a complete line for `parseCommand`.
+  if (usesNamedForm(rest)) {
     return fromParse(line);
   }
 
   let session: CommandSession = firstPrompt(spec.name, prompts);
   for (const token of rest) {
     if (session.status !== "prompting") {
-      // More tokens than the sequence takes. `parseCommand` produces the message that
-      // names the offending token and the usage line, so defer to it rather than
-      // writing a second one.
+      // The sequence already finished — this token is SURPLUS, not one the sequence
+      // failed to read. Name it directly rather than deferring to `parseCommand`
+      // (0071-REVIEW F2): that file's own grammar for a prompting command has no
+      // positionals to compare against, so `circle 100,100 20 extra` would blame
+      // `100,100` — the token the sequence read CORRECTLY — instead of `extra`.
+      return overflow(spec, token);
+    }
+    if (token.quoted) {
+      // Quoting decides type everywhere else on this line (D-071 clause 3), and no
+      // prompt step accepts a string — so a quoted answer is a token this step cannot
+      // read, not one it should silently reinterpret (0071-REVIEW F4). Same deferral
+      // as the "could not read" case below: `parseCommand` explains it in its own
+      // grammar, e.g. `circle "100,100" "20"` — "does not take the argument".
       return fromParse(line);
     }
     session = respond(session.pending, { kind: "typed", text: token.text });
@@ -142,6 +185,16 @@ export function beginCommand(line: string): CommandSession {
     }
   }
   return session;
+}
+
+/**
+ * The prompt sequence finished before `token` — it is surplus. Named directly, at its
+ * own offset, the same message shape `parseCommand` uses for "does not take the
+ * argument" (0071-REVIEW F2): the sequence, unlike `parseCommand`, knows exactly which
+ * token is excess, having already read every one before it correctly.
+ */
+function overflow(spec: CommandSpec, token: CommandToken): CommandSession {
+  return { status: "failed", message: `"${spec.name}" does not take the argument "${token.text}" — usage: ${spec.usage}`, start: token.start };
 }
 
 /**
@@ -164,11 +217,11 @@ export function respond(pending: PendingCommand, response: PromptResponse): Comm
   }
 
   const read = readResponse(step, response, pending.answers);
-  if (typeof read === "string") {
-    return { status: "prompting", pending, message: promptMessage(step), error: read };
+  if (!read.ok) {
+    return { status: "prompting", pending, message: promptMessage(step), error: read.reason };
   }
 
-  const answers: PromptAnswers = { ...pending.answers, [step.name]: read };
+  const answers: PromptAnswers = { ...pending.answers, [step.name]: read.value };
   const nextIndex = pending.stepIndex + 1;
   const nextStep = prompts[nextIndex];
   if (nextStep === undefined) {
@@ -197,26 +250,32 @@ export function promptMessage(step: PromptStep): string {
 }
 
 /**
- * Reads one response as the step's `accepts` kind, or returns the reason it could not.
+ * The result of reading one response: the value, or the reason it was refused.
  *
- * A `string` return is the refusal — the caller re-prompts with it. Returning the
- * reason rather than a bare `undefined` is what lets every refusal say which of the
- * three things this step wanted, which is §5.10's "name the specific slots involved"
- * at the layer where the slot does not exist yet.
+ * A discriminated shape, not `PromptValue | string` (0071-REVIEW F3). `PromptValue` is
+ * `number | PromptPoint` today, so a bare `string` is unambiguously a refusal — but
+ * this file already anticipates a `text`-accepting step (`usesNamedForm`'s own hazard
+ * note), and `PromptValue` widening to include `string` on that day would make an
+ * ACCEPTED text answer indistinguishable from a refusal, turning it into an infinite
+ * re-prompt with no compile error to catch it. `{ok:true,value}` / `{ok:false,reason}`
+ * makes that widening fail to compile here instead.
  */
-function readResponse(step: PromptStep, response: PromptResponse, gathered: PromptAnswers): PromptValue | string {
+type ResponseRead = { readonly ok: true; readonly value: PromptValue } | { readonly ok: false; readonly reason: string };
+
+/** Reads one response as the step's `accepts` kind, or returns the reason it could not — §5.10's "name the specific slots involved" at the layer where the slot does not exist yet. */
+function readResponse(step: PromptStep, response: PromptResponse, gathered: PromptAnswers): ResponseRead {
   if (response.kind === "picked") {
     switch (step.accepts) {
       case "point":
-        return response.point;
+        return { ok: true, value: response.point };
       case "distance":
-        return distanceFrom(step, gathered, response.point);
+        return asRead(distanceFrom(step, gathered, response.point));
       case "number":
-        return `${step.message} takes a typed number, not a point`;
+        return { ok: false, reason: `${step.message} takes a typed number, not a point` };
       default: {
         const exhaustive: never = step.accepts;
         void exhaustive;
-        return `${step.message} declares a kind this prompt cannot read`;
+        return { ok: false, reason: `${step.message} declares a kind this prompt cannot read` };
       }
     }
   }
@@ -224,34 +283,41 @@ function readResponse(step: PromptStep, response: PromptResponse, gathered: Prom
   const text = response.text.trim();
   if (text.length === 0) {
     // A bare Enter takes the default where there is one — AutoCAD's `<8>`.
-    return step.defaultValue ?? `${step.message} needs a value`;
+    return step.defaultValue === undefined ? { ok: false, reason: `${step.message} needs a value` } : { ok: true, value: step.defaultValue };
   }
 
   switch (step.accepts) {
     case "point": {
       const point = parsePointLiteral(text);
-      return point ?? `${step.message} needs a point as x,y — got "${text}"`;
+      return point === undefined ? { ok: false, reason: `${step.message} needs a point as x,y — got "${text}"` } : { ok: true, value: point };
     }
     case "distance": {
       // A typed point is as good as a picked one here: AutoCAD lets you answer the
       // radius prompt with a point on the rim either way.
       const point = parsePointLiteral(text);
       if (point !== undefined) {
-        return distanceFrom(step, gathered, point);
+        return asRead(distanceFrom(step, gathered, point));
       }
       const distance = parseCommandNumber(text);
-      return distance ?? `${step.message} needs a number or a point as x,y — got "${text}"`;
+      return distance === undefined
+        ? { ok: false, reason: `${step.message} needs a number or a point as x,y — got "${text}"` }
+        : { ok: true, value: distance };
     }
     case "number": {
       const value = parseCommandNumber(text);
-      return value ?? `${step.message} needs a number — got "${text}"`;
+      return value === undefined ? { ok: false, reason: `${step.message} needs a number — got "${text}"` } : { ok: true, value };
     }
     default: {
       const exhaustive: never = step.accepts;
       void exhaustive;
-      return `${step.message} declares a kind this prompt cannot read`;
+      return { ok: false, reason: `${step.message} declares a kind this prompt cannot read` };
     }
   }
+}
+
+/** Lifts `distanceFrom`'s own `number | string` into the discriminated shape above. Kept local to it: `distanceFrom` always yields a `number` on success, so its narrower return type carries none of `readResponse`'s widening hazard. */
+function asRead(distance: number | string): ResponseRead {
+  return typeof distance === "string" ? { ok: false, reason: distance } : { ok: true, value: distance };
 }
 
 /**
