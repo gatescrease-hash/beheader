@@ -2096,3 +2096,57 @@ formula source is not one.
 
 Reconciliation required: 0071-REVIEW fix-list item 1. Until it lands, a formula containing a string
 literal parses only if every quoted run is surrounded by spaces.
+
+---
+
+## D-074 — Once a prompt sequence has begun reading a line, its own refusal IS the message. The command layer never replaces a message it has with one from a re-read
+Answers: 0074-REVIEW F1   Ruled: entry 0074-REVIEW-phase3 (reviewer)
+Binding on: `command/prompt.ts`, `command/commands.ts`, and every future surface that drives a
+prompt sequence from typed text
+Supersedes: 0071-REVIEW §4's F2 finding, in the half that ruled the "a token the sequence could
+not read" branch correct as written. The overflow half of that finding stands and is implemented.
+
+`beginCommand` walks a typed line through the prompt sequence and, when a token is refused, throws
+the sequence's own reason away and re-reads the whole line with `parseCommand` instead. The
+message the operator sees is therefore written by a grammar they did not use:
+
+```
+circle 100,100 abc
+  the sequence said:  specify radius needs a number or a point as x,y — got "abc"
+  the operator sees:  "circle" does not take the argument "100,100" — usage: circle x=<number> y=<number> r=<number>   @7
+
+rect 0,0 junk
+  the sequence said:  specify opposite corner needs a point as x,y — got "junk"
+  the operator sees:  "rect" does not take the argument "0,0" — usage: rect x=<number> y=<number> w=<number> h=<number>   @5
+```
+
+Binding:
+
+1. **A refusal raised inside the sequence is reported as the sequence raised it**, at the offset of
+   the token that caused it. This covers a token the step could not read and a quoted answer alike.
+2. **Deferral to `parseCommand` is only for a line the sequence never began to read**: the command
+   word declares no `prompts`, or the line uses §5.10's `key=value` form. Those two checks happen
+   before the first answer is applied and they stay.
+3. **A message about the prompt form never cites the `key=value` usage string as though it were the
+   form in play.** A prompting command has two forms and one `usage`; where the operator used the
+   other one, name the step instead of the usage line.
+
+**Rationale.** `parseCommand` cannot write a better message here, and the registry says why: all
+four prompting commands declare `positional: []`, so every bare positional token on a prompting
+line reads to `parseCommand` as "does not take the argument", always naming the FIRST one. 0071-REVIEW
+assumed the deferral produced the better message; the evidence is that it produces, on the more
+common path, the exact three faults that review named on the rarer one — a token that was read
+correctly, the wrong offset, and the usage line for a form the operator did not use. This is the
+third appearance of the same defect shape (0069-REVIEW F3, 0071-REVIEW F2, this), which is what
+makes it a ruling rather than a third code fix. §5.10's standard is "every rejection message must
+name the specific slots involved"; the layer that knows which step failed is the layer that must
+speak.
+
+**Consequence worth stating.** With clause 1 in force, `usesNamedForm` stops being decorative:
+`circle x=100 y=100 r=20` currently survives its own deletion only through the fallback this
+ruling removes. The mutant that survived at entry 0070 and was ruled KEEP at 0071-REVIEW §5
+becomes a caught mutant, and that standing "known problem" closes.
+
+Reconciliation required: 0074-REVIEW fix-list item 1. No test pins the current deferral — probed at
+this review by making the change and running the suite: 106/106 still passed — so implementing this
+is additive and fires no §6.1 trigger 5.

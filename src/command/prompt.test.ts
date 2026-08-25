@@ -142,6 +142,20 @@ describe("both forms of every prompting command produce the identical Command (D
       expect(spec?.prompts === undefined).toBe(spec?.buildFromPrompts === undefined);
     }
   });
+
+  // D-073 one layer up: `beginCommand` tokenizes the whole rest of the line once it
+  // knows the command declares `prompts`, and that is only safe because no such
+  // command declares a `literal-or-formula` position for the lexer to run over. Both
+  // the function and the file header state that property; this is what enforces it,
+  // so a registry entry declaring both fails here rather than silently reinstating
+  // the defect D-073 rules against (0074-REVIEW F2).
+  it("gives no prompting command a `literal-or-formula` position, which is what lets beginCommand tokenize the rest of its line at all (D-073)", () => {
+    for (const name of COMMAND_NAMES) {
+      const spec = findCommandSpec(name);
+      const carriesFormula = spec?.positional.some((parameter) => parameter.kind === "literal-or-formula") === true;
+      expect(spec?.prompts !== undefined && carriesFormula).toBe(false);
+    }
+  });
 });
 
 describe("a refused answer re-prompts the same step and keeps what was gathered (D-072 clause 7)", () => {
