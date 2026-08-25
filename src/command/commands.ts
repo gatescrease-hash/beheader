@@ -473,7 +473,8 @@ type SlotWrite =
  * `setSlot` operation. Every rejection — an unresolvable address, a derived slot, a
  * formula that will not parse, an `unlink` of something that is not a formula, and
  * `mutate`'s own (a cycle, a dangling reference, an illegal value) — comes back as the
- * failure arm; nothing here throws.
+ * failure arm rather than as a throw — with the ONE measured exception `executeCommand`'s
+ * own doc states: `parseFormula` below unwinds a `RangeError` past ~5,000 nesting levels.
  *
  * D-040's "not silent" bound is discharged here rather than per command: whatever the
  * write, if the slot it lands on currently holds a formula, the report names that
@@ -525,16 +526,21 @@ function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Docum
       // §5.3's bare cell refs (`A1`) are legal ONLY inside a table cell's own formula,
       // so the table id goes in exactly when the TARGET is a cell — a formula written
       // at `polygon_1.origin.x` must not be able to name one.
-      const ast = parseFormula(write.source, document.objects, cellHostObjectId(target));
+      // `parser.ts` reports a `#PARSE`'s `start` as an offset into the source string it
+      // was HANDED, and the refusal below shows that source trimmed — so the trim happens
+      // BEFORE the parse, or every position is off by the width of the space after the
+      // `=` and points one character past the offending name (0080-REVIEW).
+      const source = write.source.trim();
+      const ast = parseFormula(source, document.objects, cellHostObjectId(target));
       if (isParseError(ast)) {
         // D-038 clause 2: the offending name and its position are what `parseFormula`
         // put in the `#PARSE`, carried through rather than flattened to "bad formula".
         // Clause 4: the source text is echoed rather than discarded, so the operator
         // edits it instead of retyping it.
-        return { ok: false, message: `${ast.message} (at position ${ast.start} of "${write.source.trim()}")` };
+        return { ok: false, message: `${ast.message} (at position ${ast.start} of "${source}")` };
       }
       if (write.mustBeReference && !isReferenceNode(ast)) {
-        return { ok: false, message: `"link" takes an address as its source — usage: link <address> <address>. Use "set ${target.displayName} = ${write.source.trim()}" to write a formula` };
+        return { ok: false, message: `"link" takes an address as its source — usage: link <address> <address>. Use "set ${target.displayName} = ${source}" to write a formula` };
       }
       return { ok: true, slot: { kind: "formula", ast, value: null }, lines: [`${target.displayName} = ${formatFormula(ast, document.objects)}`] };
     }

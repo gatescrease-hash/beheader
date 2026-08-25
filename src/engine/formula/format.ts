@@ -17,8 +17,12 @@
  *   operator's own keystrokes — `1+2 * 3` comes back as `1 + 2 * 3`.
  *
  * INVARIANTS UPHELD HERE
- *   - Never throws. An `Address` whose object is gone formats as the `AddressError`'s
- *     own message, the way `mutation.ts`'s `formatCycleRejection` already handles it.
+ *   - Never throws for any DOCUMENT state: an `Address` whose object is gone formats as
+ *     the `AddressError`'s own message, the way `mutation.ts`'s `formatCycleRejection`
+ *     already handles it. The one exception is SIZE, measured rather than reasoned about
+ *     (D-077 clause 2, entry 0079): `formatNode` recurses over the AST, so an AST nesting
+ *     deeper than about 5,000 levels unwinds a `RangeError` — the same band, and the same
+ *     unfixed defect, as `parser.ts`'s recursive descent that built it.
  *   - An object name is never concatenated here: every reference goes through
  *     `address.ts`'s `formatAddress` (D-015), which also strips a table cell's stored
  *     `cells` prefix so `table_x.A1` prints the way it was typed.
@@ -84,8 +88,8 @@ const ATOM_PRECEDENCE = 8;
  * authors a formula (D-071's `set <address> = <source>`), not to the formula, and a
  * caller that wants to echo the authoring form prefixes it.
  *
- * Never throws, including for an address whose object has been deleted — see the file
- * header's invariants.
+ * Never throws for an address whose object has been deleted, and unwinds a `RangeError`
+ * for an AST nested past ~5,000 levels — see the file header's invariants for both.
  */
 export function formatFormula(ast: FormulaAst, objects: readonly AddressableObject[]): string {
   return formatNode(ast, objects, 0);

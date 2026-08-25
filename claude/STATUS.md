@@ -1,8 +1,9 @@
-# STATUS — as of entry 0079
+# STATUS — as of entry 0080
 
-STATE: **GREEN.** Both configs compile, 976/976 tests pass, 0 skipped, 0 `.only`. Entry 0079 is
-**awaiting review**: §6.1 trigger 5 fired (five test expectations changed) and the batch is over
-§6.3's line cap at 944/800.
+STATE: **GREEN.** Both configs compile, 977/977 tests pass, 0 skipped, 0 `.only`. Entry 0079 has
+been **reviewed and accepted with edits** (0080-REVIEW-phase3): two findings fixed at the review,
+two on its fix list, one new ruling (**D-078**). Nothing is awaiting review; the next slice is free
+to start.
 
 Current phase: **3 — canvas, camera, geometry, command line.** A typed line can now CREATE the four
 objects and WIRE them: `set`, `set <address> = <formula>`, `link` and `unlink` all run against a
@@ -11,11 +12,10 @@ of this project.** Phase 3 criterion (§6): *"create a polygon and a table by co
 drawn, pan/zoom, select, and drag the polygon."* The engine half is done and tested; the visible
 half is untested and unbuilt. NOT claimed.
 
-Last review point: **0078-REVIEW-phase3, ACCEPT WITH EDITS.**
-Cycles since last review: **1/3** · diff since last review: **944 lines / 9 files** (cap 800/10 —
-**over**).
+Last review point: **0080-REVIEW-phase3, ACCEPT WITH EDITS.**
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
 
-## Read this first — the one thing entry 0079 found and did not fix
+## Read this first — the one known defect, and it now has an owner
 
 **`executeCommand` THROWS on one typed line.** `set table_1.A1 = 1 + 1 + …` at about 5,000 terms
 exhausts the stack inside `formula/parser.ts`'s recursive descent and a `RangeError` unwinds out of
@@ -24,11 +24,14 @@ the command line. `formatFormula` fails at the same depth; measured together at 
 exception instead of claiming a never-throws property that is false.
 
 This is D-077 clause 2 working — the claim was probed instead of reasoned about — and it is the
-same shape as 0078-REVIEW's F1: a "never throws" assertion over a collection the user sizes. The
-recursion predates this cycle; the DOOR does not, because `parseFormula` had no caller reachable
-from typed input until now. **The fix is a depth limit in the recursive-descent parser, returning
-`#PARSE` rather than unwinding** — `formula/parser.ts`'s cycle to make, not something entry 0079 was
-free to take on the side (§4).
+same shape as 0078-REVIEW's F1: a "never throws" assertion over something the user sizes.
+0080-REVIEW reproduced it independently and made it **fix-list item 1**: a depth limit in the
+recursive-descent parser returning `#PARSE` rather than unwinding, plus the same guard on
+`format.ts`'s own recursion, because a `#PARSE` at authoring time does nothing for an AST that
+arrived from a LOADED file. **Take it as its own small slice before `main.ts`** — a `RangeError` out
+of a canvas repaint is far harder to attribute than one out of a command line. `format.ts` and
+`writeSlot` now state the exception too (D-078); `parser.ts`'s two claims stay uncorrected until the
+depth limit makes them true again.
 
 ## Next slice — `rename`/`delete`/`refs`/`list`, then D-075's effects
 
@@ -46,7 +49,8 @@ free to take on the side (§4).
    `prompt.ts` — a canvas click during a live sequence is a `picked` response, not a selection**,
    with screen→world done by `camera.ts` before it reaches `command/`.
 
-The parser depth limit above can be taken as its own small slice at any point; it blocks nothing.
+The parser depth limit (fix-list item 1) is its own small slice and blocks nothing else — but take
+it BEFORE step 4, per 0080-REVIEW F3.
 
 ## Built and reviewed
 
@@ -56,9 +60,10 @@ insert/delete and `delete <table> force` (0054) · `render/camera.ts` + entry 00
 entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.ts` (0069) ·
 `command/prompt.ts` + D-071's formula path (0071) · entries 0072–0073's fix-list work (0074) ·
 `command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`, and
-`TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078).
+`TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · **`commands.ts`'s four slot commands through
+one `writeSlot` path, and `engine/formula/format.ts` (0080)**.
 
-## Built this batch, not yet reviewed
+## What entry 0079 built, as reviewed at 0080
 
 - **`command/commands.ts`'s four slot commands** — `set` (literal), `set <address> = <formula>`,
   `link`, `unlink` — through ONE `writeSlot` path (D-071 clause 4), with D-040's replaced-formula
@@ -86,32 +91,39 @@ four commands close" block. (c) partial binding under DRAG exists in `render/int
 but no test puts all three in ONE document, which is what "simultaneously" requires — and §6 forbids
 starting a phase before its predecessor's criterion passes, which Phase 3's has not.
 
-## Open fix list — **read 0078-REVIEW §9 for the full text**
+## Open fix list — **read 0080-REVIEW §9 for the full text**
 
-Items 1 and 2 are **DONE** at entry 0079 (the registry sweep now iterates all sixteen commands;
-`mutation.test.ts`'s stale resize/creation header and `schema.test.ts`'s two "graph/eval.ts does not
-exist yet" claims are corrected).
+1. **Depth-limit `formula/parser.ts`'s recursive descent** — return `#PARSE` past a fixed depth
+   instead of unwinding, guard `format.ts`'s recursion for the loaded-file path, then remove the
+   exception sentences the four sites now carry and pin the bound with a test. See the top of this
+   file. Blocks nothing; take it before `main.ts`.
+2. **Give the missing-slot refusal a remedy** — "references a slot that does not exist" is true and
+   tells the operator nothing to do. Message only: **D-047 clause 4 does not move** (0080-REVIEW F4
+   ruled it stands, and the surprise below is the ruled behaviour).
 
-**Carried from 0074-REVIEW §9, all six unchanged, none blocking:** (1) report a refused prompt
-answer with the sequence's own message — **D-074**, the one with a ruling behind it · (2) a usage
-line for the form a prompting command was used in, folded into 0069-REVIEW F3's sweep over all
-sixteen `usage` strings · (3) decide what a quoted command WORD means, and correct entry 0072's
-"only site" claim · (4) disclose 0074-REVIEW F4's two message changes, test (a) · (5) `set = x`
-wrongly says `"set" takes no formula` — it lives in `parser.ts`'s argument matching, which entry
-0079 did not open · (6) `parser.ts`'s header restating D-069 · the twelve bare "this cycle" sites in
-test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointArray` ·
-`.gitattributes`.
+**Carried from 0074-REVIEW §9 through 0078-REVIEW, all six unchanged, none blocking:** (1) report a
+refused prompt answer with the sequence's own message — **D-074**, the one with a ruling behind it ·
+(2) a usage line for the form a prompting command was used in, folded into 0069-REVIEW F3's sweep
+over all sixteen `usage` strings · (3) decide what a quoted command WORD means, and correct entry
+0072's "only site" claim · (4) disclose 0074-REVIEW F4's two message changes, test (a) · (5)
+`set = x` wrongly says `"set" takes no formula` — it lives in `parser.ts`'s argument matching · (6)
+`parser.ts`'s header restating D-069 · the twelve bare "this cycle" sites in test files ·
+`render/slots.ts` at the THIRD consumer of `readNumber`/`asPointArray` · `.gitattributes`.
+
+0078-REVIEW §9's items 1 and 2 are **DONE** (entry 0079, confirmed at 0080).
 
 ## Known problems (detail lives where the pointer says)
 
-- **`executeCommand` throws at ~5,000 formula nesting levels** — see the top of this file. The one
-  known false-in-spirit claim in the tree, now stated in the header rather than denied.
+- **`executeCommand` throws at ~5,000 formula nesting levels** — see the top of this file. Owned by
+  fix-list item 1. Every claim on that call path now states the exception except `parser.ts`'s two,
+  which the depth limit will make true outright rather than qualified (D-078).
 - **A bare reference to an EMPTY cell is REFUSED.** `set table_1.A1 = table_1.B1` on a fresh table
   fails with "references a slot that does not exist", because creation makes no cell slots (D-047)
   and D-047 clause 4 makes an absent cell fine inside a RANGE and not fine as a plain reference.
   Ruled behaviour, working as written, pinned by a test at 0079 — and still going to surprise the
-  operator, since `= SUM(B1:B4)` works on the same empty table. Raised for a reviewer's fresh eyes,
-  not proposed for change.
+  operator, since `= SUM(B1:B4)` works on the same empty table. **0080-REVIEW F4 looked and ruled it
+  STANDS** — a range names a region and tolerates absence, a bare reference names one slot the
+  operator wrote. Only the MESSAGE changes (fix-list item 2); do not re-raise the behaviour.
 - **Eight §5.10 commands have no registry entry** — `polyline`/`text`/`script`/`image`/`explode`/
   `addvertex`/`delvertex` wait on a schema or an `Operation` kind; **`pan` waits on Q-012**. All
   report "not built", not "unknown command" (`COMMANDS_SPECIFIED_BUT_NOT_BUILT`).
@@ -125,8 +137,9 @@ test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointAr
   defect**; here so the human can lower D-070's cap if a real document ever wants to. **Do not
   "fix" it by tightening a bound (D-077 clause 3).**
 - **A `#PARSE` position is an offset into the FORMULA, not into the line.** `commands.ts` never sees
-  the line, only the source `parser.ts` sliced for it, so a caret-positioning `main.ts` will need
-  `SetFormulaCommand` to carry the line offset of its `=`. Additive when wanted.
+  the line, only the trimmed source `parser.ts` sliced for it, so a caret-positioning `main.ts` will
+  need `SetFormulaCommand` to carry the line offset of its `=` PLUS the width of the whitespace
+  `buildSlot` trims. Additive when wanted.
 - **A refused prompt answer is reported by the wrong grammar** — `circle 100,100 abc` blames
   `100,100`. Ruled **D-074**, fix-list item 3(1); no test pins the current behaviour.
 - **Prompt order, wording and the `<8>` default form are a reading of AutoCAD, not the brief's.**
@@ -152,7 +165,7 @@ test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointAr
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-077**) binds without restatement here. Newest:
+Every ruling in `DECISIONS.md` (D-001 through **D-078**) binds without restatement here. Newest:
 **D-070** creation counts bounded by the HANDLER — implemented at 0075 · **D-071** a formula is
 authored with `set <address> = <source>` — implemented at 0079, clause 4's ONE path included ·
 **D-072** a command word alone enters a prompt sequence · **D-073** a formula's source is NEVER
@@ -162,7 +175,9 @@ state returns an EFFECT as plain data — **not yet implemented**, it is the sli
 **D-076** a header's PROSE is capped at 15 lines and every other length budget is withdrawn —
 **length is not a finding, do not report it** · **D-077** a dynamic slot family's size is DOCUMENT
 STATE: never spread one into a call, and probe every "never throws" claim at the largest size the
-bounds allow.
+bounds allow · **D-078** a probe that falsifies a property falsifies EVERY claim of it on that call
+path — correct all of them, in both directions, or the finding is not discharged; a claim false only
+past a size bound is QUALIFIED with the measurement, not deleted, and this authorises no sweep.
 
 **D-040 and D-041 are IMPLEMENTED, not merely ruled** (entry 0079), and **Q-001/Q-002 are
 reconciled**: D-041's kept value is `FormulaSlot.value`, D-040's report is `formatFormula` of the
@@ -179,6 +194,13 @@ Next free: **Q-014**.
 
 ## Gotchas for the next model
 
+- **Correct every claim a probe falsifies, not the one you were reading (D-078).** Entry 0079
+  measured the throw and fixed `commands.ts`; `format.ts`'s own header still said "Never throws" in
+  a file that same cycle created. Grep the call path in both directions — what throws, what asserts
+  the property while calling it, what asserts it while being called by it.
+- **A `#PARSE` position is an offset into the string the message QUOTES.** `buildSlot` trims the
+  formula source before parsing for exactly that reason (0080-REVIEW F1); a position measured
+  against a different string than the one printed beside it is worse than no position at all.
 - **Probe a "never throws" claim; do not reason about it (D-077 clause 2).** Entry 0079 did, and it
   cost the claim: `executeCommand` throws at ~5,000 formula nesting levels. Two reviews running have
   now found this shape. If your cycle writes or inherits a never-throws sentence, find the user-sized

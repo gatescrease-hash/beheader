@@ -486,8 +486,15 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     it("refuses an unknown function name, carrying the offending name and its position", () => {
       const message = refused("set table_1.A1 = NOSUCH(1)", sandbox());
       expect(message).toContain('unknown function "NOSUCH"');
-      expect(message).toContain("at position 1");
+      // Position 0, not 1: the offset is into the source the message SHOWS, which is the
+      // formula trimmed of the space after the `=` (0080-REVIEW E1). A position measured
+      // against a different string than the one quoted beside it is worse than none.
+      expect(message).toContain("at position 0");
       expect(message).toContain("NOSUCH(1)");
+    });
+
+    it("measures that position against the source it quotes, however much space follows the = (0080-REVIEW E1)", () => {
+      expect(refused("set table_1.A1 =    1 + NOSUCH(1)", sandbox())).toBe('unknown function "NOSUCH" (at position 4 of "1 + NOSUCH(1)")');
     });
 
     it("refuses a known function called with the wrong argument count", () => {

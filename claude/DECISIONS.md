@@ -2301,3 +2301,42 @@ Reconciliation required: none outstanding. The one live site was fixed at 0078-R
 paths. `enumerateRangeCellAddresses` and `graph/eval.ts` were checked at the same review and
 already loop; a tree-wide `grep 'push(\.\.\.'` returns the one static-group site, which is a
 literal in `schema.ts` and bounded by construction.
+
+---
+
+## D-078 — A probe that falsifies a property falsifies EVERY claim of it on that call path. Correct all of them, or the finding is not discharged
+
+Ruled at 0080-REVIEW-phase3 (reviewer), from entry 0079's own measurement.
+
+1. When a probe shows that a stated property (never throws, always terminates, never allocates
+   unboundedly, always returns a value) is FALSE, the finding is not discharged by correcting the
+   one claim you happened to be reading. Grep the call path for every statement of the same
+   property — file headers, function docs, test names — and correct or qualify each one.
+2. "Call path" means what the probe actually ran through, in both directions: the function that
+   throws, every function whose doc asserts the property while calling it, and every function that
+   asserts it while being called by it. In entry 0079's case that is `formula/parser.ts`,
+   `formula/format.ts`, `command/commands.ts`'s `writeSlot`, and `executeCommand` — four files'
+   worth of claims, one of which was corrected.
+3. A claim that is TRUE for every document state and false only past a size bound is qualified, not
+   deleted: state the bound and the measurement, and point at the entry that measured it. A reader
+   needs to know the property holds for everything they will type, and exactly where it stops.
+4. This does not authorise a sweep. It binds the call path the probe ran, at the cycle that ran it —
+   nothing wider, and no scheduled audit of claims nobody has probed.
+
+**Rationale.** D-077 clause 2 made the probe mandatory and it worked: entry 0079 pushed its own
+"never throws" to the bound, found a `RangeError` at ~5,000 formula nesting levels, and disclosed it
+rather than burying it. Then it corrected `commands.ts`'s header and `executeCommand`'s doc and
+stopped — leaving `format.ts`'s header asserting "Never throws" in a file created by the same cycle,
+by the model that had just watched `formatFormula` throw, plus two more sites saying the same thing.
+
+The reason this is a ruling and not a finding is that the omission is structural, not careless. A
+probe is written against one claim, so the fix lands where the reader's attention was, while the
+identical claim two files away is exactly as load-bearing and exactly as false. D-065 already says a
+comment is YOURS once you falsify it; what was missing is that a MEASUREMENT falsifies comments you
+never opened. This is the third review running to find the never-throws shape (0074-REVIEW F1,
+D-077's own rationale, and now 0080-REVIEW F2), and each time the previous fix was correct and did
+not generalise.
+
+Reconciliation required: none outstanding. The three live sites were corrected at 0080-REVIEW;
+`formula/parser.ts`'s two carry the exception until 0080-REVIEW fix-list item 1 puts the depth limit
+in, which makes the original claim true again rather than merely qualified.
