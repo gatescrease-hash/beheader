@@ -143,8 +143,8 @@
  *     pair and decides what to do with a rejection.
  *   - Operation kinds beyond the five above (`explode`, vertex add/remove) — they
  *     belong to the phases that introduce the state they touch.
- *   - A user-facing "add a new circle" COMMAND (§5.10, Phase 3): choosing a fresh id
- *     from `nextObjectId` and a type's default slot values is a command-layer concern
+ *   - A user-facing "add a new circle" COMMAND (§5.10): choosing a fresh id from
+ *     `nextObjectId` and a type's starting slot values is `command/commands.ts`'s,
  *     layered ON TOP of `CreateObjectOperation`, not the same thing as it.
  *   - Undo/redo (PROJECT_BRIEF §8) — this stores the journal data undo will need, and
  *     nothing replays it.
@@ -208,11 +208,12 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
     for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
       const slot = object.slots[slotKey(path)];
       if (slot === undefined || slot.kind !== "formula") {
-        // Either this path isn't populated on this particular object (a
-        // malformed/incomplete fixture — mutation.ts's future object-creation
-        // step should never produce one), or it's currently `literal`, which
-        // has no inbound edges (§5.1's slot-kind table). Either way: nothing
-        // to derive for this path.
+        // Either this path is DECLARED but not populated on this object —
+        // ordinary state, not a defect: a created table declares one cell path
+        // per rows x cols and carries a slot only where something was written
+        // (D-047's absent spelling of an empty cell, `command/commands.ts`) —
+        // or it's currently `literal`, which has no inbound edges (§5.1's
+        // slot-kind table). Either way: nothing to derive for this path.
         continue;
       }
       const dependentSlot = { objectId: object.id, path };

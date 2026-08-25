@@ -1,25 +1,25 @@
-# STATUS — as of entry 0077
+# STATUS — as of entry 0078
 
-STATE: **GREEN, awaiting review.** Both configs compile, 925/925 tests pass, 0 skipped, 0 `.only`.
-Entry 0075 fired **§6.1 trigger 5** (three `schema.test.ts` expectations changed) and is over
-§6.3's cap (~835 lines / 13 files vs 800/10). `command/commands.ts`, `document.ts`'s
-`mintObjectId` and `TABLE_SCHEMA`'s origin pair are **unreviewed**. Entries 0076 and 0077 are the
-human's RULINGS entries that followed — **D-075** and **D-076**, one comment changed, no behaviour.
-**Entry 0075 is the whole of what the reviewer audits.**
+STATE: **GREEN.** Both configs compile, 926/926 tests pass, 0 skipped, 0 `.only`. Entry 0075 has
+been reviewed: **0078-REVIEW-phase3, ACCEPT WITH EDITS**, four findings, one ruling (**D-077**),
+five reviewer edits. Nothing is awaiting review. `command/commands.ts`, `document.ts`'s
+`mintObjectId` and `TABLE_SCHEMA`'s origin pair are now reviewed, and §6.2 no longer holds a later
+phase back on anything touched last batch.
 
-Current phase: **3 — canvas, camera, geometry, command line.** `render/` and `command/` are now
-both complete enough to wire: a typed or picked line becomes a `Command` (`parser.ts`/`prompt.ts`)
-and the four CREATION commands run against a `Document` (`commands.ts`). **`main.ts` still holds
-no canvas and listens for nothing, so no pixel has ever come out of this project.** Phase 3
-criterion (§6): *"create a polygon and a table by command, see both drawn, pan/zoom, select, and
-drag the polygon."* Creation works and is tested; the visible half is untested. NOT claimed.
+Current phase: **3 — canvas, camera, geometry, command line.** `render/` and `command/` are both
+complete enough to wire: a typed or picked line becomes a `Command` (`parser.ts`/`prompt.ts`) and
+the four CREATION commands run against a `Document` (`commands.ts`). **`main.ts` still holds no
+canvas and listens for nothing, so no pixel has ever come out of this project.** Phase 3 criterion
+(§6): *"create a polygon and a table by command, see both drawn, pan/zoom, select, and drag the
+polygon."* Creation works and is tested; the visible half is untested. NOT claimed.
 
-Last review point: **0074-REVIEW-phase3, ACCEPT WITH EDITS.**
-Cycles since last review: **1/3** · diff since last review: **~835 lines / 13 files** (cap 800/10).
+Last review point: **0078-REVIEW-phase3, ACCEPT WITH EDITS.**
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
 
 ## Next slice — `commands.ts`'s SLOT commands (§5.10, §5.1)
 
-`set` / `set-formula` / `link` / `unlink`, in one cycle, because their debts are one debt:
+Unchanged, and 0078-REVIEW §10 confirms it. `set` / `set-formula` / `link` / `unlink`, in one
+cycle, because their debts are one debt:
 
 1. **D-071 clause 4** — `link` and a formula-writing `set` share ONE slot-writing path. First call
    to `parseFormula` in the codebase, so **D-038's four conditions come due here**: validate on
@@ -48,23 +48,13 @@ Phase 0 (0027-REVIEW) · formula engine (0037) · the whole table primitive thro
 insert/delete and `delete <table> force` (0054) · `render/camera.ts` + entry 0055's header audit
 (0058) · `primitives/geometry.ts` (0060) · `render/renderer.ts` (0062) · `render/hittest.ts` (0064) ·
 entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.ts` (0069) ·
-`command/prompt.ts` + D-071's formula path (0071) · entries 0072–0073's fix-list work (0074).
+`command/prompt.ts` + D-071's formula path (0071) · entries 0072–0073's fix-list work (0074) ·
+**`command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`, and
+`TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078)**.
 
-## Built this batch, not yet reviewed (entry 0075)
+## Built this batch, not yet reviewed
 
-- **`src/command/commands.ts`** (new, 332) — `executeCommand(command, document)`, D-069's only
-  meeting point. Four creation handlers; the other twelve `Command` arms routed and reporting
-  `"<word>" has no handler yet — nothing was changed`, from an exhaustive switch. **D-070's bounds
-  live here** (`MAX_POLYGON_SIDES` 1000, `MIN`/`MAX_TABLE_LINES` 1/1000), before any `Operation`.
-- **`src/command/commands.test.ts`** (new, 369, 42 tests) — including the end-to-end pair that
-  discharges the carried "end-to-end test through a table-creation command".
-- **`src/engine/document.ts`** (+25, load-bearing) — `mintObjectId` returns `{ id, nextObjectId }`
-  so D-002's advance cannot be forgotten. `obj_<n>` now exists in code exactly once.
-- **`src/engine/primitives/schema.ts`** (+21/-9, load-bearing) and its test (+8/-6, **trigger 5**)
-  — `TABLE_SCHEMA` declares `origin.x`/`origin.y`. **What this buys is `link table_x.origin.x
-  <address>`**, since D-017 lets only a declared path hold a `formula` slot; drawing already worked.
-- **Eight comment-only files** (`main.ts`, `renderer.ts`, `interaction.ts`, `hittest.ts` + test,
-  `table.ts` + test, `mutation.ts`) — D-065 corrections for claims entry 0075 falsified.
+Nothing. The tree is at the reviewed state plus 0078-REVIEW's own five edits.
 
 ## Not started
 
@@ -75,17 +65,23 @@ effects, `main.ts` wiring, §5.9's visual-feedback trio (**D-068**), §5.9's per
 works and is unclaimed** (0067-REVIEW probe P1); its authoring path (D-071/D-073) is complete and
 reviewed, and a polygon can now be created to try it on.
 
-## Open fix list — **read 0074-REVIEW §9 for the full text**; all six unchanged
+## Open fix list — **read 0078-REVIEW §9 for the full text**
 
-None of it is `commands.ts` work and none blocked entry 0075. One line each: (1) report a refused
-prompt answer with the sequence's own message, not `fromParse` — **D-074**, the one with a ruling
-behind it · (2) a prompting command needs a usage line for the form it was used in, folded into
-0069-REVIEW F3's sweep over all sixteen `usage` strings · (3) decide what a quoted command WORD
-means, and correct entry 0072's "only site" claim · (4) disclose 0074-REVIEW F4's two message
-changes, test (a) · (5) `set = x` wrongly says `"set" takes no formula` · (6) carried:
-`parser.ts`'s header restating D-069 · the twelve bare "this cycle" sites and two stale claims in
-test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointArray` ·
-`.gitattributes`. **Item 6's "end-to-end test through a table-creation command" is DONE (0075).**
+1. **`commands.test.ts`'s registry sweep covers 6 of 17** — its name claims the registry. Iterate
+   `UNHANDLED_EXAMPLES`'s twelve lines plus the four creation lines (that union is already pinned
+   against `COMMAND_NAMES` in the block below it), or rename the test. Rides along with the next
+   cycle, which opens that file anyway.
+2. **`mutation.test.ts:2038`'s "still-deferred resize/creation cycle"** — the resize half was stale
+   from 0050, and entry 0075 falsified the creation half, so under D-065 it now has an owner. Take
+   `schema.test.ts`'s two stale Phase-0 claims in the same pass.
+3. **Carried from 0074-REVIEW §9, all six unchanged, none blocking:** (1) report a refused prompt
+   answer with the sequence's own message — **D-074**, the one with a ruling behind it · (2) a
+   usage line for the form a prompting command was used in, folded into 0069-REVIEW F3's sweep over
+   all sixteen `usage` strings · (3) decide what a quoted command WORD means, and correct entry
+   0072's "only site" claim · (4) disclose 0074-REVIEW F4's two message changes, test (a) ·
+   (5) `set = x` wrongly says `"set" takes no formula` · (6) `parser.ts`'s header restating D-069 ·
+   the twelve bare "this cycle" sites in test files · `render/slots.ts` at the THIRD consumer of
+   `readNumber`/`asPointArray` · `.gitattributes`.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -95,8 +91,12 @@ test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointAr
 - **Twelve commands parse and then refuse** with "has no handler yet" (0075). Honest and correct
   for now; closes over the next two cycles. **`createObjectFromCommand`'s "type has no schema"
   branch is uncovered** — all four creatable types have schemas, so nothing can reach it.
+- **A 1000×1000 table is legal and costs ~1.2 s per MUTATION** — 1,000,000 declared cell paths
+  re-enumerated on every mutation, measured at 0078-REVIEW. That is Rule 5's accepted trade and
+  **not a defect**; it is here so the human can lower D-070's cap if a real document ever wants to.
+  **Do not "fix" it by tightening a bound (D-077 clause 3).**
 - **A refused prompt answer is reported by the wrong grammar** — `circle 100,100 abc` blames
-  `100,100`. Ruled **D-074**, fix-list item 1; no test pins the current behaviour.
+  `100,100`. Ruled **D-074**, fix-list item 3(1); no test pins the current behaviour.
 - **Prompt order, wording and the `<8>` default form are a reading of AutoCAD, not the brief's.**
   Cheap to change; the human should say if any reads wrong in use. **No repeat-last-command
   gesture**; it needs the input bar.
@@ -120,20 +120,21 @@ test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointAr
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-076**) binds without restatement here. Newest:
-**D-070** creation counts bounded by the HANDLER, out of range REJECTS — **implemented at 0075** ·
+Every ruling in `DECISIONS.md` (D-001 through **D-077**) binds without restatement here. Newest:
+**D-070** creation counts bounded by the HANDLER, out of range REJECTS — implemented at 0075 ·
 **D-071** a formula is authored with `set <address> = <source>` · **D-072** a command word alone
 enters a prompt sequence · **D-073** a formula's source is NEVER tokenized by the command lexer —
-discharged at 0072 · **D-074** a prompt sequence's own refusal IS the message — **still open,
-fix-list item 1** · **D-075** a command that changes no document state returns an EFFECT as plain
+discharged at 0072 · **D-074** a prompt sequence's own refusal IS the message — **still open**,
+fix-list item 3(1) · **D-075** a command that changes no document state returns an EFFECT as plain
 data and `main.ts` performs it; `commands.ts` still resolves the name and reports the refusal ·
-**D-076** a header's PROSE is capped at 15 lines and its lists are not capped; **every other length
-budget is withdrawn — header, source file and this file alike — and length is not a finding. Do
-not report it.**
+**D-076** a header's PROSE is capped at 15 lines and every other length budget is withdrawn —
+**length is not a finding, do not report it** · **D-077** a dynamic slot family's size is DOCUMENT
+STATE: never spread one into a call, and probe every "never throws" claim at the largest size the
+bounds allow.
 
 **D-047's open clause is settled: a created table has NO cell slots**, confirmed by the human at
 entry 0076 on the condition D-047 clause 3 already guarantees — an absent cell and a `null` cell
-behave identically inside an aggregate.
+behave identically inside an aggregate (pinned by `mutation.test.ts`'s paired sum tests).
 
 ## Live PROVISIONAL tags and open questions
 
@@ -146,6 +147,11 @@ handlers** — reconcile, do not re-decide. Next free: **Q-014**.
 
 ## Gotchas for the next model
 
+- **Never spread a collection the user can size (D-077).** `push(...family)`, `Math.max(...family)`,
+  `fn.apply(null, family)` all pass it as ARGUMENTS and die of `RangeError` past ~125k elements.
+  `resolveNonDerivedSlotPaths` was the second occurrence (the first was `MIN`/`MAX`, 0035-REVIEW
+  F4); both are loops now. **A "never throws" claim must be PROBED at the largest size the bounds
+  allow**, and the size named in your entry.
 - **`executeCommand` is the ONLY place a `Command` meets a `Document` (D-069).** It returns a NEW
   document; the caller stores it. The success arm ALWAYS carries one, even for a command that
   changed nothing, so there is no caller-side branch.
@@ -156,6 +162,8 @@ handlers** — reconcile, do not re-decide. Next free: **Q-014**.
   It advances only on success — a refused creation takes no id.
 - **A created table has `origin.x`/`origin.y` and `rows`/`cols`, and NO cells.** `TABLE_SCHEMA`
   declares the origin pair, which is what makes `link table_x.origin.x` possible at all (D-017).
+  Its 64 declared-but-absent cell paths take `deriveEdges`'s unpopulated branch on every mutation:
+  ordinary state, not a defect (D-047).
 - **A command word alone is not an error (D-072).** `beginCommand` in `command/prompt.ts` is the
   entry point for a typed line, not `parseCommand`. **A pick reaches `command/` as a WORLD point**,
   converted by `camera.ts` — never import `render/` into `command/` source (a TEST may, and
@@ -167,11 +175,13 @@ handlers** — reconcile, do not re-decide. Next free: **Q-014**.
   unchanged** — D-031 clause 3. **Only the three COUNTS are bounded, and only in the handler**
   (D-070). A coordinate that overflows is refused by `mutate` with a good message; see entry 0075.
 - **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it
-  (D-065).** Entry 0075 owed eight such corrections. Grep for the name of every file and capability
-  you just created, before writing your entry.
-- **Preserve each file's LINE ENDINGS when editing.** `document.ts`/`schema.ts` are CRLF;
-  `parser.ts`, `main.ts` and `render/*` are LF. An editor that normalises rewrites the whole file
-  and buries a four-line change in a 500-line diff.
+  (D-065).** Entry 0075 owed eight such corrections and made them; 0078-REVIEW found two more it
+  missed, both in the direction that is hardest to see: **a header of the file you just changed,
+  saying this file does not do the thing you just made it do.** Grep for the name of every file and
+  capability you create — and re-read the headers of the files you edited.
+- **Preserve each file's LINE ENDINGS when editing.** `document.ts`/`schema.ts`/`mutation.ts` are
+  CRLF; `parser.ts`, `commands.ts`, `main.ts` and `render/*` are LF. An editor that normalises
+  rewrites the whole file and buries a four-line change in a 500-line diff.
 - **Three different reasons to read a slot, and they do NOT unify** (0062-, 0067-REVIEW): to
   DRAW/HIT-TEST (`readNumber`, kind-blind), to SIZE the slot set (`readTableDimension`,
   `literal`-only), to decide whether it may be WRITTEN (`interaction.ts`, kind-aware).
@@ -187,8 +197,7 @@ handlers** — reconcile, do not re-decide. Next free: **Q-014**.
   fires** (entry 0073). Apply §6.1 mechanically — 0075 fired trigger 5 for a test expectation two
   reviews had explicitly asked for.
 - **Do NOT report the LENGTH of anything (D-076)** — not a header, not this file, not a source
-  file. §5.2's 20–40 / ~80 header budget and §2's "< 150 lines" for this file are both withdrawn.
-  The one length rule that survives, and the one a review may still raise, is **`WHAT THIS IS`
-  capped at 15 lines**; `INVARIANTS UPHELD HERE` and `NOT DONE HERE` are uncapped, one line per
+  file. The one length rule that survives, and the one a review may still raise, is **`WHAT THIS
+  IS` capped at 15 lines**; `INVARIANTS UPHELD HERE` and `NOT DONE HERE` are uncapped, one line per
   item. Twelve files miss the prose cap today and stay as they are — it binds new and edited
   headers only, and there is no sweep.

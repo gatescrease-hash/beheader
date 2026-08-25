@@ -196,7 +196,9 @@ export type NonDerivedSlotPathGroup =
  *
  * Never throws: a `dynamic` group's `enumerate` function must not throw
  * either (`enumerateTableCellSlotPaths`'s own doc comment explains why it
- * cannot), and this function does nothing beyond concatenating its results.
+ * cannot), and the concatenation below appends one path at a time — see its
+ * own comment for why a spread would make this claim false at a size D-070's
+ * bounds already allow.
  */
 export function resolveNonDerivedSlotPaths(
   object: GraphObject,
@@ -207,7 +209,17 @@ export function resolveNonDerivedSlotPaths(
     if (group.kind === "static") {
       paths.push(...group.paths);
     } else {
-      paths.push(...group.enumerate(object));
+      // Appended ONE AT A TIME, never `push(...group.enumerate(object))`: a
+      // dynamic family's size is DOCUMENT STATE (a table declares rows x cols
+      // cell paths), and spreading an array that large into a call passes it as
+      // arguments and dies of `RangeError: Maximum call stack size exceeded` —
+      // measured at 0078-REVIEW between 90,000 and 130,000 paths, which
+      // `table x=0 y=0 rows=1000 cols=200` reaches from one typed line with both
+      // counts inside D-070's range (D-077). A `static` group's list is a literal
+      // in this file, so the spread above is bounded by construction.
+      for (const path of group.enumerate(object)) {
+        paths.push(path);
+      }
     }
   }
   return paths;

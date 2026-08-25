@@ -83,9 +83,10 @@
  *   - Deep validation of the journal's own `Operation` payloads. Nothing replays the
  *     journal (undo/redo UI is deferred, §8), so a malformed entry is inert today.
  *     Validate it for real the moment something reads it.
- *   - Allocating a fresh object id from `nextObjectId` (incrementing the counter,
- *     choosing a type's default slot values) — a FUTURE command-layer concern (§5.10,
- *     Phase 3), layered on top of `CreateObjectOperation`.
+ *   - Choosing a newly created object's TYPE-specific starting slot values (§5.10) —
+ *     `command/commands.ts`'s, layered on top of `CreateObjectOperation`. The ID
+ *     itself IS allocated here (`mintObjectId`): D-002's counter is document state,
+ *     so the `obj_<n>` format belongs beside the counter it comes from.
  *   - World<->screen transform math, pan, and zoom-to-cursor — `render/camera.ts`
  *     (§5.9). This file only declares and serializes the `CameraState` shape;
  *     `render/camera.ts` is the sole reader that interprets its fields as a

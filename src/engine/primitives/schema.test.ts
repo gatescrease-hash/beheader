@@ -211,6 +211,20 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     // Both dimensions read as 0 (readTableDimension's own fail-safe) — no cell paths, only the four fixed ones.
     expect(resolveNonDerivedSlotPaths(malformed, groups)).toEqual([["origin", "x"], ["origin", "y"], ["rows"], ["cols"]]);
   });
+
+  it("does not throw for the 200,004 paths a rows=1000 cols=200 table declares — both counts inside D-070's range (D-077)", () => {
+    const groups = getObjectSchema("table")?.nonDerivedSlotPaths;
+    if (groups === undefined) {
+      throw new Error("test setup: expected table's schema to exist");
+    }
+    // A dynamic family's size is DOCUMENT STATE, so this function's "never throws"
+    // claim holds only while it appends one path at a time: `push(...enumerate())`
+    // passes the whole family as arguments and dies of RangeError somewhere above
+    // 90,000 paths (0078-REVIEW measured it), which one typed `table` line reaches.
+    const wide = tableObject("obj_1", "table_x", 1000, 200);
+    expect(() => resolveNonDerivedSlotPaths(wide, groups)).not.toThrow();
+    expect(resolveNonDerivedSlotPaths(wide, groups)).toHaveLength(200_004);
+  });
 });
 
 describe("derivedSlotDependencyAddresses", () => {

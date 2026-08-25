@@ -2238,3 +2238,66 @@ supersedes it.
 Reconciliation required: `PROCESS_BRIEF.md` §5.2 amended at entry 0076; §2's "Keep < 150 lines"
 struck at entry 0077. `STATUS.md`'s header-budget known problem is DELETED, and so is its
 own-length one — neither is carried forward.
+
+---
+
+## D-077 — A dynamic slot family's size is DOCUMENT STATE. Never spread one into a call, and probe every "never throws" claim at the size the bounds allow
+Answers: the defect found by probe at 0078-REVIEW (no `Q-NNN` was raised; this is a defect against
+D-070's purpose, not an ambiguity in it)
+Ruled: entry 0078-REVIEW-phase3 (reviewer)   Binding on: `primitives/schema.ts`,
+`primitives/table.ts`, `graph/eval.ts`, and every future `dynamic` slot family — script `in.*`/
+`out.*` ports (§5.8), per-vertex slots on an editable path (§5.5), a range's enumerated cells
+
+**Ruling.**
+
+1. **A collection whose length is decided by document state is appended ONE ELEMENT AT A TIME.**
+   NEVER `push(...family)`, `Math.max(...family)`, `fn.apply(null, family)`, or any other form
+   that passes the whole collection as ARGUMENTS. A spread reads as concatenation and is compiled
+   as a call with N arguments; every JS engine caps N, and a `dynamic` family's N is whatever the
+   user typed. This binds the family itself and anything derived from it one-to-one.
+2. **A "never throws" claim about such a collection MUST be probed at the largest size the ruled
+   bounds permit**, and the size probed named in the log entry. Reasoning about what the code
+   "does" is what failed here: `resolveNonDerivedSlotPaths`'s own doc said it "does nothing beyond
+   concatenating its results," which was true and still throws.
+3. **D-070's numbers stand unchanged** — `sides` ∈ [3, 1000], `rows`/`cols` ∈ [1, 1000]. Do NOT
+   "fix" a defect of this class by tightening a bound: the bound is not what was wrong, and a
+   tighter one would hide the same hazard behind a smaller number. Measured at this review with
+   clause 1 applied, `table x=0 y=0 rows=1000 cols=1000` — the worst corner the bounds allow —
+   commits in ~1.2 s and round-trips, which is Rule 5's accepted trade, not a wedge.
+
+**Rationale.** `table x=0 y=0 rows=1000 cols=200` — both counts inside the range D-070 ruled, one
+typed line — threw `RangeError: Maximum call stack size exceeded` out of `executeCommand`, past
+three separate "never throws" guarantees: `command/commands.ts`'s header and `executeCommand`'s own
+doc, `mutate`'s, and `document.ts`'s (a foreign or hand-edited file with the same dimensions killed
+`loadDocument` the same way — pre-existing, and the half of this that was reachable before a
+creation command existed). The single site was `paths.push(...group.enumerate(object))`. The break
+sits between 90,000 paths (fine) and 130,000 (throws), so every test in the tree was three orders
+of magnitude below it and none of the six mutation checks at entry 0075 could have found it.
+
+This is the exact failure class D-070 was ruled to prevent — "a hang with no error, the one class
+of failure this project's error-value idiom cannot express" — arriving through the door D-070 did
+not think to close, because the ruling bounded the COUNTS while the hazard lives in the SIZE OF THE
+FAMILY THE COUNTS DECLARE. The counts were the reviewer's provisional pick and they were fine; the
+defect is in what was assumed about what a bounded count could still produce. Entry 0075
+implemented D-070 exactly as written, including its example message verbatim, and is not at fault
+for this.
+
+**This is the SECOND occurrence, which is why it is a ruling and not just a code fix.**
+0035-REVIEW Finding 4 found `Math.min(...numbers)` in `formula/functions.ts` and D-036 clause 5
+assigned its fix to the range-wiring cycle, which replaced it with `.reduce` and left a comment
+naming `RangeError` by name. That fix was correct and is still there. What did not happen is the
+generalisation: the same shape sat two directories away in the one function every mutation calls,
+over the one collection the user can size directly, and nothing pointed at it. A finding fixes one
+site; a ruling is what reaches the second.
+
+Second half (clause 2) is the transferable lesson: this project asserts "never throws" in a dozen
+headers, and every one of those assertions is about a collection or a recursion whose size is user
+data. D-016 already requires a mutation check for an acceptance claim; this requires a SIZE probe
+for a no-throw claim, for the same reason — the claim is cheap to write and its counterexample is
+never in the range anyone tests by hand.
+
+Reconciliation required: none outstanding. The one live site was fixed at 0078-REVIEW
+(`primitives/schema.ts`, with the reason in place) and pinned by a `schema.test.ts` test at 200,004
+paths. `enumerateRangeCellAddresses` and `graph/eval.ts` were checked at the same review and
+already loop; a tree-wide `grep 'push(\.\.\.'` returns the one static-group site, which is a
+literal in `schema.ts` and bounded by construction.
