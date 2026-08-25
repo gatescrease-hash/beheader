@@ -1,12 +1,15 @@
-# STATUS — as of entry 0072-fix-list-command-lexer
+# STATUS — as of entry 0073-correction-review-verdict
 
-STATE: GREEN (compiles under both configs, 882/882 tests pass, 0 skipped, 0 `.only`).
+STATE: GREEN, but **BLOCKED — awaiting review** (compiles under both configs, 882/882 tests pass,
+0 skipped, 0 `.only`; §6.1 trigger 5 fired at entry 0072, see below).
 
-**Process state: entry 0072 (implementer) closes out 0071-REVIEW's fix list items 1–4 — D-073's
+**Process state: entry 0072 (implementer) closed out 0071-REVIEW's fix list items 1–4 — D-073's
 tokenizer restructuring, F2's overflow-token naming, F3's discriminated refusal channel, F4's
-quoted-answer refusal. No `§6.1` trigger fired; `REVIEW: RECOMMENDED` (not required) before
-`command/commands.ts` builds on the formula-slicing this cycle restructured — see entry 0072's own
-"Review point". Only item 5's carried debt remains open from 0071-REVIEW's list.**
+quoted-answer refusal. Only item 5's carried debt remains open from 0071-REVIEW's list.
+`REVIEW: REQUIRED` — §6.1 trigger 5 fired: F2's fix changed `prompt.test.ts`'s "reports too many
+arguments" test, which was passing before entry 0072 and asserts something different after it.
+Entry 0072 itself mis-stated this as `RECOMMENDED`; corrected at entry 0073 (documentation only, no
+code). The next cycle must go to a REVIEWER, not straight to `commands.ts`.**
 
 Current phase: **3 — canvas, camera, geometry, command line.** `render/` is complete and reviewed.
 `command/` parses a line AND drives AutoCAD-style prompt sequences, both now reviewed (0071-REVIEW,
@@ -16,12 +19,13 @@ both drawn, pan/zoom, select, and drag the polygon."* Both can be composed by po
 ever come from one. NOT claimed.
 
 Last review point: **0071-REVIEW-phase3, REVISE** (reviewing entry 0070). Cycles since last review:
-**1/3** · diff since last review: **~447 lines / 4 files** (cap 800/10).
+**2/3** · diff since last review: **~447 lines / 4 files** (cap 800/10) — unchanged by entry 0073.
 
-## Next slice (recommended)
+## Next slice
 
-**`command/commands.ts`** (§5.10: handlers → mutation API calls). Item 1's prerequisite has now
-landed (entry 0072); it owes:
+**A REVIEW of entries 0072–0073 first** (§6.1 trigger 5 — see "Process state" above); route to a
+REVIEWER before anything else starts. After it clears, **`command/commands.ts`** (§5.10: handlers →
+mutation API calls) is next. Item 1's prerequisite has now landed (entry 0072); it owes:
 
 1. **D-040/D-041** — reconcile Q-001/Q-002, do not re-decide. `set` over a formula slot REPLACES it
    and reports what it replaced; `unlink` keeps the value last displayed, errors included.
