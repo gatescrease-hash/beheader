@@ -2150,3 +2150,70 @@ becomes a caught mutant, and that standing "known problem" closes.
 Reconciliation required: 0074-REVIEW fix-list item 1. No test pins the current deferral — probed at
 this review by making the change and running the suite: 106/106 still passed — so implementing this
 is additive and fires no §6.1 trigger 5.
+
+---
+
+## D-075 — A command that does not change the document returns an EFFECT as plain data; `main.ts` performs it
+Answers: entry 0075's question 2   Ruled: entry 0076-RULINGS (human, 2026-08-25)
+Binding on: `command/commands.ts`, `main.ts`, and every future command that reaches the camera,
+the selection, or a file
+
+Five of §5.10's commands change no document state: `select`, `zoom`, `fit`, `save`, `load`. They
+still enter through `executeCommand`, which stays the ONLY place a `Command` meets a `Document`
+(D-069).
+
+1. **`commands.ts` does the IDENTITY work and reports the refusal.** `select intersection_a`
+   resolves the name against the document and REJECTS an unknown one there. `main.ts` never
+   resolves a name.
+2. **`CommandOutcome`'s success arm is WIDENED with an optional `effect`** — plain, serializable,
+   a discriminated union, the same stance every data shape in this codebase takes. NEVER a
+   callback, a closure, or a DOM handle.
+3. **`main.ts` performs the effect**, because each one lives on the far side of a seam
+   `command/` may not cross: the selection is `render/interaction.ts`'s state; `zoom`/`fit`
+   clamping is `render/camera.ts`'s (D-062) and `fit` needs a viewport size `main.ts` supplies per
+   call (D-061); `save`/`load` need the DOM, which `command/` never touches.
+4. **`list` and `refs` carry NO effect.** They read the document and return `lines`, which the
+   existing shape already serves — do not give them one for symmetry.
+5. **`zoom`/`fit` write `Document.camera`, and that never goes through `mutate`** (D-027 clause
+   2). `main.ts` writes the clamped value `camera.ts` gives it, and owns never producing an
+   illegal one.
+
+**Rejected: `main.ts` switching on `command.kind` for those five.** Cheaper today, and it puts a
+SECOND name-resolution site in the one file no test reaches — the drift D-069 and D-043 both exist
+to prevent.
+
+**Rejected: passing the camera, viewport, selection and a file-IO callback into
+`executeCommand`.** `save`/`load` would force either a DOM import into `command/` or a callback
+parameter, and the signature would grow with every capability added. The effect field grows by one
+arm instead.
+
+Reconciliation required: none — entry 0075 stated this only as an intent in `commands.ts`'s NOT
+DONE HERE, which now cites this ruling. The cycle that builds those handlers implements it.
+
+---
+
+## D-076 — A header's PROSE is capped at 15 lines; its lists are not capped, and header length is no longer a finding
+Answers: the header-budget request carried by 0058-, 0060-, 0062-, 0064- and 0074-REVIEW, and by
+entry 0075   Ruled: entry 0076-RULINGS (human, 2026-08-25)
+Binding on: every source and test file, and on every review's legibility audit
+Amends: `PROCESS_BRIEF.md` §5.2
+
+1. **`WHAT THIS IS` — hard cap, 15 lines.**
+2. **`INVARIANTS UPHELD HERE` and `NOT DONE HERE` — no cap.** One line per item, no paragraphs.
+3. **There is no whole-header line budget.** A header over 40 lines, or over 80, is NOT a
+   finding. Do not report it in a review or in `STATUS.md`.
+4. **Binds NEW and EDITED headers only.** Not a sweep; no verbosity audit is scheduled or wanted.
+
+Rationale (the human's, on the evidence below): the old rule contradicted itself. It set 20–40
+lines while requiring that hazards, rejected alternatives and invariants be kept "regardless of
+budget" — which in a load-bearing file exceeds 40 on its own. Measured across all 24 non-test
+source files at entry 0076: **21 exceed 40 lines of header, but only 12 exceed 15 lines of
+PROSE**, and the four worst prose blocks (`mutation.ts` 111, `primitives/table.ts` 69,
+`formula/parser.ts` 52, `formula/functions.ts` 49) are exactly the files where tightening would
+help a reader. So the cap now bites where the padding actually is and stops biting the lists,
+which §5.2 already called the expensive knowledge. Five consecutive reviews reporting the same
+unmeetable number is the cost this removes; the complexity of the program has outgrown the
+number, not the other way round.
+
+Reconciliation required: `PROCESS_BRIEF.md` §5.2 amended at entry 0076. `STATUS.md`'s "the §5.2
+header budget is not reachable anywhere" known problem is DELETED, not carried forward.

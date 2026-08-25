@@ -1,9 +1,10 @@
-# STATUS — as of entry 0075
+# STATUS — as of entry 0076
 
 STATE: **GREEN, awaiting review.** Both configs compile, 925/925 tests pass, 0 skipped, 0 `.only`.
 Entry 0075 fired **§6.1 trigger 5** (three `schema.test.ts` expectations changed) and is over
 §6.3's cap (~835 lines / 13 files vs 800/10). `command/commands.ts`, `document.ts`'s
-`mintObjectId` and `TABLE_SCHEMA`'s origin pair are **unreviewed**.
+`mintObjectId` and `TABLE_SCHEMA`'s origin pair are **unreviewed**. Entry 0076 is the human's
+RULINGS entry that followed — **D-075** and **D-076**, one comment changed, no behaviour.
 
 Current phase: **3 — canvas, camera, geometry, command line.** `render/` and `command/` are now
 both complete enough to wire: a typed or picked line becomes a `Command` (`parser.ts`/`prompt.ts`)
@@ -29,11 +30,16 @@ Cycles since last review: **1/3** · diff since last review: **~835 lines / 13 f
 3. A `derived` slot rejects both `set` and `link` (§5.1, D-040 bound 3). Bare cell refs:
    `parseFormula` takes a `tableObjectId` — a cell formula passes it, a non-cell formula must not.
 
-Then `rename`/`delete`/`refs`/`list` (D-057's `brokenSlots` surfaces at `delete … force`), then
-`main.ts`: ONE clamped camera to `renderDocument`, `hitTest` and `pointerDown`/`pointerMove`
-(D-062); reset the canvas transform before screen-space chrome; and **wire `prompt.ts` — a canvas
-click during a live sequence is a `picked` response, not a selection**, with screen→world done by
-`camera.ts` before it reaches `command/`.
+Then `rename`/`delete`/`refs`/`list` (D-057's `brokenSlots` surfaces at `delete … force`) —
+`list` and `refs` need no effect, they just return `lines` (D-075 clause 4).
+
+Then `select`/`zoom`/`fit`/`save`/`load` **under D-075**: widen `CommandOutcome`'s success arm with
+an optional plain-data `effect`; `commands.ts` still resolves `select intersection_a` and refuses an
+unknown name; `main.ts` performs it. Then `main.ts` itself: ONE clamped camera to `renderDocument`,
+`hitTest` and `pointerDown`/`pointerMove` (D-062); `zoom`/`fit` write `Document.camera` directly,
+never through `mutate` (D-027 clause 2); reset the canvas transform before screen-space chrome; and
+**wire `prompt.ts` — a canvas click during a live sequence is a `picked` response, not a
+selection**, with screen→world done by `camera.ts` before it reaches `command/`.
 
 ## Built and reviewed
 
@@ -96,10 +102,8 @@ test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointAr
 - **Row/column deletion CAN still be REJECTED**, contradicting §5.4 — repair unbounded, slot walk
   extent-bounded; reachable only via a raw `setSlot`, pinned by `mutation.test.ts`'s "KNOWN
   INCOHERENCE" test, and D-053 forbids a one-sided fix.
-- **The §5.2 header budget (20-40 ordinary) is not reachable anywhere** — 21 of 23 non-test source
-  files were over 40 at 0074-REVIEW; `commands.ts` joins them at **54**. Five reviews now recommend
-  amending §5.2 to 20–40 ordinary / ~80 first-of-subsystem / ~150 load-bearing. **The amendment is
-  the human's.** Same standing for this file's own <150 budget: it was 169, and is now longer.
+- **This file is over §2's "< 150 lines"** — 169 at 0074-REVIEW, 181 now. Unlike the header budget
+  (settled by D-076), no one has ruled on this one; raise it once, do not carry it every cycle.
 - **Three carried render gaps, all deliberate:** one `mutate` per pointer move, each deep-cloning
   the document (§5.9's perf note — any fix MUST throttle, never write outside `mutation.ts`) · cell
   text is not clipped to its cell (§5.4 silent, Rule 5) · `readNumber`/`asPointArray` still have
@@ -117,16 +121,19 @@ test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointAr
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-074**) binds without restatement here. Newest:
-**D-069** `parser.ts` resolves NOTHING · **D-070** creation counts bounded by the HANDLER, out of
-range REJECTS — **implemented at 0075** · **D-071** a formula is authored with `set <address> =
-<source>` · **D-072** a command word alone enters a prompt sequence · **D-073** a formula's source
-is NEVER tokenized by the command lexer — discharged at 0072 · **D-074** a prompt sequence's own
-refusal IS the message — **still open, fix-list item 1**.
+Every ruling in `DECISIONS.md` (D-001 through **D-076**) binds without restatement here. Newest:
+**D-070** creation counts bounded by the HANDLER, out of range REJECTS — **implemented at 0075** ·
+**D-071** a formula is authored with `set <address> = <source>` · **D-072** a command word alone
+enters a prompt sequence · **D-073** a formula's source is NEVER tokenized by the command lexer —
+discharged at 0072 · **D-074** a prompt sequence's own refusal IS the message — **still open,
+fix-list item 1** · **D-075** a command that changes no document state returns an EFFECT as plain
+data and `main.ts` performs it; `commands.ts` still resolves the name and reports the refusal ·
+**D-076** a header's PROSE is capped at 15 lines, its lists are not capped, and **header length is
+no longer a finding — do not report one for being long.**
 
-**D-047's open clause is settled by entry 0075: a created table has NO cell slots.** An absent cell
-and a `null` cell behave identically inside an aggregate (D-047 clause 3), which is what makes the
-choice free and reversible. Reviewer should confirm.
+**D-047's open clause is settled: a created table has NO cell slots**, confirmed by the human at
+entry 0076 on the condition D-047 clause 3 already guarantees — an absent cell and a `null` cell
+behave identically inside an aggregate.
 
 ## Live PROVISIONAL tags and open questions
 
@@ -179,3 +186,7 @@ handlers** — reconcile, do not re-decide. Next free: **Q-014**.
 - **A review's fix list authorises a CHANGE, never an exemption from the trigger that change
   fires** (entry 0073). Apply §6.1 mechanically — 0075 fired trigger 5 for a test expectation two
   reviews had explicitly asked for.
+- **Do NOT report a header for being long (D-076).** PROCESS_BRIEF §5.2's 20–40 / ~80 budget is
+  withdrawn. What IS capped is `WHAT THIS IS` at 15 lines; `INVARIANTS UPHELD HERE` and `NOT DONE
+  HERE` are uncapped, one line per item. Twelve files miss the prose cap today and stay as they
+  are — it binds new and edited headers only, and there is no sweep.

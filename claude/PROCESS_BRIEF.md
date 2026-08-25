@@ -173,19 +173,30 @@ X, then cycle Y widened it" belongs in your log entry. A header that is only cor
 read start-to-finish as a chronology has failed §5's goal, because every reader who
 skims or greps lands on a statement that is false about the current code.
 
-**Budget: 20-40 lines for an ordinary file, up to ~80 for a load-bearing one.** Over
-budget is a signal to check what the extra lines are doing. Cite `(D-047)` or
-`(0045-REVIEW)` freely — those are cheap, stable pointers into DECISIONS.md and
-`entries/`, which are where the chronology actually lives. Do not retell the story
-around them.
+**Budget: `WHAT THIS IS` is capped at 15 lines. Nothing else in the header is capped, and
+the header's total length is not a finding** (**D-076**). The cap sits on the prose because
+prose is where padding accumulates; `INVARIANTS UPHELD HERE` and `NOT DONE HERE` are lists,
+one line per item and no paragraphs, and a list that grows means the file got more
+load-bearing, which is information rather than bloat.
 
-Keep, always, regardless of budget: hazard notes, rejected alternatives and why they
-were rejected, invariants, and `PROVISIONAL(Q-NNN)` tags. Those are the expensive
-knowledge. Sequencing is not.
+Do NOT report a header for being long — not in a review's legibility audit, not in
+`STATUS.md`'s known problems. The 20–40 / ~80 line budget this paragraph used to carry was
+unmeetable by construction and is withdrawn.
 
-*(Budget added by the audit pass at entry 0055, which found headers had drifted to ~6x this
-size and accumulated stale claims. The present-tense rule is binding under **D-060**, ruled by the
-human at entry 0056 — it is not this paragraph's own invention.)*
+Cite `(D-047)` or `(0045-REVIEW)` freely — those are cheap, stable pointers into
+DECISIONS.md and `entries/`, which are where the chronology actually lives. Do not retell
+the story around them.
+
+Keep, always: hazard notes, rejected alternatives and why they were rejected, invariants,
+and `PROVISIONAL(Q-NNN)` tags. Those are the expensive knowledge. Sequencing is not.
+
+The prose cap binds NEW and EDITED headers. It is **not** a licence to sweep, and no
+verbosity audit is scheduled or wanted — leave a header alone until a cycle opens that file
+for another reason (D-058's own stance, applied here).
+
+*(The present-tense rule is binding under **D-060**, ruled by the human at entry 0056. The
+budget above replaces entry 0055's, by the human's ruling at entry 0076 — see **D-076** for the
+measurements behind it.)*
 
 ### 5.3 Function docs
 

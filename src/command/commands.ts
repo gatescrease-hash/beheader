@@ -44,11 +44,13 @@
  *     address or a name that already exists rather than minting one, and
  *     D-040/D-041's reconciliation and D-071 clause 4's ONE shared slot-writing
  *     path belong with them. Owner: the cycle after this one.
- *   - `select`/`zoom`/`fit`/`save`/`load`. None of them changes the document: they
- *     move a selection, a camera, or a file, which live on the far side of the
- *     engine/render seam. Owner: `main.ts`'s wiring cycle, which widens
- *     `CommandOutcome` with the effect rather than teaching this file about a
- *     canvas.
+ *   - `select`/`zoom`/`fit`/`save`/`load`. None of them changes the document, and
+ *     **D-075** settles how they land: this file still resolves the name and reports
+ *     the refusal, then returns the effect as plain data in a widened
+ *     `CommandOutcome`, and `main.ts` performs it. The selection is
+ *     `render/interaction.ts`'s state, zoom clamping is `render/camera.ts`'s (D-062),
+ *     and `save`/`load` need a DOM this layer never touches. `list` and `refs` get no
+ *     effect — they read the document and return `lines`.
  *   - Driving a prompt sequence, or parsing anything. `command/prompt.ts` turns a
  *     partial line into a `Command`; this file only ever receives a finished one.
  */
