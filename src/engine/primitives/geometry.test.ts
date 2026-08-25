@@ -458,3 +458,51 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
     expect(after).toBeCloseTo(10);
   });
 });
+
+/**
+ * D-064's pinning test, owed since 0060-REVIEW fix list item 1 and carried at
+ * 0062-REVIEW and 0063; added at 0064-REVIEW. It asserts the winding of the
+ * OUTPUT rather than calling `computeSignedAreaDoubled`, which is private to
+ * `geometry.ts` — the invariant belongs to the vertex order every consumer
+ * reads, not to the internal helper, and pinning it this way keeps the helper
+ * private.
+ */
+describe("D-064 — every preset winds counterclockwise (positive doubled signed area)", () => {
+  /** The shoelace sum over a closed vertex loop. Positive = counterclockwise in a y-up frame. */
+  function doubledSignedArea(vertices: readonly Point[]): number {
+    let sum = 0;
+    for (let i = 0; i < vertices.length; i += 1) {
+      const a = vertices[i];
+      const b = vertices[(i + 1) % vertices.length];
+      if (a === undefined || b === undefined) {
+        continue; // noUncheckedIndexedAccess artifact only — both indices are always in range.
+      }
+      sum += a.x * b.y - b.x * a.y;
+    }
+    return sum;
+  }
+
+  it("winds a polygon counterclockwise at every rotation, since rotation must not flip the order", () => {
+    for (const rotation of [0, 1, -1, 2.5, Math.PI]) {
+      for (const sides of [3, 5, 12]) {
+        expect(doubledSignedArea(computePolygonVertices(sides, 10, { x: -4, y: 7 }, rotation))).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("winds a circle counterclockwise, inheriting the polygon order it delegates to", () => {
+    expect(doubledSignedArea(computeCircleVertices(10, { x: 3, y: -3 }))).toBeGreaterThan(0);
+  });
+
+  it("winds a rect counterclockwise, so its fillRect corner order agrees with the other two presets", () => {
+    expect(doubledSignedArea(computeRectVertices({ x: 10, y: 20 }, 5, 3))).toBeGreaterThan(0);
+  });
+
+  it("gives a degenerate shape an EXACTLY zero doubled area, which is neither winding", () => {
+    // D-064 claims positive winding for every LEGAL parameter set; a zero-sized
+    // shape has no winding to claim, and `computeCentroid` already relies on
+    // this being exactly zero rather than near-zero.
+    expect(doubledSignedArea(computeRectVertices({ x: 0, y: 0 }, 0, 3))).toBe(0);
+    expect(doubledSignedArea(computeCircleVertices(0, { x: 5, y: 5 }))).toBe(0);
+  });
+});

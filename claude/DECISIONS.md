@@ -1751,3 +1751,74 @@ worry — has no way to catch it.
 Reconciliation required: none outstanding. All four sites above are fixed at this review. The
 thirteen bare "this cycle" sites in test files (0058-REVIEW Finding 2) are a DIFFERENT class —
 D-063's, still open, still blocking nothing.
+
+---
+
+## D-066 — An object that draws nothing is not hittable. Drawn extent and clickable extent are the same extent.
+Ruled: entry 0064-REVIEW-phase3 (reviewer)   Binding on: `render/hittest.ts` and every future
+per-type hit test — `table` today, `text`/`image`/`script` when their schemas land.
+
+`render/hittest.ts`'s own file header states the principle for the types it declines to test at
+all: "a click cannot land on something that is never drawn." Its `table` arm then broke it. The
+bounding box is `cols * TABLE_CELL_WIDTH` by `rows * TABLE_CELL_HEIGHT` with inclusive bounds, and
+`getTableDimensions` fails safe to `0` for an absent or non-`literal` dimension (D-046). A `0`-row
+table therefore collapses to a LINE, not to nothing, and inclusive bounds contain every point on
+it — probed at this review: a `rows: 0, cols: 3` table returns a hit at world `(120, 0)`, and an
+ordinary table with no `rows`/`cols` slots at all returns a hit at world `(0, 0)`. `drawTable`
+draws neither of them: both its loops run zero times.
+
+Ruling: **a per-type hit test MUST return `false` for a degenerate extent** — zero or negative
+width, height, or radius — rather than letting a containment test with inclusive bounds answer for
+it. The clickable extent of an object is exactly the extent that was drawn, never a boundary case
+left over from the arithmetic.
+
+Rationale: an invisible click target is the worst failure mode this subsystem has, because there is
+nothing on screen to explain it — the user clicks empty canvas, selects an object they cannot see,
+and the next drag moves it. It is also silent: no rejection message, no error value, nothing in the
+journal. The inclusive bounds are themselves CORRECT and stay (a real table's boundary is exactly
+where its outermost cell rect is stroked); the guard is what separates "the boundary of a real box"
+from "a box that is nothing but boundary."
+
+Note the shape of the trap for the cycles that will repeat it: entry 0063's own test suite built
+the empty-slots table fixture and probed it at `(9999, 9999)`, one point away from the defect. A
+degenerate-extent test belongs at the ORIGIN of the degenerate box, never at a far-away point.
+
+Reconciliation required: none outstanding — `hitTestTable`'s guard and two pinning tests were
+added at this review. Binding on `text`/`image`/`script` bounding boxes before they are written.
+
+---
+
+## D-067 — Stroke-only hit-testing is CORRECT while no object can be filled, and the fill cycle owes point-in-polygon and D-064's winding test together.
+Ruled: entry 0064-REVIEW-phase3 (reviewer)   Binding on: `render/hittest.ts`, the cycle that
+declares `style` slots, and the Phase 3 gate.
+
+§5.9 names three hit-test shapes: "Point-in-polygon for fills, distance-to-segment with pixel
+tolerance for strokes and open paths, bounding box for text/tables/images/scripts." Entry 0063
+built the second and third and deferred the first, on the ground that nothing can be filled yet —
+`primitives/geometry.ts` declares no `style` slots and `renderer.ts` never calls `ctx.fill()`.
+
+Ruling, three parts.
+
+1. **The deferral is correct and is not a partial implementation of §5.9.** The clause is
+   conditioned on its own subject: point-in-polygon is what you use FOR A FILL. An unfilled shape's
+   interior is not part of its picture, and the behaviour that falls out — an unfilled outline is
+   grabbed by its outline — is what every vector editor does. §5.9 is fully implemented for every
+   visual property an object can currently hold.
+2. **Phase 3's acceptance criterion may be claimed with stroke-only hit-testing.** "Create a
+   polygon and a table by command, see both drawn, pan/zoom, select, and drag the polygon" does not
+   require interior-click selection, and no polygon in Phase 3 has a fill to click inside of. The
+   gate is not blocked on this, and the cycle that reaches it should not re-litigate the question.
+3. **Point-in-polygon and D-064's winding invariant land in the same cycle** — the one that
+   declares `style` slots and first calls `ctx.fill()`. A winding-number test's sign convention IS
+   D-064; splitting them is what has kept the winding test unwritten across 0060, 0062, and 0063.
+   (Its pinning test is no longer part of that debt — written at this review, see §6 — so what the
+   fill cycle owes is the point-in-polygon test itself, against a winding it can now trust.)
+
+Rationale: this is the third review at which a cycle has correctly declined the same work for the
+same reason and has had to argue for it from scratch in its log. The argument is settled here so it
+stops costing a section per cycle, and part 2 keeps a defensible deferral from silently becoming a
+phase-gate dispute later. Where the human wants interior-click selection BEFORE fills exist, that
+is a product change to §5.9 and belongs to them, not to an implementer reading this file — it is
+not a defect to be fixed quietly.
+
+Reconciliation required: none. The deferral stands as built.

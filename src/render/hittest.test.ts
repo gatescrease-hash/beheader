@@ -42,7 +42,7 @@ function squareObject(id: string, name: string, type: "circle" | "polygon" | "re
 describe("hitTest — circle/polygon/rect: stroke distance-to-segment via vertices", () => {
   it("hits a point within tolerance of an edge", () => {
     const square = squareObject("obj_1", "rect_1", "rect");
-    // World (5, -4): 4 world units above the top edge (0,0)-(10,0); tolerance
+    // World (5, -4): 4 world units above the top edge (0,0)-(20,0); tolerance
     // at zoom 1 is STROKE_HIT_TOLERANCE_SCREEN_PIXELS (5) world units.
     expect(hitTest({ x: 5, y: -4 }, [square], CAMERA_IDENTITY)).toBe(square);
   });
@@ -117,6 +117,21 @@ describe("hitTest — table: bounding box", () => {
     const table = tableObject("obj_1", "table_1", 100, 200);
     expect(hitTest({ x: 120, y: 24 }, [table], CAMERA_IDENTITY)).toBeUndefined(); // the un-shifted box no longer applies
     expect(hitTest({ x: 150, y: 210 }, [table], CAMERA_IDENTITY)).toBe(table);
+  });
+
+  it("does not hit a 0-row table anywhere on its degenerate box, because nothing is drawn (D-066)", () => {
+    const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 0 }, cols: { kind: "literal", value: 3 } } };
+    // The box collapses to the line y = 0, x in [0, 240]. The containment test
+    // is inclusive, so every point ON that line would hit without the guard.
+    expect(hitTest({ x: 120, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 0, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("does not hit a table with no rows/cols slots at its origin corner, the point its zero-area box contains (D-066)", () => {
+    // The ordinary not-yet-populated table: `getTableDimensions` fails safe to
+    // 0/0 (D-046) and `drawTable` draws nothing, so no click may land on it.
+    const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: {} };
+    expect(hitTest({ x: 0, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
   });
 });
 

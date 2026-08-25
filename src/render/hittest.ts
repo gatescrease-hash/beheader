@@ -6,7 +6,7 @@
  * tolerance for strokes and open paths, bounding box for
  * text/tables/images/scripts."). First file building hit-testing — §6.1
  * trigger 2 governs its own review point, the same posture `renderer.ts`
- * took for drawing (0060-REVIEW §10 names this file as the next one).
+ * took for drawing (0062-REVIEW §10 names this file as the next slice).
  * LAYER: render. Touches no canvas/DOM at all — this file is pure coordinate
  * and geometry math over `GraphObject`/`CameraState`, structurally even
  * closer to `engine/` than `renderer.ts` is, but it lives in `render/`
@@ -58,7 +58,12 @@
  *     (D-062) — the same precondition `render/camera.ts`'s own doc comment
  *     states, and the same answer: the clamp belongs at `main.ts`'s
  *     boundary, not here (0062-REVIEW §9's ruling on `renderDocument`
- *     applies identically to this file's `screenToWorld` call).
+ *     applies identically to this file's `screenToWorld` call). The
+ *     consequence here is WORSE than `screenToWorld`'s own "silently
+ *     useless point": at `zoom: 0` the world tolerance is `Infinity`, so
+ *     every `circle`/`polygon`/`rect` hits at every point and any click
+ *     returns the topmost object (probed at 0064-REVIEW). One more reason
+ *     the boundary clamp is owed.
  *
  * NOT DONE HERE
  *   - **Point-in-polygon for FILLS.** §5.9 names it explicitly, but nothing
@@ -121,9 +126,12 @@ function distanceToSegment(point: Point, a: Point, b: Point): number {
  * `vertices` (§5.5: every preset's `vertices` is closed — see
  * `primitives/geometry.ts`'s own `edgePairs`, whose wraparound this mirrors
  * rather than importing, since that helper is private to a file this one
- * only reads schema-declared slot paths from). `Infinity` for fewer than
- * one vertex (never satisfies any real tolerance, so it reads as "no hit"
- * without a separate empty-array branch).
+ * only reads schema-declared slot paths from). `Infinity` when there is no
+ * edge to measure, or when every measurement is `NaN` — which reads as "no
+ * hit" against any FINITE tolerance, and so needs no separate empty-array
+ * branch. Against an infinite tolerance it reads as a HIT instead; that is
+ * reachable only through an unclamped `camera.zoom` of `0` (file header's
+ * PRECONDITION, D-062), never through this file's own arithmetic.
  */
 function distanceToClosedPolyline(point: Point, vertices: readonly Point[]): number {
   let minDistance = Infinity;
@@ -158,9 +166,16 @@ function hitTestVerticesShape(object: GraphObject, worldPoint: WorldPoint, strok
  * `table`'s bounding-box test (§5.9). Built from the exact same
  * origin/cell-size reading `renderer.ts`'s `drawTable` uses, including its
  * `(0, 0)` fallback for a table with no `origin.x`/`origin.y` slots yet
- * (`renderer.ts`'s own NOT DONE HERE) — never throws, and a `0`-row or
- * `0`-column table (D-046-safe `getTableDimensions`) collapses to a
- * zero-area box that no point can ever fall inside.
+ * (`renderer.ts`'s own NOT DONE HERE) — never throws.
+ *
+ * A table with NO EXTENT is not hittable (D-066): `getTableDimensions` fails
+ * safe to `0` for an absent or non-`literal` dimension (D-046), and
+ * `drawTable`'s loops then run zero times, so nothing is drawn to click on.
+ * The bounds below are inclusive — a real table's boundary is exactly where
+ * its outermost cell rect is STROKED — which is why the degenerate case needs
+ * its own guard rather than falling out: without it a `0`-row table is
+ * clickable along a line, and an ordinary not-yet-populated one is clickable
+ * at world `(0, 0)`.
  */
 function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
@@ -168,6 +183,9 @@ function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
   const { rows, cols } = getTableDimensions(object);
   const width = cols * TABLE_CELL_WIDTH;
   const height = rows * TABLE_CELL_HEIGHT;
+  if (width <= 0 || height <= 0) {
+    return false;
+  }
   return worldPoint.x >= originX && worldPoint.x <= originX + width && worldPoint.y >= originY && worldPoint.y <= originY + height;
 }
 
