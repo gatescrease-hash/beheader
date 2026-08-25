@@ -54,9 +54,9 @@
  *     implementation. When it IS built it must honour D-064's CCW winding,
  *     which is exactly where that ruling becomes load-bearing; the current
  *     distance-to-segment test is direction-agnostic and consumes no winding.
- *   - Selection state, event handling, and calling any mutation —
- *     `render/interaction.ts`'s job. This file only ANSWERS "what is under
- *     this point."
+ *   - Selection state and calling any mutation — `render/interaction.ts`'s
+ *     job; DOM event handling is `main.ts`'s. This file only ANSWERS "what is
+ *     under this point."
  *   - `text`/`script`/`image` bounding boxes, and `polyline`'s open-path
  *     distance test — no schema or visual definition exists to read yet.
  */

@@ -31,8 +31,9 @@
  *   (which would make `screenToWorld` divide by zero) or an unusable extreme.
  *
  * NOT DONE HERE
- *   - Reading the mouse/wheel, or any DOM event handling — a future
- *     `render/interaction.ts`.
+ *   - Reading the mouse/wheel, or any DOM event handling — `main.ts` listens,
+ *     and hands both this file and `render/interaction.ts` plain screen-space
+ *     points and deltas. Neither of those two knows the DOM exists.
  *   - Deciding WHEN to pan/zoom, or how a wheel delta maps to a zoom factor —
  *     callers decide that and pass this file plain screen-space numbers.
  *   - "fit" (zoom to a bounding box) — needs a viewport size and a bounding box,

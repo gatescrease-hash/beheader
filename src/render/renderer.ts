@@ -53,13 +53,17 @@
  *     identity. Harmless frame to frame (`clearScreen` resets first thing
  *     next frame), but SCREEN-space chrome drawn after this call — a
  *     selection handle, an error badge, a HUD — comes out camera-warped
- *     unless the caller resets the transform itself. Lands on
- *     `render/interaction.ts` (0062-REVIEW edit 3).
+ *     unless the caller resets the transform itself. Owned by whichever cycle
+ *     first draws screen-space chrome: §5.9's visual feedback (below), or
+ *     `main.ts`'s frame loop. NOT `render/interaction.ts`, which holds the
+ *     selection state but draws nothing at all.
  *
  * NOT DONE HERE
  *   - Selection highlight, error badges, formula-driven slot indicators —
- *     §5.9 names all three; each needs state this file cannot read. Deferred
- *     to `render/interaction.ts`, with hit-testing and all event handling.
+ *     §5.9 names all three; each needs state this file cannot read. Built
+ *     nowhere yet, and the three belong together in one cycle: the selection
+ *     STATE they would draw from is `render/interaction.ts`'s, which draws
+ *     nothing, and hit-testing is `render/hittest.ts`'s.
  *   - `style` slots (§5.5's `Path` shape) — `geometry.ts` declares none yet,
  *     so every shape draws with one disclosed default stroke.
  *   - A table's OWN position. `TABLE_SCHEMA` declares no `origin.x`/`origin.y`
