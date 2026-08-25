@@ -2192,17 +2192,23 @@ DONE HERE, which now cites this ruling. The cycle that builds those handlers imp
 
 ---
 
-## D-076 — A header's PROSE is capped at 15 lines; its lists are not capped, and header length is no longer a finding
+## D-076 — A header's PROSE is capped at 15 lines. Every other LENGTH budget in this project is withdrawn, and length is not a finding
 Answers: the header-budget request carried by 0058-, 0060-, 0062-, 0064- and 0074-REVIEW, and by
-entry 0075   Ruled: entry 0076-RULINGS (human, 2026-08-25)
-Binding on: every source and test file, and on every review's legibility audit
-Amends: `PROCESS_BRIEF.md` §5.2
+entry 0075; and `STATUS.md`'s own budget, raised at entry 0076
+Ruled: entry 0076-RULINGS, widened to `STATUS.md` at entry 0077-RULINGS (human, 2026-08-25)
+Binding on: every source and test file, `STATUS.md`, and every review's legibility and honesty audits
+Amends: `PROCESS_BRIEF.md` §5.2 and §2
 
-1. **`WHAT THIS IS` — hard cap, 15 lines.**
+1. **`WHAT THIS IS` — hard cap, 15 lines.** This is the ONE length rule that survives, and the one
+   length finding a review may still raise.
 2. **`INVARIANTS UPHELD HERE` and `NOT DONE HERE` — no cap.** One line per item, no paragraphs.
-3. **There is no whole-header line budget.** A header over 40 lines, or over 80, is NOT a
-   finding. Do not report it in a review or in `STATUS.md`.
+3. **There is no whole-header line budget, and no `STATUS.md` line budget.** A header over 40 or
+   80 lines is not a finding; neither is a `STATUS.md` over 150. **Do not report the length of
+   anything** — not in a review, not in `STATUS.md`'s known problems, not in a log entry's
+   self-assessment. §2's "Keep < 150 lines" and §5.2's "20-40 / ~80" are both withdrawn.
 4. **Binds NEW and EDITED headers only.** Not a sweep; no verbosity audit is scheduled or wanted.
+   `STATUS.md` is rewritten every cycle by construction, so clause 3 simply frees it to be as long
+   as the state it describes.
 
 Rationale (the human's, on the evidence below): the old rule contradicted itself. It set 20–40
 lines while requiring that hazards, rejected alternatives and invariants be kept "regardless of
@@ -2215,5 +2221,20 @@ which §5.2 already called the expensive knowledge. Five consecutive reviews rep
 unmeetable number is the cost this removes; the complexity of the program has outgrown the
 number, not the other way round.
 
-Reconciliation required: `PROCESS_BRIEF.md` §5.2 amended at entry 0076. `STATUS.md`'s "the §5.2
-header budget is not reachable anywhere" known problem is DELETED, not carried forward.
+Rationale for clause 3's widening to `STATUS.md` (the human, entry 0077): the same argument, and
+the same evidence — `STATUS.md` has been over its own budget for three consecutive cycles (156,
+169, 192) and every cycle that trimmed it reported that what remained was pointers a cold reader
+needs. A file whose ONLY job is to orient the next model must be allowed to be as long as the
+state it describes. What §2's number was really measuring is staleness, and D-060/D-063/D-065
+already removed the cause of that.
+
+**Note on how this entry was amended.** Clause 3 was widened IN PLACE rather than by a superseding
+decision, at the human's explicit direction, and this is the one sanctioned instance: the
+widening happened before any cycle had read or built on the original wording, in the same session
+that ruled it. The original text is preserved in commit `0df17f0`. This is NOT a precedent —
+append-only stands, and a decision any cycle has consumed is changed only by a new one that
+supersedes it.
+
+Reconciliation required: `PROCESS_BRIEF.md` §5.2 amended at entry 0076; §2's "Keep < 150 lines"
+struck at entry 0077. `STATUS.md`'s header-budget known problem is DELETED, and so is its
+own-length one — neither is carried forward.

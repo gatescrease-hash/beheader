@@ -1,10 +1,11 @@
-# STATUS — as of entry 0076
+# STATUS — as of entry 0077
 
 STATE: **GREEN, awaiting review.** Both configs compile, 925/925 tests pass, 0 skipped, 0 `.only`.
 Entry 0075 fired **§6.1 trigger 5** (three `schema.test.ts` expectations changed) and is over
 §6.3's cap (~835 lines / 13 files vs 800/10). `command/commands.ts`, `document.ts`'s
-`mintObjectId` and `TABLE_SCHEMA`'s origin pair are **unreviewed**. Entry 0076 is the human's
-RULINGS entry that followed — **D-075** and **D-076**, one comment changed, no behaviour.
+`mintObjectId` and `TABLE_SCHEMA`'s origin pair are **unreviewed**. Entries 0076 and 0077 are the
+human's RULINGS entries that followed — **D-075** and **D-076**, one comment changed, no behaviour.
+**Entry 0075 is the whole of what the reviewer audits.**
 
 Current phase: **3 — canvas, camera, geometry, command line.** `render/` and `command/` are now
 both complete enough to wire: a typed or picked line becomes a `Command` (`parser.ts`/`prompt.ts`)
@@ -102,8 +103,6 @@ test files · `render/slots.ts` at the THIRD consumer of `readNumber`/`asPointAr
 - **Row/column deletion CAN still be REJECTED**, contradicting §5.4 — repair unbounded, slot walk
   extent-bounded; reachable only via a raw `setSlot`, pinned by `mutation.test.ts`'s "KNOWN
   INCOHERENCE" test, and D-053 forbids a one-sided fix.
-- **This file is over §2's "< 150 lines"** — 169 at 0074-REVIEW, 181 now. Unlike the header budget
-  (settled by D-076), no one has ruled on this one; raise it once, do not carry it every cycle.
 - **Three carried render gaps, all deliberate:** one `mutate` per pointer move, each deep-cloning
   the document (§5.9's perf note — any fix MUST throttle, never write outside `mutation.ts`) · cell
   text is not clipped to its cell (§5.4 silent, Rule 5) · `readNumber`/`asPointArray` still have
@@ -128,8 +127,9 @@ enters a prompt sequence · **D-073** a formula's source is NEVER tokenized by t
 discharged at 0072 · **D-074** a prompt sequence's own refusal IS the message — **still open,
 fix-list item 1** · **D-075** a command that changes no document state returns an EFFECT as plain
 data and `main.ts` performs it; `commands.ts` still resolves the name and reports the refusal ·
-**D-076** a header's PROSE is capped at 15 lines, its lists are not capped, and **header length is
-no longer a finding — do not report one for being long.**
+**D-076** a header's PROSE is capped at 15 lines and its lists are not capped; **every other length
+budget is withdrawn — header, source file and this file alike — and length is not a finding. Do
+not report it.**
 
 **D-047's open clause is settled: a created table has NO cell slots**, confirmed by the human at
 entry 0076 on the condition D-047 clause 3 already guarantees — an absent cell and a `null` cell
@@ -186,7 +186,9 @@ handlers** — reconcile, do not re-decide. Next free: **Q-014**.
 - **A review's fix list authorises a CHANGE, never an exemption from the trigger that change
   fires** (entry 0073). Apply §6.1 mechanically — 0075 fired trigger 5 for a test expectation two
   reviews had explicitly asked for.
-- **Do NOT report a header for being long (D-076).** PROCESS_BRIEF §5.2's 20–40 / ~80 budget is
-  withdrawn. What IS capped is `WHAT THIS IS` at 15 lines; `INVARIANTS UPHELD HERE` and `NOT DONE
-  HERE` are uncapped, one line per item. Twelve files miss the prose cap today and stay as they
-  are — it binds new and edited headers only, and there is no sweep.
+- **Do NOT report the LENGTH of anything (D-076)** — not a header, not this file, not a source
+  file. §5.2's 20–40 / ~80 header budget and §2's "< 150 lines" for this file are both withdrawn.
+  The one length rule that survives, and the one a review may still raise, is **`WHAT THIS IS`
+  capped at 15 lines**; `INVARIANTS UPHELD HERE` and `NOT DONE HERE` are uncapped, one line per
+  item. Twelve files miss the prose cap today and stay as they are — it binds new and edited
+  headers only, and there is no sweep.

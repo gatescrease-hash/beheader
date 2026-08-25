@@ -38,7 +38,7 @@ project-root/
 ├── PROJECT_BRIEF.md          # the spec. READ-ONLY to implementers.
 ├── PROCESS_BRIEF.md          # this document. READ-ONLY to implementers.
 └── claude/
-    ├── STATUS.md              # current state. Rewritten every cycle. Keep < 150 lines.
+    ├── STATUS.md              # current state. Rewritten every cycle. No length budget (D-076).
     ├── DECISIONS.md           # append-only rulings that extend the brief. Reviewer/human only.
     ├── OPEN_QUESTIONS.md      # Q-NNN questions awaiting an answer.
     └── entries/
@@ -179,9 +179,12 @@ prose is where padding accumulates; `INVARIANTS UPHELD HERE` and `NOT DONE HERE`
 one line per item and no paragraphs, and a list that grows means the file got more
 load-bearing, which is information rather than bloat.
 
-Do NOT report a header for being long — not in a review's legibility audit, not in
-`STATUS.md`'s known problems. The 20–40 / ~80 line budget this paragraph used to carry was
-unmeetable by construction and is withdrawn.
+**Do NOT report the length of anything** — not a header, not `STATUS.md`, not a source file;
+not in a review's legibility audit, not in `STATUS.md`'s known problems, not in a log entry's
+self-assessment. The 20–40 / ~80 line header budget this paragraph used to carry, and §2's
+"< 150 lines" for `STATUS.md`, are both withdrawn as unmeetable by construction. The 15-line
+prose cap above is the one length rule that survives, and the one length finding a review may
+still raise.
 
 Cite `(D-047)` or `(0045-REVIEW)` freely — those are cheap, stable pointers into
 DECISIONS.md and `entries/`, which are where the chronology actually lives. Do not retell
