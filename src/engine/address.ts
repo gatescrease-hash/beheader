@@ -1,7 +1,7 @@
 /**
  * address.ts — Addressing scheme and resolver.
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.2. Load-bearing per Rule 3.
+ * IMPLEMENTS: PROJECT_BRIEF §5.2. Load-bearing (§6.2).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *

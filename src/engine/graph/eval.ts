@@ -7,7 +7,7 @@
  * errors produce ErrorValues; they do not roll back the mutation.") and Rule 5's
  * naive-evaluation directive ("re-evaluate the entire graph in topological order. Do
  * not implement real dirty-flag tracking yet.").
- * Load-bearing per Rule 3 (§6 trigger-2 file: graph/*).
+ * Load-bearing (§6.2: `graph/*`).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *

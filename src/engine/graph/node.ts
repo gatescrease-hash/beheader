@@ -1,7 +1,7 @@
 /**
  * node.ts — Slot/object data model.
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.1. Load-bearing per Rule 3 (§6 trigger-2 file).
+ * IMPLEMENTS: PROJECT_BRIEF §5.1. Load-bearing (§6.2).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *

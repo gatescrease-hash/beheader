@@ -9,7 +9,7 @@
  * subsection and Rule 2's append-only journal.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
- * Load-bearing per Rule 3 (§6 trigger-2 file).
+ * Load-bearing (§6.2).
  *
  * WHAT THIS IS
  *

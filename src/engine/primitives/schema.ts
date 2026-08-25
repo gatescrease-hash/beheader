@@ -3,7 +3,7 @@
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.1 ("Each object type's schema declares, for every
  * derived slot: its address path, its dependencies, and its compute function.").
- * Load-bearing per Rule 3 (§6 trigger-2 file).
+ * Load-bearing (§6.2).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *

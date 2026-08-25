@@ -13,7 +13,7 @@
  *        "Save via JSON download; load via file input" (§5.11) is NOT this file's job
  *        — those touch the DOM and belong to a future `render/` or `main.ts` caller.
  *        This file only converts between a `Document` and a JSON string.
- * Load-bearing per Rule 3 (§6 trigger-2 file).
+ * Load-bearing (§6.2).
  *
  * WHAT THIS IS
  *   `Document` — the bundle §5.11 describes: `formatVersion`, `nextObjectId` (D-002's

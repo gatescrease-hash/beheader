@@ -4,103 +4,73 @@
  * (centroid, area, length, bounds).
  *
  * IMPLEMENTS: PROJECT_BRIEF §5.5 — "The primitive is the geometry itself.
- * Named shapes are presets over it." The three PARAMETRIC presets
- * (`circle`, `polygon`, `rect`) and their derived slots live here.
- * `primitives/schema.ts` registers the `ObjectSchema` entries this file's
- * functions feed, matching the split `primitives/table.ts` already
- * establishes (pure domain logic here, the type-keyed registry there).
+ * Named shapes are presets over it." The three PARAMETRIC presets (`circle`,
+ * `polygon`, `rect`) and their derived slots live here; `primitives/schema.ts`
+ * registers the `ObjectSchema` entries these functions feed, the same split
+ * `primitives/table.ts` uses (pure domain logic here, type-keyed registry
+ * there). NOT on §6.2's load-bearing list — Rule 3 governs ADDRESSING, which
+ * this file only consumes (0060-REVIEW §4).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
- * First file of this subsystem, so §6.1 trigger 2 governs when it is
- * reviewed. NOT on §6.2's load-bearing list: Rule 3 governs the ADDRESSING
- * scheme, which this file only consumes (`primitives/table.ts`, the exact
- * analogue, claims no such status either).
  *
  * WHAT THIS IS
- *   §5.5's slot-exposure rule (Rule 6's own worked example): "Preset shapes
- *   (polygon, circle, rect) expose a single derived slot `vertices` holding a
- *   `Point[]`, computed from their parameter slots. They expose no
- *   per-vertex slots." A preset's parameter count never changes at
- *   evaluation time (`sides`, `radius`, `origin.x/y`, `rotation`, `width`,
- *   `height` are the whole non-derived slot set, declared statically in
- *   `primitives/schema.ts`), so Rule 6 holds trivially for these three types.
+ *   §5.5's slot-exposure rule, which is Rule 6's own worked example: a preset
+ *   exposes ONE derived `vertices` slot holding a `Point[]`, never per-vertex
+ *   slots. Its parameter set (`sides`, `radius`, `origin.x/y`, `rotation`,
+ *   `width`, `height`) is declared statically in `schema.ts` and never changes
+ *   at evaluation time, so Rule 6 holds trivially for these three types.
  *
- *   `computeCircleVertices`/`computePolygonVertices`/`computeRectVertices` —
- *   pure `Point[]`-producing math, no `Value`/`ErrorValue` concerns.
- *   `computeCircleVerticesSlot`/`computePolygonVerticesSlot`/
- *   `computeRectVerticesSlot` — the `DerivedSlotCompute`-shaped wrappers
- *   `schema.ts` installs as each type's `vertices` entry: read the
- *   parameter slots via `read`, validate them, call the pure function, then
- *   `finalizeVertices` (below) to enforce D-025/D-033 on every coordinate.
- *
- *   `computeCentroid`/`computeArea`/`computePerimeterLength`/`computeBounds`
- *   — pure `Point[] -> ...` math shared by every closed preset.
- *   `verticesDerivedSlots(label)` bundles all eight (`centroid.x`,
- *   `centroid.y`, `area`, `length`, `bounds.{minX,minY,maxX,maxY}`) as
- *   `DerivedSlotSchema[]`, each statically depending on `["vertices"]` —
- *   §5.1's own worked example ("centroid ← vertices"). `schema.ts` spreads
- *   this into every preset's `derivedSlots` rather than declaring eight
- *   near-identical entries per type.
- *
- *   Centroid is the AREA-WEIGHTED centroid (the standard polygon-centroid
- *   formula), not the arithmetic mean of vertices — see `computeCentroid`'s
- *   own doc comment for why the distinction matters even though the three
- *   presets this file builds are all symmetric enough that the two formulas
- *   agree on them today.
+ *   Three layers, each with its own doc comment below: pure `Point[]` math
+ *   (`compute*Vertices`, `computeCentroid`/`Area`/`PerimeterLength`/`Bounds`);
+ *   the `DerivedSlotCompute`-shaped wrappers `schema.ts` installs (`*Slot`);
+ *   and `verticesDerivedSlots(label)`, which bundles the eight shared derived
+ *   slots so `schema.ts` spreads one list per preset instead of declaring
+ *   eight near-identical entries per type.
  *
  * INVARIANTS UPHELD HERE
- *   - Every `DerivedSlotCompute` here NEVER throws (§5.1) — a missing/wrong-
- *     shaped/erroring input, or a degenerate parameter (negative radius, a
- *     polygon with under 3 sides, empty vertices), returns a typed
- *     `ErrorValue` (`#REF`/`#TYPE`), matching `primitives/schema.ts`'s `add`
- *     precedent exactly.
+ *   - **All three presets wind COUNTERCLOCKWISE in a y-up frame (D-064).**
+ *     This is a STATED invariant, not this file's private convention: the
+ *     renderer's fill rule, `explode`, and any point-in-polygon hit test
+ *     inherit it, and a winding-number test's sign convention IS this
+ *     ruling. Changing a preset's corner order or angle direction is a
+ *     deliberate change that updates every consumer — never a silent
+ *     refactor. Pinned by tests (0064-REVIEW §6).
+ *   - Every `DerivedSlotCompute` here NEVER throws (§5.1). A missing,
+ *     wrong-shaped, or erroring input, or a degenerate parameter (negative
+ *     radius, under 3 sides, empty vertices), returns a typed `ErrorValue`,
+ *     matching `schema.ts`'s `add` precedent.
  *   - D-025/D-033 on every computed number: `finiteOrTypeError` maps a
- *     non-finite result to `#TYPE`; `-0` normalises to `+0`, never an error
- *     (genuinely reachable for `centroid.x`/`centroid.y` — a zero-valued
- *     cross-product sum divided by a negative signed area is `-0` — pinned
- *     by a real test, not merely reasoned about). `finalizeVertices` applies
- *     the non-finite half of the same rule per-coordinate across a whole
- *     `vertices` `Point[]` (itself a derived slot, §5.1: "derived slots are
- *     first-class graph nodes") — its own doc comment proves the `-0` half
- *     is unreachable there, the same proof `render/camera.ts` already uses.
+ *     non-finite result to `#TYPE`; `-0` normalises to `+0`, never an error.
+ *     `-0` is genuinely reachable for `centroid.x`/`centroid.y` and is pinned
+ *     by a real test. `finalizeVertices` applies the non-finite half
+ *     per-coordinate across a whole `vertices` array.
  *   - `vertices` is the ONLY interface downstream consumers read (§5.5:
- *     "Consumers always read `vertices`") — nothing here exposes a per-vertex
- *     slot for these three types (that is `polyline`'s and `explode`'s shape,
- *     not built here — see NOT DONE HERE).
- *   - Every pure math function is TOTAL, including on an empty `Point[]`
- *     (degenerate but well-defined, never `NaN`/throwing) — the `Value`-aware
- *     wrappers reject an empty `vertices` slot as `#TYPE` before any of them
- *     are ever called with one, but totality is cheap here and keeps direct
- *     unit tests honest about what each function actually does at its edges.
+ *     "Consumers always read `vertices`").
+ *   - Every pure math function is TOTAL, including on an empty `Point[]` —
+ *     the `Value`-aware wrappers reject an empty `vertices` slot as `#TYPE`
+ *     first, but totality keeps the direct unit tests honest about edges.
+ *
+ * HAZARD — two things here look like defects and are not (0060-REVIEW §1, §7)
+ *   The centroid is the AREA-WEIGHTED polygon centroid, NOT the arithmetic
+ *   mean of vertices (the two agree on these three symmetric presets and
+ *   diverge on the irregular paths `explode` will produce — see
+ *   `computeCentroid`'s own doc). The derived slots are deliberately
+ *   redundant in their arithmetic. Do not "fix" either.
  *
  * NOT DONE HERE
  *   - `polyline` and the editable-path slot shape (per-vertex literal slots
- *     `vertex.0.x`/`vertex.0.y`... plus a `vertices` slot re-sourced from
- *     them) — a DIFFERENT, dynamic-slot-family mechanism (the one
- *     `primitives/table.ts`'s `cells.*` already established generically in
- *     `schema.ts`), deliberately deferred to the cycle that also builds
- *     `explode`/`addvertex`/`delvertex` (the mutations that give it a reason
- *     to exist) — mirroring how `primitives/table.ts`'s own first file (entry
- *     0040) deferred row/column insert/delete to later cycles.
- *   - `explode`, `addvertex`, `delvertex` — new `mutation.ts` operation
- *     kinds; `mutation.ts` itself is not touched here.
+ *     plus a `vertices` slot re-sourced from them) — a different, dynamic
+ *     slot-family mechanism, deferred to the cycle that builds
+ *     `explode`/`addvertex`/`delvertex` and gives it a reason to exist.
+ *   - Those three mutations themselves — new `mutation.ts` operation kinds.
  *   - `Segment`/`closed`/`style` as slots. §5.5's general `Path` shape names
- *     all three, but none is needed by a preset: a preset's shape is fully
- *     parametric (no per-segment data), always closed (not user-toggled),
- *     and nothing consumes `style` yet — `render/renderer.ts` draws every
- *     shape with one hardcoded default stroke, for want of these. Building
- *     them now would be building ahead of the phase that needs them, with no
- *     default-kind mechanism yet to give them a creation-time value
- *     (`schema.ts`'s own NOT DONE HERE).
- *   - The circle's TRUE arc for rendering — §5.5: "the renderer still draws a
- *     true arc" from `origin`/`radius` directly; `vertices` here is
- *     explicitly the polygonal APPROXIMATION used for bounds/hit-testing
- *     only, per that same sentence.
- *   - Registering these three in `primitives/schema.ts`'s `SCHEMAS` — that is
- *     that file's job, and it is done (entry 0059), not deferred, because unlike
- *     `table`'s dynamic family (D-017), nothing here needs a new `schema.ts`
- *     mechanism: three more `static`-only entries are the same shape
- *     `VALUE_SCHEMA`/`ADD_SCHEMA` already use.
+ *     all three; a preset needs none (fully parametric, always closed), and
+ *     nothing consumes `style` yet, so building them now would be building
+ *     ahead of the phase that needs them.
+ *   - The circle's TRUE arc — §5.5 gives that to the renderer, reading
+ *     `origin`/`radius` directly. `vertices` here is explicitly the polygonal
+ *     APPROXIMATION, used for bounds and hit-testing only, per that same
+ *     sentence.
  */
 import type { Address } from "../address.ts";
 import { isErrorValue, type ErrorValue, type GraphObject, type Point, type Value } from "../graph/node.ts";
@@ -148,10 +118,12 @@ export const MIN_POLYGON_SIDES = 3;
 /**
  * `sides` equally-spaced points on a circle of `radius` centred at `origin`,
  * starting at `rotation` radians from the positive x-axis and proceeding at
- * increasing angle (standard mathematical convention). Both the reference
- * angle (0 = +x axis, not "pointing up") and the winding direction are this
- * file's own disclosed convention: §5.5 does not specify either, and nothing
- * downstream reads winding yet. `sides`/`radius` are TRUSTED here (already
+ * increasing angle (standard mathematical convention). The reference angle
+ * (0 = +x axis, not "pointing up") is this file's own disclosed convention,
+ * which §5.5 does not specify. **The increasing-angle winding is NOT** — it is
+ * counterclockwise in a y-up frame and D-064 makes that a binding invariant
+ * three consumers depend on (file header). Reversing it here is a deliberate
+ * change that updates them all. `sides`/`radius` are TRUSTED here (already
  * validated by the caller) — this function has no `Value`/`ErrorValue`
  * vocabulary to fail closed with, and is total for `sides <= 0` (zero
  * vertices, the empty array), which the caller never actually reaches
@@ -182,10 +154,10 @@ export function computeCircleVertices(radius: number, origin: Point): readonly P
  * extending in +x/+y from there — matching `CanvasRenderingContext2D.
  * fillRect(x, y, width, height)`'s own convention exactly (PROJECT_BRIEF §2
  * mandates Canvas2D rendering, so this is the least-surprising choice: the
- * eventual renderer maps these four slots straight into that call with no
+ * renderer maps these four slots straight into that call with no
  * translation). Winding is clockwise in a y-down (screen) frame,
- * counterclockwise in a y-up (math) frame — this file is agnostic to which
- * one the renderer uses; see `computePolygonVertices`'s own note.
+ * counterclockwise in a y-up (math) frame — the SAME direction the other two
+ * presets wind, which D-064 requires of all three (file header).
  */
 export function computeRectVertices(origin: Point, width: number, height: number): readonly Point[] {
   return [

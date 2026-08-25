@@ -2,106 +2,69 @@
  * eval.ts — FormulaAst -> Value (PROJECT_BRIEF §5.3, stage 4 of 4: the evaluator).
  *
  * IMPLEMENTS: §5.3's "eager total dependency extraction vs. lazy short-circuit
- * evaluation" section — the LAZY half (`deps.ts` is the eager half): "`evaluate(ast)`
- * is LAZY and SHORT-CIRCUITS. `IF` evaluates only the taken branch. `AND`/`OR`
- * short-circuit. A runtime error... in an *untaken* branch therefore never occurs and
- * never surfaces." Upholds **D-029** (`IF`/`AND`/`OR` dispatched lazily at the
- * `FunctionCallNode` site, in BOTH syntactic forms, before any argument is evaluated;
- * `NOT` is the one eager exception), **D-028** (an `ErrorNode` evaluates to its
- * `ErrorValue`, never `#PARSE`), **D-033** (every arithmetic result routes through
- * `functions.ts`'s `finiteResult`), and **D-034** (every registry lookup goes through
- * `getFunctionEntry`; this file never indexes `FUNCTION_REGISTRY` directly).
+ * evaluation" — the LAZY half, `deps.ts` being the eager one: "`evaluate(ast)` is
+ * LAZY and SHORT-CIRCUITS. `IF` evaluates only the taken branch. `AND`/`OR`
+ * short-circuit. A runtime error... in an *untaken* branch therefore never occurs
+ * and never surfaces." Upholds D-028, D-029, D-033, D-034.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   One exported function: `evaluate(ast, read, readRange?)`.
+ *   One exported function: `evaluate(ast, read, readRange?)`. `read` resolves a
+ *   reference to whatever value an earlier stage computed — the same shape
+ *   `schema.ts`'s `DerivedSlotCompute` and `graph/eval.ts`'s closures use (D-014:
+ *   one shape, reused). `readRange` is the range analogue. This file has NO
+ *   opinion on how either answer was produced, and evaluates every node by
+ *   structural recursion in `evaluateNode`'s one exhaustive switch.
  *
- *   `read: (address) => Value | undefined` resolves a reference to whatever value an
- *   earlier stage already computed — the same shape `primitives/schema.ts`'s
- *   `DerivedSlotCompute` and `graph/eval.ts`'s own closures use (D-014: one shape,
- *   reused). `readRange: (start, end) => Value[] | ErrorValue` is the range analogue.
- *   This file has NO opinion on how either answer was produced.
+ *   **`readRange` deliberately does NOT hand this file a `GraphObject` or any
+ *   table-dimension access of its own.** Bounding a range by current extent must
+ *   use the EXACT SAME computation `mutation.ts`'s `deriveEdges` used to decide
+ *   which cells the formula depends on (`table.ts`'s `enumerateRangeCellAddresses`,
+ *   D-046's `literal`-only guard). Staying blind to that machinery is what makes
+ *   it STRUCTURALLY impossible for evaluation and edge derivation to disagree
+ *   about which cells a range spans, rather than merely conventionally so.
  *
- *   `readRange` deliberately does NOT hand this file a `GraphObject` or any
- *   table-dimension access of its own. Bounding by current extent must use the EXACT
- *   SAME computation `mutation.ts`'s `deriveEdges` used to decide which cells this
- *   formula depends on (`primitives/table.ts`'s `enumerateRangeCellAddresses`, D-046's
- *   `literal`-only guard). Staying blind to that machinery is what makes it
- *   STRUCTURALLY impossible for evaluation and edge derivation to disagree about which
- *   cells a range spans, rather than merely conventionally so.
+ *   `readRange` is OPTIONAL: a caller with no range support wired (most of this
+ *   file's own tests) may omit it, and a `RangeNode` then evaluates to a disclosed
+ *   `#PARSE`. The one production caller, `graph/eval.ts`, always supplies a real one.
  *
- *   `readRange` is OPTIONAL. A caller with no range support wired (most of this file's
- *   own test suite) may omit it; a `RangeNode` then evaluates to a disclosed `#PARSE`.
- *   The one production caller (`graph/eval.ts`) always supplies a real one.
+ *   Two things that must not be duplicated. **`AND`/`OR` are ONE shared
+ *   implementation over an operand ARRAY**, not two — the infix form passes
+ *   `[left, right]`, the call form passes `args`, and binary is simply the N=2
+ *   case. Stopping the moment the result is determined is what makes "an error in
+ *   an untaken branch never surfaces" literally true rather than merely intended.
+ *   **`NOT` is delegated to `functions.ts`'s registry entry**, never
+ *   reimplemented; duplicating its type-check-and-negate logic is exactly the
+ *   parallel copy D-009/D-014 exist to prevent.
  *
- *   Every node is evaluated by structural recursion (`evaluateNode`, one exhaustive
- *   `switch`, mirroring `deps.ts`'s `walk` and `parser.ts`'s `walkForRangePlacement`):
- *   `literal` -> its own value; `reference` -> `read(address)`, `undefined` becoming
- *   `#REF` (`undefined` is not a member of `Value`); `error` -> its stored
- *   `ErrorValue`; `binaryOp` -> `AND`/`OR` lazily, comparisons and arithmetic eagerly;
- *   `unaryOp` -> negation, or `NOT` delegated to the registry; `functionCall` ->
- *   `evaluateFunctionCall`. A `range` reached through this generic path is a
- *   MISPLACED one (`validateRangePlacement` would have rejected it) and yields the
- *   disclosed `#PARSE` — a correctly-placed range never gets here, because
- *   `evaluateFunctionCall` special-cases it first.
- *
- *   **`evaluateFunctionCall` is the ONE place D-029 could be violated by accident, and
- *   the ONE place a `RangeNode` is legally expanded.** Order, exactly:
- *   1. `getFunctionEntry(name)` (D-034-safe). `undefined` -> `#TYPE`, never a crash.
- *   2. `checkArity` — BEFORE evaluating anything, against the AST-LEVEL argument count
- *      (`SUM(A1:B4)` has exactly one argument node, whatever it flattens to).
- *   3. **The lazy check, before a single argument is evaluated** and before
- *      `entry.implementation` is so much as considered (it does not exist for a
- *      `LazyFunctionEntry` — TypeScript enforces that at `functions.ts`'s own
- *      construction sites). `IF`/`AND`/`OR` hard-dispatch here to the only three
- *      places in this file that decide which args get evaluated AT ALL. The `default`
- *      arm is a never-throwing guard against `LAZY_FUNCTION_NAMES` drifting out of
- *      sync with this dispatch, pinned by tests in both files.
- *   4. Only past that gate: arguments evaluated EAGERLY, left to right, STOPPING at
- *      the first `ErrorValue`. A `range`-typed argument is resolved via `readRange`
- *      and its values pushed onto the SAME flattened list a scalar argument lands in,
- *      so `SUM(A1, B1:B3, 10)` and `SUM(A1, B1, B2, B3, 10)` reach the registry as the
- *      identical five-element list — "expand to concrete dependencies" applied to
- *      VALUES rather than edges.
- *
- *   **`AND`/`OR`'s laziness is ONE shared implementation over an operand ARRAY**, not
- *   two. The infix form calls it with `[left, right]`; the call form with `args`.
- *   Binary is simply the N=2 case: stop and return the moment the result is determined,
- *   so every later operand is never even visited — which is what makes "an error in an
- *   untaken branch never surfaces" literally true rather than merely intended. `IF`
- *   has no infix form and evaluates only the taken branch.
- *
- *   **`NOT` is delegated to `functions.ts`'s registry entry**, never reimplemented —
- *   duplicating its type-check-and-negate logic would be exactly the parallel copy
- *   D-009/D-014 exist to prevent. The prefix form reaches it via `evaluateNot`; the
- *   call form via `evaluateFunctionCall`'s ordinary eager path. Both end at the same
- *   entry with one evaluated operand, so the two forms agree by construction — pinned
- *   by a test.
+ *   `evaluateFunctionCall` is the ONE place D-029 could be violated by accident
+ *   and the ONE place a `RangeNode` is legally expanded. Its ordered contract is
+ *   documented on the function itself, where the order it describes IS the code.
  *
  * INVARIANTS UPHELD HERE
  *   - `evaluate` NEVER throws. Every failure — unresolved reference, wrong-typed
- *     operand, unknown or mis-called function, unresolvable range, division by zero,
- *     a non-finite result — returns a typed `ErrorValue` (§5.1).
+ *     operand, unknown or mis-called function, unresolvable range, division by
+ *     zero, a non-finite result — returns a typed `ErrorValue` (§5.1).
  *   - Eager argument evaluation is left-to-right and stops at the first error; a
  *     range's own cells are walked in that same order.
- *   - `AND`/`OR`/`IF` never evaluate more than §5.3 requires — pinned by tests using a
- *     "poison" operand in the untaken position.
- *   - Every arithmetic result routes through `functions.ts`'s EXPORTED `finiteResult`,
- *     the same D-033 guard the registry entries use, not a second copy: `-0`
- *     normalises to `+0`, a genuinely non-finite result is `#TYPE`.
- *   - Comparisons require BOTH operands to be the SAME primitive type; cross-type is
- *     `#TYPE`. A disclosed decision, not a brief requirement — see
- *     `evaluateComparison`'s own comment.
- *   - A range is flattened at exactly one point and nowhere else recurses expecting
+ *   - `AND`/`OR`/`IF` never evaluate more than §5.3 requires — pinned by tests
+ *     using a "poison" operand in the untaken position.
+ *   - Every arithmetic result routes through `functions.ts`'s EXPORTED
+ *     `finiteResult` (D-033), not a second copy: `-0` normalises to `+0`, a
+ *     genuinely non-finite result is `#TYPE`.
+ *   - Comparisons require BOTH operands to be the SAME primitive type; cross-type
+ *     is `#TYPE`. A disclosed decision, not a brief requirement — see
+ *     `evaluateComparison`.
+ *   - A range is flattened at exactly one point; nothing else recurses expecting
  *     one `Value` back.
  *
  * NOT DONE HERE
- *   Any change to `deps.ts` — dependency extraction and evaluation are DIFFERENT walks
- *   over the same shapes, and neither reuses or alters the other. Building the real
- *   `readRange` — that is `primitives/table.ts`'s `enumerateRangeCellAddresses`, wired
- *   in by `graph/eval.ts`, the one place holding both the object list and the
- *   already-evaluated-values map this file is deliberately never handed.
+ *   Any change to `deps.ts` — dependency extraction and evaluation are DIFFERENT
+ *   walks over the same shapes, and neither reuses or alters the other. Building
+ *   the real `readRange` — that is `table.ts`'s `enumerateRangeCellAddresses`,
+ *   wired in by `graph/eval.ts`, the one place holding both the object list and
+ *   the already-evaluated-values map this file is deliberately never handed.
  */
 import type { Address } from "../address.ts";
 import type { BinaryOpNode, FormulaAst, FunctionCallNode, UnaryOpNode } from "./ast.ts";
@@ -441,8 +404,8 @@ function evaluateIf(args: readonly FormulaAst[], read: ReadSlot, readRange: Read
  *
  * Reached ONLY from `evaluateUnaryOp` (the prefix `NOT x` form). The call form `NOT(x)` is an
  * ordinary `EagerFunctionEntry` and takes `evaluateFunctionCall`'s eager path instead, ending at
- * the same registry implementation — which is why the two forms agree. (Corrected at
- * 0037-REVIEW-phase1: this comment previously claimed both forms route through here.)
+ * the same registry implementation — which is why the two forms agree, and why neither may grow
+ * its own negation logic (D-009/D-014).
  */
 function evaluateNot(args: readonly FormulaAst[], read: ReadSlot, readRange: ReadRange | undefined): Value {
   const operand = args[0];
@@ -461,8 +424,23 @@ function evaluateNot(args: readonly FormulaAst[], read: ReadSlot, readRange: Rea
 
 /**
  * `FunctionCallNode` evaluation — the ONE place D-029 could be violated by accident, and the ONE
- * place a `RangeNode` argument is legally expanded (D-036). See the file header's WHAT THIS IS for
- * the exact, ordered rationale; this function's structure IS that order.
+ * place a `RangeNode` argument is legally expanded (D-036).
+ *
+ * The order below is the contract, and this function's structure IS that order:
+ *   1. `getFunctionEntry(name)` (D-034-safe). `undefined` -> `#TYPE`, never a crash.
+ *   2. `checkArity` — BEFORE evaluating anything, against the AST-LEVEL argument count
+ *      (`SUM(A1:B4)` has exactly one argument node, whatever it flattens to).
+ *   3. **The lazy check, before a single argument is evaluated** and before
+ *      `entry.implementation` is so much as considered — it does not exist on a
+ *      `LazyFunctionEntry`, which `functions.ts`'s construction sites enforce at the type
+ *      level. `IF`/`AND`/`OR` hard-dispatch here to the only three places that decide which
+ *      arguments get evaluated AT ALL. The `default` arm is a never-throwing guard against
+ *      `LAZY_FUNCTION_NAMES` drifting out of sync with this dispatch, pinned in both files.
+ *   4. Only past that gate: arguments evaluated EAGERLY, left to right, STOPPING at the first
+ *      `ErrorValue`. A `range`-typed argument resolves via `readRange` and its values are
+ *      pushed onto the SAME flattened list a scalar lands in, so `SUM(A1, B1:B3, 10)` and
+ *      `SUM(A1, B1, B2, B3, 10)` reach the registry as the identical five-element list —
+ *      "expand to concrete dependencies" applied to VALUES rather than edges.
  */
 function evaluateFunctionCall(node: FunctionCallNode, read: ReadSlot, readRange: ReadRange | undefined): Value {
   const entry = getFunctionEntry(node.name);

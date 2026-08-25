@@ -1,7 +1,7 @@
 /**
  * edge.ts — Dependency edges between slots.
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.1 ("Edges"). Load-bearing per Rule 3 (§6 trigger-2 file).
+ * IMPLEMENTS: PROJECT_BRIEF §5.1 ("Edges"). Load-bearing (§6.2).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *

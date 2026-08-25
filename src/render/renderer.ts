@@ -5,102 +5,72 @@
  * IMPLEMENTS: PROJECT_BRIEF §5.9 ("Immediate mode. Every invalidation: clear,
  * apply camera transform, draw every visible object in z-order. No retained
  * scene graph, no diffing.") and §5.4's rendering clause ("fixed-size cells,
- * grid lines, numbers right-aligned and strings left-aligned"). First file
- * under `render/` with real drawing logic — §6.1 trigger 2 governs its own
- * review point (0060-REVIEW §10 names it explicitly), same posture
- * `primitives/geometry.ts` took: not on §6.2's load-bearing list, since it
- * only CONSUMES the graph, never defines addressing/mutation/schema.
- * LAYER: render. Touches Canvas2D directly — this is the one layer PROJECT_BRIEF
- * §3 Rule 1 does not bind (Rule 1 is `engine/`-only). May import: engine/*
- * (read-only), own layer. NEVER imported by engine/*.
+ * grid lines, numbers right-aligned and strings left-aligned"). Not on §6.2's
+ * load-bearing list — this file only CONSUMES the graph.
+ * LAYER: render. Touches Canvas2D directly — the one layer Rule 1 does not
+ * bind (Rule 1 is `engine/`-only). May import: engine/* (read-only), own
+ * layer. NEVER imported by engine/*.
  *
  * WHAT THIS IS
- *   `renderDocument(ctx, viewportWidth, viewportHeight, objects, camera)` — the
- *   one exported entry point, a pure function of its arguments (no retained
- *   state, no diffing, matching §5.9's own words exactly). Takes `objects`, not
- *   a whole engine `Document`: this file draws graph state, it does not care
- *   about `formatVersion`/`nextObjectId`/the journal, and staying narrow keeps
- *   it testable without constructing an irrelevant document (and sidesteps
- *   `Document` colliding with the DOM's own global `Document` type, which this
- *   file — unlike `engine/document.ts` — sits alongside).
+ *   `renderDocument(ctx, viewportWidth, viewportHeight, objects, camera)` —
+ *   the one exported entry point, a pure function of its arguments. It takes
+ *   `objects`, not a whole engine `Document`: this file draws graph state, and
+ *   the narrow argument both keeps it testable and sidesteps `Document`
+ *   colliding with the DOM's own global `Document` type, which this file —
+ *   unlike `engine/document.ts` — sits alongside.
  *
- *   Two steps, in order, matching §5.9's own sequence: (1) clear the WHOLE
- *   viewport in screen space (`ctx.setTransform` reset to identity first — see
- *   `clearScreen`'s own comment for why this must happen before any camera
- *   transform is applied); (2) set the camera transform once via
- *   `ctx.setTransform`, derived from `render/camera.ts`'s OWN
- *   `worldToScreen({x:0,y:0})` rather than a second, hand-written copy of the
- *   same formula (D-010's "declare once" principle — this file may never
- *   compute a different world<->screen mapping than `camera.ts` does), then
- *   draw every object using RAW WORLD-SPACE coordinates — the canvas's own
- *   transform does the screen conversion, so no draw call below ever calls
- *   `worldToScreen` itself.
+ *   Two steps, in §5.9's own order: clear the WHOLE viewport in screen space
+ *   (transform reset to identity FIRST — see `clearScreen`), then set the
+ *   camera transform ONCE and draw every object in RAW WORLD-SPACE
+ *   coordinates, letting the canvas transform do the conversion. No draw call
+ *   below ever calls `worldToScreen` itself. The transform is derived from
+ *   `camera.ts`'s OWN `worldToScreen` rather than a second hand-written copy
+ *   of the formula (D-010): this file may never compute a different
+ *   world<->screen mapping than `camera.ts` does.
  *
- *   Z-ORDER is `objects`' own array order — the brief names z-order but never
- *   gives objects an explicit z field, so array order (creation order, absent
- *   an explicit reorder command that does not exist yet) is the disclosed,
- *   reversible reading, matching Rule 5's "dumbest correct implementation."
+ *   Z-ORDER is `objects`' array order. The brief names z-order but gives
+ *   objects no explicit z field, so array order (creation order, absent a
+ *   reorder command that does not exist) is the disclosed, reversible
+ *   reading — Rule 5's "dumbest correct implementation." `hittest.ts` reads
+ *   it the same way, from the other end.
  *
- *   Per-type drawing: `circle` reads `origin.x`/`origin.y`/`radius` directly
- *   and draws a TRUE ARC (`ctx.arc`) — §5.5, verbatim: "the renderer still
- *   draws a true arc," never the polygonal `vertices` approximation that slot
- *   exists for (bounds/hit-testing only). `polygon`/`rect` read the derived
- *   `vertices` slot and stroke the closed path it describes — the "consumers
- *   always read `vertices`" uniformity §5.5 promises. `table` draws a
- *   FIXED-SIZE grid (§5.4) and each cell's current value, right-aligned for a
- *   number and left-aligned otherwise (`formatCellValue`/`drawCellText`).
- *   Every other `ObjectType` (`polyline`, `text`, `script`, `image`, and the
- *   Phase-0-only `value`/`add` fixtures) draws nothing — honest, matching
- *   `primitives/schema.ts`'s own stance of returning `undefined` rather than a
- *   placeholder for a type with no schema/no visual definition yet.
+ *   Two §5.5 clauses that are deliberate and must not be normalised away:
+ *   `circle` draws a TRUE ARC from `origin`/`radius` ("the renderer still
+ *   draws a true arc"), never the polygonal `vertices` approximation that
+ *   slot exists for; `polygon`/`rect` read `vertices` and stroke the closed
+ *   path it describes ("consumers always read `vertices`"). Every type with
+ *   no schema or visual definition yet draws nothing, rather than a
+ *   placeholder.
  *
  * INVARIANTS UPHELD HERE
- *   - Never throws. A missing, wrong-typed, or `ErrorValue` input to any
- *     per-type drawer (a circle with no numeric `radius`, a polygon whose
- *     `vertices` slot holds `#TYPE`) makes that ONE object draw nothing — it
- *     does not abort the loop or blank the rest of the canvas. This is NOT
- *     yet §5.9's "error badge" (see NOT DONE HERE); it is the minimum needed
- *     so one broken object cannot take the whole frame down.
- *   - No engine state is ever written here (Rule 2) — every function below
- *     only READS `GraphObject`/`Value` and calls `ctx` methods.
- *   - `ctx` is left holding the CAMERA transform on return, not identity —
- *     harmless frame to frame (`clearScreen` resets to identity first thing
- *     next frame), but a caller drawing SCREEN-space chrome after this
- *     function — a selection handle, an error badge, a HUD — must reset the
- *     transform itself first or it will be drawn camera-warped. Flagged for
+ *   - Never throws. A missing, wrong-typed, or `ErrorValue` input makes that
+ *     ONE object draw nothing — it does not abort the loop or blank the rest
+ *     of the frame. This is NOT yet §5.9's "error badge" (see NOT DONE HERE);
+ *     it is the minimum that stops one broken object taking the frame down.
+ *   - No engine state is written here (Rule 2) — every function below only
+ *     READS `GraphObject`/`Value` and calls `ctx` methods.
+ *   - HAZARD: `ctx` is left holding the CAMERA transform on return, not
+ *     identity. Harmless frame to frame (`clearScreen` resets first thing
+ *     next frame), but SCREEN-space chrome drawn after this call — a
+ *     selection handle, an error badge, a HUD — comes out camera-warped
+ *     unless the caller resets the transform itself. Lands on
  *     `render/interaction.ts` (0062-REVIEW edit 3).
  *
  * NOT DONE HERE
- *   - Selection highlight, error badges, and "formula-driven" slot indicators
- *     — §5.9 names all three, but each needs state this file has no way to
- *     read yet (a selection model, or a decision about how loudly to flag an
- *     `ErrorValue` — Q-NNN-worthy on its own). Deferred to whichever cycle
- *     builds `render/interaction.ts` and gives selection a home.
- *   - Hit-testing (`render/hittest.ts`) and any mouse/keyboard handling
- *     (`render/interaction.ts`) — this file only draws.
- *   - `style` slots (`strokeColor`/`fillColor`/`strokeWidth`, §5.5's `Path`
- *     shape) — `primitives/geometry.ts` does not declare them yet (its own
- *     NOT DONE HERE), so every shape below draws with ONE disclosed default
- *     stroke style (`DEFAULT_SHAPE_STROKE_STYLE`) until a schema exists to
- *     read from.
- *   - A table's OWN position. `primitives/schema.ts`'s `TABLE_SCHEMA` declares
- *     no `origin.x`/`origin.y` yet (§5.10's `table x=0 y=0 ...` implies one
- *     will exist, but no table-creation command has been built to need it —
- *     `primitives/table.ts`'s own NOT DONE HERE). `drawTable` reads
- *     `ORIGIN_X_PATH`/`ORIGIN_Y_PATH` (the SAME path `circle`/`polygon`/`rect`
- *     already use for their own position, imported from `geometry.ts` rather
- *     than re-declared) and falls back to `(0, 0)` when absent, so a real
- *     table origin — whenever the schema gains one — needs no renderer change
- *     at all, only the fallback ceasing to matter. Disclosed, reversible,
- *     zero document-state impact — not a `Q-NNN` (nothing about the data
- *     model, addressing, or mutation sequence turns on this).
- *   - Text/script/image objects (no schema yet — Phases 5/6).
- *   - `polyline`'s per-vertex slot shape (deferred with `explode`, per
- *     `geometry.ts`'s own NOT DONE HERE).
- *   - Any bound on how large a table's `rows`/`cols` may be, or `sides` for a
- *     polygon — STATUS.md's already-carried known problem; a huge table drawn
- *     here is exactly as slow as `primitives/geometry.ts` computing a huge
- *     `vertices` array, and the fix (if any) covers both together.
+ *   - Selection highlight, error badges, formula-driven slot indicators —
+ *     §5.9 names all three; each needs state this file cannot read. Deferred
+ *     to `render/interaction.ts`, with hit-testing and all event handling.
+ *   - `style` slots (§5.5's `Path` shape) — `geometry.ts` declares none yet,
+ *     so every shape draws with one disclosed default stroke.
+ *   - A table's OWN position. `TABLE_SCHEMA` declares no `origin.x`/`origin.y`
+ *     yet; `drawTable` reads those paths anyway (the same ones the presets
+ *     use) and falls back to `(0, 0)`, so whenever the schema gains them this
+ *     file needs no change — only the fallback stops mattering. Disclosed and
+ *     reversible; nothing in the data model or mutation sequence turns on it.
+ *   - Text/script/image objects (no schema — Phases 5/6) and `polyline`'s
+ *     per-vertex shape (deferred with `explode`).
+ *   - Any bound on `rows`/`cols`/`sides` — a carried known problem; one fix
+ *     covers drawing and evaluation together.
  */
 import { getSlot, isErrorValue, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";

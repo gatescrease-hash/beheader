@@ -4,7 +4,7 @@
  * IMPLEMENTS: PROJECT_BRIEF §5.1, mutation-loop step 5 ("Validate acyclicity. Full DFS
  * over the whole graph. Reject on cycle, naming every slot in the cycle.") and Rule 5
  * ("Cycle detection: a full DFS from scratch on every mutation. No incremental
- * bookkeeping."). Load-bearing per Rule 3 (§6 trigger-2 file: graph/*).
+ * bookkeeping."). Load-bearing (§6.2: `graph/*`).
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *

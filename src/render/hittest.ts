@@ -1,93 +1,64 @@
 /**
  * hittest.ts — Screen point -> topmost object.
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.9 ("Hit-testing: screen point -> topmost
- * object. Point-in-polygon for fills, distance-to-segment with pixel
- * tolerance for strokes and open paths, bounding box for
- * text/tables/images/scripts."). First file building hit-testing — §6.1
- * trigger 2 governs its own review point, the same posture `renderer.ts`
- * took for drawing (0062-REVIEW §10 names this file as the next slice).
- * LAYER: render. Touches no canvas/DOM at all — this file is pure coordinate
- * and geometry math over `GraphObject`/`CameraState`, structurally even
- * closer to `engine/` than `renderer.ts` is, but it lives in `render/`
- * because it depends on `render/camera.ts`'s `CameraState`/`screenToWorld`,
- * which Rule 1 forbids `engine/` from depending on in the other direction.
- * May import: engine/* (read-only), own layer. NEVER imported by engine/*.
+ * IMPLEMENTS: PROJECT_BRIEF §5.9's hit-testing sentence ("Point-in-polygon for
+ * fills, distance-to-segment with pixel tolerance for strokes and open paths,
+ * bounding box for text/tables/images/scripts").
+ * LAYER: render. Touches no canvas or DOM at all — pure coordinate and
+ * geometry math over `GraphObject`/`CameraState`. It lives in `render/`
+ * rather than `engine/` because it depends on `camera.ts`'s
+ * `CameraState`/`screenToWorld`, which Rule 1 forbids `engine/` from
+ * depending on in the other direction. May import: engine/* (read-only), own
+ * layer. NEVER imported by engine/*.
  *
  * WHAT THIS IS
  *   `hitTest(screenPoint, objects, camera)` — the one exported entry point.
- *   Converts `screenPoint` to world space via `render/camera.ts`'s OWN
- *   `screenToWorld` (D-010: never a second copy of that formula), then walks
- *   `objects` from LAST to FIRST — z-order is array order (`renderer.ts`'s
- *   own disclosed reading; a later object draws OVER an earlier one, so it
- *   is also the one a click should hit first) — and returns the first object
- *   whose own hit-test passes, or `undefined` if none does.
+ *   It converts to world space via `camera.ts`'s OWN `screenToWorld` (D-010:
+ *   never a second copy of that formula), walks `objects` from LAST to FIRST
+ *   (z-order is array order, the same reading `renderer.ts` draws under — a
+ *   later object draws OVER an earlier one, so it is tested first), and
+ *   returns the first object whose per-type test passes, or `undefined`.
  *
- *   Per-type test, dispatched the same switch-not-table way `renderer.ts`
- *   dispatches drawing (§5.1's own style, PROCESS_BRIEF §5.5):
- *     - `circle`/`polygon`/`rect` — §5.5, verbatim, is why these three share
- *       ONE test even though the renderer draws circle as a true arc: "the
- *       derived `vertices` slot yields a polygonal approximation used for
- *       bounds AND HIT-TESTING." Distance from the world point to the
- *       closest edge of the closed `vertices` polyline, against a tolerance
- *       converted from `STROKE_HIT_TOLERANCE_SCREEN_PIXELS` into world units
- *       via `camera.zoom` — §5.9's own words, "pixel tolerance," so the
- *       tolerance is screen-space regardless of Q-012's still-open
- *       world-vs-screen question for a drawn STROKE WIDTH (a different
- *       property of a different thing; this file takes no side in Q-012).
- *     - `table` — a plain bounding-box containment test (§5.9's own word for
- *       this category), built from the SAME `origin`/`TABLE_CELL_WIDTH`/
- *       `TABLE_CELL_HEIGHT` `renderer.ts` draws with (imported, not
- *       re-declared — D-010), so the clickable box can never drift from the
- *       drawn one.
- *     - `polyline`/`text`/`script`/`image`/`value`/`add` — never hit. None
- *       of these has a schema/visual definition yet (`renderer.ts`'s own
- *       stance, mirrored exactly): a click cannot land on something that is
- *       never drawn.
+ *   `circle`/`polygon`/`rect` share ONE test even though the renderer draws
+ *   circle as a true arc. §5.5 is verbatim on this: "the derived `vertices`
+ *   slot yields a polygonal approximation used for bounds AND HIT-TESTING."
+ *   Not a judgement call — a direct instruction, and the opposite of what
+ *   §5.5 says about drawing.
+ *
+ *   The stroke tolerance is screen-space (§5.9's own words, "pixel
+ *   tolerance"), converted to world units via `camera.zoom` at the point of
+ *   use. This takes no side in Q-012, which asks the world-vs-screen question
+ *   about a drawn stroke WIDTH — a different property of a different thing.
  *
  * INVARIANTS UPHELD HERE
- *   - Never throws. Every read funnels through `renderer.ts`'s own
- *     `readNumber`/`asPointArray` (typeof/`Array.isArray`-narrowed), and a
- *     missing/wrong-typed/`ErrorValue` slot makes that ONE object simply
- *     never hit — it does not abort the scan.
- *   - Reads only; writes nothing (Rule 2 — there is no document state here
- *     to write in the first place).
- *   - PRECONDITION, inherited from `screenToWorld`: `camera.zoom` is
- *     non-zero. A `CameraState` this file itself produces never violates it
- *     (this file produces none), but a camera read off a LOADED document can
- *     (D-062) — the same precondition `render/camera.ts`'s own doc comment
- *     states, and the same answer: the clamp belongs at `main.ts`'s
- *     boundary, not here (0062-REVIEW §9's ruling on `renderDocument`
- *     applies identically to this file's `screenToWorld` call). The
- *     consequence here is WORSE than `screenToWorld`'s own "silently
- *     useless point": at `zoom: 0` the world tolerance is `Infinity`, so
- *     every `circle`/`polygon`/`rect` hits at every point and any click
- *     returns the topmost object (probed at 0064-REVIEW). One more reason
- *     the boundary clamp is owed.
+ *   - Never throws. Every read funnels through `renderer.ts`'s
+ *     `readNumber`/`asPointArray`; a missing, wrong-typed, or `ErrorValue`
+ *     slot makes that ONE object never hit without aborting the scan.
+ *   - Reads only, writes nothing (Rule 2 — there is no state here to write).
+ *   - An object that draws nothing is not hittable (D-066). A degenerate
+ *     extent gets an explicit guard rather than being left to inclusive
+ *     bounds, which would contain the points ON a zero-area box.
+ *   - HAZARD, inherited from `screenToWorld`: `camera.zoom` must be non-zero.
+ *     A loaded document's camera can violate it (D-062), and the consequence
+ *     here is worse than `screenToWorld`'s own "silently useless point" — at
+ *     `zoom: 0` the world tolerance is `Infinity`, so every shape hits at
+ *     every point and any click returns the topmost object (0064-REVIEW
+ *     Finding 2). The clamp belongs at `main.ts`'s boundary, once, NOT here
+ *     (0062-REVIEW §9).
  *
  * NOT DONE HERE
- *   - **Point-in-polygon for FILLS.** §5.9 names it explicitly, but nothing
- *     can be filled yet — `primitives/geometry.ts` declares no `style`
- *     slots (its own NOT DONE HERE), and `renderer.ts` never calls
- *     `ctx.fill()`. Building it now would test a property (`fillColor`) no
- *     object can hold, so a click inside an unfilled shape's outline
- *     correctly does NOT hit it today — only the stroke does. **D-064's
- *     CCW-winding invariant is the contract a point-in-polygon test must
- *     honour when it is built** (a winding-number test's sign convention
- *     depends on it); its own pinning test is still owed (0060-REVIEW fix
- *     list item 1) and is NOT added here, since this file's stroke-distance
- *     test does not consume winding at all — distance-to-segment is
- *     direction-agnostic. Comes due with the `style`-slots cycle, same as
- *     Q-012.
- *   - Selection state, click/drag event handling, and calling any mutation —
- *     all `render/interaction.ts`'s job. This file only ANSWERS "what is
- *     under this point," it does not decide what to do with the answer.
- *   - `text`/`script`/`image` bounding boxes — no schema/visual definition
- *     yet (`renderer.ts`'s own NOT DONE HERE); nothing to bound.
- *   - `polyline`'s per-vertex, open-path shape (§5.9: "distance-to-segment...
- *     for... open paths") — deferred with `explode`/`polyline` themselves
- *     (`primitives/geometry.ts`'s own NOT DONE HERE); there is no open-path
- *     schema to read yet.
+ *   - **Point-in-polygon for FILLS.** §5.9 names it, but nothing can be
+ *     filled yet — no `style` slots exist and `renderer.ts` never calls
+ *     `ctx.fill()` — so a click inside an unfilled outline correctly misses
+ *     and only the stroke hits. D-067 rules this correct and not a partial
+ *     implementation. When it IS built it must honour D-064's CCW winding,
+ *     which is exactly where that ruling becomes load-bearing; the current
+ *     distance-to-segment test is direction-agnostic and consumes no winding.
+ *   - Selection state, event handling, and calling any mutation —
+ *     `render/interaction.ts`'s job. This file only ANSWERS "what is under
+ *     this point."
+ *   - `text`/`script`/`image` bounding boxes, and `polyline`'s open-path
+ *     distance test — no schema or visual definition exists to read yet.
  */
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
