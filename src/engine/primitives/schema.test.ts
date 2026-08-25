@@ -126,7 +126,7 @@ describe("findDerivedSlotSchema", () => {
   });
 });
 
-/** A bare table GraphObject with only its two fixed dimension slots (rows/cols), no cells yet. */
+/** A bare table GraphObject with only its two dimension slots (rows/cols) — no origin, no cells. Both absences are legal: an absent non-derived slot at a declared path is tolerated (mutation.ts's findSchemaSlotKindMismatches). */
 function tableObject(id: string, name: string, rows: Value, cols: Value): GraphObject {
   return {
     id,
@@ -172,13 +172,15 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     ]);
   });
 
-  it("table's real schema resolves to rows/cols plus every cell path for a 2x3 table, row-major", () => {
+  it("table's real schema resolves to origin/rows/cols plus every cell path for a 2x3 table, row-major", () => {
     const groups = getObjectSchema("table")?.nonDerivedSlotPaths;
     if (groups === undefined) {
       throw new Error("test setup: expected table's schema to exist");
     }
     const object = tableObject("obj_1", "table_x", 2, 3);
     expect(resolveNonDerivedSlotPaths(object, groups)).toEqual([
+      ["origin", "x"],
+      ["origin", "y"],
       ["rows"],
       ["cols"],
       ["cells", "A1"],
@@ -190,13 +192,13 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     ]);
   });
 
-  it("table's cell family is empty when rows/cols are missing entirely — no cell paths, but rows/cols themselves still resolve (they are the static group)", () => {
+  it("table's cell family is empty when rows/cols are missing entirely — no cell paths, but the four fixed paths still resolve (they are the static group)", () => {
     const object: GraphObject = { id: "obj_1", name: "table_x", type: "table", slots: {} };
     const groups = getObjectSchema("table")?.nonDerivedSlotPaths;
     if (groups === undefined) {
       throw new Error("test setup: expected table's schema to exist");
     }
-    expect(resolveNonDerivedSlotPaths(object, groups)).toEqual([["rows"], ["cols"]]);
+    expect(resolveNonDerivedSlotPaths(object, groups)).toEqual([["origin", "x"], ["origin", "y"], ["rows"], ["cols"]]);
   });
 
   it("never throws for a malformed dimension (a string, a negative number, a non-integer)", () => {
@@ -206,8 +208,8 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     }
     const malformed = tableObject("obj_1", "table_x", "not a number", -3);
     expect(() => resolveNonDerivedSlotPaths(malformed, groups)).not.toThrow();
-    // Both dimensions read as 0 (readTableDimension's own fail-safe) — no cell paths, only the two fixed ones.
-    expect(resolveNonDerivedSlotPaths(malformed, groups)).toEqual([["rows"], ["cols"]]);
+    // Both dimensions read as 0 (readTableDimension's own fail-safe) — no cell paths, only the four fixed ones.
+    expect(resolveNonDerivedSlotPaths(malformed, groups)).toEqual([["origin", "x"], ["origin", "y"], ["rows"], ["cols"]]);
   });
 });
 

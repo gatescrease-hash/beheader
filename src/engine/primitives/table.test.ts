@@ -238,7 +238,7 @@ describe("isTableDimensionResizable — 0048-REVIEW-phase2 fix 3, naming D-046",
     expect(isTableDimensionResizable(table, "column")).toBe(true);
   });
 
-  it("is true for an ABSENT dimension slot (an ordinary, not-yet-populated table)", () => {
+  it("is true for an ABSENT dimension slot (a table a creation command never built — a load, or a raw setSlot)", () => {
     const bare: GraphObject = { id: "obj_1", name: "table_x", type: "table", slots: {} };
     expect(isTableDimensionResizable(bare, "row")).toBe(true);
     expect(isTableDimensionResizable(bare, "column")).toBe(true);

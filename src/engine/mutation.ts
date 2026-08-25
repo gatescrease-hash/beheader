@@ -471,10 +471,11 @@ export interface DeleteObjectOperation {
  * complete `GraphObject` (id, name, type, every slot) rather than "create a
  * default object of this type." That distinction matters: this is
  * `document.ts`'s loader primitive (§5.11: "Loading applies objects through
- * the mutation API"), which needs to reconstruct EXACT prior state — a
- * user-facing "add a new circle" command (§5.10, Phase 3) is a different,
- * NOT-YET-BUILT concern (choosing a fresh id from `nextObjectId`, a type's
- * default slot values) layered on top of this same primitive later.
+ * the mutation API"), which needs to reconstruct EXACT prior state. §5.10's
+ * user-facing creation commands are layered ON TOP of this same primitive, in
+ * `command/commands.ts`: choosing a fresh id from `nextObjectId` and a type's
+ * starting slot values is that file's work, and this operation stays the one
+ * primitive both routes commit through.
  *
  * PRECONDITION, enforced by `mutate` before this is ever called: `object.id`
  * must NOT already name an object at the moment THIS operation is folded —

@@ -138,6 +138,31 @@ export function createEmptyDocument(): Document {
   return { formatVersion: FORMAT_VERSION, nextObjectId: 1, objects: [], journal: [], camera: DEFAULT_CAMERA };
 }
 
+/** A fresh object id, paired with the counter value that MUST replace `nextObjectId` once it is used. */
+export interface MintedObjectId {
+  readonly id: string;
+  readonly nextObjectId: number;
+}
+
+/**
+ * Mints the next object id (D-002), handing back the advanced counter with it.
+ *
+ * Why a pair rather than a bare string: D-002's guarantee is that an id is never
+ * reused — across save/load, and after its object is deleted — and that rests
+ * entirely on `nextObjectId` moving every time an id is taken. Returning the id
+ * alone would let a caller mint one and forget to advance the counter, which
+ * produces a duplicate id on the very next creation and reports nothing anywhere.
+ * The pair makes the advance impossible to omit: storing the object at all means
+ * writing `nextObjectId` back.
+ *
+ * Creates nothing and checks nothing against `objects` — `mutation.ts`'s existence
+ * simulation is the one authority on object identity and already rejects a
+ * `createObject` whose id is taken (D-026).
+ */
+export function mintObjectId(document: Document): MintedObjectId {
+  return { id: `obj_${document.nextObjectId}`, nextObjectId: document.nextObjectId + 1 };
+}
+
 // ---------------------------------------------------------------------------
 // Serialized shapes — identical to the in-memory ones, except a derived slot
 // never carries `value` (§5.11's explicit exclusion).

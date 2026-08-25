@@ -74,8 +74,11 @@
  *   - An object type's default KIND per slot (literal vs. formula) or its
  *     creation-time default value. `nonDerivedSlotPaths` is only the PATH half: which
  *     paths exist, not what they default to. §5.1 does describe schemas as declaring a
- *     "default kind", but the concrete need for that is object CREATION — a future
- *     command-layer concern. Widen this file when that need is concrete.
+ *     "default kind", and §5.10's creation commands (`command/commands.ts`) turned out
+ *     not to need one: a creation command carries its own values, and the DERIVED half
+ *     it does read from here is `derivedSlots` (D-018 requires a slot at each declared
+ *     derived path). Widen this file if a second creation route ever needs a default
+ *     rather than carrying its own.
  *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
  *     which consumes this file), cycle detection, or topological evaluation.
  *   - `polyline`/text/script/image schema entries (later Phase 3 cycles, Phases
@@ -223,8 +226,8 @@ export function resolveNonDerivedSlotPaths(
  * this type have a bindable slot at this path at all" — exactly what
  * `deriveEdges` needs to recover a formula slot's OWN address (see
  * `mutation.ts`'s header for why that need can't be met any other way).
- * Object CREATION (a slot's default kind/value) is a separate, NOT-YET-BUILT
- * concern — see the file header's NOT DONE HERE.
+ * Object CREATION reads this list for the paths it must fill and supplies the
+ * VALUES itself (`command/commands.ts`) — see the file header's NOT DONE HERE.
  *
  * ONE LIMIT REMAINS, RULED ON AT 0014-REVIEW-phase0 (D-017): a resolved path
  * list is the ONLY thing `mutation.ts`'s `deriveEdges`/`validateIntegrity`
@@ -376,10 +379,14 @@ const ADD_SCHEMA: ObjectSchema = {
 
 /**
  * `table` (PROJECT_BRIEF §5.4): "Each cell is a slot, literal or formula" over
- * a grid whose "rows and columns can be added or removed." Two FIXED
- * non-derived slots (`rows`, `cols` — §5.10's own command-line words,
- * ordinary literal number slots, no different in kind from `value`'s one
- * slot) plus one DYNAMIC non-derived slot FAMILY (`cells.*`), whose
+ * a grid whose "rows and columns can be added or removed," positioned on the
+ * canvas by §5.10's own `table x=0 y=0` arguments. FOUR FIXED non-derived
+ * slots — `origin.x`/`origin.y` (the same two paths every geometry preset
+ * uses, imported rather than re-spelled, because `render/renderer.ts`,
+ * `render/hittest.ts` and `render/interaction.ts` all read a table's position
+ * from them and a second spelling would give one object two positions) plus
+ * `rows`/`cols` (§5.10's own command-line words, ordinary literal number
+ * slots) — plus one DYNAMIC non-derived slot FAMILY (`cells.*`), whose
  * membership is the object's own CURRENT `rows`/`cols` — see
  * `primitives/table.ts`'s `enumerateTableCellSlotPaths` for why this must be
  * `dynamic` rather than a fixed list (D-017's forward note). No derived
@@ -387,11 +394,16 @@ const ADD_SCHEMA: ObjectSchema = {
  * cell's OWN value may be a `formula` slot, which is a different thing —
  * `derivedSlots` here is about slots the SCHEMA computes, and nothing about
  * a table itself is schema-computed in v1).
+ *
+ * Declaring `origin.x`/`origin.y` is what makes them ordinary slots rather
+ * than tolerated undeclared ones: only a DECLARED path may hold a `formula`
+ * slot (D-017), so this is what lets `link table_x.origin.x <address>` bind a
+ * table's position to a cell the way a polygon's already binds.
  */
 const TABLE_SCHEMA: ObjectSchema = {
   type: "table",
   nonDerivedSlotPaths: [
-    { kind: "static", paths: [TABLE_ROWS_PATH, TABLE_COLS_PATH] },
+    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, TABLE_ROWS_PATH, TABLE_COLS_PATH] },
     { kind: "dynamic", enumerate: enumerateTableCellSlotPaths },
   ],
   derivedSlots: [],

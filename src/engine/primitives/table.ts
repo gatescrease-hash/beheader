@@ -260,8 +260,8 @@ export const TABLE_COLS_PATH: readonly string[] = ["cols"];
  * Reads one of `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` off `object`'s own slots —
  * an ordinary forward lookup (`graph/node.ts`'s `getSlot`), never an inversion
  * of anything. `0` for anything that is not a `literal` slot holding a
- * non-negative integer: missing entirely (no table-creation mutation exists yet
- * to have populated it), a NON-LITERAL slot kind (`formula`/`derived` — D-046,
+ * non-negative integer: missing entirely (a table a creation command never
+ * built — a load, or a raw `setSlot`), a NON-LITERAL slot kind (`formula`/`derived` — D-046,
  * the Rule 6 guard; see the body comment for why this is the load-bearing
  * clause, not a tidy-up), or a value that is not a `number` at all — this function
  * must never throw and has no `#`-shaped failure to report (it runs during
@@ -367,8 +367,8 @@ export function getTableDimensions(object: GraphObject): TableDimensions {
  * `mutation.ts`'s `findInvalidTableResizes` (0048-REVIEW-phase2 fix 3, D-046)
  * asks a narrower question than `readTableDimension` answers: not "how many
  * rows does this table currently have" but "CAN this dimension be resized at
- * all." `true` for an ABSENT dimension slot (an ordinary, not-yet-populated
- * table — no table-creation command exists yet to have written one) or a
+ * all." `true` for an ABSENT dimension slot (a table a creation command never
+ * built — a load, or a raw `setSlot`) or a
  * `literal`-kind one; `false` ONLY when the slot is PRESENT and NOT `literal`
  * (a `formula`/`derived` dimension) — the one case `readTableDimension`
  * reads as a fail-safe `0` (D-046) rather than the table's real extent, which

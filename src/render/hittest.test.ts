@@ -128,8 +128,10 @@ describe("hitTest — table: bounding box", () => {
   });
 
   it("does not hit a table with no rows/cols slots at its origin corner, the point its zero-area box contains (D-066)", () => {
-    // The ordinary not-yet-populated table: `getTableDimensions` fails safe to
-    // 0/0 (D-046) and `drawTable` draws nothing, so no click may land on it.
+    // A table carrying no dimension slots at all — a shape a creation command
+    // never produces, but a load or a raw `setSlot` can: `getTableDimensions`
+    // fails safe to 0/0 (D-046) and `drawTable` draws nothing, so no click may
+    // land on it.
     const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: {} };
     expect(hitTest({ x: 0, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
   });

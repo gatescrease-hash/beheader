@@ -145,8 +145,8 @@ function hitTestVerticesShape(object: GraphObject, worldPoint: WorldPoint, strok
  * The bounds below are inclusive — a real table's boundary is exactly where
  * its outermost cell rect is STROKED — which is why the degenerate case needs
  * its own guard rather than falling out: without it a `0`-row table is
- * clickable along a line, and an ordinary not-yet-populated one is clickable
- * at world `(0, 0)`.
+ * clickable along a line, and one carrying no dimension slots at all is
+ * clickable at world `(0, 0)`.
  */
 function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;

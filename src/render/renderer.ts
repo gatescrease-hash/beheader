@@ -66,11 +66,6 @@
  *     nothing, and hit-testing is `render/hittest.ts`'s.
  *   - `style` slots (§5.5's `Path` shape) — `geometry.ts` declares none yet,
  *     so every shape draws with one disclosed default stroke.
- *   - A table's OWN position. `TABLE_SCHEMA` declares no `origin.x`/`origin.y`
- *     yet; `drawTable` reads those paths anyway (the same ones the presets
- *     use) and falls back to `(0, 0)`, so whenever the schema gains them this
- *     file needs no change — only the fallback stops mattering. Disclosed and
- *     reversible; nothing in the data model or mutation sequence turns on it.
  *   - Text/script/image objects (no schema — Phases 5/6) and `polyline`'s
  *     per-vertex shape (deferred with `explode`).
  *   - Any bound on `rows`/`cols`/`sides` — a carried known problem; one fix
@@ -263,8 +258,12 @@ function drawVerticesShape(ctx: CanvasRenderingContext2D, object: GraphObject): 
  * §5.4: "fixed-size cells, grid lines... Formula bar / in-place editing" (the
  * latter is `render/interaction.ts`'s job, not built here). Draws every cell
  * in `1..rows x 1..cols` (`getTableDimensions`, D-046-safe) as a bordered
- * rectangle plus its current value, positioned from `originX`/`originY` (see
- * file header's NOT DONE HERE for the `(0,0)` fallback). Never throws.
+ * rectangle plus its current value, positioned from `origin.x`/`origin.y` —
+ * the same two paths every geometry preset uses, and the ones `TABLE_SCHEMA`
+ * declares, so one object never has two positions. A table hand-built without
+ * them falls back to `(0, 0)` rather than declining to draw, because a
+ * missing coordinate is not a reason to hide a grid that has an extent.
+ * Never throws.
  */
 function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;

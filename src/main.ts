@@ -5,15 +5,15 @@
  * LAYER: application entry. May touch the DOM — this is the one file allowed to.
  *
  * WHAT THIS IS
- *   A stub: nothing is wired here yet. `render/` is ready to be — camera math
- *   (`render/camera.ts`), `renderDocument` (`render/renderer.ts`, §5.9), hit-testing
- *   (`render/hittest.ts`) and the selection/drag state machine
- *   (`render/interaction.ts`) all exist and all take plain arguments, and
- *   `command/parser.ts` turns a typed line into a command object. What is missing is
- *   on this side of the seam: nothing here listens for a pointer, a key, or a command
- *   line, and no command HANDLER exists to turn a command object into a mutation — so
- *   nothing can create an object and there is nothing for this file to put on screen
- *   but an empty canvas. It exists so the Vite scaffold has a valid entry point and
+ *   A stub: nothing is wired here yet. Both sides of the seam are ready to be —
+ *   camera math (`render/camera.ts`), `renderDocument` (`render/renderer.ts`, §5.9),
+ *   hit-testing (`render/hittest.ts`) and the selection/drag state machine
+ *   (`render/interaction.ts`) all take plain arguments, while `command/parser.ts` and
+ *   `command/prompt.ts` turn a typed or picked line into a command object and
+ *   `command/commands.ts` runs the creation commands against a document. What is
+ *   missing is only on THIS side: nothing here holds a canvas, a document, or an
+ *   input bar, and nothing listens for a pointer or a key, so none of the above is
+ *   ever called. It exists so the Vite scaffold has a valid entry point and
  *   `npm run dev` / `npm run build` succeed.
  *
  * NOT DONE HERE

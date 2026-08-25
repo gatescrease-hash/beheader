@@ -62,8 +62,9 @@
  *     clause conditioned on a thing that cannot exist, the shape D-067 ruled
  *     correct to defer. Owner: the `polyline`/`explode` cycle. Until then such
  *     an object reports that it cannot be dragged rather than swallowing the
- *     gesture. A `table` reports the same today, for the different reason that
- *     `TABLE_SCHEMA` declares no `origin.x`/`origin.y` yet (entry 0061).
+ *     gesture. A `table` is NOT in that category: `TABLE_SCHEMA` declares
+ *     `origin.x`/`origin.y`, so a table drags down the same per-component path
+ *     every preset does.
  *   - §5.9's visual feedback (selection highlight, error badge, formula-driven
  *     slot indicator). All three are draw-time work over a `ctx` this file
  *     never receives, and they belong together in one cycle, with the renderer.
