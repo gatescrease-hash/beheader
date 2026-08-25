@@ -24,7 +24,15 @@
  *   put and says what drives it in `notices`. Dragging an object whose x is
  *   bound and whose y is not therefore slides it vertically — the brief's
  *   constrained-axis payoff, and the clause most likely to be normalised into
- *   all-or-nothing dragging (0064-REVIEW §10).
+ *   all-or-nothing dragging (0064-REVIEW §10). **D-040 forbids the other
+ *   tempting normalisation**: `set` may overwrite a formula slot, a drag may
+ *   NEVER — "a drag is a continuous gesture, not a statement of intent."
+ *
+ *   §5.9's "independently" governs the per-component DECISION, not the number
+ *   of mutations: the components that DO move go in ONE batch, because §5.1
+ *   asks dragging to batch and one gesture step is one journal entry. So an
+ *   illegal value in one component rejects the other too — reachable only
+ *   through a non-finite coordinate (HAZARD below).
  *
  * INVARIANTS UPHELD HERE
  *   - A drag holds an object ID, NEVER a `GraphObject`. `mutate` returns new
@@ -41,7 +49,11 @@
  *   - HAZARD, inherited from `hittest.ts`/`camera.ts`: `camera.zoom` must be
  *     non-zero. A loaded document's camera can violate it (D-062) and every
  *     hit here then lands on the topmost object; the clamp belongs at
- *     `main.ts`'s boundary, once, not here (0062-REVIEW §9).
+ *     `main.ts`'s boundary, once, not here (0062-REVIEW §9). A DRAG at
+ *     `zoom: 0` at least fails LOUDLY: the delta is `NaN`, so `mutate` refuses
+ *     it (D-025), nothing is corrupted, and no journal entry is written — but
+ *     the message names the value, not the camera, and the drag can never
+ *     succeed (probed at 0067-REVIEW).
  *
  * NOT DONE HERE
  *   - **Per-vertex dragging** for an object with no `origin` slot (§5.9's

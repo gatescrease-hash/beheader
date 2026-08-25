@@ -1822,3 +1822,48 @@ is a product change to §5.9 and belongs to them, not to an implementer reading 
 not a defect to be fixed quietly.
 
 Reconciliation required: none. The deferral stands as built.
+
+---
+
+## D-068 — §5.9's visual feedback is ONE cycle's work, it lives with the renderer, and `render/interaction.ts` is not its home
+Ruled: entry 0067-REVIEW-phase3 (reviewer)   Binding on: `render/renderer.ts`,
+`render/interaction.ts`, `main.ts`, and the cycle that first draws selection chrome
+
+§5.9 names three pieces of visual feedback in one bullet: a **selection highlight**, an **error
+badge** on objects holding `ErrorValue`s, and **a subtle indicator on slots that are formula-driven
+rather than literal**. Three cycles have now deferred them — 0061 (`renderer.ts` could not read the
+state), 0062-REVIEW (reassigned them to a file that did not exist), 0066 (`interaction.ts` holds the
+state but draws nothing) — and each re-argued the deferral from scratch. Settled here.
+
+**Ruling, three parts.**
+
+1. **The three land together, in ONE cycle.** They are one implementation shape: each is a draw-time
+   pass over the same object list, each needs the camera transform reset that `renderDocument`
+   leaves standing, and each is a small variation on "draw chrome next to an object's extent." The
+   error badge additionally needs an `ErrorValue` scan and the formula-driven indicator a slot-kind
+   scan — two reads that belong beside each other. Doing one of three is how a §5.9 bullet becomes
+   permanently two-thirds built.
+2. **They live with the drawing, not with the state.** `render/renderer.ts` owns every `ctx` call in
+   this codebase and is where they go; the cycle that builds them widens `renderDocument`'s
+   arguments to carry the selection rather than moving drawing into `render/interaction.ts`.
+   **`render/interaction.ts` is explicitly NOT their home** — 0062-REVIEW named it as such before it
+   existed, and entry 0066 built it as a pure state machine testable without a Canvas2D fake, which
+   is a property worth keeping. It holds the selection STATE; it hands that state to the renderer.
+3. **The transform-reset hazard is that cycle's, or `main.ts`'s — never `interaction.ts`'s.**
+   `renderDocument` returns with `ctx` holding the camera transform, so screen-space chrome drawn
+   after it comes out camera-warped. Whoever first draws chrome owns the reset.
+
+**Rationale.** This is the third ruling in this project made for the same reason (compare D-067):
+a defensible deferral that has to be re-argued every cycle stops being cheap. The specific error
+this one prevents is the tempting one — "interaction.ts knows what is selected, so let it draw the
+highlight" — which costs that file its no-canvas-fake testability, splits Canvas2D across two
+`render/` files, and delivers a third of a bullet. 0064-REVIEW §10 item 4 asserted the opposite
+expectation (that the interaction cycle would need `renderer.test.ts`'s context fake); **that
+expectation was wrong and is withdrawn at 0067-REVIEW §5**, which is part of why this needs to be
+written down rather than left in a review's prose.
+
+Where the human wants a selection highlight before the other two, that is theirs to direct — it is
+not a gap for an implementer to close quietly against this ruling.
+
+Reconciliation required: none. `renderer.ts`'s NOT DONE HERE and HAZARD blocks and
+`interaction.ts`'s NOT DONE HERE were corrected at entries 0066 and 0067 and already say this.

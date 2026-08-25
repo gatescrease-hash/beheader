@@ -101,8 +101,11 @@ describe("pointerDown — §5.9 'click to select'", () => {
   it("holds the object's id, not the GraphObject the hit test returned", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
-    expect(typeof state.drag?.objectId).toBe("string");
-    expect(state.drag).not.toHaveProperty("object");
+    // Pins the SHAPE, not the absence of one guessed field name: a drag that
+    // carried the object itself — the natural wrong implementation, and the
+    // one that goes stale on the first commit — adds a key here and fails.
+    expect(Object.keys(state.drag ?? {}).sort()).toEqual(["lastWorldPoint", "objectId"]);
+    expect(state.drag?.objectId).toBe(objects[0]?.id);
   });
 
   it("selects nothing and arms nothing when the pointer lands on empty canvas", () => {
@@ -263,6 +266,39 @@ describe("per-component dragging — §5.9 'not all-or-nothing'", () => {
     // The drag still ADVANCED — there is no delta to retry when nothing here
     // can ever move.
     expect(moved.state.drag?.lastWorldPoint).toEqual({ x: 25, y: 5 });
+  });
+
+  it("names EVERY slot a branching formula could read, because extractDependencies is eager and total (§5.3)", () => {
+    // `IF(A1, B1, C1)`: evaluation takes one branch, but the graph subscribes
+    // to all three, so all three genuinely drive this component. A notice that
+    // named only the live branch would be describing a different graph than the
+    // one that exists. Added at 0067-REVIEW — the doc comment claimed this and
+    // nothing defended it.
+    const branching: GraphObject = {
+      ...rectObject(0, 0),
+      slots: {
+        ...rectObject(0, 0).slots,
+        "origin.x": {
+          kind: "formula",
+          ast: {
+            type: "functionCall",
+            name: "IF",
+            args: [
+              { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } },
+              { type: "reference", address: { objectId: "obj_2", path: ["cells", "B1"] } },
+              { type: "reference", address: { objectId: "obj_2", path: ["cells", "C1"] } },
+            ],
+          },
+          value: 0,
+        },
+      },
+    };
+    const { objects, journal } = commit([tableObject(3, [1, 2, 3]), branching]);
+    const outcome = pointerMove(dragFromOrigin("obj_1"), { x: 5, y: 5 }, objects, journal, CAMERA_IDENTITY);
+    expect(outcome.notices).toHaveLength(1);
+    expect(outcome.notices[0]).toContain("table_x.A1");
+    expect(outcome.notices[0]).toContain("table_x.B1");
+    expect(outcome.notices[0]).toContain("table_x.C1");
   });
 
   it("names a derived component as never writable rather than trying to move it", () => {
