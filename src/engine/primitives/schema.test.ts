@@ -1,10 +1,11 @@
 /**
  * schema.test.ts — Tests for the derived-slot declaration mechanism (§5.1).
  *
- * Colocated with schema.ts per D-001. Phase 0 does not yet have graph/eval.ts,
- * so these tests exercise the schema mechanism directly — calling a declared
- * `compute` function by hand with a fake `read`, rather than through a real
- * topological evaluation pass, which does not exist yet.
+ * Colocated with schema.ts per D-001. These tests exercise the schema mechanism
+ * DIRECTLY — calling a declared `compute` function by hand with a fake `read` —
+ * so a compute function's own contract is pinned in isolation from evaluation
+ * order. `graph/eval.test.ts` and `mutation.test.ts` own the other claim, that
+ * the same functions run inside the real topological pass.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
@@ -262,9 +263,10 @@ describe("derivedSlotDependencyAddresses", () => {
 });
 
 describe("add's out.result compute function", () => {
-  // graph/eval.ts does not exist yet — these tests call `compute` directly with
-  // a fake `read`, standing in for "this slot's dependencies already evaluated
-  // earlier in the same topological pass" (§5.1).
+  // These tests call `compute` directly with a fake `read` standing in for "this
+  // slot's dependencies already evaluated earlier in the same topological pass"
+  // (§5.1), so a wrong answer here is the compute function's rather than
+  // `graph/eval.ts`'s ordering.
   const computeAdd = getObjectSchema("add")?.derivedSlots[0]?.compute;
   if (computeAdd === undefined) {
     throw new Error("test setup: expected add's out.result schema entry to exist");

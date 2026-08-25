@@ -407,9 +407,10 @@ function formatCycleRejection(cycle: readonly Address[], objects: readonly Graph
 
 /**
  * Replaces the slot at `address` with `slot`, leaving every other slot on
- * every other object untouched (§5.10's future `link`/`unlink`/`set`
- * commands are all, at bottom, "put a new Slot at this address" — this is
- * that one primitive, not any of those commands themselves).
+ * every other object untouched (§5.10's `link`/`unlink`/`set` commands are
+ * all, at bottom, "put a new Slot at this address" — this is that one
+ * primitive, not any of those commands themselves; `command/commands.ts`'s
+ * `writeSlot` is the one caller that builds all three).
  *
  * One variant today (mirroring `formula/ast.ts`'s `FormulaAst`, Q-005: a
  * single-variant union Phase 3 WIDENS with more operation kinds, never

@@ -599,8 +599,9 @@ export function parseFormulaTokens(
 }
 
 /**
- * Lexes and parses `source` in one call — the entry point real callers use (a future
- * `link`/`set` command, table cell input, text's `{= }` embedding). See the file
+ * Lexes and parses `source` in one call — the entry point real callers use.
+ * `command/commands.ts`'s `writeSlot` is the first (`set <address> = <formula>` and
+ * `link`, D-071); §5.4's formula bar and text's `{= }` embedding follow. See the file
  * header for what this file deliberately leaves to the caller (stripping a leading
  * `=`, deciding whether `source` needs parsing at all).
  */

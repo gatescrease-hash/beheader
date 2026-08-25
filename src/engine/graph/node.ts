@@ -219,7 +219,8 @@ export interface LiteralSlot {
  * that is just a reference to another slot (§5.1).
  *
  * `value` is the LAST EVALUATED result, cached here so downstream formula slots
- * and `unlink` (Q-001) have something to read without re-running evaluation.
+ * and `unlink` have something to read without re-running evaluation — D-041 makes
+ * this field exactly what `unlink` freezes into a literal, errors included.
  * Step 7 of the mutation loop (§5.1) overwrites it on every mutation; it is
  * derived data, not a second source of truth — `ast` is what the user actually
  * edited.

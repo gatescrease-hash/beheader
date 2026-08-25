@@ -12,8 +12,9 @@
  *   `Document` (D-069). Everything `parser.ts` and `prompt.ts` deliberately decline
  *   to do happens here: minting an id and a default name, building an `Operation`,
  *   and calling `mutate`. It returns a NEW document plus the lines §5.10 wants
- *   echoed above the input, or a failure message. It never mutates its arguments
- *   and never throws.
+ *   echoed above the input, or a failure message. It never mutates its arguments.
+ *   It throws in exactly one measured case — see `executeCommand`'s own doc, which
+ *   states it rather than claiming it away.
  *
  *   GRAMMAR failures are `parser.ts`'s and cannot arrive here — a `Command` exists
  *   only because a line already parsed. DOMAIN and IDENTITY failures are this
@@ -36,14 +37,20 @@
  *     `ErrorValue` stand in for. `primitives/geometry.ts`'s `#TYPE` for
  *     `sides < 3` stays where it is, as the defensive arm for a loaded file.
  *   - Every `Command` arm appears in `executeCommand`'s switch, including the
- *     twelve with no handler yet: adding an arm is a compile error here, not a
+ *     ones with no handler yet: adding an arm is a compile error here, not a
  *     silent fall-through into "nothing happened".
+ *   - D-071 clause 4: `set <address> = <formula>` and `link` write their slot
+ *     through ONE function (`writeSlot`), so D-040's report of a replaced formula
+ *     and D-041's kept value cannot drift between the two commands. `unlink` shares
+ *     it for the same reason.
+ *   - A `derived` slot is refused by `set` and `link` alike (§5.1), and so is a path
+ *     the target's schema does not declare — an undeclared LITERAL slot is legal
+ *     document state, so `mutate` would accept one silently.
  *
  * NOT DONE HERE
- *   - `set`/`link`/`unlink` and `rename`/`delete`/`refs`/`list`. Each resolves an
- *     address or a name that already exists rather than minting one, and
- *     D-040/D-041's reconciliation and D-071 clause 4's ONE shared slot-writing
- *     path belong with them. Owner: the cycle after this one.
+ *   - `rename`/`delete`/`refs`/`list`. Each resolves a NAME rather than an address,
+ *     and `delete` carries §5.1.1's two paths and D-057's `brokenSlots` report.
+ *     Owner: the cycle after this one.
  *   - `select`/`zoom`/`fit`/`save`/`load`. None of them changes the document, and
  *     **D-075** settles how they land: this file still resolves the name and reports
  *     the refusal, then returns the effect as plain data in a widened
@@ -54,9 +61,19 @@
  *   - Driving a prompt sequence, or parsing anything. `command/prompt.ts` turns a
  *     partial line into a `Command`; this file only ever receives a finished one.
  */
-import { generateDefaultName } from "../engine/address.ts";
+import {
+  formatAddress,
+  generateDefaultName,
+  isAddressError,
+  parseAddress,
+  TABLE_CELL_PATH_PREFIX,
+  type Address,
+} from "../engine/address.ts";
 import { mintObjectId, type Document } from "../engine/document.ts";
-import { slotKey, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
+import { isReferenceNode } from "../engine/formula/ast.ts";
+import { formatFormula } from "../engine/formula/format.ts";
+import { isParseError, parseFormula } from "../engine/formula/parser.ts";
+import { getSlot, isErrorValue, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "../engine/graph/node.ts";
 import { mutate, type Operation } from "../engine/mutation.ts";
 import {
   MIN_POLYGON_SIDES,
@@ -68,9 +85,19 @@ import {
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
 } from "../engine/primitives/geometry.ts";
-import { getObjectSchema } from "../engine/primitives/schema.ts";
+import { findDerivedSlotSchema, getObjectSchema, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
 import { TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
-import type { Command, CreateCircleCommand, CreatePolygonCommand, CreateRectCommand, CreateTableCommand } from "./parser.ts";
+import type {
+  Command,
+  CreateCircleCommand,
+  CreatePolygonCommand,
+  CreateRectCommand,
+  CreateTableCommand,
+  LinkCommand,
+  SetFormulaCommand,
+  SetLiteralCommand,
+  UnlinkCommand,
+} from "./parser.ts";
 
 /**
  * What running one command produced.
@@ -143,8 +170,18 @@ function refuseCountOutOfRange(name: string, value: number, minimum: number, max
 /**
  * Runs one parsed command against a document (§5.10).
  *
- * Never throws: every refusal — a count out of range, a `mutate` rejection, a
- * command with no handler yet — comes back as the failure arm.
+ * Every refusal — a count out of range, a `mutate` rejection, a formula that will
+ * not parse, a command with no handler yet — comes back as the failure arm rather
+ * than as a throw.
+ *
+ * ONE MEASURED EXCEPTION, stated rather than claimed away (D-077 clause 2): a
+ * formula whose AST nests deeper than about 5,000 levels — `set table_1.A1 = 1 + 1
+ * + ...` with ~5,000 terms on one line — exhausts the stack inside
+ * `formula/parser.ts`'s recursive descent, and a `RangeError` unwinds out of here.
+ * `formula/format.ts`'s recursion fails at the same depth; both were measured
+ * together at entry 0079 (band 5,000-6,000, stack-sensitive). The fix is a depth
+ * limit inside the recursive-descent parser, returning `#PARSE` instead of
+ * unwinding — that file's cycle to make, not a check bolted on here.
  *
  * The switch names every `Command` arm, so a new arm fails to compile here rather
  * than falling through to a default that silently does nothing. The twelve arms with
@@ -161,15 +198,16 @@ export function executeCommand(command: Command, document: Document): CommandOut
     case "table":
       return createTable(command, document);
     // `set` and `set-formula` are one command word at the input bar (D-071); the
-    // parser splits them by whether the value position began with `=`, so both
-    // report under the word the operator actually typed.
+    // parser splits them by whether the value position began with `=`, and both
+    // reach the same slot-writing path below.
     case "set":
+      return setLiteral(command, document);
     case "set-formula":
-      return noHandlerYet("set");
+      return setFormula(command, document);
     case "link":
-      return noHandlerYet("link");
+      return link(command, document);
     case "unlink":
-      return noHandlerYet("unlink");
+      return unlink(command, document);
     case "rename":
       return noHandlerYet("rename");
     case "delete":
@@ -199,7 +237,7 @@ export function executeCommand(command: Command, document: Document): CommandOut
 }
 
 /** Every command word `executeCommand` actually runs. Enumerable so a test can pin it against `parser.ts`'s `COMMAND_NAMES` instead of anyone remembering to keep two lists aligned. */
-export const COMMANDS_WITH_HANDLERS: readonly string[] = ["circle", "polygon", "rect", "table"];
+export const COMMANDS_WITH_HANDLERS: readonly string[] = ["circle", "polygon", "rect", "table", "set", "link", "unlink"];
 
 /**
  * A command the parser understands and this file does not run yet.
@@ -331,4 +369,250 @@ function createTable(command: CreateTableCommand, document: Document): CommandOu
     { path: TABLE_ROWS_PATH, value: command.rows },
     { path: TABLE_COLS_PATH, value: command.cols },
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// The slot commands (§5.10's `set` / `link` / `unlink`; D-040, D-041, D-071)
+// ---------------------------------------------------------------------------
+
+/**
+ * A target address that resolved to a slot the operator is allowed to write.
+ *
+ * `existing` is `undefined` for a table cell nobody has written yet: creation makes no
+ * cell slots (D-047), so `set table_x.A1 5` is the ordinary way one comes into being,
+ * and an absent slot at a DECLARED path is not an error here.
+ */
+interface WritableSlotTarget {
+  readonly object: GraphObject;
+  readonly address: Address;
+  readonly existing: Slot | undefined;
+  /** Resolved once so every message about this slot spells it identically, and always through `formatAddress` (D-015). */
+  readonly displayName: string;
+}
+
+/** Either a resolved target or the reason it was refused — the shape every identity check in this section returns. */
+type SlotTargetResult = { readonly ok: true; readonly target: WritableSlotTarget } | { readonly ok: false; readonly message: string };
+
+/**
+ * Resolves the address `set`/`link`/`unlink` was pointed at, and decides whether it
+ * may be written at all.
+ *
+ * Why it exists: these are IDENTITY failures, which D-069 makes this file's — the
+ * parser hands over the address string exactly as typed and checks nothing about it.
+ * Three refusals live here, in the order that gives the most specific message:
+ *
+ * - the name resolves to no object, or the string is not an address at all
+ *   (`parseAddress`'s own `#REF` message);
+ * - the path names a `derived` slot. §5.1: "derived is fixed by schema and can never be
+ *   converted; attempting to link or set a derived slot is rejected", which D-040's
+ *   bound 3 leaves untouched. `mutate` would refuse this too, but with D-018's
+ *   reconciliation message, which describes a schema disagreement rather than the thing
+ *   the operator did;
+ * - the path names no slot this object's type declares. An extra `literal` slot is
+ *   legal document state, so `mutate` accepts one silently — meaning `set
+ *   polygon_1.radius2 5` would otherwise "succeed" into a slot nothing reads, which is
+ *   the silent-wrong-result this codebase refuses everywhere else. A table cell outside
+ *   the table's own extent is refused by this same check, because
+ *   `resolveNonDerivedSlotPaths` enumerates cells from the object's current
+ *   `rows`/`cols`.
+ */
+function resolveWritableSlot(target: string, document: Document): SlotTargetResult {
+  const address = parseAddress(target, document.objects);
+  if (isAddressError(address)) {
+    return { ok: false, message: address.message };
+  }
+  // Found by id inline rather than through `address.ts`'s `findObjectById`, which
+  // returns an `AddressableObject`: this file needs the object's SLOTS. Same lookup
+  // `graph/node.ts`'s `resolveSlot` already makes, for the same reason.
+  const object = document.objects.find((candidate) => candidate.id === address.objectId);
+  if (object === undefined) {
+    // Unreachable: `parseAddress` resolved this id from the same list. Returned rather
+    // than assumed, so a future change cannot turn it into a throw out of the command line.
+    return { ok: false, message: `no object with id "${address.objectId}"` };
+  }
+  const displayName = formatSlotName(address, document.objects, target);
+
+  if (findDerivedSlotSchema(object.type, address.path) !== undefined) {
+    return { ok: false, message: `${displayName} is a derived slot — its value is computed by its object's schema and can never be set or linked (§5.1)` };
+  }
+
+  const schema = getObjectSchema(object.type);
+  if (schema === undefined) {
+    return { ok: false, message: `object type "${object.type}" has no schema, so nothing can say which slots ${object.name} has` };
+  }
+  const declared = resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).some((path) => slotKey(path) === slotKey(address.path));
+  if (!declared) {
+    return { ok: false, message: `${object.name} has no slot at "${target}" — object type "${object.type}" does not declare one` };
+  }
+
+  return { ok: true, target: { object, address, existing: getSlot(object, address.path), displayName } };
+}
+
+/** Names one slot for a message, falling back to what the operator typed in the case `formatAddress` cannot resolve (D-015 — never `addressKey`, never a hand-joined name). */
+function formatSlotName(address: Address, objects: readonly GraphObject[], typed: string): string {
+  const formatted = formatAddress(address, objects);
+  return isAddressError(formatted) ? typed : formatted;
+}
+
+/**
+ * What one slot command wants written at its target. The three arms are the three
+ * §5.10 commands, and they exist as DATA so all three go through the single
+ * `writeSlot` below — D-071 clause 4 requires `link` and a formula-writing `set` to
+ * share one slot-writing path, and `unlink` joins them because it obeys the same
+ * resolution rules and reports through the same channel.
+ */
+type SlotWrite =
+  | { readonly kind: "literal"; readonly value: number | string | boolean }
+  | { readonly kind: "formula"; readonly source: string; readonly mustBeReference: boolean }
+  | { readonly kind: "unlink" };
+
+/**
+ * The ONE path that puts a new `Slot` at an address (D-071 clause 4).
+ *
+ * Resolves the target, builds the slot the request asks for, and commits it as a single
+ * `setSlot` operation. Every rejection — an unresolvable address, a derived slot, a
+ * formula that will not parse, an `unlink` of something that is not a formula, and
+ * `mutate`'s own (a cycle, a dangling reference, an illegal value) — comes back as the
+ * failure arm; nothing here throws.
+ *
+ * D-040's "not silent" bound is discharged here rather than per command: whatever the
+ * write, if the slot it lands on currently holds a formula, the report names that
+ * formula's source. That is why this is one function and not three.
+ */
+function writeSlot(write: SlotWrite, targetText: string, document: Document): CommandOutcome {
+  const resolved = resolveWritableSlot(targetText, document);
+  if (!resolved.ok) {
+    return { ok: false, message: resolved.message };
+  }
+  const { address, existing } = resolved.target;
+
+  const built = buildSlot(write, resolved.target, document);
+  if (!built.ok) {
+    return { ok: false, message: built.message };
+  }
+
+  const result = mutate(document.objects, [{ kind: "setSlot", address, slot: built.slot }], document.journal);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+
+  const lines = [...built.lines];
+  if (write.kind !== "unlink" && existing !== undefined && existing.kind === "formula") {
+    // D-040 clause 1: an explicit write over a formula is allowed and MUST NOT be
+    // silent. The source is reconstructed from the stored AST against the CURRENT
+    // names (§5.2), which is the only form of it that exists — nothing stores the
+    // operator's own keystrokes.
+    lines.push(`replaced formula: = ${formatFormula(existing.ast, document.objects)}`);
+  }
+  return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines };
+}
+
+/** Either the slot to commit plus what to say about it, or the reason the request was refused. */
+type SlotBuildResult = { readonly ok: true; readonly slot: Slot; readonly lines: readonly string[] } | { readonly ok: false; readonly message: string };
+
+/**
+ * Turns one `SlotWrite` into the `Slot` that will be committed.
+ *
+ * A `formula` slot's `value` is `null` here and never observed: step 7 of the same
+ * mutation evaluates it before anything commits, exactly as it does for the derived
+ * slots creation fills in.
+ */
+function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Document): SlotBuildResult {
+  switch (write.kind) {
+    case "literal":
+      return { ok: true, slot: { kind: "literal", value: write.value }, lines: [`${target.displayName} = ${describeSlotValue(write.value)}`] };
+    case "formula": {
+      // §5.3's bare cell refs (`A1`) are legal ONLY inside a table cell's own formula,
+      // so the table id goes in exactly when the TARGET is a cell — a formula written
+      // at `polygon_1.origin.x` must not be able to name one.
+      const ast = parseFormula(write.source, document.objects, cellHostObjectId(target));
+      if (isParseError(ast)) {
+        // D-038 clause 2: the offending name and its position are what `parseFormula`
+        // put in the `#PARSE`, carried through rather than flattened to "bad formula".
+        // Clause 4: the source text is echoed rather than discarded, so the operator
+        // edits it instead of retyping it.
+        return { ok: false, message: `${ast.message} (at position ${ast.start} of "${write.source.trim()}")` };
+      }
+      if (write.mustBeReference && !isReferenceNode(ast)) {
+        return { ok: false, message: `"link" takes an address as its source — usage: link <address> <address>. Use "set ${target.displayName} = ${write.source.trim()}" to write a formula` };
+      }
+      return { ok: true, slot: { kind: "formula", ast, value: null }, lines: [`${target.displayName} = ${formatFormula(ast, document.objects)}`] };
+    }
+    case "unlink": {
+      const existing = target.existing;
+      if (existing === undefined || existing.kind !== "formula") {
+        const state = existing === undefined ? "holds nothing" : `is already a "${existing.kind}" slot`;
+        return { ok: false, message: `${target.displayName} ${state} — "unlink" reverts a formula slot to a literal` };
+      }
+      // D-041: the value on screen is the value kept, errors included. No schema
+      // default, no refusal for a formula that is currently erroring — an `ErrorValue`
+      // is legitimate state (§5.1), and D-040 is what makes a frozen error escapable:
+      // the operator types over it.
+      return {
+        ok: true,
+        slot: { kind: "literal", value: existing.value },
+        lines: [`unlinked ${target.displayName} — kept ${describeSlotValue(existing.value)}`, `removed formula: = ${formatFormula(existing.ast, document.objects)}`],
+      };
+    }
+    default: {
+      const exhaustive: never = write;
+      void exhaustive;
+      return { ok: false, message: "this slot write declares a kind no builder reads" };
+    }
+  }
+}
+
+/** The table whose cell this target is, or `undefined` for every other slot — §5.3's bare-cell-ref scope, decided once. */
+function cellHostObjectId(target: WritableSlotTarget): string | undefined {
+  const isCell = target.object.type === TABLE_TYPE && target.address.path.length === 2 && target.address.path[0] === TABLE_CELL_PATH_PREFIX;
+  return isCell ? target.object.id : undefined;
+}
+
+/**
+ * Renders a slot's VALUE for §5.10's echo.
+ *
+ * Distinct from `formula/eval.ts`'s `describeValueType`, which names a value's TYPE for
+ * a `#TYPE` message: this one shows the value itself, because D-041's report is "here
+ * is what was kept" and a type name would not tell the operator whether to type over it.
+ */
+function describeSlotValue(value: Value): string {
+  if (value === null) {
+    return "nothing";
+  }
+  if (isErrorValue(value)) {
+    return `${value.error}: ${value.message}`;
+  }
+  if (typeof value === "string") {
+    return `"${value}"`;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `${value.length} points`;
+  }
+  const point = value as Point;
+  return `${point.x},${point.y}`;
+}
+
+/** `set polygon_1.radius 42` (§5.10) — a literal. Over a formula slot this REPLACES it and says so (D-040). */
+function setLiteral(command: SetLiteralCommand, document: Document): CommandOutcome {
+  return writeSlot({ kind: "literal", value: command.value }, command.target, document);
+}
+
+/** `set table_x.B1 = polygon_b.origin.x * 2` (D-071) — the same command word, writing a formula because the value position began with `=`. */
+function setFormula(command: SetFormulaCommand, document: Document): CommandOutcome {
+  // D-071 clause 1 keeps the `=` on the raw source so no offset is lost; `parseFormula`
+  // wants the expression alone, and this is the one place the two meet.
+  return writeSlot({ kind: "formula", source: command.source.slice(1), mustBeReference: false }, command.target, document);
+}
+
+/** `link polygon_1.origin.x table_x.A1` (§5.10) — §5.1's degenerate formula, so it is `set <target> = <source>` with the source constrained to a bare reference (D-071 clause 4). */
+function link(command: LinkCommand, document: Document): CommandOutcome {
+  return writeSlot({ kind: "formula", source: command.source, mustBeReference: true }, command.target, document);
+}
+
+/** `unlink polygon_1.origin.x` (§5.10) — back to a literal holding whatever was last displayed (D-041). */
+function unlink(command: UnlinkCommand, document: Document): CommandOutcome {
+  return writeSlot({ kind: "unlink" }, command.target, document);
 }

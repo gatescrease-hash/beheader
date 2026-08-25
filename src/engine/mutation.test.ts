@@ -2030,13 +2030,13 @@ describe("table dimensions are literal-only — Rule 6 (D-046)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The range-evaluation wiring (STATUS.md's "Next slice"; D-036's five
-// constraints, all landing this cycle). These are the end-to-end proofs
-// closest to PROJECT_BRIEF §6 Phase 2's own acceptance criterion — but see
-// each test's own note for exactly which clause it demonstrates and which
-// clause (row/column insert/delete, the repair-vs-force reject path) still
-// needs the still-deferred resize/creation cycle: this cycle does not claim
-// the phase criterion complete.
+// The range-evaluation wiring (D-036's five constraints). These are the
+// end-to-end proofs closest to PROJECT_BRIEF §6 Phase 2's own acceptance
+// criterion, built from hand-written table fixtures; see each test's own note
+// for which clause it demonstrates. Row/column insert and delete landed at
+// entries 0047/0050 and are tested in their own blocks above; object creation
+// landed at entry 0075 and lives in `command/commands.test.ts`, which builds
+// its tables from real typed lines rather than fixtures.
 // ---------------------------------------------------------------------------
 
 describe("mutate — two separate tables, a cross-table formula, live update (Phase 2 criterion clause 1, real end-to-end)", () => {

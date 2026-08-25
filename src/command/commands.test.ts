@@ -276,20 +276,11 @@ describe("a mutate rejection reaches the operator as a message, never as a throw
     expect(message).toContain("Infinity");
     expect(document.objects).toEqual([]);
   });
-
-  it("never throws for any command in the registry, run against an empty document", () => {
-    for (const line of ["circle x=0 y=0 r=1", "polygon sides=3 x=0 y=0 r=1", "rect x=0 y=0 w=1 h=1", "table x=0 y=0", "list", "save"]) {
-      expect(() => run(line, createEmptyDocument())).not.toThrow();
-    }
-  });
 });
 
 describe("the arms with no handler yet", () => {
   /** §5.10's own example line for every registry command that this file does not run yet. */
   const UNHANDLED_EXAMPLES: readonly { readonly line: string; readonly word: string }[] = [
-    { line: "link polygon_1.origin.x table_x.A1", word: "link" },
-    { line: "unlink polygon_1.origin.x", word: "unlink" },
-    { line: "set polygon_1.radius 42", word: "set" },
     { line: "rename polygon_1 intersection_a", word: "rename" },
     { line: "delete intersection_a", word: "delete" },
     { line: "refs intersection_a", word: "refs" },
@@ -311,8 +302,28 @@ describe("the arms with no handler yet", () => {
     expect([...COMMANDS_WITH_HANDLERS, ...UNHANDLED_EXAMPLES.map((example) => example.word)].sort()).toEqual([...COMMAND_NAMES].sort());
   });
 
-  it("reports a formula-writing set under the word the operator typed — 'set-formula' is a Command kind, not a command word (D-071)", () => {
-    expect(refused("set table_x.B1 = 2 + 2", createEmptyDocument())).toBe('"set" has no handler yet — nothing was changed');
+  /** Every §5.10 example line the registry can parse — the twelve above plus the seven this file now runs. Fix list item 1 of 0078-REVIEW: the sweep below claimed the registry and covered six. */
+  const EVERY_REGISTRY_EXAMPLE: readonly string[] = [
+    "circle x=0 y=0 r=1",
+    "polygon sides=3 x=0 y=0 r=1",
+    "rect x=0 y=0 w=1 h=1",
+    "table x=0 y=0",
+    "set polygon_1.radius 42",
+    "set polygon_1.radius = 1 + 1",
+    "link polygon_1.origin.x table_x.A1",
+    "unlink polygon_1.origin.x",
+    ...UNHANDLED_EXAMPLES.map((example) => example.line),
+  ];
+
+  it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {
+    for (const line of EVERY_REGISTRY_EXAMPLE) {
+      expect(() => run(line, createEmptyDocument())).not.toThrow();
+    }
+  });
+
+  it("draws that sweep from the whole registry, so a command word cannot be added without landing in it", () => {
+    const swept = new Set(EVERY_REGISTRY_EXAMPLE.map((line) => line.split(" ")[0]));
+    expect([...swept].sort()).toEqual([...COMMAND_NAMES].sort());
   });
 });
 
@@ -365,5 +376,239 @@ describe("end to end — a typed line, and a picked one, reach the same object",
       throw new Error(`expected the picked circle to commit, got: ${pickedOutcome.message}`);
     }
     expect(onlyObject(pickedOutcome.document)).toEqual(onlyObject(typed));
+  });
+});
+
+describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)", () => {
+  /** A polygon and a 4x4 table, both built by the creation commands this file already tests. */
+  function sandbox(): Document {
+    return committed("table x=0 y=0 rows=4 cols=4", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
+  }
+
+  function slotOf(document: Document, objectName: string, path: readonly string[]) {
+    const object = document.objects.find((candidate) => candidate.name === objectName);
+    if (object === undefined) {
+      throw new Error(`test setup: no object named ${objectName}`);
+    }
+    return getSlot(object, path);
+  }
+
+  describe("set writes a literal (§5.10)", () => {
+    it("replaces a literal slot's value and echoes what it wrote", () => {
+      const outcome = run("set polygon_1.radius 42", sandbox());
+      expect(outcome.ok && outcome.lines).toEqual(["polygon_1.radius = 42"]);
+      expect(slotOf(committed("set polygon_1.radius 42", sandbox()), "polygon_1", ["radius"])).toEqual({ kind: "literal", value: 42 });
+    });
+
+    it("CREATES a table cell slot that did not exist, which is how an absent cell gets written at all (D-047)", () => {
+      const before = sandbox();
+      expect(slotOf(before, "table_1", ["cells", "A1"])).toBeUndefined();
+      expect(slotOf(committed("set table_1.A1 5", before), "table_1", ["cells", "A1"])).toEqual({ kind: "literal", value: 5 });
+    });
+
+    it("accepts a lowercase cell reference and writes the SAME slot as the uppercase one (D-039)", () => {
+      expect(slotOf(committed("set table_1.a1 5", sandbox()), "table_1", ["cells", "A1"])).toEqual({ kind: "literal", value: 5 });
+    });
+
+    it("writes a string and a boolean, the other two Values a command line can express", () => {
+      const document = committed('set table_1.B2 "hello"', sandbox());
+      expect(slotOf(document, "table_1", ["cells", "B2"])?.value).toBe("hello");
+      expect(slotOf(committed("set table_1.B3 TRUE", document), "table_1", ["cells", "B3"])?.value).toBe(true);
+    });
+  });
+
+  describe("what a slot command refuses (identity failures are the handler's — D-069)", () => {
+    it("refuses an unknown object name with parseAddress's own message", () => {
+      expect(refused("set nosuch.radius 1", sandbox())).toBe('no object named "nosuch"');
+    });
+
+    it("refuses a DERIVED slot, naming it — §5.1's 'derived is fixed by schema and can never be converted', which D-040 leaves untouched", () => {
+      expect(refused("set polygon_1.area 1", sandbox())).toContain("polygon_1.area is a derived slot");
+      expect(refused("link polygon_1.area table_1.A1", sandbox())).toContain("polygon_1.area is a derived slot");
+    });
+
+    it("refuses a path the object's type does not declare, rather than quietly creating a literal slot nothing reads", () => {
+      expect(refused("set polygon_1.radius2 1", sandbox())).toBe('polygon_1 has no slot at "polygon_1.radius2" — object type "polygon" does not declare one');
+    });
+
+    it("refuses a cell outside the table's own extent, because a 4x4 table declares cells only up to D4", () => {
+      expect(refused("set table_1.A99 1", sandbox())).toContain("has no slot at");
+      expect(slotOf(committed("set table_1.D4 1", sandbox()), "table_1", ["cells", "D4"])?.value).toBe(1);
+    });
+
+    it("passes a mutate rejection through as a message and commits nothing (Rule 2's all-or-nothing)", () => {
+      const document = sandbox();
+      const message = refused(`set polygon_1.radius ${"1".repeat(400)}`, document);
+      expect(message).toContain("Infinity");
+      expect(slotOf(document, "polygon_1", ["radius"])?.value).toBe(50);
+    });
+  });
+
+  describe("set writes a FORMULA when the value position begins with = (D-071)", () => {
+    it("stores a formula slot and lets step 7 of the same mutation evaluate it — no caller ever sees the null", () => {
+      const document = committed("set table_1.A1 = 2 + 3 * 4", sandbox());
+      const slot = slotOf(document, "table_1", ["cells", "A1"]);
+      expect(slot?.kind).toBe("formula");
+      expect(slot?.value).toBe(14);
+    });
+
+    it("echoes the formula back through the CURRENT names, which is the only form of its source that exists (§5.2)", () => {
+      const outcome = run("set table_1.A1 = polygon_1.origin.x * 2", sandbox());
+      expect(outcome.ok && outcome.lines).toEqual(["table_1.A1 = polygon_1.origin.x * 2"]);
+    });
+
+    it("resolves a BARE cell ref when the target is a cell of that table, and refuses one when it is not (§5.3)", () => {
+      const seeded = committed("set table_1.A1 7", sandbox());
+      expect(slotOf(committed("set table_1.B1 = A1 + 1", seeded), "table_1", ["cells", "B1"])?.value).toBe(8);
+      expect(refused("set polygon_1.radius = A1", seeded)).toContain("A1");
+    });
+
+    it("accepts a formula containing a quoted string, because the command lexer stops at the = (D-073)", () => {
+      expect(slotOf(committed('set table_1.A1 = CONCAT("a", "b")', sandbox()), "table_1", ["cells", "A1"])?.value).toBe("ab");
+    });
+
+    it("rejects a cycle at mutation time and never stores it (§5.1 step 5)", () => {
+      const seeded = committed("set table_1.A1 = table_1.B1", committed("set table_1.B1 1", sandbox()));
+      expect(refused("set table_1.B1 = table_1.A1", seeded)).toContain("cyclic dependency");
+      expect(slotOf(seeded, "table_1", ["cells", "B1"])).toEqual({ kind: "literal", value: 1 });
+    });
+
+    it("refuses a reference to a cell that HAS no slot, because a plain reference to a missing slot is a dangling one (D-047 clause 4)", () => {
+      // Surprising but ruled: an empty cell is fine INSIDE a range, which names a
+      // region, and not fine as a bare reference, which names one slot the operator
+      // wrote. So `= B1` needs B1 to have been written; `= SUM(B1:B4)` does not.
+      expect(refused("set table_1.A1 = table_1.B1", sandbox())).toContain("references a slot that does not exist");
+      expect(slotOf(committed("set table_1.A1 = SUM(B1:B4)", sandbox()), "table_1", ["cells", "A1"])?.value).toBe(0);
+    });
+  });
+
+  describe("D-038 — a formula that cannot be valid is refused when it is ENTERED, and its source is not discarded", () => {
+    it("refuses an unknown function name, carrying the offending name and its position", () => {
+      const message = refused("set table_1.A1 = NOSUCH(1)", sandbox());
+      expect(message).toContain('unknown function "NOSUCH"');
+      expect(message).toContain("at position 1");
+      expect(message).toContain("NOSUCH(1)");
+    });
+
+    it("refuses a known function called with the wrong argument count", () => {
+      expect(refused("set table_1.A1 = ROUND(1)", sandbox())).toContain("ROUND");
+    });
+
+    it("refuses an unresolvable reference at parse time, regardless of which IF branch it sits in (§5.3)", () => {
+      expect(refused("set table_1.A1 = IF(TRUE, 1, nosuch.value)", sandbox())).toContain('no object named "nosuch"');
+    });
+
+    it("echoes the source text back so the operator edits it rather than retyping it (clause 4)", () => {
+      expect(refused("set table_1.A1 = 1 +", sandbox())).toContain('"1 +"');
+    });
+  });
+
+  describe("D-040 — an explicit write to a formula slot REPLACES it, and is not silent", () => {
+    it("turns a formula slot back into a literal and reports the formula source it replaced", () => {
+      const bound = committed("set table_1.A1 = polygon_1.radius + 1", sandbox());
+      const outcome = run("set table_1.A1 9", bound);
+      expect(outcome.ok && outcome.lines).toEqual(["table_1.A1 = 9", "replaced formula: = polygon_1.radius + 1"]);
+      expect(slotOf(committed("set table_1.A1 9", bound), "table_1", ["cells", "A1"])).toEqual({ kind: "literal", value: 9 });
+    });
+
+    it("reports a replacement identically whether the new slot is a literal, a formula, or a link — one path writes all three (D-071 clause 4)", () => {
+      const bound = committed("set table_1.A1 = 1 + 1", sandbox());
+      for (const line of ["set table_1.A1 9", "set table_1.A1 = 2 + 2", "link table_1.A1 polygon_1.radius"]) {
+        const outcome = run(line, bound);
+        expect(outcome.ok && outcome.lines[1]).toBe("replaced formula: = 1 + 1");
+      }
+    });
+
+    it("drops the replaced formula's inbound edges with it, so the old source no longer moves the slot", () => {
+      const bound = committed("set table_1.A1 = polygon_1.radius", sandbox());
+      expect(slotOf(bound, "table_1", ["cells", "A1"])?.value).toBe(50);
+      const overwritten = committed("set table_1.A1 9", bound);
+      expect(slotOf(committed("set polygon_1.radius 7", overwritten), "table_1", ["cells", "A1"])?.value).toBe(9);
+    });
+
+    it("still refuses a DERIVED slot — D-040's bound 3", () => {
+      expect(refused("set polygon_1.vertices 1", sandbox())).toContain("is a derived slot");
+    });
+  });
+
+  describe("link — §5.1's degenerate formula, through the same path (D-071 clause 4)", () => {
+    it("makes the target read the source live, so writing the source moves the target", () => {
+      const linked = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox()));
+      expect(slotOf(linked, "polygon_1", ["origin", "x"])?.value).toBe(5);
+      expect(slotOf(committed("set table_1.A1 11", linked), "polygon_1", ["origin", "x"])?.value).toBe(11);
+    });
+
+    it("stores exactly the reference node a formula-writing set would store — the two are one command underneath", () => {
+      const seeded = committed("set table_1.A1 5", sandbox());
+      const viaLink = slotOf(committed("link polygon_1.origin.x table_1.A1", seeded), "polygon_1", ["origin", "x"]);
+      const viaSet = slotOf(committed("set polygon_1.origin.x = table_1.A1", seeded), "polygon_1", ["origin", "x"]);
+      expect(viaLink).toEqual(viaSet);
+    });
+
+    it("refuses a source that is not an address, because §5.10 declares link <address> <address>", () => {
+      expect(refused("link polygon_1.radius 42", sandbox())).toContain('"link" takes an address as its source');
+    });
+
+    it("refuses a source naming no object, with parseFormula's own message", () => {
+      expect(refused("link polygon_1.radius nosuch.value", sandbox())).toContain('no object named "nosuch"');
+    });
+  });
+
+  describe("unlink — D-041, the value last displayed is the value kept", () => {
+    it("freezes the formula's last value into a literal and names the formula it removed", () => {
+      const bound = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox()));
+      const outcome = run("unlink polygon_1.origin.x", bound);
+      expect(outcome.ok && outcome.lines).toEqual(["unlinked polygon_1.origin.x — kept 5", "removed formula: = table_1.A1"]);
+      expect(slotOf(committed("unlink polygon_1.origin.x", bound), "polygon_1", ["origin", "x"])).toEqual({ kind: "literal", value: 5 });
+    });
+
+    it("stops tracking the source, which is the whole point of unlinking", () => {
+      const bound = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox()));
+      const freed = committed("unlink polygon_1.origin.x", bound);
+      expect(slotOf(committed("set table_1.A1 99", freed), "polygon_1", ["origin", "x"])?.value).toBe(5);
+    });
+
+    it("keeps an ERROR value rather than refusing or substituting a default — errors included, D-041 exactly", () => {
+      const erroring = committed("set table_1.A1 = 1 / 0", sandbox());
+      const freed = committed("unlink table_1.A1", erroring);
+      const kept = slotOf(freed, "table_1", ["cells", "A1"]);
+      expect(kept?.kind).toBe("literal");
+      expect(kept?.value).toEqual({ error: "#DIV0", message: "division by zero" });
+    });
+
+    it("lets the operator type over that frozen error, which is what makes D-041 safe (D-040)", () => {
+      const frozen = committed("unlink table_1.A1", committed("set table_1.A1 = 1 / 0", sandbox()));
+      expect(slotOf(committed("set table_1.A1 3", frozen), "table_1", ["cells", "A1"])?.value).toBe(3);
+    });
+
+    it("refuses a slot that is not a formula, saying which state it is actually in", () => {
+      expect(refused("unlink polygon_1.radius", sandbox())).toBe('polygon_1.radius is already a "literal" slot — "unlink" reverts a formula slot to a literal');
+      expect(refused("unlink table_1.A1", sandbox())).toBe('table_1.A1 holds nothing — "unlink" reverts a formula slot to a literal');
+      expect(refused("unlink polygon_1.area", sandbox())).toContain("is a derived slot");
+    });
+  });
+
+  describe("the loop these four commands close", () => {
+    it("propagates a cell edit through a link to the geometry it drives, in one topological pass (§5.1)", () => {
+      const wired = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 100", sandbox()));
+      // Two derived slots deep: the cell drives `origin.x`, which drives `vertices`,
+      // which drives `centroid.x` — all three inside the one topological pass the
+      // writing mutation runs, with no post-pass recompute.
+      expect(slotOf(wired, "polygon_1", ["centroid", "x"])?.value).toBeCloseTo(100, 6);
+      const moved = committed("set table_1.A1 250", wired);
+      expect(slotOf(moved, "polygon_1", ["centroid", "x"])?.value).toBeCloseTo(250, 6);
+    });
+
+    it("reads geometry back out into a cell, the other direction of §5.1's example chain", () => {
+      const document = committed("set table_1.B1 = polygon_1.origin.y * 2", sandbox());
+      expect(slotOf(document, "table_1", ["cells", "B1"])?.value).toBe(40);
+      expect(slotOf(committed("set polygon_1.origin.y 5", document), "table_1", ["cells", "B1"])?.value).toBe(10);
+    });
+
+    it("appends exactly one journal entry per slot command, each holding one setSlot (Rule 2)", () => {
+      const document = committed("set table_1.A1 1", sandbox());
+      expect(document.journal).toHaveLength(3);
+      expect(document.journal[2]?.operations.map((operation) => operation.kind)).toEqual(["setSlot"]);
+    });
   });
 });
