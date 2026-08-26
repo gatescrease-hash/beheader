@@ -149,7 +149,7 @@
  *   - Undo/redo (PROJECT_BRIEF §8) — this stores the journal data undo will need, and
  *     nothing replays it.
  */
-import { formatAddress, isAddressError, type Address } from "./address.ts";
+import { checkNameAvailable, formatAddress, isAddressError, type Address } from "./address.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
@@ -167,7 +167,7 @@ import {
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasIllegalNumber, isIllegalNumber, resolveSlot, slotKey, type GraphObject, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, isIllegalNumber, resolveSlot, slotKey, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -589,11 +589,48 @@ export interface DeleteTableLineOperation {
 }
 
 /**
+ * §5.2/§5.10's `rename <object> <new-name>` — the ONE operation kind that
+ * changes a NAME, and the reason it can exist this cheaply is the two-layer
+ * address scheme (§5.3): a stored AST holds an object ID, never a name, so a
+ * rename rewrites NOTHING outside the renamed object's own `name` field. No
+ * formula repair pass, no `brokenSlots`, no edge that can break — which is
+ * exactly the property §5.3 was designed to buy ("this is what lets a user
+ * rename an object without breaking every formula pointing at it").
+ *
+ * TWO PRECONDITIONS, both enforced by `mutate` before this is ever folded:
+ * (1) `objectId` names an object that still exists at the moment THIS
+ * operation is folded — the same existence simulation every other
+ * non-`createObject` variant passes; (2) `name` passes §5.2's grammar AND is
+ * unique case-insensitively against every OTHER object as of this operation's
+ * own position in the batch (`findInvalidRenames`, via `address.ts`'s
+ * `checkNameAvailable` — §5.2's single gate, never a second copy of the rule
+ * spelled out here). The uniqueness half is simulated left-to-right for the
+ * same reason table resizes are (D-050): a batch can free a name by deleting
+ * or renaming its holder before a later operation claims it.
+ *
+ * NOT a `setSlot` with a special path: a name is not a slot (it does not live
+ * in `GraphObject.slots`, has no `Slot` kind, carries no `Value`, and takes
+ * no formula), so writing one that way would mean inventing a path no schema
+ * declares — which D-017's check would then have to be taught to ignore.
+ */
+export interface RenameObjectOperation {
+  readonly kind: "renameObject";
+  readonly objectId: string;
+  readonly name: string;
+}
+
+/**
  * The full set of operations `mutate` can apply. A new kind WIDENS this union,
  * per Q-005/D-020's "widen the union, never restructure" stance — never a
  * second entry point.
  */
-export type Operation = SetSlotOperation | DeleteObjectOperation | CreateObjectOperation | InsertTableLineOperation | DeleteTableLineOperation;
+export type Operation =
+  | SetSlotOperation
+  | DeleteObjectOperation
+  | CreateObjectOperation
+  | InsertTableLineOperation
+  | DeleteTableLineOperation
+  | RenameObjectOperation;
 
 /** The object id an operation targets, whichever variant it is — shared by the existence check and the message-building below. */
 function operationTargetId(operation: Operation): string {
@@ -603,7 +640,7 @@ function operationTargetId(operation: Operation): string {
   if (operation.kind === "createObject") {
     return operation.object.id;
   }
-  if (operation.kind === "insertTableLine" || operation.kind === "deleteTableLine") {
+  if (operation.kind === "insertTableLine" || operation.kind === "deleteTableLine" || operation.kind === "renameObject") {
     return operation.objectId;
   }
   return operation.address.objectId;
@@ -772,6 +809,15 @@ function applyOperation(
       .map((object) => repairObjectFormulaAddresses(object, repairReference, repairRange))
       .filter((entry) => entry.object.id !== operation.objectId); // The deleted object itself, and any report about ITS OWN slots, leave together.
     return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
+  }
+  if (operation.kind === "renameObject") {
+    // The whole of a rename. Nothing else in the document mentions a name
+    // (§5.3: stored ASTs hold ids), so there is no second pass here — and
+    // `brokenSlots` is empty because no reference can break.
+    return {
+      objects: objects.map((object) => (object.id === operation.objectId ? { ...object, name: operation.name } : object)),
+      brokenSlots: [],
+    };
   }
   if (operation.kind === "createObject") {
     // D-024: the caller's own GraphObject never enters committed state by
@@ -1164,6 +1210,8 @@ export function mutate(
         detail = `attempts to insert a ${operation.axis} into object id "${targetId}"`;
       } else if (operation.kind === "deleteTableLine") {
         detail = `attempts to delete a ${operation.axis} from object id "${targetId}"`;
+      } else if (operation.kind === "renameObject") {
+        detail = `attempts to rename object id "${targetId}" to "${operation.name}"`;
       } else {
         detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
       }
@@ -1198,6 +1246,15 @@ export function mutate(
   const invalidResizeMessages = findInvalidTableResizes(operations, objects);
   if (invalidResizeMessages.length > 0) {
     return { ok: false, message: invalidResizeMessages.join("; ") };
+  }
+
+  // §5.2's name rules for every `renameObject` in the batch, simulated
+  // left-to-right the same way the two checks above are — see
+  // `findInvalidRenames`'s own doc comment for why a duplicate name cannot
+  // be caught after the fold instead.
+  const invalidRenameMessages = findInvalidRenames(operations, objects);
+  if (invalidRenameMessages.length > 0) {
+    return { ok: false, message: invalidRenameMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -1746,6 +1803,67 @@ interface TrackedTableState {
  * is generally unguarded against the cells that actually exist), reached
  * through the same door as before, not a new one.
  */
+/**
+ * §5.2's name rules for every `renameObject` in a batch, checked before
+ * staging — the same posture `findInvalidTableResizes` takes, and for the
+ * same reason (D-050): a name's availability is a function of the batch AS
+ * SIMULATED LEFT-TO-RIGHT, not of the pre-batch document.
+ * `[rename a → b, rename c → a]` is legal because the first frees `a`;
+ * `[rename a → z, rename c → z]` is not, and BOTH must be decided here
+ * rather than by a post-fold check, because a duplicate name is not
+ * detectable from the folded graph alone once it exists (nothing downstream
+ * looks at names at all — `validateIntegrity` reads slots and edges).
+ *
+ * The rule itself is `address.ts`'s `checkNameAvailable`, never re-spelled
+ * here: it owns both halves (§5.2's grammar and case-insensitive uniqueness)
+ * and its `excludeId` exists for exactly this call. Every offending
+ * operation is named in one pass, matching every other check in this file.
+ *
+ * KNOWN GAP, disclosed not fixed: `createObject`'s OWN name goes
+ * unchecked — this function only reads a created object's name to keep the
+ * simulation honest for a LATER rename. A loader or a command handler can
+ * therefore still commit a duplicate or ungrammatical name through
+ * `createObject`, exactly as it could before this cycle;
+ * `command/commands.ts` avoids it by minting names through
+ * `generateDefaultName`. Closing it belongs to a cycle that can weigh what
+ * it does to §5.11's load path, not to this one.
+ */
+function findInvalidRenames(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  // `AddressableObject` — the shape `checkNameAvailable` reads — is all this
+  // simulation needs to track; no slot data is touched, exactly as the
+  // existence check above touches none.
+  const tracked: { id: string; name: string; type: ObjectType }[] = objects.map((object) => ({ id: object.id, name: object.name, type: object.type }));
+
+  operations.forEach((operation, index) => {
+    if (operation.kind === "createObject") {
+      tracked.push({ id: operation.object.id, name: operation.object.name, type: operation.object.type });
+      return;
+    }
+    if (operation.kind === "deleteObject") {
+      const at = tracked.findIndex((entry) => entry.id === operation.objectId);
+      if (at !== -1) {
+        tracked.splice(at, 1); // The deleted object's name is free from here on.
+      }
+      return;
+    }
+    if (operation.kind !== "renameObject") {
+      return;
+    }
+    const check = checkNameAvailable(operation.name, tracked, operation.objectId);
+    if (!check.ok) {
+      problems.push(`operation ${index + 1} of ${operations.length} cannot rename: ${check.message}`);
+      return; // Not applied to the simulation — a refused rename changes no name.
+    }
+    const entry = tracked.find((candidate) => candidate.id === operation.objectId);
+    if (entry !== undefined) {
+      entry.name = operation.name; // Frees the old name for a later operation, and claims the new one.
+    }
+  });
+
+  return problems;
+}
+
 function findInvalidTableResizes(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
   const tracked = new Map<string, TrackedTableState>();

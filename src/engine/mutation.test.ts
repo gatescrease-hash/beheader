@@ -3321,3 +3321,161 @@ describe("mutate — KNOWN INCOHERENCE (pinned, not fixed): row/column deletion 
     expect(result.ok).toBe(false);
   });
 });
+
+// RenameObjectOperation (entry 0083) — §5.2/§5.10's `rename`, and the one
+// operation kind whose whole effect is a name. §5.3's two-layer scheme is what
+// makes it this small: every stored AST holds an ID, so nothing outside the
+// renamed object's own `name` field moves.
+describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)", () => {
+  /** `value_1` read by `add_1`, so a rename has real inbound edges to leave alone. */
+  function wired(): readonly GraphObject[] {
+    return [
+      valueObject("obj_1", "value_1", 10),
+      valueObject("obj_2", "value_2", 5),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+  }
+
+  it("writes the new name and touches nothing else — same id, same slots, and the object's position in the array is unchanged", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.objects[0]?.name).toBe("intersection_a");
+    expect(result.objects[0]?.id).toBe("obj_1");
+    expect(result.objects[0]?.slots).toEqual(wired()[0]?.slots);
+    expect(result.objects.map((object) => object.id)).toEqual(["obj_1", "obj_2", "obj_3"]);
+  });
+
+  it("breaks no reference at all — the dependent still evaluates, and brokenSlots is empty (§5.3's whole reason for storing ids)", () => {
+    const before = deriveValidateAndEvaluate(wired());
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }], []);
+    expect(result.ok && result.brokenSlots).toEqual([]);
+    expect(result.ok && result.objects[2]?.slots["out.result"]?.value).toBe(before.ok ? before.objects[2]?.slots["out.result"]?.value : undefined);
+    // The stored AST still names the ID, not either name (the VALUE moves,
+    // because step 7 evaluates every candidate — the AST does not).
+    const dependentSlot = result.ok ? result.objects[2]?.slots["in.a"] : undefined;
+    expect(dependentSlot?.kind === "formula" ? dependentSlot.ast : undefined).toEqual({ type: "reference", address: addr("obj_1", "value") });
+  });
+
+  it("derives the SAME edge set after the rename, so a name is provably not part of the graph", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }], []);
+    expectSameEdges(result.ok ? deriveEdges(result.objects) : [], deriveEdges(wired()));
+  });
+
+  it("records exactly one journal entry holding the operation (Rule 2)", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }], []);
+    expect(result.ok && result.journal).toEqual([{ operations: [{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }] }]);
+  });
+
+  it("rejects a rename of an id that does not exist, with D-021's own message shape", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_99", name: "whatever" }], []);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toBe(
+      'operation 1 of 1 attempts to rename object id "obj_99" to "whatever", which does not exist in this document (D-021)',
+    );
+  });
+
+  it("rejects a name another object already holds, case-insensitively (§5.2), through checkNameAvailable's own message", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "VALUE_2" }], []);
+    expect(result.ok === false && result.message).toBe('operation 1 of 1 cannot rename: the name "VALUE_2" is already in use');
+  });
+
+  it("rejects a name that fails §5.2's grammar", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "3bad" }], []);
+    expect(result.ok === false && result.message).toBe(
+      'operation 1 of 1 cannot rename: "3bad" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*',
+    );
+  });
+
+  it("ACCEPTS a rename to the object's own name in a different case — uniqueness excludes the object being renamed", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "VALUE_1" }], []);
+    expect(result.ok && result.objects[0]?.name).toBe("VALUE_1");
+  });
+
+  it("leaves the caller's objects and journal untouched on a rejection (§5.1 step 6)", () => {
+    const objects = wired();
+    const snapshot = JSON.stringify(objects);
+    const journal: readonly MutationJournalEntry[] = [];
+    expect(mutate(objects, [{ kind: "renameObject", objectId: "obj_1", name: "value_2" }], journal).ok).toBe(false);
+    expect(JSON.stringify(objects)).toBe(snapshot);
+    expect(journal).toEqual([]);
+  });
+});
+
+describe("mutate — findInvalidRenames simulates the batch LEFT-TO-RIGHT, the same way findInvalidTableResizes does (D-050's reasoning)", () => {
+  function pair(): readonly GraphObject[] {
+    return [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
+  }
+
+  it("ACCEPTS a rename onto a name an EARLIER rename in the same batch just freed", () => {
+    const result = mutate(
+      pair(),
+      [
+        { kind: "renameObject", objectId: "obj_1", name: "freed_later" },
+        { kind: "renameObject", objectId: "obj_2", name: "value_1" },
+      ],
+      [],
+    );
+    expect(result.ok && result.objects.map((object) => object.name)).toEqual(["freed_later", "value_1"]);
+  });
+
+  it("ACCEPTS a rename onto a name an EARLIER deleteObject in the same batch just freed", () => {
+    const result = mutate(
+      pair(),
+      [
+        { kind: "deleteObject", objectId: "obj_1" },
+        { kind: "renameObject", objectId: "obj_2", name: "value_1" },
+      ],
+      [],
+    );
+    expect(result.ok && result.objects.map((object) => object.name)).toEqual(["value_1"]);
+  });
+
+  it("REJECTS two renames in one batch claiming the SAME new name, naming the second operation", () => {
+    const result = mutate(
+      pair(),
+      [
+        { kind: "renameObject", objectId: "obj_1", name: "same" },
+        { kind: "renameObject", objectId: "obj_2", name: "same" },
+      ],
+      [],
+    );
+    expect(result.ok === false && result.message).toBe('operation 2 of 2 cannot rename: the name "same" is already in use');
+  });
+
+  it("REJECTS a rename onto a name an EARLIER createObject in the same batch took — the created object is in the simulation too", () => {
+    const result = mutate(
+      pair(),
+      [
+        { kind: "createObject", object: valueObject("obj_3", "fresh", 3) },
+        { kind: "renameObject", objectId: "obj_1", name: "FRESH" },
+      ],
+      [],
+    );
+    expect(result.ok === false && result.message).toBe('operation 2 of 2 cannot rename: the name "FRESH" is already in use');
+  });
+
+  it("names EVERY offending rename in one pass, not just the first, and a REFUSED rename frees nothing for a later one", () => {
+    // Operation 1 is refused (grammar), so `value_1` is still taken when
+    // operation 2 asks for it — a refused rename never enters the simulation.
+    const result = mutate(
+      pair(),
+      [
+        { kind: "renameObject", objectId: "obj_1", name: "3bad" },
+        { kind: "renameObject", objectId: "obj_2", name: "value_1" },
+      ],
+      [],
+    );
+    expect(result.ok === false && result.message).toBe(
+      'operation 1 of 2 cannot rename: "3bad" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*; ' +
+        'operation 2 of 2 cannot rename: the name "value_1" is already in use',
+    );
+  });
+
+  it("KNOWN GAP, pinned not fixed: createObject's OWN name is NOT checked, so a duplicate name still commits through the loader path (findInvalidRenames' doc comment owns this)", () => {
+    const result = mutate(pair(), [{ kind: "createObject", object: valueObject("obj_3", "value_1", 3) }], []);
+    expect(result.ok && result.objects.map((object) => object.name)).toEqual(["value_1", "value_2", "value_1"]);
+  });
+});

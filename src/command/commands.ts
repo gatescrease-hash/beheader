@@ -55,11 +55,10 @@
  *   - §5.1.1's two paths for `delete` are chosen by the operator's `force` flag and
  *     executed by `mutate`, never re-decided here. This file adds the remedy
  *     sentence to the rejection and reads D-057's `brokenSlots` on the repair.
+ *   - `rename` resolves the OLD name here and refuses an unknown one; §5.2's grammar
+ *     and uniqueness are `mutate`'s (`checkNameAvailable`), never re-checked here.
  *
  * NOT DONE HERE
- *   - `rename`. It resolves a NAME and writes one, so it needs a `renameObject`
- *     `Operation` that `mutation.ts` does not have yet — the only one of §5.10's
- *     object commands that cannot be built from the operations already there.
  *   - `select`/`zoom`/`fit`/`save`/`load`. None of them changes the document, and
  *     **D-075** settles how they land: this file still resolves the name and reports
  *     the refusal, then returns the effect as plain data in a widened
@@ -108,6 +107,7 @@ import type {
   DeleteCommand,
   LinkCommand,
   RefsCommand,
+  RenameCommand,
   SetFormulaCommand,
   SetLiteralCommand,
   UnlinkCommand,
@@ -198,7 +198,7 @@ function refuseCountOutOfRange(name: string, value: number, minimum: number, max
  * unwinding — that file's cycle to make, not a check bolted on here.
  *
  * The switch names every `Command` arm, so a new arm fails to compile here rather
- * than falling through to a default that silently does nothing. The six arms with
+ * than falling through to a default that silently does nothing. The five arms with
  * no handler yet say so by name; see this file's NOT DONE HERE for who owns each.
  */
 export function executeCommand(command: Command, document: Document): CommandOutcome {
@@ -223,7 +223,7 @@ export function executeCommand(command: Command, document: Document): CommandOut
     case "unlink":
       return unlink(command, document);
     case "rename":
-      return noHandlerYet("rename");
+      return renameObject(command, document);
     case "delete":
       return deleteObject(command, document);
     case "refs":
@@ -251,7 +251,7 @@ export function executeCommand(command: Command, document: Document): CommandOut
 }
 
 /** Every command word `executeCommand` actually runs. Enumerable so a test can pin it against `parser.ts`'s `COMMAND_NAMES` instead of anyone remembering to keep two lists aligned. */
-export const COMMANDS_WITH_HANDLERS: readonly string[] = ["circle", "polygon", "rect", "table", "set", "link", "unlink", "delete", "refs", "list"];
+export const COMMANDS_WITH_HANDLERS: readonly string[] = ["circle", "polygon", "rect", "table", "set", "link", "unlink", "rename", "delete", "refs", "list"];
 
 /**
  * A command the parser understands and this file does not run yet.
@@ -635,6 +635,48 @@ function link(command: LinkCommand, document: Document): CommandOutcome {
 /** `unlink polygon_1.origin.x` (§5.10) — back to a literal holding whatever was last displayed (D-041). */
 function unlink(command: UnlinkCommand, document: Document): CommandOutcome {
   return writeSlot({ kind: "unlink" }, command.target, document);
+}
+
+// ---------------------------------------------------------------------------
+// Renaming an object (§5.10's `rename`; §5.2's rules, enforced by `mutate`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `rename polygon_1 intersection_a` (§5.10, §5.2).
+ *
+ * Two names, resolved at two different layers, and the split is the whole design:
+ * the OLD name is an IDENTITY question this file answers (`findGraphObjectByName`,
+ * the same resolver `delete` uses, case-insensitive per §5.2), and the NEW name is
+ * a RULE question `mutate` answers through `address.ts`'s `checkNameAvailable` —
+ * §5.2's grammar and its case-insensitive uniqueness, in the one place that can see
+ * a whole batch. Re-checking the new name here would be a second copy of a rule that
+ * already has a single gate, free to drift from it; `parser.ts` declines the same
+ * check for the same reason, which is why `rename polygon_1 3bad` parses.
+ *
+ * Nothing else in the document moves. §5.3's two-layer scheme stores an object ID in
+ * every AST, so no formula, edge, or evaluated value changes — the echoed line says
+ * only what happened, and there is no `brokenSlots` report to make because a rename
+ * cannot break a reference.
+ *
+ * `rename polygon_1 POLYGON_1` is ACCEPTED and changes the stored case: uniqueness
+ * excludes the object being renamed, so it collides with nothing, and §5.2 gives no
+ * reason to refuse a display-case change.
+ */
+function renameObject(command: RenameCommand, document: Document): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+
+  const result = mutate(document.objects, [{ kind: "renameObject", objectId: object.id, name: command.newName }], document.journal);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`renamed ${object.name} to ${command.newName}`],
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,18 +1,21 @@
-# STATUS — as of entry 0082-REVIEW
+# STATUS — as of entry 0083
 
-STATE: **GREEN.** Both configs compile, 1005/1005 tests pass, 0 skipped, 0 `.only`. Entry 0081 is
-**reviewed and accepted with edits** (0082-REVIEW). Nothing is unreviewed; the next cycle starts
-clean.
+STATE: **GREEN.** Both configs compile, 1032/1032 tests pass, 0 skipped, 0 `.only`. **Entry 0083 is
+UNREVIEWED and asks for review** — it put a sixth `Operation` kind into `mutation.ts`, a load-bearing
+file, and removed one stub test expectation (§6.1 trigger 5).
 
 Current phase: **3 — canvas, camera, geometry, command line.** A typed line can now CREATE the four
-objects, WIRE them (`set`, `set <address> = <formula>`, `link`, `unlink`), and now READ and REMOVE
-them (`refs`, `list`, `delete [force]`). **`main.ts` still holds no canvas and listens for nothing, so
+objects, WIRE them (`set`, `set <address> = <formula>`, `link`, `unlink`), READ and REMOVE them
+(`refs`, `list`, `delete [force]`), and RENAME one (`rename`). **Every §5.10 command about an
+EXISTING object’s identity is now built** — creation, naming, wiring, reading, removal; the eight that
+need a schema or an `Operation` kind nobody has written (`polyline`/`text`/`script`/`image`/`explode`/
+`addvertex`/`delvertex`/`pan`) are not. **`main.ts` still holds no canvas and listens for nothing, so
 no pixel has ever come out of this project.** Phase 3 criterion (§6): *"create a polygon and a table by
 command, see both drawn, pan/zoom, select, and drag the polygon."* The engine half is done and tested;
 the visible half is untested and unbuilt. NOT claimed.
 
 Last review point: **0082-REVIEW-phase3, ACCEPT WITH EDITS.**
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+Cycles since last review: **1/3** · diff since last review: **425 lines / 4 files** (cap 800/10).
 
 ## Read this first — the two things a cold reader needs
 
@@ -34,29 +37,23 @@ falls back to once the table it names is gone. A `refs` reading the current edge
 "nothing references table_1" for a document whose `delete table_1` is refused — found by probe at
 entry 0081, after twelve tests over the wrong version had passed. Do not "simplify" it back.
 
-## Next slice — `rename`, then D-075's effects, then `main.ts`
+## Next slice — D-075's effects, then `main.ts`
 
-1. **`rename`** is the one §5.10 object command that needs a NEW `Operation` kind — `renameObject` in
-   `mutation.ts`, a load-bearing file. `checkNameAvailable(name, objects, excludeId)` already exists
-   and is the single gate (§5.2's grammar plus uniqueness); the handler resolves the old NAME the way
-   `delete` now does (`findGraphObjectByName`). Nothing else in §5.10 is blocked on it.
-2. Then **`select`/`zoom`/`fit`/`save`/`load` under D-075**: widen `CommandOutcome`'s success arm with
+1. **`select`/`zoom`/`fit`/`save`/`load` under D-075**: widen `CommandOutcome`'s success arm with
    an optional plain-data `effect`; `commands.ts` still resolves `select intersection_a` and refuses an
    unknown name; `main.ts` performs it.
-3. Then **`main.ts`**: ONE clamped camera to `renderDocument`, `hitTest` and
+2. Then **`main.ts`**: ONE clamped camera to `renderDocument`, `hitTest` and
    `pointerDown`/`pointerMove` (D-062); `zoom`/`fit` write `Document.camera` directly, never through
    `mutate` (D-027 clause 2); reset the canvas transform before screen-space chrome; and **wire
    `prompt.ts` — a canvas click during a live sequence is a `picked` response, not a selection**,
    with screen→world done by `camera.ts` before it reaches `command/`.
 
 The parser depth limit (fix-list item 1) is its own small slice and blocks nothing else — but take it
-BEFORE step 3, per 0080-REVIEW F3, and set it from **D-079**'s constant rather than from any of the
+BEFORE step 2, per 0080-REVIEW F3, and set it from **D-079**'s constant rather than from any of the
 measured bands.
 
-**`rename` touches `mutation.ts`, a load-bearing file.** That does not force an immediate stop by
-itself (§6.1's triggers are about new subsystems, deviations and broken rules, none of which a new
-`Operation` kind fires on its own) — but §6.2 keeps Phase 4 shut until the review that follows it,
-so say so in the log entry.
+**§6.2 is live: `mutation.ts` has unreviewed changes (entry 0083), so Phase 4 cannot start until they
+are reviewed.**
 
 ## Built and reviewed
 
@@ -72,7 +69,24 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
 
 ## Built this batch, not yet reviewed
 
-**Nothing.** The batch closed at 0082-REVIEW.
+### Entry 0083 — `rename`, and `mutation.ts`'s sixth `Operation` kind
+
+- **`RenameObjectOperation { kind, objectId, name }`** — its whole effect is one field. No repair pass,
+  no `brokenSlots`, no edge that can break: §5.3 stores an object **ID** in every AST, so a rename
+  cannot break a reference. **This operation is the first thing in the codebase to spend that
+  property**, and its doc comment says so. It is deliberately not a `setSlot` at a magic path — a name
+  is not a slot, and inventing a path for it would mean teaching D-017's check to ignore one.
+- **`findInvalidRenames`, a fourth pre-staging check.** §5.2's grammar and case-insensitive uniqueness
+  over the batch **as simulated left-to-right**, the same posture `findInvalidTableResizes` takes and
+  for D-050's reason: a batch can free a name (by rename or delete) before a later operation claims it.
+  The RULE is `address.ts`'s `checkNameAvailable`, never re-spelled — its `excludeId` parameter had
+  no caller in `src/` until this cycle, and it is why `rename polygon_1 POLYGON_1` is accepted.
+- **The handler** resolves the OLD name (identity, this file's job, `findGraphObjectByName`) and lets
+  `mutate` judge the NEW one (rule, one gate). `rename polygon_1 3bad` therefore parses and is
+  refused later, by design (D-043).
+- 28 new tests, 1 removed (the `"rename" has no handler yet` stub), **five mutation checks, all
+  caught** (9, 2, 11, 1 and 1 failures).
+- **Disclosed, pinned, not fixed:** `createObject`'s OWN name is still unchecked — see known problems.
 
 ### What entry 0081 built, and what 0082-REVIEW changed in it
 
@@ -102,7 +116,7 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
 
 ## Not started
 
-`rename` handler, `select`/`zoom`/`fit`/`save`/`load` effects, `main.ts` wiring, §5.9's visual-feedback
+`select`/`zoom`/`fit`/`save`/`load` effects, `main.ts` wiring, §5.9's visual-feedback
 trio (**D-068**), §5.9's per-vertex drag path, `polyline`/`explode`/`addvertex`/`delvertex`, `style`
 slots, point-in-polygon fill hit-testing (D-067), §5.4's formula bar / in-place cell editing ·
 Phases 4–7.
@@ -163,11 +177,18 @@ consumer of `readNumber`/`asPointArray` · `.gitattributes`.
   with "references a slot that does not exist", because creation makes no cell slots (D-047) and D-047
   clause 4 makes an absent cell fine inside a RANGE and not fine as a plain reference. **0080-REVIEW F4
   ruled it STANDS.** Only the MESSAGE changes (fix-list item 2); do not re-raise the behaviour.
+- **`createObject` does not check the name it carries.** `findInvalidRenames` checks every RENAME and
+  reads a created object's name only to keep its simulation honest, so a duplicate or ungrammatical
+  name still commits through `createObject` — exactly as it did before entry 0083. `commands.ts`
+  avoids it by minting through `generateDefaultName`; §5.11's loader is the reachable route. **Pinned
+  by a test that asserts the duplicate DOES commit**, so closing it is a visible diff. Left open
+  deliberately: it decides what a load does with a colliding saved name, which is bigger than a rename
+  slice.
 - **Eight §5.10 commands have no registry entry** — `polyline`/`text`/`script`/`image`/`explode`/
   `addvertex`/`delvertex` wait on a schema or an `Operation` kind; **`pan` waits on Q-012**. All report
   "not built", not "unknown command" (`COMMANDS_SPECIFIED_BUT_NOT_BUILT`).
-- **Six commands parse and then refuse** with "has no handler yet" (`rename`/`select`/`zoom`/`fit`/
-  `save`/`load`). Honest and correct for now. **`createObjectFromCommand`'s "type has no schema" branch
+- **Five commands parse and then refuse** with "has no handler yet" (`select`/`zoom`/`fit`/`save`/
+  `load`). Honest and correct for now. **`createObjectFromCommand`'s "type has no schema" branch
   is uncovered** — all four creatable types have schemas, so nothing can reach it. `describeSlotValue`'s
   `Point` and `Point[]` arms are uncovered for the same kind of reason.
 - **A 1000×1000 table is legal and costs ~1.5 s per MUTATION** — 1,000,000 declared cell paths
@@ -251,6 +272,9 @@ Next free: **Q-014**.
   `value: null`, and step 7 of the same mutation overwrites them before anything commits.
 - **`mintObjectId` returns the ADVANCED counter with the id.** Store both or you mint a duplicate.
   Deleting an object frees its NAME and never its id (D-002) — pinned by a test at 0081.
+- **A rename rewrites ONE field, and that is not an oversight.** Every stored AST holds an ID (§5.3),
+  so no formula, edge or value moves. If you ever find yourself writing a name-rewriting pass, something
+  upstream stored a name it should not have.
 - **A created table has `origin.x`/`origin.y` and `rows`/`cols`, and NO cells.** `set table_x.A1 5` is
   how a cell slot first comes into being.
 - **Never spread a collection the user can size (D-077).** `push(...family)`, `Math.max(...family)` all
@@ -274,8 +298,10 @@ Next free: **Q-014**.
   passed twelve tests and was wrong.
 - **A review's fix list authorises a CHANGE, never an exemption from the trigger that change fires**
   (entry 0073). Entries 0079 and 0081 both fired trigger 5 for handler work and reported it.
-- **Preserve each file's LINE ENDINGS when editing.** `document.ts`/`schema.ts`/`mutation.ts` are CRLF
-  in the index; `command/commands.ts` and its test are LF on disk.
+- **Line endings:** `command/commands.ts` and its test were LF on disk and are **CRLF as of entry
+  0083** — every file that cycle touched is now uniformly CRLF, and `git diff` shows only real changes
+  under `core.autocrlf=true`. The working tree is still mixed overall; `.gitattributes` is still owed
+  (fix list, carried).
 - **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it
   (D-065).** Grep for the name of every file and capability you create, and **re-read the headers of the
   files you edited**.

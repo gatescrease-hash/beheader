@@ -281,7 +281,6 @@ describe("a mutate rejection reaches the operator as a message, never as a throw
 describe("the arms with no handler yet", () => {
   /** §5.10's own example line for every registry command that this file does not run yet. */
   const UNHANDLED_EXAMPLES: readonly { readonly line: string; readonly word: string }[] = [
-    { line: "rename polygon_1 intersection_a", word: "rename" },
     { line: "select intersection_a", word: "select" },
     { line: "zoom 2", word: "zoom" },
     { line: "fit", word: "fit" },
@@ -309,6 +308,7 @@ describe("the arms with no handler yet", () => {
     "set polygon_1.radius = 1 + 1",
     "link polygon_1.origin.x table_x.A1",
     "unlink polygon_1.origin.x",
+    "rename intersection_a polygon_9",
     "delete intersection_a",
     "refs intersection_a",
     "list",
@@ -848,5 +848,90 @@ describe("delete, refs and list — the object commands that need no new Operati
       const table = named(recreated, "table_1");
       expect(table?.id).toBe("obj_3");
     });
+  });
+});
+
+describe("rename — §5.10's one object command that needed a new Operation kind (§5.2, §5.3)", () => {
+  /** A polygon whose origin.x is DRIVEN by `table_1.A1`, so a rename has a live formula to leave alone. */
+  function wired(): Document {
+    const sandbox = committed("table x=0 y=0 rows=4 cols=4", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
+    return committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox));
+  }
+
+  function named(document: Document, objectName: string): GraphObject | undefined {
+    return document.objects.find((candidate) => candidate.name === objectName);
+  }
+
+  it("writes the new name and echoes both, at §5.10's own example line", () => {
+    const outcome = run("rename polygon_1 intersection_a", wired());
+    expect(outcome.ok && outcome.lines).toEqual(["renamed polygon_1 to intersection_a"]);
+    expect(outcome.ok && named(outcome.document, "intersection_a")?.id).toBe("obj_1");
+    expect(outcome.ok && named(outcome.document, "polygon_1")).toBeUndefined();
+  });
+
+  it("resolves the OLD name case-insensitively, the same resolver delete uses (§5.2)", () => {
+    expect(committed("rename POLYGON_1 intersection_a", wired()).objects[0]?.name).toBe("intersection_a");
+  });
+
+  it("leaves every formula pointing at the renamed object working — §5.3's whole reason for storing ids", () => {
+    const renamed = committed("rename table_1 grid", wired());
+    const driven = committed("set grid.A1 42", renamed);
+    expect(getSlot(named(driven, "polygon_1") as GraphObject, ["origin", "x"])?.value).toBe(42);
+  });
+
+  it("makes the NEW name the one an address is printed with, because formatAddress resolves a name from the id (§5.3)", () => {
+    const renamed = committed("rename table_1 grid", wired());
+    const outcome = run("refs grid", renamed);
+    expect(outcome.ok && outcome.lines[0]).toBe("grid.A1 → polygon_1.origin.x");
+  });
+
+  it("makes the OLD name unresolvable to every other command at once, since they all resolve through the document", () => {
+    const renamed = committed("rename table_1 grid", wired());
+    expect(refused("refs table_1", renamed)).toContain("table_1");
+    expect(refused("delete table_1", renamed)).toBe('no object named "table_1"');
+    expect(refused("set table_1.A1 1", renamed)).toContain("table_1");
+  });
+
+  it("frees the old name for another object to take", () => {
+    const renamed = committed("rename polygon_1 intersection_a", wired());
+    const another = committed("polygon sides=3 x=0 y=0 r=1", renamed);
+    expect(named(another, "polygon_1")?.id).toBe("obj_3");
+  });
+
+  it("refuses an old name no object has", () => {
+    expect(refused("rename nosuch whatever", wired())).toBe('no object named "nosuch"');
+  });
+
+  it("refuses a new name another object already holds, in mutate's words — §5.2's uniqueness has ONE gate, not a copy here", () => {
+    expect(refused("rename polygon_1 table_1", wired())).toBe('operation 1 of 1 cannot rename: the name "table_1" is already in use');
+    expect(refused("rename polygon_1 TABLE_1", wired())).toContain("already in use");
+  });
+
+  it("refuses a new name that fails §5.2's grammar — the parser deliberately let it through (D-043)", () => {
+    expect(refused("rename polygon_1 3bad", wired())).toBe(
+      'operation 1 of 1 cannot rename: "3bad" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*',
+    );
+  });
+
+  it("ACCEPTS a rename that only changes case, since uniqueness excludes the object being renamed", () => {
+    expect(committed("rename polygon_1 POLYGON_1", wired()).objects[0]?.name).toBe("POLYGON_1");
+  });
+
+  it("leaves prior state bit-for-bit unchanged when it refuses (§5.1 step 6)", () => {
+    const before = wired();
+    const snapshot = JSON.stringify(before);
+    refused("rename polygon_1 table_1", before);
+    expect(JSON.stringify(before)).toBe(snapshot);
+  });
+
+  it("appends exactly one journal entry holding one renameObject operation (Rule 2)", () => {
+    const after = committed("rename polygon_1 intersection_a", wired());
+    expect(after.journal).toHaveLength(5);
+    expect(after.journal[4]?.operations).toEqual([{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }]);
+  });
+
+  it("takes no id and moves no counter — a rename is not a create (D-002)", () => {
+    const before = wired();
+    expect(committed("rename polygon_1 intersection_a", before).nextObjectId).toBe(before.nextObjectId);
   });
 });
