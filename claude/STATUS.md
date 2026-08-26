@@ -1,9 +1,9 @@
-# STATUS — as of entry 0087
+# STATUS — as of entry 0088-REVIEW
 
-STATE: **GREEN.** Both configs compile, 1073/1073 tests pass, 0 skipped, 0 `.only`. Entry 0087
-(the two formula depth limits, fix-list item 1) is **built and NOT yet reviewed**, and it fired
-**§6.1 trigger 3** (a deviation from a binding ruling's stated number, argued from a measurement
-made this cycle), so a review point is REQUIRED before the next slice.
+STATE: **GREEN.** Both configs compile, 1074/1074 tests pass, 0 skipped, 0 `.only`. Entry 0087
+(the two formula depth limits, old fix-list item 1) is **built and REVIEWED** —
+0088-REVIEW-phase3, **ACCEPT WITH EDITS**, two test defects fixed in review and **D-083** ruled.
+The review gate is CLEAR: the next slice is `main.ts`.
 
 Current phase: **3 — canvas, camera, geometry, command line.** Every §5.10 command the parser can
 produce reaches a handler that runs, and **`executeCommand` no longer throws on any input** — the
@@ -15,25 +15,26 @@ been performed.** Phase 3 criterion (§6): *"create a polygon and a table by com
 pan/zoom, select, and drag the polygon."* The engine half is done and tested; the visible half is
 untested and unbuilt. NOT claimed.
 
-Last review point: **0086-REVIEW-phase3, ACCEPT WITH EDITS.**
-Cycles since last review: **1/3** · diff since last review: **~364 lines / 7 files** (cap 800/10).
-**§6.2 holds nothing back: no load-bearing file has unreviewed changes** — entry 0087 touched
-`formula/ast.ts`, `formula/parser.ts`, `formula/format.ts`, `command/commands.ts` and three test
-files.
+Last review point: **0088-REVIEW-phase3, ACCEPT WITH EDITS.**
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+**§6.2 holds nothing back: no file has unreviewed changes.**
 
 ## Read this first — the three things a cold reader needs
 
-**1. A formula now has TWO depth limits, both fixed constants, and the reviewer is owed a word on
-one of them (D-079).** `MAX_FORMULA_PARSE_DEPTH = 256` (in `formula/parser.ts`) bounds the recursive
+**1. A formula has TWO depth limits, both fixed constants, and both are RULED (D-079, D-083).**
+`MAX_FORMULA_PARSE_DEPTH = 256` (in `formula/parser.ts`) bounds the recursive
 DESCENT in *nesting steps* — `parseUnaryExpr` and `parsePrimaryExpr` each cost one, so a parenthesis
 or call-argument level costs two, i.e. ~128 levels of `((( … )))`. `MAX_FORMULA_AST_DEPTH = 1000` (in
 `formula/ast.ts`) bounds the STORED AST and is checked in `walkForRangePlacement`, the post-parse
 walk. Two limits because a left-associative chain (`1 + 1 + …`) is a **loop** in the descent and one
 AST level per term — the descent's counter never sees it, which is why the old `RangeError` came out
-of the WALK and not out of the descent the fix list named. **The open point:** D-079 clause 2 says
-the constant is "at or below 1,000 nesting levels", but entry 0087 measured the descent throwing at
-**1,000 parenthesis levels**, so 1,000 is not safe there; the cycle took 256 steps for the descent
-and kept 1,000 for the walk (smallest observation ~6,000). Principle kept, number deviated from.
+of the WALK and not out of the descent the fix list named. **No ruling was deviated from** — entry
+0087 reported one and 0088-REVIEW F4 found it was not: D-079 clause 2's "at or below 1,000" is a
+CEILING and 256 is below it, and the two recursions count in different units (1,000 parenthesis
+levels is ~2,000 descent steps). **D-083** says this in binding form, and adds the one thing not
+yet built: a loaded AST's depth is validated ONCE at §5.11's load boundary — `deps.ts` and
+`eval.ts` never grow a depth parameter, and today they still throw a `RangeError` on a hand-built
+40,000-level AST that no parse can produce.
 
 **2. An EFFECT is how a command reaches the camera, the selection, or a file — and nothing performs
 one yet (D-075/D-082).** `CommandOutcome`'s success arm carries an optional `effect: CommandEffect`,
@@ -56,8 +57,8 @@ answered "nothing references table_1" for a document whose `delete table_1` is r
 
 ## Next slice — `main.ts`
 
-Fix-list item 1 is CLOSED, so nothing stands between here and the application file. `main.ts` wants:
-ONE clamped camera into `renderDocument`, `hitTest` and `pointerDown`/`pointerMove` (D-062);
+The parser depth limit is CLOSED and reviewed, so nothing stands between here and the application
+file. `main.ts` wants: ONE clamped camera into `renderDocument`, `hitTest` and `pointerDown`/`pointerMove` (D-062);
 **performing the five effects** through an exhaustive `switch` on `kind` (**D-082 clause 3**) —
 `select` into `render/interaction.ts`'s selection state, `zoom` as `camera.zoom * factor` through
 `zoomAtScreenPoint`, `fit` from a viewport size `main.ts` supplies (D-061) with its own guard on a
@@ -77,11 +78,13 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
 `TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · `commands.ts`'s four slot commands through one
 `writeSlot` path, and `engine/formula/format.ts` (0080) · `commands.ts`'s `delete`, `refs` and `list`
 (0082) · `mutation.ts`'s `RenameObjectOperation` + `findInvalidRenames`, and `commands.ts`'s
-`rename` handler (0084) · `CommandEffect` and the five effect handlers (0086).
+`rename` handler (0084) · `CommandEffect` and the five effect handlers (0086) · the two formula depth limits (0088).
 
 ## Built this batch, not yet reviewed
 
-**Entry 0087 — the two formula depth limits.** Four source files and three test files.
+**Nothing.** The batch is empty — entry 0087 was reviewed at 0088 and the counter is back to 0/3.
+
+What 0087 built, kept here because it is the shape a cold reader most needs after the two constants:
 
 - **`MAX_FORMULA_AST_DEPTH = 1000`** in `formula/ast.ts`, beside the shape it bounds, read by both
   `parser.ts` and `format.ts` so the number exists once (D-010).
@@ -95,9 +98,11 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
   unreadable, not broken, and only a hand-edited saved file can produce one.
 - **The four "ONE MEASURED EXCEPTION" sites are corrected** (D-065): three in `commands.ts` (file
   header, `executeCommand`, `writeSlot`) and two in `format.ts`.
-- **Fifteen tests.** Both constants pinned directly; the refusal and the still-parsing case at each
-  limit; the 20,000- and 80,000-term lines that used to throw; a 1,000-term formula that **commits
-  and evaluates**, which is what says `deps.ts`/`eval.ts`/`format.ts` survive the permitted depth.
+- **Sixteen tests** (fifteen from 0087, one added at review). Both constants pinned directly; the
+  refusal and the still-parsing case at each limit; the 20,000- and 80,000-term lines that used to
+  throw; a 1,000-term formula that **commits and evaluates**, which is what says
+  `deps.ts`/`eval.ts`/`format.ts` survive the permitted depth; and that 300 sibling nestings on one
+  line do NOT accumulate steps, which is the test that catches a leaked decrement (0088 F1).
 
 ## Not started
 
@@ -111,13 +116,13 @@ commands close" block. (c) partial binding under DRAG exists in `render/interact
 test puts all three in ONE document, which is what "simultaneously" requires — and §6 forbids
 starting a phase before its predecessor's criterion passes, which Phase 3's has not.
 
-## Open fix list — **read 0086-REVIEW §9 for the full text**
+## Open fix list — **read 0088-REVIEW §9 for the full text**
 
-**Item 1 is CLOSED by entry 0087.** Items 2–5 unchanged; entry 0087 added nothing.
+**The old item 1 is CLOSED by entry 0087 and reviewed at 0088.** Items 2–5 unchanged. 0088-REVIEW
+adds two new ones, numbered 6 and 7 here so the numbers above do not move again.
 
 1. ~~Depth-limit the formula recursion from a CONSTANT (D-079)~~ — **done, entry 0087**, as two
-   constants rather than one; see "Read this first" item 1 for the part a reviewer still owes a word
-   on.
+   constants rather than one; reviewed and ruled at 0088 (**D-083**).
 2. **Give the missing-slot refusal a remedy** — "references a slot that does not exist" is true and
    tells the operator nothing to do. Message only: **D-047 clause 4 does not move** (0080-REVIEW F4).
    `delete`'s refusal, **D-080's reserved-word refusal** and `fit`'s "create one first" are the
@@ -138,6 +143,15 @@ starting a phase before its predecessor's criterion passes, which Phase 3's has 
    formula` — it lives in `parser.ts`'s argument matching · (6) `parser.ts`'s header restating D-069 ·
    the twelve bare "this cycle" sites in test files · `render/slots.ts` at the THIRD consumer of
    `readNumber`/`asPointArray` · `.gitattributes`.
+6. **NEW — §5.11's loader validates a loaded formula's AST depth ONCE, at the boundary**
+   (**D-083** clause 4, 0088-REVIEW F3). `deps.ts` and `eval.ts` get no depth parameter and today
+   throw a `RangeError` on a 40,000-level hand-built AST; `format.ts`'s guard stands as built.
+   Blocks nothing — `parser.ts` refuses anything that deep, so no user-reachable path makes one.
+   Owned by the loader's own cycle.
+7. **NEW — a single command can echo a ~200 KB line.** `SUM` with 50,000 arguments commits (width
+   is unbounded and correctly so: every walk over an argument list is a loop, not a recursion), and
+   `writeSlot` echoes the formula it replaced. Nothing throws; it is a question of what `main.ts`
+   puts in a DOM console. Owned by the `main.ts` cycle, and possibly answered by doing nothing.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -210,20 +224,22 @@ starting a phase before its predecessor's criterion passes, which Phase 3's has 
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-082**) binds without restatement here. Newest:
+Every ruling in `DECISIONS.md` (D-001 through **D-083**) binds without restatement here. Newest:
 **D-074** a prompt sequence's own refusal IS the message — **still open**, fix-list item 5(1) ·
 **D-075** a command that changes no document state returns an EFFECT as plain data — implemented on
 the `command/` side; clause 3 (`main.ts` performs it) has no performer yet · **D-076** a header's
 PROSE is capped at 15 lines and every other length budget is withdrawn — **length is not a finding,
 do not report it** · **D-077** a dynamic slot family's size is DOCUMENT STATE · **D-078** a probe that
 falsifies a property falsifies EVERY claim of it on that call path · **D-079** a stack-depth
-measurement is an OBSERVATION, never a bound — **implemented at entry 0087**, with clause 2's
-"at or below 1,000" deviated from for the descent and the reason logged · **D-080** the five words
+measurement is an OBSERVATION, never a bound — **implemented at entry 0087**, and clause 2's
+"at or below 1,000" was NOT deviated from (see D-083 clause 1) · **D-080** the five words
 §5.3 lexes as formula keywords are NOT available object names, in ANY case · **D-081**
 `createObject`'s own name is gated by the same `checkNameAvailable` — **owed by the §5.11 load
 cycle**, and the pinned "duplicate DOES commit" test is meant to flip then · **D-082** `command/`
 refuses a camera command's DOMAIN, `render/` clamps its RANGE, and `main.ts` switches over
-`CommandEffect` exhaustively and resolves no name.
+`CommandEffect` exhaustively and resolves no name · **D-083** D-079's 1,000 is a CEILING, applied
+per recursion in that recursion's own unit, and a loaded AST's depth is validated ONCE at the load
+boundary — clause 4 is **owed by the §5.11 load cycle**.
 
 **D-057 is IMPLEMENTED end to end as of entry 0081**. **D-040/D-041 are implemented** (entry 0079) and
 **Q-001/Q-002 are reconciled**. **§5.2 now has exactly one gate with three clauses** (grammar, D-080's

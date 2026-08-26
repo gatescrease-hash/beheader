@@ -2532,3 +2532,49 @@ back explicitly in the one file no test reaches.
 
 Reconciliation required: none. `commands.ts` already implements clauses 1, 2 and 5 as of entry
 0085; clauses 3 and 4 bind the `main.ts` cycle.
+
+---
+
+## D-083 — D-079's 1,000 is a CEILING, per recursion, in that recursion's own unit. A loaded AST's depth is validated ONCE, at the load boundary
+Answers: entry 0087's self-reported §6.1 trigger 3 ("D-079 clause 2's number is unsafe for the
+descent and I deviated from it"), and the asymmetry its decisions 4 and 5 leave behind
+Ruled: entry 0088-REVIEW-phase3 (reviewer)   Binding on: `formula/parser.ts`, `formula/ast.ts`,
+`formula/format.ts`, `formula/deps.ts`, `formula/eval.ts`, and §5.11's loader when it is written
+
+**Ruling.**
+
+1. **"At or below 1,000 nesting levels" is a CEILING, not a target.** A constant *below* it is
+   compliance, not deviation. Entry 0087 set 256 nesting steps for the recursive descent and 1,000
+   levels for the stored AST; both are at or below the ceiling and **no clause of D-079 was
+   deviated from.** The entry's trigger-3 self-report was honest over-reporting and is recorded as
+   such — the log does not carry a violated ruling.
+2. **The ceiling is applied PER RECURSION, in the unit that recursion counts in.** Two independent
+   recursions over user-authored data get two constants when their frame costs and their observed
+   failure points differ, each declared beside the shape it bounds (D-010) and each pinned by a
+   test on the number itself. A single shared constant is not required and is wrong where it would
+   have to be the smaller of the two.
+3. **A recursion's limit lives at the recursion, not at its callers.** `command/commands.ts` adds
+   no depth check; that is now stated in its own doc and is binding.
+4. **Depth of a LOADED `FormulaAst` is checked ONCE, at §5.11's load boundary, against
+   `MAX_FORMULA_AST_DEPTH`** — not by a guard in every walk. `deps.ts` and `eval.ts` must NOT grow
+   depth parameters, and `format.ts`'s existing guard stands as written (it is a display fallback,
+   it stores nothing and refuses nothing, and it is already built and tested). The loader refuses
+   a document whose formula slot nests deeper than the constant, with the same vocabulary
+   `parser.ts` uses; nothing downstream of the loader may then receive one.
+
+**Rationale.** Clause 1 is the smaller half and matters because the alternative is a log that says
+a binding ruling was broken when it was not. What entry 0087 actually found is that clause 2's
+number reads as a *safe* value ("set it at 1,000") when it was written as a *bound* ("no higher
+than 1,000"); measured at 1,000 parenthesis levels the descent still throws, so the reading
+matters. Clause 2 records why that is not a contradiction: 1,000 paren levels is ~2,000 steps in
+the unit the descent counts, and the two recursions were never commensurable.
+
+Clause 4 is the load-bearing half. Entry 0087's decision 4 guards `format.ts` because "§5.11's
+load path casts a saved AST unchecked", and its decision 5 declines to guard `deps.ts`/`eval.ts`
+because "a path that does not exist yet" is speculative. Both cannot be right about the same path.
+Probed at review: a hand-built 40,000-level AST formats fine and throws a `RangeError` out of
+`extractDependencies`, `rewriteAddressesInAst` and `evaluate`. So the exposure is real and it is
+in three more places than the cycle guarded. The answer is not three more depth parameters — it is
+that a document is validated when it is read, once, the way every other unchecked-cast field in a
+loaded document will have to be. Until that loader exists no user-reachable path can produce such
+an AST (`parser.ts` refuses it), so nothing is broken today and nothing speculative gets built.

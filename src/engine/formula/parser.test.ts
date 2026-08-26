@@ -501,8 +501,8 @@ describe("the two depth limits — D-079's fixed constants, not a measured band"
     expect(MAX_FORMULA_AST_DEPTH).toBe(1000);
     // Both sit below the smallest depth either recursion has EVER been observed to
     // fail at (~2,000 steps for the descent, ~6,000 levels for the post-parse walk).
-    // Those observations are why there is a margin, not where the numbers came from.
-    expect(MAX_FORMULA_AST_DEPTH).toBeLessThanOrEqual(1000);
+    // Those observations are why there is a margin, not where the numbers came from,
+    // and neither is assertable here: an observation is not a property of the code.
   });
 
   it("refuses a parenthesis nesting past the descent limit with a #PARSE, and does not throw", () => {
@@ -553,6 +553,16 @@ describe("the two depth limits — D-079's fixed constants, not a measured band"
       expect(() => parseFormula(source, [])).not.toThrow();
       expect(isParseError(parseFormula(source, []))).toBe(true);
     }
+  });
+
+  it("does not accumulate depth across SIBLINGS — 300 nested-but-shallow terms on one line still parse", () => {
+    // The mechanism the descent limit rests on: `withNestingStep` decrements on its
+    // one return path, so nesting that has already CLOSED costs nothing. Without the
+    // decrement these 300 terms would total well past 256 steps and refuse, while the
+    // deepest point of the line is four. This is the test that catches a leaked
+    // increment; the one below cannot, because each parse gets a fresh `ParserState`.
+    const source = Array.from({ length: 300 }, () => "((1))").join(" + ");
+    expect(isParseError(parseFormula(source, []))).toBe(false);
   });
 
   it("leaves the nesting counter unraised after a refusal, so a later formula on the same call path still parses", () => {
