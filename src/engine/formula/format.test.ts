@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 import type { AddressableObject } from "../address.ts";
 import type { ObjectType } from "../graph/node.ts";
-import type { FormulaAst } from "./ast.ts";
+import { MAX_FORMULA_AST_DEPTH, type FormulaAst } from "./ast.ts";
 import { formatFormula } from "./format.ts";
 import { isParseError, parseFormula } from "./parser.ts";
 
@@ -151,5 +151,35 @@ describe("the one node that is displayable but was never typed", () => {
   it("prints a repaired reference as #REF, which §5.3 has no syntax for (D-028)", () => {
     const ast: FormulaAst = { type: "binaryOp", operator: "+", left: { type: "error", error: "#REF" }, right: { type: "literal", value: 1 } };
     expect(formatFormula(ast, DOCUMENT)).toBe("#REF + 1");
+  });
+});
+
+describe("the depth guard — a saved AST deeper than any parse could build (D-079)", () => {
+  /** A left-deep `1 + 1 + ...` ladder, built by hand: `parseFormula` refuses this shape past MAX_FORMULA_AST_DEPTH, so a document holding one arrived through §5.11's load path, not through typing. */
+  function ladder(levels: number): FormulaAst {
+    let ast: FormulaAst = { type: "literal", value: 1 };
+    for (let index = 0; index < levels; index += 1) {
+      ast = { type: "binaryOp", operator: "+", left: ast, right: { type: "literal", value: 1 } };
+    }
+    return ast;
+  }
+
+  it("formats an AST exactly at the limit without eliding anything", () => {
+    // MAX_FORMULA_AST_DEPTH - 1 binaryOp levels over one literal = depth 1000.
+    const formatted = formatFormula(ladder(MAX_FORMULA_AST_DEPTH - 1), DOCUMENT);
+    expect(formatted).not.toContain("...");
+    expect(formatted.startsWith("1 + 1")).toBe(true);
+  });
+
+  it("elides past the limit rather than unwinding a RangeError", () => {
+    // 40,000 levels: a size at which this recursion threw before the guard existed.
+    let formatted = "";
+    expect(() => {
+      formatted = formatFormula(ladder(40_000), DOCUMENT);
+    }).not.toThrow();
+    expect(formatted).toContain("...");
+    // The elision is at the DEEP end (the left spine), and everything shallower than
+    // the limit still prints — a truncated display, not a lost one.
+    expect(formatted.endsWith("1 + 1")).toBe(true);
   });
 });

@@ -169,3 +169,23 @@ export type FormulaAst =
 export function isReferenceNode(ast: FormulaAst): ast is ReferenceNode {
   return ast.type === "reference";
 }
+
+/**
+ * The deepest a stored `FormulaAst` may nest, and the bound every recursive walk over
+ * one is written against (**D-079**).
+ *
+ * Why a constant and not a measurement: entry 0079 saw a `RangeError` at ~5,000 nested
+ * levels, entry 0081 at ~3,000, and 0082-REVIEW saw the SAME formula commit and throw
+ * in one process depending only on what had been compiled before it — the depth a V8
+ * frame costs is a property of the runtime's state, not of the input. So no observed
+ * number is a bound. This is a fixed value chosen well below the smallest depth any
+ * walk over this shape has ever been seen to fail at (the smallest observed here is
+ * ~6,000 levels, in `parser.ts`'s own post-parse walk), and it is pinned by a test on
+ * the constant itself rather than on where a throw happens.
+ *
+ * `parser.ts` REFUSES a formula whose AST would nest deeper than this with a `#PARSE`,
+ * so nothing this deep is ever stored by anything a user can type; `format.ts` guards
+ * its own recursion anyway, because §5.11's load path casts a saved AST unchecked and
+ * a hand-edited file is a real way for a deeper one to arrive.
+ */
+export const MAX_FORMULA_AST_DEPTH = 1000;

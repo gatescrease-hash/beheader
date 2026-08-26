@@ -13,8 +13,8 @@
  *   to do happens here: minting an id and a default name, building an `Operation`,
  *   and calling `mutate`. It returns a NEW document plus the lines §5.10 wants
  *   echoed above the input, or a failure message. It never mutates its arguments.
- *   It throws in exactly one measured case — see `executeCommand`'s own doc, which
- *   states it rather than claiming it away.
+ *   It never throws: every refusal, including a formula too deep to walk, comes back
+ *   as the failure arm.
  *
  *   GRAMMAR failures are `parser.ts`'s and cannot arrive here — a `Command` exists
  *   only because a line already parsed. DOMAIN and IDENTITY failures are this
@@ -225,14 +225,12 @@ function refuseCountOutOfRange(name: string, value: number, minimum: number, max
  * not parse, a `select` naming nothing — comes back as the failure arm rather than
  * as a throw.
  *
- * ONE MEASURED EXCEPTION, stated rather than claimed away (D-077 clause 2): a
- * formula whose AST nests deeper than about 5,000 levels — `set table_1.A1 = 1 + 1
- * + ...` with ~5,000 terms on one line — exhausts the stack inside
- * `formula/parser.ts`'s recursive descent, and a `RangeError` unwinds out of here.
- * `formula/format.ts`'s recursion fails at the same depth; both were measured
- * together at entry 0079 (band 5,000-6,000, stack-sensitive). The fix is a depth
- * limit inside the recursive-descent parser, returning `#PARSE` instead of
- * unwinding — that file's cycle to make, not a check bolted on here.
+ * NO EXCEPTION REMAINS. A formula too deep to walk — `set table_1.A1 = 1 + 1 + ...`
+ * with tens of thousands of terms on one line — used to unwind a `RangeError` out of
+ * here from `formula/parser.ts`. It is now that file's own `#PARSE` refusal, bounded
+ * by two fixed constants (**D-079**), and it arrives on the failure arm like any
+ * other. This file adds no depth check of its own and must not: the limit belongs to
+ * the recursion it bounds.
  *
  * The switch names every `Command` arm, so a new arm fails to compile here rather
  * than falling through to a default that silently does nothing. Five of them change
@@ -539,8 +537,8 @@ type SlotWrite =
  * `setSlot` operation. Every rejection — an unresolvable address, a derived slot, a
  * formula that will not parse, an `unlink` of something that is not a formula, and
  * `mutate`'s own (a cycle, a dangling reference, an illegal value) — comes back as the
- * failure arm rather than as a throw — with the ONE measured exception `executeCommand`'s
- * own doc states: `parseFormula` below unwinds a `RangeError` past ~5,000 nesting levels.
+ * failure arm rather than as a throw. `parseFormula` below refuses a formula nested past
+ * **D-079**'s constants with a `#PARSE` instead of unwinding, so no size is an exception.
  *
  * D-040's "not silent" bound is discharged here rather than per command: whatever the
  * write, if the slot it lands on currently holds a formula, the report names that

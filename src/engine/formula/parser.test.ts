@@ -11,8 +11,8 @@
 import { describe, expect, it } from "vitest";
 import type { AddressableObject } from "../address.ts";
 import type { ObjectType } from "../graph/node.ts";
-import type { FormulaAst } from "./ast.ts";
-import { isParseError, type ParseError, parseFormula, parseFormulaTokens } from "./parser.ts";
+import { MAX_FORMULA_AST_DEPTH, type FormulaAst } from "./ast.ts";
+import { isParseError, MAX_FORMULA_PARSE_DEPTH, type ParseError, parseFormula, parseFormulaTokens } from "./parser.ts";
 
 // Same fixture-building convention as address.test.ts: `type` defaults to a harmless
 // non-table type unless a test is specifically exercising table/bare-cell-ref behaviour.
@@ -484,6 +484,83 @@ describe("parseFormulaTokens — the lower-level, already-lexed entry point", ()
     ];
     const result = parseFormulaTokens(tokens, []);
     expect(result).toEqual({
+      type: "binaryOp",
+      operator: "+",
+      left: { type: "literal", value: 1 },
+      right: { type: "literal", value: 2 },
+    });
+  });
+});
+
+describe("the two depth limits — D-079's fixed constants, not a measured band", () => {
+  // The point of these tests is that BOTH numbers are constants: they are asserted
+  // here directly, so raising one is a visible diff against this file rather than a
+  // silent widening. D-079 clause 2 forbids deriving either from a measurement.
+  it("MAX_FORMULA_PARSE_DEPTH is 256 nesting steps and MAX_FORMULA_AST_DEPTH is 1000 levels", () => {
+    expect(MAX_FORMULA_PARSE_DEPTH).toBe(256);
+    expect(MAX_FORMULA_AST_DEPTH).toBe(1000);
+    // Both sit below the smallest depth either recursion has EVER been observed to
+    // fail at (~2,000 steps for the descent, ~6,000 levels for the post-parse walk).
+    // Those observations are why there is a margin, not where the numbers came from.
+    expect(MAX_FORMULA_AST_DEPTH).toBeLessThanOrEqual(1000);
+  });
+
+  it("refuses a parenthesis nesting past the descent limit with a #PARSE, and does not throw", () => {
+    const source = `${"(".repeat(1000)}1${")".repeat(1000)}`;
+    const result = parseFormula(source, []);
+    expect(isParseError(result)).toBe(true);
+    expect((result as ParseError).message).toContain("nests too deeply");
+  });
+
+  it("still parses a nesting just inside the descent limit", () => {
+    // 127 parenthesis levels — one step for parseUnaryExpr and one for
+    // parsePrimaryExpr per level, plus the two the innermost literal itself costs:
+    // 256 steps exactly, and 128 levels is the first refusal.
+    const source = `${"(".repeat(127)}1${")".repeat(127)}`;
+    expect(parseFormula(source, [])).toEqual({ type: "literal", value: 1 });
+  });
+
+  it("refuses a unary prefix run past the descent limit rather than recursing into it", () => {
+    const result = parseFormula(`${"-".repeat(300)}1`, []);
+    expect(isParseError(result)).toBe(true);
+    expect((result as ParseError).message).toContain("nests too deeply");
+  });
+
+  it("refuses a left-associative chain past the AST limit — the case the descent's own counter cannot see", () => {
+    // `1 + 1 + ...` is a LOOP in the descent (parseLeftAssociativeExpr) and one AST
+    // level per term. This is the shape that used to unwind a RangeError out of
+    // executeCommand; it is now a #PARSE.
+    const source = Array.from({ length: MAX_FORMULA_AST_DEPTH + 1 }, () => "1").join(" + ");
+    const result = parseFormula(source, []);
+    expect(isParseError(result)).toBe(true);
+    expect((result as ParseError).message).toContain("nested operations");
+  });
+
+  it("still parses a left-associative chain exactly AT the AST limit", () => {
+    // 1000 terms is 999 binaryOp levels over one literal — depth 1000 exactly.
+    const source = Array.from({ length: MAX_FORMULA_AST_DEPTH }, () => "1").join(" + ");
+    const result = parseFormula(source, []);
+    expect(isParseError(result)).toBe(false);
+    expect((result as FormulaAst).type).toBe("binaryOp");
+  });
+
+  it("does not throw for the sizes that used to throw — 20,000 and 80,000 terms", () => {
+    // Entry 0079 measured a RangeError at ~5,000 terms and entry 0081 at ~3,000; the
+    // depth at which V8 actually dies moves with what was compiled before the call
+    // (D-079). These two sizes threw reliably before this limit existed.
+    for (const size of [20_000, 80_000]) {
+      const source = Array.from({ length: size }, () => "1").join(" + ");
+      expect(() => parseFormula(source, [])).not.toThrow();
+      expect(isParseError(parseFormula(source, []))).toBe(true);
+    }
+  });
+
+  it("leaves the nesting counter unraised after a refusal, so a later formula on the same call path still parses", () => {
+    // The counter is decremented on the one return path withNestingStep has; a leaked
+    // increment would be invisible here (each parse gets a fresh ParserState) and
+    // fatal in a long-lived one, so this asserts the intent rather than the mechanism.
+    expect(isParseError(parseFormula(`${"(".repeat(1000)}1${")".repeat(1000)}`, []))).toBe(true);
+    expect(parseFormula("1 + 2", [])).toEqual({
       type: "binaryOp",
       operator: "+",
       left: { type: "literal", value: 1 },

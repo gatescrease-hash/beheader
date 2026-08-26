@@ -1096,3 +1096,61 @@ describe("rename — §5.10's one object command that needed a new Operation kin
     expect(getSlot(named(driven, "polygon_1") as GraphObject, ["radius"])?.value).toBe(6);
   });
 });
+
+// The defect this block closes was STATUS's first "read this first" item for four
+// entries: `executeCommand` was the one call in this file that could throw, and
+// nothing measured bounded it (D-079). The fix is two fixed constants in
+// `formula/parser.ts` and `formula/ast.ts`; what belongs HERE is the end-to-end
+// claim, because this is the seam a typed line crosses.
+describe("a formula too deep to walk is refused, not thrown (D-079)", () => {
+  function sandbox(): Document {
+    return committed("table x=0 y=0 rows=4 cols=4", createEmptyDocument());
+  }
+
+  function named(document: Document, objectName: string): GraphObject | undefined {
+    return document.objects.find((candidate) => candidate.name === objectName);
+  }
+
+  function chain(terms: number): string {
+    return Array.from({ length: terms }, () => "1").join(" + ");
+  }
+
+  it("refuses a 80,000-term formula through the failure arm — the line that used to unwind a RangeError", () => {
+    const document = sandbox();
+    let outcome: CommandOutcome | undefined;
+    expect(() => {
+      outcome = run(`set table_1.A1 = ${chain(80_000)}`, document);
+    }).not.toThrow();
+    expect(outcome !== undefined && isCommandFailure(outcome)).toBe(true);
+    expect(outcome !== undefined && !outcome.ok && outcome.message).toContain("nested operations");
+  });
+
+  it("refuses a deeply parenthesized one the same way", () => {
+    const source = `${"(".repeat(1000)}1${")".repeat(1000)}`;
+    expect(() => run(`set table_1.A1 = ${source}`, sandbox())).not.toThrow();
+    expect(refused(`set table_1.A1 = ${source}`, sandbox())).toContain("nests too deeply");
+  });
+
+  it("leaves the document untouched when it refuses one", () => {
+    const document = sandbox();
+    const snapshot = JSON.stringify(document);
+    refused(`set table_1.A1 = ${chain(80_000)}`, document);
+    expect(JSON.stringify(document)).toBe(snapshot);
+  });
+
+  it("still COMMITS and EVALUATES a 1,000-term formula, at the limit exactly", () => {
+    // Not just a parse: this walks the same AST through `deps.ts`, `eval.ts` and
+    // `format.ts` — every other recursion over the shape the limit now bounds. If any
+    // of them died at depth 1,000 the constant would be wrong, and this is what says so.
+    const committed1000 = committed(`set table_1.A1 = ${chain(1000)}`, sandbox());
+    expect(getSlot(named(committed1000, "table_1") as GraphObject, ["cells", "A1"])?.value).toBe(1000);
+  });
+
+  it("reports the replaced deep formula rather than throwing while formatting it (D-040)", () => {
+    // `writeSlot` formats the formula it replaces, which is `format.ts`'s recursion
+    // over the same tree — the second of the two sites the old defect named.
+    const withDeep = committed(`set table_1.A1 = ${chain(1000)}`, sandbox());
+    const outcome = run("set table_1.A1 7", withDeep);
+    expect(outcome.ok && outcome.lines.join("\n")).toContain("1 + 1");
+  });
+});

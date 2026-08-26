@@ -17,12 +17,13 @@
  *   operator's own keystrokes — `1+2 * 3` comes back as `1 + 2 * 3`.
  *
  * INVARIANTS UPHELD HERE
- *   - Never throws for any DOCUMENT state: an `Address` whose object is gone formats as
- *     the `AddressError`'s own message, the way `mutation.ts`'s `formatCycleRejection`
- *     already handles it. The one exception is SIZE, measured rather than reasoned about
- *     (D-077 clause 2, entry 0079): `formatNode` recurses over the AST, so an AST nesting
- *     deeper than about 5,000 levels unwinds a `RangeError` — the same band, and the same
- *     unfixed defect, as `parser.ts`'s recursive descent that built it.
+ *   - Never throws, for any DOCUMENT state and for any SIZE: an `Address` whose object
+ *     is gone formats as the `AddressError`'s own message, the way `mutation.ts`'s
+ *     `formatCycleRejection` already handles it, and `formatNode`'s recursion stops at
+ *     `ast.ts`'s `MAX_FORMULA_AST_DEPTH` (**D-079**), printing `DEPTH_ELISION` where it
+ *     stopped rather than unwinding a `RangeError`. `parser.ts` refuses anything that
+ *     deep, so no formula a user can type reaches the elision; §5.11's load path casts a
+ *     saved AST unchecked, which is the route by which a deeper one can still arrive.
  *   - An object name is never concatenated here: every reference goes through
  *     `address.ts`'s `formatAddress` (D-015), which also strips a table cell's stored
  *     `cells` prefix so `table_x.A1` prints the way it was typed.
@@ -44,7 +45,18 @@
  *     shape and reuse this function; the markup around them is not here.
  */
 import { formatAddress, isAddressError, type Address, type AddressableObject } from "../address.ts";
-import type { BinaryOperator, FormulaAst } from "./ast.ts";
+import { MAX_FORMULA_AST_DEPTH, type BinaryOperator, type FormulaAst } from "./ast.ts";
+
+/**
+ * What `formatNode` prints in place of a subtree deeper than `MAX_FORMULA_AST_DEPTH`.
+ *
+ * Not an error code: `#REF` and `#PARSE` say the formula is broken, and a formula this
+ * deep is not — it is unreadable, and only reachable through a hand-edited saved file
+ * (see the file header). An ellipsis says "there is more here" without inventing a
+ * fourth error vocabulary the brief does not have. It does not re-parse, which puts it
+ * beside the three round-trip exceptions the header already discloses.
+ */
+const DEPTH_ELISION = "...";
 
 /**
  * §5.3's precedence chain, loosest to tightest, as the numbers this file compares.
@@ -88,11 +100,12 @@ const ATOM_PRECEDENCE = 8;
  * authors a formula (D-071's `set <address> = <source>`), not to the formula, and a
  * caller that wants to echo the authoring form prefixes it.
  *
- * Never throws for an address whose object has been deleted, and unwinds a `RangeError`
- * for an AST nested past ~5,000 levels — see the file header's invariants for both.
+ * Never throws — not for an address whose object has been deleted, and not for an AST
+ * nested past `MAX_FORMULA_AST_DEPTH`, which elides rather than recursing. See the file
+ * header's invariants for both.
  */
 export function formatFormula(ast: FormulaAst, objects: readonly AddressableObject[]): string {
-  return formatNode(ast, objects, 0);
+  return formatNode(ast, objects, 0, 1);
 }
 
 /**
@@ -100,7 +113,21 @@ export function formatFormula(ast: FormulaAst, objects: readonly AddressableObje
  * than that wraps itself. Passing the requirement down, rather than asking each parent
  * to inspect its children, is what keeps the associativity rule (below) in one place.
  */
-function formatNode(ast: FormulaAst, objects: readonly AddressableObject[], minimumPrecedence: number): string {
+function formatNode(
+  ast: FormulaAst,
+  objects: readonly AddressableObject[],
+  minimumPrecedence: number,
+  depth: number,
+): string {
+  // This file's own guard on the same limit `parser.ts` refuses at, kept here rather
+  // than assumed away: `document.ts` casts a loaded formula slot's `ast` unchecked, so
+  // a hand-edited file is a real path by which an AST no parse could have produced
+  // reaches this recursion (the same reasoning `parser.ts`'s own exhaustiveness arm
+  // gives). Displaying an elision is a display concern; it stores nothing and rejects
+  // nothing.
+  if (depth > MAX_FORMULA_AST_DEPTH) {
+    return DEPTH_ELISION;
+  }
   switch (ast.type) {
     case "literal":
       return formatLiteralValue(ast.value);
@@ -116,20 +143,20 @@ function formatNode(ast: FormulaAst, objects: readonly AddressableObject[], mini
       // Every §5.3 binary operator is LEFT-associative, `^` included (D-030). So the
       // left child may sit at this same level unparenthesized and the right child may
       // not: `a - (b - c)` must keep its parenthesis or it re-parses as `(a - b) - c`.
-      const left = formatNode(ast.left, objects, precedence);
-      const right = formatNode(ast.right, objects, precedence + 1);
+      const left = formatNode(ast.left, objects, precedence, depth + 1);
+      const right = formatNode(ast.right, objects, precedence + 1, depth + 1);
       return parenthesizeIfLooser(`${left} ${ast.operator} ${right}`, precedence, minimumPrecedence);
     }
     case "unaryOp": {
       // `NOT` is a word and needs the space; `-` is punctuation and reads better
       // without one. The operand is parenthesized whenever it is not an atom, which
       // covers `-(a + b)` and keeps `- -x` from printing as `--x`.
-      const operand = formatNode(ast.operand, objects, ATOM_PRECEDENCE);
+      const operand = formatNode(ast.operand, objects, ATOM_PRECEDENCE, depth + 1);
       const separator = ast.operator === "NOT" ? " " : "";
       return parenthesizeIfLooser(`${ast.operator}${separator}${operand}`, UNARY_PRECEDENCE, minimumPrecedence);
     }
     case "functionCall":
-      return `${ast.name}(${ast.args.map((argument) => formatNode(argument, objects, 0)).join(", ")})`;
+      return `${ast.name}(${ast.args.map((argument) => formatNode(argument, objects, 0, depth + 1)).join(", ")})`;
     case "error":
       // D-028's repaired reference. Displayable, not re-parseable — see the header.
       return ast.error;

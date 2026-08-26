@@ -66,10 +66,22 @@
  *   `functions.ts`'s `RANGE_ACCEPTING_FUNCTION_NAMES`, never kept as a second local
  *   copy — the same "declare vocabulary once" principle as D-009/D-014.
  *
+ *   TWO DEPTH LIMITS, both FIXED CONSTANTS (**D-079**), because both recursions here
+ *   run over user-authored text of any length:
+ *   - `MAX_FORMULA_PARSE_DEPTH` bounds the recursive DESCENT — how deeply a formula
+ *     may nest parentheses, call arguments and unary prefixes.
+ *   - `ast.ts`'s `MAX_FORMULA_AST_DEPTH` bounds the AST the descent BUILT, checked by
+ *     the same post-parse walk that enforces range placement. It is a separate limit
+ *     because the descent LOOPS over a left-associative chain rather than recursing:
+ *     `1 + 1 + ...` costs the descent nothing per term and builds one AST level per
+ *     term, so the descent limit cannot see it.
+ *   Past either one the formula is a `#PARSE` rejection, never a thrown `RangeError`.
+ *
  * INVARIANTS UPHELD HERE
  *   - Never throws. Every malformed input is a returned `ParseError`, matching
  *     `lexer.ts`'s discipline and §5.1's "errors must never throw across the
- *     evaluation loop."
+ *     evaluation loop." Includes an input too deep to walk: see the two depth limits
+ *     above.
  *   - Every `ReferenceNode` produced here holds a RESOLVED `Address` — an ID, not a
  *     name (§5.2) — via `address.ts`'s `parseAddress`, or (bare cell refs only) built
  *     against the caller-supplied `tableObjectId`. No path is ever hand-built from
@@ -96,7 +108,7 @@
  *     is deliberately free of.
  */
 import { type Address, type AddressableObject, bareCellAddress, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";
-import type { BinaryOperator, FormulaAst } from "./ast.ts";
+import { MAX_FORMULA_AST_DEPTH, type BinaryOperator, type FormulaAst } from "./ast.ts";
 import { checkArity, getFunctionEntry, RANGE_ACCEPTING_FUNCTION_NAMES } from "./functions.ts";
 import { lex, type LexError, type Token } from "./lexer.ts";
 
@@ -150,6 +162,21 @@ function isLexError(result: readonly Token[] | LexError): result is LexError {
   return !Array.isArray(result);
 }
 
+/**
+ * The deepest the recursive descent below may nest before it refuses, counted in
+ * NESTING STEPS rather than in source characters: `parseUnaryExpr` and
+ * `parsePrimaryExpr` each count one, so a parenthesized level (or a call argument
+ * list) costs two steps and a unary prefix costs one. 256 steps is therefore about 128
+ * levels of `((( ... )))` — far past anything §5.3's grammar is used for, and far
+ * below the smallest depth this descent has been observed to fail at (1,000
+ * parenthesis levels, i.e. ~2,000 steps).
+ *
+ * A FIXED CONSTANT, per **D-079** clause 2: it is not derived from that observation
+ * and is not raised because a probe once got further. Exported only so a test can pin
+ * the number itself.
+ */
+export const MAX_FORMULA_PARSE_DEPTH = 256;
+
 const OR_OPERATOR_TOKENS: ReadonlyMap<string, BinaryOperator> = new Map([["or", "OR"]]);
 const AND_OPERATOR_TOKENS: ReadonlyMap<string, BinaryOperator> = new Map([["and", "AND"]]);
 const COMPARISON_OPERATOR_TOKENS: ReadonlyMap<string, BinaryOperator> = new Map([
@@ -182,6 +209,8 @@ const POWER_OPERATOR_TOKENS: ReadonlyMap<string, BinaryOperator> = new Map([["ca
 interface ParserState {
   readonly tokens: readonly Token[];
   pos: number;
+  /** Nesting steps currently on the stack — see `MAX_FORMULA_PARSE_DEPTH`. Incremented on entry to each recursive tier and decremented on every exit path, so it measures the CURRENT stack, not the total work done. */
+  depth: number;
   readonly objects: readonly AddressableObject[];
   readonly tableObjectId: string | undefined;
 }
@@ -285,6 +314,10 @@ function parsePowerExpr(state: ParserState): FormulaAst | ParseError {
  * (`- -3`, `NOT NOT a`) parse correctly rather than being artificially limited to one.
  */
 function parseUnaryExpr(state: ParserState): FormulaAst | ParseError {
+  return withNestingStep(state, parseUnaryExprInner);
+}
+
+function parseUnaryExprInner(state: ParserState): FormulaAst | ParseError {
   const token = peek(state);
 
   if (token.type === "minus") {
@@ -319,6 +352,34 @@ function isFunctionNameToken(token: Token): boolean {
  * `NOT`-as-call dispatch and the range/reference split.
  */
 function parsePrimaryExpr(state: ParserState): FormulaAst | ParseError {
+  return withNestingStep(state, parsePrimaryExprInner);
+}
+
+/**
+ * Runs one recursive tier with the nesting counter raised, and refuses instead of
+ * recursing once `MAX_FORMULA_PARSE_DEPTH` steps are already on the stack. Wrapping
+ * the two recursive tiers here — rather than counting at each of the call sites that
+ * recurse — is what makes the decrement unmissable: there is exactly one return path,
+ * so no error arm can leave the counter raised.
+ */
+function withNestingStep(
+  state: ParserState,
+  tier: (state: ParserState) => FormulaAst | ParseError,
+): FormulaAst | ParseError {
+  state.depth += 1;
+  const result =
+    state.depth > MAX_FORMULA_PARSE_DEPTH
+      ? {
+          error: "#PARSE" as const,
+          message: `formula nests too deeply (limit ${MAX_FORMULA_PARSE_DEPTH} nesting steps); split it across cells, or over several slots`,
+          start: peek(state).start,
+        }
+      : tier(state);
+  state.depth -= 1;
+  return result;
+}
+
+function parsePrimaryExprInner(state: ParserState): FormulaAst | ParseError {
   const token = peek(state);
 
   if (token.type === "number" || token.type === "string" || token.type === "boolean") {
@@ -497,10 +558,27 @@ function consumePathSegment(state: ParserState): string | ParseError {
  * `RangeNode` in the tree is a direct argument of an aggregate `FunctionCallNode`.
  */
 function validateRangePlacement(ast: FormulaAst): ParseError | undefined {
-  return walkForRangePlacement(ast, false);
+  return walkForRangePlacement(ast, false, 1);
 }
 
-function walkForRangePlacement(node: FormulaAst, isDirectAggregateArgument: boolean): ParseError | undefined {
+function walkForRangePlacement(
+  node: FormulaAst,
+  isDirectAggregateArgument: boolean,
+  depth: number,
+): ParseError | undefined {
+  // The AST-depth limit lives HERE rather than in the descent because a left-
+  // associative chain (`1 + 1 + ...`) is a LOOP in the descent and one AST level per
+  // term — the descent's counter never rises. This walk is the first recursion over
+  // the finished tree, so refusing here is both the bound on the shape that gets
+  // STORED and the guard on this walk's own stack (D-079; a RangeError was observed
+  // out of this very function at ~6,000 levels, which is an observation, not a bound).
+  if (depth > MAX_FORMULA_AST_DEPTH) {
+    return {
+      error: "#PARSE",
+      message: `formula has more than ${MAX_FORMULA_AST_DEPTH} nested operations; split it across cells, or use SUM over a range`,
+      start: 0, // No source position survives into the built AST — see ParseError's own doc comment.
+    };
+  }
   switch (node.type) {
     case "range":
       if (!isDirectAggregateArgument) {
@@ -530,13 +608,13 @@ function walkForRangePlacement(node: FormulaAst, isDirectAggregateArgument: bool
     case "error":
       return undefined;
     case "binaryOp":
-      return walkForRangePlacement(node.left, false) ?? walkForRangePlacement(node.right, false);
+      return walkForRangePlacement(node.left, false, depth + 1) ?? walkForRangePlacement(node.right, false, depth + 1);
     case "unaryOp":
-      return walkForRangePlacement(node.operand, false);
+      return walkForRangePlacement(node.operand, false, depth + 1);
     case "functionCall": {
       const isAggregate = RANGE_ACCEPTING_FUNCTION_NAMES.has(node.name);
       for (const arg of node.args) {
-        const error = walkForRangePlacement(arg, isAggregate);
+        const error = walkForRangePlacement(arg, isAggregate, depth + 1);
         if (error !== undefined) {
           return error;
         }
@@ -570,7 +648,7 @@ export function parseFormulaTokens(
   objects: readonly AddressableObject[],
   tableObjectId?: string,
 ): FormulaAst | ParseError {
-  const state: ParserState = { tokens, pos: 0, objects, tableObjectId };
+  const state: ParserState = { tokens, pos: 0, depth: 0, objects, tableObjectId };
 
   if (peek(state).type === "eof") {
     return { error: "#PARSE", message: "empty formula", start: peek(state).start };
