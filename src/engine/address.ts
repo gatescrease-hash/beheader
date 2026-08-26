@@ -46,6 +46,7 @@
  *     `parseAddress` for every real `name.path`.
  *   - Dependency extraction, cycle detection, mutation.
  */
+import { RESERVED_WORDS } from "./formula/lexer.ts";
 import { type ObjectType, TABLE_TYPE } from "./graph/node.ts";
 
 /**
@@ -152,14 +153,20 @@ export function isNameTaken(
 }
 
 /**
- * The single gate a create or rename mutation must pass before writing a name
- * (§5.2: unique, case-insensitive, `[a-zA-Z_][a-zA-Z0-9_]*`). Reports which rule
- * failed rather than a bare boolean, because §5.10 requires every rejection to name
- * the specific problem.
+ * The gate every name a mutation writes is meant to pass (§5.2: unique,
+ * case-insensitive, `[a-zA-Z_][a-zA-Z0-9_]*`). Reports which rule failed rather than
+ * a bare boolean, because §5.10 requires every rejection to name the specific problem.
  *
- * Rejects: a name that fails the grammar, or a name already taken by another object
- * (case-insensitively). `excludeId` allows checking a rename against everything
- * except the object being renamed.
+ * Rejects: a name that fails the grammar; a name §5.3 lexes as a formula keyword, in
+ * ANY case (**D-080**, reading `formula/lexer.ts`'s `RESERVED_WORDS` rather than a
+ * second copy of those five strings); or a name already taken by another object
+ * (case-insensitively). `excludeId` allows checking a rename against everything except
+ * the object being renamed, which is why a rename that only changes CASE is accepted.
+ *
+ * `mutation.ts`'s `renameObject` passes this gate. **`createObject` does not yet** — a
+ * duplicate or ungrammatical name still commits through it, pinned by a test in
+ * `mutation.test.ts` and owed to the cycle that builds §5.11's load path (**D-081**).
+ * Do not read this function's existence as proof that no document holds a bad name.
  */
 export function checkNameAvailable(
   name: string,
@@ -170,6 +177,18 @@ export function checkNameAvailable(
     return {
       ok: false,
       message: `"${name}" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*`,
+    };
+  }
+  // D-080: §5.3 lexes these five words as keywords, so `TRUE.A1` never reaches
+  // `parseAddress` at all — an object named one of them can still be listed, renamed
+  // and deleted, but no formula and no `link` can ever READ it. Refused in EVERY case,
+  // not just the uppercase `formula/lexer.ts` matches, so that accepting lowercase
+  // keywords later (which that file's header calls purely additive) cannot break names
+  // already saved in a document.
+  if (RESERVED_WORDS.has(name.toUpperCase())) {
+    return {
+      ok: false,
+      message: `"${name}" is a reserved word — §5.3 reads ${[...RESERVED_WORDS].join(", ")} as formula keywords in any case, so no formula could reference this object; choose another name`,
     };
   }
   if (isNameTaken(name, objects, excludeId)) {
@@ -489,11 +508,13 @@ export function parseAddress(input: string, objects: readonly AddressableObject[
     };
   }
 
-  // Deliberately not pre-checked against NAME_PATTERN: no object can exist with an
-  // invalid name (checkNameAvailable is the only gate that creates/renames one), so
-  // an ungrammatical namePart simply fails lookup below and reports as "no object
-  // named" — one failure path instead of two, at the cost of a slightly imprecise
-  // message for that one case. (L-4, 0002-REVIEW-phase0.)
+  // Deliberately not pre-checked against NAME_PATTERN: an ungrammatical namePart
+  // simply fails the lookup below and reports as "no object named" — one failure path
+  // instead of two, at the cost of a slightly imprecise message for that one case.
+  // (L-4, 0002-REVIEW-phase0.) The message stays imprecise rather than WRONG even for
+  // a document that really does hold an ungrammatical name — which `createObject` can
+  // still commit (see `checkNameAvailable`, D-081) — because such a name is looked up
+  // like any other and simply matches or does not.
   const object = findObjectByName(namePart, objects);
   if (object === undefined) {
     return { error: "#REF", message: `no object named "${namePart}"` };

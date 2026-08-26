@@ -24,6 +24,7 @@ import {
   parseAddress,
   parseCellReference,
 } from "./address.ts";
+import { RESERVED_WORDS } from "./formula/lexer.ts";
 import type { ObjectType } from "./graph/node.ts";
 
 // `type` defaults to "polygon" — an arbitrary non-table type — for every test that
@@ -104,6 +105,30 @@ describe("isNameTaken / checkNameAvailable", () => {
   it("checkNameAvailable accepts a valid, unused name", () => {
     const result = checkNameAvailable("intersection_a", objects(["obj_1", "polygon_1"]));
     expect(result.ok).toBe(true);
+  });
+
+  // D-080 (0084-REVIEW). The reserved set is imported from `formula/lexer.ts`, not
+  // retyped, so a sixth keyword added there lands in these tests automatically.
+  it("checkNameAvailable rejects every word §5.3 lexes as a formula keyword (D-080)", () => {
+    for (const reserved of RESERVED_WORDS) {
+      expect(checkNameAvailable(reserved, objects()).ok).toBe(false);
+    }
+  });
+
+  it("checkNameAvailable rejects a reserved word in ANY case, not just the uppercase the lexer matches (D-080)", () => {
+    const result = checkNameAvailable("True", objects());
+    expect(result.ok === false && result.message).toBe(
+      '"True" is a reserved word — §5.3 reads AND, OR, NOT, TRUE, FALSE as formula keywords in any case, so no formula could reference this object; choose another name',
+    );
+  });
+
+  it("checkNameAvailable accepts a name that merely CONTAINS a reserved word — the rule is the whole name", () => {
+    expect(checkNameAvailable("android", objects()).ok).toBe(true);
+    expect(checkNameAvailable("not_1", objects()).ok).toBe(true);
+  });
+
+  it("pins the reserved set itself, so growing the lexer's keyword table is a visible diff here (D-080)", () => {
+    expect([...RESERVED_WORDS].sort()).toEqual(["AND", "FALSE", "NOT", "OR", "TRUE"]);
   });
 });
 

@@ -168,6 +168,20 @@ const KEYWORDS: ReadonlyMap<string, "and" | "or" | "not"> = new Map([
   ["NOT", "not"],
 ]);
 
+/**
+ * Every word this file lexes as something OTHER than an identifier: §5.3's three
+ * keyword operators above, plus its two boolean literals. Exported because a name
+ * that lexes as one of these is a name NO formula can hold a reference to — the
+ * reference never survives the lexer — so `address.ts` refuses it as an object name
+ * (**D-080**), reading the set from HERE rather than re-spelling five strings that
+ * would then be free to drift from this file's own table.
+ *
+ * Case is the CALLER's to decide: this file matches keywords case-SENSITIVELY (see
+ * the header), while `address.ts` refuses a name in ANY case, so that accepting
+ * lowercase keywords later stays the purely additive change the header promises.
+ */
+export const RESERVED_WORDS: ReadonlySet<string> = new Set([...KEYWORDS.keys(), "TRUE", "FALSE"]);
+
 /** Every punctuation/operator character that is unambiguous on its own — no two-character form to look ahead for (`<`/`>` are handled separately; they might extend to `<=`/`<>`/`>=`). */
 const SINGLE_CHAR_TOKENS: ReadonlyMap<string, WordOrSymbolTokenType> = new Map([
   ["+", "plus"],

@@ -1,23 +1,24 @@
-# STATUS — as of entry 0083
+# STATUS — as of entry 0084
 
-STATE: **GREEN.** Both configs compile, 1032/1032 tests pass, 0 skipped, 0 `.only`. **Entry 0083 is
-UNREVIEWED and asks for review** — it put a sixth `Operation` kind into `mutation.ts`, a load-bearing
-file, and removed one stub test expectation (§6.1 trigger 5).
+STATE: **GREEN.** Both configs compile, 1040/1040 tests pass, 0 skipped, 0 `.only`. **Nothing is
+unreviewed.** Entry 0083 (`rename`) was reviewed at 0084-REVIEW-phase3: **ACCEPT WITH EDITS**, four
+findings all fixed at the review, two rulings (**D-080**, **D-081**), nothing added to the fix list.
 
 Current phase: **3 — canvas, camera, geometry, command line.** A typed line can now CREATE the four
 objects, WIRE them (`set`, `set <address> = <formula>`, `link`, `unlink`), READ and REMOVE them
 (`refs`, `list`, `delete [force]`), and RENAME one (`rename`). **Every §5.10 command about an
-EXISTING object’s identity is now built** — creation, naming, wiring, reading, removal; the eight that
-need a schema or an `Operation` kind nobody has written (`polyline`/`text`/`script`/`image`/`explode`/
-`addvertex`/`delvertex`/`pan`) are not. **`main.ts` still holds no canvas and listens for nothing, so
-no pixel has ever come out of this project.** Phase 3 criterion (§6): *"create a polygon and a table by
-command, see both drawn, pan/zoom, select, and drag the polygon."* The engine half is done and tested;
-the visible half is untested and unbuilt. NOT claimed.
+EXISTING object's identity is built and reviewed**; the eight that need a schema or an `Operation`
+kind nobody has written (`polyline`/`text`/`script`/`image`/`explode`/`addvertex`/`delvertex`/`pan`)
+are not. **`main.ts` still holds no canvas and listens for nothing, so no pixel has ever come out of
+this project.** Phase 3 criterion (§6): *"create a polygon and a table by command, see both drawn,
+pan/zoom, select, and drag the polygon."* The engine half is done and tested; the visible half is
+untested and unbuilt. NOT claimed.
 
-Last review point: **0082-REVIEW-phase3, ACCEPT WITH EDITS.**
-Cycles since last review: **1/3** · diff since last review: **425 lines / 4 files** (cap 800/10).
+Last review point: **0084-REVIEW-phase3, ACCEPT WITH EDITS.**
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+**§6.2 holds nothing back: no load-bearing file has unreviewed changes.**
 
-## Read this first — the two things a cold reader needs
+## Read this first — the three things a cold reader needs
 
 **1. `executeCommand` THROWS on one typed line, and NO measurement bounds it (D-079).** A formula whose
 AST nests too deep exhausts the stack inside `formula/parser.ts`'s recursive descent and a `RangeError`
@@ -37,23 +38,27 @@ falls back to once the table it names is gone. A `refs` reading the current edge
 "nothing references table_1" for a document whose `delete table_1` is refused — found by probe at
 entry 0081, after twelve tests over the wrong version had passed. Do not "simplify" it back.
 
-## Next slice — D-075's effects, then `main.ts`
+**3. Five names §5.2's grammar allows are NOT available, and the gate is `checkNameAvailable`
+(D-080).** `AND`, `OR`, `NOT`, `TRUE` and `FALSE` lex as formula keywords, so `TRUE.A1` never reaches
+`parseAddress` and no formula or `link` can reference an object named one of them — while `list`,
+`delete`, `refs` and a literal `set` all still work, which is what made it invisible. `rename` was the
+first command to hand a user the naming layer at all; found by probe at 0084-REVIEW, fixed at the one
+gate, refused in EVERY case so that accepting lowercase keywords later stays additive. **Function
+names are safe and are NOT reserved** — `SUM.A1`, `IF.A1`, `PI.A1` all parse and resolve (D-080
+clause 5).
+
+## Next slice — D-075's effects, then the depth limit, then `main.ts`
 
 1. **`select`/`zoom`/`fit`/`save`/`load` under D-075**: widen `CommandOutcome`'s success arm with
    an optional plain-data `effect`; `commands.ts` still resolves `select intersection_a` and refuses an
    unknown name; `main.ts` performs it.
-2. Then **`main.ts`**: ONE clamped camera to `renderDocument`, `hitTest` and
+2. **The parser depth limit** (fix-list item 1) — its own small slice, blocks nothing else, and set
+   from **D-079**'s constant rather than from any measured band. Take it BEFORE step 3 (0080-REVIEW F3).
+3. Then **`main.ts`**: ONE clamped camera to `renderDocument`, `hitTest` and
    `pointerDown`/`pointerMove` (D-062); `zoom`/`fit` write `Document.camera` directly, never through
    `mutate` (D-027 clause 2); reset the canvas transform before screen-space chrome; and **wire
    `prompt.ts` — a canvas click during a live sequence is a `picked` response, not a selection**,
    with screen→world done by `camera.ts` before it reaches `command/`.
-
-The parser depth limit (fix-list item 1) is its own small slice and blocks nothing else — but take it
-BEFORE step 2, per 0080-REVIEW F3, and set it from **D-079**'s constant rather than from any of the
-measured bands.
-
-**§6.2 is live: `mutation.ts` has unreviewed changes (entry 0083), so Phase 4 cannot start until they
-are reviewed.**
 
 ## Built and reviewed
 
@@ -65,54 +70,35 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
 `command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`, and
 `TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · `commands.ts`'s four slot commands through one
 `writeSlot` path, and `engine/formula/format.ts` (0080) · `commands.ts`'s `delete`, `refs` and `list`
-(0082).
+(0082) · **`mutation.ts`'s `RenameObjectOperation` + `findInvalidRenames`, and `commands.ts`'s
+`rename` handler (0084)**.
 
-## Built this batch, not yet reviewed
-
-### Entry 0083 — `rename`, and `mutation.ts`'s sixth `Operation` kind
+### What entry 0083 built, and what 0084-REVIEW changed in it
 
 - **`RenameObjectOperation { kind, objectId, name }`** — its whole effect is one field. No repair pass,
   no `brokenSlots`, no edge that can break: §5.3 stores an object **ID** in every AST, so a rename
   cannot break a reference. **This operation is the first thing in the codebase to spend that
-  property**, and its doc comment says so. It is deliberately not a `setSlot` at a magic path — a name
-  is not a slot, and inventing a path for it would mean teaching D-017's check to ignore one.
-- **`findInvalidRenames`, a fourth pre-staging check.** §5.2's grammar and case-insensitive uniqueness
+  property.** It is deliberately not a `setSlot` at a magic path — a name is not a slot, and inventing
+  a path for it would mean teaching D-017's check to ignore one.
+- **`findInvalidRenames`, a fifth pre-staging check.** §5.2's grammar and case-insensitive uniqueness
   over the batch **as simulated left-to-right**, the same posture `findInvalidTableResizes` takes and
   for D-050's reason: a batch can free a name (by rename or delete) before a later operation claims it.
-  The RULE is `address.ts`'s `checkNameAvailable`, never re-spelled — its `excludeId` parameter had
-  no caller in `src/` until this cycle, and it is why `rename polygon_1 POLYGON_1` is accepted.
+  The RULE is `address.ts`'s `checkNameAvailable`, never re-spelled — its `excludeId` parameter is why
+  `rename polygon_1 POLYGON_1` is accepted.
 - **The handler** resolves the OLD name (identity, this file's job, `findGraphObjectByName`) and lets
   `mutate` judge the NEW one (rule, one gate). `rename polygon_1 3bad` therefore parses and is
   refused later, by design (D-043).
-- 28 new tests, 1 removed (the `"rename" has no handler yet` stub), **five mutation checks, all
-  caught** (9, 2, 11, 1 and 1 failures).
-- **Disclosed, pinned, not fixed:** `createObject`'s OWN name is still unchecked — see known problems.
+- **0084-REVIEW's edits, six files:** **D-080's reserved-word clause** in `checkNameAvailable` plus
+  `RESERVED_WORDS` exported from `formula/lexer.ts` (F1, the one behaviour change) · `mutation.ts`'s
+  file header corrected to SIX operation kinds and FIVE preconditions, and `mutate`'s doc taught to
+  name the fourth and fifth (F2) · `findInvalidRenames` moved BELOW `findInvalidTableResizes`, whose
+  doc comment it had been inserted underneath (F3) — comment-only, code verified identical ·
+  `address.ts`'s two "the only gate" claims corrected (F4, ruled **D-081**) · 8 tests across
+  `address.test.ts`, `mutation.test.ts` and `commands.test.ts`.
 
-### What entry 0081 built, and what 0082-REVIEW changed in it
+## Built this batch, not yet reviewed
 
-- **`delete <object> [force]`** — resolves the name, builds one `DeleteObjectOperation` carrying the
-  flag, calls `mutate`. It chooses **neither** of §5.1.1's two paths; the flag selects them inside
-  `mutate`. It owns two things `mutate` cannot say: the **remedy** (a rejection names every dependent
-  and cannot name a `force` flag, because an `Operation` carries no command syntax) and the **report**
-  — **D-057's `brokenSlots` has its first reader here**, formatted against the committed objects per
-  D-059.
-- **`refs <object|address>`** — every slot that reads the target, printed `source → dependent`, split
-  into dependents on other objects and dependents on the target's own object, with a summary line
-  counting the two apart. The two forms are told apart by `isValidName` (address.ts's own §5.2 grammar),
-  never a dot rule spelled out locally. A `derived` path is an ACCEPTED target here, unlike
-  `resolveWritableSlot`'s refusal. See "Read this first" item 2 for the blocking half's derivation.
-- **`list`** — `<name> — <type>` per object in creation order, `no objects` when empty. No ids.
-- Both read-only commands return the document they were given **by identity** and journal nothing,
-  which is why D-075 clause 4 gives them no `effect`.
-- 29 new tests, 3 removed (the `"<word>" has no handler yet` ones), **twelve mutation checks, all
-  caught** (0082-REVIEW re-ran two of them and got the same counts), and a D-077 clause 2 size probe at
-  `rows=1000 cols=1000` plus the deep-formula band.
-- **0082-REVIEW's edits, all in `commands.ts` and its test:** `refs`'s summary carries TWO counts —
-  `2 inbound edges from 1 dependent slot: 1 on other objects, 0 on table_1 itself` — because the lines
-  are edges and the number an operator acts on is the count of distinct dependent SLOTS (it said
-  `2 inbound dependents` for one slot). Plus a test pinning the two counts apart, a test for the
-  external-formula-reads-a-derived-slot case entry 0081 left open, and a stale count comment rewritten.
-  **The `refs` DESIGN was not touched** — only what its last line claims.
+**Nothing.** The tree is fully reviewed as of 0084-REVIEW.
 
 ## Not started
 
@@ -127,7 +113,9 @@ close" block. (c) partial binding under DRAG exists in `render/interaction.ts` (
 all three in ONE document, which is what "simultaneously" requires — and §6 forbids starting a phase
 before its predecessor's criterion passes, which Phase 3's has not.
 
-## Open fix list — **read 0082-REVIEW §9 for the full text**
+## Open fix list — **read 0084-REVIEW §9 for the full text**
+
+**Unchanged by 0084-REVIEW: it added nothing.**
 
 1. **Depth-limit `formula/parser.ts`'s recursive descent, from a CONSTANT** — return `#PARSE` past a
    fixed depth instead of unwinding, guard `format.ts`'s recursion for the loaded-file path, then
@@ -136,16 +124,17 @@ before its predecessor's criterion passes, which Phase 3's has not.
    first" item 1. Blocks nothing; take it before `main.ts`.
 2. **Give the missing-slot refusal a remedy** — "references a slot that does not exist" is true and
    tells the operator nothing to do. Message only: **D-047 clause 4 does not move** (0080-REVIEW F4).
-   Note `delete` now does exactly this for its own refusal, and is the worked example. The same message
-   is now also reachable from `refs`, where in D-046's formula-dimension corner its "object type X does
-   not declare one" clause is not the reason either (0082-REVIEW §4).
+   `delete`'s refusal and **D-080's reserved-word refusal** are the two worked examples of a refusal
+   that names what to do instead. The same message is also reachable from `refs`, where in D-046's
+   formula-dimension corner its "object type X does not declare one" clause is not the reason either
+   (0082-REVIEW §4).
 3. **`findDanglingReferences` names one dependent once per MISSING SOURCE**, so `delete table_1` over
    `polygon_1.origin.x = table_1.A1 + table_1.A2` says `polygon_1.origin.x references a slot that does
    not exist; polygon_1.origin.x references a slot that does not exist`. Pre-existing in `mutation.ts`,
    user-visible only since `delete` got a handler. Group by dependent, or dedupe within the message
    (0082-REVIEW F4). Owned by the cycle that opens that function.
 
-**Carried from 0074-REVIEW §9 through 0082-REVIEW, all six unchanged, none blocking:** (1) report a
+**Carried from 0074-REVIEW §9 through 0084-REVIEW, all six unchanged, none blocking:** (1) report a
 refused prompt answer with the sequence's own message — **D-074**, the one with a ruling behind it ·
 (2) a usage line for the form a prompting command was used in, folded into 0069-REVIEW F3's sweep over
 all sixteen `usage` strings · (3) decide what a quoted command WORD means, and correct entry 0072's
@@ -179,11 +168,12 @@ consumer of `readNumber`/`asPointArray` · `.gitattributes`.
   ruled it STANDS.** Only the MESSAGE changes (fix-list item 2); do not re-raise the behaviour.
 - **`createObject` does not check the name it carries.** `findInvalidRenames` checks every RENAME and
   reads a created object's name only to keep its simulation honest, so a duplicate or ungrammatical
-  name still commits through `createObject` — exactly as it did before entry 0083. `commands.ts`
-  avoids it by minting through `generateDefaultName`; §5.11's loader is the reachable route. **Pinned
-  by a test that asserts the duplicate DOES commit**, so closing it is a visible diff. Left open
-  deliberately: it decides what a load does with a colliding saved name, which is bigger than a rename
-  slice.
+  name still commits through `createObject`. `commands.ts` avoids it by minting through
+  `generateDefaultName`; §5.11's loader is the reachable route. **Pinned by a test that asserts the
+  duplicate DOES commit**, so closing it is a visible diff. **Ruled D-081 at 0084-REVIEW**: the
+  direction is settled (same `checkNameAvailable` gate, extending `findInvalidRenames`'s own
+  simulation, rejecting the whole batch and naming every offender) and the **load cycle owns it**. The
+  pinned test is meant to FLIP then; that is not a test being weakened.
 - **Eight §5.10 commands have no registry entry** — `polyline`/`text`/`script`/`image`/`explode`/
   `addvertex`/`delvertex` wait on a schema or an `Operation` kind; **`pan` waits on Q-012**. All report
   "not built", not "unknown command" (`COMMANDS_SPECIFIED_BUT_NOT_BUILT`).
@@ -222,23 +212,25 @@ consumer of `readNumber`/`asPointArray` · `.gitattributes`.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-078**) binds without restatement here. Newest:
-**D-070** creation counts bounded by the HANDLER — implemented at 0075 · **D-071** a formula is authored
-with `set <address> = <source>` — implemented at 0079 · **D-072** a command word alone enters a prompt
-sequence · **D-073** a formula's source is NEVER tokenized by the command lexer — discharged at 0072 ·
+Every ruling in `DECISIONS.md` (D-001 through **D-081**) binds without restatement here. Newest:
 **D-074** a prompt sequence's own refusal IS the message — **still open**, fix-list item 3(1) ·
 **D-075** a command that changes no document state returns an EFFECT as plain data — **clause 4 is
-implemented at 0081** (`refs`/`list` return `lines` and no effect); clauses 1–3 and 5 are still the
-slice after next · **D-076** a header's PROSE is capped at 15 lines and every other length budget is
-withdrawn — **length is not a finding, do not report it** · **D-077** a dynamic slot family's size is
-DOCUMENT STATE: never spread one into a call, and probe every "never throws" claim at the largest size
-the bounds allow · **D-078** a probe that falsifies a property falsifies EVERY claim of it on that call
-path · **D-079** a stack-depth measurement is an OBSERVATION, never a bound — a recursion limit is a
-fixed constant below the smallest observed failure, pinned by a test on the constant.
+implemented at 0081** (`refs`/`list` return `lines` and no effect); clauses 1–3 and 5 are the next
+slice · **D-076** a header's PROSE is capped at 15 lines and every other length budget is withdrawn —
+**length is not a finding, do not report it**, and correcting a FALSE sentence in a long header is not
+a licence to re-cut it (0084-REVIEW F2) · **D-077** a dynamic slot family's size is DOCUMENT STATE ·
+**D-078** a probe that falsifies a property falsifies EVERY claim of it on that call path · **D-079** a
+stack-depth measurement is an OBSERVATION, never a bound · **D-080** the five words §5.3 lexes as
+formula keywords are NOT available object names, in ANY case, refused by `checkNameAvailable` from
+`formula/lexer.ts`'s exported `RESERVED_WORDS` — **implemented at 0084-REVIEW**; function names are
+NOT reserved · **D-081** `createObject`'s own name is gated by the same `checkNameAvailable`, by
+extending `findInvalidRenames`'s simulation, rejecting the whole batch — **owed by the §5.11 load
+cycle**, and the pinned "duplicate DOES commit" test is meant to flip then.
 
 **D-057 is IMPLEMENTED end to end as of entry 0081**: the channel was built at the `force` slice and
 now has a reader — `delete <object> force` reports every slot it broke. **D-040/D-041 are implemented**
-(entry 0079) and **Q-001/Q-002 are reconciled**.
+(entry 0079) and **Q-001/Q-002 are reconciled**. **§5.2 now has exactly one gate with three clauses**
+(grammar, D-080's reserved words, uniqueness) and one caller in `mutation.ts`.
 
 ## Live PROVISIONAL tags and open questions
 
@@ -250,6 +242,10 @@ Next free: **Q-014**.
 
 ## Gotchas for the next model
 
+- **A name §5.2 allows is not automatically a name §5.3 can READ (D-080).** The two sections never
+  mention each other and they overlap on five words. `checkNameAvailable` is the one gate; if you add
+  a naming path (a loader, an import, a duplicate-and-rename gesture), route it through that gate
+  rather than re-checking §5.2 yourself.
 - **A range over cells nobody has written creates NO edges** (D-047 item 1) and becomes ONE dangling
   edge the moment the table it names disappears. That asymmetry is why `refs <object>` simulates the
   removal. Anything else that asks "who reads this object" inherits the same trap.
@@ -297,14 +293,14 @@ Next free: **Q-014**.
   (`sed 's/\x1b\[[0-9;]*m//g'`) and assert on the `Tests  N failed` line. Entry 0081's first `refs`
   passed twelve tests and was wrong.
 - **A review's fix list authorises a CHANGE, never an exemption from the trigger that change fires**
-  (entry 0073). Entries 0079 and 0081 both fired trigger 5 for handler work and reported it.
-- **Line endings:** `command/commands.ts` and its test were LF on disk and are **CRLF as of entry
-  0083** — every file that cycle touched is now uniformly CRLF, and `git diff` shows only real changes
-  under `core.autocrlf=true`. The working tree is still mixed overall; `.gitattributes` is still owed
-  (fix list, carried).
+  (entry 0073). Entries 0079, 0081 and 0083 all fired trigger 5 for handler work and reported it.
+- **Line endings:** every file entries 0083 and 0084-REVIEW touched is CRLF on disk except
+  `address.test.ts`, which was LF before and still is. The working tree is mixed overall and `git diff`
+  shows only real changes under `core.autocrlf=true`; `.gitattributes` is still owed (fix list, carried).
 - **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it
   (D-065).** Grep for the name of every file and capability you create, and **re-read the headers of the
-  files you edited**.
+  files you edited** — three of 0084-REVIEW's four findings were exactly this, including one in a file
+  the cycle only depended on.
 - **Do NOT report the LENGTH of anything (D-076)** — not a header, not this file, not a source file. The
   one length rule that survives is **`WHAT THIS IS` capped at 15 lines**, binding new and edited headers
-  only. There is no sweep.
+  only. There is no sweep, and fixing a false sentence in a long header does not oblige you to re-cut it.

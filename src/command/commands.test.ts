@@ -934,4 +934,27 @@ describe("rename — §5.10's one object command that needed a new Operation kin
     const before = wired();
     expect(committed("rename polygon_1 intersection_a", before).nextObjectId).toBe(before.nextObjectId);
   });
+
+  // D-080 (0084-REVIEW): before this, `rename table_1 TRUE` committed and left an
+  // object no formula and no `link` could name again — §5.2's grammar admits five
+  // words §5.3 lexes as keywords.
+  it("refuses a new name §5.3 lexes as a formula keyword, naming all five and what to do (D-080)", () => {
+    const message = refused("rename table_1 TRUE", wired());
+    expect(message).toContain("is a reserved word");
+    expect(message).toContain("AND, OR, NOT, TRUE, FALSE");
+    expect(message).toContain("choose another name");
+  });
+
+  it("refuses one in ANY case, and leaves prior state bit-for-bit unchanged", () => {
+    const before = wired();
+    const snapshot = JSON.stringify(before);
+    expect(refused("rename table_1 not", before)).toContain("is a reserved word");
+    expect(JSON.stringify(before)).toBe(snapshot);
+  });
+
+  it("leaves every ACCEPTED new name referenceable by a formula, which is the property D-080 protects", () => {
+    const renamed = committed("rename table_1 grid", wired());
+    const driven = committed("set polygon_1.radius = grid.A1 + 1", renamed);
+    expect(getSlot(named(driven, "polygon_1") as GraphObject, ["radius"])?.value).toBe(6);
+  });
 });

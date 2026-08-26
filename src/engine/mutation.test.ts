@@ -3402,6 +3402,13 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
     expect(JSON.stringify(objects)).toBe(snapshot);
     expect(journal).toEqual([]);
   });
+
+  it("rejects a name §5.3 lexes as a formula keyword, in ANY case — D-080, reviewer edit at 0084-REVIEW", () => {
+    const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "or" }], []);
+    expect(result.ok === false && result.message).toBe(
+      'operation 1 of 1 cannot rename: "or" is a reserved word — §5.3 reads AND, OR, NOT, TRUE, FALSE as formula keywords in any case, so no formula could reference this object; choose another name',
+    );
+  });
 });
 
 describe("mutate — findInvalidRenames simulates the batch LEFT-TO-RIGHT, the same way findInvalidTableResizes does (D-050's reasoning)", () => {

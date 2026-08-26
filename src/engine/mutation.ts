@@ -102,14 +102,15 @@
  * before `detectCycle` does, or a document whose only cycle runs through an undeclared
  * slot gets a false "no cycle" pass instead of the rejection those checks exist to give.
  *
- * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. FIVE
+ * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. SIX
  * operation kinds: `setSlot`, `deleteObject`, `createObject`, `insertTableLine`,
- * `deleteTableLine`. Four PRECONDITIONS run over the whole batch before staging even
- * starts — an empty batch, a target that does not resolve (D-021; simulated
+ * `deleteTableLine`, `renameObject`. FIVE PRECONDITIONS run over the whole batch before
+ * staging even starts — an empty batch, a target that does not resolve (D-021; simulated
  * LEFT-TO-RIGHT so a batch that creates or deletes objects mid-fold is checked against
  * each operation's own position, not pre-batch state alone), an illegal payload value
- * or stored AST literal (D-048), and an invalid table resize (D-050/D-046/D-053,
- * simulated in that same left-to-right walk). Then: deep-clone once (D-019 — a real
+ * or stored AST literal (D-048), an invalid table resize (D-050/D-046/D-053), and a
+ * rename to a name §5.2 does not allow (D-080). The last two are simulated in that same
+ * left-to-right walk. Then: deep-clone once (D-019 — a real
  * recursive clone, not a JSON round-trip), fold every operation onto that ONE clone,
  * validate and evaluate ONCE, commit all-or-nothing with exactly one journal entry
  * holding the whole list (D-020).
@@ -141,7 +142,7 @@
  *   - Holding "the current document" across calls — Rule 2 forbids it. `mutate` is a
  *     pure function of its three arguments; the caller owns the `objects`/`journal`
  *     pair and decides what to do with a rejection.
- *   - Operation kinds beyond the five above (`explode`, vertex add/remove) — they
+ *   - Operation kinds beyond the six above (`explode`, vertex add/remove) — they
  *     belong to the phases that introduce the state they touch.
  *   - A user-facing "add a new circle" COMMAND (§5.10): choosing a fresh id from
  *     `nextObjectId` and a type's starting slot values is `command/commands.ts`'s,
@@ -1141,6 +1142,14 @@ export type MutationResult =
  *   applies directly — see that function's own doc comment for why reusing it
  *   here is its third sanctioned call site's shape, not a new exception).
  *
+ * A FOURTH and a FIFTH check, same placement and same shape, each documented
+ * on the function that owns it rather than restated here:
+ * `findInvalidTableResizes` (§5.4's row/column preconditions —
+ * D-050/D-046/D-053) and `findInvalidRenames` (§5.2's name rules, and D-080's
+ * reserved words). Both simulate the batch LEFT-TO-RIGHT for the reason check
+ * 2 does: a table's extent and a name's availability are functions of an
+ * operation's own POSITION in the batch, not of the pre-batch document.
+ *
  * Why staging matters even though every function downstream is already pure
  * (so `objects` was never going to be mutated regardless): Rule 5 asks for
  * this literally ("implement staging by deep-cloning the document state"),
@@ -1803,67 +1812,6 @@ interface TrackedTableState {
  * is generally unguarded against the cells that actually exist), reached
  * through the same door as before, not a new one.
  */
-/**
- * §5.2's name rules for every `renameObject` in a batch, checked before
- * staging — the same posture `findInvalidTableResizes` takes, and for the
- * same reason (D-050): a name's availability is a function of the batch AS
- * SIMULATED LEFT-TO-RIGHT, not of the pre-batch document.
- * `[rename a → b, rename c → a]` is legal because the first frees `a`;
- * `[rename a → z, rename c → z]` is not, and BOTH must be decided here
- * rather than by a post-fold check, because a duplicate name is not
- * detectable from the folded graph alone once it exists (nothing downstream
- * looks at names at all — `validateIntegrity` reads slots and edges).
- *
- * The rule itself is `address.ts`'s `checkNameAvailable`, never re-spelled
- * here: it owns both halves (§5.2's grammar and case-insensitive uniqueness)
- * and its `excludeId` exists for exactly this call. Every offending
- * operation is named in one pass, matching every other check in this file.
- *
- * KNOWN GAP, disclosed not fixed: `createObject`'s OWN name goes
- * unchecked — this function only reads a created object's name to keep the
- * simulation honest for a LATER rename. A loader or a command handler can
- * therefore still commit a duplicate or ungrammatical name through
- * `createObject`, exactly as it could before this cycle;
- * `command/commands.ts` avoids it by minting names through
- * `generateDefaultName`. Closing it belongs to a cycle that can weigh what
- * it does to §5.11's load path, not to this one.
- */
-function findInvalidRenames(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
-  const problems: string[] = [];
-  // `AddressableObject` — the shape `checkNameAvailable` reads — is all this
-  // simulation needs to track; no slot data is touched, exactly as the
-  // existence check above touches none.
-  const tracked: { id: string; name: string; type: ObjectType }[] = objects.map((object) => ({ id: object.id, name: object.name, type: object.type }));
-
-  operations.forEach((operation, index) => {
-    if (operation.kind === "createObject") {
-      tracked.push({ id: operation.object.id, name: operation.object.name, type: operation.object.type });
-      return;
-    }
-    if (operation.kind === "deleteObject") {
-      const at = tracked.findIndex((entry) => entry.id === operation.objectId);
-      if (at !== -1) {
-        tracked.splice(at, 1); // The deleted object's name is free from here on.
-      }
-      return;
-    }
-    if (operation.kind !== "renameObject") {
-      return;
-    }
-    const check = checkNameAvailable(operation.name, tracked, operation.objectId);
-    if (!check.ok) {
-      problems.push(`operation ${index + 1} of ${operations.length} cannot rename: ${check.message}`);
-      return; // Not applied to the simulation — a refused rename changes no name.
-    }
-    const entry = tracked.find((candidate) => candidate.id === operation.objectId);
-    if (entry !== undefined) {
-      entry.name = operation.name; // Frees the old name for a later operation, and claims the new one.
-    }
-  });
-
-  return problems;
-}
-
 function findInvalidTableResizes(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
   const tracked = new Map<string, TrackedTableState>();
@@ -1956,6 +1904,67 @@ function findInvalidTableResizes(operations: readonly Operation[], objects: read
       state.rows += delta;
     } else {
       state.cols += delta;
+    }
+  });
+
+  return problems;
+}
+
+/**
+ * §5.2's name rules for every `renameObject` in a batch, checked before
+ * staging — the same posture `findInvalidTableResizes` takes, and for the
+ * same reason (D-050): a name's availability is a function of the batch AS
+ * SIMULATED LEFT-TO-RIGHT, not of the pre-batch document.
+ * `[rename a → b, rename c → a]` is legal because the first frees `a`;
+ * `[rename a → z, rename c → z]` is not, and BOTH must be decided here
+ * rather than by a post-fold check, because a duplicate name is not
+ * detectable from the folded graph alone once it exists (nothing downstream
+ * looks at names at all — `validateIntegrity` reads slots and edges).
+ *
+ * The rule itself is `address.ts`'s `checkNameAvailable`, never re-spelled
+ * here: it owns both halves (§5.2's grammar and case-insensitive uniqueness)
+ * and its `excludeId` exists for exactly this call. Every offending
+ * operation is named in one pass, matching every other check in this file.
+ *
+ * KNOWN GAP, disclosed not fixed: `createObject`'s OWN name goes
+ * unchecked — this function only reads a created object's name to keep the
+ * simulation honest for a LATER rename. A loader or a command handler can
+ * therefore still commit a duplicate or ungrammatical name through
+ * `createObject`, exactly as it could before this cycle;
+ * `command/commands.ts` avoids it by minting names through
+ * `generateDefaultName`. Closing it belongs to a cycle that can weigh what
+ * it does to §5.11's load path, not to this one.
+ */
+function findInvalidRenames(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  // `AddressableObject` — the shape `checkNameAvailable` reads — is all this
+  // simulation needs to track; no slot data is touched, exactly as the
+  // existence check above touches none.
+  const tracked: { id: string; name: string; type: ObjectType }[] = objects.map((object) => ({ id: object.id, name: object.name, type: object.type }));
+
+  operations.forEach((operation, index) => {
+    if (operation.kind === "createObject") {
+      tracked.push({ id: operation.object.id, name: operation.object.name, type: operation.object.type });
+      return;
+    }
+    if (operation.kind === "deleteObject") {
+      const at = tracked.findIndex((entry) => entry.id === operation.objectId);
+      if (at !== -1) {
+        tracked.splice(at, 1); // The deleted object's name is free from here on.
+      }
+      return;
+    }
+    if (operation.kind !== "renameObject") {
+      return;
+    }
+    const check = checkNameAvailable(operation.name, tracked, operation.objectId);
+    if (!check.ok) {
+      problems.push(`operation ${index + 1} of ${operations.length} cannot rename: ${check.message}`);
+      return; // Not applied to the simulation — a refused rename changes no name.
+    }
+    const entry = tracked.find((candidate) => candidate.id === operation.objectId);
+    if (entry !== undefined) {
+      entry.name = operation.name; // Frees the old name for a later operation, and claims the new one.
     }
   });
 

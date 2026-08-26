@@ -2397,3 +2397,99 @@ Reconciliation required: none outstanding, and no `PROVISIONAL` tag. `formula/pa
 `formula/format.ts` carry qualified never-throws claims naming a measured band (D-078 clause 3);
 0080-REVIEW fix-list item 1, as restated at 0082-REVIEW §9, replaces both with the constant this
 ruling requires.
+
+---
+
+## D-080 — A word §5.3 lexes as a formula keyword is NOT an available object name, in any case
+Answers: the finding at 0084-REVIEW (no `Q-NNN` was raised — the brief is silent where two of its
+own sections meet, which entry 0083 had no reason to look for)
+Ruled: entry 0084-REVIEW-phase3 (reviewer)   Binding on: `address.ts`'s `checkNameAvailable` and
+every future caller of it, including §5.11's load path
+
+**Ruling.**
+
+1. **`checkNameAvailable` refuses `AND`, `OR`, `NOT`, `TRUE` and `FALSE` as object names, matched
+   case-INSENSITIVELY**, alongside §5.2's grammar and uniqueness. It is a third clause of the same
+   gate, not a second gate somewhere else.
+2. **The set is read from `formula/lexer.ts`'s exported `RESERVED_WORDS`, never re-spelled.**
+   D-010's "declare vocabulary once" applies: five string literals copied into `address.ts` are
+   five literals free to drift from the table the lexer actually matches against. A sixth keyword
+   added to that table is reserved automatically, and the test pinning the set's contents makes
+   that a visible diff rather than a silent widening.
+3. **Case-insensitively, even though the lexer matches keywords case-SENSITIVELY today.** `and`
+   lexes as an identifier and would work; refusing it anyway costs a user nothing and keeps
+   `lexer.ts`'s standing promise — "lowercase acceptance is purely additive later" — actually
+   additive. If that promise is ever cashed, no name already saved in a document breaks.
+4. **The reservation is on the WHOLE name, never a substring.** `android` and `not_1` are ordinary
+   names.
+5. **This does not extend to function names.** `SUM`, `IF`, `PI` and every other entry in
+   `functions.ts`'s registry lex as identifiers, and `SUM.A1` parses and resolves exactly like any
+   other reference — probed, not assumed. Do not widen the reserved set to them.
+
+**Rationale.** §5.2 says an object name matches `[a-zA-Z_][a-zA-Z0-9_]*`. §5.3 says `TRUE`,
+`FALSE`, `AND`, `OR` and `NOT` are literals and operators. Five words satisfy both, and neither
+section mentions the other. Before entry 0083 nothing could reach the overlap: `commands.ts` mints
+every name through `generateDefaultName`, so no user-chosen name existed. `rename` is the first
+command that lets a user name an object, which makes the overlap reachable by one typed line:
+
+```
+rename table_1 TRUE                          committed
+link polygon_1.origin.x TRUE.A1              unexpected trailing input starting at "."
+set  polygon_1.origin.y = TRUE.A1 + 1        unexpected trailing input starting at "."
+refs TRUE                                    TRUE.A1 → polygon_1.origin.x
+```
+
+The object is still listed, still renamed, still deleted, and every formula that ALREADY read it
+keeps evaluating — §5.3's stored-ID scheme sees to that. What is gone is the ability to write a NEW
+reference to it: the name never survives the lexer, so it never reaches `parseAddress`. `refs`
+happily prints an address no one can type back in. That is a §5.10 rejection story failing in the
+worst available way — the operator is shown the right answer and cannot use it.
+
+The alternative — teaching `formula/parser.ts` to accept a keyword token in leading-reference
+position — is a real grammar change to a reviewed subsystem, for the benefit of five names nobody
+wants. Rule 5 asks for the dumbest correct fix, and refusing the name at the one gate that already
+exists is it.
+
+Reconciliation required: none, and no `PROVISIONAL` tag. Implemented at 0084-REVIEW in
+`address.ts` and `formula/lexer.ts`, with tests at all three layers (`address.test.ts`,
+`mutation.test.ts`, `commands.test.ts`).
+
+---
+
+## D-081 — `createObject`'s own name is gated by `checkNameAvailable` too, and the cycle that builds §5.11's load path owns closing it
+Answers: entry 0083's reviewer question 1 ("is pinning the gap the right call, and whose is it?")
+Ruled: entry 0084-REVIEW-phase3 (reviewer)   Binding on: `mutation.ts`, and on the cycle that
+builds §5.11's load
+
+**Ruling.**
+
+1. **Entry 0083 was right not to close it.** A rename slice may not decide what a load does with a
+   corrupted saved document. Disclosing the gap in the log, in `findInvalidRenames`'s own doc, in
+   STATUS's known problems, and in a test that asserts the duplicate DOES commit is the correct
+   handling of a gap you are deliberately leaving open — it is the shape D-053's "KNOWN
+   INCOHERENCE" pin already established, and closing it will now be a diff against a named test
+   rather than a silent behaviour change.
+2. **The direction is settled, so the load cycle does not re-litigate it.** `createObject`'s
+   `object.name` MUST pass the same `checkNameAvailable` gate every rename passes — grammar,
+   D-080's reserved words, and uniqueness — evaluated at that operation's own position in the
+   left-to-right simulation `findInvalidRenames` already runs. It extends that function; it does
+   not get a fifth pre-staging check of its own (D-050's "every future operation kind that changes
+   [what is being simulated] MUST extend that same simulation," applied to names).
+3. **A colliding or ungrammatical name REJECTS the whole batch, naming every offender.** It is not
+   repaired by auto-renaming. §5.1 commits all-or-nothing, D-021 already rejects a load whose
+   references do not resolve, and a silent rename would change a name the user wrote formulas
+   against without saying so. A load of a corrupt file fails loudly, the same way every other
+   corrupt-document check in this file fails.
+4. **Until then, do not read `checkNameAvailable`'s existence as proof that no document holds a bad
+   name.** Two comments in `address.ts` claimed exactly that and were corrected at 0084-REVIEW.
+
+**Rationale.** The gap is pre-existing and, today, unreachable from any code that ships: every
+`createObject` in `src/` is built by `commands.ts` from `generateDefaultName`, and §5.11's loader
+does not exist yet. The reachable route arrives with the loader, which is precisely the cycle that
+has to weigh what rejecting a name does to a user's saved file — so that cycle owns it, and it
+inherits a decided direction rather than an open question. Ruling it now costs nothing and stops
+the third cycle in a row from re-deciding whose problem it is.
+
+Reconciliation required: none outstanding. The pinned test in `mutation.test.ts` ("KNOWN GAP,
+pinned not fixed") must FLIP when the load cycle implements this — that is the intended visible
+diff, not a test being weakened.
