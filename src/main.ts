@@ -6,9 +6,11 @@
  * and D-082 (performing a `CommandEffect`), D-062 (clamping a loaded camera),
  * D-061 and D-066 (`fit`), D-027 clause 2 (`camera` is written directly, never
  * through `mutate`), D-072 (a canvas pick answers a live prompt step).
- * LAYER: application entry. May touch the DOM — this is the ONE file allowed to,
- *        and the one file no test reaches. May import: engine/*, render/*,
- *        command/*. Imported by nothing.
+ * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
+ *        May import: engine/*, render/*, command/*. Imported by nothing but
+ *        `main.test.ts`, which reaches the pure half through the bootstrap guard
+ *        at the bottom (D-065: D-082 called this "the one file no test reaches",
+ *        and entry 0089 falsified that).
  *
  * WHAT THIS IS
  *   Two halves, split so the interesting one is testable. `AppState` and the
@@ -325,7 +327,13 @@ function fitToDocument(state: AppState, viewport: Viewport): AppState {
   }
   const width = extent.maxX - extent.minX;
   const height = extent.maxY - extent.minY;
-  const fits = width > 0 && height > 0 && viewport.width > 0 && viewport.height > 0;
+  // D-066's degeneracy is BOTH extents zero — a point. A FLAT extent (a rect of
+  // zero height, a run of collinear vertices) has a real axis to fit to, and the
+  // `Math.min` below already handles the other: dividing by a zero extent gives
+  // `Infinity`, which loses the min to the finite axis. Requiring both to be
+  // positive reported a 200x0 rect as "a single point" and refused to fit it
+  // (0090-REVIEW F2).
+  const fits = (width > 0 || height > 0) && viewport.width > 0 && viewport.height > 0;
   const zoom = fits
     ? clampZoom(Math.min((viewport.width * FIT_VIEWPORT_FRACTION) / width, (viewport.height * FIT_VIEWPORT_FRACTION) / height), camera.zoom)
     : camera.zoom;
@@ -452,7 +460,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
   };
 
+  // The canvas's BACKING size must equal its CSS size, or the browser scales the
+  // drawing while `screenPointOf` keeps reporting CSS pixels off
+  // `getBoundingClientRect` — clicks land somewhere other than where the picture
+  // shows them, and drags slip by the same ratio. The log growing shortens the
+  // canvas with no window resize behind it, so the size is re-read before every
+  // paint rather than only on that event (0090-REVIEW F1). Rule 5: one layout
+  // read per frame is not a cost this project trades correctness for.
   const paint = (): void => {
+    if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+    }
     renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera);
   };
 
@@ -474,13 +493,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
   };
 
-  const resize = (): void => {
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
-    paint();
-  };
-
-  window.addEventListener("resize", resize);
+  window.addEventListener("resize", paint);
 
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key !== "Enter") {
@@ -498,7 +511,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       apply(escape(state));
       return;
     }
-    if (event.key === " " && event.target !== input) {
+    // §5.9's space-drag meets §5.10's always-focused input bar: every space key
+    // arrives at the input, so a `target !== input` guard made the gesture
+    // unreachable (0090-REVIEW F3). An EMPTY input is the one case where a space
+    // means nothing as text — no command word starts with one — so that is where
+    // the gesture wins, and the keystroke is swallowed rather than typed.
+    if (event.key === " " && input.value === "") {
+      event.preventDefault();
       spaceHeld = true;
     }
   });
@@ -544,7 +563,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     { passive: false },
   );
 
-  resize();
   apply(state);
   input.focus();
 }
@@ -561,8 +579,13 @@ function downloadDocument(state: Document): void {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = "graphpaper.json";
+  // In the document, and revoked LATER: a detached anchor's click is ignored by
+  // some browsers, and revoking the URL in the same tick can cancel the download
+  // the click just started (0090-REVIEW F4).
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /**

@@ -2578,3 +2578,112 @@ in three more places than the cycle guarded. The answer is not three more depth 
 that a document is validated when it is read, once, the way every other unchecked-cast field in a
 loaded document will have to be. Until that loader exists no user-reachable path can produce such
 an AST (`parser.ts` refuses it), so nothing is broken today and nothing speculative gets built.
+
+---
+
+## D-084 — Phase 3's gate is cleared CONDITIONALLY: Phase 4 may not begin until a human has run the app once and reported what they saw
+Answers: entry 0089's acceptance-criteria qualification 1 ("I have not run the app in a browser")
+Ruled: entry 0090-REVIEW-phase3 (reviewer)   Binding on: the Phase 3 → Phase 4 transition, and
+every later phase gate whose criterion is stated in the operator's own verbs
+
+**Ruling.**
+
+1. **Phase 3's criterion is ACCEPTED as engineering** — `main.test.ts`'s end-to-end block runs
+   the criterion's own order (create, draw, pan, zoom, select, drag) against one state and asserts
+   the draw calls, the camera, the selection and the moved slot. That is the strongest form
+   PROCESS_BRIEF §12.1 asks for where a criterion is visual: "test the engine-side consequence and
+   describe the manual check separately and honestly." Entry 0089 did both.
+2. **It is NOT cleared as a gate until the manual check is performed by the human and its result
+   recorded in a numbered entry.** The check is entry 0089's own wording: open the dev server,
+   type `polygon sides=5 x=100 y=100 r=50` and `table x=300 y=100 rows=3 cols=3`, wheel, middle-drag,
+   click the polygon's outline, drag it. Whoever runs it writes down what they saw, including
+   nothing.
+3. **No implementer cycle can discharge clause 2.** An implementer with no browser MUST NOT claim
+   it, simulate it, or add a headless-browser dependency to reach it (§4: never add a dependency).
+   Until it is recorded, `STATUS.md` says the gate is conditional and Phase 4 does not start.
+4. **The next slice, meanwhile, is D-068's feedback trio** — it is inside Phase 3, it is what makes
+   `select` mean something on screen, and it is the one piece that changes what the manual check
+   will show. Doing it first makes clause 2 worth performing once instead of twice.
+
+**Rationale.** Three of this review's four findings are in the half of `main.ts` no test reaches,
+and all three would have been caught in ten seconds by a human clicking once: a canvas whose
+backing size never matched its CSS size (every click landing off the picture), a space-drag pan
+that could not fire, and a save that some browsers drop. That is the measurement. A criterion
+written in the operator's verbs — "see both drawn", "select", "drag" — is a claim about what a
+person perceives, and this project has now demonstrated that a green suite over the testable half
+does not cover the claim. The gate is not the tests' to close.
+
+This does not weaken §12: the criterion still MUST be expressed as executable tests before it is
+claimed, and it was. Clause 2 adds the one check tests structurally cannot make, and names who
+owes it.
+
+---
+
+## D-085 — §5.9's space-drag pan is armed by a space key while the input bar is EMPTY
+Answers: the collision between §5.9 ("pan: middle-drag or space-drag") and §5.10 ("the input bar
+is always focused when the user is not editing text or a cell"), found at 0090-REVIEW F3
+Ruled: entry 0090-REVIEW-phase3 (reviewer)   Binding on: `main.ts`'s key handling, and any later
+file that reads a key the input bar could also have consumed
+
+**Ruling.** The space key arms the pan gesture when `input.value` is `""`, and is consumed
+(`preventDefault`) when it does; otherwise it is an ordinary character and reaches the input.
+A `event.target !== input` test is NOT an acceptable guard for this or any other global key,
+because §5.10 makes the input the target of essentially every keystroke.
+
+**Rationale.** Entry 0089's guard was written to keep a space typed mid-command from yanking the
+canvas, which is right, but it made the gesture unreachable rather than conditional: the input is
+focused at startup and re-focused after every canvas press, so `target` is the input every time.
+An empty input is the exact state in which a space carries no meaning as text — no command word
+begins with one — so it is free to carry the gesture, and the operator's mental model ("nothing
+typed yet, so the canvas has the keyboard") matches. Middle-drag was unaffected and is why §5.9's
+pan was still satisfiable; that does not make a specified gesture optional.
+
+**Reconciliation required:** none — applied at 0090-REVIEW.
+
+---
+
+## D-086 — A canvas's BACKING size is re-read from its CSS size before every paint, in `main.ts`, and nowhere else
+Answers: 0090-REVIEW F1
+Ruled: entry 0090-REVIEW-phase3 (reviewer)   Binding on: `main.ts`; constrains any future
+`render/` work that would rather scale the context
+
+**Ruling.**
+
+1. `canvas.width`/`canvas.height` are set from `canvas.clientWidth`/`clientHeight` immediately
+   before each `renderDocument` call, whenever they differ. Not only on `window`'s `resize`.
+2. **The invariant it buys is stated once and relied on everywhere downstream: one backing pixel
+   is one CSS pixel.** `screenPointOf` reports CSS pixels off `getBoundingClientRect`, `hitTest`
+   and `renderDocument` consume backing pixels, and nothing between them converts. So the two
+   MUST be the same number, and `main.ts` is the only file that can make them so.
+3. A future device-pixel-ratio or GPU cycle that wants a backing store bigger than the CSS box
+   MUST introduce the conversion at `screenPointOf` in the same change. It may not break clause 2
+   and leave the conversion for later.
+
+**Rationale.** The canvas is a flex child above a log that GROWS as commands are echoed, so its
+CSS height changes with no window `resize` behind it. Entry 0089 sized the backing store once at
+startup, before the first log line was drawn — so the mismatch existed from the first frame and
+widened for the first nine lines. The browser scales the backing store to fit the box, which means
+the picture stays plausible while every click is displaced by the ratio: the failure looks like
+bad hit-testing, and `hittest.ts` is where the next reader would go looking. Re-reading the size
+per paint costs one layout read per frame, which Rule 5 does not trade correctness for.
+
+---
+
+## D-087 — A degenerate extent (D-066) is one with BOTH axes zero. A FLAT extent is fitted to its one real axis
+Answers: 0090-REVIEW F2
+Ruled: entry 0090-REVIEW-phase3 (reviewer)   Binding on: `main.ts`'s `fit`, and any later reader
+of `render/hittest.ts`'s `documentExtent`
+
+**Ruling.** `fit` treats an extent as degenerate only when its width AND its height are zero — one
+point. An extent with one zero axis (a `rect` of zero height, a run of collinear vertices, a single
+row of a future polyline) is FITTED, to the axis it has, and is never described as a point.
+
+**Rationale.** D-066 asked for a guard against dividing the viewport by a zero extent, and entry
+0089 built one that fired on either axis. The arithmetic did not need it to: dividing by a zero
+axis yields `Infinity`, and the `Math.min` against the other axis discards it, so a flat extent
+already fits correctly. The over-broad guard cost a real behaviour and produced a false message —
+verified at review, `rect x=0 y=0 w=200 h=0` then `fit` reported "the document's extent is a single
+point" about a rect two hundred units wide. A message that names the wrong shape is worse than no
+message; §5.10's whole debugging story is that every line names what it is talking about.
+
+**Reconciliation required:** none — applied and pinned by a test at 0090-REVIEW.

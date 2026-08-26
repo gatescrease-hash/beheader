@@ -242,6 +242,20 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
     expect(state.log[state.log.length - 1]).toContain("single point");
   });
 
+  it("fits a FLAT extent to its one real axis instead of calling it a point (0090-REVIEW F2)", () => {
+    // `rect w=200 h=0` is legal — no creation handler bounds a rect's size — and
+    // its extent has width but no height. That is not D-066's degeneracy: there
+    // is an axis to fit to, and a guard demanding BOTH axes refused it and
+    // reported "a single point", which was also untrue.
+    let state = typed(opened(), "rect x=0 y=0 w=200 h=0");
+    const zoomBefore = state.document.camera.zoom;
+    state = typed(state, "fit");
+    expect(state.document.camera.zoom).toBe((VIEWPORT.width * 0.9) / 200);
+    expect(state.document.camera.zoom).not.toBe(zoomBefore);
+    expect(worldToScreen(state.document.camera, { x: 100, y: 0 })).toEqual({ x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 });
+    expect(state.log[state.log.length - 1]).not.toContain("single point");
+  });
+
   it("says so, and moves nothing, when objects exist but none of them draws anything", () => {
     // Reachable only through a document this build did not create by command —
     // `text` has no schema yet. It is the other emptiness `documentExtent`

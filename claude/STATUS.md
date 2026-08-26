@@ -1,34 +1,39 @@
-# STATUS — as of entry 0089
+# STATUS — as of entry 0090-REVIEW
 
-STATE: **GREEN.** Both configs compile, 1125/1125 tests pass, 0 skipped, 0 `.only`, `npm run build`
-succeeds. Entry 0089 (`main.ts` — the application, and every effect performed) is **built and NOT
-yet reviewed.**
+STATE: **GREEN.** Both configs compile, 1126/1126 tests pass, 0 skipped, 0 `.only`, `npm run build`
+succeeds. Entry 0089 (`main.ts` — the application, and every effect performed) is **reviewed:
+0090-REVIEW-phase3, ACCEPT WITH EDITS**, four findings, all four fixed in that review.
 
-Current phase: **3 — canvas, camera, geometry, command line.** **Phase 3's criterion is claimed,
-with three qualifications, and needs the gate review** (§6.1 trigger 1). The application exists: a
-typed line reaches a handler, the handler's document is drawn, the wheel zooms to the cursor, a
-middle-drag pans, a click selects, a drag moves — all demonstrated end to end by
-`src/main.test.ts`'s "Phase 3's acceptance criterion" block.
+Current phase: **3 — canvas, camera, geometry, command line.** **The criterion is ACCEPTED as
+engineering and the gate is CONDITIONALLY OPEN: Phase 4 may not begin until a human has run the app
+once and written down what they saw (D-084).** No implementer cycle can discharge that. The
+application exists: a typed line reaches a handler, the handler's document is drawn, the wheel zooms
+to the cursor, a middle-drag or space-drag pans, a click selects, a drag moves — all demonstrated end
+to end by `src/main.test.ts`'s "Phase 3's acceptance criterion" block.
 
-Last review point: **0088-REVIEW-phase3, ACCEPT WITH EDITS.**
-Cycles since last review: **1/3** · diff since last review: **~1438 lines / 7 files** — **over the
-800/10 cap**, and the phase gate fires regardless.
+Last review point: **0090-REVIEW-phase3, ACCEPT WITH EDITS.**
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
 
 ## Read this first — the four things a cold reader needs
 
-**1. Phase 3's criterion is demonstrated by a TEST and has never been seen by a human.** There is no
-browser in the implementer's environment. `main.test.ts` asserts the draw calls `renderer.ts` makes
-(the polygon's stroked path, the table's nine stroked cell rects), the camera after a pan/zoom, the
-selection after a click on the polygon's stroke, and the moved `origin.x` after a drag. It does not
-assert pixels. The manual check — open the dev server, type `polygon sides=5 x=100 y=100 r=50` and
-`table x=300 y=100 rows=3 cols=3`, wheel, middle-drag, click the outline, drag — is **owed and
-undone**. Two further qualifications: **a selection draws nothing** (D-068 defers all three feedback
-pieces to one later cycle) and **interior clicks miss** (stroke-only hit-testing, ruled fine for
-this gate by D-067 clause 2).
+**1. The gate needs one human run, and that is the only thing between here and Phase 4 (D-084).**
+`main.test.ts` asserts the draw calls `renderer.ts` makes (the polygon's stroked path, the table's
+nine stroked cell rects), the camera after a pan/zoom, the selection after a click on the polygon's
+stroke, and the moved `origin.x` after a drag. It does not assert pixels, and nobody has looked. The
+owed check: open the dev server, type `polygon sides=5 x=100 y=100 r=50` and
+`table x=300 y=100 rows=3 cols=3`, wheel, middle-drag, click the outline, drag — then write down what
+you saw, including nothing. **Why this is now a binding rule and not a nicety: all four of
+0090-REVIEW's findings were in the untested DOM half, and all four were things a single click would
+have shown** (a canvas whose backing size never matched its CSS size, so every click landed off the
+picture; a space-drag pan that could not fire; a fragile `save`). Two standing qualifications on what
+that run will show: **a selection draws nothing** (D-068 defers all three feedback pieces to one
+later cycle) and **interior clicks miss** (stroke-only hit-testing, ruled fine for this gate by D-067
+clause 2).
 
 **2. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
 it (`submitLine`, `performEffect`, `pointerDownAt`, `pointerMoveTo`, `wheelZoomAt`, `panByScreen`,
-`escape`, `replaceDocument`, …) are pure, take plain numbers plus a `Viewport`, and have 35 tests.
+`escape`, `replaceDocument`, …) are pure, take plain numbers plus a `Viewport`, and have 36 tests.
+**All four of 0090-REVIEW's findings were in the OTHER half.**
 `start` — the canvas, the listeners, the log element, the file picker, the download anchor — has
 **none**, because testing it needs a DOM and that needs a dependency this project will not add. The
 bottom of the file is guarded on `typeof document`, which is what lets the test file import the
@@ -39,7 +44,8 @@ nothing in this repo will say so.**
 `kind` with the `never` default. `select` uses the ID it was handed and resolves no name; `zoom`
 multiplies the current zoom about the VIEWPORT CENTRE (a typed factor has no cursor) and reports the
 CLAMPED result; `fit` places the extent's centre at the screen's centre and guards D-066's
-degenerate case itself; `save`/`load` come back out as a `fileRequest` the DOM half performs. The
+degenerate case itself — a POINT, both axes zero, since **D-087**; `save`/`load` come back out as a
+`fileRequest` the DOM half performs. The
 camera is written directly through ONE function and never through `mutate` (D-027 clause 2).
 
 **4. `load` is wired, and that makes an unbuilt check user-reachable.** Before this cycle nothing
@@ -53,18 +59,20 @@ either). Nothing this build SAVES can contain such an AST — `parser.ts` refuse
 `NOT`, `TRUE`, `FALSE` lex as formula keywords and `checkNameAvailable` refuses them in every case
 (**D-080**). Function names are safe and are NOT reserved.
 
-## Next slice — the human's call between two
+## Next slice — ruled, not a choice
 
-- **§5.9's visual feedback trio** (**D-068**): selection highlight, error badge, formula-driven
-  indicator, together, in `renderer.ts`, with `renderDocument` widened to carry the selection. That
-  cycle owns the transform reset before screen-space chrome. This is what makes `select` visible and
-  closes the gate's second qualification.
-- **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
-  `createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then). This
-  is what closes item 4 above.
+**§5.9's visual feedback trio** (**D-068**): selection highlight, error badge, formula-driven
+indicator, together, in `renderer.ts`, with `renderDocument` widened to carry the selection. That
+cycle owns the transform reset before screen-space chrome. 0090-REVIEW §10 puts it first for one
+reason beyond its own merit: it is the last piece that changes what **D-084**'s owed human run will
+show, so doing it first means that run is worth performing once instead of twice.
 
-Either is a full slice. `document.ts` is load-bearing (§6.2), so the second one cannot start while
-this cycle's changes are unreviewed.
+**Then §5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
+`createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then). This is
+what closes item 4 above. `document.ts` is load-bearing (§6.2) and this review has landed, so it is
+unblocked whenever it is reached.
+
+**Neither is Phase 4.** Phase 4 does not begin until D-084 clause 2 is recorded in a numbered entry.
 
 ## Built and reviewed
 
@@ -80,13 +88,15 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
 `rename` handler (0084) · `CommandEffect` and the five effect handlers (0086) · the two formula depth
 limits (0088).
 
-## Built this batch, not yet reviewed
+## Reviewed at 0090-REVIEW (ACCEPT WITH EDITS)
 
 **Entry 0089 — `main.ts`, and the two render/ additions it needed.**
 
 - **`src/main.ts`** — rewritten from the stub. The pure half (`AppState` + transitions) and the DOM
   half (`start`, the download anchor, the file picker), split so the rules are testable and the
-  browser is not. 35 tests in `src/main.test.ts`.
+  browser is not. 36 tests in `src/main.test.ts`. 0090-REVIEW fixed four defects: the canvas
+  backing size (F1, **D-086**), `fit`'s over-broad degeneracy guard (F2, **D-087**), the unreachable
+  space-drag (F3, **D-085**), and the download anchor (F4).
 - **`src/render/camera.ts`** — `clampCamera` (D-062's boundary, in one function) and `clampZoom`
   exported with its signature changed to `(requestedZoom, fallbackZoom)`, because `fit` must know
   the clamped zoom before it can place a camera. `IDENTITY_ZOOM` exported. Two header claims the
@@ -96,7 +106,7 @@ limits (0088).
   Degenerate extents are skipped exactly as they are un-hittable.
 - **`index.html`** — canvas, log, input bar, minimal CSS. No behaviour.
 
-Verified: `tsc` clean on both configs, 1125/1125, `npm run build` succeeds, and a five-mutant check
+Verified at review, re-run not re-read: `tsc` clean on both configs, 1126/1126, `npm run build` succeeds. Entry 0089's own five-mutant check
 against `main.ts` (each seeded alone, reverted after) killed 1, 1, 6, 1 and 3 tests respectively.
 
 ## Not started
@@ -113,9 +123,11 @@ reaching the LOG rather than the canvas. What is missing for the gate is all thr
 with the on-canvas feedback D-068 owns — and §6 forbids starting Phase 4 before Phase 3's criterion
 passes review.
 
-## Open fix list — **read 0088-REVIEW §9 for the full text**
+## Open fix list — **read 0090-REVIEW §9 for the full text**
 
-Numbering follows 0088-REVIEW §9.
+Numbering follows 0090-REVIEW §9, which restarted it. Old item 5 (the ~200 KB echo) is **CLOSED by
+ruling** — the line stays as typed, and it is not a defect; 0090-REVIEW §9 has the reasoning and the
+one condition that would reopen it.
 
 1. **§5.11's loader validates a loaded formula's AST depth once, at the boundary** (**D-083**
    clause 4). `deps.ts` and `eval.ts` get no depth parameter. **Now user-reachable** — entry 0089
@@ -127,11 +139,7 @@ Numbering follows 0088-REVIEW §9.
    formula repeats the same sentence a thousand times. `mutation.ts`; owned by the cycle that opens
    that function.
 4. **`zoom`'s refusal names `Infinity` rather than what was typed.** Message only.
-5. **A single command can echo a ~200 KB line.** Entry 0089 answered this by **doing nothing**, and
-   says why in its decision 6: the log is a `textContent` write and the line is the true echo of what
-   was typed. Truncating it would be this codebase's first silently shortened message; a reviewer
-   should rule rather than an implementer invent an ellipsis policy.
-6. **Carried from 0074-REVIEW §9, all six unchanged, none blocking:** (1) D-074's refused prompt
+5. **Carried from 0074-REVIEW §9, all six unchanged, none blocking:** (1) D-074's refused prompt
    answer · (2) the usage line for the form a prompting command was used in · (3) what a quoted
    command WORD means · (4) disclose 0074-REVIEW F4's two message changes and test (a) · (5)
    `set = x`'s self-contradictory message · (6) `parser.ts`'s header restating D-069 · the twelve
@@ -141,8 +149,11 @@ Numbering follows 0088-REVIEW §9.
 ## Known problems (detail lives where the pointer says)
 
 - **`main.ts`'s `start` is untested code** — every listener, the canvas sizing, the log rewrite, the
-  download anchor and the file picker. Minimised, not solved. Entry 0089, "where I got stuck".
-- **No human has seen this application run.** See cold-read item 1.
+  download anchor and the file picker. Minimised, not solved. Entry 0089, "where I got stuck", and
+  **0090-REVIEW found four defects there and none anywhere else.** Treat a change to that region as
+  unverified until someone clicks on it.
+- **No human has seen this application run**, and **D-084** now makes that a gate condition rather
+  than a regret. See cold-read item 1.
 - **A selection changes nothing on screen** (D-068), and **an error badge and the formula-driven
   indicator do not exist** either. All three are one cycle's work.
 - **A hand-edited saved file can throw a `RangeError` out of the Load button** — fix-list item 1.
@@ -197,13 +208,24 @@ Numbering follows 0088-REVIEW §9.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-083**) binds without restatement here. The ones
-this cycle implemented: **D-075** and **D-082** (an effect is data; `main.ts` performs it through an
+Every ruling in `DECISIONS.md` (D-001 through **D-087**) binds without restatement here.
+
+**New at 0090-REVIEW, all four already applied in code:** **D-084** (Phase 3's gate is cleared only
+by a human run, recorded in a numbered entry — no implementer cycle may claim it) · **D-085**
+(§5.9's space-drag arms on a space while the input bar is EMPTY, and `target !== input` is never an
+acceptable guard for a global key, because §5.10 makes the input the target of everything) ·
+**D-086** (one canvas backing pixel is one CSS pixel, re-read before every paint; a future
+device-pixel-ratio cycle must add the conversion at `screenPointOf` in the same change) · **D-087**
+(a degenerate extent is a POINT — both axes zero; a FLAT extent is fitted to the axis it has, and is
+never described as a point).
+
+The ones entry 0089 implemented: **D-075** and **D-082** (an effect is data; `main.ts` performs it through an
 exhaustive switch and resolves no name) — **now implemented end to end, clauses 3 and 4 included** ·
 **D-062** (a loaded camera is clamped in `render/`, at the boundary) — **implemented as
 `clampCamera`, called by `main.ts` at every document replacement** · **D-061** (`camera.x`/`.y` is the
 world point at the screen's TOP-LEFT corner) — the convention `fit`'s arithmetic is written against ·
-**D-066** (a degenerate extent needs its OWN guard) — `fit`'s single-point branch · **D-072** (a pick
+**D-066** (a degenerate extent needs its OWN guard) — `fit`'s single-point branch, narrowed to a
+true point by **D-087** · **D-072** (a pick
 is a prompt answer, as a WORLD point) · **D-027 clause 2** (the camera never goes through `mutate`).
 
 Still owed, unchanged: **D-074** (a prompt sequence's own refusal IS the message) · **D-081**
@@ -264,3 +286,13 @@ Next free: **Q-014**.
   real changes. `.gitattributes` is still owed (fix list).
 - **Do NOT report the LENGTH of anything (D-076)** — the one surviving rule is `WHAT THIS IS` capped
   at 15 lines, binding new and edited headers only.
+- **A global key handler may NOT be guarded on `event.target !== input` (D-085).** §5.10 focuses the
+  input bar at startup and again after every canvas press, so that test is false essentially never
+  and any gesture behind it is dead code that compiles, tests green, and does nothing.
+- **One canvas backing pixel is one CSS pixel, and `paint()` is what keeps it true (D-086).** The
+  canvas is a flex child above a log that GROWS, so its CSS size changes with no `resize` event
+  behind it. If a click ever seems to land in the wrong place, this is the first thing to check and
+  `hittest.ts` is the wrong place to look.
+- **`Infinity` is not always a bug in `fit`'s arithmetic.** Dividing the viewport by a zero extent
+  yields it, and the `Math.min` against the other axis discards it — which is why D-087's degeneracy
+  is BOTH axes and not either.
