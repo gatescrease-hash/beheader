@@ -2340,3 +2340,60 @@ not generalise.
 Reconciliation required: none outstanding. The three live sites were corrected at 0080-REVIEW;
 `formula/parser.ts`'s two carry the exception until 0080-REVIEW fix-list item 1 puts the depth limit
 in, which makes the original claim true again rather than merely qualified.
+
+---
+
+## D-079 — A stack-depth measurement is an OBSERVATION, not a bound. Set a recursion limit from a constant, never from a probe
+Answers: the finding at 0082-REVIEW (no `Q-NNN` was raised; this is a defect in what two entries
+concluded from a real measurement, not an ambiguity in the brief)
+Ruled: entry 0082-REVIEW-phase3 (reviewer)   Binding on: `formula/parser.ts`, `formula/format.ts`,
+and every future recursive walk over user-authored data
+
+**Ruling.**
+
+1. **A measured recursion depth records that a throw was SEEN at that size, in that process,
+   after whatever else had already run.** It never licenses "below N is safe" and is never quoted
+   as a bound. State it as what it is: a size at which the throw was observed.
+2. **Every depth limit is a FIXED CONSTANT, chosen well below the smallest depth ever observed to
+   fail, and pinned by a test on the constant itself.** It is NOT derived from a measurement and
+   NOT raised because a probe got further once. For `formula/parser.ts` and `format.ts` today that
+   constant is at or below **1,000** nesting levels.
+3. **D-078 clause 3 is satisfied for a stack-depth property by saying the depth is not fixed** and
+   naming the smallest observed failure. A qualified claim that names one number as THE bound
+   ("never throws below ~5,000 levels") is still a false claim, and is the form both live sites
+   currently carry — fix-list item 1 replaces them with the constant.
+4. **The limit is the fix.** A bigger interpreter stack is not (this project ships no runtime
+   flags), and converting a recursive descent into an explicit loop is a separate change needing
+   its own review — Rule 5 does not ask for it and nothing in the brief does.
+
+**Rationale.** Entry 0079 measured a `RangeError` at ~5,000 terms of `1 + 1 + …`; entry 0081
+measured one at ~3,000 terms of `table_1.B1 + table_1.B1 + …` and concluded that the depth
+"depends on what the terms are, not just how many" — reasonable, and it became STATUS's standing
+instruction to *set the limit from the worst term*. Both measurements reproduce exactly. The
+conclusion does not survive one more probe:
+
+```
+ladder 1000 -> 3000:                 3000 x "table_1.B1"   THREW
+ladder 1000 -> 2000 -> 2500 -> 3000: 3000 x "table_1.B1"   COMMITTED,  4000 THREW
+ladder 1000 -> ... -> 5000:          6000 x "table_1.B1"   COMMITTED
+cold, same size, next process:       6000 x "table_1.B1"   THREW
+```
+
+The same formula both commits and throws in the same process depending only on what parsed before
+it: the stack depth a V8 frame costs moves with how the function was compiled at the moment of the
+call, so the failure point is a property of the runtime's state, not of the input. A limit set at
+"3,000, from the worst term" is a limit that still throws.
+
+**Why a ruling and not a finding.** This is the fourth cycle in a row on the never-throws shape
+(0074-REVIEW F1, D-077, D-078, and now this), and each previous ruling made the NEXT step right:
+D-077 clause 2 made the probe mandatory, and the probe found the throw; D-078 made one probe
+correct every claim on its call path. What neither says is what a measurement may be USED for
+afterwards. A number that was expensively earned is the most tempting thing in the log to build
+on, and the next cycle is about to build a depth limit. 1,000 terms committed in every run at
+0082-REVIEW, of both term shapes, cold and warm; that is the kind of number a constant may be set
+from — the floor everything survived, not the ceiling something died at.
+
+Reconciliation required: none outstanding, and no `PROVISIONAL` tag. `formula/parser.ts` and
+`formula/format.ts` carry qualified never-throws claims naming a measured band (D-078 clause 3);
+0080-REVIEW fix-list item 1, as restated at 0082-REVIEW §9, replaces both with the constant this
+ruling requires.

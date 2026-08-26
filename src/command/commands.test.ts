@@ -299,7 +299,7 @@ describe("the arms with no handler yet", () => {
     expect([...COMMANDS_WITH_HANDLERS, ...UNHANDLED_EXAMPLES.map((example) => example.word)].sort()).toEqual([...COMMAND_NAMES].sort());
   });
 
-  /** Every §5.10 example line the registry can parse — the twelve above plus the seven this file now runs. Fix list item 1 of 0078-REVIEW: the sweep below claimed the registry and covered six. */
+  /** Every §5.10 example line the registry can parse: one per command this file runs, plus `UNHANDLED_EXAMPLES`'s. Counted nowhere — the second test below pins it against `COMMAND_NAMES`, which is what 0078-REVIEW fix list item 1 asked for after a hand-written sweep claimed the registry and covered six. */
   const EVERY_REGISTRY_EXAMPLE: readonly string[] = [
     "circle x=0 y=0 r=1",
     "polygon sides=3 x=0 y=0 r=1",
@@ -674,14 +674,14 @@ describe("delete, refs and list — the object commands that need no new Operati
 
     it("counts other objects' dependents apart from the target's own, because only the first kind can block a delete (§5.1.1)", () => {
       const reported = lines("refs table_1", wired());
-      expect(reported[reported.length - 1]).toBe("1 inbound dependent: 1 on other objects, 0 on table_1 itself");
+      expect(reported[reported.length - 1]).toBe("1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself");
     });
 
     it("reports a preset's own schema wiring rather than hiding it — its derived slots do read its parameters", () => {
       const reported = lines("refs polygon_1", sandbox());
       // Five parameter slots feed `vertices`, and `vertices` feeds the eight slots
       // `verticesDerivedSlots` bundles (centroid.x/y, area, length, bounds.*).
-      expect(reported[reported.length - 1]).toBe("13 inbound dependents: 0 on other objects, 13 on polygon_1 itself");
+      expect(reported[reported.length - 1]).toBe("13 inbound edges from 9 dependent slots: 0 on other objects, 9 on polygon_1 itself");
       expect(reported).toContain("polygon_1.origin.x → polygon_1.vertices");
       expect(reported).toContain("polygon_1.vertices → polygon_1.centroid.x");
     });
@@ -689,13 +689,13 @@ describe("delete, refs and list — the object commands that need no new Operati
     it("answers about ONE slot when given an address, not the whole object", () => {
       expect(lines("refs polygon_1.origin.x", sandbox())).toEqual([
         "polygon_1.origin.x → polygon_1.vertices",
-        "1 inbound dependent: 0 on other objects, 1 on polygon_1 itself",
+        "1 inbound edge from 1 dependent slot: 0 on other objects, 1 on polygon_1 itself",
       ]);
     });
 
     it("accepts a DERIVED slot as a target — reading who depends on a computed value is not an attempt to write it (§5.1)", () => {
       const reported = lines("refs polygon_1.vertices", sandbox());
-      expect(reported[reported.length - 1]).toBe("8 inbound dependents: 0 on other objects, 8 on polygon_1 itself");
+      expect(reported[reported.length - 1]).toBe("8 inbound edges from 8 dependent slots: 0 on other objects, 8 on polygon_1 itself");
     });
 
     it("says nothing references a target rather than printing an empty report", () => {
@@ -711,7 +711,19 @@ describe("delete, refs and list — the object commands that need no new Operati
       const twice = committed("set table_1.B1 = table_1.A1 + table_1.A1", committed("set table_1.A1 2", sandbox()));
       expect(lines("refs table_1.A1", twice)).toEqual([
         "table_1.A1 → table_1.B1",
-        "1 inbound dependent: 0 on other objects, 1 on table_1 itself",
+        "1 inbound edge from 1 dependent slot: 0 on other objects, 1 on table_1 itself",
+      ]);
+    });
+
+    it("counts EDGES and SLOTS apart where one slot reads two slots of the target, because only the slot count says how much unlinking a delete needs (§5.1.1)", () => {
+      const both = committed(
+        "set polygon_1.origin.x = table_1.A1 + table_1.A2",
+        committed("set table_1.A2 7", committed("set table_1.A1 5", sandbox())),
+      );
+      expect(lines("refs table_1", both)).toEqual([
+        "table_1.A1 → polygon_1.origin.x",
+        "table_1.A2 → polygon_1.origin.x",
+        "2 inbound edges from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
       ]);
     });
 
@@ -753,7 +765,7 @@ describe("delete, refs and list — the object commands that need no new Operati
       it("is reported by refs, because it is the edge the deletion would leave dangling", () => {
         expect(lines("refs table_1", rangeReader())).toEqual([
           "table_1.A1 → table_2.A1",
-          "1 inbound dependent: 1 on other objects, 0 on table_1 itself",
+          "1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
         ]);
       });
 
@@ -814,6 +826,15 @@ describe("delete, refs and list — the object commands that need no new Operati
 
     it("refuses a name no object has", () => {
       expect(refused("delete nosuch", sandbox())).toBe('no object named "nosuch"');
+    });
+
+    it("treats an EXTERNAL formula reading a DERIVED slot exactly like any other reference — refused, then repaired under force (entry 0081's disclosed gap, pinned at 0082-REVIEW)", () => {
+      const readsDerived = committed("set table_1.A1 = polygon_1.area", sandbox());
+      expect(lines("refs polygon_1", readsDerived)[0]).toBe("polygon_1.area → table_1.A1");
+      expect(refused("delete polygon_1", readsDerived)).toContain("table_1.A1 references a slot that does not exist");
+      const repaired = committed("delete polygon_1 force", readsDerived);
+      const cell = named(repaired, "table_1");
+      expect(cell === undefined ? undefined : getSlot(cell, ["cells", "A1"])?.value).toEqual({ error: "#REF", message: expect.any(String) });
     });
 
     it("appends exactly one journal entry holding one deleteObject operation (Rule 2)", () => {

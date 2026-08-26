@@ -759,25 +759,40 @@ function refs(command: RefsCommand, document: Document): CommandOutcome {
 
   const own = current.onTarget;
   const others = afterRemoval.elsewhere;
-  const total = own.length + others.length;
-  if (total === 0) {
+  if (own.length + others.length === 0) {
     return { ok: true, document, lines: [`nothing references ${displayName}`] };
   }
+  // Two counts, because they differ and only one of them answers the question §5.1.1
+  // asks. `polygon_1.origin.x = table_1.A1 + table_1.A2` is TWO inbound edges and ONE
+  // slot to unlink, so the split counts SLOTS; the lines above are edges, one per line,
+  // which makes both numbers checkable against the report they summarise (0082-REVIEW).
+  const ownSlots = current.onTargetSlotCount;
+  const otherSlots = afterRemoval.elsewhereSlotCount;
   return {
     ok: true,
     document,
     lines: [
       ...others,
       ...own,
-      `${countedNoun(total, "inbound dependent")}: ${others.length} on other objects, ${own.length} on ${target.object.name} itself`,
+      `${countedNoun(others.length + own.length, "inbound edge")} from ${countedNoun(otherSlots + ownSlots, "dependent slot")}: ${otherSlots} on other objects, ${ownSlots} on ${target.object.name} itself`,
     ],
   };
 }
 
-/** One `refs` report's two halves: the dependents that sit on the target's own object, and the dependents that sit anywhere else. */
+/**
+ * One `refs` report's two halves: the dependents that sit on the target's own object,
+ * and the dependents that sit anywhere else.
+ *
+ * Each half carries its LINES — one per edge — and the number of distinct dependent
+ * SLOTS those lines name. The two numbers differ whenever one slot reads two slots of
+ * the target, and the slot count is the one an operator acts on: it is how many slots
+ * have to be unlinked before a `delete` stops being refused (§5.1.1).
+ */
 interface PartitionedDependents {
   readonly onTarget: readonly string[];
   readonly elsewhere: readonly string[];
+  readonly onTargetSlotCount: number;
+  readonly elsewhereSlotCount: number;
 }
 
 /**
@@ -792,6 +807,8 @@ interface PartitionedDependents {
 function partitionDependents(edges: readonly Edge[], target: RefsTarget, objects: readonly GraphObject[]): PartitionedDependents {
   const onTarget: string[] = [];
   const elsewhere: string[] = [];
+  const onTargetSlots = new Set<string>();
+  const elsewhereSlots = new Set<string>();
   const seen = new Set<string>();
   for (const edge of edges) {
     if (!edgeReadsTarget(edge.sourceSlot, target)) {
@@ -807,9 +824,15 @@ function partitionDependents(edges: readonly Edge[], target: RefsTarget, objects
     }
     seen.add(identity);
     const line = `${formatSlotAddress(edge.sourceSlot, objects)} → ${formatSlotAddress(edge.dependentSlot, objects)}`;
-    (edge.dependentSlot.objectId === target.object.id ? onTarget : elsewhere).push(line);
+    if (edge.dependentSlot.objectId === target.object.id) {
+      onTarget.push(line);
+      onTargetSlots.add(addressKey(edge.dependentSlot));
+    } else {
+      elsewhere.push(line);
+      elsewhereSlots.add(addressKey(edge.dependentSlot));
+    }
   }
-  return { onTarget, elsewhere };
+  return { onTarget, elsewhere, onTargetSlotCount: onTargetSlots.size, elsewhereSlotCount: elsewhereSlots.size };
 }
 
 /** Whether one edge's source slot is the thing `refs` was asked about — the whole object, or the one slot. */
@@ -902,7 +925,7 @@ function formatSlotAddress(address: Address, objects: readonly GraphObject[]): s
   return isAddressError(formatted) ? formatted.message : formatted;
 }
 
-/** `1 formula` / `2 formulas` — pluralised once, because two messages here count something and a per-site `+ "s"` is two chances to disagree. */
+/** `1 formula` / `2 formulas` — pluralised once, because several messages here count something and a per-site `+ "s"` is one chance to disagree per site. */
 function countedNoun(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }

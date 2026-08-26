@@ -1,7 +1,8 @@
-# STATUS — as of entry 0081
+# STATUS — as of entry 0082-REVIEW
 
-STATE: **GREEN.** Both configs compile, 1003/1003 tests pass, 0 skipped, 0 `.only`. Entry 0081 is
-**built and NOT yet reviewed** — it fired §6.1 trigger 5, so a review point is open.
+STATE: **GREEN.** Both configs compile, 1005/1005 tests pass, 0 skipped, 0 `.only`. Entry 0081 is
+**reviewed and accepted with edits** (0082-REVIEW). Nothing is unreviewed; the next cycle starts
+clean.
 
 Current phase: **3 — canvas, camera, geometry, command line.** A typed line can now CREATE the four
 objects, WIRE them (`set`, `set <address> = <formula>`, `link`, `unlink`), and now READ and REMOVE
@@ -10,20 +11,21 @@ no pixel has ever come out of this project.** Phase 3 criterion (§6): *"create 
 command, see both drawn, pan/zoom, select, and drag the polygon."* The engine half is done and tested;
 the visible half is untested and unbuilt. NOT claimed.
 
-Last review point: **0080-REVIEW-phase3, ACCEPT WITH EDITS.**
-Cycles since last review: **1/3** · diff since last review: **522 lines / 2 files** (cap 800/10).
+Last review point: **0082-REVIEW-phase3, ACCEPT WITH EDITS.**
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
 
 ## Read this first — the two things a cold reader needs
 
-**1. `executeCommand` THROWS on one typed line, and the band is NOT a constant.** A formula whose AST
-nests too deep exhausts the stack inside `formula/parser.ts`'s recursive descent and a `RangeError`
-unwinds out of the command line; `formatFormula` fails at the same depth. Entry 0079 measured
-**~5,000 terms of `1 + 1 + …`**; entry 0081 measured **~3,000 terms of `table_1.B1 + table_1.B1 + …`**.
-**The depth depends on what the terms are, not just how many** — a reference costs more stack than a
-literal. 0080-REVIEW's fix-list item 1 owns this (a depth limit in the parser returning `#PARSE`, plus
-the same guard on `format.ts`'s recursion for the loaded-file path). **Set the limit from the worst
-term, not from entry 0079's number.** Take it before `main.ts`: a `RangeError` out of a canvas repaint
-is far harder to attribute than one out of a command line.
+**1. `executeCommand` THROWS on one typed line, and NO measurement bounds it (D-079).** A formula whose
+AST nests too deep exhausts the stack inside `formula/parser.ts`'s recursive descent and a `RangeError`
+unwinds out of the command line; `formatFormula` fails the same way. Entry 0079 saw it at ~5,000 terms
+of `1 + 1 + …`, entry 0081 at ~3,000 terms of `table_1.B1 + …`, and 0082-REVIEW showed **the same
+formula committing and throwing in one process depending only on what parsed before it** — the depth a
+V8 frame costs moves with how the function was compiled. So the band is not a property of the terms
+either. Fix-list item 1 owns this: a depth limit in the parser returning `#PARSE`, the same guard on
+`format.ts`'s recursion for the loaded-file path, **and the limit set from a FIXED CONSTANT at or below
+1,000 nesting levels — never from any of these numbers** (D-079 clause 2). Take it before `main.ts`: a
+`RangeError` out of a canvas repaint is far harder to attribute than one out of a command line.
 
 **2. `refs` had to simulate the deletion, and the reason is not obvious.** `refs <object>` derives its
 blocking half over the document **without** that object, because a range over cells nobody has written
@@ -48,7 +50,13 @@ entry 0081, after twelve tests over the wrong version had passed. Do not "simpli
    with screen→world done by `camera.ts` before it reaches `command/`.
 
 The parser depth limit (fix-list item 1) is its own small slice and blocks nothing else — but take it
-BEFORE step 3, per 0080-REVIEW F3.
+BEFORE step 3, per 0080-REVIEW F3, and set it from **D-079**'s constant rather than from any of the
+measured bands.
+
+**`rename` touches `mutation.ts`, a load-bearing file.** That does not force an immediate stop by
+itself (§6.1's triggers are about new subsystems, deviations and broken rules, none of which a new
+`Operation` kind fires on its own) — but §6.2 keeps Phase 4 shut until the review that follows it,
+so say so in the log entry.
 
 ## Built and reviewed
 
@@ -59,11 +67,14 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
 `command/prompt.ts` + D-071's formula path (0071) · entries 0072–0073's fix-list work (0074) ·
 `command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`, and
 `TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · `commands.ts`'s four slot commands through one
-`writeSlot` path, and `engine/formula/format.ts` (0080).
+`writeSlot` path, and `engine/formula/format.ts` (0080) · `commands.ts`'s `delete`, `refs` and `list`
+(0082).
 
 ## Built this batch, not yet reviewed
 
-**Entry 0081 — `command/commands.ts`'s `delete`, `refs` and `list` handlers.** No engine file changed.
+**Nothing.** The batch closed at 0082-REVIEW.
+
+### What entry 0081 built, and what 0082-REVIEW changed in it
 
 - **`delete <object> [force]`** — resolves the name, builds one `DeleteObjectOperation` carrying the
   flag, calls `mutate`. It chooses **neither** of §5.1.1's two paths; the flag selects them inside
@@ -80,7 +91,14 @@ entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.t
 - Both read-only commands return the document they were given **by identity** and journal nothing,
   which is why D-075 clause 4 gives them no `effect`.
 - 29 new tests, 3 removed (the `"<word>" has no handler yet` ones), **twelve mutation checks, all
-  caught**, and a D-077 clause 2 size probe at `rows=1000 cols=1000` plus the deep-formula band.
+  caught** (0082-REVIEW re-ran two of them and got the same counts), and a D-077 clause 2 size probe at
+  `rows=1000 cols=1000` plus the deep-formula band.
+- **0082-REVIEW's edits, all in `commands.ts` and its test:** `refs`'s summary carries TWO counts —
+  `2 inbound edges from 1 dependent slot: 1 on other objects, 0 on table_1 itself` — because the lines
+  are edges and the number an operator acts on is the count of distinct dependent SLOTS (it said
+  `2 inbound dependents` for one slot). Plus a test pinning the two counts apart, a test for the
+  external-formula-reads-a-derived-slot case entry 0081 left open, and a stale count comment rewritten.
+  **The `refs` DESIGN was not touched** — only what its last line claims.
 
 ## Not started
 
@@ -95,17 +113,25 @@ close" block. (c) partial binding under DRAG exists in `render/interaction.ts` (
 all three in ONE document, which is what "simultaneously" requires — and §6 forbids starting a phase
 before its predecessor's criterion passes, which Phase 3's has not.
 
-## Open fix list — **read 0080-REVIEW §9 for the full text**
+## Open fix list — **read 0082-REVIEW §9 for the full text**
 
-1. **Depth-limit `formula/parser.ts`'s recursive descent** — return `#PARSE` past a fixed depth instead
-   of unwinding, guard `format.ts`'s recursion for the loaded-file path, then remove the exception
-   sentences the four sites now carry and pin the bound with a test. **Entry 0081 widened what this has
-   to cover** — see "Read this first" item 1. Blocks nothing; take it before `main.ts`.
+1. **Depth-limit `formula/parser.ts`'s recursive descent, from a CONSTANT** — return `#PARSE` past a
+   fixed depth instead of unwinding, guard `format.ts`'s recursion for the loaded-file path, then
+   remove the exception sentences the four sites now carry and pin the CONSTANT with a test. Set it at
+   or below **1,000** nesting levels and **never from a measurement** (**D-079**) — see "Read this
+   first" item 1. Blocks nothing; take it before `main.ts`.
 2. **Give the missing-slot refusal a remedy** — "references a slot that does not exist" is true and
    tells the operator nothing to do. Message only: **D-047 clause 4 does not move** (0080-REVIEW F4).
-   Note `delete` now does exactly this for its own refusal, and is the worked example.
+   Note `delete` now does exactly this for its own refusal, and is the worked example. The same message
+   is now also reachable from `refs`, where in D-046's formula-dimension corner its "object type X does
+   not declare one" clause is not the reason either (0082-REVIEW §4).
+3. **`findDanglingReferences` names one dependent once per MISSING SOURCE**, so `delete table_1` over
+   `polygon_1.origin.x = table_1.A1 + table_1.A2` says `polygon_1.origin.x references a slot that does
+   not exist; polygon_1.origin.x references a slot that does not exist`. Pre-existing in `mutation.ts`,
+   user-visible only since `delete` got a handler. Group by dependent, or dedupe within the message
+   (0082-REVIEW F4). Owned by the cycle that opens that function.
 
-**Carried from 0074-REVIEW §9 through 0080-REVIEW, all six unchanged, none blocking:** (1) report a
+**Carried from 0074-REVIEW §9 through 0082-REVIEW, all six unchanged, none blocking:** (1) report a
 refused prompt answer with the sequence's own message — **D-074**, the one with a ruling behind it ·
 (2) a usage line for the form a prompting command was used in, folded into 0069-REVIEW F3's sweep over
 all sixteen `usage` strings · (3) decide what a quoted command WORD means, and correct entry 0072's
@@ -116,8 +142,10 @@ consumer of `readNumber`/`asPointArray` · `.gitattributes`.
 
 ## Known problems (detail lives where the pointer says)
 
-- **`executeCommand` throws on a deep enough formula, and the band depends on the terms** — see the top
-  of this file. Owned by fix-list item 1.
+- **`executeCommand` throws on a deep enough formula, and nothing measured bounds it (D-079)** — see the
+  top of this file. Owned by fix-list item 1.
+- **A `delete` refusal can name the same dependent twice** — `mutate` groups by missing source. Fix-list
+  item 3; the handler's remedy sentence is appended once, correctly.
 - **`refs` names a range's START cell as the source** when the range's table is being removed, so the
   line reads `table_1.A1 → table_2.A1` for a formula that reads `A1:A4`. The DEPENDENT is right, which
   is what §5.1.1 asks to be named, and the source is a real address rather than an invented one — but
@@ -127,9 +155,10 @@ consumer of `readNumber`/`asPointArray` · `.gitattributes`.
 - **Two sites now ask the schema whether it declares a path** — `declaresSlotPath` and
   `resolveWritableSlot`'s inline check. Disclosed at entry 0081 under §4's no-refactor rule;
   `declaresSlotPath`'s doc names the condition for merging them and forbids a third site.
-- **No test covers an EXTERNAL formula reading a `derived` slot of an object that is then deleted.**
-  The repair path treats it as any plain reference, so it should behave, but nothing pins it
-  (entry 0081, the cheapest gap left).
+- **`refs <address>` REFUSES for a cell of a table whose `rows` is a formula** — D-046 reads a dimension
+  `literal`-only, so no cell is declared and the refusal's "object type `table` does not declare one" is
+  not the reason. `refs <object>` and `delete` still answer that document correctly, so the operator is
+  refused rather than misled. Fix-list item 2 (message only). Reachable only by `link`ing a dimension.
 - **A bare reference to an EMPTY cell is REFUSED.** `set table_1.A1 = table_1.B1` on a fresh table fails
   with "references a slot that does not exist", because creation makes no cell slots (D-047) and D-047
   clause 4 makes an absent cell fine inside a RANGE and not fine as a plain reference. **0080-REVIEW F4
@@ -183,7 +212,8 @@ slice after next · **D-076** a header's PROSE is capped at 15 lines and every o
 withdrawn — **length is not a finding, do not report it** · **D-077** a dynamic slot family's size is
 DOCUMENT STATE: never spread one into a call, and probe every "never throws" claim at the largest size
 the bounds allow · **D-078** a probe that falsifies a property falsifies EVERY claim of it on that call
-path.
+path · **D-079** a stack-depth measurement is an OBSERVATION, never a bound — a recursion limit is a
+fixed constant below the smallest observed failure, pinned by a test on the constant.
 
 **D-057 is IMPLEMENTED end to end as of entry 0081**: the channel was built at the `force` slice and
 now has a reader — `delete <object> force` reports every slot it broke. **D-040/D-041 are implemented**
@@ -205,8 +235,9 @@ Next free: **Q-014**.
 - **`delete` appends the remedy to `mutate`'s message rather than pre-checking.** The pre-check version
   was written and dropped: it is a second, weaker definition of §5.1.1 beside the real one, and it
   misses the range case above. If you add a destructive command, do the same.
-- **A measurement can be less general than it looks (D-078 clause 3).** Entry 0079's ~5,000-term band
-  and entry 0081's ~3,000-term band are the same defect at different term costs. State what you fed it.
+- **A measurement can be less general than it looks (D-078 clause 3, D-079).** Entry 0079's ~5,000-term
+  band and entry 0081's ~3,000-term band are the same defect, and 0082-REVIEW showed the same formula
+  landing on both sides of it in one process. State what you fed it, and never build a limit on it.
 - **Correct every claim a probe falsifies, not the one you were reading (D-078).** Grep the call path in
   both directions.
 - **`writeSlot` in `commands.ts` is the ONE place a slot is written by command.** Put a fourth
