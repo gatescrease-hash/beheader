@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { GraphObject } from "../engine/graph/node.ts";
 import type { CameraState } from "../engine/document.ts";
-import { hitTest, STROKE_HIT_TOLERANCE_SCREEN_PIXELS } from "./hittest.ts";
+import { documentExtent, hitTest, STROKE_HIT_TOLERANCE_SCREEN_PIXELS } from "./hittest.ts";
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
 
@@ -167,5 +167,71 @@ describe("hitTest — object types with no schema/visual definition yet never hi
 describe("hitTest — tolerance constant", () => {
   it("is a positive number of screen pixels", () => {
     expect(STROKE_HIT_TOLERANCE_SCREEN_PIXELS).toBeGreaterThan(0);
+  });
+});
+
+describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts)", () => {
+  function tableFixture(id: string, originX: number, originY: number): GraphObject {
+    return {
+      id,
+      name: id,
+      type: "table",
+      slots: {
+        rows: { kind: "literal", value: 2 },
+        cols: { kind: "literal", value: 3 },
+        "origin.x": { kind: "literal", value: originX },
+        "origin.y": { kind: "literal", value: originY },
+      },
+    };
+  }
+
+  it("is undefined for a document with no objects at all", () => {
+    expect(documentExtent([])).toBeUndefined();
+  });
+
+  it("is undefined when every object draws nothing, which no document read could have refused", () => {
+    // `commands.ts` refuses `fit` over an EMPTY document; this is the other
+    // emptiness, and it is why main.ts still needs a branch for "no extent".
+    const unrendered: GraphObject = { id: "obj_1", name: "text_1", type: "text", slots: {} };
+    expect(documentExtent([unrendered])).toBeUndefined();
+  });
+
+  it("bounds a shape by its vertices — §5.5's own instruction that `vertices` is what bounds a circle", () => {
+    expect(documentExtent([squareObject("obj_1", "polygon_1", "polygon")])).toEqual({ minX: 0, minY: 0, maxX: 20, maxY: 20 });
+  });
+
+  it("bounds a table by the box it is drawn in, at the same cell size hitTestTable uses", () => {
+    // 2 rows x 3 cols at the default cell size, offset to (100, 200).
+    expect(documentExtent([tableFixture("obj_1", 100, 200)])).toEqual({ minX: 100, minY: 200, maxX: 340, maxY: 248 });
+  });
+
+  it("unions every object that draws something and skips every object that does not", () => {
+    const unrendered: GraphObject = { id: "obj_3", name: "script_1", type: "script", slots: {} };
+    const extent = documentExtent([squareObject("obj_1", "polygon_1", "polygon"), unrendered, tableFixture("obj_2", 100, 200)]);
+    expect(extent).toEqual({ minX: 0, minY: 0, maxX: 340, maxY: 248 });
+  });
+
+  it("skips a table with a degenerate extent, exactly as the hit test does (D-066)", () => {
+    const degenerate: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 0 }, cols: { kind: "literal", value: 3 } } };
+    expect(documentExtent([degenerate, squareObject("obj_2", "polygon_1", "polygon")])).toEqual({ minX: 0, minY: 0, maxX: 20, maxY: 20 });
+  });
+
+  it("is undefined for a shape whose vertices slot is missing, wrong-typed, or an ErrorValue — never throws", () => {
+    const noVertices: GraphObject = { id: "obj_1", name: "polygon_1", type: "polygon", slots: {} };
+    const wrongType: GraphObject = { id: "obj_2", name: "polygon_2", type: "polygon", slots: { vertices: { kind: "derived", value: 7 } } };
+    const errored: GraphObject = { id: "obj_3", name: "polygon_3", type: "polygon", slots: { vertices: { kind: "derived", value: { error: "#TYPE", message: "no" } } } };
+    expect(documentExtent([noVertices, wrongType, errored])).toBeUndefined();
+  });
+
+  it("gives a single point a real, degenerate extent rather than undefined — the caller decides what to do with it (D-066)", () => {
+    // A zero-radius circle: one repeated vertex. main.ts's `fit` is what refuses
+    // to divide the viewport by it; this function reports the geometry it found.
+    const point: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: { vertices: { kind: "derived", value: [{ x: 5, y: 5 }, { x: 5, y: 5 }] } },
+    };
+    expect(documentExtent([point])).toEqual({ minX: 5, minY: 5, maxX: 5, maxY: 5 });
   });
 });

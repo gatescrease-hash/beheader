@@ -4,9 +4,59 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Graphpaper</title>
+    <!--
+      §5.10: "a persistent input bar at the bottom... Minimal UI chrome elsewhere —
+      no panels, no toolbars." The three elements below are the whole interface:
+      the canvas, the scrolling log above the input, and the input bar. main.ts
+      finds them by id and wires them; nothing here holds state or behaviour.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #ffffff;
+        font: 14px ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        color: #1a1a1a;
+      }
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      #canvas {
+        flex: 1 1 auto;
+        display: block;
+        width: 100%;
+        min-height: 0;
+        cursor: crosshair;
+        touch-action: none;
+      }
+      #log {
+        flex: 0 0 auto;
+        max-height: 9em;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        padding: 4px 8px;
+        border-top: 1px solid #d0d0d0;
+        background: #fafafa;
+      }
+      #command {
+        flex: 0 0 auto;
+        border: none;
+        border-top: 1px solid #d0d0d0;
+        padding: 6px 8px;
+        font: inherit;
+        outline: none;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <canvas id="canvas"></canvas>
+      <div id="log"></div>
+      <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="command line" />
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

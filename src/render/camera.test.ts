@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { deserializeDocument, type CameraState } from "../engine/document.ts";
-import { MAX_ZOOM, MIN_ZOOM, panByScreenDelta, screenToWorld, worldToScreen, zoomAtScreenPoint } from "./camera.ts";
+import { clampCamera, clampZoom, IDENTITY_ZOOM, MAX_ZOOM, MIN_ZOOM, panByScreenDelta, screenToWorld, worldToScreen, zoomAtScreenPoint } from "./camera.ts";
 
 const IDENTITY_CAMERA: CameraState = { x: 0, y: 0, zoom: 1 };
 
@@ -135,5 +135,64 @@ describe("a loaded camera is not clamped to [MIN_ZOOM, MAX_ZOOM] (D-062, known g
   it("loads a zoom far below MIN_ZOOM, so MIN_ZOOM binds only cameras this file produces", () => {
     const camera = loadCameraWithZoom(1e-300);
     expect(camera.zoom).toBeLessThan(MIN_ZOOM);
+  });
+});
+
+describe("clampCamera — D-062's boundary, where a loaded camera enters the render layer", () => {
+  it("leaves a camera already inside the zoom range bit-for-bit alone", () => {
+    expect(clampCamera({ x: 37, y: -19, zoom: 3.5 })).toEqual({ x: 37, y: -19, zoom: 3.5 });
+  });
+
+  it("corrects the zoom deserializeDocument accepts and screenToWorld cannot use", () => {
+    // The three D-062 names by value: all legal numbers (D-027), none a usable
+    // zoom. Probed through `deserializeDocument` below so this is not a claim
+    // about a hand-built camera the loader would have rejected.
+    expect(clampCamera({ x: 0, y: 0, zoom: 0 }).zoom).toBe(MIN_ZOOM);
+    expect(clampCamera({ x: 0, y: 0, zoom: -5 }).zoom).toBe(MIN_ZOOM);
+    expect(clampCamera({ x: 0, y: 0, zoom: 1e-300 }).zoom).toBe(MIN_ZOOM);
+    expect(clampCamera({ x: 0, y: 0, zoom: 1e9 }).zoom).toBe(MAX_ZOOM);
+  });
+
+  it("makes screenToWorld usable for the camera that used to return Infinity", () => {
+    const loaded: CameraState = { x: 0, y: 0, zoom: 0 };
+    expect(screenToWorld(loaded, { x: 100, y: 100 })).toEqual({ x: Infinity, y: Infinity });
+    expect(screenToWorld(clampCamera(loaded), { x: 100, y: 100 })).toEqual({ x: 100 / MIN_ZOOM, y: 100 / MIN_ZOOM });
+  });
+
+  it("clamps a zoom that a real document round-trip carried in, not just a hand-built one", () => {
+    const raw = { formatVersion: 1, nextObjectId: 1, objects: [], journal: [], camera: { x: 5, y: 6, zoom: 0 } };
+    const loaded = deserializeDocument(raw);
+    if (!loaded.ok) {
+      throw new Error(`expected the zero-zoom camera to LOAD (that is D-062's whole point), got: ${loaded.message}`);
+    }
+    expect(clampCamera(loaded.document.camera)).toEqual({ x: 5, y: 6, zoom: MIN_ZOOM });
+  });
+
+  it("falls back to identity zoom for a zoom no bound can correct, and to the world origin for a non-finite pan", () => {
+    // Unreachable through the loader (D-027 rejects non-finite numbers), which is
+    // exactly why it is asserted: this function is total, and is the one place a
+    // camera from anywhere else acquires the range guarantee.
+    expect(clampCamera({ x: Number.NaN, y: Infinity, zoom: Number.NaN })).toEqual({ x: 0, y: 0, zoom: IDENTITY_ZOOM });
+  });
+});
+
+describe("clampZoom — the range half, exported for a caller that must place a camera at the zoom it actually got", () => {
+  it("clamps to the bounds and keeps an in-range request unchanged", () => {
+    expect(clampZoom(0.5, 1)).toBe(0.5);
+    expect(clampZoom(0, 1)).toBe(MIN_ZOOM);
+    expect(clampZoom(1e9, 1)).toBe(MAX_ZOOM);
+  });
+
+  it("returns the fallback for a non-finite request rather than snapping to a bound", () => {
+    // Math.min/Math.max would propagate NaN straight through, which is the bug
+    // this branch exists in front of.
+    expect(clampZoom(Number.NaN, 4)).toBe(4);
+    expect(clampZoom(Infinity, 4)).toBe(4);
+  });
+
+  it("agrees with zoomAtScreenPoint, which must not develop a second clamp", () => {
+    const camera: CameraState = { x: 0, y: 0, zoom: 2 };
+    expect(zoomAtScreenPoint(camera, { x: 10, y: 10 }, 1e9).zoom).toBe(clampZoom(1e9, camera.zoom));
+    expect(zoomAtScreenPoint(camera, { x: 10, y: 10 }, Number.NaN).zoom).toBe(clampZoom(Number.NaN, camera.zoom));
   });
 });

@@ -20,15 +20,14 @@
  *   `{ x, y, zoom }`, per Q-007's binding constraint that Phase 3 widens the shape
  *   rather than replacing it, and only if it must.
  *
- *   `panByScreenDelta` and `zoomAtScreenPoint` are the only two functions here that
- *   PRODUCE a `CameraState`; `worldToScreen`/`screenToWorld` are pure reads. Per
- *   D-027 ("every number reachable from a Document... guard it where it is
- *   computed"), both producers reject a non-finite result in favour of the
- *   camera's own prior coordinate rather than propagate `NaN`/`Infinity` into
- *   document state — this is the file D-027 named in advance ("a NaN zoom out of
- *   a zoom-to-fit over an empty selection... guard it where it is computed").
- *   Zoom is additionally clamped to `[MIN_ZOOM, MAX_ZOOM]` so it can never reach 0
- *   (which would make `screenToWorld` divide by zero) or an unusable extreme.
+ *   `panByScreenDelta`, `zoomAtScreenPoint` and `clampCamera` are the three
+ *   functions that PRODUCE a `CameraState`; the rest are pure reads. Every
+ *   producer refuses a non-finite result in favour of the camera's own prior
+ *   value rather than propagating `NaN`/`Infinity` into document state (D-027,
+ *   which named this file in advance), and clamps zoom to `[MIN_ZOOM, MAX_ZOOM]`
+ *   so it can never reach 0 — which would make `screenToWorld` divide by zero.
+ *   `clampCamera` is D-062's boundary: a camera off a LOADED document has no
+ *   such guarantee until it passes through here.
  *
  * NOT DONE HERE
  *   - Reading the mouse/wheel, or any DOM event handling — `main.ts` listens,
@@ -37,8 +36,8 @@
  *   - Deciding WHEN to pan/zoom, or how a wheel delta maps to a zoom factor —
  *     callers decide that and pass this file plain screen-space numbers.
  *   - "fit" (zoom to a bounding box) — needs a viewport size and a bounding box,
- *     neither of which this file owns; composes from `zoomAtScreenPoint` plus the
- *     caller's own arithmetic, later.
+ *     neither of which this file owns. `main.ts` composes it from `clampZoom`
+ *     plus `render/hittest.ts`'s `documentExtent` (D-061, D-075 clause 5).
  */
 import type { CameraState } from "../engine/document.ts";
 import type { Point } from "../engine/graph/node.ts";
@@ -80,7 +79,8 @@ export function worldToScreen(camera: CameraState, worldPoint: WorldPoint): Scre
  * D-062 puts that guard in `render/`, where a loaded camera enters the render
  * layer, and NOT in `document.ts`: `MIN_ZOOM` is defined here, and Rule 1
  * forbids `engine/` importing `render/`, so the loader structurally cannot
- * enforce this file's range.
+ * enforce this file's range. That guard is `clampCamera` below, and `main.ts`
+ * runs every camera it holds — loaded, created, or replaced — through it.
  */
 export function screenToWorld(camera: CameraState, screenPoint: ScreenPoint): WorldPoint {
   return {
@@ -112,7 +112,7 @@ export function panByScreenDelta(camera: CameraState, dxScreen: number, dyScreen
  * wheelFactor`); this file does not interpret wheel deltas (file header).
  */
 export function zoomAtScreenPoint(camera: CameraState, screenPoint: ScreenPoint, requestedZoom: number): CameraState {
-  const zoom = clampZoom(camera, requestedZoom);
+  const zoom = clampZoom(requestedZoom, camera.zoom);
   const worldPointUnderCursor = screenToWorld(camera, screenPoint);
   return {
     x: finiteOrFallback(worldPointUnderCursor.x - screenPoint.x / zoom, camera.x),
@@ -122,18 +122,53 @@ export function zoomAtScreenPoint(camera: CameraState, screenPoint: ScreenPoint,
 }
 
 /**
- * Clamps to `[MIN_ZOOM, MAX_ZOOM]`. A non-finite request keeps the CURRENT zoom
+ * Clamps to `[MIN_ZOOM, MAX_ZOOM]`. A non-finite request yields `fallbackZoom`
  * rather than snapping to a bound — the same "ignore a bad computation, don't
  * let it move the camera" posture `finiteOrFallback` states below, applied
  * before `Math.min`/`Math.max` (which would themselves propagate a `NaN`
  * argument straight through unchanged).
+ *
+ * Exported because a caller that must know the CLAMPED zoom before it can place
+ * the camera — `main.ts`'s `fit`, which computes `camera.x`/`camera.y` from the
+ * zoom it actually got (D-061, D-075 clause 5) — cannot get it from
+ * `zoomAtScreenPoint`, which needs a finished camera to return. Takes a plain
+ * fallback rather than a `CameraState` so `clampCamera` below can reuse it for a
+ * camera whose own zoom is the thing in doubt.
  */
-function clampZoom(camera: CameraState, requestedZoom: number): number {
+export function clampZoom(requestedZoom: number, fallbackZoom: number): number {
   if (!Number.isFinite(requestedZoom)) {
-    return camera.zoom;
+    return fallbackZoom;
   }
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, requestedZoom));
 }
+
+/**
+ * D-062's boundary, in one function: the point where a camera read off a LOADED
+ * document (or off `createEmptyDocument`) enters the render layer and acquires
+ * the range guarantee only a `CameraState` this file produced otherwise carries.
+ *
+ * Why it exists: `deserializeDocument` accepts `zoom: 0`, `zoom: -5` and
+ * `1e-300` — all legal numbers (D-027), none a usable zoom — and at `zoom: 0`
+ * `screenToWorld` returns `Infinity` and `hitTest`'s world tolerance becomes
+ * `Infinity`, so every click selects the topmost object. D-062 clause 2 puts the
+ * correction HERE, not in `document.ts` (Rule 1 forbids `engine/` importing this
+ * file's constants), and makes it a correction rather than a rejection: a
+ * document with a strange camera still opens, pointing somewhere usable.
+ *
+ * A zoom that is not finite at all cannot be corrected toward a bound (there is
+ * no direction to correct it in), so it falls back to `IDENTITY_ZOOM`. `x`/`y`
+ * fall back to the world origin for the same reason.
+ */
+export function clampCamera(camera: CameraState): CameraState {
+  return {
+    x: finiteOrFallback(camera.x, 0),
+    y: finiteOrFallback(camera.y, 0),
+    zoom: clampZoom(camera.zoom, IDENTITY_ZOOM),
+  };
+}
+
+/** The zoom at which one world unit is one screen pixel — `createEmptyDocument`'s own default, and what `clampCamera` falls back to when a zoom is not a number it can clamp. */
+export const IDENTITY_ZOOM = 1;
 
 /**
  * D-027: a camera-producing function must never emit a non-finite number into
