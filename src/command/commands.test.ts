@@ -282,9 +282,6 @@ describe("the arms with no handler yet", () => {
   /** §5.10's own example line for every registry command that this file does not run yet. */
   const UNHANDLED_EXAMPLES: readonly { readonly line: string; readonly word: string }[] = [
     { line: "rename polygon_1 intersection_a", word: "rename" },
-    { line: "delete intersection_a", word: "delete" },
-    { line: "refs intersection_a", word: "refs" },
-    { line: "list", word: "list" },
     { line: "select intersection_a", word: "select" },
     { line: "zoom 2", word: "zoom" },
     { line: "fit", word: "fit" },
@@ -312,6 +309,9 @@ describe("the arms with no handler yet", () => {
     "set polygon_1.radius = 1 + 1",
     "link polygon_1.origin.x table_x.A1",
     "unlink polygon_1.origin.x",
+    "delete intersection_a",
+    "refs intersection_a",
+    "list",
     ...UNHANDLED_EXAMPLES.map((example) => example.line),
   ];
 
@@ -616,6 +616,216 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       const document = committed("set table_1.A1 1", sandbox());
       expect(document.journal).toHaveLength(3);
       expect(document.journal[2]?.operations.map((operation) => operation.kind)).toEqual(["setSlot"]);
+    });
+  });
+});
+
+describe("delete, refs and list — the object commands that need no new Operation kind", () => {
+  /** A polygon and a 4x4 table, the same fixture the slot commands use, because these commands are about what those built. */
+  function sandbox(): Document {
+    return committed("table x=0 y=0 rows=4 cols=4", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
+  }
+
+  /** A document in which `table_1.A1` drives `polygon_1.origin.x` — the one wiring that makes a delete refusable. */
+  function wired(): Document {
+    return committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox()));
+  }
+
+  function lines(line: string, document: Document): readonly string[] {
+    const outcome = run(line, document);
+    if (isCommandFailure(outcome)) {
+      throw new Error(`expected "${line}" to succeed, got: ${outcome.message}`);
+    }
+    return outcome.lines;
+  }
+
+  function named(document: Document, objectName: string): GraphObject | undefined {
+    return document.objects.find((candidate) => candidate.name === objectName);
+  }
+
+  describe("list — §5.10's dump all objects and names", () => {
+    it("says so plainly on an empty document rather than returning no lines at all", () => {
+      expect(lines("list", createEmptyDocument())).toEqual(["no objects"]);
+    });
+
+    it("names every object with its type, in creation order", () => {
+      expect(lines("list", sandbox())).toEqual(["polygon_1 — polygon", "table_1 — table"]);
+    });
+
+    it("never prints an object id, because §5.2 makes the id the layer the operator never writes", () => {
+      const listed = lines("list", sandbox()).join("\n");
+      for (const object of sandbox().objects) {
+        expect(listed).not.toContain(object.id);
+      }
+    });
+
+    it("returns the document it was given, unchanged and unjournalled — D-075 clause 4's reason for giving it no effect", () => {
+      const before = sandbox();
+      const outcome = run("list", before);
+      expect(outcome.ok && outcome.document).toBe(before);
+      expect(before.journal).toHaveLength(2);
+    });
+  });
+
+  describe("refs — §5.1.1's look before you delete", () => {
+    it("names the slot on another object that reads the target, in the edge's own source → dependent direction", () => {
+      expect(lines("refs table_1", wired())[0]).toBe("table_1.A1 → polygon_1.origin.x");
+    });
+
+    it("counts other objects' dependents apart from the target's own, because only the first kind can block a delete (§5.1.1)", () => {
+      const reported = lines("refs table_1", wired());
+      expect(reported[reported.length - 1]).toBe("1 inbound dependent: 1 on other objects, 0 on table_1 itself");
+    });
+
+    it("reports a preset's own schema wiring rather than hiding it — its derived slots do read its parameters", () => {
+      const reported = lines("refs polygon_1", sandbox());
+      // Five parameter slots feed `vertices`, and `vertices` feeds the eight slots
+      // `verticesDerivedSlots` bundles (centroid.x/y, area, length, bounds.*).
+      expect(reported[reported.length - 1]).toBe("13 inbound dependents: 0 on other objects, 13 on polygon_1 itself");
+      expect(reported).toContain("polygon_1.origin.x → polygon_1.vertices");
+      expect(reported).toContain("polygon_1.vertices → polygon_1.centroid.x");
+    });
+
+    it("answers about ONE slot when given an address, not the whole object", () => {
+      expect(lines("refs polygon_1.origin.x", sandbox())).toEqual([
+        "polygon_1.origin.x → polygon_1.vertices",
+        "1 inbound dependent: 0 on other objects, 1 on polygon_1 itself",
+      ]);
+    });
+
+    it("accepts a DERIVED slot as a target — reading who depends on a computed value is not an attempt to write it (§5.1)", () => {
+      const reported = lines("refs polygon_1.vertices", sandbox());
+      expect(reported[reported.length - 1]).toBe("8 inbound dependents: 0 on other objects, 8 on polygon_1 itself");
+    });
+
+    it("says nothing references a target rather than printing an empty report", () => {
+      expect(lines("refs table_1", sandbox())).toEqual(["nothing references table_1"]);
+      expect(lines("refs table_1.A1", sandbox())).toEqual(["nothing references table_1.A1"]);
+    });
+
+    it("accepts a cell path the table declares but nobody has written, because D-047 makes an absent cell ordinary state", () => {
+      expect(lines("refs table_1.D4", sandbox())).toEqual(["nothing references table_1.D4"]);
+    });
+
+    it("names a dependent once even where the formula reads it twice, because the report is about which SLOTS read the target", () => {
+      const twice = committed("set table_1.B1 = table_1.A1 + table_1.A1", committed("set table_1.A1 2", sandbox()));
+      expect(lines("refs table_1.A1", twice)).toEqual([
+        "table_1.A1 → table_1.B1",
+        "1 inbound dependent: 0 on other objects, 1 on table_1 itself",
+      ]);
+    });
+
+    it("refuses a name no object has, rather than reporting that nothing references it", () => {
+      expect(refused("refs nosuch", sandbox())).toBe('no object named "nosuch"');
+    });
+
+    it("refuses a path the schema does not declare, for the reason resolveWritableSlot does: a confident answer about a slot that does not exist is worse than a refusal", () => {
+      expect(refused("refs polygon_1.radius2", sandbox())).toBe('polygon_1 has no slot at "polygon_1.radius2" — object type "polygon" does not declare one');
+      expect(refused("refs table_1.E1", sandbox())).toContain("does not declare one");
+    });
+
+    it("returns the document it was given, unchanged and unjournalled (D-075 clause 4)", () => {
+      const before = wired();
+      const outcome = run("refs table_1", before);
+      expect(outcome.ok && outcome.document).toBe(before);
+    });
+
+    it("reports exactly the dependent a non-forced delete then refuses, because both read deriveEdges over the same document", () => {
+      const document = wired();
+      expect(lines("refs table_1", document)[0]).toBe("table_1.A1 → polygon_1.origin.x");
+      expect(refused("delete table_1", document)).toContain("polygon_1.origin.x");
+    });
+
+    /**
+     * The case that made the blocking half derive from the document WITHOUT the target.
+     * A range over cells nobody has written expands to no edges at all (D-047 item 1),
+     * so a `refs` reading the CURRENT edge set answered "nothing references table_1"
+     * for a document whose `delete table_1` is refused — the exact failure §5.1.1
+     * provides this command to prevent. Found by probe at entry 0081, not by reading.
+     */
+    describe("a range over cells nobody has written yet", () => {
+      /** `table_2.A1` aggregates a column of `table_1` in which no cell slot exists. */
+      function rangeReader(): Document {
+        const two = committed("table x=100 y=0 rows=4 cols=4", sandbox());
+        return committed("set table_2.A1 = SUM(table_1.A1:table_1.A4)", two);
+      }
+
+      it("is reported by refs, because it is the edge the deletion would leave dangling", () => {
+        expect(lines("refs table_1", rangeReader())).toEqual([
+          "table_1.A1 → table_2.A1",
+          "1 inbound dependent: 1 on other objects, 0 on table_1 itself",
+        ]);
+      });
+
+      it("names the same dependent refs named when the delete is then refused", () => {
+        const document = rangeReader();
+        expect(lines("refs table_1", document)[0]).toContain("table_2.A1");
+        expect(refused("delete table_1", document)).toContain("table_2.A1");
+      });
+
+      it("still reports nothing for the CELL itself, because an unwritten cell inside a range is not yet depended on", () => {
+        expect(lines("refs table_1.A1", rangeReader())).toEqual(["nothing references table_1.A1"]);
+      });
+    });
+  });
+
+  describe("delete — §5.1.1's two paths, chosen by the operator's force flag", () => {
+    it("removes an object nothing reads, and says which one it removed", () => {
+      const after = committed("delete table_1", sandbox());
+      expect(lines("delete table_1", sandbox())).toEqual(["deleted table_1"]);
+      expect(named(after, "table_1")).toBeUndefined();
+      expect(named(after, "polygon_1")).toBeDefined();
+    });
+
+    it("REJECTS while another object still reads it, naming every dependent (§5.1.1 clause 1)", () => {
+      expect(refused("delete table_1", wired())).toContain("polygon_1.origin.x references a slot that does not exist");
+    });
+
+    it("names the force flag in that refusal, because a mutate rejection cannot — an Operation carries no command syntax", () => {
+      expect(refused("delete table_1", wired())).toContain('unlink each, or "delete table_1 force" to rewrite them to #REF instead');
+    });
+
+    it("leaves prior state bit-for-bit unchanged when it rejects (§5.1 step 6)", () => {
+      const before = wired();
+      const snapshot = JSON.stringify(before);
+      refused("delete table_1", before);
+      expect(JSON.stringify(before)).toBe(snapshot);
+    });
+
+    it("takes §5.1.1's REPAIR path under force, and reports every slot it broke (D-057's first reader)", () => {
+      const outcome = run("delete table_1 force", wired());
+      expect(outcome.ok && outcome.lines).toEqual([
+        "deleted table_1",
+        "broke 1 formula: polygon_1.origin.x — each now reads #REF where it read table_1",
+      ]);
+    });
+
+    it("leaves the broken formula holding a #REF value rather than a dangling edge (§5.1.1's whole reason for the repair path)", () => {
+      const repaired = committed("delete table_1 force", wired());
+      const polygon = named(repaired, "polygon_1");
+      const slot = polygon === undefined ? undefined : getSlot(polygon, ["origin", "x"]);
+      expect(slot?.kind).toBe("formula");
+      expect(slot?.value).toEqual({ error: "#REF", message: expect.any(String) });
+    });
+
+    it("says nothing about broken slots when the repair broke none, so the report is never noise", () => {
+      expect(lines("delete table_1 force", sandbox())).toEqual(["deleted table_1"]);
+    });
+
+    it("refuses a name no object has", () => {
+      expect(refused("delete nosuch", sandbox())).toBe('no object named "nosuch"');
+    });
+
+    it("appends exactly one journal entry holding one deleteObject operation (Rule 2)", () => {
+      const after = committed("delete table_1", sandbox());
+      expect(after.journal).toHaveLength(3);
+      expect(after.journal[2]?.operations).toEqual([{ kind: "deleteObject", objectId: "obj_2", force: false }]);
+    });
+
+    it("frees the deleted name for reuse while never reusing its id (D-002)", () => {
+      const recreated = committed("table x=0 y=0 rows=2 cols=2", committed("delete table_1", sandbox()));
+      const table = named(recreated, "table_1");
+      expect(table?.id).toBe("obj_3");
     });
   });
 });
