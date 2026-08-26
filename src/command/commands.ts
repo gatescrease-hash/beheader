@@ -36,9 +36,9 @@
  *     count is an unbounded slot allocation, which Rule 6 will not let an
  *     `ErrorValue` stand in for. `primitives/geometry.ts`'s `#TYPE` for
  *     `sides < 3` stays where it is, as the defensive arm for a loaded file.
- *   - Every `Command` arm appears in `executeCommand`'s switch, including the
- *     ones with no handler yet: adding an arm is a compile error here, not a
- *     silent fall-through into "nothing happened".
+ *   - Every `Command` arm appears in `executeCommand`'s switch and every one of
+ *     them now runs: adding an arm is a compile error here, not a silent
+ *     fall-through into "nothing happened".
  *   - D-071 clause 4: `set <address> = <formula>` and `link` write their slot
  *     through ONE function (`writeSlot`), so D-040's report of a replaced formula
  *     and D-041's kept value cannot drift between the two commands. `unlink` shares
@@ -57,15 +57,23 @@
  *     sentence to the rejection and reads D-057's `brokenSlots` on the repair.
  *   - `rename` resolves the OLD name here and refuses an unknown one; §5.2's grammar
  *     and uniqueness are `mutate`'s (`checkNameAvailable`), never re-checked here.
+ *   - D-075: a command that changes no document state returns an `effect` — plain,
+ *     serializable data naming an object by ID, never a callback, a closure, a DOM
+ *     handle, or a `CameraState`. `select` resolves its name here and refuses an
+ *     unknown one; `zoom` refuses a factor that is not a positive finite multiplier;
+ *     what the camera, the selection or a file then DOES with it is `main.ts`'s.
  *
  * NOT DONE HERE
- *   - `select`/`zoom`/`fit`/`save`/`load`. None of them changes the document, and
- *     **D-075** settles how they land: this file still resolves the name and reports
- *     the refusal, then returns the effect as plain data in a widened
- *     `CommandOutcome`, and `main.ts` performs it. The selection is
+ *   - PERFORMING an effect. `main.ts` does that, because each one lives on the far
+ *     side of a seam this layer may not cross: the selection is
  *     `render/interaction.ts`'s state, zoom clamping is `render/camera.ts`'s (D-062),
- *     and `save`/`load` need a DOM this layer never touches. `list` and `refs` need
- *     no such widening (D-075 clause 4) and are built here already.
+ *     `fit` needs a viewport size only `main.ts` has (D-061), and `save`/`load` need
+ *     a DOM this layer never touches. Nothing here reads or writes `document.camera`
+ *     either — under D-027 clause 2 that write never goes through `mutate`, and under
+ *     D-075 clause 5 it is `main.ts` that makes it, from the value `camera.ts` clamps.
+ *   - Computing an extent. `fit` refuses an EMPTY document here, because "are there
+ *     any objects" is a document read; the bounding box of the ones that exist is
+ *     `render/`'s geometry and never travels in an effect.
  *   - Driving a prompt sequence, or parsing anything. `command/prompt.ts` turns a
  *     partial line into a `Command`; this file only ever receives a finished one.
  */
@@ -108,9 +116,11 @@ import type {
   LinkCommand,
   RefsCommand,
   RenameCommand,
+  SelectCommand,
   SetFormulaCommand,
   SetLiteralCommand,
   UnlinkCommand,
+  ZoomCommand,
 } from "./parser.ts";
 
 /**
@@ -127,8 +137,35 @@ import type {
  * an `ErrorValue` and must not be mistakable for one.
  */
 export type CommandOutcome =
-  | { readonly ok: true; readonly document: Document; readonly lines: readonly string[] }
+  | { readonly ok: true; readonly document: Document; readonly lines: readonly string[]; readonly effect?: CommandEffect }
   | { readonly ok: false; readonly message: string };
+
+/**
+ * What a command asks the application layer to do once the document part is done
+ * (D-075 clause 2).
+ *
+ * Why it exists: five of §5.10's commands change no document state and reach the
+ * camera, the selection, or a file — none of which `command/` may touch. They still
+ * enter through `executeCommand`, which stays the ONLY place a `Command` meets a
+ * `Document` (D-069), do their IDENTITY and DOMAIN work here, and hand `main.ts` a
+ * description of the rest.
+ *
+ * Plain data, discriminated on `kind`, the same stance every shape in this codebase
+ * takes: NEVER a callback, a closure, or a DOM handle, and an object is named by ID
+ * (§5.2) because a name can be renamed out from under a stored effect.
+ *
+ * It carries no `CameraState`: `zoom` reports the multiplier the operator typed, and
+ * the clamped camera is `render/camera.ts`'s to compute (D-075 clause 5, D-062).
+ *
+ * An outcome without one changed only the document, or only reported on it —
+ * `list` and `refs` deliberately have none (D-075 clause 4).
+ */
+export type CommandEffect =
+  | { readonly kind: "select"; readonly objectId: string }
+  | { readonly kind: "zoom"; readonly factor: number }
+  | { readonly kind: "fit" }
+  | { readonly kind: "save" }
+  | { readonly kind: "load" };
 
 /** Narrows an outcome to its failure arm, discriminating on the VALUE of `ok` (D-032's principle) rather than a field's presence. */
 export function isCommandFailure(outcome: CommandOutcome): outcome is { readonly ok: false; readonly message: string } {
@@ -185,8 +222,8 @@ function refuseCountOutOfRange(name: string, value: number, minimum: number, max
  * Runs one parsed command against a document (§5.10).
  *
  * Every refusal — a count out of range, a `mutate` rejection, a formula that will
- * not parse, a command with no handler yet — comes back as the failure arm rather
- * than as a throw.
+ * not parse, a `select` naming nothing — comes back as the failure arm rather than
+ * as a throw.
  *
  * ONE MEASURED EXCEPTION, stated rather than claimed away (D-077 clause 2): a
  * formula whose AST nests deeper than about 5,000 levels — `set table_1.A1 = 1 + 1
@@ -198,8 +235,8 @@ function refuseCountOutOfRange(name: string, value: number, minimum: number, max
  * unwinding — that file's cycle to make, not a check bolted on here.
  *
  * The switch names every `Command` arm, so a new arm fails to compile here rather
- * than falling through to a default that silently does nothing. The five arms with
- * no handler yet say so by name; see this file's NOT DONE HERE for who owns each.
+ * than falling through to a default that silently does nothing. Five of them change
+ * no document state and return a `CommandEffect` instead (D-075).
  */
 export function executeCommand(command: Command, document: Document): CommandOutcome {
   switch (command.kind) {
@@ -231,15 +268,15 @@ export function executeCommand(command: Command, document: Document): CommandOut
     case "list":
       return list(document);
     case "select":
-      return noHandlerYet("select");
+      return select(command, document);
     case "zoom":
-      return noHandlerYet("zoom");
+      return zoom(command, document);
     case "fit":
-      return noHandlerYet("fit");
+      return fit(document);
     case "save":
-      return noHandlerYet("save");
+      return save(document);
     case "load":
-      return noHandlerYet("load");
+      return load(document);
     default: {
       // Compile-time exhaustiveness without a throw — the idiom every
       // discriminated-union switch in this codebase carries.
@@ -250,19 +287,34 @@ export function executeCommand(command: Command, document: Document): CommandOut
   }
 }
 
-/** Every command word `executeCommand` actually runs. Enumerable so a test can pin it against `parser.ts`'s `COMMAND_NAMES` instead of anyone remembering to keep two lists aligned. */
-export const COMMANDS_WITH_HANDLERS: readonly string[] = ["circle", "polygon", "rect", "table", "set", "link", "unlink", "rename", "delete", "refs", "list"];
-
 /**
- * A command the parser understands and this file does not run yet.
+ * Every command word `executeCommand` actually runs. Enumerable so a test can pin it
+ * against `parser.ts`'s `COMMAND_NAMES` instead of anyone remembering to keep two
+ * lists aligned.
  *
- * Says so by name and says that nothing changed, because §9 forbids reporting a
- * stub as complete and the operator's next move depends on knowing which it was —
- * a silent success would look like a command that ran and did nothing.
+ * It holds EVERY registry entry, so the two lists are equal rather than
+ * complementary, and no command word reaches this file without running. The eight
+ * §5.10 commands still unbuilt never reach it at all — `parser.ts`'s
+ * `COMMANDS_SPECIFIED_BUT_NOT_BUILT` refuses them before a `Command` exists.
  */
-function noHandlerYet(commandWord: string): CommandOutcome {
-  return { ok: false, message: `"${commandWord}" has no handler yet — nothing was changed` };
-}
+export const COMMANDS_WITH_HANDLERS: readonly string[] = [
+  "circle",
+  "polygon",
+  "rect",
+  "table",
+  "set",
+  "link",
+  "unlink",
+  "rename",
+  "delete",
+  "refs",
+  "list",
+  "select",
+  "zoom",
+  "fit",
+  "save",
+  "load",
+];
 
 // ---------------------------------------------------------------------------
 // Creation (§5.5's presets, §5.4's table)
@@ -953,6 +1005,99 @@ function declaresSlotPath(object: GraphObject, path: readonly string[]): boolean
   // returns one entry per declared cell, which a 1000x1000 table makes a million of
   // (D-077 clause 1).
   return resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).some((declared) => slotKey(declared) === key);
+}
+
+// ---------------------------------------------------------------------------
+// The effect commands (§5.10's `select`/`zoom`/`fit`/`save`/`load`; D-075)
+// ---------------------------------------------------------------------------
+
+/**
+ * `select intersection_a` (§5.10).
+ *
+ * The name is resolved HERE and an unknown one is refused here (D-075 clause 1):
+ * `main.ts` never resolves a name, or there would be a second resolution site in the
+ * one file no test reaches. The effect carries the ID, not the name — `render/`'s
+ * selection state is ID-keyed and a name is mutable (§5.2).
+ *
+ * The echoed line is safe to state in the past tense: everything that could refuse
+ * this command has already happened, and storing the id cannot fail.
+ */
+function select(command: SelectCommand, document: Document): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+  return { ok: true, document, lines: [`selected ${object.name}`], effect: { kind: "select", objectId: object.id } };
+}
+
+/**
+ * `zoom <factor>` (§5.10) — a MULTIPLIER on the current zoom, not a zoom level.
+ *
+ * A factor of zero, a negative one, or an infinity is refused here as a DOMAIN
+ * failure, the same posture `refuseCountOutOfRange` takes: none of the three is a
+ * multiplier, and `parser.ts` accepts all three — it validates the FORM of a number
+ * and not its usefulness, so `0`, `-2` and a run of 400 digits (which `Number` reads
+ * as `Infinity`) all arrive here as a `factor`. Letting them through would reach
+ * `render/camera.ts`'s clamp, which would silently turn each into `MIN_ZOOM` or into
+ * "no change" — a command that appears to work and does something else.
+ *
+ * The RANGE is not checked here and must not be: `[MIN_ZOOM, MAX_ZOOM]` is
+ * `render/camera.ts`'s (D-062), it is a property of the resulting camera rather than
+ * of the factor, and this layer cannot see the current zoom to apply it to. So the
+ * echoed line names the REQUEST; a clamped result is `main.ts`'s to report.
+ */
+function zoom(command: ZoomCommand, document: Document): CommandOutcome {
+  if (!Number.isFinite(command.factor) || command.factor <= 0) {
+    return { ok: false, message: `factor must be a positive number, got ${command.factor}` };
+  }
+  return { ok: true, document, lines: [`zoom by ${command.factor}`], effect: { kind: "zoom", factor: command.factor } };
+}
+
+/**
+ * `fit` (§5.10) — zoom to the document's extent.
+ *
+ * An EMPTY document is refused here: "are there any objects" is a document read, this
+ * file is where a `Command` meets a `Document` (D-069), and the alternative is a
+ * camera computed from an extent that does not exist. `render/camera.ts` would
+ * survive it — `finiteOrFallback` leaves the camera where it was (D-027) — but the
+ * operator would see a command that reported success and moved nothing.
+ *
+ * The extent itself does NOT travel in the effect. It is geometry over drawn objects,
+ * which is `render/`'s, and it needs the viewport size only `main.ts` has (D-061).
+ * A single-point extent still has to be guarded there (D-066); refusing the empty
+ * document does not discharge that.
+ */
+function fit(document: Document): CommandOutcome {
+  if (document.objects.length === 0) {
+    return { ok: false, message: "no objects to fit — create one first" };
+  }
+  return { ok: true, document, lines: ["fit to the document extent"], effect: { kind: "fit" } };
+}
+
+/**
+ * `save` (§5.10, §5.11) — hand the document to `main.ts` for a JSON download.
+ *
+ * Nothing is serialized here and the effect carries no document: the outcome's own
+ * `document` is the one to write, by identity, and `main.ts` already stores it
+ * (D-069). Every way this can fail — no DOM, a refused download — is on the far side
+ * of the seam, so success here means only "there is nothing to refuse", which is why
+ * the line is progressive rather than past tense.
+ */
+function save(document: Document): CommandOutcome {
+  return { ok: true, document, lines: ["saving document"], effect: { kind: "save" } };
+}
+
+/**
+ * `load` (§5.10, §5.11) — ask `main.ts` to read a document back through a file input.
+ *
+ * Returns the CURRENT document unchanged. The loaded one cannot come back through
+ * this outcome: reading a file is asynchronous and DOM-driven, and `executeCommand`
+ * is synchronous and DOM-free. `main.ts` performs the read and installs the result
+ * through §5.11's loader, which is the one path allowed to build a `Document` from
+ * JSON — not this file, and not a widened effect.
+ */
+function load(document: Document): CommandOutcome {
+  return { ok: true, document, lines: ["loading document"], effect: { kind: "load" } };
 }
 
 /** The `GraphObject` behind a user-typed name — `findObjectByName` owns §5.2's case-insensitive lookup, and this adds only the slots that function's `AddressableObject` does not carry. */

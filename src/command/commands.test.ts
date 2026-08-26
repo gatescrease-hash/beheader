@@ -72,6 +72,15 @@ function onlyObject(document: Document): GraphObject {
   return object;
 }
 
+/** The object a name resolves to, or a thrown test failure — so a test asserting on an ID never silently reads `undefined.id`. */
+function onlyNamed(document: Document, objectName: string): GraphObject {
+  const object = document.objects.find((candidate) => candidate.name === objectName);
+  if (object === undefined) {
+    throw new Error(`expected an object named ${objectName}`);
+  }
+  return object;
+}
+
 function literalValue(object: GraphObject, path: readonly string[]): unknown {
   const slot = getSlot(object, path);
   return slot === undefined || slot.kind !== "literal" ? undefined : slot.value;
@@ -278,27 +287,14 @@ describe("a mutate rejection reaches the operator as a message, never as a throw
   });
 });
 
-describe("the arms with no handler yet", () => {
-  /** §5.10's own example line for every registry command that this file does not run yet. */
-  const UNHANDLED_EXAMPLES: readonly { readonly line: string; readonly word: string }[] = [
-    { line: "select intersection_a", word: "select" },
-    { line: "zoom 2", word: "zoom" },
-    { line: "fit", word: "fit" },
-    { line: "save", word: "save" },
-    { line: "load", word: "load" },
-  ];
-
-  for (const example of UNHANDLED_EXAMPLES) {
-    it(`reports "${example.word}" as having no handler yet, rather than silently doing nothing`, () => {
-      expect(refused(example.line, createEmptyDocument())).toBe(`"${example.word}" has no handler yet — nothing was changed`);
-    });
-  }
-
-  it("covers every registry command exactly once between the handled set and the list above, so a new entry cannot land unrouted", () => {
-    expect([...COMMANDS_WITH_HANDLERS, ...UNHANDLED_EXAMPLES.map((example) => example.word)].sort()).toEqual([...COMMAND_NAMES].sort());
+describe("every registry command reaches a handler", () => {
+  it("routes every word the parser can produce, so a new registry entry cannot land unrouted", () => {
+    // Entry 0085 emptied the other side of this comparison: with `select`/`zoom`/
+    // `fit`/`save`/`load` built, there is no "no handler yet" set left to add in.
+    expect([...COMMANDS_WITH_HANDLERS].sort()).toEqual([...COMMAND_NAMES].sort());
   });
 
-  /** Every §5.10 example line the registry can parse: one per command this file runs, plus `UNHANDLED_EXAMPLES`'s. Counted nowhere — the second test below pins it against `COMMAND_NAMES`, which is what 0078-REVIEW fix list item 1 asked for after a hand-written sweep claimed the registry and covered six. */
+  /** Every §5.10 example line the registry can parse, one per command. Counted nowhere — the second test below pins it against `COMMAND_NAMES`, which is what 0078-REVIEW fix list item 1 asked for after a hand-written sweep claimed the registry and covered six. */
   const EVERY_REGISTRY_EXAMPLE: readonly string[] = [
     "circle x=0 y=0 r=1",
     "polygon sides=3 x=0 y=0 r=1",
@@ -312,7 +308,11 @@ describe("the arms with no handler yet", () => {
     "delete intersection_a",
     "refs intersection_a",
     "list",
-    ...UNHANDLED_EXAMPLES.map((example) => example.line),
+    "select intersection_a",
+    "zoom 2",
+    "fit",
+    "save",
+    "load",
   ];
 
   it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {
@@ -324,6 +324,129 @@ describe("the arms with no handler yet", () => {
   it("draws that sweep from the whole registry, so a command word cannot be added without landing in it", () => {
     const swept = new Set(EVERY_REGISTRY_EXAMPLE.map((line) => line.split(" ")[0]));
     expect([...swept].sort()).toEqual([...COMMAND_NAMES].sort());
+  });
+});
+
+describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)", () => {
+  /** A polygon and a table, so the four commands that need something to point at have one. */
+  function sandbox(): Document {
+    return committed("table x=0 y=0 rows=2 cols=2", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
+  }
+
+  /** The whole success arm, so a test can read `effect` and `lines` off one outcome. */
+  function succeeded(line: string, document: Document) {
+    const outcome = run(line, document);
+    if (isCommandFailure(outcome)) {
+      throw new Error(`expected "${line}" to succeed, got: ${outcome.message}`);
+    }
+    return outcome;
+  }
+
+  describe("select", () => {
+    it("resolves the name HERE and returns the ID, because a name is mutable and main.ts must not resolve one (D-075 clause 1)", () => {
+      const document = sandbox();
+      const outcome = succeeded("select polygon_1", document);
+      expect(outcome.effect).toEqual({ kind: "select", objectId: onlyNamed(document, "polygon_1").id });
+      expect(outcome.lines).toEqual(["selected polygon_1"]);
+    });
+
+    it("resolves case-insensitively, the same §5.2 lookup delete and rename use", () => {
+      const document = sandbox();
+      expect(succeeded("select POLYGON_1", document).effect).toEqual({ kind: "select", objectId: onlyNamed(document, "polygon_1").id });
+    });
+
+    it("refuses an unknown name here rather than handing main.ts an effect it cannot check", () => {
+      expect(refused("select nosuch", sandbox())).toBe('no object named "nosuch"');
+    });
+
+    it("returns the document it was given, by identity — nothing about the selection is document state", () => {
+      const document = sandbox();
+      expect(succeeded("select table_1", document).document).toBe(document);
+    });
+  });
+
+  describe("zoom", () => {
+    it("passes the factor through untouched, because the clamp to [MIN_ZOOM, MAX_ZOOM] is render/camera.ts's (D-062, D-075 clause 5)", () => {
+      const outcome = succeeded("zoom 2", createEmptyDocument());
+      expect(outcome.effect).toEqual({ kind: "zoom", factor: 2 });
+      expect(outcome.lines).toEqual(["zoom by 2"]);
+    });
+
+    it("accepts a factor below 1, which is zooming out and not an error", () => {
+      expect(succeeded("zoom 0.5", createEmptyDocument()).effect).toEqual({ kind: "zoom", factor: 0.5 });
+    });
+
+    it("needs no objects — an empty document still has a camera", () => {
+      expect(succeeded("zoom 3", createEmptyDocument()).effect).toEqual({ kind: "zoom", factor: 3 });
+    });
+
+    // "1e999" is NOT among these: the command line's number grammar has no exponent
+    // form, so an infinity reaches this handler only as a run of digits too long to
+    // represent — which is a line an operator can actually type.
+    for (const factor of ["0", "-2", "0.0", "-0.5", "9".repeat(400)]) {
+      it(`refuses "zoom ${factor.slice(0, 12)}", which is not a multiplier and would reach the camera's clamp as a silent no-op`, () => {
+        expect(refused(`zoom ${factor}`, createEmptyDocument())).toContain("factor must be a positive number");
+      });
+    }
+
+    it("names the offending factor in the refusal, per §5.10's every-rejection-names-the-specifics rule", () => {
+      expect(refused("zoom -2", createEmptyDocument())).toBe("factor must be a positive number, got -2");
+    });
+  });
+
+  describe("fit", () => {
+    it("carries an effect with no payload — the extent is render/'s geometry and never travels in one", () => {
+      const outcome = succeeded("fit", sandbox());
+      expect(outcome.effect).toEqual({ kind: "fit" });
+      expect(outcome.lines).toEqual(["fit to the document extent"]);
+    });
+
+    it("refuses an empty document, rather than reporting success over an extent that does not exist", () => {
+      expect(refused("fit", createEmptyDocument())).toBe("no objects to fit — create one first");
+    });
+  });
+
+  describe("save and load", () => {
+    it("save asks for the write and serializes nothing here — the outcome's own document is the one to write", () => {
+      const document = sandbox();
+      const outcome = succeeded("save", document);
+      expect(outcome.effect).toEqual({ kind: "save" });
+      expect(outcome.document).toBe(document);
+      expect(outcome.lines).toEqual(["saving document"]);
+    });
+
+    it("load returns the CURRENT document unchanged, because reading a file is asynchronous and DOM-driven", () => {
+      const document = sandbox();
+      const outcome = succeeded("load", document);
+      expect(outcome.effect).toEqual({ kind: "load" });
+      expect(outcome.document).toBe(document);
+      expect(outcome.lines).toEqual(["loading document"]);
+    });
+
+    it("save is allowed on an empty document — an empty document is a document (§5.11)", () => {
+      expect(succeeded("save", createEmptyDocument()).effect).toEqual({ kind: "save" });
+    });
+  });
+
+  describe("who carries an effect at all", () => {
+    it("gives list and refs NONE, because their answer is lines (D-075 clause 4)", () => {
+      const document = sandbox();
+      expect(succeeded("list", document).effect).toBeUndefined();
+      expect(succeeded("refs polygon_1", document).effect).toBeUndefined();
+    });
+
+    it("gives a command that CHANGES the document none either — the new document is the whole result", () => {
+      expect(succeeded("circle x=0 y=0 r=1", createEmptyDocument()).effect).toBeUndefined();
+      expect(succeeded("set polygon_1.radius 9", sandbox()).effect).toBeUndefined();
+    });
+
+    it("is plain, serializable data — no function survives a JSON round trip, so this pins D-075 clause 2 mechanically", () => {
+      const document = sandbox();
+      for (const line of ["select polygon_1", "zoom 2", "fit", "save", "load"]) {
+        const effect = succeeded(line, document).effect;
+        expect(JSON.parse(JSON.stringify(effect))).toEqual(effect);
+      }
+    });
   });
 });
 
