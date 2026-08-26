@@ -10,7 +10,9 @@
  *   hit-testing (`render/hittest.ts`) and the selection/drag state machine
  *   (`render/interaction.ts`) all take plain arguments, while `command/parser.ts` and
  *   `command/prompt.ts` turn a typed or picked line into a command object and
- *   `command/commands.ts` runs the creation commands against a document. What is
+ *   `command/commands.ts` runs every command the parser can produce against a
+ *   document, returning a `CommandEffect` for the five that reach the camera, the
+ *   selection or a file — this file is what performs one (D-075). What is
  *   missing is only on THIS side: nothing here holds a canvas, a document, or an
  *   input bar, and nothing listens for a pointer or a key, so none of the above is
  *   ever called. It exists so the Vite scaffold has a valid entry point and

@@ -2493,3 +2493,42 @@ the third cycle in a row from re-deciding whose problem it is.
 Reconciliation required: none outstanding. The pinned test in `mutation.test.ts` ("KNOWN GAP,
 pinned not fixed") must FLIP when the load cycle implements this — that is the intended visible
 diff, not a test being weakened.
+
+---
+
+## D-082 — `command/` refuses a camera command's DOMAIN; `render/` clamps its RANGE; `main.ts` switches over `CommandEffect` exhaustively and resolves no name
+Answers: entry 0085's decisions 2, 3 and 5, ruled rather than left as implementation choices
+Ruled: entry 0086-REVIEW-phase3   Binding on: `command/commands.ts`, `render/camera.ts`, `main.ts`,
+and every future command that returns a `CommandEffect`
+
+1. **DOMAIN is `command/`'s, RANGE is `render/`'s.** A value that is not the KIND of thing the
+   command takes is refused in `commands.ts` and never becomes an effect: a `zoom` factor that is
+   not a positive finite multiplier, a `select` naming nothing, a `fit` over an empty document.
+   A value that is legal but must be bounded against the CURRENT camera — `[MIN_ZOOM, MAX_ZOOM]` —
+   is clamped in `render/camera.ts` (D-062) and NEVER re-checked in `command/`, which cannot see
+   the camera to check it against.
+2. **A refusal that `camera.ts` would silently absorb belongs in clause 1's half.** `clampZoom`
+   turns `0` and `-2` into `MIN_ZOOM` and keeps the current zoom for a non-finite request — each
+   is a line that would report success and do something the operator did not ask for. Where the
+   two layers could both "handle" a value, the one that can still say NO takes it.
+3. **`main.ts` performs an effect through a `switch` on `kind` with the `never` default**, the
+   idiom every discriminated-union switch in this codebase carries. `effect` is OPTIONAL on the
+   success arm (entry 0085's decision 1), so a missing arm is not a compile error at the seam —
+   the exhaustive switch is what restores that, and it is required, not suggested.
+4. **`main.ts` resolves no name and re-derives no identity** (D-075 clause 1, restated because
+   this is the cycle that will be tempted): an effect names an object by ID, and `main.ts` uses
+   the ID it was handed.
+5. **An effect carries the REQUEST, and the echoed line is worded for what has actually happened.**
+   `selected polygon_1` is past tense because nothing after it can fail; `zoom by 2`, `fit to the
+   document extent`, `saving document` and `loading document` are not. A clamped or degenerate
+   result is `main.ts`'s to report, not `commands.ts`'s to predict.
+
+**Rationale.** Two layers can both plausibly own "is this zoom sane", which is exactly the split
+that produces either a double check that drifts or a gap neither side covers. The line that makes
+it decidable is not "which is closer to the camera" but "which layer can still refuse" — a clamp
+cannot refuse, it can only absorb. Clause 3 exists because widening rather than restructuring
+(the right call) costs the seam its compile-time exhaustiveness, and that cost has to be paid
+back explicitly in the one file no test reaches.
+
+Reconciliation required: none. `commands.ts` already implements clauses 1, 2 and 5 as of entry
+0085; clauses 3 and 4 bind the `main.ts` cycle.

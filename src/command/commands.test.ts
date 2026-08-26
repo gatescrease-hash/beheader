@@ -376,6 +376,15 @@ describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)"
       expect(succeeded("zoom 0.5", createEmptyDocument()).effect).toEqual({ kind: "zoom", factor: 0.5 });
     });
 
+    // 0086-REVIEW: "changes no document state" is the PREMISE of D-075, so every
+    // effect command pins it, not only the three whose handler names it. D-027
+    // clause 2 keeps the camera write off `mutate`; this pins that `zoom` does not
+    // make one here either.
+    it("returns the document it was given, by identity — Document.camera is written by main.ts, never here", () => {
+      const document = sandbox();
+      expect(succeeded("zoom 2", document).document).toBe(document);
+    });
+
     it("needs no objects — an empty document still has a camera", () => {
       expect(succeeded("zoom 3", createEmptyDocument()).effect).toEqual({ kind: "zoom", factor: 3 });
     });
@@ -403,6 +412,12 @@ describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)"
 
     it("refuses an empty document, rather than reporting success over an extent that does not exist", () => {
       expect(refused("fit", createEmptyDocument())).toBe("no objects to fit — create one first");
+    });
+
+    // 0086-REVIEW: as for `zoom` above — reading the object list is not writing it.
+    it("returns the document it was given, by identity — the extent is render/'s to compute, and nothing here writes one", () => {
+      const document = sandbox();
+      expect(succeeded("fit", document).document).toBe(document);
     });
   });
 
