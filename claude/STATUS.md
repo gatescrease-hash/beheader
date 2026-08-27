@@ -1,4 +1,4 @@
-# STATUS — as of entry 0091-REVIEW
+# STATUS — as of entry 0092-REVIEW
 
 STATE: **GREEN.** Both configs compile, 1126/1126 tests pass, 0 skipped, 0 `.only`, `npm run build`
 succeeds.
@@ -8,10 +8,11 @@ is CLOSED.** The criterion was demonstrated by executable test at entry 0089 and
 human running the application at entry **0091** (D-084 clause 2, discharged). Nothing procedural
 stands in front of Phase 4.
 
-Last review point: **0091-REVIEW-phase3, the human's manual check.**
+Last review point: **0092-REVIEW-phase3** (the addressing vocabulary is invisible — D-092).
+Before it: **0091-REVIEW-phase3**, the human's manual check, which closed Phase 3's gate.
 Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
 
-## Read this first — the four things a cold reader needs
+## Read this first — the five things a cold reader needs
 
 **1. A human has now used this application, and that is where the last four defects came from.**
 Entry 0091 records the session. Two defects, both invisible to 1,126 passing tests, both in
@@ -22,16 +23,31 @@ resampled on a scaled display. Both fixed at 0091-REVIEW. **This is the second c
 where every finding was in that region.** 0091-REVIEW §7 asks for D-084's mechanism — a human
 session — at every phase gate from here.
 
-**2. The human's session set the next three cycles, and raised one question only they can answer.**
-Ruled and queued: **D-088** (every printable keystroke reaches the command input wherever focus is;
-`ctrl`/`alt`/`meta` combinations never route), **D-089** (command history on up/down, held in
-`AppState`), **D-090** (a prompt sequence that has gathered a point DRAWS it, and the geometry it
-would produce, from `state.pending` and never into the document). Answered: **D-091** (the table's
-grey grid against a near-black outline is deliberate and stands). **Escalated: Q-014, a properties
-panel** — the human asked for one and §5.10 says "no panels, no toolbars", so it needs a brief
-amendment and no model may settle it. Nothing is built against it.
+**2. THE ADDRESSING VOCABULARY IS INVISIBLE, and that is a gap in the brief (D-092).** The human
+found it at entry 0092 and it is the most important open item here. Rule 3 makes addressing
+load-bearing, §5.2 gives the operator a name as their half of it, and every authoring act — `link`,
+`set`, `refs`, `delete`, `rename` — is spelled in names and slot paths. **The running application
+displays neither.** Three holes: *object → name* (click a circle, learn it is `circle_2` — not in
+the brief at all), *name → object* (`select` + a highlight — specified, unbuilt, D-068), and
+**object → its slots** (what can I link, and which are `derived`? — not in the brief at all, and the
+one that blocks Phase 4 for a human). `list` prints names and types only. **D-092** closes holes 1
+and 3 without amending anything: a name drawn beside each object, and a `props <object>` command
+printing each slot's path, kind and value.
 
-**3. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
+**3. The human's session at entry 0091 set the rest of the queue.** Ruled: **D-088** (every printable
+keystroke reaches the command input wherever focus is; `ctrl`/`alt`/`meta` combinations never route)
+· **D-089** (command history on up/down, held in `AppState`) · **D-090** (a prompt sequence that has
+gathered a point DRAWS it, and the geometry it would produce, from `state.pending` and never into the
+document) · **D-091** (the table's grey grid against a near-black outline is deliberate and stands).
+
+**Q-014, the properties panel, is OPEN and the HUMAN'S ALONE — and it is now NARROWER than it was.**
+D-092 closes the "I can't see anything" half without touching the brief, so Q-014 is only about
+EDITING and LINKING slots by mouse, which §5.10's "no panels, no toolbars" forbids in terms. The
+recommendation is option (a), floating and per-object, for the human's own reason: linking is a
+binary operation between two slots on two objects, and one fixed panel cannot express a binary
+operation. **Nothing is built against it, not even a small version.**
+
+**4. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
 it (`submitLine`, `performEffect`, `pointerDownAt`, `pointerMoveTo`, `wheelZoomAt`, `panByScreen`,
 `escape`, `replaceDocument`, …) are pure, take plain numbers plus a `Viewport`, and have 36 tests.
 `start` — the canvas, the listeners, the log element, the file picker, the download anchor — has
@@ -39,7 +55,7 @@ it (`submitLine`, `performEffect`, `pointerDownAt`, `pointerMoveTo`, `wheelZoomA
 **Every finding of the last two reviews lived in `start`.** D-089 clause 1 is the standing response:
 new behaviour goes in `AppState` where it can be asserted, and only the listener stays down there.
 
-**4. `load` is wired, and that makes an unbuilt check user-reachable.** A hand-edited document whose
+**5. `load` is wired, and that makes an unbuilt check user-reachable.** A hand-edited document whose
 formula AST nests deeper than `MAX_FORMULA_AST_DEPTH` reaches `deserializeDocument` from a button and
 throws a `RangeError` out of the file-read promise (**D-083** clause 4's loader check is not built;
 **D-081**'s name gate is not either). Nothing this build SAVES can contain such an AST — `parser.ts`
@@ -49,21 +65,27 @@ refuses it. Owned by `document.ts`'s cycle.
 `NOT`, `TRUE`, `FALSE` lex as formula keywords and `checkNameAvailable` refuses them in every case
 (**D-080**). Function names are safe and are NOT reserved.
 
-## Next cycles — ordered, and the order is reasoned in 0091-REVIEW §6
+## Next cycles — ordered, and the order is reasoned in 0092-REVIEW §5
 
-1. **D-068's feedback trio + D-090's prompt preview, together, in `renderer.ts`.** Selection
-   highlight, error badge, formula-driven indicator, and the marker-plus-preview for a prompt
-   sequence that has gathered a point. One cycle because they need the same new capability (drawing
-   something that is not an object) and the same transform reset before screen-space chrome. Between
-   them they answer both halves of what the human could not see.
-2. **D-088 + D-089, the command input's behaviour.** Printable-key routing and history.
-3. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
+1. **`renderer.ts`: D-068's feedback trio + D-090's prompt preview + D-092 clause 1's name labels.**
+   Selection highlight, error badge, formula-driven indicator, the marker-and-preview for a prompt
+   sequence that has gathered a point, and a screen-space name beside every object. Together because
+   all five are "draw something that is not an object" and all five need the transform reset D-068
+   owns. **This is now a large cycle — watch it against §6.3's 800/10 cap and split it if it runs
+   over, keeping D-068's three together as D-068 requires.**
+2. **`commands.ts`: D-092 clause 4's `props <object>`.** Every slot's path, kind and value. Small,
+   entirely testable, and it is what a properties panel would display if Q-014 is approved, so the
+   work composes whichever way that goes.
+3. **D-088 + D-089, the command input's behaviour.** Printable-key routing and history.
+4. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
    `createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then).
 
-**Phase 4 should follow those three, and that is a recommendation rather than a rule** (0091-REVIEW
-§6). Its criterion (c) requires "feedback that X is driven" during a drag, which is D-068's third
-piece. Phase 4 is reachable today with that feedback in the log, and demonstrates far more with it
-on the canvas.
+**Phase 4 should follow at least cycles 1 and 2, and that is a recommendation rather than a rule.**
+Its criterion (c) requires "feedback that X is driven" during a drag, which is D-068's third piece.
+More pointedly, 0092-REVIEW §5: Phase 4 asks a HUMAN to bind `polygon_a.origin.x` to `table_x.A1`
+and have `table_x.B1` read `polygon_b.origin.x`. Until D-092 lands that human cannot see which
+polygon is which, or that `origin.x` is a path they are allowed to write. The phase is reachable
+without it and would be miserable.
 
 
 ## Built and reviewed
@@ -103,7 +125,7 @@ against `main.ts` (each seeded alone, reverted after) killed 1, 1, 6, 1 and 3 te
 
 ## Not started
 
-§5.9's visual-feedback trio (**D-068**) · §5.9's per-vertex drag path ·
+§5.9's visual-feedback trio (**D-068**) · **D-092's name labels and `props` command** · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation (D-081,
 D-083 clause 4) · Phases 4–7.
@@ -173,6 +195,9 @@ Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-RE
 - **`format.ts`'s elision does not re-parse** — a disclosed exception to the round-trip property,
   reachable only through a loaded AST deeper than any parse can build.
 - **A `delete` refusal can name the same dependent twice** — fix-list item 3.
+- **An operator cannot discover an object's slots.** No command prints them. **D-092** clause 4 owes
+  `props <object>`. Until then the only source is `primitives/schema.ts`.
+- **An operator cannot tell which object on canvas is which name.** **D-092** clause 1 owes the label.
 - **`refs` names a range's START cell as the source** when the range's table is being removed. The
   DEPENDENT is right, which is what §5.1.1 asks. Entry 0081, disclosed not fixed.
 - **`refs <object>` derives edges twice.** Rule 5's accepted trade; 326 ms for the largest table
@@ -213,7 +238,13 @@ Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-RE
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-091**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-092**) binds without restatement here.
+
+**New at 0092-REVIEW:** **D-092** — the addressing vocabulary must be VISIBLE in the running
+application. A name is drawn beside each object (screen-space, constant size, always on at first),
+and `props <object>` prints every slot's path, KIND and value. Neither amends the brief: the brief
+is silent on both, and §5.10's "adding a command is one registry entry" is its own extension
+mechanism. Cold-read item 2 has the gap it closes.
 
 **New at 0091-REVIEW, from the human's session:** **D-088** (the command input keeps the keyboard:
 a canvas press refuses the browser's default focus move, every printable keystroke routes to the
@@ -332,3 +363,6 @@ Next free: **Q-015**.
 - **`window.devicePixelRatio` is not always an integer.** Windows at 125% scaling gives 1.25, so
   `paint` rounds the backing size and `screenPointOf` reads the ratio back off the canvas instead of
   trusting the multiplication.
+- **The operator cannot see what you can see.** You have `primitives/schema.ts` open; they have a
+  canvas and a log. Before adding anything that the operator must NAME to use, ask where they learn
+  the name from. D-092 exists because ninety-one entries went by without anyone asking.

@@ -2807,3 +2807,64 @@ defaults.
 constants were chosen deliberately and differ on purpose, but `DEFAULT_SHAPE_STROKE_STYLE` carries a
 paragraph of reasoning and `TABLE_GRID_STROKE_STYLE` was typed with no comment at all, so nothing in
 the repo said which. It does now.
+
+---
+
+## D-092 — The addressing vocabulary MUST be visible in the running application. A name is drawn on the canvas, and an object's slots are readable by command
+Answers: the human's argument at entry 0092 — *"How can I actually tell which object is which? Which
+circle is circle_1 or circle_2 to me, the user, who only sees a canvas and the history of commands?"*
+Ruled: entry 0092-REVIEW-phase3 (reviewer)   Binding on: `render/renderer.ts`, `command/commands.ts`,
+and every later surface that shows an object
+
+**The gap, stated first, because it is larger than the question that found it.** Rule 3 makes the
+addressing scheme load-bearing and §5.2 gives the operator a mutable name as their half of it. Every
+authoring act in §5.10 — `link`, `set`, `refs`, `delete`, `rename` — is spelled in names and slot
+paths. **Nothing in the running application displays either.** Three separate holes:
+
+1. **Object to name.** Click a circle and there is no way to learn it is `circle_2`. Nothing in the
+   brief addresses this at all.
+2. **Name to object.** `select circle_2` exists and is specified, and it draws nothing until D-068
+   lands. Specified, unbuilt.
+3. **Object to its slots.** `list` prints names and types (`circle_1 — circle`). No command prints
+   what slots an object HAS, what kind each is, or what drives it. An operator cannot discover that
+   `origin.x` or `radius` exists without reading `primitives/schema.ts`.
+
+Hole 3 is the one that blocks Phase 4 for a human. `link polygon_1.origin.x table_x.A1` requires
+knowing in advance that both paths exist and that the target is not `derived`. The brief assumes the
+operator knows the schema, which is true of the brief's author and false of its user.
+
+**Ruling.**
+
+1. **An object's name is drawn on the canvas, next to the object.** This is object rendering in the
+   family of §5.9's "visual feedback", NOT §5.10's forbidden "panels, toolbars". Runs in D-068's
+   cycle, which already owns drawing things that are not geometry.
+2. **The label is SCREEN-space: constant size and constant offset regardless of zoom.** A name is
+   not a property of the drawing, so it does not scale with it. This is the first thing in
+   `renderer.ts` that is unambiguously screen-space, and it is evidence toward **Q-012** rather than
+   a taking of it: Q-012 asks about a stroke WIDTH and a cell SIZE, which are properties of the
+   object. A label is not.
+3. **Always drawn, at first.** Rule 5's dumbest correct implementation, and it is what makes the
+   vocabulary visible without inventing a hover or toggle mechanism nobody has asked for. If a
+   crowded canvas makes this noise, the next human session will say so and a toggle is one cycle.
+   Do NOT pre-emptively build the toggle.
+4. **A command prints an object's slots, their kinds, and their current values.** Registry name
+   `props <object>`, one entry, which is §5.10's own extension mechanism ("adding a command is one
+   registry entry") and therefore needs no amendment. It reports every slot on the object: the path,
+   the kind (`literal` / `formula` / `derived`), the current value, and for a formula slot the source
+   reconstructed by `formula/format.ts` against current names.
+5. **`props` must make the three slot kinds legible, because they are what the operator is allowed
+   to do.** A `derived` slot cannot be `set` or `link`ed (§5.1) and the operator has no other way to
+   learn which ones those are. Marking the kind IS the point of the command.
+6. **`props` reads and refuses to write.** No `effect`, no mutation, like `list` and `refs`
+   (D-075 clause 4).
+
+**Rationale.** The project's thesis is wiring objects together parametrically. The wiring is done in
+a vocabulary — names and slot paths — that the engine treats as load-bearing and the interface does
+not show at all. An engine that resolves addresses perfectly is unusable by someone who cannot see
+the addresses. That is not a UI nicety, and it is not the properties-panel question (**Q-014**),
+which is about EDITING slots by mouse. Clauses 1 and 4 make the vocabulary READABLE, cost about one
+cycle between them, and conflict with nothing in the brief.
+
+Clause 4 is deliberately a command rather than a panel, so that it lands whatever the human rules on
+Q-014. If the panel is approved, `props` is what the panel displays and the work is not wasted. If
+the panel is declined, `props` is the whole answer to hole 3.

@@ -16,53 +16,65 @@ Next free ID: **Q-015**
 
 ---
 
-## Q-014 — Does §5.10's "no panels, no toolbars" still hold, now that the human has asked for a properties panel as the PRIMARY authoring surface?
-Raised: entry 0091-REVIEW (reviewer, relaying the human's manual check)   Brief section: §5.10,
-§5.1, §5.3   Status: **OPEN — for the human only. No implementer may settle this.**
+## Q-014 — Does §5.10's "no panels, no toolbars" still hold, now that the human has asked for a properties panel as an authoring surface?
+Raised: entry 0091-REVIEW (reviewer, relaying the human's manual check)
+**Restated: entry 0092-REVIEW**, after the human's argument that the brief has a gap. The gap is
+real and is now ruled separately as **D-092** — this question is narrower than it was.
+Brief section: §5.10, §5.1, §5.3   Status: **OPEN — for the human only. No model may settle it.**
 
-Ambiguity: there is none in the brief. §5.10 is explicit: "AutoCAD-style: a persistent input bar
-at the bottom... **Minimal UI chrome elsewhere — no panels, no toolbars.**" The human's manual
-check asks for the opposite: a properties panel on the left, appearing when an object is selected,
-listing that object's slots, and being *"where the user will really spend most of their time
-linking variables and functions"* rather than the command line.
+**What this question is NOT, since 0092-REVIEW.** The human's argument was that an operator cannot
+tell which circle is `circle_1`, cannot see an object's slots, and therefore cannot wire anything
+together. That is correct and it is three holes, of which **D-092** closes two without touching the
+brief: a name is drawn beside each object (object rendering, §5.9's feedback family), and `props
+<object>` prints an object's slots with their kinds and values (§5.10's own "adding a command is one
+registry entry"). Neither needs an amendment.
 
-This is a **brief amendment**, not an ambiguity to resolve. PROCESS_BRIEF §8 forbids the reviewer
-from amending the design mid-review, and §1 makes the human final arbiter on product questions. So
-this question exists to hold the request until the human edits `PROJECT_BRIEF.md` §5.10 (and
-probably §6's phase order), or withdraws it.
-
-What is at stake beyond the panel itself: the brief's §1 and §5.10 make the command line the
-authoring model, and every design decision downstream has assumed it — D-069 (`executeCommand` is
-the only place a `Command` meets a `Document`), D-072's prompt sequences, D-075's effects as data,
-Q-013's open question about how a general formula is authored at all. A properties panel that
-edits slots directly is a SECOND authoring path into `mutation.ts`. That is allowed by Rule 2 (it
-would call the same API), and it moots Q-013's difficulty (a formula gets typed into the slot's own
-row, which is where a spreadsheet puts it), but it is a real change of direction and it should be
-made on purpose.
+**What remains, and it is only this: EDITING and LINKING slots by mouse, in a panel.** §5.10 says
+"Minimal UI chrome elsewhere — no panels, no toolbars." A panel that displays slots is chrome. A
+panel that writes them is chrome AND a second authoring path. Only the human may allow it.
 
 Options:
 
-(a) **Amend §5.10 to allow one properties panel, and keep the command line as an equal surface.**
-    The panel reads the selected object's slots and their kinds, and writes through the same
-    `writeSlot`/`mutate` path `commands.ts` uses. Phase 4's linking demo becomes achievable by
-    mouse as well as by typing.
-(b) **Amend §5.10 and demote the command line** to a secondary/creation surface, per the human's
-    "most of their time... not through the command line". Larger, and it changes what Phases 4–7
-    are demonstrating.
-(c) **Hold the brief as written.** The panel is deferred to §8's list. Selection feedback stays
-    D-068's highlight, and slot authoring stays the command line's job.
+(a) **Floating panel, anchored per object, appearing on selection.** The human's own preference, and
+    their stated reason is the strongest argument here: **linking is a binary operation between two
+    slots on two different objects.** One fixed panel shows one object at a time, so linking means
+    select A, memorise the path, select B, type it — which is the command line with extra steps. Two
+    floating panels let the operator click a slot on A, click a slot on B, and be done. The
+    interaction only makes sense if more than one can be open.
+(b) **One fixed panel on the left, showing the selected object.** Conventional, less occlusion, no
+    anchoring arithmetic. Loses the two-panel linking gesture in (a), which is the thing that made
+    the request worth making.
+(c) **Hold the brief as written.** D-092's label and `props` command are the whole answer, and
+    linking stays typed. Cheapest, and defensible: the operator can now SEE both names and both slot
+    paths, which is what they could not do before.
 
-Recommendation: **(a)**, and only after D-068's feedback trio lands. Reasons: it is the smallest
-amendment that satisfies what the human actually reported needing (a place to see and link an
-object's slots), it leaves every existing ruling intact because the panel is another caller of the
-same mutation API, and it answers Q-013 as a side effect. (b) is the same code plus a decision
-about the project's identity that nothing forces today. (c) contradicts a direct instruction from
-the project's owner and is listed only for completeness.
+Recommendation: **(a)**, after D-068 and D-092 land. It is what the human asked for, its rationale
+is a real interaction argument rather than a preference, and D-092's `props` command is exactly the
+data such a panel displays — so the work composes rather than duplicating.
 
-Reversible? **The panel is. The direction is not.** Building a panel under (a) costs one cycle and
-deletes cleanly. Rebuilding the project's authoring model around it (b) touches the phase plan.
-Provisional choice taken: **none. Nothing is built against this until the human rules.** Tagged at:
-nowhere.
+**Design questions (a) must answer, none of them blocking this ruling:**
+
+1. **Screen space, not world space.** A panel that pans and zooms with its object becomes unreadable
+   at low zoom and enormous at high zoom. It anchors to the object's PROJECTED position and holds a
+   constant size, which makes it a consumer of the transform reset D-068 already owns.
+2. **Occlusion.** Floating panels cover the canvas they describe. Needs a collapse, a drag, or a
+   close, and that is UI furniture the brief has never had.
+3. **Refusals must survive into the panel.** §5.10: "every rejection message must name the specific
+   slots involved." A click on a `derived` slot that silently does nothing is WORSE than the command
+   line's "radius is driven by table_x.A1" — the panel must say the same sentence the command says.
+4. **It is a second caller of `mutate`, which Rule 2 permits** and D-069 does not: `executeCommand`
+   is currently "the ONLY place a `Command` meets a `Document`". A panel either builds `Command`
+   values and goes through that path (preferred, and it keeps D-069 true), or becomes a second
+   authoring path that needs its own ruling.
+
+**Consequence worth stating:** approving (a) or (b) largely moots **Q-013** (how a general formula is
+authored at all, which §5.10 has no command for and Phase 4(b) requires). A formula gets typed into
+the slot's own row, which is where a spreadsheet puts it.
+
+Reversible? **The panel is. The direction is not.** Building it costs a cycle and deletes cleanly.
+The human's framing at entry 0091 — most of the linking work happening in the panel rather than at
+the command line — is a change to what this project IS, and that part is not a reversible choice.
+Provisional choice taken: **none. Nothing is built against this.** Tagged at: nowhere.
 
 ---
 
