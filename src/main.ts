@@ -455,22 +455,44 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let spaceHeld = false;
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
+
+  /**
+   * A screen point in BACKING pixels, which is the space `hitTest`,
+   * `renderDocument` and `viewport()` all work in (D-086 clause 2).
+   *
+   * The ratio is read off the canvas itself rather than from
+   * `devicePixelRatio`, so it stays exact through the rounding `paint` does when
+   * it sizes the backing store, and degrades to 1 for a canvas the layout has
+   * given no width.
+   */
   const screenPointOf = (event: PointerEvent | WheelEvent): ScreenPoint => {
     const bounds = canvas.getBoundingClientRect();
-    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    const ratioX = bounds.width > 0 ? canvas.width / bounds.width : 1;
+    const ratioY = bounds.height > 0 ? canvas.height / bounds.height : 1;
+    return { x: (event.clientX - bounds.left) * ratioX, y: (event.clientY - bounds.top) * ratioY };
   };
 
-  // The canvas's BACKING size must equal its CSS size, or the browser scales the
-  // drawing while `screenPointOf` keeps reporting CSS pixels off
-  // `getBoundingClientRect` — clicks land somewhere other than where the picture
-  // shows them, and drags slip by the same ratio. The log growing shortens the
-  // canvas with no window resize behind it, so the size is re-read before every
-  // paint rather than only on that event (0090-REVIEW F1). Rule 5: one layout
-  // read per frame is not a cost this project trades correctness for.
+  // The canvas's BACKING size follows its CSS size times the display's device
+  // pixel ratio. A backing store sized in CSS pixels is stretched by the display
+  // and every line drawn into it is resampled, which is the fuzziness entry 0091
+  // reported: the log and the command input are DOM text and stay sharp, so only
+  // the picture looks soft (D-086, widened at 0091-REVIEW).
+  //
+  // `screenPointOf` above converts INTO this space, which D-086 clause 3 requires
+  // to happen in the same change: a pointer event carries CSS pixels and
+  // everything downstream of here consumes backing pixels.
+  //
+  // Re-read before every paint rather than on `resize` alone, because the log
+  // growing shortens the canvas with no window resize behind it (0090-REVIEW F1).
+  // Rule 5: one layout read per frame is not a cost this project trades
+  // correctness for.
   const paint = (): void => {
-    if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
+    const ratio = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    const backingWidth = Math.round(canvas.clientWidth * ratio);
+    const backingHeight = Math.round(canvas.clientHeight * ratio);
+    if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+      canvas.width = backingWidth;
+      canvas.height = backingHeight;
     }
     renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera);
   };
@@ -528,22 +550,34 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
+    // Both lines are about the command input keeping the keyboard (§5.10:
+    // "always focused when the user is not editing text or a cell"). A press on
+    // the canvas moves focus to the body as its DEFAULT action, which runs AFTER
+    // this listener — so `input.focus()` alone was undone a moment later, and
+    // every keystroke after a click went nowhere until the operator clicked the
+    // input (entry 0091). Refusing the default keeps the focus where it is, and
+    // the `focus()` call recovers it when something else already took it.
+    event.preventDefault();
+    input.focus();
     canvas.setPointerCapture(event.pointerId);
+    const point = screenPointOf(event);
     if (event.button === 1 || spaceHeld) {
-      pan = { lastScreenX: event.clientX, lastScreenY: event.clientY };
+      pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
     }
-    applyTransition(pointerDownAt(state, screenPointOf(event), viewport()));
-    input.focus();
+    applyTransition(pointerDownAt(state, point, viewport()));
   });
 
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
+    const point = screenPointOf(event);
     if (pan !== undefined) {
-      apply(panByScreen(state, event.clientX - pan.lastScreenX, event.clientY - pan.lastScreenY));
-      pan = { lastScreenX: event.clientX, lastScreenY: event.clientY };
+      // Backing-pixel deltas, like every other screen number here: a CSS-pixel
+      // delta would pan at 1/ratio of the pointer's speed on a scaled display.
+      apply(panByScreen(state, point.x - pan.lastScreenX, point.y - pan.lastScreenY));
+      pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
     }
-    apply(pointerMoveTo(state, screenPointOf(event)));
+    apply(pointerMoveTo(state, point));
   });
 
   const endGesture = (event: PointerEvent): void => {

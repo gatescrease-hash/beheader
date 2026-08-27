@@ -1,78 +1,70 @@
-# STATUS — as of entry 0090-REVIEW
+# STATUS — as of entry 0091-REVIEW
 
 STATE: **GREEN.** Both configs compile, 1126/1126 tests pass, 0 skipped, 0 `.only`, `npm run build`
-succeeds. Entry 0089 (`main.ts` — the application, and every effect performed) is **reviewed:
-0090-REVIEW-phase3, ACCEPT WITH EDITS**, four findings, all four fixed in that review.
+succeeds.
 
-Current phase: **3 — canvas, camera, geometry, command line.** **The criterion is ACCEPTED as
-engineering and the gate is CONDITIONALLY OPEN: Phase 4 may not begin until a human has run the app
-once and written down what they saw (D-084).** No implementer cycle can discharge that. The
-application exists: a typed line reaches a handler, the handler's document is drawn, the wheel zooms
-to the cursor, a middle-drag or space-drag pans, a click selects, a drag moves — all demonstrated end
-to end by `src/main.test.ts`'s "Phase 3's acceptance criterion" block.
+Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
+is CLOSED.** The criterion was demonstrated by executable test at entry 0089 and confirmed by a
+human running the application at entry **0091** (D-084 clause 2, discharged). Nothing procedural
+stands in front of Phase 4.
 
-Last review point: **0090-REVIEW-phase3, ACCEPT WITH EDITS.**
+Last review point: **0091-REVIEW-phase3, the human's manual check.**
 Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
 
 ## Read this first — the four things a cold reader needs
 
-**1. The gate needs one human run, and that is the only thing between here and Phase 4 (D-084).**
-`main.test.ts` asserts the draw calls `renderer.ts` makes (the polygon's stroked path, the table's
-nine stroked cell rects), the camera after a pan/zoom, the selection after a click on the polygon's
-stroke, and the moved `origin.x` after a drag. It does not assert pixels, and nobody has looked. The
-owed check: open the dev server, type `polygon sides=5 x=100 y=100 r=50` and
-`table x=300 y=100 rows=3 cols=3`, wheel, middle-drag, click the outline, drag — then write down what
-you saw, including nothing. **Why this is now a binding rule and not a nicety: all four of
-0090-REVIEW's findings were in the untested DOM half, and all four were things a single click would
-have shown** (a canvas whose backing size never matched its CSS size, so every click landed off the
-picture; a space-drag pan that could not fire; a fragile `save`). Two standing qualifications on what
-that run will show: **a selection draws nothing** (D-068 defers all three feedback pieces to one
-later cycle) and **interior clicks miss** (stroke-only hit-testing, ruled fine for this gate by D-067
-clause 2).
+**1. A human has now used this application, and that is where the last four defects came from.**
+Entry 0091 records the session. Two defects, both invisible to 1,126 passing tests, both in
+`main.ts`'s DOM half, both found in the first two minutes: the command input lost its focus on every
+canvas press (a press moves focus to the body as its DEFAULT action, which runs *after* the listener
+that called `focus()`), and the canvas backing store was sized in CSS pixels, so every line was
+resampled on a scaled display. Both fixed at 0091-REVIEW. **This is the second consecutive review
+where every finding was in that region.** 0091-REVIEW §7 asks for D-084's mechanism — a human
+session — at every phase gate from here.
 
-**2. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
+**2. The human's session set the next three cycles, and raised one question only they can answer.**
+Ruled and queued: **D-088** (every printable keystroke reaches the command input wherever focus is;
+`ctrl`/`alt`/`meta` combinations never route), **D-089** (command history on up/down, held in
+`AppState`), **D-090** (a prompt sequence that has gathered a point DRAWS it, and the geometry it
+would produce, from `state.pending` and never into the document). Answered: **D-091** (the table's
+grey grid against a near-black outline is deliberate and stands). **Escalated: Q-014, a properties
+panel** — the human asked for one and §5.10 says "no panels, no toolbars", so it needs a brief
+amendment and no model may settle it. Nothing is built against it.
+
+**3. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
 it (`submitLine`, `performEffect`, `pointerDownAt`, `pointerMoveTo`, `wheelZoomAt`, `panByScreen`,
 `escape`, `replaceDocument`, …) are pure, take plain numbers plus a `Viewport`, and have 36 tests.
-**All four of 0090-REVIEW's findings were in the OTHER half.**
 `start` — the canvas, the listeners, the log element, the file picker, the download anchor — has
-**none**, because testing it needs a DOM and that needs a dependency this project will not add. The
-bottom of the file is guarded on `typeof document`, which is what lets the test file import the
-module at all under `vitest`'s `node` environment. **If a listener is wired to the wrong event,
-nothing in this repo will say so.**
+**none**, because testing it needs a DOM and that needs a dependency this project will not add.
+**Every finding of the last two reviews lived in `start`.** D-089 clause 1 is the standing response:
+new behaviour goes in `AppState` where it can be asserted, and only the listener stays down there.
 
-**3. Every effect is now PERFORMED** (D-075 clause 3, D-082 clauses 3–5), through a `switch` on
-`kind` with the `never` default. `select` uses the ID it was handed and resolves no name; `zoom`
-multiplies the current zoom about the VIEWPORT CENTRE (a typed factor has no cursor) and reports the
-CLAMPED result; `fit` places the extent's centre at the screen's centre and guards D-066's
-degenerate case itself — a POINT, both axes zero, since **D-087**; `save`/`load` come back out as a
-`fileRequest` the DOM half performs. The
-camera is written directly through ONE function and never through `mutate` (D-027 clause 2).
-
-**4. `load` is wired, and that makes an unbuilt check user-reachable.** Before this cycle nothing
-could open a file. Now a hand-edited document whose formula AST nests deeper than
-`MAX_FORMULA_AST_DEPTH` reaches `deserializeDocument` from a button and throws a `RangeError` out of
-the file-read promise (**D-083** clause 4's loader check is not built; **D-081**'s name gate is not
-either). Nothing this build SAVES can contain such an AST — `parser.ts` refuses it. The fix is
-`document.ts`'s cycle, not this one; what changed is the SEVERITY, not the ownership.
+**4. `load` is wired, and that makes an unbuilt check user-reachable.** A hand-edited document whose
+formula AST nests deeper than `MAX_FORMULA_AST_DEPTH` reaches `deserializeDocument` from a button and
+throws a `RangeError` out of the file-read promise (**D-083** clause 4's loader check is not built;
+**D-081**'s name gate is not either). Nothing this build SAVES can contain such an AST — `parser.ts`
+refuses it. Owned by `document.ts`'s cycle.
 
 **Still binding, one line: five names §5.2's grammar allows are NOT available** — `AND`, `OR`,
 `NOT`, `TRUE`, `FALSE` lex as formula keywords and `checkNameAvailable` refuses them in every case
 (**D-080**). Function names are safe and are NOT reserved.
 
-## Next slice — ruled, not a choice
+## Next cycles — ordered, and the order is reasoned in 0091-REVIEW §6
 
-**§5.9's visual feedback trio** (**D-068**): selection highlight, error badge, formula-driven
-indicator, together, in `renderer.ts`, with `renderDocument` widened to carry the selection. That
-cycle owns the transform reset before screen-space chrome. 0090-REVIEW §10 puts it first for one
-reason beyond its own merit: it is the last piece that changes what **D-084**'s owed human run will
-show, so doing it first means that run is worth performing once instead of twice.
+1. **D-068's feedback trio + D-090's prompt preview, together, in `renderer.ts`.** Selection
+   highlight, error badge, formula-driven indicator, and the marker-plus-preview for a prompt
+   sequence that has gathered a point. One cycle because they need the same new capability (drawing
+   something that is not an object) and the same transform reset before screen-space chrome. Between
+   them they answer both halves of what the human could not see.
+2. **D-088 + D-089, the command input's behaviour.** Printable-key routing and history.
+3. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
+   `createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then).
 
-**Then §5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
-`createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then). This is
-what closes item 4 above. `document.ts` is load-bearing (§6.2) and this review has landed, so it is
-unblocked whenever it is reached.
+**Phase 4 should follow those three, and that is a recommendation rather than a rule** (0091-REVIEW
+§6). Its criterion (c) requires "feedback that X is driven" during a drag, which is D-068's third
+piece. Phase 4 is reachable today with that feedback in the log, and demonstrates far more with it
+on the canvas.
 
-**Neither is Phase 4.** Phase 4 does not begin until D-084 clause 2 is recorded in a numbered entry.
 
 ## Built and reviewed
 
@@ -116,18 +108,18 @@ against `main.ts` (each seeded alone, reverted after) killed 1, 1, 6, 1 and 3 te
 (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation (D-081,
 D-083 clause 4) · Phases 4–7.
 
-**Phase 4 is close and is NOT claimed.** (a) data drives geometry and (b) geometry drives data are
-both reachable from typed lines; (c) partial binding under drag is now demonstrated end to end in
+**Phase 4 is OPEN and is NOT claimed.** (a) data drives geometry and (b) geometry drives data are
+both reachable from typed lines; (c) partial binding under drag is demonstrated end to end in
 `main.test.ts` ("drags a polygon whose origin.x is a formula along Y only"), with the feedback
-reaching the LOG rather than the canvas. What is missing for the gate is all three in ONE document
-with the on-canvas feedback D-068 owns — and §6 forbids starting Phase 4 before Phase 3's criterion
-passes review.
+reaching the LOG rather than the canvas. What is missing is all three in ONE document, and (c)'s
+"feedback that X is driven" wants the on-canvas half D-068 owns. Nothing procedural forbids starting
+it — 0091-REVIEW §6 recommends the three queued cycles first, and that is a recommendation.
 
-## Open fix list — **read 0090-REVIEW §9 for the full text**
+## Open fix list — **read 0090-REVIEW §9 and 0091-REVIEW §5 for the full text**
 
-Numbering follows 0090-REVIEW §9, which restarted it. Old item 5 (the ~200 KB echo) is **CLOSED by
-ruling** — the line stays as typed, and it is not a defect; 0090-REVIEW §9 has the reasoning and the
-one condition that would reopen it.
+Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-REVIEW. Old item 5 (the
+~200 KB echo) is **CLOSED by ruling** — the line stays as typed, and it is not a defect; 0090-REVIEW
+§9 has the reasoning and the one condition that would reopen it.
 
 1. **§5.11's loader validates a loaded formula's AST depth once, at the boundary** (**D-083**
    clause 4). `deps.ts` and `eval.ts` get no depth parameter. **Now user-reachable** — entry 0089
@@ -145,6 +137,10 @@ one condition that would reopen it.
    `set = x`'s self-contradictory message · (6) `parser.ts`'s header restating D-069 · the twelve
    bare "this cycle" sites in test files · `render/slots.ts` at the THIRD consumer of
    `readNumber`/`asPointArray` · `.gitattributes`.
+6. **A middle-drag pan started outside the canvas is untested and unthought-about.** D-088 clause
+   1's `preventDefault` handles the ordinary case. Owned by D-088's cycle.
+7. **`TABLE_GRID_STROKE_STYLE` has no comment** where its neighbour has a paragraph. **D-091**
+   explains the choice and the constant should say a line of it. Owned by the `style`-slots cycle.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -152,8 +148,17 @@ one condition that would reopen it.
   download anchor and the file picker. Minimised, not solved. Entry 0089, "where I got stuck", and
   **0090-REVIEW found four defects there and none anywhere else.** Treat a change to that region as
   unverified until someone clicks on it.
-- **No human has seen this application run**, and **D-084** now makes that a gate condition rather
-  than a regret. See cold-read item 1.
+- **A human HAS now used it** (entry 0091), and found two defects the whole suite could not. Both
+  fixed. **The three fixes made at 0091-REVIEW are themselves unverified by any test** — focus
+  retention, the device-pixel-ratio backing store, and backing-pixel pan deltas. Confirm them by
+  eye at the next session.
+- **A prompt sequence shows nothing where you clicked** — no marker for a picked point, no preview
+  of the shape being built, so picking a circle's radius is a guess. Ruled **D-090**, queued with
+  D-068.
+- **A printable keystroke does not reach the command input unless it is focused.** The focus is no
+  longer lost on a canvas press, but D-088 clauses 2–4 (routing from anywhere, excluding
+  `ctrl`/`alt`/`meta`) are not built.
+- **There is no command history.** Ruled **D-089**, queued.
 - **A selection changes nothing on screen** (D-068), and **an error badge and the formula-driven
   indicator do not exist** either. All three are one cycle's work.
 - **A hand-edited saved file can throw a `RangeError` out of the Load button** — fix-list item 1.
@@ -208,7 +213,20 @@ one condition that would reopen it.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-087**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-091**) binds without restatement here.
+
+**New at 0091-REVIEW, from the human's session:** **D-088** (the command input keeps the keyboard:
+a canvas press refuses the browser's default focus move, every printable keystroke routes to the
+input from anywhere, and `ctrl`/`alt`/`meta` combinations never route — clause 1 built, 2–4 queued)
+· **D-089** (command history on up/down, in `AppState` and not in two variables inside `start`;
+submitted lines including refused ones, never prompt answers) · **D-090** (a prompt sequence draws
+its gathered point and the geometry it would produce, from `state.pending`, never into the document)
+· **D-091** (the table's grey grid against a near-black outline is deliberate and stands).
+
+**Superseded in part: D-086 clause 2's "one backing pixel is one CSS pixel"** — the backing store now
+matches the DISPLAY, and clause 3's required conversion is built at `screenPointOf`. 0091-REVIEW §4
+records why the original was the right fix and the wrong constant. `DECISIONS.md` is append-only, so
+the clause stands there as written and this line is the correction.
 
 **New at 0090-REVIEW, all four already applied in code:** **D-084** (Phase 3's gate is cleared only
 by a human run, recorded in a numbered entry — no implementer cycle may claim it) · **D-085**
@@ -238,7 +256,14 @@ checked once at the load boundary) · **D-068** (§5.9's feedback trio, one cycl
 `TABLE_CELL_*` constants): world units or screen pixels? Provisional (a) world units. Due with the
 `style`-slots cycle — and still blocking `pan`'s argument grammar, though not the pan gesture.
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
-Next free: **Q-014**.
+
+**Q-014 — the properties panel — is OPEN and is the HUMAN'S ALONE.** They asked for one at entry
+0091; §5.10 says "no panels, no toolbars". It needs a brief amendment, so no implementer and no
+reviewer may settle it, and **nothing is built against it, not even a small version**. The
+recommendation in `OPEN_QUESTIONS.md` is option (a). Note it would also moot **Q-013** (how a
+general formula is authored, which §5.10 has no command for and Phase 4(b) needs).
+
+Next free: **Q-015**.
 
 ## Gotchas for the next model
 
@@ -296,3 +321,14 @@ Next free: **Q-014**.
 - **`Infinity` is not always a bug in `fit`'s arithmetic.** Dividing the viewport by a zero extent
   yields it, and the `Math.min` against the other axis discards it — which is why D-087's degeneracy
   is BOTH axes and not either.
+- **A browser's DEFAULT action runs AFTER your listener.** A press on the canvas moves focus to the
+  body, which is why `input.focus()` inside a `pointerdown` handler was undone a moment later and
+  the command input went deaf after the first click (entry 0091). `preventDefault` is the fix, not
+  a second `focus()` call.
+- **The canvas backing store is in DEVICE pixels and pointer events are in CSS pixels.**
+  `screenPointOf` is the one conversion between them (D-086 clause 3). Anything new that reads a
+  pointer event goes through it — a raw `clientX` delta pans at the wrong speed on a scaled display,
+  which is a bug that shipped and was found only because the fuzziness forced the conversion.
+- **`window.devicePixelRatio` is not always an integer.** Windows at 125% scaling gives 1.25, so
+  `paint` rounds the backing size and `screenPointOf` reads the ratio back off the canvas instead of
+  trusting the multiplication.

@@ -2687,3 +2687,123 @@ point" about a rect two hundred units wide. A message that names the wrong shape
 message; §5.10's whole debugging story is that every line names what it is talking about.
 
 **Reconciliation required:** none — applied and pinned by a test at 0090-REVIEW.
+
+---
+
+## D-088 — Every printable keystroke reaches the command input, wherever focus happens to be. Modifier combinations never do
+Answers: entry 0091's manual check, note 2 ("the command line currently requires the user to click
+on it to activate it")
+Ruled: entry 0091-REVIEW-phase3 (reviewer)   Binding on: `main.ts`'s key and pointer handling
+
+**Ruling.**
+
+1. **A press on the canvas must not cost the command input its focus.** The browser moves focus to
+   the body as the DEFAULT action of a press, which runs after the listener, so an `input.focus()`
+   inside the handler is undone a moment later. The canvas's `pointerdown` listener calls
+   `event.preventDefault()`, and keeps the `focus()` call for the case where something else already
+   took the keyboard. Applied at 0091-REVIEW.
+2. **A printable keystroke arriving anywhere else routes to the command input and is not lost.**
+   The window-level handler focuses the input and lets the character through, so the operator can
+   pan, drag, and then type `circle` without a click in between. This is §5.10's "always focused
+   when the user is not editing text or a cell" implemented rather than asserted — the sentence has
+   been in the brief since the first commit and entry 0089 read it as "call `focus()` twice".
+3. **A keystroke with `ctrl`, `alt` or `meta` held is NOT printable and is never routed.** AutoCAD's
+   own rule, and the reason it is a rule rather than a preference: browser and OS shortcuts
+   (`ctrl+r`, `ctrl+shift+i`, `alt+tab`) must keep working, and a routed `ctrl+c` would silently
+   turn a copy into a character. `shift` alone IS printable and routes.
+4. **The keys that already mean something keep meaning it.** `Escape` cancels (D-072 clause 7) and
+   deselects. `Space` on an EMPTY input arms the pan gesture and is consumed (D-085, unchanged and
+   unaffected — an empty input is still an empty input when the keystroke was routed to it).
+   `Enter` submits.
+
+**Rationale.** Note 2 of the manual check is the clearest possible statement of why D-084 exists:
+the sentence in §5.10 is unambiguous, the code called `focus()` in two places, the suite was
+unanimous, and the application still could not be typed into after a click. Nothing short of a
+person pressing a key was going to find that.
+
+Clause 3 is the part most likely to be got wrong later by someone implementing clause 2 in a hurry.
+Routing on `event.key.length === 1` alone catches `ctrl+v` — whose `key` is `"v"`.
+
+---
+
+## D-089 — The command input keeps a history, walked with the up and down arrows, and it lives in `AppState`
+Answers: entry 0091's manual check, note 3
+Ruled: entry 0091-REVIEW-phase3 (reviewer)   Binding on: `main.ts`
+
+**Ruling.**
+
+1. **`AppState` gains `history` (the lines submitted, oldest first) and `historyCursor`.** Both are
+   plain data, both are part of the pure half, and the transitions over them (`recallPrevious`,
+   `recallNext`) are tested like every other transition in that file. Only the arrow-key listener
+   lives in the untested half, which is the same split entry 0089 chose and the reason 0090-REVIEW's
+   findings were survivable.
+2. **What is recorded is what the operator SUBMITTED**, including a line that was refused — a
+   rejected command is the one you most want back to correct a typo in. A prompt-sequence ANSWER is
+   not a command and is not recorded.
+3. **Up walks toward older, down toward newer, and down past the newest restores the empty input.**
+   Walking off the oldest end stays on the oldest.
+4. **History is not serialized.** It is not part of §5.11's document, it is not journal state, and
+   `replaceDocument` keeps it for the same reason it keeps the log: it is a record of what the
+   operator did, and loading a file does not undo that.
+
+**Rationale.** Not in the brief, and it does not need to be: §1 names AutoCAD as the interaction
+model and §8's deferred "command-language gold-plating" is about the command LANGUAGE (adding
+commands), not about the input's ergonomics. The human asked for it directly, which under §1 settles
+whether it is in scope.
+
+Clause 1 is the ruling that matters. The obvious implementation keeps two mutable variables inside
+`start` next to `pan` and `spaceHeld`, and would be entirely untested. Putting them in `AppState`
+costs nothing and moves the whole behaviour into the half that has assertions.
+
+---
+
+## D-090 — A prompt sequence that has gathered a point DRAWS that point, and the geometry it would produce
+Answers: entry 0091's manual check, note 4 ("no reference point for the centre of the circle")
+Ruled: entry 0091-REVIEW-phase3 (reviewer)   Binding on: `render/renderer.ts`, `main.ts`; runs with
+D-068 in one cycle
+
+**Ruling.**
+
+1. **The pending command's gathered answers are drawn.** A picked world point draws as a small
+   marker, and where the remaining steps are enough to determine a shape, the shape it WOULD create
+   draws in the same preview treatment, updated as the pointer moves. `circle` with an origin picked
+   shows the centre marker and the circle the current pointer position would make.
+2. **A preview is not an object and never enters the document.** It is drawn from `state.pending`,
+   which already holds the gathered answers (D-072), plus the live pointer position. No `mutate`
+   call, no ID minted, nothing serialized, nothing hit-testable. Rule 2 is untouched because nothing
+   is written.
+3. **`renderDocument` takes the preview the same way it takes the selection** — as an explicit
+   parameter, not as a field on `Document`. `render/` may read the pending command's shape; the
+   document may not learn about it.
+4. **This runs in D-068's cycle**, because both need the same thing: the ability to draw something
+   that is not an object, and the transform reset before screen-space chrome that D-068 already
+   owns.
+
+**Rationale.** The manual check's note 4 is a real gap and it is not covered by anything already
+ruled. D-072 made a canvas pick a prompt answer and tested that the right world point arrives at the
+right step, which is the whole of what a headless test can check. What it cannot check is that the
+operator can see where the first click landed — and without that, every multi-point command is a
+guess. This is the same class of defect as 0090-REVIEW's F1 through F4 and it was found the same way.
+
+Clause 2 is the clause to defend. The tempting implementation creates the object on the first pick
+and moves it on each subsequent one, which would put a half-built object in the document, in the
+journal, and in front of `evaluate`. The pending command already holds everything needed and holds
+it in the pure half.
+
+---
+
+## D-091 — A table's grid is drawn lighter than an object's outline, deliberately, and both stay untuned until the `style` cycle
+Answers: entry 0091's manual check, note 5 ("the circles and rectangles are a darker black while the
+table is grey. Is that intentional?")
+Ruled: entry 0091-REVIEW-phase3 (reviewer)   Binding on: `render/renderer.ts`
+
+**Ruling.** The difference is intended and stands. A table's grid is chrome that contains content,
+an outline is the object itself, and drawing them at one weight makes a table read as a drawn shape.
+Both constants remain untuned under Rule 5 and both are absorbed by the cycle that declares real
+`style` slots (§5.5, Q-012), which is where a per-object colour becomes a slot and these two become
+defaults.
+
+**Rationale.** Recorded because the honest answer to "is that intentional?" was *half*. The two
+constants were chosen deliberately and differ on purpose, but `DEFAULT_SHAPE_STROKE_STYLE` carries a
+paragraph of reasoning and `TABLE_GRID_STROKE_STYLE` was typed with no comment at all, so nothing in
+the repo said which. It does now.

@@ -8,13 +8,64 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-014**
+Next free ID: **Q-015**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
 
 ---
+
+## Q-014 — Does §5.10's "no panels, no toolbars" still hold, now that the human has asked for a properties panel as the PRIMARY authoring surface?
+Raised: entry 0091-REVIEW (reviewer, relaying the human's manual check)   Brief section: §5.10,
+§5.1, §5.3   Status: **OPEN — for the human only. No implementer may settle this.**
+
+Ambiguity: there is none in the brief. §5.10 is explicit: "AutoCAD-style: a persistent input bar
+at the bottom... **Minimal UI chrome elsewhere — no panels, no toolbars.**" The human's manual
+check asks for the opposite: a properties panel on the left, appearing when an object is selected,
+listing that object's slots, and being *"where the user will really spend most of their time
+linking variables and functions"* rather than the command line.
+
+This is a **brief amendment**, not an ambiguity to resolve. PROCESS_BRIEF §8 forbids the reviewer
+from amending the design mid-review, and §1 makes the human final arbiter on product questions. So
+this question exists to hold the request until the human edits `PROJECT_BRIEF.md` §5.10 (and
+probably §6's phase order), or withdraws it.
+
+What is at stake beyond the panel itself: the brief's §1 and §5.10 make the command line the
+authoring model, and every design decision downstream has assumed it — D-069 (`executeCommand` is
+the only place a `Command` meets a `Document`), D-072's prompt sequences, D-075's effects as data,
+Q-013's open question about how a general formula is authored at all. A properties panel that
+edits slots directly is a SECOND authoring path into `mutation.ts`. That is allowed by Rule 2 (it
+would call the same API), and it moots Q-013's difficulty (a formula gets typed into the slot's own
+row, which is where a spreadsheet puts it), but it is a real change of direction and it should be
+made on purpose.
+
+Options:
+
+(a) **Amend §5.10 to allow one properties panel, and keep the command line as an equal surface.**
+    The panel reads the selected object's slots and their kinds, and writes through the same
+    `writeSlot`/`mutate` path `commands.ts` uses. Phase 4's linking demo becomes achievable by
+    mouse as well as by typing.
+(b) **Amend §5.10 and demote the command line** to a secondary/creation surface, per the human's
+    "most of their time... not through the command line". Larger, and it changes what Phases 4–7
+    are demonstrating.
+(c) **Hold the brief as written.** The panel is deferred to §8's list. Selection feedback stays
+    D-068's highlight, and slot authoring stays the command line's job.
+
+Recommendation: **(a)**, and only after D-068's feedback trio lands. Reasons: it is the smallest
+amendment that satisfies what the human actually reported needing (a place to see and link an
+object's slots), it leaves every existing ruling intact because the panel is another caller of the
+same mutation API, and it answers Q-013 as a side effect. (b) is the same code plus a decision
+about the project's identity that nothing forces today. (c) contradicts a direct instruction from
+the project's owner and is listed only for completeness.
+
+Reversible? **The panel is. The direction is not.** Building a panel under (a) costs one cycle and
+deletes cleanly. Rebuilding the project's authoring model around it (b) touches the phase plan.
+Provisional choice taken: **none. Nothing is built against this until the human rules.** Tagged at:
+nowhere.
+
+---
+
 
 ## Q-013 — How is a general formula authored, given §5.10 has no command that takes one and Phase 4(b) requires one?
 Raised: entry 0068 (implementer)   Brief section: §5.10, §5.4, §6 (Phase 4b)
