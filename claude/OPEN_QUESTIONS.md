@@ -20,7 +20,22 @@ Next free ID: **Q-015**
 Raised: entry 0091-REVIEW (reviewer, relaying the human's manual check)
 **Restated: entry 0092-REVIEW**, after the human's argument that the brief has a gap. The gap is
 real and is now ruled separately as **D-092** — this question is narrower than it was.
+**Narrowed again: entry 0095-REVIEW.** The human directed, with a sketch, that a selected object show
+a floating properties panel listing its slots. That half is ruled — **D-094**, display only — and
+§5.10 is amended once, narrowly, for it. What is left of this question is **strictly the WRITING
+half**.
 Brief section: §5.10, §5.1, §5.3   Status: **OPEN — for the human only. No model may settle it.**
+
+**WHAT REMAINS OPEN, as of 0095-REVIEW — read this before the options below, which predate D-094.**
+Only these, and nothing else:
+(i) may a click on a slot row EDIT it (a second authoring path — Q-014's design question 4, which
+D-069 makes a real ruling and not a detail); (ii) may a click on a slot row in one panel and then in
+another LINK them, which requires two panels open at once and therefore multi-selection, neither of
+which exists; (iii) does approving (i) moot **Q-013**'s spelling by putting formula authoring in the
+row. The DISPLAY questions below — where it floats, screen space, occlusion, whether the refusal
+sentence survives into it — are answered by D-094's clauses or explicitly deferred there.
+**Nothing is built against any of this. The read-only panel deliberately has `pointer-events: none`
+so that approving (i) later is an addition, not an unwinding.**
 
 **What this question is NOT, since 0092-REVIEW.** The human's argument was that an operator cannot
 tell which circle is `circle_1`, cannot see an object's slots, and therefore cannot wire anything

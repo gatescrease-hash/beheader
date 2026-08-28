@@ -501,6 +501,8 @@ So dragging an object whose `x` is bound and whose `y` is literal slides it vert
 
 AutoCAD-style: a persistent input bar at the bottom, **always focused when the user is not editing text or a cell**. Minimal UI chrome elsewhere — no panels, no toolbars.
 
+> **AMENDED by the human at entry 0095, once and narrowly — see `DECISIONS.md` D-094.** A selected object shows a floating, **read-only** properties panel beside it, listing its slots (path and value, modifiable slots above a thick rule and derived slots below it in italics). That is the only panel this sentence now permits: no toolbar, no palette, no menu, no inspector, and no panel that WRITES — editing and linking by mouse remain open as **Q-014** and are the human's alone to settle. The command line is still the authoring surface.
+
 ```
 circle x=100 y=100 r=20
 polygon sides=5 x=0 y=0 r=50

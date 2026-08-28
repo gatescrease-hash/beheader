@@ -2868,3 +2868,154 @@ cycle between them, and conflict with nothing in the brief.
 Clause 4 is deliberately a command rather than a panel, so that it lands whatever the human rules on
 Q-014. If the panel is approved, `props` is what the panel displays and the work is not wasted. If
 the panel is declined, `props` is the whole answer to hole 3.
+
+---
+
+## D-093 — `render/` splits into `slots.ts` and `extent.ts`. The `renderer.ts` ↔ `hittest.ts` import cycle is removed BEFORE anything else is built on top of it
+Answers: entry 0094's escalation, question 1   Ruled: entry 0095-REVIEW-phase4 (reviewer)
+Binding on: `render/*`, and every future consumer of a slot read or an object's extent
+
+**Ruling.** Take the split entry 0094 itself described. Four moves, one cycle, no behaviour change:
+
+1. **`src/render/slots.ts`** — `readNumber`, `asPointArray`, `TABLE_CELL_WIDTH`, `TABLE_CELL_HEIGHT`,
+   `TABLE_CELL_TEXT_PADDING`. These are the reads more than one file in `render/` makes of a
+   `GraphObject`. 0064-REVIEW §5 already named this file and set its trigger at "the THIRD consumer";
+   `renderer.ts`, `hittest.ts` and (next cycle, D-094) the properties panel's placement are three.
+2. **`src/render/extent.ts`** — `WorldExtent`, `objectExtent`, `documentExtent`, importing `slots.ts`.
+   0090-REVIEW accepted 0089's reasoning for `documentExtent` living beside `objectExtent`; that
+   reasoning is preserved exactly — the two still live together, in a file that is now about extents
+   rather than about hit-testing.
+3. **`renderer.ts` and `hittest.ts` both import those two.** The `render/` graph becomes a DAG and
+   both HAZARD notes entry 0094 wrote are deleted, not amended — a comment describing a hazard that
+   no longer exists is D-065 debt the moment it is falsified.
+4. **Re-export nothing for compatibility.** `renderer.ts` stops exporting `readNumber`/`asPointArray`/
+   `TABLE_CELL_*`; every importer moves. There are few and the compiler finds them all.
+
+**Rationale.** The cycle resolves today only because every cross-file reference happens to sit inside
+a function body. That is not an invariant anyone stated, no test can see it, and the failure mode is
+a TDZ error at module evaluation — the whole application blank, from a one-line edit that looks
+harmless. Rule 9's "whatever is easiest to delete later" does not license leaving a trap in a file
+two more cycles are about to be written against. The split is mechanical, the destination was already
+designed by an earlier review, and D-094's panel is the third consumer that earlier review was
+waiting for.
+
+**This ruling is the authorisation §4 requires** to restructure `renderer.ts` and `hittest.ts`, which
+entry 0094 correctly declined to do without one. Scope is the move itself: no logic change, no
+renamed function, no new behaviour, and every existing test passes unedited except for its import
+lines. If a test needs its *assertions* changed, the move has stopped being a move — stop and say so.
+
+**Sequencing: this cycle runs FIRST**, before `props` and before the panel. Both of those add
+consumers, and adding them to a cyclic graph makes the split bigger every cycle it is deferred.
+
+---
+
+## D-094 — A selected object's slots are displayed in a floating, READ-ONLY properties panel beside the object. §5.10's "no panels" is amended by the human, for display only
+Answers: the human's directive and sketch at entry 0095; the DISPLAY half of Q-014
+Ruled: entry 0095-REVIEW-phase4 (reviewer, recording the human's decision)
+Binding on: `index.html`, `src/main.ts`, `src/render/*`, `src/command/*`
+
+**Status of the brief.** §5.10 says "Minimal UI chrome elsewhere — no panels, no toolbars." The human
+has amended that sentence for this one surface and no other. `PROJECT_BRIEF.md` §5.10 now carries a
+pointer to this ruling. **No other panel, palette, toolbar, menu, ribbon, or inspector is thereby
+permitted** — §8's forbidden list and §5.10's sentence stand for everything except what is specified
+below. The command line remains the authoring surface.
+
+**The problem, in the human's own words:** there must be a way to SEE the slots an object exposes,
+"not just knowing they exist or what they would be called — too much remembering." D-092 clause 4's
+`props <object>` command answers that for an operator who already knows the object's name and thinks
+to ask. The panel answers it for one who has just clicked a shape, which is the actual moment of not
+knowing.
+
+**Ruling — the panel.**
+
+1. **It is a GUI element, not a document object.** A DOM node over the canvas. It is never a `table`
+   object, never enters `state.document`, never goes through `mutate`, is never saved, and does not
+   appear in `list`. Vocabulary: **"the properties panel"**; its two groups are **"modifiable slots"**
+   and **"derived slots"**. Do not call it a table anywhere in code, comment, or log line.
+2. **It is shown exactly when `state.interaction.selectedObjectId` resolves to an object**, and
+   hidden otherwise — including for a stale id (D-023-shaped), which draws no highlight either.
+   One selection, therefore one panel. Two panels is a linking gesture and belongs to Q-014's
+   remaining half.
+3. **The object's NAME is the panel's header, and the canvas name label for the SELECTED object is
+   suppressed while the panel is open.** The human's word is "move": the name is in one place at a
+   time, not two. `renderDocument` already receives `selectedObjectId`, so skipping that one object's
+   chrome name is a one-line condition. The error badge and the formula-driven ticks are NOT
+   suppressed — they mark the shape, and the panel says the same thing in words.
+4. **Two columns, one row per slot: the slot PATH and its VALUE.** The path is written exactly as the
+   operator would type it after the object's name — `origin.x`, `radius`, `vertices` — because the
+   header carries the name and `<name>.<path>` is the address (§5.2/§5.3). Do not invent a display
+   spelling.
+5. **Two groups, separated by a THICK rule, in this order: modifiable above, derived below.**
+   Modifiable = every slot whose kind is `literal` or `formula` (the two an operator may `set`,
+   `link`, or `unlink`). Derived = kind `derived`. **Derived rows are rendered in italics; modifiable
+   rows are not.** This is D-092 clause 5's point carried into pixels: the kind IS what the operator
+   is allowed to do, and a slot they cannot write must be unmistakable before they try.
+6. **A `formula` slot is a modifiable row and shows BOTH its source and its value** — the source
+   reconstructed by `formula/format.ts` against current names, prefixed `=`, and the last evaluated
+   value. A formula slot is writable (that is what `set`/`unlink` do to it), so it does not go below
+   the rule; the `=` is what distinguishes it from a literal.
+7. **Row order is SCHEMA declaration order** — `resolveNonDerivedSlotPaths`'s order, then
+   `derivedSlots`' order — never `Object.keys(object.slots)` insertion order. The panel must not
+   reshuffle itself when a slot is written.
+8. **A table's cells are NOT enumerated.** `resolveNonDerivedSlotPaths` for a large table returns tens
+   of thousands of paths (0078-REVIEW measured 90,000–130,000) and D-077 forbids spreading a
+   collection the user can size. A table gets ONE modifiable row for `cells`, whose value names the
+   grid and how many cells are written. Per-cell editing is §5.4's formula bar, not this panel.
+9. **ONE enumeration serves both `props` and the panel.** A new pure module **`src/command/props.ts`**
+   exports the descriptor type and the function that builds it from a `GraphObject` plus the object
+   list (it needs the list only to format formula sources against current names). `commands.ts`'s
+   `props` handler formats its log lines from that function's output; the panel renders rows from the
+   same output. **A second enumeration of an object's slots is forbidden** (D-010's shape): the
+   command and the panel must never be able to disagree about what an object has.
+   `describeSlotValue` moves or is exported so one formatter serves both.
+10. **The panel is READ-ONLY this cycle.** No inputs, no click handlers, no `mutate`, no `Command`
+    built anywhere near it. Give it `pointer-events: none` so every click passes through to the
+    canvas beneath — that keeps D-085/D-088's focus discipline untouched by construction, and there
+    is nothing to click yet. Editing and linking by mouse remain **Q-014**, the human's alone.
+11. **Placement is a PURE function, and only element writing lives in `start`.** Export from
+    `render/` a function taking the object's extent, the camera, the viewport size and the panel's
+    measured size, returning the panel's CSS-pixel top-left. It anchors to the LEFT of the object's
+    extent with its top edge at the extent's top (the human's sketch), flipping to the RIGHT when it
+    would overflow the left edge, and clamped to stay inside the canvas. Test that function. Entry
+    0090 found four defects and all four were in untested `start` code; this arithmetic does not have
+    to join them.
+12. **The panel is positioned in CSS pixels, and `worldToScreen` returns BACKING pixels.** D-086
+    clause 3's conversion runs here too, in the other direction — divide by the ratio the canvas
+    actually has (`canvas.width / bounds.width`), read off the canvas the way `screenPointOf` reads
+    it, never `devicePixelRatio` multiplied by assumption. A panel that drifts from its object on a
+    125%-scaled display is this conversion, missed.
+13. **Re-placed every paint.** The camera pans and zooms under it; the panel is screen-space furniture
+    hanging off a world-space anchor, exactly like the chrome in pass 3.
+14. **Names and values are user text: build rows with `textContent`,** never `innerHTML`. An object
+    named `<b>` is legal under §5.2's grammar.
+
+**Explicitly NOT ruled in, and not to be invented (Rule 5):** the sketch's dashed leader line between
+panel and object (it would need the panel's screen rect back inside the renderer — a real coupling,
+deferred, and the human may ask for it); a close button, a drag handle, a collapse, a resize, a
+scrollbar policy beyond the browser's default; any hover behaviour; a second panel; per-cell rows.
+
+**Rationale.** The project's thesis is wiring objects together in a vocabulary of names and slot
+paths. D-092 made that vocabulary readable to an operator who asks in words. The human's argument is
+that asking in words is still remembering, and the moment they need it is the moment they have
+clicked a shape. The panel is display only, so it does not become a second authoring path (D-069
+stays true, Rule 2 is untouched), and every hard question about editing stays exactly where it was.
+What it costs is one DOM node, one pure placement function, and the enumeration `props` was going to
+write anyway.
+
+---
+
+## D-095 — Object chrome hangs from the TOP-CENTRE of the drawn extent, and there is no inter-object label collision avoidance
+Answers: entry 0094's escalation, questions 2 and 3   Ruled: entry 0095-REVIEW-phase4 (reviewer)
+Binding on: `render/renderer.ts`
+
+**Ruling.** The anchor entry 0094 built is correct and stands: chrome hangs from `objectExtent`'s
+top-centre, on one measured line, in screen pixels. Do not move it to the top-left; a corner title
+reads as belonging to a corner, and a circle has no corner. **No collision avoidance between the
+labels of two adjacent objects is to be built** until a human has looked at a crowded canvas and said
+it is a problem. Overlapping labels are noise, not a defect; a layout solver invented on suspicion is
+Rule 5's exact failure mode, and D-094's panel takes the selected — that is, the currently
+interesting — object's label off the canvas anyway.
+
+**Rationale.** Both questions ask the reviewer to prefer a guess over what the one human who has
+actually seen the screen said. The human saw entry 0093's output, objected to labels inside circles,
+and objected to nothing else. Settle the anchor so the next three cycles stop re-opening it.
