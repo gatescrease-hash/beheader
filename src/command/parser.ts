@@ -184,6 +184,17 @@ export interface RefsCommand {
   readonly target: string;
 }
 
+/**
+ * `props polygon_1` — every slot the object's schema declares: path, kind, value,
+ * and a formula's source. NOT in §5.10's own command table; added by **D-092
+ * clause 4** through §5.10's own extension mechanism ("adding a command is one
+ * registry entry"), so it needs no brief amendment.
+ */
+export interface PropsCommand {
+  readonly kind: "props";
+  readonly target: string;
+}
+
 /** `list` (§5.10) — dump all objects and names. */
 export interface ListCommand {
   readonly kind: "list";
@@ -234,6 +245,7 @@ export type Command =
   | RenameCommand
   | DeleteCommand
   | RefsCommand
+  | PropsCommand
   | ListCommand
   | SelectCommand
   | ZoomCommand
@@ -546,6 +558,14 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: (args) => ({ kind: "refs", target: textArgument(args, "target") }),
+  },
+  {
+    name: "props",
+    usage: "props <object>",
+    positional: [text("target")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "props", target: textArgument(args, "target") }),
   },
   {
     name: "list",

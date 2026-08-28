@@ -1,22 +1,26 @@
-# STATUS — as of entry 0096
+# STATUS — as of entry 0097
 
-STATE: **GREEN.** Both configs compile, 1148/1148 tests pass, 0 skipped, 0 `.only`, `npm run build`
-succeeds — all four **re-run at entry 0096** (implementer), real output pasted in that entry. Entry
-**0096** is **not yet reviewed** (REVIEW: NOT NEEDED — see below); entries **0093** and **0094**
-remain **REVIEWED: ACCEPT** (0095-REVIEW), no reviewer edits to source.
+STATE: **BLOCKED — awaiting review.** Both configs compile, 1174/1174 tests pass, 0 skipped, 0
+`.only`, `npm run build` succeeds — all four **re-run at entry 0097** (implementer), real output
+pasted in that entry, plus a three-mutant check on the new file. Entries **0096** and **0097** are
+**not yet reviewed**; entries **0093** and **0094** remain **REVIEWED: ACCEPT** (0095-REVIEW), no
+reviewer edits to source.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW, D-084 clause 2 discharged). Nothing procedural stands in front of Phase 4,
 and Phase 4 has not been claimed.
 
 Last review point: **0095-REVIEW-phase4** (ACCEPT; D-093, D-094, D-095 ruled).
-Cycles since last review: **1/3** · diff since last review: **2 new files (~185 lines) + 5 files with
-a 1–3 line edit each (~19 insertions / 182 deletions)** (cap 800/10).
+Cycles since last review: **2/3** · diff since last review: **~941 changed lines / 13 files**
+(0096's 427/7 + 0097's 514/6) — **OVER BOTH §6.3 CAPS (800 lines, 10 files)**, on top of 0097's own
+§6.1 trigger (first file of a new subsystem, `command/props.ts`).
 
-**REVIEW: NOT NEEDED to continue.** Entry 0096 (queue item 1, D-093's split) is done — see "Read
-this first" item 2, rewritten below. **The next cycle (`command/props.ts` + the `props` command)
-WILL fire §6.1 on its own — a new subsystem file — so hand off after it lands, and again after the
-properties panel that follows it.**
+**REVIEW: REQUIRED.** Entry 0097 built D-092 clause 4's `props <object>` command on a new pure
+module, `src/command/props.ts` — a first file of a new subsystem (§6.1 trigger 2), and the queue
+said this would happen. **Stop here. Do not start the properties panel (D-094) or anything else
+before a review lands** — the panel is explicitly the NEXT consumer of `props.ts`'s enumeration
+(D-094 clause 9), so starting it against an unreviewed `props.ts` risks building on something a
+review could still change.
 
 **THE HUMAN GAVE A DIRECTIVE AT 0095, WITH A SKETCH: a properties panel.** It is ruled in full as
 **D-094** (fourteen clauses) and it **amends `PROJECT_BRIEF.md` §5.10's "no panels"**, once and
@@ -53,14 +57,15 @@ assertion changed, only import lines. Both HAZARD notes are **deleted**, not ame
 a NEW top-level cross-reference between `renderer.ts` and `hittest.ts`, that is a regression of this
 fix, not a return to the old accepted shape — there is no more reason for one to exist.**
 
-**3. THE ADDRESSING VOCABULARY IS HALF VISIBLE — and the human has now ruled how the rest of it
-gets seen.** D-092 named two holes: object → name (**closed** at 0093/0094, item 1 above) and
-object → its slots (**still open**). `list` prints names and types only; nothing prints what slots
-an object HAS, their KIND, or their values, so `link polygon_1.origin.x table_x.A1` still requires
-knowing in advance that both paths exist and neither is `derived`. Two cycles close it, in order:
-**D-092 clause 4's `props <object>` command**, built on a new pure `src/command/props.ts`, and then
-**D-094's read-only properties panel**, which renders *the same enumeration* beside the selected
-object. **One enumeration, two surfaces — a second one is forbidden.**
+**3. THE ADDRESSING VOCABULARY'S SECOND HOLE IS BUILT, PENDING REVIEW.** D-092 named two holes:
+object → name (**closed** at 0093/0094, item 1 above) and object → its slots. The second is now
+**built at entry 0097, NOT YET REVIEWED**: `props <object>` prints every slot an object's schema
+declares — path, kind, value, and a formula's reconstructed source — reading `src/command/props.ts`'s
+`buildSlotDescriptors`. A table's `cells.*` family is summarised as ONE row (grid shape, cells
+written), never spread (D-077). **D-094's read-only properties panel is next in the queue and is
+the enumeration's SECOND and only other permitted reader** (D-094 clause 9: "a second enumeration of
+an object's slots is forbidden") — **do not start it before `props.ts` clears review**, since a
+review verdict could still change the descriptor shape the panel would otherwise build against.
 
 **4. The human's session at entry 0091 set the rest of the queue.** Ruled: **D-088** (every
 printable keystroke reaches the command input wherever focus is; `ctrl`/`alt`/`meta` never route —
@@ -91,34 +96,33 @@ throws a `RangeError` out of the file-read promise (**D-083** clause 4's loader 
 
 ## Next cycles — ordered
 
-**D-093's split (was item 1) is DONE, at entry 0096** — see "Read this first" item 2. The remaining
-chain's order is still ruled, not suggested: each one's destination is the next one's substrate.
-**Hand off after each** — items 1 and 2 below both create a new subsystem file, which is a §6.1
-trigger on its own.
+**D-093's split (entry 0096) and D-092 clause 4's `props` (entry 0097) are BOTH DONE, NEITHER
+REVIEWED.** See "Read this first" items 2 and 3. **A review must land before item 1 below starts** —
+0097's own log entry says so, and it is restated here because it is the one instruction in this file
+most likely to be skipped by a model that only reads the numbered list. The remaining chain's order
+is still ruled, not suggested: each one's destination is the next one's substrate.
 
-1. **`src/command/props.ts` + `commands.ts`: D-092 clause 4's `props <object>`.** One pure module
-   exporting the slot-descriptor type and the function that builds it (path, kind, value, and for a
-   formula slot its source via `format.ts`), plus one registry entry that formats log lines from it.
-   Read-only, no effect (D-092 clause 6). **This enumeration is also the panel's, so it is written
-   once and here** (D-094 clause 9). Watch D-077: a table's non-derived paths number in the tens of
-   thousands — the cells are summarised, never spread.
-2. **`index.html` + `main.ts` + `render/`: D-094's read-only properties panel.** Fourteen clauses,
-   all binding; read them before starting. The four that cost the most if missed: the placement
-   arithmetic is a **pure tested function** in `render/`, not code in `start` (clause 11); the panel
-   is positioned in **CSS pixels** while `worldToScreen` returns **backing pixels** (clause 12);
-   the selected object's canvas name label is **suppressed** because the name moves into the panel
-   header (clause 3); `pointer-events: none`, because it is display-only and that keeps D-085/D-088's
-   focus discipline true by construction (clause 10).
-3. **`main.ts` + `renderer.ts`: D-090's prompt-sequence preview.** Needs `state.pending` threaded
+1. **`index.html` + `main.ts` + `render/`: D-094's read-only properties panel — BLOCKED on review of
+   entry 0097.** Fourteen clauses, all binding; read them before starting. The four that cost the
+   most if missed: the placement arithmetic is a **pure tested function** in `render/`, not code in
+   `start` (clause 11); the panel is positioned in **CSS pixels** while `worldToScreen` returns
+   **backing pixels** (clause 12); the selected object's canvas name label is **suppressed** because
+   the name moves into the panel header (clause 3); `pointer-events: none`, because it is
+   display-only and that keeps D-085/D-088's focus discipline true by construction (clause 10). It
+   consumes `props.ts`'s `SlotDescriptor` directly (D-094 clause 9) — a review edit to that shape
+   would need to land here too.
+2. **`main.ts` + `renderer.ts`: D-090's prompt-sequence preview.** Needs `state.pending` threaded
    into the render call, plus per-command preview geometry.
-4. **D-088 clauses 2–4 + D-089, the command input's behaviour.** Printable-key routing from
+3. **D-088 clauses 2–4 + D-089, the command input's behaviour.** Printable-key routing from
    anywhere, and history.
-5. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
+4. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
    `createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then).
 
 **A human session is owed before Phase 4 is attempted in earnest.** Phase 4's criterion needs a
-human to bind two polygons through a table; until `props` exists that human still cannot discover
-`origin.x` is a writable path without reading `primitives/schema.ts`.
+human to bind two polygons through a table; `props` now exists (pending review) so that human can
+discover `origin.x` is a writable path by typing `props polygon_1`, without reading
+`primitives/schema.ts` — but the panel, which puts the same information beside the object they just
+clicked, is the friendlier surface and is next.
 
 ## Built and reviewed
 
@@ -151,6 +155,21 @@ body changed, no test assertion changed — five other files got a one-to-three-
 comment edit (`main.ts`, `camera.ts`, `hittest.test.ts`). `tsc` clean on both configs, **1148/1148**,
 `npm run build` succeeds — full output in entry 0096. `REVIEW: NOT NEEDED` (pre-authorised by D-093
 itself; no logic change, no new subsystem).
+
+**Entry 0097 — `src/command/props.ts` (new) + the `props` command: D-092 clause 4, D-094 clause 9.**
+`buildSlotDescriptors(object, objects)` enumerates every slot a schema declares, in schema order; a
+table's `cells.*` family collapses to ONE summary descriptor rather than being spread (D-077).
+`describeSlotValue` moved here from `commands.ts` and is exported, per D-094 clause 9's "one
+formatter, not two." `parser.ts` gained `PropsCommand` (registry: `props <object>`, between `refs`
+and `list` — not a §5.10 command; added through §5.10's own extension mechanism, D-092 clause 4).
+`commands.ts`'s `props` handler formats the descriptor list into log lines; no `effect` (D-075
+clause 4, D-092 clause 6). 26 new tests (15 in the new `props.test.ts`, 10 in `commands.test.ts`, 1
+in `parser.test.ts`). `tsc` clean on both configs, **1174/1174**, `npm run build` succeeds — full
+output in entry 0097. Three seeded mutants on `props.ts`, each `diff`-confirmed reverted: the table
+summary's `rows × cols` swapped to `rows + cols` killed 4; a literal slot mis-tagged as `formula`
+killed 3; the table's dynamic-group summary replaced with full per-cell enumeration (what D-077
+forbids) killed 7. **`REVIEW: REQUIRED`** — first file of a new subsystem (§6.1 trigger 2); see
+entry 0097's own three questions for the reviewer.
 
 ## Reviewed at 0095-REVIEW (detail retained for the record)
 
@@ -192,7 +211,7 @@ Entry 0093's own two mutants killed 8 and 2.
 
 ## Not started
 
-**D-092 clause 4's `props` command + `command/props.ts`** · **D-094's properties panel** ·
+**D-094's properties panel** (BLOCKED on review of entry 0097 — see "Next cycles") ·
 **D-090's prompt-sequence preview** · §5.9's per-vertex drag
 path · `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation
@@ -201,8 +220,10 @@ hit-testing (D-067) · §5.4's formula bar / in-place cell editing · §5.11's l
 **Phase 4 is OPEN and is NOT claimed.** (a) data drives geometry and (b) geometry drives data are
 both reachable from typed lines; (c) partial binding under drag is demonstrated end to end in
 `main.test.ts`, with the feedback now reaching BOTH the log and (untested-by-eye) the canvas via
-this cycle's formula-driven indicator. What is missing is all three in ONE document, authored by a
-human who can find the paths involved — which is `props`'s job, not built yet.
+entry 0093's formula-driven indicator. What is missing is all three in ONE document, authored by a
+human who can find the paths involved — `props` now exists (entry 0097, pending review) so that
+human can type `props polygon_1` and see `origin.x`, but nobody has yet run the human session Phase
+4's criterion actually needs.
 
 ## Open fix list — **read 0090-REVIEW §9 and 0091-REVIEW §5 for the full text**
 
@@ -237,9 +258,10 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
    Harmless today — `drawCellText` sets all three itself on every call — but it is the same shape as
    the transform hazard entry 0093 closed. Owned by whichever cycle next opens `drawObjectChrome`.
 10. **The formula-driven indicator's narrowness (`origin.x`/`origin.y` only) should be RE-DECIDED
-    once `props.ts` exists** (0095-REVIEW §4). Today it is a limitation — nothing enumerates an
-    object's writable slots. After the `props.ts` cycle (next, per the queue above) it becomes a
-    choice, and should be made deliberately.
+    now that `props.ts` exists** (0095-REVIEW §4). `buildSlotDescriptors` (entry 0097) enumerates
+    every writable slot, so the narrowness is now a CHOICE rather than a limitation — not made yet,
+    and not this cycle's to make (§4: no refactor of code outside the declared slice). Owned by
+    whichever cycle next opens `render/renderer.ts`'s chrome pass.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -253,10 +275,11 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
   entry 0094 deliberately invented none (Rule 5).
 - **A prompt sequence still shows nothing where you clicked** — no marker for a picked point, no
   preview of the shape being built. Ruled **D-090**, queued, explicitly deferred out of entry 0093.
-- **An operator still cannot discover an object's slots.** No command prints them and no panel shows
-  them. **D-092** clause 4 owes `props <object>` and **D-094** owes the panel — the next two cycles
-  in the queue. Until then the only source is `primitives/schema.ts`, which the operator does not
-  have.
+- **An operator can now TYPE their way to an object's slots, but there is still no panel.**
+  `props <object>` (entry 0097, pending review) prints every slot — path, kind, value, formula
+  source — but the operator still has to know the object's NAME first, type it, and read text. The
+  properties panel (**D-094**, next in the queue, blocked on review) is what answers "I just clicked
+  a shape and want to see this" without typing anything.
 - **The formula-driven indicator is read NARROWLY** — `origin.x`/`origin.y` only, the two slots a
   drag can move today. A `style` slot bound to a formula, once `style` slots exist, gets no
   indicator without a widening.
@@ -311,7 +334,10 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
   fails for `table` (0043-REVIEW §7 Q1) · `describeValueType` duplicated in `functions.ts`/`eval.ts` ·
   `rewrite`/`repairObjectFormulaAddresses` walk `formula` slots only, owed text boxes at Phase 5 ·
   journal structure unvalidated beyond `Array.isArray` · `lexer.ts`'s two edge cases · §5.11's
-  `style` field · `noUnusedLocals` off.
+  `style` field · `noUnusedLocals` off · **new at entry 0097:** `render/renderer.ts`'s
+  `formatCellValue` and `command/props.ts`'s `describeSlotValue` are two separate `Value`-to-text
+  formatters that were never reconciled — pre-existing duplication `props.ts`'s move made visible
+  rather than caused, not fixed because `formatCellValue`'s file was not otherwise open this cycle.
 
 ## Settled — do not re-raise
 
@@ -333,7 +359,11 @@ formula-driven indicator, and the screen-space name label all draw, in `render/r
 verified by 34 tests and two seeded mutants. **Unverified by a human eye** — see "Read this first"
 item 1.
 
-**D-092 clause 4 (`props <object>`) is RULED but NOT YET BUILT** — next in the queue.
+**D-092 clause 4 (`props <object>`) is IMPLEMENTED, at entry 0097, NOT YET REVIEWED.**
+`src/command/props.ts`'s `buildSlotDescriptors` + `commands.ts`'s `props` handler. **This IS a §6.1
+review point** (first file of a new subsystem) — see entry 0097's three questions for the reviewer,
+and do not start D-094's panel before this lands, since the panel consumes the same descriptor shape
+a review could still change.
 
 **Entry 0096 needed no review** (`REVIEW: NOT NEEDED`) — it built exactly D-093's own ruling, a
 pure move with no logic change and no test assertion changed, and D-093 at 0095-REVIEW is itself
@@ -493,3 +523,20 @@ Next free: **Q-015**.
 - **A properties panel is not a `table` object and must never be spoken of as one** (D-094 clause 1).
   The human's own note says so twice. It is DOM furniture; it never enters `state.document`, never
   goes through `mutate`, is never saved, and never appears in `list`.
+- **`command/props.ts` now exists, and it is where "every slot an object has" is answered from —
+  ONCE.** `buildSlotDescriptors(object, objects)` (entry 0097). Before writing a second walk of
+  `schema.nonDerivedSlotPaths`/`schema.derivedSlots` anywhere (the panel included), check whether
+  this function already answers the question — D-094 clause 9 forbids a second enumeration outright.
+- **`describeSlotValue` lives in `command/props.ts` now, exported, not in `commands.ts`.** Moved at
+  entry 0097 (D-094 clause 9) because the panel needs the identical value formatting `set`/`unlink`'s
+  echo lines already used. If a future cycle wants to format a slot's value anywhere, import it from
+  here — do not write a third copy of the `Value`-to-text switch. (`render/renderer.ts`'s
+  `formatCellValue` is a SECOND one, over a narrower slice of `Value` and predating this move — not
+  disclosed as related to `describeSlotValue` anywhere, and worth reconciling if a cycle opens that
+  file for its own reason.)
+- **Entry 0097's table-summary branch checks `object.type === TABLE_TYPE` directly, not "is this a
+  dynamic group."** `TABLE_SCHEMA`'s `cells.*` is the ONLY dynamic `NonDerivedSlotPathGroup` in the
+  registry today. A future dynamic group on a different type gets silently DROPPED by
+  `buildSlotDescriptors`, not enumerated — disclosed in `props.ts`'s own header as a known gap, and
+  flagged to the reviewer as entry 0097's first question. Check that question was answered before
+  adding a second dynamic group anywhere.

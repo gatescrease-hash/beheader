@@ -11,7 +11,9 @@
  * to the registry without one. That is also what pins each entry's `build` against
  * its own spec — a `build` reading an argument name its spec does not declare
  * produces the loud fallback instead of the value, and the expected command object
- * catches it.
+ * catches it. One entry, `props`, is not §5.10's own — it is D-092 clause 4's
+ * addition through §5.10's own extension mechanism — and gets a plain example line
+ * instead of a quoted one for the same reason.
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
@@ -51,6 +53,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "rename polygon_1 intersection_a", command: { kind: "rename", target: "polygon_1", newName: "intersection_a" } },
   { line: "delete intersection_a", command: { kind: "delete", target: "intersection_a", force: false } },
   { line: "refs intersection_a", command: { kind: "refs", target: "intersection_a" } },
+  { line: "props intersection_a", command: { kind: "props", target: "intersection_a" } },
   { line: "list", command: { kind: "list" } },
   { line: "select intersection_a", command: { kind: "select", target: "intersection_a" } },
   { line: "zoom 2", command: { kind: "zoom", factor: 2 } },

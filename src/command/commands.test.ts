@@ -307,6 +307,7 @@ describe("every registry command reaches a handler", () => {
     "rename intersection_a polygon_9",
     "delete intersection_a",
     "refs intersection_a",
+    "props intersection_a",
     "list",
     "select intersection_a",
     "zoom 2",
@@ -758,7 +759,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
   });
 });
 
-describe("delete, refs and list — the object commands that need no new Operation kind", () => {
+describe("delete, refs, props and list — the object commands that need no new Operation kind", () => {
   /** A polygon and a 4x4 table, the same fixture the slot commands use, because these commands are about what those built. */
   function sandbox(): Document {
     return committed("table x=0 y=0 rows=4 cols=4", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
@@ -916,6 +917,77 @@ describe("delete, refs and list — the object commands that need no new Operati
       it("still reports nothing for the CELL itself, because an unwritten cell inside a range is not yet depended on", () => {
         expect(lines("refs table_1.A1", rangeReader())).toEqual(["nothing references table_1.A1"]);
       });
+    });
+  });
+
+  describe("props — D-092 clause 4's slot enumeration, D-094 clause 9's shared reading of it", () => {
+    it("headers the report with the object's name and type, the same pair list uses", () => {
+      expect(lines("props polygon_1", sandbox())[0]).toBe("polygon_1 — polygon");
+    });
+
+    it("lists every slot in SCHEMA order — non-derived first, then derived (D-094 clause 7)", () => {
+      const paths = lines("props polygon_1", sandbox())
+        .slice(1)
+        .map((line) => line.split(" = ")[0]);
+      expect(paths).toEqual([
+        "sides",
+        "radius",
+        "origin.x",
+        "origin.y",
+        "rotation",
+        "vertices",
+        "centroid.x",
+        "centroid.y",
+        "area",
+        "length",
+        "bounds.minX",
+        "bounds.minY",
+        "bounds.maxX",
+        "bounds.maxY",
+      ]);
+    });
+
+    it("shows a literal slot's path, value and kind", () => {
+      expect(lines("props polygon_1", sandbox())).toContain("radius = 50 (literal)");
+    });
+
+    it("marks a derived slot as derived, never as something §5.1 lets the operator set or link", () => {
+      const reported = lines("props polygon_1", sandbox());
+      expect(reported.some((line) => line.startsWith("vertices = ") && line.endsWith("(derived)"))).toBe(true);
+    });
+
+    it("shows a formula slot's reconstructed SOURCE alongside its current value (D-092 clause 4)", () => {
+      const document = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 7", sandbox()));
+      expect(lines("props polygon_1", document)).toContain("origin.x = 7 (formula, = table_1.A1)");
+    });
+
+    it("gives a table's cell family ONE row naming the grid and how many cells are WRITTEN, never one row per cell (D-077, D-094 clause 8)", () => {
+      const document = committed("set table_1.B2 2", committed("set table_1.A1 5", sandbox()));
+      const reported = lines("props table_1", document);
+      expect(reported).toContain('cells = "4×4 grid — 2 of 16 cells written" (literal)');
+      // Exactly one row for the whole family, not one per declared cell (16 here, tens of thousands on a large table).
+      expect(reported.filter((line) => line.startsWith("cells"))).toHaveLength(1);
+    });
+
+    it("counts a table's WRITTEN cells, not its declared extent — an absent cell is D-047's ordinary empty", () => {
+      expect(lines("props table_1", sandbox())).toContain('cells = "4×4 grid — 0 of 16 cells written" (literal)');
+    });
+
+    it("lists a table's own slots in schema order, the summary row last", () => {
+      const paths = lines("props table_1", sandbox())
+        .slice(1)
+        .map((line) => line.split(" = ")[0]);
+      expect(paths).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
+    });
+
+    it("refuses a name no object has", () => {
+      expect(refused("props nosuch", sandbox())).toBe('no object named "nosuch"');
+    });
+
+    it("returns the document it was given, unchanged and unjournalled (D-075 clause 4, D-092 clause 6)", () => {
+      const before = sandbox();
+      const outcome = run("props polygon_1", before);
+      expect(outcome.ok && outcome.document).toBe(before);
     });
   });
 

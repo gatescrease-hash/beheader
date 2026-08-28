@@ -46,9 +46,10 @@
  *   - A `derived` slot is refused by `set` and `link` alike (§5.1), and so is a path
  *     the target's schema does not declare — an undeclared LITERAL slot is legal
  *     document state, so `mutate` would accept one silently.
- *   - `refs` and `list` change nothing and say nothing a `mutate` could have said:
- *     they read `document.objects` and `deriveEdges` and return `lines` only, which
- *     is why D-075 gives them no `effect`.
+ *   - `refs`, `props` and `list` change nothing and say nothing a `mutate` could
+ *     have said: they read `document.objects` (`props` via `command/props.ts`'s
+ *     `buildSlotDescriptors`, never a second enumeration — D-094 clause 9) and
+ *     return `lines` only, which is why D-075 gives them no `effect`.
  *   - `refs <object>` derives its blocking half over the document WITHOUT that
  *     object, so it reads the identical edge set `delete <object>` is validated
  *     against and the two can never name different dependents.
@@ -92,7 +93,7 @@ import { isReferenceNode } from "../engine/formula/ast.ts";
 import { formatFormula } from "../engine/formula/format.ts";
 import { isParseError, parseFormula } from "../engine/formula/parser.ts";
 import { addressKey, type Edge } from "../engine/graph/edge.ts";
-import { getSlot, isErrorValue, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "../engine/graph/node.ts";
+import { getSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
 import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
 import {
   MIN_POLYGON_SIDES,
@@ -106,6 +107,7 @@ import {
 } from "../engine/primitives/geometry.ts";
 import { findDerivedSlotSchema, getObjectSchema, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
 import { TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
+import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
   Command,
   CreateCircleCommand,
@@ -114,6 +116,7 @@ import type {
   CreateTableCommand,
   DeleteCommand,
   LinkCommand,
+  PropsCommand,
   RefsCommand,
   RenameCommand,
   SelectCommand,
@@ -263,6 +266,8 @@ export function executeCommand(command: Command, document: Document): CommandOut
       return deleteObject(command, document);
     case "refs":
       return refs(command, document);
+    case "props":
+      return props(command, document);
     case "list":
       return list(document);
     case "select":
@@ -306,6 +311,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "rename",
   "delete",
   "refs",
+  "props",
   "list",
   "select",
   "zoom",
@@ -636,33 +642,6 @@ function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Docum
 function cellHostObjectId(target: WritableSlotTarget): string | undefined {
   const isCell = target.object.type === TABLE_TYPE && target.address.path.length === 2 && target.address.path[0] === TABLE_CELL_PATH_PREFIX;
   return isCell ? target.object.id : undefined;
-}
-
-/**
- * Renders a slot's VALUE for §5.10's echo.
- *
- * Distinct from `formula/eval.ts`'s `describeValueType`, which names a value's TYPE for
- * a `#TYPE` message: this one shows the value itself, because D-041's report is "here
- * is what was kept" and a type name would not tell the operator whether to type over it.
- */
-function describeSlotValue(value: Value): string {
-  if (value === null) {
-    return "nothing";
-  }
-  if (isErrorValue(value)) {
-    return `${value.error}: ${value.message}`;
-  }
-  if (typeof value === "string") {
-    return `"${value}"`;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return `${value.length} points`;
-  }
-  const point = value as Point;
-  return `${point.x},${point.y}`;
 }
 
 /** `set polygon_1.radius 42` (§5.10) — a literal. Over a formula slot this REPLACES it and says so (D-040). */
@@ -1003,6 +982,52 @@ function declaresSlotPath(object: GraphObject, path: readonly string[]): boolean
   // returns one entry per declared cell, which a 1000x1000 table makes a million of
   // (D-077 clause 1).
   return resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).some((declared) => slotKey(declared) === key);
+}
+
+// ---------------------------------------------------------------------------
+// props — an object's slots, made legible (D-092 clause 4, D-094 clause 9)
+// ---------------------------------------------------------------------------
+
+/**
+ * `props polygon_1` (D-092 clause 4) — every slot the object's schema declares:
+ * its path, its kind, its current value, and for a formula slot the source
+ * `formula/format.ts` reconstructs against current names.
+ *
+ * The enumeration itself is `command/props.ts`'s `buildSlotDescriptors` — D-094
+ * clause 9 forbids a second one, so the properties panel it also feeds (queued,
+ * not built) will render rows from the identical list rather than a fresh
+ * reading of the schema.
+ *
+ * No `effect` (D-075 clause 4, D-092 clause 6): `props` reads and refuses to
+ * write, exactly like `refs` and `list`.
+ */
+function props(command: PropsCommand, document: Document): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+  const descriptors = buildSlotDescriptors(object, document.objects);
+  if (descriptors.length === 0) {
+    // Only reachable for a type `primitives/schema.ts` has no registry entry
+    // for yet (`props.ts`'s own file header) — every creatable type's schema
+    // declares at least one slot, so this is a truthful "why", not a guess.
+    return { ok: false, message: `object type "${object.type}" has no schema, so nothing can say which slots ${object.name} has` };
+  }
+  return {
+    ok: true,
+    document,
+    lines: [`${object.name} — ${object.type}`, ...descriptors.map(formatSlotDescriptorLine)],
+  };
+}
+
+/** One `SlotDescriptor` as a `props` log line — the path exactly as the operator would type it after the object's name (D-010's `slotKey`, never a hand-joined string). */
+function formatSlotDescriptorLine(descriptor: SlotDescriptor): string {
+  const path = slotKey(descriptor.path);
+  const value = describeSlotValue(descriptor.value);
+  if (descriptor.kind === "formula") {
+    return `${path} = ${value} (formula, = ${descriptor.formulaSource})`;
+  }
+  return `${path} = ${value} (${descriptor.kind})`;
 }
 
 // ---------------------------------------------------------------------------
