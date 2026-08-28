@@ -97,7 +97,15 @@ import { ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../eng
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import { formatCellReference, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
-import { worldToScreen, type ScreenPoint } from "./camera.ts";
+import { worldToScreen } from "./camera.ts";
+// D-066's one extent, reused as the chrome anchor (see `chromeAnchorPoint`).
+// HAZARD: this is an import CYCLE — `hittest.ts` imports `readNumber`,
+// `asPointArray` and the `TABLE_CELL_*` constants back out of this file. It
+// resolves because every reference on both sides sits inside a function body,
+// never at module top level; a top-level `const` in EITHER file that reads the
+// other's export would break with a TDZ error. Flagged for the reviewer at
+// entry 0094 with a clean alternative (`render/slots.ts` + `render/extent.ts`).
+import { objectExtent } from "./hittest.ts";
 
 /**
  * World-unit defaults — no `style` slot exists yet (see file header). Round,
@@ -145,7 +153,7 @@ const SELECTION_HIGHLIGHT_WIDTH = DEFAULT_SHAPE_STROKE_WIDTH * 3;
  * not measured, same as every other constant in this file.
  */
 const CHROME_ANCHOR_MARGIN_SCREEN = 6;
-const CHROME_TICK_SPACING_SCREEN = 14;
+const CHROME_GAP_SCREEN = 6;
 const CHROME_FONT = "12px sans-serif";
 const CHROME_LABEL_STYLE = "#1a1a1a";
 const CHROME_ERROR_BADGE_STYLE = "#c0392b";
@@ -503,39 +511,38 @@ function strokeHighlight(ctx: CanvasRenderingContext2D): void {
 // ---------------------------------------------------------------------------
 
 /**
- * The point `drawObjectChrome` anchors an object's chrome to — the SAME point
- * `drawObject` positions the object AT, so a label can never sit somewhere
- * other than where the picture actually is (D-010). `circle`/`polygon`/`rect`
- * require `origin.x`/`origin.y` to draw AT ALL, so their chrome anchor is
- * exactly as present as their body is; `table` draws even with a missing
- * origin (the same `?? 0` fallback `drawTable` uses), so its chrome anchor
- * does too. `undefined` for every type with no schema/visual definition yet
- * (file header) — there is nowhere to be "beside."
+ * Where an object's chrome hangs from: the TOP-CENTRE of its drawn extent,
+ * in world space.
+ *
+ * **Why the extent and NOT `origin.x`/`origin.y`.** `origin` does not mean the
+ * same thing across types — it is a circle's and a polygon's CENTRE but a
+ * rect's and a table's TOP-LEFT CORNER (`primitives/geometry.ts`). Entry 0093
+ * anchored to it and the result, seen in a browser for the first time at entry
+ * 0094, was a table labelled above its grid like a title and a circle labelled
+ * *inside itself*. Each was 6px above its own anchor, so every test passed; the
+ * defect was in what the anchor MEANT, which is not a thing an offset
+ * assertion can catch.
+ *
+ * The drawn extent is the one quantity that means the same for every type, and
+ * D-066 already rules that the drawn extent and the clickable extent are ONE
+ * extent — so this reuses `hittest.ts`'s `objectExtent` rather than computing a
+ * second reading of the same question (D-010). `undefined` for an object that
+ * draws nothing, which is exactly the set that has no extent.
+ *
+ * A consequence worth stating: chrome now appears precisely when an object has
+ * a drawn extent, so a hand-built shape with an `origin` but no `vertices`
+ * slot gets neither body nor label (it previously got a label). For any object
+ * built through `mutate`, `vertices` is a schema-declared derived slot and is
+ * always present, so this is a fixture-only difference.
  */
 function chromeAnchorPoint(object: GraphObject): Point | undefined {
-  switch (object.type) {
-    case "circle":
-    case "polygon":
-    case "rect": {
-      const x = readNumber(object, ORIGIN_X_PATH);
-      const y = readNumber(object, ORIGIN_Y_PATH);
-      return x === undefined || y === undefined ? undefined : { x, y };
-    }
-    case "table":
-      return { x: readNumber(object, ORIGIN_X_PATH) ?? 0, y: readNumber(object, ORIGIN_Y_PATH) ?? 0 };
-    case "polyline":
-    case "text":
-    case "script":
-    case "image":
-    case "value":
-    case "add":
-      return undefined;
-    default: {
-      const exhaustive: never = object.type;
-      void exhaustive;
-      return undefined;
-    }
+  const extent = objectExtent(object);
+  if (extent === undefined) {
+    return undefined;
   }
+  // Y grows DOWNWARD in this coordinate system (`drawTable`'s own row layout),
+  // so `minY` is the object's TOP edge.
+  return { x: (extent.minX + extent.maxX) / 2, y: extent.minY };
 }
 
 /**
@@ -549,10 +556,18 @@ function objectHasError(object: GraphObject): boolean {
 }
 
 /**
- * One object's screen-space chrome: its name label (D-092 clause 1), then —
- * if applicable — an error badge and a formula-driven indicator (§5.9,
- * D-068). Draws nothing for an object with no anchor point (see
- * `chromeAnchorPoint`); never throws.
+ * One object's screen-space chrome, laid out as ONE line above the object's
+ * top edge: `[•x •y] name [!]`.
+ *
+ * All three pieces share a baseline and none is drawn inside the shape —
+ * entry 0093 put the ticks BELOW the anchor, which under the old centre-anchor
+ * meant inside a circle and under the new top-anchor would mean inside every
+ * shape. The horizontal offsets are MEASURED off the name (`ctx.measureText`)
+ * rather than assumed, so a long name pushes the badge and the ticks out
+ * instead of colliding with them.
+ *
+ * Draws nothing for an object with no anchor point (see `chromeAnchorPoint`);
+ * never throws.
  */
 function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject): void {
   const anchor = chromeAnchorPoint(object);
@@ -560,54 +575,55 @@ function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, ob
     return;
   }
   const screen = worldToScreen(camera, anchor);
-  drawNameLabel(ctx, screen, object.name);
-  if (objectHasError(object)) {
-    drawErrorBadge(ctx, screen);
-  }
-  drawFormulaDrivenTicks(ctx, screen, object);
-}
+  const baseline = screen.y - CHROME_ANCHOR_MARGIN_SCREEN;
 
-/** D-092 clause 1: a name beside every object, screen-space and always on (Rule 5 — no hover/toggle mechanism yet). Centred above the anchor point. */
-function drawNameLabel(ctx: CanvasRenderingContext2D, screen: ScreenPoint, name: string): void {
+  ctx.font = CHROME_FONT;
+  ctx.textBaseline = "bottom";
+
+  // D-092 clause 1: a name for every object, screen-space and always on
+  // (Rule 5 — no hover or toggle mechanism yet).
   ctx.fillStyle = CHROME_LABEL_STYLE;
-  ctx.font = CHROME_FONT;
   ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
-  ctx.fillText(name, screen.x, screen.y - CHROME_ANCHOR_MARGIN_SCREEN);
-}
+  ctx.fillText(object.name, screen.x, baseline);
 
-/** §5.9's error badge — a bare "!" beside the name label, distinguished only by colour (Rule 5's dumbest-correct reading; a real icon is a `style`-slots-era polish). */
-function drawErrorBadge(ctx: CanvasRenderingContext2D, screen: ScreenPoint): void {
-  ctx.fillStyle = CHROME_ERROR_BADGE_STYLE;
-  ctx.font = CHROME_FONT;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "bottom";
-  ctx.fillText("!", screen.x + CHROME_TICK_SPACING_SCREEN, screen.y - CHROME_ANCHOR_MARGIN_SCREEN);
+  const halfName = ctx.measureText(object.name).width / 2;
+
+  // §5.9's error badge. A bare "!" in the error colour, to the RIGHT of the
+  // name — Rule 5's dumbest correct reading; a drawn icon is `style`-slots-era.
+  if (objectHasError(object)) {
+    ctx.fillStyle = CHROME_ERROR_BADGE_STYLE;
+    ctx.textAlign = "left";
+    ctx.fillText("!", screen.x + halfName + CHROME_GAP_SCREEN, baseline);
+  }
+
+  const ticks = formulaDrivenTicks(object);
+  if (ticks !== "") {
+    // To the LEFT of the name, right-aligned so it grows away from it.
+    ctx.fillStyle = CHROME_FORMULA_TICK_STYLE;
+    ctx.textAlign = "right";
+    ctx.fillText(ticks, screen.x - halfName - CHROME_GAP_SCREEN, baseline);
+  }
 }
 
 /**
  * §5.9's "a subtle indicator on slots that are formula-driven rather than
- * literal" — read NARROWLY, for now, as the two component slots a drag can
- * actually move (`render/interaction.ts`'s per-component rule): `origin.x`
- * and `origin.y` (file header's NOT DONE HERE). Neither is ever `derived` (no
- * schema declares them so), so `"formula"` is the one kind that needs
- * marking — `render/interaction.ts`'s own drag skips exactly this kind, and
- * the operator has had no other way to learn which axis that is.
+ * literal", as the text to draw — `""` when neither axis is driven.
+ *
+ * Read NARROWLY, for now, as the two component slots a drag can actually move
+ * (`render/interaction.ts`'s per-component rule): `origin.x` and `origin.y`
+ * (file header's NOT DONE HERE). Neither is ever `derived` (no schema declares
+ * them so), so `"formula"` is the one kind that needs marking — a drag skips
+ * exactly that kind, and the operator has had no other way to learn which axis
+ * is the one that will not move.
  */
-function drawFormulaDrivenTicks(ctx: CanvasRenderingContext2D, screen: ScreenPoint, object: GraphObject): void {
+function formulaDrivenTicks(object: GraphObject): string {
   const xDriven = getSlot(object, ORIGIN_X_PATH)?.kind === "formula";
   const yDriven = getSlot(object, ORIGIN_Y_PATH)?.kind === "formula";
-  if (!xDriven && !yDriven) {
-    return;
+  if (xDriven && yDriven) {
+    return "•x •y";
   }
-  ctx.fillStyle = CHROME_FORMULA_TICK_STYLE;
-  ctx.font = CHROME_FONT;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
   if (xDriven) {
-    ctx.fillText("•x", screen.x - CHROME_TICK_SPACING_SCREEN, screen.y + CHROME_ANCHOR_MARGIN_SCREEN);
+    return "•x";
   }
-  if (yDriven) {
-    ctx.fillText("•y", screen.x + CHROME_TICK_SPACING_SCREEN, screen.y + CHROME_ANCHOR_MARGIN_SCREEN);
-  }
+  return yDriven ? "•y" : "";
 }

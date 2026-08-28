@@ -27,6 +27,9 @@ type RecordedCall =
   | { readonly op: "strokeRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillText"; readonly text: string; readonly x: number; readonly y: number; readonly align: string };
 
+/** The fake measurer's per-character width — see `measureText` below. */
+const FAKE_CHAR_WIDTH = 7;
+
 /** A minimal recording fake — only the `CanvasRenderingContext2D` members `renderer.ts` calls. See file header. */
 function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly calls: readonly RecordedCall[] } {
   const calls: RecordedCall[] = [];
@@ -66,6 +69,12 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
     },
     fillText(text: string, x: number, y: number) {
       calls.push({ op: "fillText", text, x, y, align: ctx.textAlign });
+    },
+    // A FIXED-WIDTH fake measurer — the same posture Rule 1 prescribes for the
+    // engine's injected `TextMeasurer`, translated to this layer. 7px per
+    // character keeps every expected coordinate below exact and hand-checkable.
+    measureText(text: string) {
+      return { width: text.length * FAKE_CHAR_WIDTH };
     },
   };
   // The fake implements exactly the subset of CanvasRenderingContext2D this
@@ -203,7 +212,10 @@ describe("renderDocument — polygon/rect: the closed path vertices describes", 
       },
     };
     renderDocument(ctx, 800, 600, [rect], CAMERA_IDENTITY);
-    const shapeCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
+    // Chrome (`fillText`) is excluded: this test is about the world-space PATH.
+    // The rect earns a name label since entry 0094 because it has a `vertices`
+    // slot and therefore an extent — its own describe block covers that.
+    const shapeCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect" && call.op !== "fillText");
     expect(shapeCalls).toEqual([
       { op: "beginPath" },
       { op: "moveTo", x: 0, y: 0 },
@@ -256,13 +268,14 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     });
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
-    // The trailing entry is D-092 clause 1's name label — a table with no
-    // origin.x/origin.y slots anchors at drawTable's own (0,0) fallback.
+    // The trailing entry is D-092 clause 1's name label, centred over the grid
+    // (3 cols x 80 / 2 = 120) and above its top edge — see the label describe
+    // block for why the anchor is the extent rather than origin (entry 0094).
     expect(textCalls).toEqual([
       { op: "fillText", text: "42", x: 76, y: 12, align: "right" },
       { op: "fillText", text: "hello", x: 84, y: 12, align: "left" },
       { op: "fillText", text: "TRUE", x: 164, y: 12, align: "left" },
-      { op: "fillText", text: "table_1", x: 0, y: -6, align: "center" },
+      { op: "fillText", text: "table_1", x: 120, y: -6, align: "center" },
     ]);
   });
 
@@ -275,8 +288,8 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     // EVERY slot (file header), and cells.A1 here is one of them.
     expect(textCalls).toEqual([
       { op: "fillText", text: "#REF", x: 4, y: 12, align: "left" },
-      { op: "fillText", text: "table_1", x: 0, y: -6, align: "center" },
-      { op: "fillText", text: "!", x: 14, y: -6, align: "left" },
+      { op: "fillText", text: "table_1", x: 120, y: -6, align: "center" },
+      { op: "fillText", text: "!", x: 150.5, y: -6, align: "left" }, // 120 + 7 chars * 7px / 2 + 6px gap.
     ]);
   });
 
@@ -285,7 +298,7 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     const table = tableObject({ "cells.A1": { kind: "literal", value: null } }); // B1/C1 have no slot at all.
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call) => call.op === "fillText");
-    expect(textCalls).toEqual([{ op: "fillText", text: "table_1", x: 0, y: -6, align: "center" }]);
+    expect(textCalls).toEqual([{ op: "fillText", text: "table_1", x: 120, y: -6, align: "center" }]);
   });
 
   it("falls back to origin (0,0) when the table has no origin.x/origin.y slots", () => {
@@ -353,38 +366,92 @@ describe("renderDocument — wired through the real mutate() pipeline (D-016 dis
   });
 });
 
+/**
+ * A circle at the world origin, radius 5.
+ *
+ * `vertices` is present and spans the circle's own bounding box: since entry
+ * 0094 an object's CHROME hangs from its drawn EXTENT (`chromeAnchorPoint`),
+ * and `hittest.ts` reads a circle's extent from `vertices` — §5.5's own
+ * instruction that the polygonal approximation is what bounds a circle. Four
+ * extreme points stand in for the real `CIRCLE_VERTEX_COUNT`-gon, whose extent
+ * is the same box and is all these tests depend on.
+ */
 function circleObject(id: string, name: string, slots: Readonly<Record<string, Slot>> = {}): GraphObject {
   return {
     id,
     name,
     type: "circle",
-    slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, radius: { kind: "literal", value: 5 }, ...slots },
+    slots: {
+      "origin.x": { kind: "literal", value: 0 },
+      "origin.y": { kind: "literal", value: 0 },
+      radius: { kind: "literal", value: 5 },
+      vertices: {
+        kind: "derived",
+        value: [
+          { x: 5, y: 0 },
+          { x: 0, y: 5 },
+          { x: -5, y: 0 },
+          { x: 0, y: -5 },
+        ],
+      },
+      ...slots,
+    },
   };
 }
 
+/** Where `circleObject`'s chrome baseline sits at zoom 1: top edge (y = -5) less the 6px anchor margin. */
+const CIRCLE_CHROME_BASELINE = -11;
+
 describe("renderDocument — name label (D-092 clause 1)", () => {
-  it("draws every object's name in the SCREEN-space pass, centred above its anchor point converted through the SAME worldToScreen the camera transform uses", () => {
+  it("draws every object's name in the SCREEN-space pass, centred above the TOP of its extent, converted through the SAME worldToScreen the camera transform uses", () => {
     const { ctx, calls } = createFakeContext();
-    const circle = circleObject("obj_1", "circle_7", { "origin.x": { kind: "literal", value: 3 }, "origin.y": { kind: "literal", value: 4 } });
+    const circle = circleObject("obj_1", "circle_7");
     renderDocument(ctx, 800, 600, [circle], { x: 0, y: 0, zoom: 2 });
-    // World (3,4) at zoom 2 -> screen (6,8); the label sits CHROME_ANCHOR_MARGIN_SCREEN above that.
+    // Extent top-centre is world (0,-5); at zoom 2 that is screen (0,-10), and
+    // the baseline sits CHROME_ANCHOR_MARGIN_SCREEN (a SCREEN constant, so it
+    // does NOT scale with zoom) above that.
     const textCalls = calls.filter((call) => call.op === "fillText");
-    expect(textCalls).toEqual([{ op: "fillText", text: "circle_7", x: 6, y: 2, align: "center" }]);
+    expect(textCalls).toEqual([{ op: "fillText", text: "circle_7", x: 0, y: -16, align: "center" }]);
   });
 
-  it("draws no label for a type with no schema/anchor point yet", () => {
+  it("anchors a CIRCLE above its top edge, not at its centre — origin means different things per type, so the extent is what chrome hangs from (entry 0094)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    const label = calls.find((call) => call.op === "fillText");
+    // The circle's CENTRE is world y=0. The label must be above the top edge
+    // (y=-5), never at or inside the centre — the entry-0093 defect.
+    expect(label).toEqual({ op: "fillText", text: "circle_1", x: 0, y: CIRCLE_CHROME_BASELINE, align: "center" });
+  });
+
+  it("anchors a TABLE above its top edge too — the same rule that moved the circle's label leaves a corner-origin type where it already looked right", () => {
+    const { ctx, calls } = createFakeContext();
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_1",
+      type: "table",
+      slots: { rows: { kind: "literal", value: 2 }, cols: { kind: "literal", value: 2 }, "origin.x": { kind: "literal", value: 100 }, "origin.y": { kind: "literal", value: 200 } },
+    };
+    renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
+    const label = calls.find((call) => call.op === "fillText");
+    // Extent x spans 100..260 (2 cols x 80), so top-centre x is 180 — CENTRED
+    // over the grid, where entry 0093 put it over the left corner.
+    expect(label).toEqual({ op: "fillText", text: "table_1", x: 180, y: 194, align: "center" });
+  });
+
+  it("draws no label for a type with no schema/extent yet", () => {
     const { ctx, calls } = createFakeContext();
     const value: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } };
     renderDocument(ctx, 800, 600, [value], CAMERA_IDENTITY);
     expect(calls.some((call) => call.op === "fillText")).toBe(false);
   });
 
-  it("labels a circle whose radius is missing (draws no body) at its origin — the label and the body have independent preconditions", () => {
+  it("draws no label for a shape with no vertices slot — chrome appears exactly when a drawn extent does (entry 0094's stated consequence)", () => {
     const { ctx, calls } = createFakeContext();
-    const circle: GraphObject = { id: "obj_1", name: "circle_1", type: "circle", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 } } };
+    const circle: GraphObject = { id: "obj_1", name: "circle_1", type: "circle", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, radius: { kind: "literal", value: 5 } } };
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
-    expect(calls.some((call) => call.op === "arc")).toBe(false);
-    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
+    expect(calls.some((call) => call.op === "arc")).toBe(true); // The BODY still draws from origin/radius (§5.5).
+    expect(calls.some((call) => call.op === "fillText")).toBe(false);
   });
 
   it("labels EVERY object, in document order, not only a selected one", () => {
@@ -455,6 +522,23 @@ describe("renderDocument — error badge (D-068)", () => {
     expect(calls.some((call) => call.op === "fillText" && call.text === "!")).toBe(true);
   });
 
+  it("places the badge clear of the name by MEASURING it, on the same baseline, so a long name pushes it out instead of colliding", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "a_very_long_object_name", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    const badge = calls.find((call) => call.op === "fillText" && call.text === "!");
+    // 23 chars * 7px fake width / 2 = 80.5, plus the 6px gap, right of centre 0.
+    expect(badge).toEqual({ op: "fillText", text: "!", x: 86.5, y: CIRCLE_CHROME_BASELINE, align: "left" });
+  });
+
+  it("draws the badge ABOVE the shape, never inside it — same baseline as the name", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    const textCalls = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
+    expect(textCalls.every((call) => call.y === CIRCLE_CHROME_BASELINE)).toBe(true);
+  });
+
   it("draws no badge for an object with no ErrorValue anywhere", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
@@ -471,36 +555,52 @@ describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
     return { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 0 };
   }
 
+  /** The tick text, or undefined — one right-aligned draw carries both axes since entry 0094. */
+  function tickCall(calls: readonly RecordedCall[]): RecordedCall | undefined {
+    return calls.find((call) => call.op === "fillText" && call.text.includes("•"));
+  }
+
   it("marks origin.x when its slot kind is formula, and leaves a literal origin.y unmarked", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1", { "origin.x": boundToCellSlot() });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
-    const ticks = calls.filter((call) => call.op === "fillText" && (call.text === "•x" || call.text === "•y"));
-    expect(ticks).toEqual([{ op: "fillText", text: "•x", x: -14, y: 6, align: "center" }]);
+    // "circle_1" is 8 chars * 7px / 2 = 28, plus the 6px gap, LEFT of centre 0.
+    expect(tickCall(calls)).toEqual({ op: "fillText", text: "•x", x: -34, y: CIRCLE_CHROME_BASELINE, align: "right" });
   });
 
-  it("marks both axes independently when both origin.x and origin.y are formula slots", () => {
+  it("marks both axes in ONE right-aligned draw when both origin.x and origin.y are formula slots", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1", { "origin.x": boundToCellSlot(), "origin.y": boundToCellSlot() });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
-    const ticks = calls.filter((call) => call.op === "fillText" && (call.text === "•x" || call.text === "•y"));
-    expect(ticks).toEqual([
-      { op: "fillText", text: "•x", x: -14, y: 6, align: "center" },
-      { op: "fillText", text: "•y", x: 14, y: 6, align: "center" },
-    ]);
+    expect(tickCall(calls)).toEqual({ op: "fillText", text: "•x •y", x: -34, y: CIRCLE_CHROME_BASELINE, align: "right" });
+  });
+
+  it("marks only origin.y when it alone is driven", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", { "origin.y": boundToCellSlot() });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(tickCall(calls)).toEqual({ op: "fillText", text: "•y", x: -34, y: CIRCLE_CHROME_BASELINE, align: "right" });
   });
 
   it("marks neither axis when both origin.x and origin.y are literal", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
-    expect(calls.some((call) => call.op === "fillText" && (call.text === "•x" || call.text === "•y"))).toBe(false);
+    expect(tickCall(calls)).toBeUndefined();
   });
 
   it("marks neither axis for a DERIVED slot — never reachable in practice (origin is never declared derived), but the check reads the kind, not the presence, of a slot", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1", { "origin.x": { kind: "derived", value: 0 } });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
-    expect(calls.some((call) => call.op === "fillText" && call.text === "•x")).toBe(false);
+    expect(tickCall(calls)).toBeUndefined();
+  });
+
+  it("draws the ticks ABOVE the shape, on the name's baseline — never inside it, which is where entry 0093 put them", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", { "origin.x": boundToCellSlot() });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    const textCalls = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
+    expect(textCalls.every((call) => call.y === CIRCLE_CHROME_BASELINE)).toBe(true);
   });
 });

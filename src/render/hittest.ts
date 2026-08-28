@@ -184,8 +184,23 @@ export interface WorldExtent {
  * The degenerate cases D-066 names are `undefined` here for the same reason
  * they are `false` there: a table with no extent is not drawn, so it is not
  * part of what `fit` fits to.
+ *
+ * Exported at entry 0094 for a SECOND consumer: `renderer.ts` hangs an object's
+ * screen-space chrome (name label, error badge, formula-driven indicator) from
+ * the top-centre of this box. That is D-066 applied a third time — the drawn
+ * extent, the clickable extent and the LABELLED extent are one extent — and it
+ * is why the chrome anchor is not computed separately over there.
+ *
+ * **HAZARD — import cycle.** `renderer.ts` imports this function while this
+ * file imports `readNumber`/`asPointArray`/`TABLE_CELL_*` from `renderer.ts`.
+ * It resolves today because every cross-file reference on both sides is inside
+ * a function body, never at module top level. **A top-level `const` in this
+ * file that reads a `renderer.ts` export would break with a TDZ error.** Entry
+ * 0094 flagged this for the reviewer with a clean alternative (split the shared
+ * slot reads into `render/slots.ts` and the extent into `render/extent.ts`);
+ * until that is ruled on, do not add such a constant.
  */
-function objectExtent(object: GraphObject): WorldExtent | undefined {
+export function objectExtent(object: GraphObject): WorldExtent | undefined {
   switch (object.type) {
     case "circle":
     case "polygon":

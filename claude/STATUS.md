@@ -1,8 +1,8 @@
-# STATUS — as of entry 0093
+# STATUS — as of entry 0094
 
-STATE: **GREEN.** Both configs compile, 1142/1142 tests pass, 0 skipped, 0 `.only`, `npm run build`
-succeeds. Entry 0093 (§5.9's visual-feedback trio + D-092 clause 1's name labels, in
-`renderer.ts`) is **built and NOT yet reviewed.**
+STATE: **GREEN.** Both configs compile, 1148/1148 tests pass, 0 skipped, 0 `.only`, `npm run build`
+succeeds. Entries **0093** (§5.9's visual-feedback trio + D-092 clause 1's name labels) and **0094**
+(chrome anchors to the drawn extent) are **built and NOT yet reviewed.**
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW, D-084 clause 2 discharged). Nothing procedural stands in front of Phase 4,
@@ -10,49 +10,59 @@ and Phase 4 has not been claimed.
 
 Last review point: **0092-REVIEW-phase3** (the addressing vocabulary is invisible — D-092; a
 ruling, not a code review). Last CODE review: **0090-REVIEW-phase3**, ACCEPT WITH EDITS.
-Cycles since last review: **1/3** · diff since last review: **~534 lines / 3 files** (cap 800/10).
+Cycles since last review: **2/3** · diff since last review: **~700 lines / 5 files** (cap 800/10).
+
+**REVIEW: REQUIRED.** Entry 0094 fired **§6.1 trigger 4** — a hard rule it could not satisfy
+cleanly, worked around, and disclosed: **it created an import cycle between `renderer.ts` and
+`hittest.ts`.** See cold-read item 2. Three questions for the reviewer are at the end of entry 0094.
 
 ## Read this first — the six things a cold reader needs
 
-**1. §5.9's feedback trio and D-092's name label are BUILT, at entry 0093, and NOBODY HAS SEEN THEM
-IN A BROWSER.** `renderDocument` now draws, in addition to every object's body: a selection
-highlight (re-strokes the selected object's own path, or a table's whole grid extent), an error
-badge (`"!"`, for any object holding an `ErrorValue` in ANY slot), a formula-driven indicator
-(`"•x"`/`"•y"`, when `origin.x`/`origin.y`'s slot kind is `"formula"`), and a screen-space name
-label centred above every object that has one. 34 tests in `renderer.test.ts` (16 new), all
-positions verified against known camera math — **none verified against a real picture.** Given
-0090-REVIEW and 0091-REVIEW both found their defects in exactly the region tests could not reach,
-treat the exact pixel layout (label/badge/tick offsets, whether a long name collides with anything)
-as unconfirmed until a human looks. **D-090's prompt-sequence preview did NOT land in this cycle** —
-it needs `state.pending` reaching `renderer.ts`, which is new `main.ts` plumbing, deliberately split
-off (0092-REVIEW §5, 0093's own declared scope).
+**1. Chrome hangs from the object's drawn EXTENT, and the bug it replaced is the lesson.** Entry
+0093 anchored the name label, error badge and formula-driven indicator to `origin.x`/`origin.y`.
+`origin` is a circle's and a polygon's **centre** but a rect's and a table's **top-left corner**
+(`primitives/geometry.ts`), so a circle's label drew *inside the circle* while a table's drew above
+its grid. **Every test passed** — each asserted "6px above the anchor," which was true for every
+type. The defect was in what the anchor MEANT. A human screenshot found it (entry 0094). Chrome now
+hangs from the top-centre of `hittest.ts`'s `objectExtent` — D-066's one extent, used a third time —
+and all three pieces sit on one measured line above the object: `[•x •y] name [!]`, with
+`ctx.measureText` keeping the badge and ticks clear of the name instead of fixed offsets that only
+happened not to collide.
 
-**2. THE ADDRESSING VOCABULARY IS PARTLY VISIBLE NOW; `props` IS STILL OWED.** D-092 named two
-holes: object → name (closed, item 1 above) and object → its slots (still open). `list` prints
-names and types only; there is still no command that prints what slots an object HAS, their KIND,
-or their values. `link polygon_1.origin.x table_x.A1` still requires knowing in advance that both
-paths exist and neither is `derived`. **D-092 clause 4's `props <object>` is next in the queue,
-below.**
+**This is the third consecutive finding that required a human eye, and the first NOT in `main.ts`'s
+DOM half.** The standing lesson widens: it is not only untested code that is at risk, it is code
+whose tests can only check what their author was already thinking about.
 
-**3. The human's session at entry 0091 set the rest of the queue.** Ruled: **D-088** (every
-printable keystroke reaches the command input wherever focus is; `ctrl`/`alt`/`meta` combinations
-never route — clause 1 built, 2–4 owed) · **D-089** (command history on up/down, held in
-`AppState`) · **D-090** (a prompt sequence that has gathered a point DRAWS it, and the geometry it
-would produce, from `state.pending` and never into the document — owed) · **D-091** (the table's
-grey grid against a near-black outline is deliberate and stands).
+**2. THERE IS AN IMPORT CYCLE, disclosed and unresolved.** `renderer.ts` imports `objectExtent` from
+`hittest.ts`; `hittest.ts` imports `readNumber`, `asPointArray` and `TABLE_CELL_*` from
+`renderer.ts`. It resolves today **only** because every cross-file reference on both sides sits
+inside a function body, never at module top level. **A top-level `const` in either file that reads
+the other's export will fail with a TDZ error.** Both files carry a HAZARD note. Entry 0094 declined
+to fix it properly because the fix restructures two reviewed files (§4) — the clean end state is
+`render/slots.ts` (the shared slot reads, which 0064-REVIEW already anticipated "at the THIRD
+consumer") plus `render/extent.ts`, making the graph a DAG. **Ruling wanted.**
+
+**3. THE ADDRESSING VOCABULARY IS HALF VISIBLE; `props` IS STILL OWED.** D-092 named two holes:
+object → name (**closed**, items 1 above) and object → its slots (**still open**). `list` prints
+names and types only. There is still no command that prints what slots an object HAS, their KIND, or
+their values, so `link polygon_1.origin.x table_x.A1` still requires knowing in advance that both
+paths exist and neither is `derived`. **D-092 clause 4's `props <object>` is the next cycle.**
+
+**4. The human's session at entry 0091 set the rest of the queue.** Ruled: **D-088** (every
+printable keystroke reaches the command input wherever focus is; `ctrl`/`alt`/`meta` never route —
+clause 1 built, 2–4 owed) · **D-089** (command history on up/down, held in `AppState`) · **D-090**
+(a prompt sequence DRAWS its gathered point and the geometry it would produce, from `state.pending`,
+never into the document — owed) · **D-091** (the table's grey grid is deliberate and stands).
 
 **Q-014, the properties panel, is OPEN and the HUMAN'S ALONE.** Narrower since D-092: only EDITING
-and LINKING slots by mouse remains in question. **Nothing is built against it, not even a small
-version.**
+and LINKING slots by mouse remains in question. **Nothing is built against it.**
 
-**4. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
+**5. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
 it are pure and have 36 tests. `start` — the canvas, the listeners, the log element, the file
-picker, the download anchor — has **none**, because testing it needs a DOM this project will not
-add. **Every finding of the last two code reviews lived in `start`.** This cycle's one change to
-`start` (passing `state.interaction.selectedObjectId` into `renderDocument`) is therefore itself
-unverified by any test, same as everything else down there.
+picker, the download anchor — has **none**. Every finding of the last three reviews touched either
+`start` or something only a running browser could show.
 
-**5. `load` is wired, and that makes an unbuilt check user-reachable.** A hand-edited document whose
+**6. `load` is wired, and that makes an unbuilt check user-reachable.** A hand-edited document whose
 formula AST nests deeper than `MAX_FORMULA_AST_DEPTH` reaches `deserializeDocument` from a button and
 throws a `RangeError` out of the file-read promise (**D-083** clause 4's loader check is not built;
 **D-081**'s name gate is not either). Owned by `document.ts`'s cycle.
@@ -65,20 +75,18 @@ throws a `RangeError` out of the file-read promise (**D-083** clause 4's loader 
 
 1. **`commands.ts`: D-092 clause 4's `props <object>`.** Every slot's path, kind and value. Small,
    entirely testable, and it is what a properties panel would display if Q-014 is approved, so the
-   work composes whichever way that goes. **This is the highest-value remaining cycle for a human
-   trying to actually link two objects together.**
+   work composes whichever way that goes. **The highest-value remaining cycle for a human trying to
+   actually link two objects together.**
 2. **`main.ts` + `renderer.ts`: D-090's prompt-sequence preview.** Needs `state.pending` threaded
-   into the render call, and per-command preview geometry (what does a live `circle`/`polygon`/`rect`
-   prompt draw before it is finished?). Deliberately split from entry 0093.
+   into the render call, plus per-command preview geometry.
 3. **D-088 clauses 2–4 + D-089, the command input's behaviour.** Printable-key routing from
-   anywhere and history.
+   anywhere, and history.
 4. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
    `createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then).
 
-**A human session is owed before Phase 4 is attempted in earnest.** Nothing procedural blocks
-starting Phase 4 today, but its criterion needs a human to bind two polygons through a table by
-mouse and by formula, and until `props` exists that human still cannot discover `origin.x` is a
-writable path without reading `primitives/schema.ts`.
+**A human session is owed before Phase 4 is attempted in earnest.** Phase 4's criterion needs a
+human to bind two polygons through a table; until `props` exists that human still cannot discover
+`origin.x` is a writable path without reading `primitives/schema.ts`.
 
 ## Built and reviewed
 
@@ -106,17 +114,34 @@ at 0091 — four defects found and fixed across the two).
   (`selectedObjectId?: string`) and a third rendering pass (screen-space chrome, after a second
   identity-transform reset). `buildCirclePath`/`buildVerticesPath` factored out of
   `drawCircle`/`drawVerticesShape` so the highlight re-strokes the SAME path rather than computing
-  an independent outline (D-010). `chromeAnchorPoint` reuses the same `origin.x`/`origin.y` reads
-  (and table's `?? 0` fallback) that positions the object's body, so a label can never disagree with
-  the drawn picture. 16 new tests; 3 existing table tests updated because a table's `fillText` calls
-  genuinely changed (see the entry's Decisions §3).
+  an independent outline (D-010). 16 new tests; 3 existing table tests updated because a table's
+  `fillText` calls genuinely changed.
 - **`src/main.ts`** — one line: `paint()`'s `renderDocument` call now passes
   `state.interaction.selectedObjectId`. Resolves no name (D-082 clause 4's discipline, held here
   too).
 
-Verified: `tsc` clean on both configs, 1142/1142, `npm run build` succeeds. Two-mutant check against
-`renderer.ts` (each seeded alone, reverted after): "highlight always draws" killed 8 tests,
-"`objectHasError` always false" killed 2.
+**Entry 0094 — chrome anchors to the drawn EXTENT, not to `origin`.** The fix for the defect a
+human screenshot found in 0093's output (cold-read item 1).
+
+- **`src/render/renderer.ts`** — `chromeAnchorPoint` is four lines: `objectExtent`'s top-centre. The
+  per-type `switch` is gone. `drawObjectChrome` lays all three pieces on ONE line above the top
+  edge (`[•x •y] name [!]`), with horizontal offsets MEASURED via `ctx.measureText` so a long name
+  pushes the badge and ticks out instead of colliding. `drawNameLabel`/`drawErrorBadge`/
+  `drawFormulaDrivenTicks` collapse into `drawObjectChrome` + `formulaDrivenTicks(object): string`
+  (one right-aligned draw carries both ticks). Dead `ScreenPoint` import removed.
+- **`src/render/hittest.ts`** — `objectExtent` exported. No logic change. **This is what created the
+  import cycle** (cold-read item 2).
+- **Tests** — `renderer.test.ts` at 40 (was 34). Both fakes gained `measureText` as a FIXED-WIDTH
+  fake measurer (7px/char), the posture Rule 1 prescribes for the engine's `TextMeasurer` applied a
+  layer up. Six existing tests changed, each itemised in entry 0094 §"the six existing tests I
+  changed" with the reason this cycle's own change touched it — **none weakened**.
+  `main.test.ts`'s Phase 3 acceptance test needed ONLY `measureText` added to its fake; no
+  assertion changed.
+
+Verified: `tsc` clean on both configs, **1148/1148**, `npm run build` succeeds. Three-mutant check
+against `renderer.ts` (each seeded alone, `diff`-confirmed reverted): anchor at the extent's BOTTOM
+killed 12, anchor at the LEFT edge killed 10, offsets ignoring the measured name width killed 5.
+Entry 0093's own two mutants killed 8 and 2.
 
 ## Not started
 
@@ -167,9 +192,13 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
   download anchor and the file picker, now including the one-line selection hand-off to
   `renderDocument`. **0090-REVIEW found four defects there and none anywhere else.** Treat a change
   to that region as unverified until someone clicks on it.
-- **§5.9's feedback trio and D-092's name label are drawn but UNSEEN.** Entry 0093 built them against
-  known camera math, not against a picture. The exact layout (offsets, whether a badge collides with
-  a long name, whether `•x`/`•y` reads as intended) is unconfirmed.
+- **THE IMPORT CYCLE between `renderer.ts` and `hittest.ts`** — cold-read item 2. Resolves only
+  because every cross-file reference sits inside a function body. **Do not add a top-level `const`
+  in either file that reads the other's export.** Awaiting a ruling.
+- **The chrome layout is still UNSEEN.** Entry 0094 fixed the anchor a screenshot exposed and made
+  the offsets measured rather than guessed, but nobody has looked at the result. **Labels of two
+  adjacent objects can still overlap each other** — there is no inter-object collision handling and
+  entry 0094 deliberately invented none (Rule 5).
 - **A prompt sequence still shows nothing where you clicked** — no marker for a picked point, no
   preview of the shape being built. Ruled **D-090**, queued, explicitly deferred out of entry 0093.
 - **An operator still cannot discover an object's slots.** No command prints them yet. **D-092**
@@ -364,3 +393,19 @@ Next free: **Q-015**.
   updating**, not exempting, once an object it exercises gets a real anchor point — three
   `renderer.test.ts` table tests changed at entry 0093 for exactly this reason. Check whether the
   test's fixture has `origin.x`/`origin.y` before assuming a chrome change is safe to skip.
+- **`origin` does not mean the same thing across object types.** It is a circle's and a polygon's
+  CENTRE and a rect's and a table's TOP-LEFT CORNER (`primitives/geometry.ts`). Entry 0093 anchored
+  chrome to it and got a label inside every circle; entry 0094 moved to the drawn extent. **Anything
+  that needs "where is this object, visually" wants `objectExtent`, never `origin`.**
+- **A test that asserts an OFFSET cannot catch a wrong ANCHOR.** Entry 0093's label tests all passed
+  while the labels were in the wrong place, because each asserted "6px above the anchor" and that
+  was true. When adding a positioned thing, pin the ABSOLUTE position for at least two types whose
+  geometry differs — entry 0094 pins a circle (centre-origin) and a table (corner-origin) precisely
+  so the next anchor change cannot pass silently.
+- **`renderer.ts` and `hittest.ts` are a MODULE CYCLE as of entry 0094.** It works only because
+  every cross-file reference is inside a function body. A top-level `const` reading across the
+  boundary breaks with a TDZ error. The clean split (`render/slots.ts` + `render/extent.ts`) is
+  written up in entry 0094's ESCALATION section and awaits a ruling.
+- **Adding a `ctx` member to `renderer.ts` breaks every hand-rolled fake in the repo**, and there
+  are two (`renderer.test.ts`, `main.test.ts`). Entry 0094's `ctx.measureText` failed the Phase 3
+  acceptance test with `TypeError: ctx.measureText is not a function` before both fakes were updated.

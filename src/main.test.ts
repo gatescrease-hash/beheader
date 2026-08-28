@@ -407,6 +407,10 @@ describe("Phase 3's acceptance criterion, end to end", () => {
       arc: record("arc"),
       strokeRect: record("strokeRect"),
       fillText: record("fillText"),
+      // `renderer.ts` measures a name label to place the chrome beside it
+      // (entry 0094). A fixed-width fake, like `renderer.test.ts`'s — this
+      // test asserts WHICH calls happen, never where the text lands.
+      measureText: (text: string) => ({ width: text.length * 7 }),
     };
     return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
   }
