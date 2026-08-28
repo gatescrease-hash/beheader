@@ -2030,6 +2030,88 @@ describe("table dimensions are literal-only — Rule 6 (D-046)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// D-097 (0100-REVIEW-phase4, the human's "vanishing table"): a plain `setSlot`
+// writing `table`'s `rows`/`cols` is bounded at EVERY write, not only at
+// `insertTableLine`/`deleteTableLine` (which `findInvalidTableResizes` above
+// already covers) or at creation (`command/commands.ts`'s own check). One
+// test per row of D-097's ruling table, each asserting the refusal AND that
+// the document is bit-for-bit unchanged (Rule 2's rejection invariant).
+// ---------------------------------------------------------------------------
+
+describe("mutate — findInvalidDimensionWrites (D-097): a setSlot bounding table rows/cols at write time", () => {
+  const REJECTED_ROWS_WRITES: readonly { readonly label: string; readonly slot: Slot }[] = [
+    { label: "a formula (evaluation could resize the table, Rule 6)", slot: { kind: "formula", ast: { type: "literal", value: 5 }, value: 5 } },
+    { label: "zero", slot: { kind: "literal", value: 0 } },
+    { label: "a negative number", slot: { kind: "literal", value: -2 } },
+    { label: "a non-integer", slot: { kind: "literal", value: 2.5 } },
+  ];
+
+  for (const { label, slot } of REJECTED_ROWS_WRITES) {
+    it(`rejects a setSlot writing ${label} to table_x.rows, leaving prior state bit-for-bit unchanged`, () => {
+      const table = tableObject("obj_1", "table_x", 3, 3, {});
+      const snapshotBefore = JSON.parse(JSON.stringify([table])) as unknown;
+
+      const result = mutate([table], [{ kind: "setSlot", address: addr("obj_1", "rows"), slot }], []);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.message).toContain("table_x.rows");
+        expect(result.message).toContain("Rule 6");
+      }
+      expect([table]).toEqual(snapshotBefore); // step 6: prior state provably untouched.
+    });
+  }
+
+  it("rejects the same shape (zero) for cols, symmetric to rows", () => {
+    const table = tableObject("obj_1", "table_x", 3, 3, {});
+    const result = mutate([table], [{ kind: "setSlot", address: addr("obj_1", "cols"), slot: { kind: "literal", value: 0 } }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("table_x.cols");
+    }
+  });
+
+  it("a legal set table_x.rows 5 still commits and GROWS the declared cell family", () => {
+    const table = tableObject("obj_1", "table_x", 3, 3, {});
+
+    const result = mutate([table], [{ kind: "setSlot", address: addr("obj_1", "rows"), slot: { kind: "literal", value: 5 } }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const resized = result.objects.find((object) => object.id === "obj_1");
+      expect(resized?.slots.rows).toMatchObject({ value: 5 });
+      expect(resized === undefined ? [] : enumerateTableCellSlotPaths(resized)).toHaveLength(5 * 3);
+    }
+  });
+
+  it("validates a setSlot on a table created EARLIER IN THE SAME BATCH — not skipped, mirroring findInvalidTableResizes' own same-batch case", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, {});
+
+    const result = mutate(
+      [],
+      [
+        { kind: "createObject", object: table },
+        { kind: "setSlot", address: addr("obj_1", "rows"), slot: { kind: "literal", value: 0 } },
+      ],
+      [],
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("operation 2 of 2");
+    }
+  });
+
+  it("leaves a NON-table object's own 'rows'-named literal slot alone — an undeclared literal is ordinary legal state (D-017)", () => {
+    const notATable = valueObject("obj_1", "value_1", 1);
+    // `value` declares no "rows" path at all — this check is about `table`'s
+    // dynamic sizing slot specifically, not any slot that happens to share the name.
+    const result = mutate([notATable], [{ kind: "setSlot", address: addr("obj_1", "rows"), slot: { kind: "literal", value: -1 } }], []);
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The range-evaluation wiring (D-036's five constraints). These are the
 // end-to-end proofs closest to PROJECT_BRIEF §6 Phase 2's own acceptance
 // criterion, built from hand-written table fixtures; see each test's own note

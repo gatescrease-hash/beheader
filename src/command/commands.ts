@@ -36,6 +36,10 @@
  *     count is an unbounded slot allocation, which Rule 6 will not let an
  *     `ErrorValue` stand in for. `primitives/geometry.ts`'s `#TYPE` for
  *     `sides < 3` stays where it is, as the defensive arm for a loaded file.
+ *     `rows`/`cols` are bounded a SECOND time, at every later WRITE rather than
+ *     only at creation — `mutation.ts`'s `findInvalidDimensionWrites` (D-097) —
+ *     because `set table_1.rows = ...` reaches `mutate` through `writeSlot`
+ *     below, which knows nothing about dimensions.
  *   - Every `Command` arm appears in `executeCommand`'s switch and every one of
  *     them now runs: adding an arm is a compile error here, not a silent
  *     fall-through into "nothing happened".
@@ -106,7 +110,7 @@ import {
   RECT_WIDTH_PATH,
 } from "../engine/primitives/geometry.ts";
 import { findDerivedSlotSchema, getObjectSchema, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
-import { TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
+import { MAX_TABLE_LINES, MIN_TABLE_LINES, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
   Command,
@@ -176,7 +180,8 @@ export function isCommandFailure(outcome: CommandOutcome): outcome is { readonly
 }
 
 // ---------------------------------------------------------------------------
-// D-070 — the creation counts, bounded here and nowhere else
+// D-070 — the creation counts, bounded at CREATION here; `table`'s two also
+// bound every later WRITE, one layer down (D-097, see the import above)
 // ---------------------------------------------------------------------------
 
 /**
@@ -193,9 +198,10 @@ export function isCommandFailure(outcome: CommandOutcome): outcome is { readonly
  */
 export const MAX_POLYGON_SIDES = 1000;
 
-/** D-070's provisional bounds on `table rows=<n> cols=<n>`. A table with zero lines has no cells and cannot be drawn, so the floor is 1, not 0. */
-export const MIN_TABLE_LINES = 1;
-export const MAX_TABLE_LINES = 1000;
+// `MIN_TABLE_LINES`/`MAX_TABLE_LINES` — D-070's identical provisional bounds for
+// `table rows=<n> cols=<n>` — MOVED to `engine/primitives/table.ts` at D-097 clause 3:
+// `mutation.ts`'s write-time bound needs them and `engine/` may not import `command/`.
+// Imported above, not re-declared, so creation and every later write read one number.
 
 /** §5.5 gives `polygon` a `rotation` slot and §5.10's form gives it no argument, so creation supplies this and `set polygon_1.rotation` changes it. */
 const DEFAULT_POLYGON_ROTATION = 0;

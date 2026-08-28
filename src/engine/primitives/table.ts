@@ -91,11 +91,14 @@
  *   - No `slotKey` is ever inverted (D-010).
  *
  * NOT DONE HERE
- *   - **A dimension slot is not checked for COHERENCE with the cells that exist.** A
- *     raw `setSlot` writing an INCOHERENT `literal` count is still unguarded; D-046
- *     settles only the KIND, and D-053 makes a resize reject unless BOTH dimensions
- *     are literal. `insertTableLine`/`deleteTableLine`, not a bare `setSlot`, are the
- *     sanctioned way to resize a table. See STATUS.md's known problems.
+ *   - **A raw `setSlot` lowering `rows`/`cols` does not remove the now-out-of-bounds
+ *     cell slots it strands.** `MIN_TABLE_LINES`/`MAX_TABLE_LINES` below bound the KIND
+ *     and RANGE a dimension write may commit (`mutation.ts`'s `findInvalidDimensionWrites`,
+ *     **D-097**) — that closes "a formula/0/negative/non-integer dimension makes the
+ *     table vanish," not "a stranded cell beyond the new extent." A stranded slot is
+ *     simply invisible to `enumerateTableCellSlotPaths` (D-047's absent/empty
+ *     equivalence), not a defect; `insertTableLine`/`deleteTableLine`, not a bare
+ *     `setSlot`, remain the sanctioned way to add or remove an actual cell.
  *   - A table-creation command (`table x=0 y=0 rows=8 cols=8`, §5.10) — Phase 3.
  *     `createObject` already suffices to build one by hand (every test fixture does)
  *     and `command/parser.ts` reads the line; what is missing is the handler between
@@ -103,6 +106,19 @@
  */
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";
 import { getSlot, slotKey, type GraphObject, type Slot } from "../graph/node.ts";
+
+/**
+ * The bounds a `rows`/`cols` write must fall inside to stay `readTableDimension`-
+ * readable — a table with zero lines has no cells and cannot be drawn, so the
+ * floor is 1, not 0. Provisional numbers, D-070's own reviewer pick, the human may
+ * overrule without disturbing anything else here. **Moved from `command/commands.ts`
+ * by D-097 clause 3**: `engine/` may not import `command/`, and `mutation.ts`'s
+ * write-time bound (`findInvalidDimensionWrites`) needs them beside the primitive
+ * they describe. `commands.ts`'s creation-time check (`createTable`) imports them
+ * from here now — one declaration, two readers (D-010).
+ */
+export const MIN_TABLE_LINES = 1;
+export const MAX_TABLE_LINES = 1000;
 
 /** §5.4: "Default 8×8." `command/parser.ts` applies these when a `table` command omits `rows`/`cols`; nothing in this file writes them anywhere. */
 export const DEFAULT_TABLE_ROWS = 8;

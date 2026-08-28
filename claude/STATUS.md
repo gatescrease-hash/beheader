@@ -1,29 +1,30 @@
-# STATUS — as of entry 0100-REVIEW-phase4
+# STATUS — as of entry 0101
 
-STATE: **GREEN, and fully reviewed.** Both configs compile, **1191/1191** tests pass, 0 skipped,
-0 `.only`, `npm run build` succeeds — re-run by the reviewer at 0100, matching entry 0099's claims
-exactly. Entry **0099** (D-094's read-only properties panel) is **REVIEWED: ACCEPT**, no edits.
+STATE: **GREEN, built, not yet reviewed.** Both configs compile, **1205/1205** tests pass, 0
+skipped, 0 `.only`, `npm run build` succeeds. Entry **0101** (D-097, the vanishing table) is
+**BUILT, mutation-checked, awaiting review** — not yet re-run by a reviewer.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
 Last review point: **0100-REVIEW-phase4** (ACCEPT; **D-097 through D-103** ruled).
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files**.
+Cycles since last review: **1/3** · diff since last review: **353 insertions / 33 deletions across
+5 files** (cap ~800 lines / 10 files).
 
-**NEXT: entry 0101 builds D-097 — the vanishing table.** D-103 fixes the order of the next four
-cycles and it is not negotiable; see "Next cycles".
+**NEXT: entry 0102 builds D-098 + D-099** (once-per-drag-gesture notices, panel decimal rounding) —
+D-103's order, unchanged. See "Next cycles".
 
 ## Read this first — the six things a cold reader needs
 
 **1. THE HUMAN DROVE THE APPLICATION FOR THE FIRST TIME (at 0100) AND IT CHANGED THE QUEUE.** Their
 verdict on the panel was "the properties tab is good." What the session produced instead was **one
-real defect** (below) and **three product changes** that turn the panel from a display into an
-authoring surface. All of it is ruled: **D-097** (the defect), **D-098** (log spam), **D-099**
-(significant figures), **D-100/D-101/D-102** (multi-selection, N draggable panels, the paperclip),
-**D-103** (the order). **Q-014 is CLOSED** — the human ruled the writing/linking half.
+real defect** (below, now FIXED at 0101) and **three product changes** that turn the panel from a
+display into an authoring surface. All of it is ruled: **D-097** (the defect), **D-098** (log spam),
+**D-099** (significant figures), **D-100/D-101/D-102** (multi-selection, N draggable panels, the
+paperclip), **D-103** (the order). **Q-014 is CLOSED** — the human ruled the writing/linking half.
 
-**2. THE DEFECT: A TABLE VANISHES WHEN ITS `rows` OR `cols` IS SET, AND THE WRITE SAYS IT WORKED.**
-Four ways, all reproduced at 0100-REVIEW §6, all echoing success:
+**2. THE DEFECT IS FIXED, AWAITING REVIEW: A TABLE NO LONGER VANISHES WHEN ITS `rows`/`cols` IS SET.**
+Was reproducible four ways (0100-REVIEW §6), all echoing success while silently breaking the object:
 
 ```
 > set table_1.rows = 5     rows = {kind:"formula", value:5}    objectExtent -> undefined
@@ -32,11 +33,13 @@ Four ways, all reproduced at 0100-REVIEW §6, all echoing success:
 > set table_1.rows 2.5     rows = {kind:"literal", value:2.5}  objectExtent -> undefined
 ```
 
-The table stops drawing, `fit` says *"nothing on the canvas has an extent to fit to"*, and `list`
-still lists it. **D-046's fail-closed read is NOT the bug and does not move** — Rule 6 requires it.
-The bug is that nothing refuses the WRITE: `commands.ts` bounds `rows`/`cols` at CREATION only
-(D-070) and `set` goes through the generic `writeSlot` → `setSlot` path. **D-097** closes it in
-`mutation.ts`, not in the `set` handler, because D-102 is about to add a second write path.
+**All four now REFUSE, at entry 0101.** `mutation.ts`'s new `findInvalidDimensionWrites` (D-097)
+rejects a `setSlot` that would leave `table`'s `rows`/`cols` non-`literal`, non-number,
+non-integer, or outside `MIN_TABLE_LINES..MAX_TABLE_LINES` — the same four shapes
+`readTableDimension` already read as a fail-safe `0` (D-046, which STANDS UNCHANGED — see "Settled"
+below). Pinned by name at both layers: `mutation.test.ts` against hand-built `Operation`s, and
+`commands.test.ts` end to end through the real typed lines above. Mutation-checked (see entry
+0101's own log for the exact before/after test-failure count).
 
 **3. THE PROPERTIES PANEL IS BUILT AND REVIEWED (entry 0099, ACCEPT at 0100).** D-094's fourteen
 clauses, in `render/panel.ts` (`placePropertiesPanel` — pure, tested), `main.ts` (`buildPanelModel`
@@ -51,11 +54,11 @@ TOP-LEFT CORNER, so a circle's label drew inside it. **Every test passed** — e
 OFFSET from the anchor, and the defect was in what the anchor MEANT. Chrome now hangs from
 `render/extent.ts`'s `objectExtent` top-centre.
 
-**The lesson restated, because §6's defect is the same shape: it is not only untested code that is
-at risk, it is code whose tests can only check what their author was already thinking about.**
-`readTableDimension`'s fail-closed `0` HAS a test. Nobody tested the path that produces the `0`,
-because everyone looking at that function was thinking about a malformed LOADED document, not about
-a typed command.
+**The lesson restated, because entry 0101's own defect was the same shape: it is not only untested
+code that is at risk, it is code whose tests can only check what their author was already thinking
+about.** `readTableDimension`'s fail-closed `0` HAD a test. Nobody tested the path that produces
+the `0` from a typed WRITE, because everyone looking at that function was thinking about a
+malformed LOADED document.
 
 **5. THE IMPORT CYCLE IS CLOSED (D-093, entry 0096).** `src/render/slots.ts` (`readNumber`,
 `asPointArray`, `TABLE_CELL_*`) and `src/render/extent.ts` (`WorldExtent`, `objectExtent`,
@@ -71,13 +74,11 @@ region substantially.** Treat any change there as unverified until someone click
 
 ## Next cycles — D-103's order, and it is binding
 
-1. **Entry 0101 — D-097, the vanishing table.** `mutation.ts` gains `findInvalidDimensionWrites`,
-   simulated left-to-right over the batch like `findInvalidTableResizes` and `findInvalidRenames`.
-   Refuses a dynamic-family sizing slot that is non-`literal`, non-number, non-integer, or outside
-   `MIN_TABLE_LINES..MAX_TABLE_LINES`. **Those two constants MOVE to
-   `engine/primitives/table.ts`** (authorised by D-097 clause 3, must be named in the log entry per
-   D-096 clause 1) because `engine/` may not import `command/`. One test per row of D-097's table,
-   each asserting the refusal AND that the document is bit-for-bit unchanged.
+1. ~~**Entry 0101 — D-097, the vanishing table.**~~ **DONE, awaiting review.** `mutation.ts` gained
+   `findInvalidDimensionWrites`, simulated left-to-right over the batch like `findInvalidTableResizes`
+   and `findInvalidRenames`. `MIN_TABLE_LINES`/`MAX_TABLE_LINES` MOVED to `engine/primitives/table.ts`
+   (D-097 clause 3; the move is named in entry 0101's own log per D-096 clause 1) because `engine/`
+   may not import `command/`; `commands.ts` imports them from there now.
 2. **Entry 0102 — D-098 + D-099.** Once-per-drag-gesture notices in `interaction.ts`'s `DragState`;
    `describeSlotValue` gains an optional `maxDecimals` that only `buildPanelModel` passes. Small,
    independent, unrelated to each other.
@@ -112,18 +113,21 @@ formula depth limits (0088) · `main.ts` rewritten from the stub, `render/camera
 0096), `index.html` (0089, reviewed 0090/0091) · entry 0093's selection highlight / error badge /
 formula-driven indicator (D-068) and D-092 clause 1's name label, entry 0094's chrome-anchor fix
 (0095-REVIEW, ACCEPT) · entry 0096's `render/slots.ts` + `render/extent.ts` split (D-093) and entry
-0097's `command/props.ts` + `props` command (0098-REVIEW, ACCEPT WITH EDITS; D-096) · **entry 0099's
-`render/panel.ts` + `buildPanelModel` + the panel DOM + clause 3's name suppression — REVIEWED:
-ACCEPT at 0100-REVIEW, no edits.**
+0097's `command/props.ts` + `props` command (0098-REVIEW, ACCEPT WITH EDITS; D-096) · entry 0099's
+`render/panel.ts` + `buildPanelModel` + the panel DOM + clause 3's name suppression (REVIEWED:
+ACCEPT at 0100-REVIEW, no edits).
 
-## Nothing is unreviewed
+## Built this batch, not yet reviewed
 
-The working tree is clean and every entry through 0099 has a verdict. Entry 0101 starts from a
-reviewed baseline.
+**Entry 0101 — D-097, the vanishing table.** `mutation.ts`'s `findInvalidDimensionWrites` (a sixth
+pre-staging precondition, simulated left-to-right); `MIN_TABLE_LINES`/`MAX_TABLE_LINES` moved to
+`engine/primitives/table.ts`; `commands.ts` updated to import rather than declare them; new tests in
+both `mutation.test.ts` (engine-level, hand-built `Operation`s, bit-for-bit-unchanged assertions) and
+`commands.test.ts` (end to end through the real typed repro lines). Cycle 1/3 since 0100-REVIEW.
 
 ## Not started
 
-**D-097 through D-103, all of them** · D-090's prompt-sequence preview · §5.9's per-vertex drag
+**D-098 through D-103, all of them** · D-090's prompt-sequence preview · §5.9's per-vertex drag
 path · `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation
 (D-081, D-083 clause 4) · D-088 clauses 2–4 · D-089 · Phases 5–7.
@@ -159,9 +163,11 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 
 ## Known problems (detail lives where the pointer says)
 
-- **A TABLE VANISHES WHEN ITS DIMENSION IS SET TO A FORMULA, `0`, A NEGATIVE, OR A NON-INTEGER** —
-  the defect above. **Ruled D-097, entry 0101's whole slice.** Until it lands, `set <table>.rows`
-  is a trap.
+- **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** rather
+  than removing it — a narrower, disclosed remnant of the vanishing-table gap. D-097 (entry 0101)
+  closed the KIND/RANGE half; this stranded-slot half is ordinary D-047 empty state (invisible to
+  `enumerateTableCellSlotPaths`, not a defect), not reachable except through a raw `setSlot`
+  bypassing `insertTableLine`/`deleteTableLine`. See `primitives/table.ts`'s header.
 - **`main.ts`'s `start` is untested code and D-101/D-102 will grow it substantially** — every
   listener, the canvas sizing, the log rewrite, the file picker, the selection hand-off,
   `updatePanel`, and soon N panels with drag and text inputs. 0090-REVIEW found four defects here
@@ -191,8 +197,8 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 - **Two sites ask the schema whether it declares a path** — `declaresSlotPath` and
   `resolveWritableSlot`'s inline check. A THIRD is forbidden.
 - **`refs <address>` REFUSES for a cell of a table whose `rows` is a formula** (D-046) — a state
-  **D-097 makes unreachable by command**, though a loaded file can still carry it, so the refusal
-  stays.
+  D-097 makes unreachable BY COMMAND (entry 0101), though a loaded file can still carry it, so the
+  refusal stays.
 - **A bare reference to an EMPTY cell is REFUSED.** 0080-REVIEW F4 ruled it STANDS.
 - **`createObject` does not check the name it carries** — pinned by a test asserting a duplicate
   DOES commit, which **D-081** says must FLIP in the load cycle.
@@ -206,6 +212,9 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
   separate `Value`-to-text formatters** never reconciled. **D-099 clause 5 keeps it that way
   deliberately** — the human chose panel-only rounding, so on-canvas cell text keeps full precision
   and the two now disagree on purpose. Reconciling them is its own slice and needs its own ask.
+  `mutation.ts`'s NEW `describeDimensionSlotValue` (entry 0101) is a THIRD, narrower formatter —
+  disclosed here rather than left implicit — but it is scoped to a rejection message's "Got:"
+  clause, never a display path, so it is not the same hazard D-099 clause 1 guards against.
 - **Carried unchanged, each with its pointer:** `set-formula` is a `kind` not a registry name ·
   comment debt in TEST files only · mixed line endings in the WORKING TREE only (`core.autocrlf=true`)
   · dangling-reference messages name the DEPENDENT not the missing SOURCE · D-022's bounded-correctness
@@ -218,16 +227,18 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 
 Every ruling in `DECISIONS.md` (D-001 through **D-103**) binds without restatement here.
 
-**From 0100-REVIEW — D-097 through D-103, all seven:** (**D-097**) a dynamic-family sizing slot is
-bounded at EVERY write, in `mutation.ts`, not only at creation · (**D-098**) a drag notice is
-emitted once per drag GESTURE, deduplicated in `DragState`, NOT on a wall clock · (**D-099**) the
-panel rounds a displayed number to at most 4 decimals through an optional argument on the ONE
-formatter, and a non-zero value that rounds to zero shows in exponential form · (**D-100**) the
-selection is a list; plain click replaces, shift-click adds, escape clears; D-094 clause 3
-generalises to every selected object · (**D-101**) one panel per selected object, dragged by its
-header, detaching until deselected, with no collision avoidance · (**D-102**) the panel becomes
-writable, `pointer-events: none` is lifted, the paperclip is blue for a `formula` slot and grey for
-a `literal` one, and **every panel write goes through `executeCommand`, never `mutate`** ·
+**D-097 is IMPLEMENTED, at entry 0101** — see "Read this first" item 2 above for the mechanism.
+Awaiting review; do not re-attempt or duplicate it if a review has not yet landed.
+
+**From 0100-REVIEW — D-098 through D-103, still queued:** (**D-098**) a drag notice is emitted once
+per drag GESTURE, deduplicated in `DragState`, NOT on a wall clock · (**D-099**) the panel rounds a
+displayed number to at most 4 decimals through an optional argument on the ONE formatter, and a
+non-zero value that rounds to zero shows in exponential form · (**D-100**) the selection is a list;
+plain click replaces, shift-click adds, escape clears; D-094 clause 3 generalises to every selected
+object · (**D-101**) one panel per selected object, dragged by its header, detaching until
+deselected, with no collision avoidance · (**D-102**) the panel becomes writable,
+`pointer-events: none` is lifted, the paperclip is blue for a `formula` slot and grey for a
+`literal` one, and **every panel write goes through `executeCommand`, never `mutate`** ·
 (**D-103**) the order those are built in.
 
 **Q-014 IS CLOSED → D-102.** The human ruled the writing/linking half at entry 0100. §5.10's "no
@@ -239,13 +250,15 @@ panels, no toolbars" now carries one amendment, made twice by the same human: a 
 by D-100 clause 8.** Everything else in it is unchanged and IMPLEMENTED at entry 0099.
 
 **From 0098-REVIEW — D-096, four clauses:** (1) a ruling's file/move list is a CEILING, its
-rationale governs a divergence, and a divergence **must be named in the log entry** — **this worked
-on its first cycle in force** (entry 0099 disclosed its fifth argument unprompted); (2) the table
-`cells` summary keeps `kind: "literal"` and `SlotDescriptor` grows no fourth kind — **the optional
-`synthetic?: true` that ruling deferred is now D-102 clause 2's, and entry 0105 is the cycle that
-adds and reads it**; (3) a new `dynamic` group MUST add its own summary branch in `props.ts` in the
-same cycle — **D-097 clause 6 extends that duty to the write check**; (4) `props`'s registry
-position and unknown-name message stand.
+rationale governs a divergence, and a divergence **must be named in the log entry** — entry 0099
+disclosed its fifth argument unprompted, and entry 0101 named its own divergence (a new formatter
+instead of reusing `describeIllegalValue`) the same way; (2) the table `cells` summary keeps
+`kind: "literal"` and `SlotDescriptor` grows no fourth kind — **the optional `synthetic?: true`
+that ruling deferred is now D-102 clause 2's, and entry 0105 is the cycle that adds and reads it**;
+(3) a new `dynamic` group MUST add its own summary branch in `props.ts` in the same cycle — **D-097
+clause 6 extends that duty to the write check, which entry 0101 satisfies for `table`'s own
+`cells.*` family (the only one that exists)**; (4) `props`'s registry position and unknown-name
+message stand.
 
 **From 0095-REVIEW — D-093** (the `render/` split — IMPLEMENTED at 0096) · **D-094** (the panel —
 IMPLEMENTED at 0099) · **D-095** (chrome hangs from the extent's top-centre; **no inter-object label
@@ -255,8 +268,8 @@ collision avoidance is to be built** — extended to panels by D-101 clause 3).
 (queued) · **D-090** (queued) · **D-091** (the grey grid stands).
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
-D-097 adds the write-time refusal that should always have been beside it; it does not weaken the
-read. Anyone tempted to "fix" the vanishing table by honouring a formula dimension's cached value
+D-097's write-time refusal (entry 0101) sits BESIDE that read, not inside it, and does not weaken
+it. Anyone tempted to "fix" a future dimension bug by honouring a formula dimension's cached value
 is about to violate Rule 6 — read D-046's rationale first.
 
 **Superseded in part: D-086 clause 2's "one backing pixel is one CSS pixel"** — the backing store
@@ -284,16 +297,20 @@ conventional toggle, ruled provisionally as D-100 clause 4. The human's to settl
 
 ## Gotchas for the next model
 
-- **`set <table>.rows` is a trap until D-097 lands.** Four accepted writes make the table invisible
-  and every one of them echoes success. Do not "fix" it in `objectExtent` or in `readTableDimension`
-  — the refusal goes in `mutation.ts` (D-097 clause 2).
-- **`MIN_TABLE_LINES`/`MAX_TABLE_LINES` are about to move** from `command/commands.ts` to
-  `engine/primitives/table.ts` (D-097 clause 3), because `engine/` may not import `command/`.
+- **D-097 is CLOSED (entry 0101) — do not re-fix the vanishing table.** `mutation.ts`'s
+  `findInvalidDimensionWrites` now refuses a `setSlot` that would leave `table`'s `rows`/`cols`
+  non-`literal`, non-number, non-integer, or outside `MIN_TABLE_LINES..MAX_TABLE_LINES`, at every
+  write, not only at creation or at `insertTableLine`/`deleteTableLine`.
+- **`MIN_TABLE_LINES`/`MAX_TABLE_LINES` now live in `engine/primitives/table.ts`**, not
+  `command/commands.ts` (D-097 clause 3 — `engine/` may not import `command/`). `commands.ts`
+  imports them; nothing re-declares them.
 - **A drag notice fires per pointer EVENT today.** D-098 dedupes it in `DragState` — do not reach
   for `Date.now()`; `interaction.ts` is deterministic and every test depends on that.
 - **`describeSlotValue` must never be copied.** D-099 clause 1 gives it an optional `maxDecimals`
-  instead. `renderer.ts`'s `formatCellValue` is already a second formatter, disclosed and
-  deliberately unreconciled (D-099 clause 5). A THIRD is forbidden.
+  instead. `renderer.ts`'s `formatCellValue` is already a second, disclosed formatter (D-099
+  clause 5); `mutation.ts`'s new `describeDimensionSlotValue` (entry 0101) is a narrow THIRD,
+  scoped to one rejection message's "Got:" clause — not a display path, and not a precedent for
+  adding a fourth anywhere else.
 - **`placePropertiesPanel` needs NO change for N panels** — it takes the extent as an argument,
   which is exactly why D-094 clause 11 put it in `render/`.
 - **`buildSlotDescriptors` is the ONE schema walk for display** (D-094 clause 9). N panels and
@@ -303,7 +320,8 @@ conventional toggle, ruled provisionally as D-100 clause 4. The human's to settl
   `writePanel` → `replaceChildren` runs on every pointer move; an open input would lose focus and
   the caret on the first mouse twitch. Correctness, not performance.
 - **The panel writes through `executeCommand` and nothing else** (D-102 clause 5). Not `mutate`,
-  not `writeSlot`. That is what makes an editable panel cheap: it inherits every refusal for free.
+  not `writeSlot`. That is what makes an editable panel cheap: it inherits every refusal for free —
+  D-097's included, automatically, once D-102 lands.
 - **`render/panel.ts` is PURE and tested; the panel DOM in `main.ts` is not.**
 - **The panel is positioned in CSS pixels; `worldToScreen` returns BACKING pixels.** Divide by the
   ratio the canvas actually has (`canvas.width / bounds.width`), never `devicePixelRatio` by
@@ -322,8 +340,9 @@ conventional toggle, ruled provisionally as D-100 clause 4. The human's to settl
   rect's/table's TOP-LEFT CORNER. "Where is this object, visually" wants `objectExtent`.
 - **A test that asserts an OFFSET cannot catch a wrong ANCHOR** (entries 0093/0094). When adding a
   positioned thing, pin the ABSOLUTE position for at least two geometries that differ.
-- **Mutation-check a suite that passes first try — and check the checker.** Strip ANSI and assert on
-  the `Tests N failed` line.
+- **Mutation-check a suite that passes first try — and check the checker.** Entry 0101 did this by
+  temporarily neutering `findInvalidDimensionWrites`'s call site and confirming 11 of 14 new tests
+  flipped to failing before restoring it — the pattern to repeat, not just a slogan.
 - **A review's fix list authorises a CHANGE, never an exemption from the trigger that change fires.**
 - **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it**
   (D-065).
@@ -339,4 +358,5 @@ conventional toggle, ruled provisionally as D-100 clause 4. The human's to settl
   recursion before you bound it** (entry 0087).
 - **The operator cannot see what you can see.** The panel exists because that question kept going
   unasked. **The human's session at 0100 is the second time it has paid off, and the vanishing table
-  is what 1191 passing tests looked like from the inside.**
+  was what 1191 passing tests looked like from the inside — it is 1205 now, with that exact defect
+  named in the count.**

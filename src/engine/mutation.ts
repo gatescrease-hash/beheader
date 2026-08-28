@@ -104,16 +104,17 @@
  *
  * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. SIX
  * operation kinds: `setSlot`, `deleteObject`, `createObject`, `insertTableLine`,
- * `deleteTableLine`, `renameObject`. FIVE PRECONDITIONS run over the whole batch before
+ * `deleteTableLine`, `renameObject`. SIX PRECONDITIONS run over the whole batch before
  * staging even starts — an empty batch, a target that does not resolve (D-021; simulated
  * LEFT-TO-RIGHT so a batch that creates or deletes objects mid-fold is checked against
  * each operation's own position, not pre-batch state alone), an illegal payload value
- * or stored AST literal (D-048), an invalid table resize (D-050/D-046/D-053), and a
- * rename to a name §5.2 does not allow (D-080). The last two are simulated in that same
- * left-to-right walk. Then: deep-clone once (D-019 — a real
- * recursive clone, not a JSON round-trip), fold every operation onto that ONE clone,
- * validate and evaluate ONCE, commit all-or-nothing with exactly one journal entry
- * holding the whole list (D-020).
+ * or stored AST literal (D-048), an invalid table resize (D-050/D-046/D-053), a `setSlot`
+ * that would leave a dynamic-family sizing slot (`table`'s `rows`/`cols`) unreadable by
+ * `readTableDimension` (**D-097**), and a rename to a name §5.2 does not allow (D-080).
+ * The last three are simulated in that same left-to-right walk. Then: deep-clone once
+ * (D-019 — a real recursive clone, not a JSON round-trip), fold every operation onto
+ * that ONE clone, validate and evaluate ONCE, commit all-or-nothing with exactly one
+ * journal entry holding the whole list (D-020).
  *
  * §5.1.1's two paths both live here. REJECT is the default for `delete <object>` —
  * check 3 above IS that mechanism, no separate machinery. REPAIR is taken by
@@ -161,14 +162,18 @@ import {
   insertTableLine,
   isRangeEnumerationError,
   isTableDimensionResizable,
+  MAX_TABLE_LINES,
+  MIN_TABLE_LINES,
   repairCellAddressForDelete,
   repairRangeEndpointsForDelete,
   shiftCellAddressForInsert,
+  TABLE_COLS_PATH,
+  TABLE_ROWS_PATH,
 } from "./primitives/table.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasIllegalNumber, isIllegalNumber, resolveSlot, slotKey, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, isIllegalNumber, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -1142,13 +1147,16 @@ export type MutationResult =
  *   applies directly — see that function's own doc comment for why reusing it
  *   here is its third sanctioned call site's shape, not a new exception).
  *
- * A FOURTH and a FIFTH check, same placement and same shape, each documented
- * on the function that owns it rather than restated here:
+ * A FOURTH, FIFTH, and SIXTH check, same placement and same shape, each
+ * documented on the function that owns it rather than restated here:
  * `findInvalidTableResizes` (§5.4's row/column preconditions —
- * D-050/D-046/D-053) and `findInvalidRenames` (§5.2's name rules, and D-080's
- * reserved words). Both simulate the batch LEFT-TO-RIGHT for the reason check
- * 2 does: a table's extent and a name's availability are functions of an
- * operation's own POSITION in the batch, not of the pre-batch document.
+ * D-050/D-046/D-053), `findInvalidDimensionWrites` (a `setSlot` bounding
+ * `table`'s `rows`/`cols` the same way at every write, not only at
+ * `insertTableLine`/`deleteTableLine` — **D-097**), and `findInvalidRenames`
+ * (§5.2's name rules, and D-080's reserved words). All three simulate the
+ * batch LEFT-TO-RIGHT for the reason check 2 does: a table's extent, its
+ * dimension slots' readability, and a name's availability are all functions
+ * of an operation's own POSITION in the batch, not of the pre-batch document.
  *
  * Why staging matters even though every function downstream is already pure
  * (so `objects` was never going to be mutated regardless): Rule 5 asks for
@@ -1257,8 +1265,18 @@ export function mutate(
     return { ok: false, message: invalidResizeMessages.join("; ") };
   }
 
+  // D-097 (0100-REVIEW-phase4, the human's "vanishing table"): a `setSlot`
+  // writing directly to a dynamic-family SIZING slot (`table`'s `rows`/`cols`)
+  // is bounded the same way `insertTableLine`/`deleteTableLine` already are,
+  // simulated left-to-right for the same reason (D-050) — a `createObject`
+  // earlier in the SAME batch can mint the table this `setSlot` then targets.
+  const invalidDimensionMessages = findInvalidDimensionWrites(operations, objects);
+  if (invalidDimensionMessages.length > 0) {
+    return { ok: false, message: invalidDimensionMessages.join("; ") };
+  }
+
   // §5.2's name rules for every `renameObject` in the batch, simulated
-  // left-to-right the same way the two checks above are — see
+  // left-to-right the same way the checks above are — see
   // `findInvalidRenames`'s own doc comment for why a duplicate name cannot
   // be caught after the fold instead.
   const invalidRenameMessages = findInvalidRenames(operations, objects);
@@ -1908,6 +1926,163 @@ function findInvalidTableResizes(operations: readonly Operation[], objects: read
   });
 
   return problems;
+}
+
+/**
+ * D-097 (0100-REVIEW-phase4, the human's manual-test report): rejects a
+ * `setSlot` that would leave a dynamic-family SIZING slot — `table`'s
+ * `rows`/`cols`, the only one this codebase has (clause 6 extends this same
+ * duty to the next `dynamic` `NonDerivedSlotPathGroup` a future cycle adds) —
+ * in a state `primitives/table.ts`'s `readTableDimension` cannot read as a
+ * genuine count. That function already fails CLOSED to `0` for exactly these
+ * four shapes (D-046, Rule 6: a dimension's value is evaluated at step 7,
+ * after this file's own edge derivation and integrity checks have already
+ * used it, so it must never be trusted from a formula); what was missing was
+ * refusing the WRITE that produces one, so `set table_1.rows = 5` (or `0`,
+ * `-2`, `2.5`) stopped committing with `ok: true` and then silently erasing
+ * the table from every downstream reader (`objectExtent`, `fit`) while `list`
+ * kept naming it and `props` kept answering questions about it.
+ *
+ * **Why this lives here and not in `command/commands.ts`'s `set` handler**
+ * (clause 2): `writeSlot` is ONE of several paths that can reach `mutate` with
+ * a `setSlot` targeting `rows`/`cols` — a future panel edit (D-102) is
+ * another, a raw loaded `Operation` a third — and a command-layer check would
+ * leave every path but `set` open. Putting the gate in `mutate` itself is what
+ * makes every future write path inherit the refusal for free (Rule 2's own
+ * "nothing else mutates document state" already requires this shape; D-097
+ * just applies it to a specific slot pair).
+ *
+ * Simulated left-to-right over the batch, the same posture
+ * `findInvalidTableResizes`/`findInvalidRenames` take (D-050): a `setSlot`
+ * naming `some_id.rows` needs to know `some_id` IS a `"table"` AS OF THIS
+ * OPERATION'S OWN POSITION — reachable only via an earlier `createObject` in
+ * the SAME batch, not necessarily pre-batch `objects`.
+ *
+ * Checks ONLY an address that is EXACTLY `TABLE_ROWS_PATH`/`TABLE_COLS_PATH`
+ * on an object already known to be `"table"`-typed — an arbitrary undeclared
+ * `literal` slot some OTHER object type happens to store under the path
+ * `["rows"]` is ordinary legal state (D-017's own "literal slots are not
+ * checked" stance) and none of this check's business; `mutate`'s existence
+ * check (which runs before this one) is what already guarantees the target
+ * object genuinely exists by this operation's position, so a lookup miss here
+ * is defensive only.
+ *
+ * `MIN_TABLE_LINES`/`MAX_TABLE_LINES` are `primitives/table.ts`'s bounds,
+ * imported rather than re-spelled (D-097 clause 3, D-010) — the same numbers
+ * `command/commands.ts`'s `createTable` enforces at creation, so a table can
+ * never carry a count creation itself would have refused.
+ */
+function findInvalidDimensionWrites(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  // Only object TYPE is tracked here (unlike `findInvalidTableResizes`'s
+  // `TrackedTableState`, which also tracks the evolving row/column COUNT) —
+  // this check bounds one WRITE's own payload, not the table's running
+  // extent, so there is nothing to carry forward between operations beyond
+  // "does this id currently name a table."
+  const trackedTypes = new Map<string, { readonly name: string; readonly type: ObjectType }>();
+
+  const resolveTracked = (objectId: string): { readonly name: string; readonly type: ObjectType } | undefined => {
+    const existing = trackedTypes.get(objectId);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const fromObjects = objects.find((candidate) => candidate.id === objectId);
+    const fromCreate = fromObjects === undefined
+      ? operations.find((candidate): candidate is CreateObjectOperation => candidate.kind === "createObject" && candidate.object.id === objectId)?.object
+      : undefined;
+    const source = fromObjects ?? fromCreate;
+    if (source === undefined) {
+      return undefined; // D-021's existence check rejects the whole batch for this operation separately.
+    }
+    const state = { name: source.name, type: source.type };
+    trackedTypes.set(objectId, state);
+    return state;
+  };
+
+  operations.forEach((operation, index) => {
+    if (operation.kind !== "setSlot") {
+      return;
+    }
+    const axisName = dimensionPathName(operation.address.path);
+    if (axisName === undefined) {
+      return;
+    }
+    const tracked = resolveTracked(operation.address.objectId);
+    if (tracked === undefined || tracked.type !== TABLE_TYPE) {
+      return; // Not a table's dimension slot at all — see this function's own doc comment.
+    }
+    const problem = describeDimensionWriteProblem(operation.slot);
+    if (problem === undefined) {
+      return;
+    }
+    problems.push(
+      `operation ${index + 1} of ${operations.length}: ${tracked.name}.${axisName} must be a whole number from ` +
+        `${MIN_TABLE_LINES} to ${MAX_TABLE_LINES} held as a literal — a formula there would let evaluation resize ` +
+        `the table (Rule 6). Got: ${problem}`,
+    );
+  });
+
+  return problems;
+}
+
+/**
+ * `TABLE_ROWS_PATH`/`TABLE_COLS_PATH` as a human-facing name, or `undefined`
+ * for any other path — an EXACT match only (`path.length === 1`), so a
+ * deeper path that happens to start with `"rows"`/`"cols"` (not reachable
+ * today; defensive) is left alone.
+ */
+function dimensionPathName(path: readonly string[]): "rows" | "cols" | undefined {
+  if (path.length !== 1) {
+    return undefined;
+  }
+  if (path[0] === TABLE_ROWS_PATH[0]) {
+    return "rows";
+  }
+  if (path[0] === TABLE_COLS_PATH[0]) {
+    return "cols";
+  }
+  return undefined;
+}
+
+/**
+ * The four rejected shapes D-097's ruling table names, as one predicate:
+ * `undefined` for a `literal` slot holding an integer inside
+ * `MIN_TABLE_LINES..MAX_TABLE_LINES` (legal — nothing to report), otherwise a
+ * short description of what was actually supplied, for the refusal's "Got:"
+ * clause (clause 4: name the value, not just "invalid").
+ */
+function describeDimensionWriteProblem(slot: Slot): string | undefined {
+  if (slot.kind !== "literal") {
+    // A `"derived"` slot cannot reach here through any sanctioned write path
+    // (§5.1: derived is fixed by schema) — named generically rather than
+    // assumed unreachable, matching this file's never-throws discipline.
+    return slot.kind === "formula" ? "a formula" : `a "${slot.kind}" slot`;
+  }
+  if (typeof slot.value !== "number" || !Number.isInteger(slot.value) || slot.value < MIN_TABLE_LINES || slot.value > MAX_TABLE_LINES) {
+    return describeDimensionSlotValue(slot.value);
+  }
+  return undefined;
+}
+
+/**
+ * Renders a dimension write's actual payload for a refusal message —
+ * deliberately NOT `describeIllegalValue` below, whose own doc comment scopes
+ * it to a value `hasIllegalNumber` already flagged (NaN/Infinity/-0); a
+ * dimension write is far more often an ordinary out-of-range or non-integer
+ * NUMBER, a STRING, or a BOOLEAN (`set table_1.rows "many"`), none of which
+ * `hasIllegalNumber` has any opinion about.
+ */
+function describeDimensionSlotValue(value: Value): string {
+  if (typeof value === "number") {
+    return formatIllegalNumber(value); // Handles -0 the same honest way check 4's messages do.
+  }
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value) || (typeof value === "object" && value !== null && "x" in value && "y" in value)) {
+    return "a point value"; // A dimension has no business ever holding a Point/Point[] — named, not spelled out.
+  }
+  return String(value); // boolean, null, or an ErrorValue's `#CODE`.
 }
 
 /**

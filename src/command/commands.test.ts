@@ -18,18 +18,12 @@ import { describe, expect, it } from "vitest";
 import { createEmptyDocument, type Document } from "../engine/document.ts";
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
 import { mutate } from "../engine/mutation.ts";
+import { MAX_TABLE_LINES } from "../engine/primitives/table.ts";
 import { hitTest } from "../render/hittest.ts";
 import { pointerDown, pointerMove } from "../render/interaction.ts";
 import { COMMAND_NAMES, isCommandParseFailure, parseCommand, type Command } from "./parser.ts";
 import { beginCommand, respond } from "./prompt.ts";
-import {
-  COMMANDS_WITH_HANDLERS,
-  executeCommand,
-  isCommandFailure,
-  MAX_POLYGON_SIDES,
-  MAX_TABLE_LINES,
-  type CommandOutcome,
-} from "./commands.ts";
+import { COMMANDS_WITH_HANDLERS, executeCommand, isCommandFailure, MAX_POLYGON_SIDES, type CommandOutcome } from "./commands.ts";
 
 /** The command a line parses to, or a thrown test failure naming the parser's own message. */
 function parsed(line: string): Command {
@@ -274,6 +268,53 @@ describe("D-070 — a creation count is bounded by the HANDLER, and out of range
 
   it("leaves a COORDINATE unbounded — only a count decides how many slots exist", () => {
     expect(literalValue(onlyObject(committed("circle x=-99999999 y=99999999 r=1", createEmptyDocument())), ["origin", "x"])).toBe(-99999999);
+  });
+});
+
+describe("D-097 — a table's rows/cols are bounded at every WRITE, not only at creation (the vanishing table, 0100-REVIEW-phase4)", () => {
+  /** §0100-REVIEW's own repro table, reproduced end to end through the real `set` command rather than a hand-built `Operation`. */
+  function seeded(): Document {
+    return committed("table x=0 y=0 rows=3 cols=3", createEmptyDocument());
+  }
+
+  it("refuses set table_1.rows = 5 — a formula there would let evaluation resize the table (Rule 6), and the table is untouched", () => {
+    const document = seeded();
+    const message = refused("set table_1.rows = 5", document);
+    expect(message).toContain("table_1.rows");
+    expect(message).toContain("Rule 6");
+    expect(literalValue(onlyNamed(document, "table_1"), ["rows"])).toBe(3);
+  });
+
+  it("refuses set table_1.rows 0 — below the minimum, and the table is untouched", () => {
+    const document = seeded();
+    expect(refused("set table_1.rows 0", document)).toContain("table_1.rows must be a whole number from 1 to");
+    expect(literalValue(onlyNamed(document, "table_1"), ["rows"])).toBe(3);
+  });
+
+  it("refuses set table_1.rows -2 — negative, and the table is untouched", () => {
+    const document = seeded();
+    expect(refused("set table_1.rows -2", document)).toContain("table_1.rows");
+    expect(literalValue(onlyNamed(document, "table_1"), ["rows"])).toBe(3);
+  });
+
+  it("refuses set table_1.rows 2.5 — non-integer, and the table is untouched", () => {
+    const document = seeded();
+    expect(refused("set table_1.rows 2.5", document)).toContain("table_1.rows");
+    expect(literalValue(onlyNamed(document, "table_1"), ["rows"])).toBe(3);
+  });
+
+  it("refuses the identical four shapes for cols, symmetric to rows", () => {
+    const document = seeded();
+    expect(refused("set table_1.cols 0", document)).toContain("table_1.cols");
+  });
+
+  it("a legal set table_1.rows 5 still commits and GROWS the table's declared extent", () => {
+    const after = committed("set table_1.rows 5", seeded());
+    expect(literalValue(onlyNamed(after, "table_1"), ["rows"])).toBe(5);
+    // The dynamic cell family grows with it: A5 was out of range for the
+    // original 3-row table and is a real, writable cell now.
+    const withCell = committed("set table_1.A5 1", after);
+    expect(literalValue(onlyNamed(withCell, "table_1"), ["cells", "A5"])).toBe(1);
   });
 });
 
