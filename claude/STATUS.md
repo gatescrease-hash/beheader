@@ -1,19 +1,18 @@
-# STATUS — as of entry 0102
+# STATUS — as of entry 0103-REVIEW-phase4
 
-STATE: **GREEN, built, NOT yet reviewed — review is REQUIRED before another cycle starts.** Both
-configs compile, **1215/1215** tests pass, 0 skipped, 0 `.only`, `npm run build` succeeds. Entries
-**0101** (D-097, the vanishing table) and **0102** (D-098 + D-099) are both BUILT and
-mutation-checked, awaiting a reviewer.
+STATE: **GREEN and REVIEWED — the next cycle may start.** Both configs compile, **1215/1215** tests
+pass, 0 skipped, 0 `.only`, `npm run build` succeeds. Entries **0101** (D-097, the vanishing table)
+and **0102** (D-098 + D-099) were reviewed together at **0103-REVIEW-phase4**: **ACCEPT WITH
+EDITS** (two documentation edits, no behaviour changed) and one new ruling, **D-104**.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
-Last review point: **0100-REVIEW-phase4** (ACCEPT; **D-097 through D-103** ruled).
-Cycles since last review: **2/3** · diff since last review: **626 insertions / 51 deletions across
-11 files** — **the §6.3 FILE-COUNT CAP (~10 files) IS TRIPPED** (the line-count half, 677, stays
-under 800). **REVIEW: REQUIRED before entry 0103 starts.** See "Next cycles."
+Last review point: **0103-REVIEW-phase4** (ACCEPT WITH EDITS; **D-104** ruled).
+Cycles since last review: **0/3** · diff since last review: none. **REVIEW: NOT NEEDED to start
+entry 0104** — but D-100 clause 9 puts a review point at that cycle's OWN end regardless.
 
-## Read this first — the six things a cold reader needs
+## Read this first — the seven things a cold reader needs
 
 **1. THE HUMAN DROVE THE APPLICATION FOR THE FIRST TIME (at 0100) AND IT CHANGED THE QUEUE.** Their
 verdict on the panel was "the properties tab is good." What the session produced instead was **one
@@ -23,12 +22,12 @@ an authoring surface. All of it is ruled: **D-097** (the defect, DONE), **D-098*
 the paperclip — all still queued), **D-103** (the order). **Q-014 is CLOSED** — the human ruled the
 writing/linking half.
 
-**2. TWO CYCLES HAVE LANDED SINCE THE REVIEW AND A THIRD MAY NOT START YET.** Entry 0101 fixed D-097
-(the vanishing table). Entry 0102 built D-098 (a drag notice is deduplicated per GESTURE, not per
-pointer sample) and D-099 (the properties panel rounds a displayed number to at most 4 decimals;
-`props` does not). Neither cycle tripped a §6.1 trigger on its own, but TOGETHER they have touched
-11 distinct files against the batch's ~10-file cap — **the next model's job is to stop and get this
-batch reviewed, not to start D-100.**
+**2. THAT BATCH IS NOW REVIEWED AND CLEARED (0103-REVIEW-phase4, ACCEPT WITH EDITS).** Entry 0101
+fixed D-097 (the vanishing table). Entry 0102 built D-098 (a drag notice is deduplicated per
+GESTURE, not per pointer sample) and D-099 (the properties panel rounds a displayed number to at
+most 4 decimals; `props` does not). The review re-ran both configs and the suite, matched the logs
+against the diff, made two documentation edits, and ruled **D-104** — see item 7 below. **The next
+model's job is entry 0104, D-100.**
 
 **3. THE VANISHING-TABLE DEFECT IS FIXED (entry 0101).** `mutation.ts`'s `findInvalidDimensionWrites`
 rejects a `setSlot` that would leave `table`'s `rows`/`cols` non-`literal`, non-number,
@@ -56,23 +55,27 @@ READ-ONLY.** D-094's fourteen clauses, in `render/panel.ts`, `main.ts`'s `buildP
 (pure, tested) and the untested DOM half, `index.html`, `renderer.ts`. **D-102 is what makes it
 writable, and it has not started.**
 
+**7. D-104 IS NEW AND IT IS OWED BY A CYCLE THAT HAS NOT BEEN SCHEDULED YET.** D-097 closed the
+vanishing table for a `setSlot`. `insertTableLine`/`deleteTableLine` write the SAME two slots and
+`findInvalidTableResizes` bounds only their INDEX — so a `deleteTableLine` on a one-row table still
+lands `rows` on `0`. **Not reachable by any command today** (§5.10's row/column commands are
+unbuilt), disclosed in two file headers, and **D-104 binds the cycle that builds those commands** to
+close the floor inside `findInvalidTableResizes`. Do NOT widen
+`findInvalidDimensionWrites` for it — D-104 clause 3 says so explicitly.
+
 ## Next cycles — D-103's order, and it is binding
 
-**STOP HERE FOR REVIEW.** Entries 0101 and 0102 are both built, tested, and mutation-checked, but
-the batch has tripped §6.3's file-count cap (11 files since 0100-REVIEW, cap ~10) — the next model's
-FIRST job is routing this batch to a reviewer, not starting the next slice.
-
-Once reviewed:
+The batch is reviewed and cleared (0103-REVIEW-phase4). Numbering shifted by one: the review took
+entry 0103, so D-100 is entry **0104**.
 
 1. ~~**Entry 0101 — D-097, the vanishing table.**~~ **DONE.** See "Read this first" item 3.
 2. ~~**Entry 0102 — D-098 + D-099.**~~ **DONE.** See "Read this first" items 4–5.
-3. **Entry 0103 — D-100, the selection becomes a list.** `selectedObjectIds: readonly string[]`
+3. **Entry 0104 — D-100, the selection becomes a list.** `selectedObjectIds: readonly string[]`
    across `interaction.ts`, `renderer.ts`, `main.ts`. Plain click replaces, shift-click adds,
    escape clears. **Review point at its end** (D-100 clause 9) — it changes a state shape every
-   prior cycle was written against, and every test that builds an `InteractionState`. This is
-   ALSO the first cycle after whatever review clears the current batch, so it starts from a fresh
-   0/3 count regardless.
-4. **Entry 0104 — D-101, N panels, draggable.** Then **entry 0105 — D-102, the paperclip and
+   prior cycle was written against, and every test that builds an `InteractionState`. Starts from
+   a fresh 0/3 count.
+4. **Entry 0105 — D-101, N panels, draggable.** Then **entry 0106 — D-102, the paperclip and
    editing**, which gets its own review point regardless of the batch cap.
 
 **Still queued behind all of that, unchanged:** D-090's prompt-sequence preview · D-088 clauses 2–4
@@ -88,7 +91,7 @@ Phase 0 (0027-REVIEW) · formula engine (0037) · table primitive through row/co
 `delete <table> force` (0054) · `render/camera.ts` + entry 0055's header audit (0058) ·
 `primitives/geometry.ts` (0060) · `render/renderer.ts`'s original body/table drawing (0062, widened
 by 0093/0094) · `render/hittest.ts` (0064) · entry 0065's header audit · `render/interaction.ts`
-(0067, its D-098 widening at 0102 NOT yet reviewed — see below) · `command/parser.ts` (0069) ·
+(0067, its D-098 widening at 0102 reviewed at 0103) · `command/parser.ts` (0069) ·
 `command/prompt.ts` + D-071's formula path (0071) · entries 0072–0073's fix-list work (0074) ·
 `command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`,
 `TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · `commands.ts`'s four slot commands through one
@@ -100,12 +103,12 @@ by 0093/0094) · `render/hittest.ts` (0064) · entry 0065's header audit · `ren
 reviewed 0090/0091) · entry 0093's selection highlight / error badge / formula-driven indicator
 (D-068) and D-092 clause 1's name label, entry 0094's chrome-anchor fix (0095-REVIEW, ACCEPT) ·
 entry 0096's `render/slots.ts` + `render/extent.ts` split (D-093) and entry 0097's `command/props.ts`
-+ `props` command (0098-REVIEW, ACCEPT WITH EDITS; D-096, its D-099 widening at 0102 NOT yet
-reviewed — see below) · entry 0099's `render/panel.ts` + `buildPanelModel` + the panel DOM + clause
-3's name suppression (REVIEWED: ACCEPT at 0100-REVIEW, no edits; its D-099 widening at 0102 NOT yet
-reviewed).
++ `props` command (0098-REVIEW, ACCEPT WITH EDITS; D-096, its D-099 widening at 0102 reviewed at
+0103) · entry 0099's `render/panel.ts` + `buildPanelModel` + the panel DOM + clause
+3's name suppression (REVIEWED: ACCEPT at 0100-REVIEW, no edits; its D-099 widening at 0102 reviewed
+at 0103).
 
-## Built this batch, not yet reviewed
+## Reviewed at 0103-REVIEW-phase4 (ACCEPT WITH EDITS)
 
 **Entry 0101 — D-097, the vanishing table.** `mutation.ts`'s `findInvalidDimensionWrites`;
 `MIN_TABLE_LINES`/`MAX_TABLE_LINES` moved to `engine/primitives/table.ts`; `commands.ts` updated to
@@ -116,8 +119,9 @@ import rather than declare them; tests in both `mutation.test.ts` and `commands.
 `formatDisplayNumber`; `main.ts`'s `buildPanelModel` passing `{ maxDecimals: 4 }`. Tests in
 `interaction.test.ts`, `props.test.ts`, `main.test.ts`.
 
-**Cycles since last review: 2/3 · diff: 626 insertions / 51 deletions across 11 files — the
-FILE-COUNT half of the §6.3 cap is tripped. REVIEW: REQUIRED before entry 0103.**
+**Reviewer's edits at 0103-REVIEW (documentation only, no behaviour changed):** a `NOT DONE HERE`
+bullet in `engine/primitives/table.ts` and a paragraph on `findInvalidDimensionWrites`'s doc
+comment, both disclosing D-104's gap. **Cycles since last review: 0/3.**
 
 ## Not started
 
@@ -154,6 +158,12 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
     **Superseded for the editing case by D-102 clause 8**, which must solve the general form.
 12. **A right-flipped panel that hits the right clamp overlaps its own object** (0100-REVIEW §3).
     Correct per D-094 clause 11 as written; revisit only if the human asks after seeing it.
+13. **`insertTableLine`/`deleteTableLine` are not bounded by `MIN_TABLE_LINES`/`MAX_TABLE_LINES`**
+    (0103-REVIEW §6). Deleting the last row lands `rows` on `0` — D-097's vanishing state, reached
+    by the one write path D-097 does not cover. **Not operator-reachable**: no command builds either
+    operation. **D-104** owns it and binds the cycle that builds §5.10's row/column commands, which
+    **must not land without it**; the fix goes in `findInvalidTableResizes`, never in
+    `findInvalidDimensionWrites`.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -219,10 +229,13 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-103**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-104**) binds without restatement here.
 
-**D-097, D-098, D-099 are all IMPLEMENTED**, at entries 0101 and 0102 respectively. Awaiting review;
-do not re-attempt or duplicate any of them if a review has not yet landed.
+**D-097, D-098, D-099 are all IMPLEMENTED AND REVIEWED** — entries 0101 and 0102, cleared at
+0103-REVIEW-phase4 (ACCEPT WITH EDITS). Do not re-attempt or duplicate any of them.
+
+**D-104 is NEW and NOT implemented** (0103-REVIEW). It is not owed by the next cycle — it is owed by
+the cycle that builds §5.10's row/column commands. See "Read this first" item 7 and fix-list 13.
 
 **From 0100-REVIEW — D-100 through D-103, still queued:** (**D-100**) the selection is a list; plain
 click replaces, shift-click adds, escape clears; D-094 clause 3 generalises to every selected object
@@ -287,10 +300,13 @@ conventional toggle, ruled provisionally as D-100 clause 4. The human's to settl
 
 ## Gotchas for the next model
 
-- **THE BATCH NEEDS REVIEW BEFORE ANYTHING ELSE.** Entries 0101/0102 together touched 11 files
-  since 0100-REVIEW-phase4, tripping §6.3's file-count cap. Do not start entry 0103 (D-100) until
-  a reviewer has cleared this batch — read 0100-REVIEW's own text if you are the reviewer, or hand
-  this off if you are not.
+- **THE BATCH IS CLEARED — START ENTRY 0104 (D-100).** 0103-REVIEW-phase4 accepted entries
+  0101/0102 with two documentation edits and ruled D-104. Counter is back to 0/3; the review took
+  entry number 0103, so every queued cycle shifted by one.
+- **A SIZING SLOT'S BOUND MUST HOLD AT EVERY PATH THAT WRITES IT**, not just the one a ruling
+  names (D-104's general form). D-097 was built for `setSlot` and `insertTableLine`/
+  `deleteTableLine` were missed because nothing pointed at them. When you bound a value, enumerate
+  the WRITERS, not the commands.
 - **D-097, D-098, D-099 are all CLOSED — do not re-fix any of them.** `mutation.ts`'s
   `findInvalidDimensionWrites` (rows/cols write-time bound), `interaction.ts`'s per-gesture notice
   dedup (`DragState.emittedNotices`), and `props.ts`'s `describeSlotValue({ maxDecimals })` are all

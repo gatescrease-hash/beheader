@@ -99,6 +99,13 @@
  *     simply invisible to `enumerateTableCellSlotPaths` (D-047's absent/empty
  *     equivalence), not a defect; `insertTableLine`/`deleteTableLine`, not a bare
  *     `setSlot`, remain the sanctioned way to add or remove an actual cell.
+ *   - **`MIN_TABLE_LINES`/`MAX_TABLE_LINES` do NOT bound `insertTableLine`/
+ *     `deleteTableLine`.** D-097's write-time gate covers `setSlot` only, and creation is
+ *     bounded in `command/commands.ts`; a `deleteTableLine` on a one-line table still
+ *     drives that count to `0` — the vanishing state D-097 closes for a write — and
+ *     repeated `insertTableLine` still carries it past `MAX_TABLE_LINES`. Not reachable
+ *     by any command today (§5.10's row/column commands do not exist), and **D-104**
+ *     binds the cycle that builds them to close the floor in `findInvalidTableResizes`.
  *   - A table-creation command (`table x=0 y=0 rows=8 cols=8`, §5.10) — Phase 3.
  *     `createObject` already suffices to build one by hand (every test fixture does)
  *     and `command/parser.ts` reads the line; what is missing is the handler between

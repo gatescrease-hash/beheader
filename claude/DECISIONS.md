@@ -3348,3 +3348,49 @@ Not a preference — three of these have a dependency and one is a live defect.
 
 **Phase 4's own gate is still owed and is not any of these.** It needs a human to bind two polygons
 through a table in one document. Every item above makes that session easier; none of them is it.
+
+---
+
+## D-104 — D-097's floor binds the row/column DELETE path too, and the check that owns it is `findInvalidTableResizes`
+Answers: a gap found while reviewing entry 0101   Ruled: entry 0103-REVIEW-phase4 (reviewer)
+Binding on: `src/engine/mutation.ts`, and the cycle that builds §5.10's row/column commands
+
+**The gap.** D-097 clause 1 states the invariant as "`mutation.ts` REJECTS any batch that would
+leave a dynamic-family sizing slot in a state `readTableDimension` cannot read." Entry 0101 built
+that for `setSlot` and only for `setSlot`. Two other operations write the same two slots:
+`insertTableLine` and `deleteTableLine` (`primitives/table.ts` re-asserts BOTH counts as literals on
+every call). `findInvalidTableResizes` bounds their INDEX against the current extent, not the
+resulting COUNT — so `deleteTableLine` on a one-row table is accepted and lands `rows` on `0`, which
+is exactly the vanishing state D-097 closes for a write. Symmetrically, repeated `insertTableLine`
+carries a count past `MAX_TABLE_LINES`, which `setSlot` would refuse.
+
+**This is not entry 0101's defect and it is not reachable today.** The gap predates D-097 (the
+bounds were creation-only before it), and no `Command` reaches `insertTableLine`/`deleteTableLine` —
+§5.10's row/column commands are unbuilt. Entry 0101 built its ruling exactly as written; what it did
+not do is notice that the ruling's *stated invariant* is wider than the clause that implements it.
+That is a reviewer's finding, not an implementer's miss.
+
+**Ruling.**
+
+1. **The floor is `MIN_TABLE_LINES`: a `deleteTableLine` that would leave `0` lines on either axis
+   is REFUSED**, with a message naming the axis and the floor. `insertTableLine` is bounded above by
+   `MAX_TABLE_LINES` the same way.
+2. **The check that owns it is `findInvalidTableResizes`, not a second pass.** It already simulates
+   the batch left-to-right and already carries the running row/column count — the count the bound is
+   about. A parallel `findInvalidDimensionResizeBounds` would be a second source of truth for one
+   number (D-010).
+3. **`findInvalidDimensionWrites` is not widened.** It judges one `setSlot`'s own payload and has
+   nothing cumulative to track; that is why entry 0101 gave it a `{name, type}` map rather than
+   `TrackedTableState`, and that reading is correct.
+4. **Owed by the cycle that builds §5.10's row/column commands**, which is the first cycle that can
+   reach these operations from a typed line — and it is that cycle's duty regardless of what its own
+   declared slice was, because shipping the command without the bound makes the defect operator-
+   reachable in the same breath. Pinned by two tests: deleting the last row of a 1×N table is
+   refused with the document bit-for-bit unchanged, and inserting past `MAX_TABLE_LINES` likewise.
+5. **Until then it is disclosed, not silently carried** — `primitives/table.ts`'s `NOT DONE HERE`
+   and `findInvalidDimensionWrites`'s own doc comment both name it (reviewer edits at this entry),
+   and `STATUS.md` carries it under known problems.
+
+**The general form, restated for the next `dynamic` group** (D-097 clause 6, widened): a sizing
+slot's bound must hold at EVERY path that writes it — creation, direct write, and any structural
+operation that recomputes it. Enumerate the writers, not the commands.

@@ -1967,6 +1967,13 @@ function findInvalidTableResizes(operations: readonly Operation[], objects: read
  * object genuinely exists by this operation's position, so a lookup miss here
  * is defensive only.
  *
+ * Covers `setSlot` ONLY. `insertTableLine`/`deleteTableLine` write the same two
+ * slots through `findInvalidTableResizes`, which bounds the INDEX but not the
+ * resulting count — deleting the last row still lands `rows` on `0`. No command
+ * reaches those two operations yet; **D-104** binds the cycle that builds §5.10's
+ * row/column commands to close that floor where the index is already checked,
+ * rather than duplicating a second bound here (D-010).
+ *
  * `MIN_TABLE_LINES`/`MAX_TABLE_LINES` are `primitives/table.ts`'s bounds,
  * imported rather than re-spelled (D-097 clause 3, D-010) — the same numbers
  * `command/commands.ts`'s `createTable` enforces at creation, so a table can
