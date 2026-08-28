@@ -3073,3 +3073,278 @@ disclosure already in `props.ts`'s header is what tells that cycle so.
 **4. `props`'s registry position and its unknown-name message stand.** (Entry 0097's question 3.)
 Between `refs` and `list`, and `no object named "..."` verbatim as `refs`/`select`/`delete` say it.
 Identical refusals for identical failures is D-069's shape; nothing to change.
+
+---
+
+## D-097 — A slot that SIZES a dynamic slot family is bounded at EVERY write, not only at creation
+Answers: the human's manual-test report at entry 0100 ("setting a table's rows or cols makes it
+disappear from view... still appears with `list`... isn't visible with `fit`"), reproduced by the
+reviewer   Ruled: entry 0100-REVIEW-phase4 (reviewer)
+Binding on: `src/engine/mutation.ts`, `src/engine/primitives/table.ts`, and every future `dynamic`
+`NonDerivedSlotPathGroup`
+
+**The defect, reproduced four ways, every one of them reporting SUCCESS.** Against `table x=0 y=0
+rows=3 cols=3`:
+
+| typed | log line | `rows` slot after | `objectExtent` |
+|---|---|---|---|
+| `set table_1.rows = 5` | `table_1.rows = 5` | `{kind:"formula", value:5}` | `undefined` |
+| `set table_1.rows 0` | `table_1.rows = 0` | `{kind:"literal", value:0}` | `undefined` |
+| `set table_1.rows -2` | `table_1.rows = -2` | `{kind:"literal", value:-2}` | `undefined` |
+| `set table_1.rows 2.5` | `table_1.rows = 2.5` | `{kind:"literal", value:2.5}` | `undefined` |
+
+In each case the table stops drawing, `fit` answers *"nothing on the canvas has an extent to fit
+to"*, `props` reports `cells = "0×3 grid — 0 of 0 cells written"`, and `list` still shows
+`table_1 — table`. The operator is told the write succeeded and the object silently leaves the
+visible world.
+
+**Why it happens, and why D-046 is NOT the bug.** `readTableDimension` fails safe to `0` for a
+dimension that is not `literal`, not an integer, or negative (D-046, Rule 6). That read is correct
+and stays. What is missing is the other half: **nothing refuses to CREATE such a dimension.**
+`commands.ts` bounds `rows`/`cols` at CREATION only (`MIN_TABLE_LINES`/`MAX_TABLE_LINES`, D-070);
+`set` writes through the generic `writeSlot` → `setSlot` path, which knows nothing about
+dimensions. So the guard fires, correctly, against a state the system itself let the operator
+build. A fail-closed read is a backstop against a malformed LOADED document; it was never meant to
+be the only thing standing between a typed command and an invisible object.
+
+**Ruling.**
+
+1. **`mutation.ts` REJECTS any batch that would leave a dynamic-family sizing slot in a state
+   `readTableDimension` cannot read.** A new `findInvalidDimensionWrites` check, simulated
+   left-to-right over the batch exactly as `findInvalidTableResizes` and `findInvalidRenames`
+   already are. The rejected states are precisely the four above: a non-`literal` kind, a
+   non-number, a non-integer, and a value outside `MIN_TABLE_LINES..MAX_TABLE_LINES`.
+2. **The check lives in `mutation.ts`, not in the `set` handler.** Rule 2: every write path —
+   `set`, a future panel edit (D-102), a raw `Operation` — must hit the same gate. A command-layer
+   check would leave the other paths open, and D-102 is about to add one.
+3. **The bounds are D-070's, imported, not re-spelled.** `MIN_TABLE_LINES`/`MAX_TABLE_LINES`
+   currently live in `command/commands.ts`; `engine/` may not import `command/`, so they move to
+   `engine/primitives/table.ts` beside the primitive they describe and `commands.ts` imports them
+   from there. One declaration, two readers (D-010). This move is authorised by this clause and
+   must be named in the log entry per D-096 clause 1.
+4. **The refusal names the path, the value, and the remedy** — the same shape every other refusal
+   here takes. It must not merely say "invalid": the operator's mental model is that they set a
+   number, so the message says which rule the number broke. Suggested:
+   `table_1.rows must be a whole number from 1 to 1000 held as a literal — a formula there would
+   let evaluation resize the table (Rule 6). Got: 2.5`
+5. **`unlink` on a dimension remains legal and is the escape hatch** — it turns a formula slot back
+   into a literal holding its last value, which clause 1 then accepts or refuses on its merits.
+6. **The general rule, for the `dynamic` group that does not exist yet:** a slot that sizes a
+   dynamic family is (i) read `literal`-only and fail-closed (D-046), AND (ii) refused at write
+   time by this check. Adding a `dynamic` group without adding its sizing slot to clause 1's check
+   is the same defect this ruling closes, and D-096 clause 3's "same cycle" duty extends to it.
+
+**What this ruling does NOT do.** It does not make `objectExtent` invent a box for a zero-row table
+(D-066 stands — an object that draws nothing has no extent), and it does not touch the read. It
+closes the door the operator was walking through, and leaves the fail-safe behind it.
+
+**Pinning required.** One test per row of the table above, each asserting the refusal AND that the
+document is bit-for-bit unchanged (Rule 2's rejection invariant). Plus one asserting that a legal
+`set table_1.rows 5` still commits and grows the extent.
+
+---
+
+## D-098 — A drag notice is emitted ONCE PER DRAG GESTURE, not once per pointer-move
+Answers: the human's manual-test report at entry 0100 ("the message does not need to be sent so
+often — dragging a slider spams the chat log with repeat messages")   Ruled: entry
+0100-REVIEW-phase4 (reviewer)
+Binding on: `src/render/interaction.ts`
+
+**The defect.** §5.9's non-blocking feedback (`planComponent`'s `... did not move: it is driven by
+a formula`) is produced by `pointerMove`, which runs on every pointer event. Dragging an object
+with one driven component — the human's slider, a circle with a fixed `origin.x` and a free
+`origin.y` — emits one identical line per mouse sample and buries the log.
+
+**Ruling.** `DragState` carries the set of notices already emitted during THIS gesture.
+`pointerMove` filters a notice it has already emitted from `PointerMoveOutcome.notices` and returns
+the widened set in the advanced state. `pointerDown` starts every gesture with an empty set;
+`pointerUp` discards it with the drag. A notice whose TEXT differs (a different component, a
+different driver after the formula changed mid-drag) is a new notice and is emitted.
+
+**Why not the human's suggested three-second throttle.** A wall clock would put `Date.now()` inside
+a pure transition that today is fully deterministic and fully tested — `interaction.ts`'s outcome
+would stop being a function of its inputs, every test would need a clock injected, and the injection
+is a new seam for a cosmetic problem (Rule 5). Once-per-gesture is *stricter* than three seconds
+(a 30-second drag says it once, not ten times), needs no new input, and is pinned by an ordinary
+test: two `pointerMove` calls, one notice. **The human may overrule toward a timer** — the state
+this ruling adds is where a timestamp would go, so that change stays cheap.
+
+**Scope.** Notices only. `rejection` (the whole step failing) is not deduplicated: it is rare, and
+a repeated rejection is information.
+
+---
+
+## D-099 — The properties panel rounds a displayed number to at most 4 decimal places; `props` does not
+Answers: the human's manual-test report at entry 0100 ("too many sig figs... keep it to four
+decimals past the decimal point displayed"), and their explicit scope choice of panel-only   Ruled:
+entry 0100-REVIEW-phase4 (reviewer)
+Binding on: `src/command/props.ts`, `src/main.ts`
+
+**What the panel shows today** for `circle x=10 y=20 r=7`: `centroid.x = 10.000000000000002`,
+`area = 152.95081246064453`, `length = 43.91167886764314`. Float noise, presented as precision.
+
+**Ruling.**
+
+1. **`describeSlotValue` gains an optional display-precision argument. It does NOT gain a second
+   copy.** `describeSlotValue(value, options?: { readonly maxDecimals?: number })` — one switch, two
+   callers. `main.ts`'s `buildPanelModel` passes `{ maxDecimals: 4 }`; `commands.ts`'s `props`
+   handler passes nothing and its output is byte-identical to today's. This is what keeps the
+   human's panel-only choice from producing a third `Value`-to-text formatter, which
+   `props.ts`'s header and `STATUS.md` both already forbid.
+2. **The rule, applied to every number the option reaches** — including each component of a
+   `Point`: round to at most `maxDecimals` decimal places and TRIM trailing zeros, so an integer
+   stays bare (`10`, never `10.0000`) and `152.95081246064453` becomes `152.9508`.
+3. **A non-zero value that would round to `0` is shown in exponential form instead** (`1.2246e-16`,
+   not `0`). Printing `0` for a number that is not zero is a lie the operator cannot detect, and
+   these values are exactly where it would happen — a circle centred on the origin has a
+   `centroid.y` of float dust. This clause is the reason this is a ruling and not a one-liner.
+4. **Untouched:** a non-finite number (unreachable as a `Value` — `finiteOrTypeError` maps it to
+   `#TYPE` — so it falls through to `String()` as today), the `n points` summary, the table `cells`
+   summary string, the error-value text, and the quoting of strings.
+5. **`renderer.ts`'s `formatCellValue` is explicitly OUT OF SCOPE.** On-canvas table cell text keeps
+   full precision this cycle. It is the second, disclosed, unreconciled formatter (`STATUS.md`'s
+   known problems); the human was asked and chose panel-only. Reconciling the two is its own slice
+   and needs its own ask.
+
+---
+
+## D-100 — The selection is a LIST; a plain click replaces it, shift-click adds, escape releases it
+Answers: the human's new interaction rules at entry 0100, and their explicit choice of click model
+Ruled: entry 0100-REVIEW-phase4 (reviewer)
+Binding on: `src/render/interaction.ts`, `src/render/renderer.ts`, `src/main.ts`,
+`src/command/commands.ts`
+
+The panel stops being ephemeral. That is a selection-model change before it is a panel change, and
+it must land first.
+
+1. **`InteractionState.selectedObjectId: string | undefined` becomes
+   `selectedObjectIds: readonly string[]`**, in click order. Plain, serializable, IDs not
+   references (Rule 3's posture). `deselect()` returns the empty list.
+2. **A plain click REPLACES the selection** with the object hit, or with nothing when the click
+   lands on empty canvas. This is today's behaviour, unchanged, and it is the human's choice.
+3. **A shift-click ADDS the object hit to the selection.** A shift-click on empty canvas changes
+   nothing (it neither clears nor adds) — clearing on a modified click would make an accidental
+   miss destroy a multi-selection the operator built deliberately.
+4. **Shift-clicking an ALREADY-SELECTED object removes it from the selection** — the reviewer's
+   reading, not the human's words. Without it there is no way to drop one object short of clearing
+   everything. **PROVISIONAL(Q-015)**, tagged at the site; reversible in one branch.
+5. **Escape clears the whole selection and hides every panel.** Escape keeps its existing first
+   duty — cancelling a live prompt sequence — and D-102 clause 7 adds a third, innermost one. The
+   order is innermost-first: an open panel input, then a live prompt, then the selection.
+6. **A drag still targets exactly the object under the press**, whatever else is selected. Dragging
+   the whole selection is NOT ruled here and must not be built on suspicion (Rule 5, §4).
+7. **`select <name>` REPLACES the selection with that one object.** No multi-select command syntax
+   is added; `CommandEffect`'s `{kind: "select", objectId}` is unchanged. The mouse is where
+   multi-selection lives, because linking-by-mouse is what it exists for (Q-014's own argument).
+8. **`renderDocument`'s `selectedObjectId?: string` becomes `selectedObjectIds: readonly string[]`.**
+   Every selected object gets the highlight, and **D-094 clause 3 generalises: every selected
+   object's canvas name label is suppressed**, because every selected object now has a panel
+   carrying its name. A stale id in the list still draws nothing and suppresses nothing (D-023).
+9. **This is a review point.** It changes a shared state shape across three files and every test
+   that constructs an `InteractionState`. Stop at the end of it (§6.1 trigger 3 — a deviation from
+   the shape every prior cycle was written against).
+
+---
+
+## D-101 — One panel per selected object; a panel may be dragged off its anchor, and re-attaches when reselected
+Answers: the human's new panel rules at entry 0100   Ruled: entry 0100-REVIEW-phase4 (reviewer)
+Binding on: `src/main.ts`, `src/render/panel.ts`, `index.html`
+
+1. **One panel element per selected object**, each built by `buildPanelModel` from the same
+   `buildSlotDescriptors` enumeration (D-094 clause 9 is unchanged and now has N readers of one
+   list, not two of one).
+2. **Each panel is placed by `placePropertiesPanel` against its OWN object's extent.** The function
+   is unchanged — it already takes the extent as an argument, which is why it survives this ruling
+   untouched. D-094 clauses 11–13 apply per panel.
+3. **No inter-panel collision avoidance is to be built.** D-095 ruled exactly this for canvas
+   labels, for the same reason: it is a layout engine, the human has a mouse, and clause 4 is the
+   answer. Two panels may overlap.
+4. **A panel is dragged by its HEADER**, not by its body — the body is about to hold click targets
+   (D-102) and a drag started anywhere would swallow them.
+5. **Dragging DETACHES the panel**: its position becomes a manual CSS point held in `AppState`,
+   keyed by object id, and `placePropertiesPanel` is no longer consulted for that panel while it is
+   detached. A detached panel does not follow pan or zoom — detaching is the operator saying "stop
+   moving."
+6. **A manual position is discarded when its object leaves the selection.** Re-selecting the object
+   re-attaches its panel to the object (the human's rule verbatim). Escape therefore resets every
+   panel's position, which is a second reason escape is the release.
+7. **A panel position is APPLICATION state, never DOCUMENT state.** It never enters
+   `state.document`, never goes through `mutate`, is never saved, never appears in `list` (D-094
+   clause 1, restated because N panels make it tempting to store them on the object).
+8. **A panel drag must not reach the canvas** — it changes no selection, starts no object drag, and
+   pans nothing.
+
+---
+
+## D-102 — The properties panel becomes WRITABLE: the paperclip, and one path to every write
+Answers: **Q-014's remaining half**, ruled by the human at entry 0100 (design), and by the reviewer
+for mechanism   Ruled: entry 0100-REVIEW-phase4 (reviewer)
+Binding on: `src/main.ts`, `index.html`, `src/command/props.ts`
+**Amends D-094 clause 10** (`pointer-events: none`) and **closes Q-014**.
+
+The human has ruled the half that was theirs: a slot may be edited from the panel, and two panels
+exist so slots can be linked by mouse. What follows is that decision plus the mechanism it needs.
+
+1. **`pointer-events: none` is lifted** — the panel becomes interactive. Disclosed consequence: a
+   click landing on a panel no longer passes through to the canvas, so a panel overlapping its own
+   object hides part of it from the mouse. This is the cost of the feature and is accepted;
+   D-101 clause 5 (drag it away) is the remedy.
+2. **Every MODIFIABLE row carries a paperclip affordance.** Derived rows carry none — they are not
+   writable and an affordance that refuses is worse than none. A row whose descriptor carries
+   `synthetic?: true` (the table `cells` summary — D-096 clause 2's field, which this cycle is the
+   one that adds and reads) carries none either.
+3. **Bold blue when the slot's kind is `formula`; faded grey when `literal`.** The human's choice:
+   the icon reports the slot KIND, not whether the formula happens to reference anything, so a row's
+   icon and its `= ...` text can never disagree. Small and low-contrast when grey — the human's
+   words are "faded and small, doesn't want to be that apparent."
+4. **Clicking a BLUE paperclip performs `unlink <address>`.** Clicking a GREY one opens a text input
+   on that row, seeded with the current value.
+5. **Every panel write goes through `executeCommand` (D-069), as the Command the command line would
+   have built.** The panel constructs an `UnlinkCommand` / `SetLiteralCommand` / `SetFormulaCommand`
+   and hands it to the same `apply(...)` path a typed line uses. **The panel MUST NOT call `mutate`,
+   and MUST NOT reach into `writeSlot`.** This is the whole reason the feature is affordable: D-069
+   already guarantees one place where a `Command` meets a `Document`, so the panel adds an input
+   surface and zero new write semantics — including D-097's new refusal, which it inherits for free.
+6. **What the operator types is disambiguated ONCE, at commit:** text that parses as a bare number
+   becomes `set <address> <number>`; anything else becomes `set <address> = <text>`, with a leading
+   `=` the operator typed absorbed rather than doubled. Enter commits; escape or blur cancels and
+   writes nothing.
+7. **The echoed line and any refusal go to the LOG**, exactly as if typed — including the echo of
+   the synthesised command itself, so the log remains a complete record of every write. The panel
+   grows no error channel of its own. **Escape with an input open closes the input only** and does
+   not clear the selection (D-100 clause 5's innermost-first order).
+8. **The panel may no longer be rebuilt from scratch while an input is open.** `updatePanel` today
+   calls `writePanel`, which calls `replaceChildren`, on EVERY paint — and paint runs on every
+   pointer move. An open input would lose focus, caret, and typed text on the first mouse twitch,
+   which makes the feature unusable rather than slow. **This is a correctness requirement, not an
+   optimisation, and Rule 5 does not excuse it.** The narrowest fix that satisfies it is the one to
+   take: while a row's input is open, that panel is not rebuilt.
+9. **Nothing here builds slot-to-slot linking BY DRAGGING between two panels.** Q-014's (ii) is
+   reachable now that two panels can be open and a row can be typed into, and the human named
+   typing as the mechanism. A drag-a-slot-onto-a-slot gesture is a further feature and needs its
+   own ask (§4).
+
+**Q-014 is CLOSED** by this ruling together with D-094 (display), D-100 (selection), and D-101
+(panels). §5.10's "no panels, no toolbars" now carries one amendment, made twice by the same human:
+a display panel (D-094) that is also an authoring surface (this ruling).
+
+---
+
+## D-103 — The order this batch is built in
+Ruled: entry 0100-REVIEW-phase4 (reviewer)   Binding on: the next four cycles
+
+Not a preference — three of these have a dependency and one is a live defect.
+
+1. **D-097** (the vanishing table). A correctness bug the human hit in five minutes of use, in
+   `mutation.ts`, independent of everything else. It goes first.
+2. **D-098 + D-099** (the notice spam and the four-decimal cap). Small, independent, unrelated to
+   each other; one cycle, two files, no shared state.
+3. **D-100** (the selection becomes a list). Must precede D-101 and D-102 — both are written
+   against a selection that holds more than one object. Review point at its end.
+4. **D-101 then D-102** (N panels and dragging; then the paperclip and editing). D-102 clause 8's
+   no-rebuild-while-editing requirement is easier against the per-panel structure D-101 builds, and
+   D-102 is the first code in this project that writes state from a mouse gesture in the DOM —
+   it gets its own review point regardless of the batch cap.
+
+**Phase 4's own gate is still owed and is not any of these.** It needs a human to bind two polygons
+through a table in one document. Every item above makes that session easier; none of them is it.

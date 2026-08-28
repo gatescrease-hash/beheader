@@ -8,11 +8,36 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-015**
+Next free ID: **Q-016**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-015 — Does a shift-click on an ALREADY-SELECTED object remove it from the selection?
+Raised: entry 0100-REVIEW-phase4 (reviewer)   Brief section: §5.9   Status: **OPEN — the human's,
+but not blocking.**
+
+The human chose the click model at entry 0100: a plain click replaces the selection, a shift-click
+adds to it, escape clears it (**D-100** clauses 2, 3, 5). What they were not asked, and did not say,
+is what a shift-click on an object that is ALREADY selected does.
+
+Options:
+
+(a) **It removes that object from the selection** (the conventional toggle). Without it, the only
+    way to drop one object from a five-object selection is escape and rebuild the whole thing.
+(b) **It does nothing** — shift-click strictly adds, and the selection only ever shrinks at escape.
+    Simpler to describe; makes a mis-shift-click unrecoverable except by starting over.
+
+Recommendation: **(a)**. It is what every selection surface the operator has ever used does, and it
+costs one branch. The reason this is a question at all rather than a silent choice is that it is a
+PRODUCT behaviour the human is the arbiter of (D-042's stance), and it was not in their notes.
+
+Reversible? **Yes** — one branch in `interaction.ts`'s `pointerDown`, one test.
+Provisional choice taken: **(a)**, ruled provisionally as D-100 clause 4. Tagged at:
+`src/render/interaction.ts` (`PROVISIONAL(Q-015)`), to be added by D-100's cycle.
 
 ---
 
@@ -24,7 +49,15 @@ real and is now ruled separately as **D-092** — this question is narrower than
 a floating properties panel listing its slots. That half is ruled — **D-094**, display only — and
 §5.10 is amended once, narrowly, for it. What is left of this question is **strictly the WRITING
 half**.
-Brief section: §5.10, §5.1, §5.3   Status: **OPEN — for the human only. No model may settle it.**
+Brief section: §5.10, §5.1, §5.3   Status: **ANSWERED → D-102** (entry 0100-REVIEW-phase4). The
+human ruled the writing/linking half at entry 0100: a slot IS editable from the panel, through a
+paperclip affordance per modifiable row, and multi-selection exists so two panels can be open at
+once. **D-102** carries that decision plus the mechanism (every panel write goes through
+`executeCommand`, so D-069 stays true and clause 4 below is answered "preferred"); **D-100** rules
+the selection model it needs and **D-101** the panels themselves. The design questions below are
+answered: 1 by D-094 clauses 11-13, 2 by D-101 clauses 3-6, 3 by D-102 clause 7, 4 by D-102 clause
+5. Q-013 is NOT mooted — `set <address> = <formula>` stays the spelling, and D-102 clause 6 reuses
+it verbatim rather than inventing a second one.
 
 **WHAT REMAINS OPEN, as of 0095-REVIEW — read this before the options below, which predate D-094.**
 Only these, and nothing else:
