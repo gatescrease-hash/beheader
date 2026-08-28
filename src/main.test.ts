@@ -19,6 +19,7 @@ import { getSlot, type GraphObject } from "./engine/graph/node.ts";
 import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
 import {
+  buildPanelModel,
   escape,
   initialAppState,
   performEffect,
@@ -318,6 +319,43 @@ describe("the camera in AppState is always usable (D-062)", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const strange: Document = { ...createEmptyDocument(), camera: { x: 0, y: 0, zoom: -5 } as CameraState };
     expect(replaceDocument(state, strange, "loaded strange.json").document.camera.zoom).toBe(MIN_ZOOM);
+  });
+});
+
+describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)", () => {
+  it("splits an object's slots into modifiable and derived groups, in schema declaration order", () => {
+    const state = typed(opened(), "circle x=10 y=20 r=5");
+    const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
+    expect(model.header).toBe("circle_1");
+    expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "radius"]);
+    // Every derived row is read-only; `vertices` is the first the schema declares.
+    expect(model.derived[0]?.path).toBe("vertices");
+    expect(model.derived.map((row) => row.path)).toContain("centroid.x");
+  });
+
+  it("shows a literal slot's plain value and no formula source", () => {
+    const state = typed(opened(), "circle x=10 y=20 r=5");
+    const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
+    const originX = model.modifiable.find((row) => row.path === "origin.x");
+    expect(originX).toEqual({ path: "origin.x", value: "10", formulaSource: undefined });
+  });
+
+  it("carries a formula slot's reconstructed source and keeps it in the modifiable group (D-094 clause 6)", () => {
+    let state = typed(opened(), "circle x=0 y=0 r=5");
+    state = typed(state, "table x=200 y=0 rows=2 cols=2");
+    state = typed(state, "set table_1.A1 7");
+    state = typed(state, "link circle_1.origin.x table_1.A1");
+    const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
+    const originX = model.modifiable.find((row) => row.path === "origin.x");
+    expect(originX?.formulaSource).toBe("table_1.A1");
+    expect(model.derived.some((row) => row.path === "origin.x")).toBe(false);
+  });
+
+  it("summarises a table's cells as ONE modifiable row, never one per cell (D-077, D-094 clause 8)", () => {
+    const state = typed(opened(), "table x=0 y=0 rows=3 cols=3");
+    const model = buildPanelModel(objectNamed(state, "table_1"), state.document.objects);
+    expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
+    expect(model.derived).toEqual([]);
   });
 });
 

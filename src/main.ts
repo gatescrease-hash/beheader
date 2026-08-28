@@ -45,6 +45,13 @@
  *     or D-090's prompt preview — all `render/renderer.ts`'s (0092-REVIEW),
  *     which this file hands `state.interaction.selectedObjectId` to and
  *     nothing more (D-082 clause 4: no name resolved, no chrome drawn here).
+ *   - **The placement ARITHMETIC of D-094's properties panel** — a pure tested
+ *     function in `render/panel.ts` (clause 11). This file only builds the
+ *     panel's DOM rows from `command/props.ts`'s descriptors (clause 9), shows
+ *     it when the selection resolves to an object with a drawn extent
+ *     (clause 2), and re-places it every paint (clause 13). It is READ-ONLY:
+ *     no listeners, no `mutate` (clause 10) — `index.html` gives it
+ *     `pointer-events: none`.
  *   - Injecting a Canvas2D `TextMeasurer` (Rule 1). Nothing evaluates text yet —
  *     §5.6 is Phase 5 — so there is no `EvalContext` to inject one into.
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
@@ -56,11 +63,14 @@
  *     write outside the mutation API.
  */
 import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
+import { slotKey, type GraphObject } from "./engine/graph/node.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
+import { buildSlotDescriptors, describeSlotValue } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
-import { documentExtent } from "./render/extent.ts";
+import { documentExtent, objectExtent } from "./render/extent.ts";
 import { deselect, pointerDown, pointerMove, pointerUp, INITIAL_INTERACTION_STATE, type InteractionState } from "./render/interaction.ts";
+import { placePropertiesPanel } from "./render/panel.ts";
 import { renderDocument } from "./render/renderer.ts";
 
 // ---------------------------------------------------------------------------
@@ -418,6 +428,56 @@ export function replaceDocument(state: AppState, document: Document, line: strin
 }
 
 // ---------------------------------------------------------------------------
+// The properties panel's row model (D-094 clauses 3-9)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of the properties panel: the slot PATH exactly as the operator would
+ * type it after the object's name (D-094 clause 4), the last evaluated VALUE as
+ * `command/props.ts`'s `describeSlotValue` renders it, and — only for a formula
+ * slot (D-094 clause 6) — the source `formula/format.ts` reconstructed, without
+ * a leading `=` (the DOM writer adds one).
+ */
+export interface PanelRow {
+  readonly path: string;
+  readonly value: string;
+  readonly formulaSource: string | undefined;
+}
+
+/**
+ * The properties panel's content for one object (D-094 clauses 3, 5, 7): its
+ * name as the header, then its slots in SCHEMA declaration order split into the
+ * two groups clause 5 names — `modifiable` (kind `literal` or `formula`, the
+ * ones an operator may `set`/`link`/`unlink`) above the thick rule, `derived`
+ * (read-only) below it and rendered in italics by the DOM writer.
+ *
+ * Built from `command/props.ts`'s `buildSlotDescriptors` and no other reading
+ * of the schema (D-094 clause 9): the panel and `props` must never disagree
+ * about what slots an object has.
+ */
+export interface PanelModel {
+  readonly header: string;
+  readonly modifiable: readonly PanelRow[];
+  readonly derived: readonly PanelRow[];
+}
+
+export function buildPanelModel(object: GraphObject, objects: readonly GraphObject[]): PanelModel {
+  const grouped = buildSlotDescriptors(object, objects).map((descriptor) => ({
+    row: {
+      path: slotKey(descriptor.path),
+      value: describeSlotValue(descriptor.value),
+      formulaSource: descriptor.formulaSource,
+    },
+    derived: descriptor.kind === "derived",
+  }));
+  return {
+    header: object.name,
+    modifiable: grouped.filter((entry) => !entry.derived).map((entry) => entry.row),
+    derived: grouped.filter((entry) => entry.derived).map((entry) => entry.row),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The DOM half — the only part of this file that knows a browser exists
 // ---------------------------------------------------------------------------
 //
@@ -442,7 +502,7 @@ interface PanGesture {
  * here is listener wiring and drawing — checked by hand, described in the log
  * entry, and NOT covered by any assertion.
  */
-function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLInputElement): void {
+function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLInputElement, panel: HTMLElement): void {
   const context = canvas.getContext("2d");
   if (context === null) {
     logElement.textContent = "this browser gave no 2D canvas context — nothing can be drawn";
@@ -497,6 +557,43 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // own rule, applied here too): this file resolves no name, and `renderer.ts`
     // draws no highlight at all for an id naming nothing (D-068).
     renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectId);
+    updatePanel();
+  };
+
+  /**
+   * D-094's properties panel: shown exactly when the selection resolves to an
+   * object with a drawn extent (clause 2), its rows built from
+   * `command/props.ts`'s descriptors (clause 9), re-placed every paint in CSS
+   * pixels (clauses 12-13). Read-only — this closure never calls `mutate`.
+   */
+  const updatePanel = (): void => {
+    const selectedId = state.interaction.selectedObjectId;
+    const object = selectedId === undefined ? undefined : state.document.objects.find((candidate) => candidate.id === selectedId);
+    const extent = object === undefined ? undefined : objectExtent(object);
+    if (object === undefined || extent === undefined) {
+      // A stale id draws no highlight either (D-094 clause 2); an object that
+      // draws nothing has no extent to hang a panel off.
+      panel.hidden = true;
+      return;
+    }
+    writePanel(panel, buildPanelModel(object, state.document.objects));
+    panel.hidden = false;
+    // Measured AFTER the rows are in and the element is visible. D-094 clause
+    // 12: worldToScreen is in BACKING pixels, the panel is laid out in CSS
+    // pixels — divide by the ratio the canvas actually has, read off the canvas
+    // the way `screenPointOf` reads it, never `devicePixelRatio` by assumption.
+    const bounds = canvas.getBoundingClientRect();
+    const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
+    const panelRect = panel.getBoundingClientRect();
+    const placement = placePropertiesPanel(
+      extent,
+      state.document.camera,
+      ratio,
+      { width: bounds.width, height: bounds.height },
+      { width: panelRect.width, height: panelRect.height },
+    );
+    panel.style.left = `${placement.left}px`;
+    panel.style.top = `${placement.top}px`;
   };
 
   const apply = (next: AppState): void => {
@@ -609,6 +706,50 @@ function drawLog(logElement: HTMLElement, lines: readonly string[]): void {
   logElement.scrollTop = logElement.scrollHeight;
 }
 
+/**
+ * D-094's properties panel, redrawn whole (immediate-mode, like the log and the
+ * canvas). Header, then the modifiable rows, then — if there are any — the thick
+ * rule (clause 5) and the derived rows. Every piece of text goes in through
+ * `textContent`: an object's name and a slot's value are user-controlled, and
+ * `<b>` is a legal object name (D-094 clause 14).
+ */
+function writePanel(panelElement: HTMLElement, model: PanelModel): void {
+  const header = document.createElement("div");
+  header.className = "panel-header";
+  header.textContent = model.header;
+  const children: HTMLElement[] = [header];
+
+  for (const row of model.modifiable) {
+    children.push(panelRowElement(row, false));
+  }
+  if (model.derived.length > 0) {
+    const rule = document.createElement("div");
+    rule.className = "panel-rule";
+    children.push(rule);
+    for (const row of model.derived) {
+      children.push(panelRowElement(row, true));
+    }
+  }
+  panelElement.replaceChildren(...children);
+}
+
+/** One panel row: `<path>` and `<value>`, the value carrying the reconstructed source (prefixed `=`) for a formula slot (D-094 clause 6). `derived` rows get the italic class (clause 5). */
+function panelRowElement(row: PanelRow, derived: boolean): HTMLElement {
+  const element = document.createElement("div");
+  element.className = derived ? "panel-row panel-row--derived" : "panel-row";
+
+  const path = document.createElement("span");
+  path.className = "panel-row__path";
+  path.textContent = row.path;
+
+  const value = document.createElement("span");
+  value.className = "panel-row__value";
+  value.textContent = row.formulaSource === undefined ? row.value : `= ${row.formulaSource}  (${row.value})`;
+
+  element.append(path, value);
+  return element;
+}
+
 /** §5.11's "save via JSON download". */
 function downloadDocument(state: Document): void {
   const url = URL.createObjectURL(new Blob([saveDocument(state)], { type: "application/json" }));
@@ -661,7 +802,8 @@ if (typeof document !== "undefined") {
   const canvas = document.querySelector<HTMLCanvasElement>("#canvas");
   const logElement = document.querySelector<HTMLElement>("#log");
   const input = document.querySelector<HTMLInputElement>("#command");
-  if (canvas !== null && logElement !== null && input !== null) {
-    start(canvas, logElement, input);
+  const panel = document.querySelector<HTMLElement>("#panel");
+  if (canvas !== null && logElement !== null && input !== null && panel !== null) {
+    start(canvas, logElement, input, panel);
   }
 }

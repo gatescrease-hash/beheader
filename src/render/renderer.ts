@@ -34,7 +34,10 @@
  *        — a name label (D-092 clause 1), an error badge, a formula-driven
  *        indicator (§5.9, D-068) — each converted through `worldToScreen`
  *        explicitly, because chrome text must stay a constant size regardless
- *        of zoom, unlike the geometry in pass 2.
+ *        of zoom, unlike the geometry in pass 2. The SELECTED object's name
+ *        label is suppressed here (D-094 clause 3): its name moves into the
+ *        properties panel's header, which `main.ts` draws. Its badge and ticks
+ *        still draw — they mark the shape, and the panel says the same in words.
  *
  *   The highlight is drawn in a SEPARATE pass after every object (not
  *   inline with pass 2's per-object loop) so it is never occluded by a LATER
@@ -167,7 +170,8 @@ function clearScreen(ctx: CanvasRenderingContext2D, viewportWidth: number, viewp
  * transform, draw every object in z-order (array order — see file header),
  * draw the selection highlight, then reset to identity and draw every
  * object's screen-space chrome. `selectedObjectId` names no object (`undefined`,
- * or a stale id — D-023-shaped) draws no highlight; never throws.
+ * or a stale id — D-023-shaped) draws no highlight and suppresses no label;
+ * never throws.
  */
 export function renderDocument(
   ctx: CanvasRenderingContext2D,
@@ -203,7 +207,10 @@ export function renderDocument(
   // explicit worldToScreen per object (file header's pass 3).
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   for (const object of objects) {
-    drawObjectChrome(ctx, camera, object);
+    // D-094 clause 3: the selected object's NAME moves into the properties
+    // panel's header, so it is not also drawn on the canvas. Its badge and
+    // ticks are not suppressed.
+    drawObjectChrome(ctx, camera, object, object.id === selectedObjectId);
   }
 }
 
@@ -531,8 +538,12 @@ function objectHasError(object: GraphObject): boolean {
  *
  * Draws nothing for an object with no anchor point (see `chromeAnchorPoint`);
  * never throws.
+ *
+ * `suppressName` (D-094 clause 3) omits ONLY the name label — the badge and the
+ * ticks still draw. With no name drawn there is no name width to measure, so
+ * `halfName` is 0 and the badge and ticks sit a gap either side of the anchor.
  */
-function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject): void {
+function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject, suppressName: boolean): void {
   const anchor = chromeAnchorPoint(object);
   if (anchor === undefined) {
     return;
@@ -544,12 +555,15 @@ function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, ob
   ctx.textBaseline = "bottom";
 
   // D-092 clause 1: a name for every object, screen-space and always on
-  // (Rule 5 — no hover or toggle mechanism yet).
+  // (Rule 5 — no hover or toggle mechanism yet), EXCEPT the selected one,
+  // whose name is in the properties panel's header instead (D-094 clause 3).
   ctx.fillStyle = CHROME_LABEL_STYLE;
   ctx.textAlign = "center";
-  ctx.fillText(object.name, screen.x, baseline);
+  if (!suppressName) {
+    ctx.fillText(object.name, screen.x, baseline);
+  }
 
-  const halfName = ctx.measureText(object.name).width / 2;
+  const halfName = suppressName ? 0 : ctx.measureText(object.name).width / 2;
 
   // §5.9's error badge. A bare "!" in the error colour, to the RIGHT of the
   // name — Rule 5's dumbest correct reading; a drawn icon is `style`-slots-era.

@@ -5,10 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Graphpaper</title>
     <!--
-      §5.10: "a persistent input bar at the bottom... Minimal UI chrome elsewhere —
-      no panels, no toolbars." The three elements below are the whole interface:
-      the canvas, the scrolling log above the input, and the input bar. main.ts
-      finds them by id and wires them; nothing here holds state or behaviour.
+      §5.10's interface: the canvas, the scrolling log above the input, and the
+      always-focused input bar. main.ts finds each by id and wires it.
+
+      #panel is D-094's read-only properties panel — the ONE amendment §5.10's
+      "no panels, no toolbars" has ever taken (the human's, at entry 0095),
+      display-only with `pointer-events: none` (D-094 clause 10). It floats over
+      the canvas, so the canvas lives inside a positioned #stage; main.ts
+      shows, fills and positions the panel every paint (D-094 clauses 2, 11-13).
+      Nothing here holds state or behaviour.
     -->
     <style>
       html,
@@ -24,13 +29,59 @@
         flex-direction: column;
         height: 100%;
       }
-      #canvas {
+      #stage {
+        position: relative;
         flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+      #canvas {
         display: block;
         width: 100%;
-        min-height: 0;
+        height: 100%;
         cursor: crosshair;
         touch-action: none;
+      }
+      #panel {
+        position: absolute;
+        left: 0;
+        top: 0;
+        box-sizing: border-box;
+        max-width: 320px;
+        max-height: 100%;
+        overflow: auto;
+        /* D-094 clause 10: display only — every click passes through to the canvas. */
+        pointer-events: none;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid #d0d0d0;
+        padding: 4px 6px;
+        font: 12px ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        color: #1a1a1a;
+      }
+      #panel[hidden] {
+        display: none;
+      }
+      .panel-header {
+        font-weight: bold;
+        padding-bottom: 2px;
+      }
+      /* D-094 clause 5: the thick rule between modifiable slots and derived ones. */
+      .panel-rule {
+        border-top: 3px solid #1a1a1a;
+        margin: 3px 0;
+      }
+      .panel-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        white-space: nowrap;
+      }
+      /* D-094 clause 5: derived rows in italics — the operator cannot write them. */
+      .panel-row--derived {
+        font-style: italic;
+      }
+      .panel-row__path {
+        color: #555555;
       }
       #log {
         flex: 0 0 auto;
@@ -53,7 +104,10 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="canvas"></canvas>
+      <div id="stage">
+        <canvas id="canvas"></canvas>
+        <div id="panel" hidden></div>
+      </div>
       <div id="log"></div>
       <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="command line" />
     </div>

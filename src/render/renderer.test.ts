@@ -604,3 +604,45 @@ describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
     expect(textCalls.every((call) => call.y === CIRCLE_CHROME_BASELINE)).toBe(true);
   });
 });
+
+describe("renderDocument — the selected object's name label is suppressed (D-094 clause 3)", () => {
+  function boundToCellSlot(): Slot {
+    return { kind: "formula", ast: { type: "reference", address: { objectId: "obj_9", path: ["cells", "A1"] } }, value: 0 };
+  }
+
+  it("does not draw the selected object's own name — its name is in the properties panel's header instead", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_1");
+    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(false);
+  });
+
+  it("still draws the selected object's error badge and formula ticks — they mark the shape, and the panel says the same in words", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", {
+      "origin.x": boundToCellSlot(),
+      radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } },
+    });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_1");
+    const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
+    expect(texts).not.toContain("circle_1");
+    expect(texts).toContain("!");
+    expect(texts).toContain("•x");
+  });
+
+  it("still labels a NON-selected object while another one is selected", () => {
+    const { ctx, calls } = createFakeContext();
+    const selected = circleObject("obj_1", "circle_a");
+    const other = circleObject("obj_2", "circle_b");
+    renderDocument(ctx, 800, 600, [selected, other], CAMERA_IDENTITY, "obj_1");
+    const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
+    expect(texts).toEqual(["circle_b"]);
+  });
+
+  it("suppresses no label when the selection is a stale id (D-023-shaped)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_missing");
+    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
+  });
+});
