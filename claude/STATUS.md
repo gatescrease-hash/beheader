@@ -1,19 +1,22 @@
-# STATUS — as of entry 0095-REVIEW
+# STATUS — as of entry 0096
 
 STATE: **GREEN.** Both configs compile, 1148/1148 tests pass, 0 skipped, 0 `.only`, `npm run build`
-succeeds — all three **re-run by the reviewer at 0095**, not read off a log. Entries **0093** and
-**0094** are now **REVIEWED: ACCEPT** (0095-REVIEW), no reviewer edits to source.
+succeeds — all four **re-run at entry 0096** (implementer), real output pasted in that entry. Entry
+**0096** is **not yet reviewed** (REVIEW: NOT NEEDED — see below); entries **0093** and **0094**
+remain **REVIEWED: ACCEPT** (0095-REVIEW), no reviewer edits to source.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW, D-084 clause 2 discharged). Nothing procedural stands in front of Phase 4,
 and Phase 4 has not been claimed.
 
 Last review point: **0095-REVIEW-phase4** (ACCEPT; D-093, D-094, D-095 ruled).
-Cycles since last review: **0/3** · diff since last review: **0 lines** (cap 800/10).
+Cycles since last review: **1/3** · diff since last review: **2 new files (~185 lines) + 5 files with
+a 1–3 line edit each (~19 insertions / 182 deletions)** (cap 800/10).
 
-**REVIEW: NOT NEEDED to start.** The queue is clear and the next three cycles are ordered below.
-**Note that cycle 2 and cycle 3 in that list will each fire §6.1 — a new subsystem file —** so plan
-to hand off after each rather than batching all three.
+**REVIEW: NOT NEEDED to continue.** Entry 0096 (queue item 1, D-093's split) is done — see "Read
+this first" item 2, rewritten below. **The next cycle (`command/props.ts` + the `props` command)
+WILL fire §6.1 on its own — a new subsystem file — so hand off after it lands, and again after the
+properties panel that follows it.**
 
 **THE HUMAN GAVE A DIRECTIVE AT 0095, WITH A SKETCH: a properties panel.** It is ruled in full as
 **D-094** (fourteen clauses) and it **amends `PROJECT_BRIEF.md` §5.10's "no panels"**, once and
@@ -28,8 +31,9 @@ before touching `index.html`, `main.ts`, or `command/`.
 (`primitives/geometry.ts`), so a circle's label drew *inside the circle* while a table's drew above
 its grid. **Every test passed** — each asserted "6px above the anchor," which was true for every
 type. The defect was in what the anchor MEANT. A human screenshot found it (entry 0094). Chrome now
-hangs from the top-centre of `hittest.ts`'s `objectExtent` — D-066's one extent, used a third time —
-and all three pieces sit on one measured line above the object: `[•x •y] name [!]`, with
+hangs from the top-centre of `extent.ts`'s `objectExtent` (moved there from `hittest.ts` at entry
+0096) — D-066's one extent, used a third time — and all three pieces sit on one measured line above
+the object: `[•x •y] name [!]`, with
 `ctx.measureText` keeping the badge and ticks clear of the name instead of fixed offsets that only
 happened not to collide.
 
@@ -37,14 +41,17 @@ happened not to collide.
 DOM half.** The standing lesson widens: it is not only untested code that is at risk, it is code
 whose tests can only check what their author was already thinking about.
 
-**2. THE IMPORT CYCLE IS RULED — REMOVE IT FIRST (D-093).** `renderer.ts` imports `objectExtent`
-from `hittest.ts`; `hittest.ts` imports `readNumber`, `asPointArray` and `TABLE_CELL_*` from
-`renderer.ts`. It resolves today **only** because every cross-file reference on both sides sits
-inside a function body, never at module top level, and **a top-level `const` in either file that
-reads the other's export fails with a TDZ error** — a blank application from a harmless-looking
-edit. **D-093 rules the split entry 0094 itself designed: `render/slots.ts` + `render/extent.ts`,
-one mechanical cycle, no logic change, run BEFORE anything else.** That ruling is the §4
-authorisation to restructure the two reviewed files. Both HAZARD notes get **deleted**, not amended.
+**2. THE IMPORT CYCLE IS CLOSED (D-093, built at entry 0096).** `renderer.ts` used to import
+`objectExtent` from `hittest.ts` while `hittest.ts` imported `readNumber`, `asPointArray` and
+`TABLE_CELL_*` from `renderer.ts` — a cycle that resolved only because every cross-file reference on
+both sides sat inside a function body, never at module top level, so a top-level `const` reading
+across it would have failed with a TDZ error. **`src/render/slots.ts`** (`readNumber`,
+`asPointArray`, `TABLE_CELL_WIDTH`, `TABLE_CELL_HEIGHT`) and **`src/render/extent.ts`**
+(`WorldExtent`, `objectExtent`, `documentExtent`) now hold that shared code; `renderer.ts` and
+`hittest.ts` both import them and neither imports the other. Pure move — no logic change, no test
+assertion changed, only import lines. Both HAZARD notes are **deleted**, not amended. **If you find
+a NEW top-level cross-reference between `renderer.ts` and `hittest.ts`, that is a regression of this
+fix, not a return to the old accepted shape — there is no more reason for one to exist.**
 
 **3. THE ADDRESSING VOCABULARY IS HALF VISIBLE — and the human has now ruled how the rest of it
 gets seen.** D-092 named two holes: object → name (**closed** at 0093/0094, item 1 above) and
@@ -84,33 +91,29 @@ throws a `RangeError` out of the file-read promise (**D-083** clause 4's loader 
 
 ## Next cycles — ordered
 
-The first three are one chain and the order is ruled, not suggested: each one's destination is the
-next one's substrate. **Hand off after each** — cycles 2 and 3 both create a new subsystem file,
-which is a §6.1 trigger on its own.
+**D-093's split (was item 1) is DONE, at entry 0096** — see "Read this first" item 2. The remaining
+chain's order is still ruled, not suggested: each one's destination is the next one's substrate.
+**Hand off after each** — items 1 and 2 below both create a new subsystem file, which is a §6.1
+trigger on its own.
 
-1. **`render/`: D-093's split.** `render/slots.ts` (`readNumber`, `asPointArray`, `TABLE_CELL_*`) and
-   `render/extent.ts` (`WorldExtent`, `objectExtent`, `documentExtent`); `renderer.ts` and
-   `hittest.ts` both import them; the graph becomes a DAG; both HAZARD notes are deleted. **A pure
-   move: no logic change, no rename, and every existing test passes with only its import lines
-   edited. If a test's ASSERTIONS need changing, it has stopped being a move — stop and say so.**
-2. **`src/command/props.ts` + `commands.ts`: D-092 clause 4's `props <object>`.** One pure module
+1. **`src/command/props.ts` + `commands.ts`: D-092 clause 4's `props <object>`.** One pure module
    exporting the slot-descriptor type and the function that builds it (path, kind, value, and for a
    formula slot its source via `format.ts`), plus one registry entry that formats log lines from it.
    Read-only, no effect (D-092 clause 6). **This enumeration is also the panel's, so it is written
    once and here** (D-094 clause 9). Watch D-077: a table's non-derived paths number in the tens of
    thousands — the cells are summarised, never spread.
-3. **`index.html` + `main.ts` + `render/`: D-094's read-only properties panel.** Fourteen clauses,
+2. **`index.html` + `main.ts` + `render/`: D-094's read-only properties panel.** Fourteen clauses,
    all binding; read them before starting. The four that cost the most if missed: the placement
    arithmetic is a **pure tested function** in `render/`, not code in `start` (clause 11); the panel
    is positioned in **CSS pixels** while `worldToScreen` returns **backing pixels** (clause 12);
    the selected object's canvas name label is **suppressed** because the name moves into the panel
    header (clause 3); `pointer-events: none`, because it is display-only and that keeps D-085/D-088's
    focus discipline true by construction (clause 10).
-4. **`main.ts` + `renderer.ts`: D-090's prompt-sequence preview.** Needs `state.pending` threaded
+3. **`main.ts` + `renderer.ts`: D-090's prompt-sequence preview.** Needs `state.pending` threaded
    into the render call, plus per-command preview geometry.
-5. **D-088 clauses 2–4 + D-089, the command input's behaviour.** Printable-key routing from
+4. **D-088 clauses 2–4 + D-089, the command input's behaviour.** Printable-key routing from
    anywhere, and history.
-6. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
+5. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
    `createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then).
 
 **A human session is owed before Phase 4 is attempted in earnest.** Phase 4's criterion needs a
@@ -131,10 +134,25 @@ creation handlers, `document.ts`'s `mintObjectId`, and `TABLE_SCHEMA`'s `origin.
 `RenameObjectOperation` + `findInvalidRenames`, and `commands.ts`'s `rename` handler (0084) ·
 `CommandEffect` and the five effect handlers (0086) · the two formula depth limits (0088) ·
 `main.ts` rewritten from the stub, `render/camera.ts`'s `clampCamera`/`clampZoom`,
-`render/hittest.ts`'s `documentExtent`, `index.html` (0089, reviewed at 0090 and again by the human
-at 0091 — four defects found and fixed across the two).
+`render/hittest.ts`'s `documentExtent` (moved at entry 0096 to `render/extent.ts`), `index.html`
+(0089, reviewed at 0090 and again by the human at 0091 — four defects found and fixed across the
+two) · entry 0093's selection highlight/error badge/formula-driven indicator (D-068) and D-092
+clause 1's name label, and entry 0094's chrome-anchor fix — both **REVIEWED: ACCEPT at 0095-REVIEW**,
+detail retained below.
 
-## Built this batch — REVIEWED AND ACCEPTED at 0095-REVIEW
+## Built this batch, not yet reviewed
+
+**Entry 0096 — `render/slots.ts` + `render/extent.ts`: D-093's split.** A pure move closing the
+import cycle between `renderer.ts` and `hittest.ts` (see "Read this first" item 2, rewritten this
+cycle). `readNumber`/`asPointArray`/`TABLE_CELL_WIDTH`/`TABLE_CELL_HEIGHT` now live in `slots.ts`;
+`WorldExtent`/`objectExtent`/`documentExtent` now live in `extent.ts`, importing `slots.ts`.
+`renderer.ts` and `hittest.ts` both import both new files; neither imports the other. No function
+body changed, no test assertion changed — five other files got a one-to-three-line import or
+comment edit (`main.ts`, `camera.ts`, `hittest.test.ts`). `tsc` clean on both configs, **1148/1148**,
+`npm run build` succeeds — full output in entry 0096. `REVIEW: NOT NEEDED` (pre-authorised by D-093
+itself; no logic change, no new subsystem).
+
+## Reviewed at 0095-REVIEW (detail retained for the record)
 
 **Entry 0093 — `renderer.ts`'s selection highlight, error badge, formula-driven indicator
 (D-068), and D-092 clause 1's name label; `main.ts` wired to pass the selection through.**
@@ -174,7 +192,8 @@ Entry 0093's own two mutants killed 8 and 2.
 
 ## Not started
 
-**D-093's `render/` split** · **D-092 clause 4's `props` command + `command/props.ts`** · **D-094's properties panel** · **D-090's prompt-sequence preview** · §5.9's per-vertex drag
+**D-092 clause 4's `props` command + `command/props.ts`** · **D-094's properties panel** ·
+**D-090's prompt-sequence preview** · §5.9's per-vertex drag
 path · `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation
 (D-081, D-083 clause 4) · D-088 clauses 2–4 · D-089 · Phases 5–7.
@@ -205,8 +224,8 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
    answer · (2) the usage line for the form a prompting command was used in · (3) what a quoted
    command WORD means · (4) disclose 0074-REVIEW F4's two message changes and test (a) · (5)
    `set = x`'s self-contradictory message · (6) `parser.ts`'s header restating D-069 · the twelve
-   bare "this cycle" sites in test files · `render/slots.ts` at the THIRD consumer of
-   `readNumber`/`asPointArray` · `.gitattributes`.
+   bare "this cycle" sites in test files · `.gitattributes`. (`render/slots.ts` itself is no
+   longer on this list — it was built at entry 0096.)
 6. **A middle-drag pan started outside the canvas is untested and unthought-about.** D-088 clause
    1's `preventDefault` handles the ordinary case. Owned by D-088's cycle.
 7. **`TABLE_GRID_STROKE_STYLE` has no comment** where its neighbour has a paragraph. **D-091**
@@ -219,7 +238,8 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
    the transform hazard entry 0093 closed. Owned by whichever cycle next opens `drawObjectChrome`.
 10. **The formula-driven indicator's narrowness (`origin.x`/`origin.y` only) should be RE-DECIDED
     once `props.ts` exists** (0095-REVIEW §4). Today it is a limitation — nothing enumerates an
-    object's writable slots. After cycle 2 it becomes a choice, and should be made deliberately.
+    object's writable slots. After the `props.ts` cycle (next, per the queue above) it becomes a
+    choice, and should be made deliberately.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -227,10 +247,6 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
   download anchor and the file picker, now including the one-line selection hand-off to
   `renderDocument`. **0090-REVIEW found four defects there and none anywhere else.** Treat a change
   to that region as unverified until someone clicks on it.
-- **THE IMPORT CYCLE between `renderer.ts` and `hittest.ts`** — cold-read item 2. Resolves only
-  because every cross-file reference sits inside a function body. **Do not add a top-level `const`
-  in either file that reads the other's export.** **RULED at 0095: D-093 removes it, and that is the
-  very next cycle** — if you are reading this and the cycle has not run, run it before anything else.
 - **The chrome layout is still UNSEEN.** Entry 0094 fixed the anchor a screenshot exposed and made
   the offsets measured rather than guessed, but nobody has looked at the result. **Labels of two
   adjacent objects can still overlap each other** — there is no inter-object collision handling and
@@ -238,8 +254,9 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
 - **A prompt sequence still shows nothing where you clicked** — no marker for a picked point, no
   preview of the shape being built. Ruled **D-090**, queued, explicitly deferred out of entry 0093.
 - **An operator still cannot discover an object's slots.** No command prints them and no panel shows
-  them. **D-092** clause 4 owes `props <object>` and **D-094** owes the panel — cycles 2 and 3.
-  Until then the only source is `primitives/schema.ts`, which the operator does not have.
+  them. **D-092** clause 4 owes `props <object>` and **D-094** owes the panel — the next two cycles
+  in the queue. Until then the only source is `primitives/schema.ts`, which the operator does not
+  have.
 - **The formula-driven indicator is read NARROWLY** — `origin.x`/`origin.y` only, the two slots a
   drag can move today. A `style` slot bound to a formula, once `style` slots exist, gets no
   indicator without a widening.
@@ -284,9 +301,9 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
   **No repeat-last-command gesture** (D-089 will provide one, unbuilt).
 - **Row/column deletion CAN still be REJECTED**, contradicting §5.4 — reachable only via a raw
   `setSlot`, pinned by `mutation.test.ts`'s "KNOWN INCOHERENCE" test; D-053 forbids a one-sided fix.
-- **Two carried render gaps:** cell text is not clipped to its cell (§5.4 silent, Rule 5) ·
-  `readNumber`/`asPointArray` still have two consumers and move to `render/slots.ts` at the THIRD
-  (0064-REVIEW §5 — `documentExtent` deliberately did NOT become one, by living in `hittest.ts`).
+- **One carried render gap:** cell text is not clipped to its cell (§5.4 silent, Rule 5).
+  (0064-REVIEW §5's other item — `readNumber`/`asPointArray` moving to a shared file at their third
+  consumer — is CLOSED: they live in `render/slots.ts` as of entry 0096.)
 - **Carried unchanged, each with its pointer:** `set-formula` is a `kind` that is not a registry name
   (covered explicitly in `commands.test.ts`) · comment debt in TEST files only (0058-REVIEW F2) ·
   mixed line endings in the WORKING TREE only (`core.autocrlf=true`) · dangling-reference messages
@@ -300,12 +317,12 @@ cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays 
 
 Every ruling in `DECISIONS.md` (D-001 through **D-095**) binds without restatement here.
 
-**From 0095-REVIEW — three new rulings, all unbuilt:** **D-093** (the `render/` split that removes
-the import cycle; runs first, is a pure move, and IS the §4 authorisation to touch the two reviewed
-files) · **D-094** (the read-only floating properties panel the human sketched — fourteen clauses,
-and the **one amendment `PROJECT_BRIEF.md` §5.10 has ever taken**, narrow and display-only) ·
-**D-095** (chrome hangs from the extent's top-centre and stays there; **no inter-object label
-collision avoidance is to be built** — stop re-opening both).
+**From 0095-REVIEW — three new rulings:** **D-093** (the `render/` split that removes the import
+cycle — **IMPLEMENTED at entry 0096**, `render/slots.ts` + `render/extent.ts`) · **D-094** (the
+read-only floating properties panel the human sketched — fourteen clauses, and the **one amendment
+`PROJECT_BRIEF.md` §5.10 has ever taken**, narrow and display-only — **not yet built**) · **D-095**
+(chrome hangs from the extent's top-centre and stays there; **no inter-object label collision
+avoidance is to be built** — stop re-opening both; not a build item, already true).
 
 **Entries 0093 and 0094 are REVIEWED: ACCEPT** (0095-REVIEW), no source edits by the reviewer. The
 reviewer re-ran both typechecks and the suite, and re-seeded entry 0094's strongest mutant — 12
@@ -317,6 +334,10 @@ verified by 34 tests and two seeded mutants. **Unverified by a human eye** — s
 item 1.
 
 **D-092 clause 4 (`props <object>`) is RULED but NOT YET BUILT** — next in the queue.
+
+**Entry 0096 needed no review** (`REVIEW: NOT NEEDED`) — it built exactly D-093's own ruling, a
+pure move with no logic change and no test assertion changed, and D-093 at 0095-REVIEW is itself
+the authorisation to touch the two files it edited. Do not re-litigate the split; it is done.
 
 **From 0092-REVIEW:** the addressing vocabulary must be VISIBLE in the running application (D-092's
 full text). Neither mechanism amends the brief: the brief is silent on both, and §5.10's "adding a
@@ -449,10 +470,11 @@ Next free: **Q-015**.
   was true. When adding a positioned thing, pin the ABSOLUTE position for at least two types whose
   geometry differs — entry 0094 pins a circle (centre-origin) and a table (corner-origin) precisely
   so the next anchor change cannot pass silently.
-- **`renderer.ts` and `hittest.ts` are a MODULE CYCLE as of entry 0094.** It works only because
-  every cross-file reference is inside a function body. A top-level `const` reading across the
-  boundary breaks with a TDZ error. The clean split (`render/slots.ts` + `render/extent.ts`) is
-  written up in entry 0094's ESCALATION section and awaits a ruling.
+- **`renderer.ts` and `hittest.ts` WERE a MODULE CYCLE, entries 0094 through 0095.** It worked only
+  because every cross-file reference was inside a function body — a top-level `const` reading across
+  the boundary would have broken with a TDZ error. **Closed at entry 0096**: `render/slots.ts` +
+  `render/extent.ts` now hold the shared code, and neither `renderer.ts` nor `hittest.ts` imports the
+  other. If you see a new cross-reference between them, that is a fresh mistake, not this one back.
 - **Adding a `ctx` member to `renderer.ts` breaks every hand-rolled fake in the repo**, and there
   are two (`renderer.test.ts`, `main.test.ts`). Entry 0094's `ctx.measureText` failed the Phase 3
   acceptance test with `TypeError: ctx.measureText is not a function` before both fakes were updated.

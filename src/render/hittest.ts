@@ -22,16 +22,12 @@
  *   `vertices` slot yields a polygonal approximation used for bounds AND
  *   HIT-TESTING."
  *
- *   `documentExtent(objects)` answers the other question about the same
- *   per-type extents — "where is everything" rather than "what is under this
- *   point" — because D-066 makes drawn extent and clickable extent one extent.
- *
  *   The stroke tolerance is screen-space (§5.9's "pixel tolerance"), converted
  *   to world units via `camera.zoom` at the point of use. It takes no side in
  *   Q-012, which asks about a drawn stroke WIDTH — a different property.
  *
  * INVARIANTS UPHELD HERE
- *   - Never throws. Every read funnels through `renderer.ts`'s
+ *   - Never throws. Every read funnels through `slots.ts`'s
  *     `readNumber`/`asPointArray`; a missing, wrong-typed, or `ErrorValue`
  *     slot makes that ONE object never hit without aborting the scan.
  *   - Reads only, writes nothing (Rule 2 — there is no state here to write).
@@ -59,13 +55,18 @@
  *     under this point."
  *   - `text`/`script`/`image` bounding boxes, and `polyline`'s open-path
  *     distance test — no schema or visual definition exists to read yet.
+ *   - An object's or the document's drawn extent — `extent.ts` (D-093's
+ *     split; see that file's header). This file used to define both; moved
+ *     out because "where is everything" is a different question from "what
+ *     is under this point," and the two functions had nothing left in common
+ *     once the shared slot reads moved to `slots.ts` too.
  */
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
-import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./renderer.ts";
+import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 /**
  * §5.9: "pixel tolerance" for stroke/open-path hit-testing. A round, untuned
@@ -158,134 +159,6 @@ function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
     return false;
   }
   return worldPoint.x >= originX && worldPoint.x <= originX + width && worldPoint.y >= originY && worldPoint.y <= originY + height;
-}
-
-/**
- * The world-space box an object occupies — `minX <= maxX`, `minY <= maxY`
- * always, because every producer below builds it from real coordinates.
- */
-export interface WorldExtent {
-  readonly minX: number;
-  readonly minY: number;
-  readonly maxX: number;
-  readonly maxY: number;
-}
-
-/**
- * One object's drawn extent, or `undefined` for an object that draws nothing.
- *
- * Why it lives beside the hit tests rather than in its own file: D-066 rules
- * that drawn extent and clickable extent are the SAME extent, so the per-type
- * reads this needs (`vertices` for the three shapes — §5.5's own instruction
- * that a circle's polygonal approximation is what bounds it — and
- * origin-plus-cell-size for a table) are exactly the reads the tests above
- * already make. A second file would be a second reading of the same question.
- *
- * The degenerate cases D-066 names are `undefined` here for the same reason
- * they are `false` there: a table with no extent is not drawn, so it is not
- * part of what `fit` fits to.
- *
- * Exported at entry 0094 for a SECOND consumer: `renderer.ts` hangs an object's
- * screen-space chrome (name label, error badge, formula-driven indicator) from
- * the top-centre of this box. That is D-066 applied a third time — the drawn
- * extent, the clickable extent and the LABELLED extent are one extent — and it
- * is why the chrome anchor is not computed separately over there.
- *
- * **HAZARD — import cycle.** `renderer.ts` imports this function while this
- * file imports `readNumber`/`asPointArray`/`TABLE_CELL_*` from `renderer.ts`.
- * It resolves today because every cross-file reference on both sides is inside
- * a function body, never at module top level. **A top-level `const` in this
- * file that reads a `renderer.ts` export would break with a TDZ error.** Entry
- * 0094 flagged this for the reviewer with a clean alternative (split the shared
- * slot reads into `render/slots.ts` and the extent into `render/extent.ts`);
- * until that is ruled on, do not add such a constant.
- */
-export function objectExtent(object: GraphObject): WorldExtent | undefined {
-  switch (object.type) {
-    case "circle":
-    case "polygon":
-    case "rect":
-      return verticesExtent(object);
-    case "table":
-      return tableExtent(object);
-    case "polyline":
-    case "text":
-    case "script":
-    case "image":
-    case "value":
-    case "add":
-      return undefined; // Draws nothing yet (file header) — nothing to bound.
-    default: {
-      const exhaustive: never = object.type;
-      void exhaustive;
-      return undefined;
-    }
-  }
-}
-
-/** The bounding box of a shape's `vertices`. `undefined` for a missing/wrong-typed/empty `vertices` slot, and for one holding a non-finite coordinate — the same "never throws, this one object simply does not participate" posture the hit tests take. */
-function verticesExtent(object: GraphObject): WorldExtent | undefined {
-  const vertices = asPointArray(getSlot(object, VERTICES_PATH)?.value);
-  if (vertices === undefined || vertices.length === 0) {
-    return undefined;
-  }
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const vertex of vertices) {
-    minX = Math.min(minX, vertex.x);
-    minY = Math.min(minY, vertex.y);
-    maxX = Math.max(maxX, vertex.x);
-    maxY = Math.max(maxY, vertex.y);
-  }
-  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
-    return undefined;
-  }
-  return { minX, minY, maxX, maxY };
-}
-
-/** A table's drawn box, read exactly as `hitTestTable` reads it — including D-066's guard, so a table that draws nothing has no extent. */
-function tableExtent(object: GraphObject): WorldExtent | undefined {
-  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
-  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-  const { rows, cols } = getTableDimensions(object);
-  const width = cols * TABLE_CELL_WIDTH;
-  const height = rows * TABLE_CELL_HEIGHT;
-  if (width <= 0 || height <= 0) {
-    return undefined;
-  }
-  return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
-}
-
-/**
- * The box containing every object that draws something, or `undefined` when
- * none does — §5.10's `fit`, which `main.ts` performs (D-075 clause 3).
- *
- * Returning `undefined` for "nothing to fit to" rather than a zero box keeps the
- * decision with the caller: `commands.ts` already refuses `fit` over an EMPTY
- * document (D-082 clause 1), and this is the OTHER emptiness — a document whose
- * objects all draw nothing — which no document read could have refused, and
- * which D-066 says is the same case.
- */
-export function documentExtent(objects: readonly GraphObject[]): WorldExtent | undefined {
-  let extent: WorldExtent | undefined;
-  for (const object of objects) {
-    const objectBox = objectExtent(object);
-    if (objectBox === undefined) {
-      continue;
-    }
-    extent =
-      extent === undefined
-        ? objectBox
-        : {
-            minX: Math.min(extent.minX, objectBox.minX),
-            minY: Math.min(extent.minY, objectBox.minY),
-            maxX: Math.max(extent.maxX, objectBox.maxX),
-            maxY: Math.max(extent.maxY, objectBox.maxY),
-          };
-  }
-  return extent;
 }
 
 /** Dispatches by `ObjectType` (mirrors `renderer.ts`'s `drawObject` switch exactly — same style, same exhaustiveness idiom). */

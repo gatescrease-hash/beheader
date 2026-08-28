@@ -98,14 +98,11 @@ import { getTableDimensions } from "../engine/primitives/table.ts";
 import { formatCellReference, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
+import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 // D-066's one extent, reused as the chrome anchor (see `chromeAnchorPoint`).
-// HAZARD: this is an import CYCLE — `hittest.ts` imports `readNumber`,
-// `asPointArray` and the `TABLE_CELL_*` constants back out of this file. It
-// resolves because every reference on both sides sits inside a function body,
-// never at module top level; a top-level `const` in EITHER file that reads the
-// other's export would break with a TDZ error. Flagged for the reviewer at
-// entry 0094 with a clean alternative (`render/slots.ts` + `render/extent.ts`).
-import { objectExtent } from "./hittest.ts";
+// `extent.ts` and `slots.ts` are D-093's split: neither this file nor
+// `hittest.ts` imports the other any more, so there is no cycle to flag here.
+import { objectExtent } from "./extent.ts";
 
 /**
  * World-unit defaults — no `style` slot exists yet (see file header). Round,
@@ -120,16 +117,9 @@ import { objectExtent } from "./hittest.ts";
 const DEFAULT_SHAPE_STROKE_STYLE = "#1a1a1a";
 const DEFAULT_SHAPE_STROKE_WIDTH = 1;
 
-/**
- * §5.4: "fixed-size cells." World-unit constants — untuned (Rule 5), scale on
- * screen with zoom like everything else drawn here. PROVISIONAL(Q-012), same
- * reading as the stroke width above. Exported: `render/hittest.ts`'s table
- * bounding-box test (§5.9) needs the SAME cell size this file draws with —
- * D-010's "declare once" principle, so a future resize of these two constants
- * can never leave the picture and the click box disagreeing.
- */
-export const TABLE_CELL_WIDTH = 80;
-export const TABLE_CELL_HEIGHT = 24;
+// §5.4's fixed cell size (`TABLE_CELL_WIDTH`/`TABLE_CELL_HEIGHT`) moved to
+// `slots.ts` at D-093's split — `hittest.ts` and `extent.ts` need the SAME
+// constants (D-010) and this file no longer defines them, only imports them.
 const TABLE_CELL_TEXT_PADDING = 4;
 const TABLE_GRID_STROKE_STYLE = "#999999";
 const TABLE_CELL_TEXT_STYLE = "#1a1a1a";
@@ -252,17 +242,6 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject): void {
 }
 
 /**
- * A slot's current value, narrowed to `number` — `undefined` for anything else
- * (missing, wrong-typed, an `ErrorValue`). Never throws. Exported: `render/
- * hittest.ts` reads the same `origin.x`/`origin.y` paths for its table
- * bounding-box test and must not re-derive this narrowing separately (D-010).
- */
-export function readNumber(object: GraphObject, path: readonly string[]): number | undefined {
-  const value = getSlot(object, path)?.value;
-  return typeof value === "number" ? value : undefined;
-}
-
-/**
  * Builds (but does not stroke) §5.5's circle path — `ctx.beginPath()` /
  * `ctx.arc(...)` — from `origin.x`/`origin.y`/`radius` directly, never
  * `vertices` (§5.5: "the renderer still draws a true arc"). Returns whether a
@@ -290,22 +269,6 @@ function drawCircle(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
   ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
   ctx.stroke();
-}
-
-/**
- * Narrows a slot's current value to a `Point[]` — `undefined` for everything
- * else, an `ErrorValue` included. `readonly Point[]` is the ONLY array arm of
- * `Value` (§5.1, `graph/node.ts`), so `Array.isArray` alone excludes every
- * other member and no separate `isErrorValue` guard is needed here (an
- * `ErrorValue` is not an array). Never throws. Exported: `render/hittest.ts`
- * reads the same `vertices` slot for its stroke distance-to-segment test and
- * must not re-derive this narrowing separately (D-010).
- */
-export function asPointArray(value: Value | undefined): readonly Point[] | undefined {
-  if (value === undefined || !Array.isArray(value)) {
-    return undefined;
-  }
-  return value as readonly Point[];
 }
 
 /**
@@ -525,7 +488,7 @@ function strokeHighlight(ctx: CanvasRenderingContext2D): void {
  *
  * The drawn extent is the one quantity that means the same for every type, and
  * D-066 already rules that the drawn extent and the clickable extent are ONE
- * extent — so this reuses `hittest.ts`'s `objectExtent` rather than computing a
+ * extent — so this reuses `extent.ts`'s `objectExtent` rather than computing a
  * second reading of the same question (D-010). `undefined` for an object that
  * draws nothing, which is exactly the set that has no extent.
  *

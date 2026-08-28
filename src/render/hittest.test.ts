@@ -7,7 +7,8 @@
 import { describe, expect, it } from "vitest";
 import type { GraphObject } from "../engine/graph/node.ts";
 import type { CameraState } from "../engine/document.ts";
-import { documentExtent, hitTest, STROKE_HIT_TOLERANCE_SCREEN_PIXELS } from "./hittest.ts";
+import { hitTest, STROKE_HIT_TOLERANCE_SCREEN_PIXELS } from "./hittest.ts";
+import { documentExtent } from "./extent.ts";
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
 

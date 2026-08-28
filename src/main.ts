@@ -59,7 +59,7 @@ import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
-import { documentExtent } from "./render/hittest.ts";
+import { documentExtent } from "./render/extent.ts";
 import { deselect, pointerDown, pointerMove, pointerUp, INITIAL_INTERACTION_STATE, type InteractionState } from "./render/interaction.ts";
 import { renderDocument } from "./render/renderer.ts";
 

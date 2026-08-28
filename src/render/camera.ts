@@ -37,7 +37,7 @@
  *     callers decide that and pass this file plain screen-space numbers.
  *   - "fit" (zoom to a bounding box) — needs a viewport size and a bounding box,
  *     neither of which this file owns. `main.ts` composes it from `clampZoom`
- *     plus `render/hittest.ts`'s `documentExtent` (D-061, D-075 clause 5).
+ *     plus `render/extent.ts`'s `documentExtent` (D-061, D-075 clause 5).
  */
 import type { CameraState } from "../engine/document.ts";
 import type { Point } from "../engine/graph/node.ts";
