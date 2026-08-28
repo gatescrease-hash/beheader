@@ -19,9 +19,9 @@
  *   address and writes nothing.
  *
  *   `describeSlotValue` renders one slot's VALUE as the text `command/
- *   commands.ts`'s echo lines already used before this cycle moved it here —
- *   the same "one formatter, not two" reasoning D-094 clause 9 states for the
- *   descriptor list applies to the text built from it.
+ *   commands.ts`'s echo lines show — the same "one formatter, not two"
+ *   reasoning D-094 clause 9 states for the descriptor list applies to the
+ *   text built from it (entry 0097 moved it here).
  *
  *   `commands.ts`'s `props` handler formats `SlotDescriptor[]` into log
  *   lines; the properties panel (D-094, not yet built) will render rows from
@@ -159,12 +159,14 @@ function tableCellsSummary(object: GraphObject): SlotDescriptor {
 }
 
 /**
- * Renders a slot's VALUE as display text — moved here from `command/
- * commands.ts` at this cycle (D-094 clause 9), which is where `set`'s and
- * `unlink`'s echo lines still call it.
+ * Renders a slot's VALUE as display text — §5.10's echo lines (`set`'s and
+ * `unlink`'s, in `command/commands.ts`) and `props`'s own lines both call it,
+ * which is why D-094 clause 9 puts it here rather than in either caller.
  *
  * Distinct from `formula/eval.ts`'s `describeValueType`, which names a
- * value's TYPE for a `#TYPE` message: this one shows the value itself.
+ * value's TYPE for a `#TYPE` message: this one shows the value itself,
+ * because D-041's report is "here is what was kept" and a type name would
+ * not tell the operator whether to type over it.
  */
 export function describeSlotValue(value: Value): string {
   if (value === null) {

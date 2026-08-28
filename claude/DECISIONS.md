@@ -3019,3 +3019,57 @@ interesting — object's label off the canvas anyway.
 **Rationale.** Both questions ask the reviewer to prefer a guess over what the one human who has
 actually seen the screen said. The human saw entry 0093's output, objected to labels inside circles,
 and objected to nothing else. Settle the anchor so the next three cycles stop re-opening it.
+
+---
+
+## D-096 — A ruling's file list states intent, not a quota; and the table `cells` summary keeps `kind: "literal"`
+Answers: entry 0097's three questions to the reviewer, and the one undisclosed departure found in
+entry 0096   Ruled: entry 0098-REVIEW-phase4 (reviewer)
+Binding on: `src/command/props.ts`, `src/render/slots.ts`, and every future cycle executing a
+ruling that enumerates files or moves
+
+**1. A ruling's enumerated list is a ceiling, and a departure from it must be NAMED.**
+D-093 clause 1 listed five declarations to move into `render/slots.ts`. Entry 0096 moved four:
+`TABLE_CELL_TEXT_PADDING` stayed in `renderer.ts`. **That was the right call and it is ratified** —
+the constant is module-private with exactly one consumer, and moving it would have widened a private
+constant into an export for no second reader, against `slots.ts`'s own stated purpose ("the reads
+more than one file in `render/` makes", D-093 clause 1's own words). What was wrong is that entry
+0096 did not say so: it described the slice as D-093's split and listed four moves without noting
+that the ruling named five.
+
+The rule, general: **when a ruling's literal text and its stated rationale diverge, follow the
+rationale and NAME the divergence in the log entry.** A reviewer reading a ruling against a diff
+counts what the ruling listed; an unexplained shortfall reads as an oversight and costs a round-trip
+to distinguish from one. This is not a §6.1 trigger 3 escalation (the brief is not ambiguous and
+nothing load-bearing moved) — it is a disclosure duty, discharged by one sentence in "Decisions I
+made."
+
+**2. The table's synthetic `cells` row keeps `kind: "literal"`. `SlotDescriptor` does NOT grow a
+fourth kind.** (Entry 0097's question 2.) `kind` means "what the operator may do with this slot"
+(D-092 clause 5, carried into pixels by D-094 clause 5), and `"literal"` puts the row in the
+modifiable group, which is where D-094 clause 8 puts it. A `"summary"` kind would have to be handled
+by every reader of `kind` — including the two grouping branches D-094 clause 5 specifies — to say
+one thing the panel does not yet need to know, and the panel is READ-ONLY (D-094 clause 10): it
+offers no editing to be mistaken about. **When editing arrives** (Q-014's remaining half, unruled),
+that cycle adds `readonly synthetic?: true` to `SlotDescriptor` and refuses to open an editor on a
+row carrying it — an additive optional field, not a widened union. Do not add it before there is a
+reader.
+
+The summary's value stays a plain string, quoted by `describeSlotValue` like any other string
+(`cells = "4×4 grid — 2 of 16 cells written" (literal)`). A bypass field in the shared formatter for
+one synthetic row is more machinery than the cosmetic gain is worth (Rule 5), and entry 0097's own
+reasoning for declining it is adopted here rather than re-argued.
+
+**3. The dynamic-group summary may be reached by an explicit `object.type === TABLE_TYPE` check.**
+(Entry 0097's question 1.) D-094 clause 8 is written about tables, `TABLE_SCHEMA`'s `cells.*` is the
+only `dynamic` `NonDerivedSlotPathGroup` in the registry, and a generic "summarise any dynamic group"
+mechanism would be a second abstraction invented for a second case that does not exist (Rule 5).
+**The silent DROP of a future, non-table dynamic group is the required failure direction** — a group
+that vanishes from `props` is a visible gap someone reports; one that spreads path-by-path is a
+D-077 violation that can hang the application on a large table. **A new `dynamic` group anywhere in
+`primitives/schema.ts` MUST add its own summary branch in `props.ts` in the same cycle**, and the
+disclosure already in `props.ts`'s header is what tells that cycle so.
+
+**4. `props`'s registry position and its unknown-name message stand.** (Entry 0097's question 3.)
+Between `refs` and `list`, and `no object named "..."` verbatim as `refs`/`select`/`delete` say it.
+Identical refusals for identical failures is D-069's shape; nothing to change.
