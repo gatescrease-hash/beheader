@@ -256,10 +256,13 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     });
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
+    // The trailing entry is D-092 clause 1's name label — a table with no
+    // origin.x/origin.y slots anchors at drawTable's own (0,0) fallback.
     expect(textCalls).toEqual([
       { op: "fillText", text: "42", x: 76, y: 12, align: "right" },
       { op: "fillText", text: "hello", x: 84, y: 12, align: "left" },
       { op: "fillText", text: "TRUE", x: 164, y: 12, align: "left" },
+      { op: "fillText", text: "table_1", x: 0, y: -6, align: "center" },
     ]);
   });
 
@@ -268,14 +271,21 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     const table = tableObject({ "cells.A1": { kind: "derived", value: { error: "#REF", message: "gone" } } });
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call) => call.op === "fillText");
-    expect(textCalls).toEqual([{ op: "fillText", text: "#REF", x: 4, y: 12, align: "left" }]);
+    // Plus D-092's name label and D-068's error badge — objectHasError scans
+    // EVERY slot (file header), and cells.A1 here is one of them.
+    expect(textCalls).toEqual([
+      { op: "fillText", text: "#REF", x: 4, y: 12, align: "left" },
+      { op: "fillText", text: "table_1", x: 0, y: -6, align: "center" },
+      { op: "fillText", text: "!", x: 14, y: -6, align: "left" },
+    ]);
   });
 
-  it("draws no text for a null-valued or entirely unset cell", () => {
+  it("draws no CELL text for a null-valued or entirely unset cell — only the name label", () => {
     const { ctx, calls } = createFakeContext();
     const table = tableObject({ "cells.A1": { kind: "literal", value: null } }); // B1/C1 have no slot at all.
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
-    expect(calls.some((call) => call.op === "fillText")).toBe(false);
+    const textCalls = calls.filter((call) => call.op === "fillText");
+    expect(textCalls).toEqual([{ op: "fillText", text: "table_1", x: 0, y: -6, align: "center" }]);
   });
 
   it("falls back to origin (0,0) when the table has no origin.x/origin.y slots", () => {
@@ -340,5 +350,157 @@ describe("renderDocument — wired through the real mutate() pipeline (D-016 dis
     // A pentagon: 1 moveTo (the first vertex) + 4 lineTo (the remaining four) — the REAL evaluated `vertices`, not a fixture this test wrote by hand.
     expect(moveToCalls).toHaveLength(1);
     expect(lineToCalls).toHaveLength(4);
+  });
+});
+
+function circleObject(id: string, name: string, slots: Readonly<Record<string, Slot>> = {}): GraphObject {
+  return {
+    id,
+    name,
+    type: "circle",
+    slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, radius: { kind: "literal", value: 5 }, ...slots },
+  };
+}
+
+describe("renderDocument — name label (D-092 clause 1)", () => {
+  it("draws every object's name in the SCREEN-space pass, centred above its anchor point converted through the SAME worldToScreen the camera transform uses", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_7", { "origin.x": { kind: "literal", value: 3 }, "origin.y": { kind: "literal", value: 4 } });
+    renderDocument(ctx, 800, 600, [circle], { x: 0, y: 0, zoom: 2 });
+    // World (3,4) at zoom 2 -> screen (6,8); the label sits CHROME_ANCHOR_MARGIN_SCREEN above that.
+    const textCalls = calls.filter((call) => call.op === "fillText");
+    expect(textCalls).toEqual([{ op: "fillText", text: "circle_7", x: 6, y: 2, align: "center" }]);
+  });
+
+  it("draws no label for a type with no schema/anchor point yet", () => {
+    const { ctx, calls } = createFakeContext();
+    const value: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } };
+    renderDocument(ctx, 800, 600, [value], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "fillText")).toBe(false);
+  });
+
+  it("labels a circle whose radius is missing (draws no body) at its origin — the label and the body have independent preconditions", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle: GraphObject = { id: "obj_1", name: "circle_1", type: "circle", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 } } };
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "arc")).toBe(false);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
+  });
+
+  it("labels EVERY object, in document order, not only a selected one", () => {
+    const { ctx, calls } = createFakeContext();
+    const circleA = circleObject("obj_1", "circle_a");
+    const circleB = circleObject("obj_2", "circle_b");
+    renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY);
+    const labels = calls.filter((call) => call.op === "fillText").map((call) => (call.op === "fillText" ? call.text : ""));
+    expect(labels).toEqual(["circle_a", "circle_b"]);
+  });
+});
+
+describe("renderDocument — selection highlight (D-068)", () => {
+  it("re-strokes the selected circle's own path, in addition to the ordinary draw", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_1");
+    expect(calls.filter((call) => call.op === "arc")).toHaveLength(2);
+    expect(calls.filter((call) => call.op === "stroke")).toHaveLength(2);
+  });
+
+  it("draws no highlight when nothing is selected", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, undefined);
+    expect(calls.filter((call) => call.op === "arc")).toHaveLength(1);
+  });
+
+  it("draws no highlight for a selectedObjectId naming no object in the document (a stale selection)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_missing");
+    expect(calls.filter((call) => call.op === "arc")).toHaveLength(1);
+  });
+
+  it("highlights a table as its whole grid extent, not per-cell — one extra strokeRect beyond the cell borders", () => {
+    const { ctx, calls } = createFakeContext();
+    const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 2 }, cols: { kind: "literal", value: 2 } } };
+    renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY, "obj_1");
+    const rects = calls.filter((call) => call.op === "strokeRect");
+    expect(rects).toHaveLength(5); // 4 cell borders + 1 highlight around the whole grid.
+    expect(rects[4]).toEqual({ op: "strokeRect", x: 0, y: 0, w: 160, h: 48 });
+  });
+
+  it("is drawn AFTER every object, so a later object in z-order cannot occlude an earlier one's highlight", () => {
+    const { ctx, calls } = createFakeContext();
+    const circleA = circleObject("obj_1", "circle_a");
+    const circleB = circleObject("obj_2", "circle_b");
+    renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY, "obj_1");
+    // 2 arcs for the ordinary draw (a then b), then obj_1's highlight arc LAST.
+    const arcCalls = calls.filter((call) => call.op === "arc");
+    expect(arcCalls).toHaveLength(3);
+  });
+
+  it("highlights nothing, without throwing, for a selected object of a type with no visual definition yet", () => {
+    const { ctx, calls } = createFakeContext();
+    const value: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } };
+    expect(() => renderDocument(ctx, 800, 600, [value], CAMERA_IDENTITY, "obj_1")).not.toThrow();
+    expect(calls.some((call) => call.op === "stroke")).toBe(false);
+  });
+});
+
+describe("renderDocument — error badge (D-068)", () => {
+  it("badges an object holding an ErrorValue in ANY slot, not only the ones this file draws from", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "!")).toBe(true);
+  });
+
+  it("draws no badge for an object with no ErrorValue anywhere", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "!")).toBe(false);
+  });
+});
+
+describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
+  // `value: 0` keeps the world anchor at circleObject's own (0,0) origin — only
+  // the KIND differs from the literal default, which is what the indicator
+  // reads (file header: `getSlot(...)?.kind === "formula"`, never the value).
+  function boundToCellSlot(): Slot {
+    return { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 0 };
+  }
+
+  it("marks origin.x when its slot kind is formula, and leaves a literal origin.y unmarked", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", { "origin.x": boundToCellSlot() });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    const ticks = calls.filter((call) => call.op === "fillText" && (call.text === "•x" || call.text === "•y"));
+    expect(ticks).toEqual([{ op: "fillText", text: "•x", x: -14, y: 6, align: "center" }]);
+  });
+
+  it("marks both axes independently when both origin.x and origin.y are formula slots", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", { "origin.x": boundToCellSlot(), "origin.y": boundToCellSlot() });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    const ticks = calls.filter((call) => call.op === "fillText" && (call.text === "•x" || call.text === "•y"));
+    expect(ticks).toEqual([
+      { op: "fillText", text: "•x", x: -14, y: 6, align: "center" },
+      { op: "fillText", text: "•y", x: 14, y: 6, align: "center" },
+    ]);
+  });
+
+  it("marks neither axis when both origin.x and origin.y are literal", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "fillText" && (call.text === "•x" || call.text === "•y"))).toBe(false);
+  });
+
+  it("marks neither axis for a DERIVED slot — never reachable in practice (origin is never declared derived), but the check reads the kind, not the presence, of a slot", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1", { "origin.x": { kind: "derived", value: 0 } });
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "•x")).toBe(false);
   });
 });

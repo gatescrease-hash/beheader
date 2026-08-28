@@ -1,152 +1,146 @@
-# STATUS — as of entry 0092-REVIEW
+# STATUS — as of entry 0093
 
-STATE: **GREEN.** Both configs compile, 1126/1126 tests pass, 0 skipped, 0 `.only`, `npm run build`
-succeeds.
+STATE: **GREEN.** Both configs compile, 1142/1142 tests pass, 0 skipped, 0 `.only`, `npm run build`
+succeeds. Entry 0093 (§5.9's visual-feedback trio + D-092 clause 1's name labels, in
+`renderer.ts`) is **built and NOT yet reviewed.**
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
-is CLOSED.** The criterion was demonstrated by executable test at entry 0089 and confirmed by a
-human running the application at entry **0091** (D-084 clause 2, discharged). Nothing procedural
-stands in front of Phase 4.
+is CLOSED** (0091-REVIEW, D-084 clause 2 discharged). Nothing procedural stands in front of Phase 4,
+and Phase 4 has not been claimed.
 
-Last review point: **0092-REVIEW-phase3** (the addressing vocabulary is invisible — D-092).
-Before it: **0091-REVIEW-phase3**, the human's manual check, which closed Phase 3's gate.
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+Last review point: **0092-REVIEW-phase3** (the addressing vocabulary is invisible — D-092; a
+ruling, not a code review). Last CODE review: **0090-REVIEW-phase3**, ACCEPT WITH EDITS.
+Cycles since last review: **1/3** · diff since last review: **~534 lines / 3 files** (cap 800/10).
 
-## Read this first — the five things a cold reader needs
+## Read this first — the six things a cold reader needs
 
-**1. A human has now used this application, and that is where the last four defects came from.**
-Entry 0091 records the session. Two defects, both invisible to 1,126 passing tests, both in
-`main.ts`'s DOM half, both found in the first two minutes: the command input lost its focus on every
-canvas press (a press moves focus to the body as its DEFAULT action, which runs *after* the listener
-that called `focus()`), and the canvas backing store was sized in CSS pixels, so every line was
-resampled on a scaled display. Both fixed at 0091-REVIEW. **This is the second consecutive review
-where every finding was in that region.** 0091-REVIEW §7 asks for D-084's mechanism — a human
-session — at every phase gate from here.
+**1. §5.9's feedback trio and D-092's name label are BUILT, at entry 0093, and NOBODY HAS SEEN THEM
+IN A BROWSER.** `renderDocument` now draws, in addition to every object's body: a selection
+highlight (re-strokes the selected object's own path, or a table's whole grid extent), an error
+badge (`"!"`, for any object holding an `ErrorValue` in ANY slot), a formula-driven indicator
+(`"•x"`/`"•y"`, when `origin.x`/`origin.y`'s slot kind is `"formula"`), and a screen-space name
+label centred above every object that has one. 34 tests in `renderer.test.ts` (16 new), all
+positions verified against known camera math — **none verified against a real picture.** Given
+0090-REVIEW and 0091-REVIEW both found their defects in exactly the region tests could not reach,
+treat the exact pixel layout (label/badge/tick offsets, whether a long name collides with anything)
+as unconfirmed until a human looks. **D-090's prompt-sequence preview did NOT land in this cycle** —
+it needs `state.pending` reaching `renderer.ts`, which is new `main.ts` plumbing, deliberately split
+off (0092-REVIEW §5, 0093's own declared scope).
 
-**2. THE ADDRESSING VOCABULARY IS INVISIBLE, and that is a gap in the brief (D-092).** The human
-found it at entry 0092 and it is the most important open item here. Rule 3 makes addressing
-load-bearing, §5.2 gives the operator a name as their half of it, and every authoring act — `link`,
-`set`, `refs`, `delete`, `rename` — is spelled in names and slot paths. **The running application
-displays neither.** Three holes: *object → name* (click a circle, learn it is `circle_2` — not in
-the brief at all), *name → object* (`select` + a highlight — specified, unbuilt, D-068), and
-**object → its slots** (what can I link, and which are `derived`? — not in the brief at all, and the
-one that blocks Phase 4 for a human). `list` prints names and types only. **D-092** closes holes 1
-and 3 without amending anything: a name drawn beside each object, and a `props <object>` command
-printing each slot's path, kind and value.
+**2. THE ADDRESSING VOCABULARY IS PARTLY VISIBLE NOW; `props` IS STILL OWED.** D-092 named two
+holes: object → name (closed, item 1 above) and object → its slots (still open). `list` prints
+names and types only; there is still no command that prints what slots an object HAS, their KIND,
+or their values. `link polygon_1.origin.x table_x.A1` still requires knowing in advance that both
+paths exist and neither is `derived`. **D-092 clause 4's `props <object>` is next in the queue,
+below.**
 
-**3. The human's session at entry 0091 set the rest of the queue.** Ruled: **D-088** (every printable
-keystroke reaches the command input wherever focus is; `ctrl`/`alt`/`meta` combinations never route)
-· **D-089** (command history on up/down, held in `AppState`) · **D-090** (a prompt sequence that has
-gathered a point DRAWS it, and the geometry it would produce, from `state.pending` and never into the
-document) · **D-091** (the table's grey grid against a near-black outline is deliberate and stands).
+**3. The human's session at entry 0091 set the rest of the queue.** Ruled: **D-088** (every
+printable keystroke reaches the command input wherever focus is; `ctrl`/`alt`/`meta` combinations
+never route — clause 1 built, 2–4 owed) · **D-089** (command history on up/down, held in
+`AppState`) · **D-090** (a prompt sequence that has gathered a point DRAWS it, and the geometry it
+would produce, from `state.pending` and never into the document — owed) · **D-091** (the table's
+grey grid against a near-black outline is deliberate and stands).
 
-**Q-014, the properties panel, is OPEN and the HUMAN'S ALONE — and it is now NARROWER than it was.**
-D-092 closes the "I can't see anything" half without touching the brief, so Q-014 is only about
-EDITING and LINKING slots by mouse, which §5.10's "no panels, no toolbars" forbids in terms. The
-recommendation is option (a), floating and per-object, for the human's own reason: linking is a
-binary operation between two slots on two objects, and one fixed panel cannot express a binary
-operation. **Nothing is built against it, not even a small version.**
+**Q-014, the properties panel, is OPEN and the HUMAN'S ALONE.** Narrower since D-092: only EDITING
+and LINKING slots by mouse remains in question. **Nothing is built against it, not even a small
+version.**
 
 **4. `main.ts` is two halves, and only one of them is tested.** `AppState` and every transition over
-it (`submitLine`, `performEffect`, `pointerDownAt`, `pointerMoveTo`, `wheelZoomAt`, `panByScreen`,
-`escape`, `replaceDocument`, …) are pure, take plain numbers plus a `Viewport`, and have 36 tests.
-`start` — the canvas, the listeners, the log element, the file picker, the download anchor — has
-**none**, because testing it needs a DOM and that needs a dependency this project will not add.
-**Every finding of the last two reviews lived in `start`.** D-089 clause 1 is the standing response:
-new behaviour goes in `AppState` where it can be asserted, and only the listener stays down there.
+it are pure and have 36 tests. `start` — the canvas, the listeners, the log element, the file
+picker, the download anchor — has **none**, because testing it needs a DOM this project will not
+add. **Every finding of the last two code reviews lived in `start`.** This cycle's one change to
+`start` (passing `state.interaction.selectedObjectId` into `renderDocument`) is therefore itself
+unverified by any test, same as everything else down there.
 
 **5. `load` is wired, and that makes an unbuilt check user-reachable.** A hand-edited document whose
 formula AST nests deeper than `MAX_FORMULA_AST_DEPTH` reaches `deserializeDocument` from a button and
 throws a `RangeError` out of the file-read promise (**D-083** clause 4's loader check is not built;
-**D-081**'s name gate is not either). Nothing this build SAVES can contain such an AST — `parser.ts`
-refuses it. Owned by `document.ts`'s cycle.
+**D-081**'s name gate is not either). Owned by `document.ts`'s cycle.
 
 **Still binding, one line: five names §5.2's grammar allows are NOT available** — `AND`, `OR`,
 `NOT`, `TRUE`, `FALSE` lex as formula keywords and `checkNameAvailable` refuses them in every case
 (**D-080**). Function names are safe and are NOT reserved.
 
-## Next cycles — ordered, and the order is reasoned in 0092-REVIEW §5
+## Next cycles — ordered
 
-1. **`renderer.ts`: D-068's feedback trio + D-090's prompt preview + D-092 clause 1's name labels.**
-   Selection highlight, error badge, formula-driven indicator, the marker-and-preview for a prompt
-   sequence that has gathered a point, and a screen-space name beside every object. Together because
-   all five are "draw something that is not an object" and all five need the transform reset D-068
-   owns. **This is now a large cycle — watch it against §6.3's 800/10 cap and split it if it runs
-   over, keeping D-068's three together as D-068 requires.**
-2. **`commands.ts`: D-092 clause 4's `props <object>`.** Every slot's path, kind and value. Small,
+1. **`commands.ts`: D-092 clause 4's `props <object>`.** Every slot's path, kind and value. Small,
    entirely testable, and it is what a properties panel would display if Q-014 is approved, so the
-   work composes whichever way that goes.
-3. **D-088 + D-089, the command input's behaviour.** Printable-key routing and history.
+   work composes whichever way that goes. **This is the highest-value remaining cycle for a human
+   trying to actually link two objects together.**
+2. **`main.ts` + `renderer.ts`: D-090's prompt-sequence preview.** Needs `state.pending` threaded
+   into the render call, and per-command preview geometry (what does a live `circle`/`polygon`/`rect`
+   prompt draw before it is finished?). Deliberately split from entry 0093.
+3. **D-088 clauses 2–4 + D-089, the command input's behaviour.** Printable-key routing from
+   anywhere and history.
 4. **§5.11's load boundary** in `document.ts`: **D-083** clause 4's depth check and **D-081**'s
    `createObject` name gate (whose pinned "duplicate DOES commit" test is meant to FLIP then).
 
-**Phase 4 should follow at least cycles 1 and 2, and that is a recommendation rather than a rule.**
-Its criterion (c) requires "feedback that X is driven" during a drag, which is D-068's third piece.
-More pointedly, 0092-REVIEW §5: Phase 4 asks a HUMAN to bind `polygon_a.origin.x` to `table_x.A1`
-and have `table_x.B1` read `polygon_b.origin.x`. Until D-092 lands that human cannot see which
-polygon is which, or that `origin.x` is a path they are allowed to write. The phase is reachable
-without it and would be miserable.
-
+**A human session is owed before Phase 4 is attempted in earnest.** Nothing procedural blocks
+starting Phase 4 today, but its criterion needs a human to bind two polygons through a table by
+mouse and by formula, and until `props` exists that human still cannot discover `origin.x` is a
+writable path without reading `primitives/schema.ts`.
 
 ## Built and reviewed
 
 Phase 0 (0027-REVIEW) · formula engine (0037) · the whole table primitive through row/column
 insert/delete and `delete <table> force` (0054) · `render/camera.ts` + entry 0055's header audit
-(0058) · `primitives/geometry.ts` (0060) · `render/renderer.ts` (0062) · `render/hittest.ts` (0064) ·
-entry 0065's header audit · `render/interaction.ts` (0067) · `command/parser.ts` (0069) ·
-`command/prompt.ts` + D-071's formula path (0071) · entries 0072–0073's fix-list work (0074) ·
-`command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`, and
-`TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · `commands.ts`'s four slot commands through one
-`writeSlot` path, and `engine/formula/format.ts` (0080) · `commands.ts`'s `delete`, `refs` and `list`
-(0082) · `mutation.ts`'s `RenameObjectOperation` + `findInvalidRenames`, and `commands.ts`'s
-`rename` handler (0084) · `CommandEffect` and the five effect handlers (0086) · the two formula depth
-limits (0088).
+(0058) · `primitives/geometry.ts` (0060) · `render/renderer.ts`'s original body/table drawing (0062,
+widened by 0093, unreviewed) · `render/hittest.ts` (0064) · entry 0065's header audit ·
+`render/interaction.ts` (0067) · `command/parser.ts` (0069) · `command/prompt.ts` + D-071's formula
+path (0071) · entries 0072–0073's fix-list work (0074) · `command/commands.ts`'s seam and its four
+creation handlers, `document.ts`'s `mintObjectId`, and `TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078)
+· `commands.ts`'s four slot commands through one `writeSlot` path, and `engine/formula/format.ts`
+(0080) · `commands.ts`'s `delete`, `refs` and `list` (0082) · `mutation.ts`'s
+`RenameObjectOperation` + `findInvalidRenames`, and `commands.ts`'s `rename` handler (0084) ·
+`CommandEffect` and the five effect handlers (0086) · the two formula depth limits (0088) ·
+`main.ts` rewritten from the stub, `render/camera.ts`'s `clampCamera`/`clampZoom`,
+`render/hittest.ts`'s `documentExtent`, `index.html` (0089, reviewed at 0090 and again by the human
+at 0091 — four defects found and fixed across the two).
 
-## Reviewed at 0090-REVIEW (ACCEPT WITH EDITS)
+## Built this batch, not yet reviewed
 
-**Entry 0089 — `main.ts`, and the two render/ additions it needed.**
+**Entry 0093 — `renderer.ts`'s selection highlight, error badge, formula-driven indicator
+(D-068), and D-092 clause 1's name label; `main.ts` wired to pass the selection through.**
 
-- **`src/main.ts`** — rewritten from the stub. The pure half (`AppState` + transitions) and the DOM
-  half (`start`, the download anchor, the file picker), split so the rules are testable and the
-  browser is not. 36 tests in `src/main.test.ts`. 0090-REVIEW fixed four defects: the canvas
-  backing size (F1, **D-086**), `fit`'s over-broad degeneracy guard (F2, **D-087**), the unreachable
-  space-drag (F3, **D-085**), and the download anchor (F4).
-- **`src/render/camera.ts`** — `clampCamera` (D-062's boundary, in one function) and `clampZoom`
-  exported with its signature changed to `(requestedZoom, fallbackZoom)`, because `fit` must know
-  the clamped zoom before it can place a camera. `IDENTITY_ZOOM` exported. Two header claims the
-  work falsified are corrected (D-065).
-- **`src/render/hittest.ts`** — `documentExtent(objects)`, the box `fit` fits to, built from the same
-  per-type reads the hit tests make (D-066: drawn extent and clickable extent are one extent).
-  Degenerate extents are skipped exactly as they are un-hittable.
-- **`index.html`** — canvas, log, input bar, minimal CSS. No behaviour.
+- **`src/render/renderer.ts`** — `renderDocument` gained a sixth, optional parameter
+  (`selectedObjectId?: string`) and a third rendering pass (screen-space chrome, after a second
+  identity-transform reset). `buildCirclePath`/`buildVerticesPath` factored out of
+  `drawCircle`/`drawVerticesShape` so the highlight re-strokes the SAME path rather than computing
+  an independent outline (D-010). `chromeAnchorPoint` reuses the same `origin.x`/`origin.y` reads
+  (and table's `?? 0` fallback) that positions the object's body, so a label can never disagree with
+  the drawn picture. 16 new tests; 3 existing table tests updated because a table's `fillText` calls
+  genuinely changed (see the entry's Decisions §3).
+- **`src/main.ts`** — one line: `paint()`'s `renderDocument` call now passes
+  `state.interaction.selectedObjectId`. Resolves no name (D-082 clause 4's discipline, held here
+  too).
 
-Verified at review, re-run not re-read: `tsc` clean on both configs, 1126/1126, `npm run build` succeeds. Entry 0089's own five-mutant check
-against `main.ts` (each seeded alone, reverted after) killed 1, 1, 6, 1 and 3 tests respectively.
+Verified: `tsc` clean on both configs, 1142/1142, `npm run build` succeeds. Two-mutant check against
+`renderer.ts` (each seeded alone, reverted after): "highlight always draws" killed 8 tests,
+"`objectHasError` always false" killed 2.
 
 ## Not started
 
-§5.9's visual-feedback trio (**D-068**) · **D-092's name labels and `props` command** · §5.9's per-vertex drag path ·
-`polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
-(D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation (D-081,
-D-083 clause 4) · Phases 4–7.
+**D-092 clause 4's `props` command** · **D-090's prompt-sequence preview** · §5.9's per-vertex drag
+path · `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill
+hit-testing (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation
+(D-081, D-083 clause 4) · D-088 clauses 2–4 · D-089 · Phases 5–7.
 
 **Phase 4 is OPEN and is NOT claimed.** (a) data drives geometry and (b) geometry drives data are
 both reachable from typed lines; (c) partial binding under drag is demonstrated end to end in
-`main.test.ts` ("drags a polygon whose origin.x is a formula along Y only"), with the feedback
-reaching the LOG rather than the canvas. What is missing is all three in ONE document, and (c)'s
-"feedback that X is driven" wants the on-canvas half D-068 owns. Nothing procedural forbids starting
-it — 0091-REVIEW §6 recommends the three queued cycles first, and that is a recommendation.
+`main.test.ts`, with the feedback now reaching BOTH the log and (untested-by-eye) the canvas via
+this cycle's formula-driven indicator. What is missing is all three in ONE document, authored by a
+human who can find the paths involved — which is `props`'s job, not built yet.
 
 ## Open fix list — **read 0090-REVIEW §9 and 0091-REVIEW §5 for the full text**
 
-Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-REVIEW. Old item 5 (the
-~200 KB echo) is **CLOSED by ruling** — the line stays as typed, and it is not a defect; 0090-REVIEW
+Numbering follows 0090-REVIEW §9, restarted there, plus two added at 0091-REVIEW. Unchanged this
+cycle. Old item 5 (the ~200 KB echo) is **CLOSED by ruling** — the line stays as typed; 0090-REVIEW
 §9 has the reasoning and the one condition that would reopen it.
 
 1. **§5.11's loader validates a loaded formula's AST depth once, at the boundary** (**D-083**
-   clause 4). `deps.ts` and `eval.ts` get no depth parameter. **Now user-reachable** — entry 0089
-   wired the Load button (see item 4 of the cold-read section). Owned by `document.ts`'s cycle,
-   together with **D-081**'s `createObject` name gate.
+   clause 4). `deps.ts` and `eval.ts` get no depth parameter. **User-reachable** since entry 0089
+   wired the Load button. Owned by `document.ts`'s cycle, together with **D-081**'s `createObject`
+   name gate.
 2. **Give the missing-slot refusal a remedy** — "references a slot that does not exist" tells the
    operator nothing to do. Message only: **D-047 clause 4 does not move**.
 3. **`findDanglingReferences` names one dependent once per MISSING SOURCE** — a refused 1,000-term
@@ -163,31 +157,36 @@ Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-RE
    1's `preventDefault` handles the ordinary case. Owned by D-088's cycle.
 7. **`TABLE_GRID_STROKE_STYLE` has no comment** where its neighbour has a paragraph. **D-091**
    explains the choice and the constant should say a line of it. Owned by the `style`-slots cycle.
+8. **The new screen-space chrome constants (label/badge/tick offsets) are untuned** and this cycle's
+   own equivalent of item 7 — chosen, not measured, and disclosed as such in entry 0093. Not a
+   defect (Rule 5); revisit only once a human has actually seen the layout.
 
 ## Known problems (detail lives where the pointer says)
 
 - **`main.ts`'s `start` is untested code** — every listener, the canvas sizing, the log rewrite, the
-  download anchor and the file picker. Minimised, not solved. Entry 0089, "where I got stuck", and
-  **0090-REVIEW found four defects there and none anywhere else.** Treat a change to that region as
-  unverified until someone clicks on it.
-- **A human HAS now used it** (entry 0091), and found two defects the whole suite could not. Both
-  fixed. **The three fixes made at 0091-REVIEW are themselves unverified by any test** — focus
-  retention, the device-pixel-ratio backing store, and backing-pixel pan deltas. Confirm them by
-  eye at the next session.
-- **A prompt sequence shows nothing where you clicked** — no marker for a picked point, no preview
-  of the shape being built, so picking a circle's radius is a guess. Ruled **D-090**, queued with
-  D-068.
+  download anchor and the file picker, now including the one-line selection hand-off to
+  `renderDocument`. **0090-REVIEW found four defects there and none anywhere else.** Treat a change
+  to that region as unverified until someone clicks on it.
+- **§5.9's feedback trio and D-092's name label are drawn but UNSEEN.** Entry 0093 built them against
+  known camera math, not against a picture. The exact layout (offsets, whether a badge collides with
+  a long name, whether `•x`/`•y` reads as intended) is unconfirmed.
+- **A prompt sequence still shows nothing where you clicked** — no marker for a picked point, no
+  preview of the shape being built. Ruled **D-090**, queued, explicitly deferred out of entry 0093.
+- **An operator still cannot discover an object's slots.** No command prints them yet. **D-092**
+  clause 4 owes `props <object>` — next in the queue. Until then the only source is
+  `primitives/schema.ts`.
+- **The formula-driven indicator is read NARROWLY** — `origin.x`/`origin.y` only, the two slots a
+  drag can move today. A `style` slot bound to a formula, once `style` slots exist, gets no
+  indicator without a widening.
 - **A printable keystroke does not reach the command input unless it is focused.** The focus is no
-  longer lost on a canvas press, but D-088 clauses 2–4 (routing from anywhere, excluding
+  longer lost on a canvas press (D-088 clause 1), but clauses 2–4 (routing from anywhere, excluding
   `ctrl`/`alt`/`meta`) are not built.
 - **There is no command history.** Ruled **D-089**, queued.
-- **A selection changes nothing on screen** (D-068), and **an error badge and the formula-driven
-  indicator do not exist** either. All three are one cycle's work.
 - **A hand-edited saved file can throw a `RangeError` out of the Load button** — fix-list item 1.
 - **Every pointer move repaints the canvas AND rewrites the whole log's `textContent`.** The repaint
   is §5.9's accepted cost; the log rewrite is entry 0089's own and is unmeasured.
 - **`fit`'s margin (`FIT_VIEWPORT_FRACTION = 0.9`) is chosen, not measured**, like every other
-  untuned constant in `render/` (Rule 5).
+  untuned constant in `render/` (Rule 5) — now joined by entry 0093's chrome offsets.
 - **`escape` is bound to the window**, so it cancels a live prompt sequence from anywhere, including
   mid-typing. Believed right (AutoCAD's behaviour); untested in use.
 - **`zoom`'s echoed line names the REQUEST and `main.ts` adds a second line with the RESULT.**
@@ -195,9 +194,6 @@ Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-RE
 - **`format.ts`'s elision does not re-parse** — a disclosed exception to the round-trip property,
   reachable only through a loaded AST deeper than any parse can build.
 - **A `delete` refusal can name the same dependent twice** — fix-list item 3.
-- **An operator cannot discover an object's slots.** No command prints them. **D-092** clause 4 owes
-  `props <object>`. Until then the only source is `primitives/schema.ts`.
-- **An operator cannot tell which object on canvas is which name.** **D-092** clause 1 owes the label.
 - **`refs` names a range's START cell as the source** when the range's table is being removed. The
   DEPENDENT is right, which is what §5.1.1 asks. Entry 0081, disclosed not fixed.
 - **`refs <object>` derives edges twice.** Rule 5's accepted trade; 326 ms for the largest table
@@ -219,9 +215,8 @@ Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-RE
 - **A `#PARSE` position is an offset into the FORMULA, not into the line.** A caret-positioning UI
   will need `SetFormulaCommand` to carry the line offset of its `=` plus the trimmed whitespace.
 - **A refused prompt answer is reported by the wrong grammar** — ruled **D-074**, fix-list item 6(1).
-- **Prompt order, wording and the `<8>` default form are a reading of AutoCAD, not the brief's** —
-  and now that the input bar exists, the human can finally judge them in use. **No repeat-last-command
-  gesture.**
+- **Prompt order, wording and the `<8>` default form are a reading of AutoCAD, not the brief's.**
+  **No repeat-last-command gesture** (D-089 will provide one, unbuilt).
 - **Row/column deletion CAN still be REJECTED**, contradicting §5.4 — reachable only via a raw
   `setSlot`, pinned by `mutation.test.ts`'s "KNOWN INCOHERENCE" test; D-053 forbids a one-sided fix.
 - **Two carried render gaps:** cell text is not clipped to its cell (§5.4 silent, Rule 5) ·
@@ -240,59 +235,53 @@ Numbering follows 0090-REVIEW §9, which restarted it, plus two added at 0091-RE
 
 Every ruling in `DECISIONS.md` (D-001 through **D-092**) binds without restatement here.
 
-**New at 0092-REVIEW:** **D-092** — the addressing vocabulary must be VISIBLE in the running
-application. A name is drawn beside each object (screen-space, constant size, always on at first),
-and `props <object>` prints every slot's path, KIND and value. Neither amends the brief: the brief
-is silent on both, and §5.10's "adding a command is one registry entry" is its own extension
-mechanism. Cold-read item 2 has the gap it closes.
+**D-068 and D-092 clause 1 are now IMPLEMENTED, at entry 0093** — selection highlight, error badge,
+formula-driven indicator, and the screen-space name label all draw, in `render/renderer.ts`,
+verified by 34 tests and two seeded mutants. **Unverified by a human eye** — see "Read this first"
+item 1.
 
-**New at 0091-REVIEW, from the human's session:** **D-088** (the command input keeps the keyboard:
-a canvas press refuses the browser's default focus move, every printable keystroke routes to the
-input from anywhere, and `ctrl`/`alt`/`meta` combinations never route — clause 1 built, 2–4 queued)
-· **D-089** (command history on up/down, in `AppState` and not in two variables inside `start`;
-submitted lines including refused ones, never prompt answers) · **D-090** (a prompt sequence draws
-its gathered point and the geometry it would produce, from `state.pending`, never into the document)
-· **D-091** (the table's grey grid against a near-black outline is deliberate and stands).
+**D-092 clause 4 (`props <object>`) is RULED but NOT YET BUILT** — next in the queue.
+
+**From 0092-REVIEW:** the addressing vocabulary must be VISIBLE in the running application (D-092's
+full text). Neither mechanism amends the brief: the brief is silent on both, and §5.10's "adding a
+command is one registry entry" is its own extension mechanism.
+
+**From 0091-REVIEW, from the human's session:** **D-088** (the command input keeps the keyboard —
+clause 1 built, 2–4 queued) · **D-089** (command history, queued) · **D-090** (a prompt sequence
+draws its gathered point, queued) · **D-091** (the table's grey grid is deliberate and stands).
 
 **Superseded in part: D-086 clause 2's "one backing pixel is one CSS pixel"** — the backing store now
-matches the DISPLAY, and clause 3's required conversion is built at `screenPointOf`. 0091-REVIEW §4
-records why the original was the right fix and the wrong constant. `DECISIONS.md` is append-only, so
-the clause stands there as written and this line is the correction.
+matches the DISPLAY, and clause 3's required conversion is built at `screenPointOf`. `DECISIONS.md`
+is append-only, so the clause stands there as written and this line is the correction.
 
-**New at 0090-REVIEW, all four already applied in code:** **D-084** (Phase 3's gate is cleared only
-by a human run, recorded in a numbered entry — no implementer cycle may claim it) · **D-085**
-(§5.9's space-drag arms on a space while the input bar is EMPTY, and `target !== input` is never an
-acceptable guard for a global key, because §5.10 makes the input the target of everything) ·
-**D-086** (one canvas backing pixel is one CSS pixel, re-read before every paint; a future
-device-pixel-ratio cycle must add the conversion at `screenPointOf` in the same change) · **D-087**
-(a degenerate extent is a POINT — both axes zero; a FLAT extent is fitted to the axis it has, and is
-never described as a point).
+**From 0090-REVIEW, all four implemented:** **D-084** (Phase 3's gate needs a human run — discharged
+at 0091) · **D-085** (space-drag arms on an empty input bar) · **D-086** (one canvas backing pixel is
+one CSS pixel, re-read before every paint) · **D-087** (a degenerate extent is a POINT; a FLAT extent
+is fitted).
 
-The ones entry 0089 implemented: **D-075** and **D-082** (an effect is data; `main.ts` performs it through an
-exhaustive switch and resolves no name) — **now implemented end to end, clauses 3 and 4 included** ·
-**D-062** (a loaded camera is clamped in `render/`, at the boundary) — **implemented as
-`clampCamera`, called by `main.ts` at every document replacement** · **D-061** (`camera.x`/`.y` is the
-world point at the screen's TOP-LEFT corner) — the convention `fit`'s arithmetic is written against ·
-**D-066** (a degenerate extent needs its OWN guard) — `fit`'s single-point branch, narrowed to a
-true point by **D-087** · **D-072** (a pick
-is a prompt answer, as a WORLD point) · **D-027 clause 2** (the camera never goes through `mutate`).
+**From entry 0089:** **D-075**/**D-082** (an effect is data; performed through an exhaustive switch,
+no name resolved) · **D-062** (a loaded camera is clamped in `render/`, at the boundary) · **D-061**
+(`camera.x`/`.y` is the world point at the screen's TOP-LEFT corner) · **D-066** (a degenerate extent
+needs its OWN guard, narrowed to a true point by D-087) · **D-072** (a pick is a prompt answer, as a
+WORLD point) · **D-027 clause 2** (the camera never goes through `mutate`).
 
 Still owed, unchanged: **D-074** (a prompt sequence's own refusal IS the message) · **D-081**
 (`createObject`'s name gate, owed by the load cycle) · **D-083 clause 4** (a loaded AST's depth,
-checked once at the load boundary) · **D-068** (§5.9's feedback trio, one cycle, in `renderer.ts`).
+checked once at the load boundary).
 
 ## Live PROVISIONAL tags and open questions
 
 **`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** (`DEFAULT_SHAPE_STROKE_WIDTH`, the
-`TABLE_CELL_*` constants): world units or screen pixels? Provisional (a) world units. Due with the
-`style`-slots cycle — and still blocking `pan`'s argument grammar, though not the pan gesture.
+`TABLE_CELL_*` constants, `SELECTION_HIGHLIGHT_WIDTH`): world units or screen pixels? Provisional
+(a) world units. Due with the `style`-slots cycle — still blocking `pan`'s argument grammar, though
+not the pan gesture. **Entry 0093's new CHROME constants deliberately do NOT take a side in this —
+they are screen pixels by a different, stated reason (legibility at any zoom), not an answer to
+what a stroke WIDTH should be.**
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
-**Q-014 — the properties panel — is OPEN and is the HUMAN'S ALONE.** They asked for one at entry
-0091; §5.10 says "no panels, no toolbars". It needs a brief amendment, so no implementer and no
-reviewer may settle it, and **nothing is built against it, not even a small version**. The
-recommendation in `OPEN_QUESTIONS.md` is option (a). Note it would also moot **Q-013** (how a
-general formula is authored, which §5.10 has no command for and Phase 4(b) needs).
+**Q-014 — the properties panel — is OPEN and is the HUMAN'S ALONE.** Narrower since D-092: only
+EDITING and LINKING slots by mouse remains in question. **Nothing is built against it, not even a
+small version.**
 
 Next free: **Q-015**.
 
@@ -329,15 +318,16 @@ Next free: **Q-015**.
 - **Never spread a collection the user can size (D-077).**
 - **Four different reasons to read a slot, and they do NOT unify** (0062-, 0067-REVIEW): to
   DRAW/HIT-TEST, to SIZE a slot family, to decide whether it may be WRITTEN, and to decide whether a
-  command MAY write it.
+  command MAY write it. **A fifth joined at entry 0093: to decide whether it may be HIGHLIGHTED/
+  LABELLED** — `chromeAnchorPoint` and `drawSelectionHighlight` deliberately reuse the DRAW/HIT-TEST
+  reads rather than becoming a sixth.
 - **Mutation-check a suite that passes first try — and check the checker.** Strip ANSI
   (`sed 's/\x1b\[[0-9;]*m//g'`) and assert on the `Tests  N failed` line. Entry 0089 seeded five
-  faults one at a time and killed 1, 1, 6, 1 and 3 tests.
+  faults and killed 1, 1, 6, 1, 3; entry 0093 seeded two and killed 8, 2.
 - **A review's fix list authorises a CHANGE, never an exemption from the trigger that change fires.**
 - **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it
-  (D-065).** Entry 0089 falsified three: `camera.ts`'s "the only two producers", `screenToWorld`'s
-  "D-062 puts that guard in `render/`" (it is now built), and `hittest.ts`'s "the one exported entry
-  point".
+  (D-065).** Entry 0089 falsified three; entry 0093 falsified `renderer.ts`'s own HAZARD note about
+  `ctx` being left at the camera transform on return — it is now left at identity, by construction.
 - **Line endings:** the working tree is mixed under `core.autocrlf=true` and `git diff` shows only
   real changes. `.gitattributes` is still owed (fix list).
 - **Do NOT report the LENGTH of anything (D-076)** — the one surviving rule is `WHAT THIS IS` capped
@@ -366,3 +356,11 @@ Next free: **Q-015**.
 - **The operator cannot see what you can see.** You have `primitives/schema.ts` open; they have a
   canvas and a log. Before adding anything that the operator must NAME to use, ask where they learn
   the name from. D-092 exists because ninety-one entries went by without anyone asking.
+- **A chrome anchor MUST reuse the same read the object's BODY uses to position itself**, `?? 0`
+  fallback included, or the label/highlight can silently disagree with the picture (D-010, entry
+  0093). This is why `chromeAnchorPoint`'s `table` case matches `drawTable`'s fallback exactly
+  rather than requiring both slots present like circle/polygon/rect do.
+- **A "no text drawn" or "exact fillText array" test written before chrome existed WILL need
+  updating**, not exempting, once an object it exercises gets a real anchor point — three
+  `renderer.test.ts` table tests changed at entry 0093 for exactly this reason. Check whether the
+  test's fixture has `origin.x`/`origin.y` before assuming a chrome change is safe to skip.

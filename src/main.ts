@@ -41,11 +41,10 @@
  *     `render/camera.ts`, so `command/` only ever sees a world point (D-069).
  *
  * NOT DONE HERE
- *   - §5.9's visual feedback trio — selection highlight, error badge,
- *     formula-driven indicator. D-068 keeps all three together in ONE cycle in
- *     `render/renderer.ts`, so a selection made here is currently invisible.
- *     That cycle also owns the transform reset before screen-space chrome; this
- *     file draws no chrome, so nothing here needs one yet.
+ *   - **Drawing** §5.9's visual feedback trio, D-092 clause 1's name labels,
+ *     or D-090's prompt preview — all `render/renderer.ts`'s (0092-REVIEW),
+ *     which this file hands `state.interaction.selectedObjectId` to and
+ *     nothing more (D-082 clause 4: no name resolved, no chrome drawn here).
  *   - Injecting a Canvas2D `TextMeasurer` (Rule 1). Nothing evaluates text yet —
  *     §5.6 is Phase 5 — so there is no `EvalContext` to inject one into.
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
@@ -494,7 +493,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       canvas.width = backingWidth;
       canvas.height = backingHeight;
     }
-    renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera);
+    // The selected object reaches the renderer as an ID only (D-082 clause 4's
+    // own rule, applied here too): this file resolves no name, and `renderer.ts`
+    // draws no highlight at all for an id naming nothing (D-068).
+    renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectId);
   };
 
   const apply = (next: AppState): void => {
