@@ -86,7 +86,7 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
 
 /** A drag already in progress on `objectId`, starting from world (0, 0) — for the cases `pointerDown` cannot set up because the object is not hittable. */
 function dragFromOrigin(objectId: string): InteractionState {
-  return { selectedObjectId: objectId, drag: { objectId, lastWorldPoint: { x: 0, y: 0 } } };
+  return { selectedObjectId: objectId, drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] } };
 }
 
 describe("pointerDown — §5.9 'click to select'", () => {
@@ -95,7 +95,7 @@ describe("pointerDown — §5.9 'click to select'", () => {
     // World (10, 0) sits exactly on the rect's top edge (0,0)-(20,0).
     const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     expect(state.selectedObjectId).toBe("obj_1");
-    expect(state.drag).toEqual({ objectId: "obj_1", lastWorldPoint: { x: 10, y: 0 } });
+    expect(state.drag).toEqual({ objectId: "obj_1", lastWorldPoint: { x: 10, y: 0 }, emittedNotices: [] });
   });
 
   it("holds the object's id, not the GraphObject the hit test returned", () => {
@@ -104,7 +104,7 @@ describe("pointerDown — §5.9 'click to select'", () => {
     // Pins the SHAPE, not the absence of one guessed field name: a drag that
     // carried the object itself — the natural wrong implementation, and the
     // one that goes stale on the first commit — adds a key here and fails.
-    expect(Object.keys(state.drag ?? {}).sort()).toEqual(["lastWorldPoint", "objectId"]);
+    expect(Object.keys(state.drag ?? {}).sort()).toEqual(["emittedNotices", "lastWorldPoint", "objectId"]);
     expect(state.drag?.objectId).toBe(objects[0]?.id);
   });
 
@@ -347,6 +347,100 @@ describe("per-component dragging — §5.9 'not all-or-nothing'", () => {
     expect(outcome.objects).toBe(objects);
     expect(outcome.journal).toBe(journal);
     expect(outcome.notices).toEqual(["table_x has no origin slots, and dragging by vertex is not built yet — nothing moved"]);
+  });
+});
+
+describe("per-gesture notice dedup (D-098)", () => {
+  /** The `slides in Y only` fixture above, reused: `origin.x` driven by `table_x.A1`, `origin.y` free. */
+  function xDrivenRect(): GraphObject {
+    return {
+      ...rectObject(0, 0),
+      slots: {
+        ...rectObject(0, 0).slots,
+        "origin.x": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 10 },
+      },
+    };
+  }
+
+  it("emits a repeated notice only ONCE per gesture, not once per pointerMove sample", () => {
+    const { objects, journal } = commit([tableObject(1, [10]), xDrivenRect()]);
+    const state = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY); // origin is (10, 0) once evaluated.
+
+    const first = pointerMove(state, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
+    expect(first.notices).toHaveLength(1);
+    expect(first.notices[0]).toContain("table_x.A1");
+
+    // Same drag, another sample: origin.x is STILL driven by the SAME formula,
+    // so the notice text is identical — D-098 says once per gesture, not once
+    // per sample. x must actually move THIS step too (a zero x-delta would
+    // skip the component before it ever gets to report anything, which would
+    // pass this assertion for the WRONG reason — see `planComponent`).
+    const second = pointerMove(first.state, { x: 26, y: 9 }, first.objects, first.journal, CAMERA_IDENTITY);
+    expect(second.notices).toEqual([]);
+    // The gesture still advances and the free axis still moves — dedup only
+    // silences the REPORT, never the underlying per-component behaviour.
+    expect(slotValue(second.objects, "obj_1", "origin.x")).toBe(10);
+    expect(slotValue(second.objects, "obj_1", "origin.y")).toBe(9);
+
+    // And a third sample, same story again.
+    const third = pointerMove(second.state, { x: 27, y: 11 }, second.objects, second.journal, CAMERA_IDENTITY);
+    expect(third.notices).toEqual([]);
+  });
+
+  it("a DIFFERENT notice text within the same gesture still emits — dedup is per TEXT, not a blanket silence", () => {
+    const { objects, journal } = commit([tableObject(2, [10, 20]), xDrivenRect()]);
+    const state = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    const afterFirst = pointerMove(state, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
+    expect(afterFirst.notices).toHaveLength(1);
+    expect(afterFirst.notices[0]).toContain("table_x.A1");
+
+    // Re-point origin.x's OWN formula at a DIFFERENT cell mid-gesture (the
+    // operator typed `link rect_1.origin.x table_x.B1` without releasing the
+    // drag) — the notice's TEXT changes even though the SHAPE of the report
+    // ("did not move: it is driven by...") does not.
+    const relinked = mutate(
+      afterFirst.objects,
+      [
+        {
+          kind: "setSlot",
+          address: { objectId: "obj_1", path: ["origin", "x"] },
+          slot: { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "B1"] } }, value: 20 },
+        },
+      ],
+      afterFirst.journal,
+    );
+    if (!relinked.ok) {
+      throw new Error(`test setup: expected the relink to succeed, got: ${relinked.message}`);
+    }
+
+    // x must actually move THIS step (a zero delta skips the component
+    // entirely, before it can even report — see `planComponent`), so the
+    // screen point moves in x too, not just y.
+    const afterRelink = pointerMove(afterFirst.state, { x: 26, y: 6 }, relinked.objects, relinked.journal, CAMERA_IDENTITY);
+    expect(afterRelink.notices).toHaveLength(1); // A genuinely NEW text — surfaces despite the still-running gesture.
+    expect(afterRelink.notices[0]).toContain("table_x.B1");
+
+    // But the SAME new text, on the very next sample, dedupes again.
+    const again = pointerMove(afterRelink.state, { x: 27, y: 7 }, afterRelink.objects, afterRelink.journal, CAMERA_IDENTITY);
+    expect(again.notices).toEqual([]);
+  });
+
+  it("re-emits the same notice on a NEW gesture — pointerUp/pointerDown resets the per-gesture set", () => {
+    const { objects, journal } = commit([tableObject(1, [10]), xDrivenRect()]);
+    const firstGesture = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(firstGesture, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
+    expect(moved.notices).toHaveLength(1);
+
+    const released = pointerUp(moved.state);
+    expect(released.drag).toBeUndefined(); // The per-gesture set is discarded WITH the drag.
+
+    // A fresh gesture on the same object — its top edge is now (10,5)-(30,5).
+    const secondGesture = pointerDown({ x: 20, y: 5 }, moved.objects, CAMERA_IDENTITY);
+    expect(secondGesture.drag?.emittedNotices).toEqual([]); // D-098: a fresh gesture starts with nothing surfaced yet.
+
+    const movedAgain = pointerMove(secondGesture, { x: 25, y: 9 }, moved.objects, moved.journal, CAMERA_IDENTITY);
+    expect(movedAgain.notices).toHaveLength(1); // Same text — but a NEW gesture, so it surfaces again.
+    expect(movedAgain.notices[0]).toContain("table_x.A1");
   });
 });
 

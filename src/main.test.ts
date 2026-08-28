@@ -357,6 +357,22 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
     expect(model.derived).toEqual([]);
   });
+
+  it("rounds a derived number's float dust to 4 decimals (D-099), while `props` keeps full precision — the two formatters disagree on purpose", () => {
+    // 0100-REVIEW's own example: a circle's area-weighted centroid (computed
+    // from its polygon-approximated vertices) carries float dust even at an
+    // integer origin.
+    const state = typed(opened(), "circle x=10 y=20 r=7");
+    const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
+    const centroidX = model.derived.find((row) => row.path === "centroid.x");
+    expect(centroidX?.value).toBe("10"); // Rounded AND trimmed — never "10.0000".
+
+    // The SAME slot, through `props`, is untouched — D-099 clause 5's
+    // disclosed, deliberate divergence.
+    const propsState = typed(state, "props circle_1");
+    const propsLines = newLines(state, propsState);
+    expect(propsLines.some((line) => line.includes("centroid.x = 10.000000000000002"))).toBe(true);
+  });
 });
 
 describe("pointer and wheel (§5.9)", () => {

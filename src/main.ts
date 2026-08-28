@@ -434,9 +434,10 @@ export function replaceDocument(state: AppState, document: Document, line: strin
 /**
  * One row of the properties panel: the slot PATH exactly as the operator would
  * type it after the object's name (D-094 clause 4), the last evaluated VALUE as
- * `command/props.ts`'s `describeSlotValue` renders it, and — only for a formula
- * slot (D-094 clause 6) — the source `formula/format.ts` reconstructed, without
- * a leading `=` (the DOM writer adds one).
+ * `command/props.ts`'s `describeSlotValue` renders it — rounded to at most 4
+ * decimal places, per **D-099** — and — only for a formula slot (D-094 clause
+ * 6) — the source `formula/format.ts` reconstructed, without a leading `=`
+ * (the DOM writer adds one).
  */
 export interface PanelRow {
   readonly path: string;
@@ -465,7 +466,10 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
   const grouped = buildSlotDescriptors(object, objects).map((descriptor) => ({
     row: {
       path: slotKey(descriptor.path),
-      value: describeSlotValue(descriptor.value),
+      // D-099: the ONE caller that rounds a displayed number — 4 decimal
+      // places, trimmed — so float dust (`10.000000000000002`) doesn't read
+      // as precision. `props`'s own output (`commands.ts`) stays untouched.
+      value: describeSlotValue(descriptor.value, { maxDecimals: 4 }),
       formulaSource: descriptor.formulaSource,
     },
     derived: descriptor.kind === "derived",

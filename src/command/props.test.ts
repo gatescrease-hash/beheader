@@ -139,3 +139,39 @@ describe("describeSlotValue — every Value variant (§5.1), moved here at D-094
     expect(describeSlotValue({ x: 3, y: 4 })).toBe("3,4");
   });
 });
+
+describe("describeSlotValue — maxDecimals (D-099): panel-only display rounding", () => {
+  it("with no options at all, a number renders exactly as before D-099 — byte-identical", () => {
+    expect(describeSlotValue(10.000000000000002)).toBe("10.000000000000002");
+    expect(describeSlotValue(152.95081246064453)).toBe("152.95081246064453");
+  });
+
+  it("rounds to AT MOST maxDecimals decimal places and TRIMS trailing zeros, so an integer stays bare", () => {
+    expect(describeSlotValue(10.000000000000002, { maxDecimals: 4 })).toBe("10"); // never "10.0000"
+    expect(describeSlotValue(152.95081246064453, { maxDecimals: 4 })).toBe("152.9508");
+    expect(describeSlotValue(1.5, { maxDecimals: 4 })).toBe("1.5"); // fewer than 4 decimals to begin with — nothing padded on
+  });
+
+  it("a non-zero value that would round to 0 shows in EXPONENTIAL form instead of lying with '0'", () => {
+    // A circle centred on the origin's own float dust — exactly the case
+    // D-099 clause 3 names.
+    expect(describeSlotValue(1.2246467991473532e-16, { maxDecimals: 4 })).toBe("1.2246e-16");
+    expect(describeSlotValue(-1.2246467991473532e-16, { maxDecimals: 4 })).toBe("-1.2246e-16");
+  });
+
+  it("an EXACT zero still renders as plain '0', not exponential — clause 3 is about hiding a lie, and zero is not one", () => {
+    expect(describeSlotValue(0, { maxDecimals: 4 })).toBe("0");
+  });
+
+  it("rounds each component of a Point independently", () => {
+    expect(describeSlotValue({ x: 10.000000000000002, y: 1.2246467991473532e-16 }, { maxDecimals: 4 })).toBe("10,1.2246e-16");
+  });
+
+  it("leaves every other Value variant untouched by maxDecimals (D-099 clause 4)", () => {
+    expect(describeSlotValue("42", { maxDecimals: 4 })).toBe('"42"');
+    expect(describeSlotValue(true, { maxDecimals: 4 })).toBe("true");
+    expect(describeSlotValue(null, { maxDecimals: 4 })).toBe("nothing");
+    expect(describeSlotValue({ error: "#REF", message: "no such slot" }, { maxDecimals: 4 })).toBe("#REF: no such slot");
+    expect(describeSlotValue([{ x: 0, y: 0 }, { x: 1, y: 1 }], { maxDecimals: 4 })).toBe("2 points");
+  });
+});

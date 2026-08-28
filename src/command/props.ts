@@ -21,7 +21,12 @@
  *   `describeSlotValue` renders one slot's VALUE as the text `command/
  *   commands.ts`'s echo lines show — the same "one formatter, not two"
  *   reasoning D-094 clause 9 states for the descriptor list applies to the
- *   text built from it (entry 0097 moved it here).
+ *   text built from it (entry 0097 moved it here). **D-099** gives it one
+ *   optional `maxDecimals` argument rather than a second copy: absent (every
+ *   `commands.ts` caller, `props` included), a number renders exactly as
+ *   before; `main.ts`'s `buildPanelModel` is the ONE caller that passes
+ *   `{ maxDecimals: 4 }`, rounding a displayed number for the panel while
+ *   leaving `props`'s own output byte-identical.
  *
  *   `commands.ts`'s `props` handler formats `SlotDescriptor[]` into log
  *   lines; the properties panel (D-094, not yet built) will render rows from
@@ -167,8 +172,18 @@ function tableCellsSummary(object: GraphObject): SlotDescriptor {
  * value's TYPE for a `#TYPE` message: this one shows the value itself,
  * because D-041's report is "here is what was kept" and a type name would
  * not tell the operator whether to type over it.
+ *
+ * `options.maxDecimals` (**D-099**): absent, every number renders via plain
+ * `String(value)`, byte-identical to before this option existed — every
+ * `command/commands.ts` caller, `props` included, relies on that. Set (only
+ * by `main.ts`'s `buildPanelModel`), a `number` and each component of a
+ * `Point` round to at most that many decimal places — see
+ * `formatDisplayNumber`. Untouched either way (D-099 clause 4): the `n
+ * points` summary, the table `cells` summary string (already text, not a bare
+ * number, by the time it reaches here), the error-value text, and the
+ * quoting of strings.
  */
-export function describeSlotValue(value: Value): string {
+export function describeSlotValue(value: Value, options?: { readonly maxDecimals?: number }): string {
   if (value === null) {
     return "nothing";
   }
@@ -178,12 +193,49 @@ export function describeSlotValue(value: Value): string {
   if (typeof value === "string") {
     return `"${value}"`;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (typeof value === "boolean") {
     return String(value);
+  }
+  if (typeof value === "number") {
+    return formatDisplayNumber(value, options?.maxDecimals);
   }
   if (Array.isArray(value)) {
     return `${value.length} points`;
   }
   const point = value as Point;
-  return `${point.x},${point.y}`;
+  return `${formatDisplayNumber(point.x, options?.maxDecimals)},${formatDisplayNumber(point.y, options?.maxDecimals)}`;
+}
+
+/**
+ * One number, for `describeSlotValue`'s display (**D-099**). `maxDecimals`
+ * absent — every caller but `buildPanelModel` — is plain `String(value)`,
+ * unchanged from before this function existed.
+ *
+ * With `maxDecimals` set: rounds to AT MOST that many decimal places and
+ * TRIMS trailing zeros, so an integer stays bare (`10`, never `10.0000`).
+ * `toFixed` then a round-trip through `Number`/`String` is what does the
+ * trimming for free — a JS number's own default string form never carries a
+ * trailing zero, so there is nothing to strip by hand (D-099 clause 2).
+ *
+ * EXCEPT when that rounds a genuinely non-zero value to `0` (clause 3): a
+ * `centroid.y` of float dust reading `0` on screen is a lie the operator
+ * cannot detect, so that one case reports in EXPONENTIAL form instead, at the
+ * same precision (`1.2246e-16`, not `0`) — an exact `0` is unaffected, since
+ * `0 !== 0` is false.
+ *
+ * A non-finite number is unreachable through this path today — every
+ * reachable `Value` is `finiteOrTypeError`-checked at evaluation time (D-025)
+ * — but `toFixed`/`toExponential` both throw on `NaN`/`±Infinity`, so it is
+ * guarded here rather than assumed away (clause 4; this file's own
+ * "never throws" posture, matching every other reader of a `Value`).
+ */
+function formatDisplayNumber(value: number, maxDecimals: number | undefined): string {
+  if (maxDecimals === undefined || !Number.isFinite(value)) {
+    return String(value);
+  }
+  const rounded = Number(value.toFixed(maxDecimals));
+  if (rounded === 0 && value !== 0) {
+    return value.toExponential(maxDecimals);
+  }
+  return String(rounded);
 }

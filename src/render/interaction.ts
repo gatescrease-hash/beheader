@@ -90,10 +90,20 @@ import { hitTest } from "./hittest.ts";
  * `pointerDown`: each `pointerMove` moves the object by the delta since the
  * previous one, so a step `mutate` rejects simply leaves that delta on the
  * table for the next step to retry.
+ *
+ * `emittedNotices` (**D-098**) is every notice TEXT already surfaced during
+ * THIS gesture — `pointerDown` starts it empty, `pointerMove` widens it,
+ * `pointerUp` discards it with the rest of the drag. A plain `readonly
+ * string[]`, matching every other notice collection in this file, rather than
+ * a `Set`: a gesture drags at most two components (`origin.x`/`origin.y`), so
+ * there is no volume this needs a hash structure for, and a plain array keeps
+ * `DragState` comparable with `toEqual` the way every other test fixture here
+ * already is.
  */
 export interface DragState {
   readonly objectId: string;
   readonly lastWorldPoint: WorldPoint;
+  readonly emittedNotices: readonly string[];
 }
 
 /** §5.9's whole interaction state: what is selected, and what a drag is moving. Plain data — a caller may keep it anywhere. */
@@ -117,7 +127,11 @@ export const INITIAL_INTERACTION_STATE: InteractionState = {
  *
  * `notices` is §5.9's "non-blocking feedback": one line per component that did
  * not move, naming what drives it. Non-blocking means exactly that — the
- * components that COULD move already did.
+ * components that COULD move already did. **D-098**: a notice whose TEXT was
+ * already surfaced earlier in THIS drag gesture is filtered out here — a
+ * 30-second drag of a component driven by a formula says so ONCE, not once
+ * per pointer sample. `state.drag.emittedNotices` is what tracks "already
+ * surfaced"; see `DragState`'s own doc comment.
  *
  * `rejection` is `mutate`'s own message when it refused the batch, and is a
  * different thing from a notice: a notice is a component that was never asked
@@ -152,8 +166,12 @@ export function pointerDown(screenPoint: ScreenPoint, objects: readonly GraphObj
   if (object === undefined) {
     return INITIAL_INTERACTION_STATE;
   }
-  // The ID, never the object — see the file header's INVARIANTS.
-  return { selectedObjectId: object.id, drag: { objectId: object.id, lastWorldPoint: screenToWorld(camera, screenPoint) } };
+  // The ID, never the object — see the file header's INVARIANTS. D-098: every
+  // gesture starts with no notice yet surfaced.
+  return {
+    selectedObjectId: object.id,
+    drag: { objectId: object.id, lastWorldPoint: screenToWorld(camera, screenPoint), emittedNotices: [] },
+  };
 }
 
 /**
@@ -204,16 +222,21 @@ export function pointerMove(
   }
 
   const plan = planOriginDrag(object, objects, deltaX, deltaY);
+  // D-098: dedupe against every notice TEXT this gesture has already surfaced
+  // — computed BEFORE `mutate` runs, because a skipped component's notice
+  // (formula-driven, no slot, wrong type) is about that component alone and
+  // has nothing to do with whether some OTHER component's mutation commits.
+  const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
     selectedObjectId: state.selectedObjectId,
-    drag: { objectId: drag.objectId, lastWorldPoint: worldPoint },
+    drag: { objectId: drag.objectId, lastWorldPoint: worldPoint, emittedNotices: widenedEmittedNotices },
   };
 
   if (plan.operations.length === 0) {
     // §5.9: "Only when every component is driven does the drag do nothing." The
     // pointer still moved, so the drag advances — there is no delta left to
     // retry, because nothing here can ever move.
-    return { state: advanced, objects, journal, notices: plan.notices, rejection: undefined };
+    return { state: advanced, objects, journal, notices: freshNotices, rejection: undefined };
   }
 
   const result = mutate(objects, plan.operations, journal);
@@ -223,9 +246,39 @@ export function pointerMove(
     // silently dropped. Nothing above pre-checks the value for legality:
     // `mutate` is the one channel that decides what may be stored (D-025,
     // D-027), and re-deciding it here would be a second source of truth.
-    return { state, objects, journal, notices: plan.notices, rejection: result.message };
+    // `emittedNotices` STILL widens when this step actually surfaced a fresh
+    // one (D-098's own "scope" clause: only the REJECTION message itself is
+    // never deduplicated, not the skipped-component notices beside it) — but
+    // when there is nothing fresh to fold in, `state` is handed back BY
+    // REFERENCE, exactly as before D-098, rather than a same-valued rebuild.
+    if (freshNotices.length === 0) {
+      return { state, objects, journal, notices: freshNotices, rejection: result.message };
+    }
+    const unmoved: InteractionState = {
+      selectedObjectId: state.selectedObjectId,
+      drag: { objectId: drag.objectId, lastWorldPoint: drag.lastWorldPoint, emittedNotices: widenedEmittedNotices },
+    };
+    return { state: unmoved, objects, journal, notices: freshNotices, rejection: result.message };
   }
-  return { state: advanced, objects: result.objects, journal: result.journal, notices: plan.notices, rejection: undefined };
+  return { state: advanced, objects: result.objects, journal: result.journal, notices: freshNotices, rejection: undefined };
+}
+
+/**
+ * D-098's dedup step: splits `notices` (this step's own, from `planOriginDrag`)
+ * into `fresh` (not already in `drag.emittedNotices`) and `widened` (the
+ * gesture's full emitted set so far, `fresh` folded in) — the pair every
+ * caller in `pointerMove` needs, computed once so the two lists cannot drift
+ * apart. Matched by TEXT (D-098's own wording: "a notice whose TEXT differs...
+ * is emitted"), not by which component produced it — the ruling's rationale is
+ * about what the OPERATOR sees repeated, and two components could in
+ * principle produce identical text.
+ */
+function widenEmittedNotices(
+  drag: DragState,
+  notices: readonly string[],
+): { readonly fresh: readonly string[]; readonly widened: readonly string[] } {
+  const fresh = notices.filter((notice) => !drag.emittedNotices.includes(notice));
+  return { fresh, widened: fresh.length === 0 ? drag.emittedNotices : [...drag.emittedNotices, ...fresh] };
 }
 
 /** Ends a drag, keeping the selection — §5.9 separates selecting from moving, and releasing the button does not deselect. */
