@@ -3394,3 +3394,29 @@ That is a reviewer's finding, not an implementer's miss.
 **The general form, restated for the next `dynamic` group** (D-097 clause 6, widened): a sizing
 slot's bound must hold at EVERY path that writes it — creation, direct write, and any structural
 operation that recomputes it. Enumerate the writers, not the commands.
+
+---
+
+## D-105 — A press never inherits a drag; and name suppression may not outlive the panel that replaces the name
+Answers: two findings against entry 0104   Ruled: entry 0105-REVIEW-phase4 (reviewer)
+Binding on: `src/render/interaction.ts`, `src/render/renderer.ts`, `src/main.ts`
+
+**1. Every `pointerDown` ends whatever drag was armed before it, on every branch.** Entry 0104's
+additive/empty-canvas branch returned prior `state` verbatim, drag included, while the plain-click
+branch cleared it. D-100 clause 3's "changes nothing" is about the SELECTION — it says nothing about
+a gesture. This matters because `main.ts` binds `pointerup`/`pointercancel` to the CANVAS: a release
+outside the canvas leaves a drag armed, and the next shift-click on empty canvas would have kept it,
+so the following `pointerMove` moves an object nobody is holding. Fixed by reviewer edit at this
+entry, with two tests. **The general form: a press is the start of a gesture, so no branch of
+`pointerDown` may hand one forward.**
+
+**2. A name is suppressed only where something else is showing it.** D-094 clause 3's rationale is
+that the name MOVES into the panel header; D-100 clause 8 generalised the suppression to every
+selected object on the strength of D-101's panels, which are not built. Entry 0104 correctly declined
+to invent interim multi-panel behaviour (its "Decisions I made" item 3, ratified), and the resulting
+gap — two objects selected, both names off the canvas, no panel showing either — is ACCEPTED for
+exactly one cycle. **It is bounded, not open-ended:** if D-101 does not land in the next cycle, the
+cycle after it narrows suppression to the objects that actually have a panel. Until then the gap is
+disclosed in `STATUS.md`'s known problems (reviewer edit at this entry), not silently carried.
+Building a throwaway interim would have been the Rule 5 failure; leaving the gap unnamed is the
+D-096 clause 1 failure. Neither is on offer.

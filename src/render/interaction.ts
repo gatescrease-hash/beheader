@@ -26,7 +26,8 @@
  *   **PROVISIONAL(Q-015)**: the human's own open question, not yet ruled
  *   final). A shift-click on EMPTY canvas changes nothing — clause 3's
  *   deliberate choice, so an accidental miss cannot destroy a selection built
- *   one object at a time. A drag always targets exactly the object under THIS
+ *   one object at a time — though it still ends a drag armed before it, the
+ *   same as every other press. A drag always targets exactly the object under THIS
  *   press (clause 6), never the whole selection — dragging a multi-selection
  *   as a group is a further feature and is not built here.
  *
@@ -178,9 +179,8 @@ export interface PointerMoveOutcome {
  * that keeps a stale one alive, same as before this ruling. `true` (a
  * shift-click) ADDS the object hit, unless it is already selected, in which
  * case it is REMOVED (clause 4, **PROVISIONAL(Q-015)**); on empty canvas it
- * changes nothing at all (clause 3) — prior `state` comes back exactly,
- * drag included, since nothing here should ever leave a drag running from
- * BEFORE this press.
+ * leaves the SELECTION exactly as it was (clause 3), but still ends any drag:
+ * no press may inherit a gesture armed before it.
  *
  * A drag arms on the object under THIS press regardless of whether the
  * selection just grew or shrank (clause 6: a drag targets exactly the
@@ -199,7 +199,15 @@ export function pointerDown(
 ): InteractionState {
   const object = hitTest(screenPoint, objects, camera);
   if (object === undefined) {
-    return additive ? state : INITIAL_INTERACTION_STATE;
+    if (!additive) {
+      return INITIAL_INTERACTION_STATE;
+    }
+    // Clause 3's "changes nothing" is about the SELECTION. A drag is not part
+    // of it: `main.ts` listens for `pointerup` on the CANVAS, so a release
+    // outside it leaves a drag armed, and a press must never inherit one —
+    // otherwise the next `pointerMove` moves an object nobody is holding
+    // (0105-REVIEW). The plain-click branch above already clears it.
+    return state.drag === undefined ? state : { selectedObjectIds: state.selectedObjectIds, drag: undefined };
   }
   const selectedObjectIds = additive ? toggleSelection(state.selectedObjectIds, object.id) : [object.id];
   // The ID, never the object — see the file header's INVARIANTS. D-098: every

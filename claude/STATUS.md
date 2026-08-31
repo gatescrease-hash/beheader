@@ -1,17 +1,18 @@
-# STATUS — as of entry 0104-selection-becomes-a-list
+# STATUS — as of entry 0105-REVIEW-phase4
 
-STATE: **BLOCKED — awaiting review.** Both configs compile, **1223/1223** tests pass, 0 skipped, 0
-`.only`, `npm run build` succeeds — the tree is GREEN — but entry **0104** built **D-100** (the
-selection becomes a list), and D-100 clause 9 fires a mandatory review point at that cycle's OWN
-end regardless of the batch cap. **Do not start D-101 before this review lands.**
+STATE: **CLEAR TO PROCEED.** Both configs compile, **1225/1225** tests pass, 0 skipped, 0 `.only`,
+`npm run build` succeeds. Entry **0104** (D-100, the selection becomes a list) has been reviewed:
+**ACCEPT WITH EDITS** at 0105-REVIEW-phase4, which fixed one defect (a shift-click on empty canvas
+inherited a drag armed before it), ruled **D-105**, and ratified all five of entry 0104's decisions.
+**The next slice is D-101 (N panels), and D-105 clause 2 puts a one-cycle clock on it** — see known
+problems.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
-Last review point: **0103-REVIEW-phase4** (ACCEPT WITH EDITS; **D-104** ruled). Entry **0104** is
-built and green but NOT yet reviewed.
-Cycles since last review: **1/3** · diff since last review: ~384 lines / 8 files (entry 0104).
-**REVIEW: REQUIRED** — D-100 clause 9's own trigger, not the batch cap (1/3, well under it).
+Last review point: **0105-REVIEW-phase4** (ACCEPT WITH EDITS; **D-105** ruled).
+Cycles since last review: **0/3** · diff since last review: none.
+**REVIEW: NOT NEEDED** to start the next slice.
 
 ## Read this first — the eight things a cold reader needs
 
@@ -141,7 +142,7 @@ import rather than declare them; tests in both `mutation.test.ts` and `commands.
 bullet in `engine/primitives/table.ts` and a paragraph on `findInvalidDimensionWrites`'s doc
 comment, both disclosing D-104's gap.
 
-## Built this batch, not yet reviewed
+## Built and REVIEWED this batch (0105-REVIEW-phase4, ACCEPT WITH EDITS)
 
 **Entry 0104 — D-100, the selection becomes a list.** `render/interaction.ts`'s `InteractionState.
 selectedObjectIds: readonly string[]`, `pointerDown`'s reordered signature and its new `additive`
@@ -150,7 +151,11 @@ whole list, for both the highlight pass and the chrome name-suppression pass; `m
 `performEffect`'s `"select"` case, `pointerDownAt`'s `additive` parameter and the DOM listener's
 `event.shiftKey`, and `updatePanel`'s single-panel-only-for-exactly-one-selected reading. Tests in
 `interaction.test.ts`, `renderer.test.ts`, `main.test.ts`, plus one call-site fix in
-`commands.test.ts`. **Cycles since last review: 1/3 — but D-100 clause 9 forces review regardless.**
+`commands.test.ts`. **Reviewed at 0105-REVIEW-phase4** — one defect found and fixed by reviewer edit
+(`pointerDown`'s empty-canvas additive branch now ends a drag armed before the press, **D-105**
+clause 1, +2 tests), one test expectation deliberately narrowed there, and all five of the entry's
+"Decisions I made" ratified. **Q-015 stays OPEN and deferred to the human; the provisional toggle
+stands, built and tagged.**
 
 ## Not started
 
@@ -197,6 +202,14 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
     `findInvalidDimensionWrites`.
 
 ## Known problems (detail lives where the pointer says)
+
+- **A selection of TWO OR MORE objects puts their names NOWHERE on screen** — D-100 clause 8
+  suppresses every selected object's canvas label, and the panel that is supposed to carry the name
+  instead is still ONE panel, shown only for a selection of exactly one. Accepted deliberately for
+  ONE cycle (building a throwaway interim is Rule 5's failure mode) and **bounded by D-105 clause
+  2**: if **D-101 does not land in the next cycle, the cycle after it narrows suppression to the
+  objects that actually have a panel.** Reached only by a deliberate shift-click and undone by a
+  plain click or escape.
 
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** rather
   than removing it — a narrower, disclosed remnant of the vanishing-table gap. D-097 (entry 0101)
@@ -343,8 +356,12 @@ human's to settle; blocking nothing; reversible in one branch and one test if ov
   `pointerDown(screenPoint, objects, camera)` is now calling the wrong overload of nothing and will
   fail to compile, loudly.
 - **A drag arms on the object under the press even when a shift-click just toggled it OUT of the
-  selection** — entry 0104's own reading of D-100 clause 6, not yet human-confirmed. If the human
-  disagrees, it is one branch and one test in `pointerDown` to change.
+  selection** — entry 0104's reading of D-100 clause 6, **ratified at 0105-REVIEW**. The human may
+  still overrule it as product behaviour; it is one branch and one test in `pointerDown`.
+- **EVERY branch of `pointerDown` ends a drag armed before the press** (**D-105** clause 1). The
+  additive/empty-canvas branch used to return prior `state` verbatim and inherit one — reachable
+  because `main.ts` binds `pointerup`/`pointercancel` to the CANVAS, so a release outside it leaves
+  a drag armed. A press starts a gesture; it never continues one.
 - **The properties panel is STILL ONE PANEL** after entry 0104 — a selection of exactly one shows
   it, zero or two-or-more hides it. This is a deliberate placeholder for D-101, not an attempt at
   real multi-panel behaviour; do not treat the "hide on multi-select" reading as anything but

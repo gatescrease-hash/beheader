@@ -136,11 +136,27 @@ describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", 
     expect(toggled.selectedObjectIds).toEqual([]);
   });
 
-  it("a shift-click on empty canvas changes nothing at all — neither clears nor adds (D-100 clause 3)", () => {
+  it("a shift-click on empty canvas leaves the SELECTION alone — neither clears nor adds (D-100 clause 3)", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const selected = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const missed = pointerDown(selected, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true);
-    expect(missed).toBe(selected);
+    expect(missed.selectedObjectIds).toEqual(selected.selectedObjectIds);
+  });
+
+  it("a shift-click on empty canvas still ENDS a drag armed before it (0105-REVIEW)", () => {
+    // `main.ts` listens for `pointerup` on the canvas, so a release outside it
+    // leaves a drag armed. A press must not inherit one — the plain-click
+    // branch already clears it, and the additive branch now agrees.
+    const { objects } = commit([rectObject(0, 0)]);
+    const armed = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(armed.drag?.objectId).toBe("obj_1");
+    expect(pointerDown(armed, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true).drag).toBeUndefined();
+  });
+
+  it("a shift-click on empty canvas with no drag running returns the prior state itself", () => {
+    const { objects } = commit([rectObject(0, 0)]);
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined };
+    expect(pointerDown(idle, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true)).toBe(idle);
   });
 
   it("arms a drag on the object under THIS press even when the shift-click just removed it from the selection (D-100 clause 6)", () => {
