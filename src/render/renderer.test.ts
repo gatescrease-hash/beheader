@@ -468,7 +468,7 @@ describe("renderDocument — selection highlight (D-068)", () => {
   it("re-strokes the selected circle's own path, in addition to the ordinary draw", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
-    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"]);
     expect(calls.filter((call) => call.op === "arc")).toHaveLength(2);
     expect(calls.filter((call) => call.op === "stroke")).toHaveLength(2);
   });
@@ -480,17 +480,27 @@ describe("renderDocument — selection highlight (D-068)", () => {
     expect(calls.filter((call) => call.op === "arc")).toHaveLength(1);
   });
 
-  it("draws no highlight for a selectedObjectId naming no object in the document (a stale selection)", () => {
+  it("draws no highlight for a selectedObjectIds entry naming no object in the document (a stale selection)", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
-    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_missing");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_missing"]);
     expect(calls.filter((call) => call.op === "arc")).toHaveLength(1);
+  });
+
+  it("highlights EVERY selected object, not only one (D-100 clause 8)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circleA = circleObject("obj_1", "circle_a");
+    const circleB = circleObject("obj_2", "circle_b");
+    renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY, ["obj_1", "obj_2"]);
+    // 2 arcs for the ordinary draw, then 2 more for each one's own highlight.
+    expect(calls.filter((call) => call.op === "arc")).toHaveLength(4);
+    expect(calls.filter((call) => call.op === "stroke")).toHaveLength(4);
   });
 
   it("highlights a table as its whole grid extent, not per-cell — one extra strokeRect beyond the cell borders", () => {
     const { ctx, calls } = createFakeContext();
     const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 2 }, cols: { kind: "literal", value: 2 } } };
-    renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY, "obj_1");
+    renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY, ["obj_1"]);
     const rects = calls.filter((call) => call.op === "strokeRect");
     expect(rects).toHaveLength(5); // 4 cell borders + 1 highlight around the whole grid.
     expect(rects[4]).toEqual({ op: "strokeRect", x: 0, y: 0, w: 160, h: 48 });
@@ -500,7 +510,7 @@ describe("renderDocument — selection highlight (D-068)", () => {
     const { ctx, calls } = createFakeContext();
     const circleA = circleObject("obj_1", "circle_a");
     const circleB = circleObject("obj_2", "circle_b");
-    renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY, "obj_1");
+    renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY, ["obj_1"]);
     // 2 arcs for the ordinary draw (a then b), then obj_1's highlight arc LAST.
     const arcCalls = calls.filter((call) => call.op === "arc");
     expect(arcCalls).toHaveLength(3);
@@ -509,7 +519,7 @@ describe("renderDocument — selection highlight (D-068)", () => {
   it("highlights nothing, without throwing, for a selected object of a type with no visual definition yet", () => {
     const { ctx, calls } = createFakeContext();
     const value: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } };
-    expect(() => renderDocument(ctx, 800, 600, [value], CAMERA_IDENTITY, "obj_1")).not.toThrow();
+    expect(() => renderDocument(ctx, 800, 600, [value], CAMERA_IDENTITY, ["obj_1"])).not.toThrow();
     expect(calls.some((call) => call.op === "stroke")).toBe(false);
   });
 });
@@ -605,7 +615,7 @@ describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
   });
 });
 
-describe("renderDocument — the selected object's name label is suppressed (D-094 clause 3)", () => {
+describe("renderDocument — the selected object's name label is suppressed (D-094 clause 3, D-100 clause 8)", () => {
   function boundToCellSlot(): Slot {
     return { kind: "formula", ast: { type: "reference", address: { objectId: "obj_9", path: ["cells", "A1"] } }, value: 0 };
   }
@@ -613,7 +623,7 @@ describe("renderDocument — the selected object's name label is suppressed (D-0
   it("does not draw the selected object's own name — its name is in the properties panel's header instead", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
-    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"]);
     expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(false);
   });
 
@@ -623,7 +633,7 @@ describe("renderDocument — the selected object's name label is suppressed (D-0
       "origin.x": boundToCellSlot(),
       radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } },
     });
-    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"]);
     const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
     expect(texts).not.toContain("circle_1");
     expect(texts).toContain("!");
@@ -634,15 +644,25 @@ describe("renderDocument — the selected object's name label is suppressed (D-0
     const { ctx, calls } = createFakeContext();
     const selected = circleObject("obj_1", "circle_a");
     const other = circleObject("obj_2", "circle_b");
-    renderDocument(ctx, 800, 600, [selected, other], CAMERA_IDENTITY, "obj_1");
+    renderDocument(ctx, 800, 600, [selected, other], CAMERA_IDENTITY, ["obj_1"]);
     const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
     expect(texts).toEqual(["circle_b"]);
+  });
+
+  it("suppresses BOTH names when both objects are selected (D-100 clause 8)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circleA = circleObject("obj_1", "circle_a");
+    const circleB = circleObject("obj_2", "circle_b");
+    renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY, ["obj_1", "obj_2"]);
+    const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
+    expect(texts).not.toContain("circle_a");
+    expect(texts).not.toContain("circle_b");
   });
 
   it("suppresses no label when the selection is a stale id (D-023-shaped)", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
-    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, "obj_missing");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_missing"]);
     expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
   });
 });

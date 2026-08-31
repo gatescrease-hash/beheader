@@ -43,7 +43,7 @@
  * NOT DONE HERE
  *   - **Drawing** §5.9's visual feedback trio, D-092 clause 1's name labels,
  *     or D-090's prompt preview — all `render/renderer.ts`'s (0092-REVIEW),
- *     which this file hands `state.interaction.selectedObjectId` to and
+ *     which this file hands `state.interaction.selectedObjectIds` to and
  *     nothing more (D-082 clause 4: no name resolved, no chrome drawn here).
  *   - **The placement ARITHMETIC of D-094's properties panel** — a pure tested
  *     function in `render/panel.ts` (clause 11). This file only builds the
@@ -51,7 +51,10 @@
  *     it when the selection resolves to an object with a drawn extent
  *     (clause 2), and re-places it every paint (clause 13). It is READ-ONLY:
  *     no listeners, no `mutate` (clause 10) — `index.html` gives it
- *     `pointer-events: none`.
+ *     `pointer-events: none`. **D-101's N panels are not built yet** (that is
+ *     the next cycle's own slice) — this cycle keeps today's ONE panel, shown
+ *     only while the selection holds EXACTLY one object, and hidden for zero
+ *     or for two-or-more (see `updatePanel`).
  *   - Injecting a Canvas2D `TextMeasurer` (Rule 1). Nothing evaluates text yet —
  *     §5.6 is Phase 5 — so there is no `EvalContext` to inject one into.
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
@@ -280,10 +283,13 @@ export const WHEEL_ZOOM_STEP = 1.1;
 export function performEffect(effect: CommandEffect, state: AppState, viewport: Viewport): AppTransition {
   switch (effect.kind) {
     case "select":
-      // The drag is cleared, not carried: a selection made from the input bar
-      // has no pointer holding it, and `render/interaction.ts`'s `DragState`
-      // means "a pointer is dragging this right now".
-      return transition({ ...state, interaction: { selectedObjectId: effect.objectId, drag: undefined } });
+      // `select <name>` REPLACES the whole selection with this one object
+      // (D-100 clause 7) — no multi-select command syntax exists; the mouse is
+      // where multi-selection lives. The drag is cleared, not carried: a
+      // selection made from the input bar has no pointer holding it, and
+      // `render/interaction.ts`'s `DragState` means "a pointer is dragging
+      // this right now".
+      return transition({ ...state, interaction: { selectedObjectIds: [effect.objectId], drag: undefined } });
     case "zoom":
       return transition(zoomBy(state, effect.factor, viewport));
     case "fit":
@@ -367,18 +373,24 @@ function describeZoom(actual: number, requested: number): string {
 
 /**
  * A press on the canvas: an answer to the live prompt step if there is one
- * (D-072), and otherwise §5.9's "click to select", which also arms a drag.
+ * (D-072), and otherwise §5.9's "click to select" — widened by **D-100** to a
+ * multi-object selection — which also arms a drag.
+ *
+ * `additive` is the shift key (D-100 clauses 3-4): `false` for a plain click,
+ * `true` to add to (or toggle out of) the selection instead of replacing it.
+ * Defaults to `false` so every existing caller — a typed `select`, a test —
+ * keeps meaning "plain click" without naming the modifier.
  *
  * The screen->world conversion for a pick happens HERE, through
  * `render/camera.ts`, because `command/` may never import `render/` and must
  * receive a world point (D-069, D-072).
  */
-export function pointerDownAt(state: AppState, screenPoint: ScreenPoint, viewport: Viewport): AppTransition {
+export function pointerDownAt(state: AppState, screenPoint: ScreenPoint, viewport: Viewport, additive: boolean = false): AppTransition {
   if (state.pending !== undefined) {
     const world = screenToWorld(state.document.camera, screenPoint);
     return respondToPrompt(state, { kind: "picked", point: { x: world.x, y: world.y } }, viewport);
   }
-  return transition({ ...state, interaction: pointerDown(screenPoint, state.document.objects, state.document.camera) });
+  return transition({ ...state, interaction: pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive) });
 }
 
 /**
@@ -557,10 +569,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       canvas.width = backingWidth;
       canvas.height = backingHeight;
     }
-    // The selected object reaches the renderer as an ID only (D-082 clause 4's
-    // own rule, applied here too): this file resolves no name, and `renderer.ts`
-    // draws no highlight at all for an id naming nothing (D-068).
-    renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectId);
+    // Every selected object reaches the renderer as an ID only (D-082 clause
+    // 4's own rule, applied here too): this file resolves no name, and
+    // `renderer.ts` draws no highlight at all for an id naming nothing
+    // (D-068), now over the whole list (D-100 clause 8).
+    renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectIds);
     updatePanel();
   };
 
@@ -569,9 +582,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * object with a drawn extent (clause 2), its rows built from
    * `command/props.ts`'s descriptors (clause 9), re-placed every paint in CSS
    * pixels (clauses 12-13). Read-only — this closure never calls `mutate`.
+   *
+   * **D-100 leaves this at ONE panel** — D-101's N panels are the next
+   * cycle's own slice. So a selection of exactly one object shows its panel,
+   * same as before this ruling; an empty selection or a multi-selection shows
+   * none, rather than guessing which of several objects it belongs to.
    */
   const updatePanel = (): void => {
-    const selectedId = state.interaction.selectedObjectId;
+    const selectedIds = state.interaction.selectedObjectIds;
+    const selectedId = selectedIds.length === 1 ? selectedIds[0] : undefined;
     const object = selectedId === undefined ? undefined : state.document.objects.find((candidate) => candidate.id === selectedId);
     const extent = object === undefined ? undefined : objectExtent(object);
     if (object === undefined || extent === undefined) {
@@ -668,7 +687,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
     }
-    applyTransition(pointerDownAt(state, point, viewport()));
+    // D-100 clauses 3-4: shift is the additive-selection modifier.
+    applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey));
   });
 
   canvas.addEventListener("pointermove", (event: PointerEvent) => {

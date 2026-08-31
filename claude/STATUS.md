@@ -1,33 +1,36 @@
-# STATUS — as of entry 0103-REVIEW-phase4
+# STATUS — as of entry 0104-selection-becomes-a-list
 
-STATE: **GREEN and REVIEWED — the next cycle may start.** Both configs compile, **1215/1215** tests
-pass, 0 skipped, 0 `.only`, `npm run build` succeeds. Entries **0101** (D-097, the vanishing table)
-and **0102** (D-098 + D-099) were reviewed together at **0103-REVIEW-phase4**: **ACCEPT WITH
-EDITS** (two documentation edits, no behaviour changed) and one new ruling, **D-104**.
+STATE: **BLOCKED — awaiting review.** Both configs compile, **1223/1223** tests pass, 0 skipped, 0
+`.only`, `npm run build` succeeds — the tree is GREEN — but entry **0104** built **D-100** (the
+selection becomes a list), and D-100 clause 9 fires a mandatory review point at that cycle's OWN
+end regardless of the batch cap. **Do not start D-101 before this review lands.**
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
-Last review point: **0103-REVIEW-phase4** (ACCEPT WITH EDITS; **D-104** ruled).
-Cycles since last review: **0/3** · diff since last review: none. **REVIEW: NOT NEEDED to start
-entry 0104** — but D-100 clause 9 puts a review point at that cycle's OWN end regardless.
+Last review point: **0103-REVIEW-phase4** (ACCEPT WITH EDITS; **D-104** ruled). Entry **0104** is
+built and green but NOT yet reviewed.
+Cycles since last review: **1/3** · diff since last review: ~384 lines / 8 files (entry 0104).
+**REVIEW: REQUIRED** — D-100 clause 9's own trigger, not the batch cap (1/3, well under it).
 
-## Read this first — the seven things a cold reader needs
+## Read this first — the eight things a cold reader needs
 
 **1. THE HUMAN DROVE THE APPLICATION FOR THE FIRST TIME (at 0100) AND IT CHANGED THE QUEUE.** Their
 verdict on the panel was "the properties tab is good." What the session produced instead was **one
 real defect** (fixed at 0101) and **three product changes** that turn the panel from a display into
 an authoring surface. All of it is ruled: **D-097** (the defect, DONE), **D-098** (log spam, DONE),
-**D-099** (significant figures, DONE), **D-100/D-101/D-102** (multi-selection, N draggable panels,
-the paperclip — all still queued), **D-103** (the order). **Q-014 is CLOSED** — the human ruled the
-writing/linking half.
+**D-099** (significant figures, DONE), **D-100** (multi-selection, BUILT at 0104, awaiting review),
+**D-101/D-102** (N draggable panels, the paperclip — still queued), **D-103** (the order). **Q-014
+is CLOSED** — the human ruled the writing/linking half.
 
-**2. THAT BATCH IS NOW REVIEWED AND CLEARED (0103-REVIEW-phase4, ACCEPT WITH EDITS).** Entry 0101
-fixed D-097 (the vanishing table). Entry 0102 built D-098 (a drag notice is deduplicated per
-GESTURE, not per pointer sample) and D-099 (the properties panel rounds a displayed number to at
-most 4 decimals; `props` does not). The review re-ran both configs and the suite, matched the logs
-against the diff, made two documentation edits, and ruled **D-104** — see item 7 below. **The next
-model's job is entry 0104, D-100.**
+**2. THAT BATCH WAS REVIEWED AND CLEARED (0103-REVIEW-phase4, ACCEPT WITH EDITS); ENTRY 0104 IS THE
+NEXT ONE AND IT IS NOT YET REVIEWED.** Entry 0101 fixed D-097 (the vanishing table). Entry 0102
+built D-098 (a drag notice is deduplicated per GESTURE, not per pointer sample) and D-099 (the
+properties panel rounds a displayed number to at most 4 decimals; `props` does not). That review
+re-ran both configs and the suite, matched the logs against the diff, made two documentation edits,
+and ruled **D-104** — see item 7 below. Entry **0104** then built **D-100** (the selection becomes a
+list) and stopped for review per D-100 clause 9 — see item 8 below. **The next model's job is to
+wait for that review, then build entry 0105, D-101 — do not start it unreviewed.**
 
 **3. THE VANISHING-TABLE DEFECT IS FIXED (entry 0101).** `mutation.ts`'s `findInvalidDimensionWrites`
 rejects a `setSlot` that would leave `table`'s `rows`/`cols` non-`literal`, non-number,
@@ -55,28 +58,43 @@ READ-ONLY.** D-094's fourteen clauses, in `render/panel.ts`, `main.ts`'s `buildP
 (pure, tested) and the untested DOM half, `index.html`, `renderer.ts`. **D-102 is what makes it
 writable, and it has not started.**
 
-**7. D-104 IS NEW AND IT IS OWED BY A CYCLE THAT HAS NOT BEEN SCHEDULED YET.** D-097 closed the
+**7. D-104 IS STILL OWED BY A CYCLE THAT HAS NOT BEEN SCHEDULED YET.** D-097 closed the
 vanishing table for a `setSlot`. `insertTableLine`/`deleteTableLine` write the SAME two slots and
 `findInvalidTableResizes` bounds only their INDEX — so a `deleteTableLine` on a one-row table still
 lands `rows` on `0`. **Not reachable by any command today** (§5.10's row/column commands are
 unbuilt), disclosed in two file headers, and **D-104 binds the cycle that builds those commands** to
 close the floor inside `findInvalidTableResizes`. Do NOT widen
-`findInvalidDimensionWrites` for it — D-104 clause 3 says so explicitly.
+`findInvalidDimensionWrites` for it — D-104 clause 3 says so explicitly. Untouched by entry 0104.
+
+**8. ENTRY 0104 BUILT D-100 AND IS AWAITING REVIEW — READ ITS OWN LOG BEFORE TOUCHING
+`interaction.ts`, `renderer.ts`, OR `main.ts`.** `InteractionState.selectedObjectId: string |
+undefined` is now `selectedObjectIds: readonly string[]`. `pointerDown` is reordered (`state` is now
+its first argument) and gains `additive: boolean = false` (the shift key): a plain click replaces
+the selection or clears it on empty canvas, a shift-click adds the hit object or — PROVISIONAL,
+**Q-015** — removes it if already selected, and a shift-click on empty canvas changes nothing. A
+drag always arms on the object under the press, even one a shift-click just toggled OUT of the
+selection (entry 0104's own reading of clause 6, not yet human-confirmed). `renderDocument`'s
+trailing parameter is the same list, defaulted to `[]`; every selected object is now highlighted and
+has its name suppressed, not just one. **The properties panel stays ONE panel this cycle** — shown
+only for a selection of exactly one, hidden for zero or two-or-more — because D-101 (N panels) is
+the next queued cycle and building interim multi-panel behaviour now would be thrown away. `select
+<name>` is UNCHANGED: it still replaces the whole selection with one object (D-100 clause 7); no
+command-line multi-select syntax exists.
 
 ## Next cycles — D-103's order, and it is binding
 
-The batch is reviewed and cleared (0103-REVIEW-phase4). Numbering shifted by one: the review took
-entry 0103, so D-100 is entry **0104**.
+Numbering shifted by two total now: the phase-4 review took entry 0103, D-100 took entry 0104, so
+D-101 is entry **0105**.
 
 1. ~~**Entry 0101 — D-097, the vanishing table.**~~ **DONE.** See "Read this first" item 3.
 2. ~~**Entry 0102 — D-098 + D-099.**~~ **DONE.** See "Read this first" items 4–5.
-3. **Entry 0104 — D-100, the selection becomes a list.** `selectedObjectIds: readonly string[]`
-   across `interaction.ts`, `renderer.ts`, `main.ts`. Plain click replaces, shift-click adds,
-   escape clears. **Review point at its end** (D-100 clause 9) — it changes a state shape every
-   prior cycle was written against, and every test that builds an `InteractionState`. Starts from
-   a fresh 0/3 count.
+3. ~~**Entry 0104 — D-100, the selection becomes a list.**~~ **BUILT, NOT YET REVIEWED.** See "Read
+   this first" item 8. **A review of entry 0104 must land before entry 0105 starts** (D-100 clause
+   9 — this is not a batch-cap stop, it is unconditional).
 4. **Entry 0105 — D-101, N panels, draggable.** Then **entry 0106 — D-102, the paperclip and
-   editing**, which gets its own review point regardless of the batch cap.
+   editing**, which gets its own review point regardless of the batch cap. Both are written against
+   a selection that can hold more than one object, so both need D-100 actually reviewed first, not
+   merely built.
 
 **Still queued behind all of that, unchanged:** D-090's prompt-sequence preview · D-088 clauses 2–4
 and D-089 (the command input's behaviour) · §5.11's load boundary in `document.ts` (D-083 clause 4's
@@ -121,11 +139,22 @@ import rather than declare them; tests in both `mutation.test.ts` and `commands.
 
 **Reviewer's edits at 0103-REVIEW (documentation only, no behaviour changed):** a `NOT DONE HERE`
 bullet in `engine/primitives/table.ts` and a paragraph on `findInvalidDimensionWrites`'s doc
-comment, both disclosing D-104's gap. **Cycles since last review: 0/3.**
+comment, both disclosing D-104's gap.
+
+## Built this batch, not yet reviewed
+
+**Entry 0104 — D-100, the selection becomes a list.** `render/interaction.ts`'s `InteractionState.
+selectedObjectIds: readonly string[]`, `pointerDown`'s reordered signature and its new `additive`
+parameter, `toggleSelection` (PROVISIONAL(Q-015)); `render/renderer.ts`'s `renderDocument` over the
+whole list, for both the highlight pass and the chrome name-suppression pass; `main.ts`'s
+`performEffect`'s `"select"` case, `pointerDownAt`'s `additive` parameter and the DOM listener's
+`event.shiftKey`, and `updatePanel`'s single-panel-only-for-exactly-one-selected reading. Tests in
+`interaction.test.ts`, `renderer.test.ts`, `main.test.ts`, plus one call-site fix in
+`commands.test.ts`. **Cycles since last review: 1/3 — but D-100 clause 9 forces review regardless.**
 
 ## Not started
 
-**D-100 through D-103** · D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
+**D-101 through D-103** · D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation (D-081,
 D-083 clause 4) · D-088 clauses 2–4 · D-089 · Phases 5–7.
@@ -150,7 +179,9 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 8. **The screen-space chrome constants and `PANEL_OBJECT_GAP_CSS` are untuned** — chosen, not
    measured (Rule 5). The human has now seen the panel and did not object to the gap.
 9. **The chrome pass leaves `ctx.font`/`textAlign`/`textBaseline` set on return.** Harmless today.
-   Owned by whichever cycle next opens `drawObjectChrome` — D-100 clause 8 will.
+   **Entry 0104 opened `drawObjectChrome`'s call site (D-100 clause 8) but did not fix this** — the
+   change there was only which objects count as selected, not the function's own state-leak. Still
+   owned by whichever cycle actually addresses it.
 10. **The formula-driven indicator's narrowness (`origin.x`/`origin.y` only) should be RE-DECIDED**
     now that `props.ts` exists (0095-REVIEW §4).
 11. **The panel's `overflow: auto` scroll position resets on every paint**, because
@@ -237,12 +268,13 @@ Every ruling in `DECISIONS.md` (D-001 through **D-104**) binds without restateme
 **D-104 is NEW and NOT implemented** (0103-REVIEW). It is not owed by the next cycle — it is owed by
 the cycle that builds §5.10's row/column commands. See "Read this first" item 7 and fix-list 13.
 
-**From 0100-REVIEW — D-100 through D-103, still queued:** (**D-100**) the selection is a list; plain
-click replaces, shift-click adds, escape clears; D-094 clause 3 generalises to every selected object
-· (**D-101**) one panel per selected object, dragged by its header, detaching until deselected,
-with no collision avoidance · (**D-102**) the panel becomes writable, `pointer-events: none` is
-lifted, the paperclip is blue for a `formula` slot and grey for a `literal` one, and **every panel
-write goes through `executeCommand`, never `mutate`** · (**D-103**) the order those are built in.
+**From 0100-REVIEW — D-100 through D-103:** (**D-100**) the selection is a list; plain click
+replaces, shift-click adds, escape clears; D-094 clause 3 generalises to every selected object —
+**BUILT at entry 0104, awaiting review; do not re-build it** · (**D-101**, queued) one panel per
+selected object, dragged by its header, detaching until deselected, with no collision avoidance ·
+(**D-102**, queued) the panel becomes writable, `pointer-events: none` is lifted, the paperclip is
+blue for a `formula` slot and grey for a `literal` one, and **every panel write goes through
+`executeCommand`, never `mutate`** · (**D-103**) the order those are built in.
 
 **Q-014 IS CLOSED → D-102.** The human ruled the writing/linking half at entry 0100. §5.10's "no
 panels, no toolbars" now carries one amendment, made twice by the same human: a display panel
@@ -292,17 +324,31 @@ NOT take a side — it is CSS pixels by a stated reason.
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
-**`PROVISIONAL(Q-015)` → `src/render/interaction.ts`, to be added by entry 0103.** Does a
-shift-click on an ALREADY-SELECTED object REMOVE it from the selection? Provisional (a) yes, the
-conventional toggle, ruled provisionally as D-100 clause 4. The human's to settle; blocking nothing.
+**`PROVISIONAL(Q-015)` → `src/render/interaction.ts`'s `toggleSelection`, added at entry 0104.** Does
+a shift-click on an ALREADY-SELECTED object REMOVE it from the selection? Provisional (a) yes, the
+conventional toggle, ruled provisionally as D-100 clause 4, now actually built that way. The
+human's to settle; blocking nothing; reversible in one branch and one test if overruled.
 
 **Q-014 is CLOSED (→ D-102).** Next free: **Q-016**.
 
 ## Gotchas for the next model
 
-- **THE BATCH IS CLEARED — START ENTRY 0104 (D-100).** 0103-REVIEW-phase4 accepted entries
-  0101/0102 with two documentation edits and ruled D-104. Counter is back to 0/3; the review took
-  entry number 0103, so every queued cycle shifted by one.
+- **ENTRY 0104 IS BUILT BUT UNREVIEWED — DO NOT START D-101 UNTIL A REVIEW OF 0104 LANDS.** D-100
+  clause 9 makes this an unconditional stop, not a batch-cap one (the counter is only 1/3). If you
+  are the reviewer: the diff is `interaction.ts`/`renderer.ts`/`main.ts` (plus their tests) and
+  entry 0104's log names every decision and every mutation-check it ran.
+- **`pointerDown`'s signature changed shape, not just its selection field's type.** `state` is now
+  its FIRST argument (matching `pointerMove`'s own order) and it gained a fifth, defaulted
+  `additive: boolean = false` parameter — the shift key. Any code (or memory) still calling it as
+  `pointerDown(screenPoint, objects, camera)` is now calling the wrong overload of nothing and will
+  fail to compile, loudly.
+- **A drag arms on the object under the press even when a shift-click just toggled it OUT of the
+  selection** — entry 0104's own reading of D-100 clause 6, not yet human-confirmed. If the human
+  disagrees, it is one branch and one test in `pointerDown` to change.
+- **The properties panel is STILL ONE PANEL** after entry 0104 — a selection of exactly one shows
+  it, zero or two-or-more hides it. This is a deliberate placeholder for D-101, not an attempt at
+  real multi-panel behaviour; do not treat the "hide on multi-select" reading as anything but
+  interim.
 - **A SIZING SLOT'S BOUND MUST HOLD AT EVERY PATH THAT WRITES IT**, not just the one a ruling
   names (D-104's general form). D-097 was built for `setSlot` and `insertTableLine`/
   `deleteTableLine` were missed because nothing pointed at them. When you bound a value, enumerate
@@ -372,5 +418,5 @@ conventional toggle, ruled provisionally as D-100 clause 4. The human's to settl
   (D-069)** — and D-102 clause 5 is what keeps that true once the panel can write. · **Find the
   recursion before you bound it** (entry 0087).
 - **The operator cannot see what you can see.** The panel exists because that question kept going
-  unasked. **The human's session at 0100 produced three ruled fixes (D-097/D-098/D-099), two of
-  them now built — the panel is what made all three visible in the first place.**
+  unasked. **The human's session at 0100 produced three ruled fixes (D-097/D-098/D-099), all three
+  now built (entries 0101/0102) — the panel is what made all three visible in the first place.**

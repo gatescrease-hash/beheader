@@ -13,7 +13,7 @@
  *
  * WHAT THIS IS
  *   `renderDocument(ctx, viewportWidth, viewportHeight, objects, camera,
- *   selectedObjectId?)` — the one exported entry point, a pure function of
+ *   selectedObjectIds?)` — the one exported entry point, a pure function of
  *   its arguments. It takes `objects`, not a whole engine `Document`: this
  *   file draws graph state, and the narrow argument both keeps it testable
  *   and sidesteps `Document` colliding with the DOM's own global `Document`
@@ -22,22 +22,24 @@
  *   THREE passes, in this order:
  *     1. Clear the WHOLE viewport in screen space (transform reset to
  *        identity FIRST — see `clearScreen`).
- *     2. Set the camera transform ONCE and draw every object, then (if
- *        `selectedObjectId` names one of them) its selection highlight, in
- *        RAW WORLD-SPACE coordinates — letting the canvas transform do the
- *        conversion. No draw call in this pass ever calls `worldToScreen`
- *        itself. The transform is derived from `camera.ts`'s OWN
- *        `worldToScreen` rather than a second hand-written copy of the
- *        formula (D-010): this file may never compute a different
- *        world<->screen mapping than `camera.ts` does.
+ *     2. Set the camera transform ONCE and draw every object, then — for
+ *        every id in `selectedObjectIds` that names one of them (**D-100**
+ *        clause 8 widens this from one id to a list) — that object's
+ *        selection highlight, in RAW WORLD-SPACE coordinates — letting the
+ *        canvas transform do the conversion. No draw call in this pass ever
+ *        calls `worldToScreen` itself. The transform is derived from
+ *        `camera.ts`'s OWN `worldToScreen` rather than a second hand-written
+ *        copy of the formula (D-010): this file may never compute a
+ *        different world<->screen mapping than `camera.ts` does.
  *     3. Reset to identity again and draw every object's SCREEN-SPACE chrome
  *        — a name label (D-092 clause 1), an error badge, a formula-driven
  *        indicator (§5.9, D-068) — each converted through `worldToScreen`
  *        explicitly, because chrome text must stay a constant size regardless
- *        of zoom, unlike the geometry in pass 2. The SELECTED object's name
- *        label is suppressed here (D-094 clause 3): its name moves into the
- *        properties panel's header, which `main.ts` draws. Its badge and ticks
- *        still draw — they mark the shape, and the panel says the same in words.
+ *        of zoom, unlike the geometry in pass 2. EVERY selected object's name
+ *        label is suppressed here (D-094 clause 3, generalised by D-100
+ *        clause 8): its name moves into its properties panel's header, which
+ *        `main.ts` draws. Its badge and ticks still draw — they mark the
+ *        shape, and the panel says the same in words.
  *
  *   The highlight is drawn in a SEPARATE pass after every object (not
  *   inline with pass 2's per-object loop) so it is never occluded by a LATER
@@ -166,12 +168,12 @@ function clearScreen(ctx: CanvasRenderingContext2D, viewportWidth: number, viewp
 }
 
 /**
- * §5.9's whole sequence, widened by D-068/D-092: clear, apply the camera
- * transform, draw every object in z-order (array order — see file header),
- * draw the selection highlight, then reset to identity and draw every
- * object's screen-space chrome. `selectedObjectId` names no object (`undefined`,
- * or a stale id — D-023-shaped) draws no highlight and suppresses no label;
- * never throws.
+ * §5.9's whole sequence, widened by D-068/D-092/D-100: clear, apply the
+ * camera transform, draw every object in z-order (array order — see file
+ * header), draw every selected object's highlight, then reset to identity and
+ * draw every object's screen-space chrome. An empty `selectedObjectIds`, or
+ * one holding only stale ids (D-023-shaped), draws no highlight and
+ * suppresses no label; never throws.
  */
 export function renderDocument(
   ctx: CanvasRenderingContext2D,
@@ -179,7 +181,7 @@ export function renderDocument(
   viewportHeight: number,
   objects: readonly GraphObject[],
   camera: CameraState,
-  selectedObjectId?: string,
+  selectedObjectIds: readonly string[] = [],
 ): void {
   clearScreen(ctx, viewportWidth, viewportHeight);
 
@@ -195,11 +197,18 @@ export function renderDocument(
     drawObject(ctx, object);
   }
 
-  // Drawn LAST in world space — never inline with the loop above — so the
-  // highlight is never occluded by a later object in z-order (file header).
-  const selected = selectedObjectId === undefined ? undefined : objects.find((object) => object.id === selectedObjectId);
-  if (selected !== undefined) {
-    drawSelectionHighlight(ctx, selected);
+  // D-100 clause 8: every selected id, not just one. A `Set` so a duplicate
+  // (never produced by `interaction.ts`'s own toggle, but not this file's to
+  // assume) cannot double-stroke a highlight.
+  const selectedIds = new Set(selectedObjectIds);
+
+  // Drawn LAST in world space, in DOCUMENT order — never inline with the loop
+  // above — so a highlight is never occluded by a later object in z-order
+  // (file header).
+  for (const object of objects) {
+    if (selectedIds.has(object.id)) {
+      drawSelectionHighlight(ctx, object);
+    }
   }
 
   // Screen-space chrome: a fresh identity reset (clearScreen's own reasoning
@@ -207,10 +216,10 @@ export function renderDocument(
   // explicit worldToScreen per object (file header's pass 3).
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   for (const object of objects) {
-    // D-094 clause 3: the selected object's NAME moves into the properties
-    // panel's header, so it is not also drawn on the canvas. Its badge and
-    // ticks are not suppressed.
-    drawObjectChrome(ctx, camera, object, object.id === selectedObjectId);
+    // D-094 clause 3, generalised by D-100 clause 8: every SELECTED object's
+    // NAME moves into its properties panel's header, so it is not also drawn
+    // on the canvas. Its badge and ticks are not suppressed.
+    drawObjectChrome(ctx, camera, object, selectedIds.has(object.id));
   }
 }
 

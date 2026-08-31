@@ -36,9 +36,11 @@
  *     second hand-written copy of it (D-010).
  *
  * NOT DONE HERE
- *   - Whether the panel is shown at all (that is "does `selectedObjectId`
- *     resolve to an object with a drawn extent" — `main.ts`), what it contains,
- *     or the sketch's dashed leader line to the object (D-094 defers that).
+ *   - Whether the panel is shown at all (that is "does the selection resolve
+ *     to an object with a drawn extent" — `main.ts`, and since **D-100** a
+ *     selection of more than one shows no panel until D-101 builds N of
+ *     them), what it contains, or the sketch's dashed leader line to the
+ *     object (D-094 defers that).
  */
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";

@@ -86,21 +86,21 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
 
 /** A drag already in progress on `objectId`, starting from world (0, 0) — for the cases `pointerDown` cannot set up because the object is not hittable. */
 function dragFromOrigin(objectId: string): InteractionState {
-  return { selectedObjectId: objectId, drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] } };
+  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] } };
 }
 
-describe("pointerDown — §5.9 'click to select'", () => {
+describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", () => {
   it("selects the object under the pointer and arms a drag from that world point", () => {
     const { objects } = commit([rectObject(0, 0)]);
     // World (10, 0) sits exactly on the rect's top edge (0,0)-(20,0).
-    const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
-    expect(state.selectedObjectId).toBe("obj_1");
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(state.selectedObjectIds).toEqual(["obj_1"]);
     expect(state.drag).toEqual({ objectId: "obj_1", lastWorldPoint: { x: 10, y: 0 }, emittedNotices: [] });
   });
 
   it("holds the object's id, not the GraphObject the hit test returned", () => {
     const { objects } = commit([rectObject(0, 0)]);
-    const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     // Pins the SHAPE, not the absence of one guessed field name: a drag that
     // carried the object itself — the natural wrong implementation, and the
     // one that goes stale on the first commit — adds a key here and fails.
@@ -111,27 +111,62 @@ describe("pointerDown — §5.9 'click to select'", () => {
   it("selects nothing and arms nothing when the pointer lands on empty canvas", () => {
     const { objects } = commit([rectObject(0, 0)]);
     // Far outside the rect and well past the 5-pixel stroke tolerance.
-    expect(pointerDown({ x: 500, y: 500 }, objects, CAMERA_IDENTITY)).toEqual(INITIAL_INTERACTION_STATE);
+    expect(pointerDown(INITIAL_INTERACTION_STATE, { x: 500, y: 500 }, objects, CAMERA_IDENTITY)).toEqual(INITIAL_INTERACTION_STATE);
   });
 
-  it("replaces a prior selection with whatever is under the pointer, empty canvas included", () => {
+  it("replaces a prior selection with whatever is under the pointer, empty canvas included (D-100 clause 2)", () => {
     const { objects } = commit([rectObject(0, 0)]);
-    const selected = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
-    expect(selected.selectedObjectId).toBe("obj_1");
-    expect(pointerDown({ x: 500, y: 500 }, objects, CAMERA_IDENTITY).selectedObjectId).toBeUndefined();
+    const selected = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(selected.selectedObjectIds).toEqual(["obj_1"]);
+    expect(pointerDown(selected, { x: 500, y: 500 }, objects, CAMERA_IDENTITY).selectedObjectIds).toEqual([]);
+  });
+
+  it("a shift-click ADDS the object hit to the selection (D-100 clause 3)", () => {
+    const rectB: GraphObject = { ...rectObject(30, 0), id: "obj_3", name: "rect_2" };
+    const { objects } = commit([rectObject(0, 0), rectB]);
+    const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const second = pointerDown(first, { x: 40, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(second.selectedObjectIds).toEqual(["obj_1", "obj_3"]);
+  });
+
+  it("a shift-click on an ALREADY-SELECTED object REMOVES it — the conventional toggle (D-100 clause 4, PROVISIONAL(Q-015))", () => {
+    const { objects } = commit([rectObject(0, 0)]);
+    const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const toggled = pointerDown(first, { x: 10, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(toggled.selectedObjectIds).toEqual([]);
+  });
+
+  it("a shift-click on empty canvas changes nothing at all — neither clears nor adds (D-100 clause 3)", () => {
+    const { objects } = commit([rectObject(0, 0)]);
+    const selected = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const missed = pointerDown(selected, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true);
+    expect(missed).toBe(selected);
+  });
+
+  it("arms a drag on the object under THIS press even when the shift-click just removed it from the selection (D-100 clause 6)", () => {
+    const { objects } = commit([rectObject(0, 0)]);
+    const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const toggled = pointerDown(first, { x: 10, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(toggled.selectedObjectIds).toEqual([]);
+    expect(toggled.drag?.objectId).toBe("obj_1");
   });
 });
 
 describe("pointerUp and deselect", () => {
   it("pointerUp ends the drag and keeps the selection — §5.9 separates selecting from moving", () => {
     const state = pointerUp(dragFromOrigin("obj_1"));
-    expect(state.selectedObjectId).toBe("obj_1");
+    expect(state.selectedObjectIds).toEqual(["obj_1"]);
     expect(state.drag).toBeUndefined();
   });
 
   it("pointerUp returns the same state untouched when no drag is running", () => {
-    const idle: InteractionState = { selectedObjectId: "obj_1", drag: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined };
     expect(pointerUp(idle)).toBe(idle);
+  });
+
+  it("pointerUp keeps a MULTI-object selection untouched, ending only the drag", () => {
+    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] } };
+    expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined });
   });
 
   it("deselect clears the selection AND a drag in progress, so no gesture survives Escape (§5.9)", () => {
@@ -142,7 +177,7 @@ describe("pointerUp and deselect", () => {
 describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () => {
   it("moves a literal origin by the world delta and re-evaluates the derived slots that read it", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
 
     const moved = pointerMove(state, { x: 13, y: 7 }, objects, journal, CAMERA_IDENTITY);
 
@@ -163,7 +198,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
 
   it("journals exactly one entry per committed drag step (Rule 2's append-only journal)", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const moved = pointerMove(state, { x: 13, y: 7 }, objects, journal, CAMERA_IDENTITY);
     expect(moved.journal.length).toBe(journal.length + 1);
     expect(moved.journal[moved.journal.length - 1]?.operations.length).toBe(2);
@@ -173,7 +208,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
     const zoomed: CameraState = { x: 0, y: 0, zoom: 2 };
     const { objects, journal } = commit([rectObject(0, 0)]);
     // Screen (20, 0) is world (10, 0) at zoom 2 — on the rect's top edge.
-    const state = pointerDown({ x: 20, y: 0 }, objects, zoomed);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, zoomed);
     // Screen (40, 20) is world (20, 10): a 20x20 SCREEN delta is a 10x10 WORLD
     // delta. A file that skipped the conversion would move the rect by 20.
     const moved = pointerMove(state, { x: 40, y: 20 }, objects, journal, zoomed);
@@ -183,7 +218,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
 
   it("keeps moving the right object across steps, because the drag holds an id and not a stale snapshot", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const first = pointerMove(pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY), { x: 13, y: 0 }, objects, journal, CAMERA_IDENTITY);
+    const first = pointerMove(pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY), { x: 13, y: 0 }, objects, journal, CAMERA_IDENTITY);
     // `mutate` returned NEW objects; the second step is fed those, and the
     // drag's id still resolves. A held GraphObject would have moved the rect
     // from its original position again, landing on 4 instead of 7.
@@ -193,7 +228,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
 
   it("is a no-op with no drag in progress, so a caller may wire it to every pointer move", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const idle: InteractionState = { selectedObjectId: "obj_1", drag: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined };
     const outcome = pointerMove(idle, { x: 99, y: 99 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.state).toBe(idle);
     expect(outcome.objects).toBe(objects);
@@ -203,7 +238,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
 
   it("does not mutate when the pointer has not moved in world space — no journal entry for a step that moved nothing", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const outcome = pointerMove(state, { x: 10, y: 0 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.journal).toBe(journal);
     expect(outcome.objects).toBe(objects);
@@ -212,7 +247,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
 
   it("writes only the component that actually changed when the pointer moves along one axis", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const state = pointerDown({ x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const moved = pointerMove(state, { x: 15, y: 0 }, objects, journal, CAMERA_IDENTITY);
     // One operation, not two: `origin.y`'s delta is zero, and a write that
     // stores the value already there would still journal a mutation.
@@ -232,8 +267,8 @@ describe("per-component dragging — §5.9 'not all-or-nothing'", () => {
     };
     const { objects, journal } = commit([tableObject(1, [10]), rect]);
     // origin is (10, 0) once evaluated, so the top edge runs (10,0)-(30,0).
-    const state = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY);
-    expect(state.selectedObjectId).toBe("obj_1");
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(state.selectedObjectIds).toEqual(["obj_1"]);
 
     const moved = pointerMove(state, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
 
@@ -255,7 +290,7 @@ describe("per-component dragging — §5.9 'not all-or-nothing'", () => {
       },
     };
     const { objects, journal } = commit([tableObject(2, [10, 0]), bothDriven]);
-    const state = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY);
 
     const moved = pointerMove(state, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
 
@@ -364,7 +399,7 @@ describe("per-gesture notice dedup (D-098)", () => {
 
   it("emits a repeated notice only ONCE per gesture, not once per pointerMove sample", () => {
     const { objects, journal } = commit([tableObject(1, [10]), xDrivenRect()]);
-    const state = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY); // origin is (10, 0) once evaluated.
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY); // origin is (10, 0) once evaluated.
 
     const first = pointerMove(state, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
     expect(first.notices).toHaveLength(1);
@@ -389,7 +424,7 @@ describe("per-gesture notice dedup (D-098)", () => {
 
   it("a DIFFERENT notice text within the same gesture still emits — dedup is per TEXT, not a blanket silence", () => {
     const { objects, journal } = commit([tableObject(2, [10, 20]), xDrivenRect()]);
-    const state = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY);
     const afterFirst = pointerMove(state, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
     expect(afterFirst.notices).toHaveLength(1);
     expect(afterFirst.notices[0]).toContain("table_x.A1");
@@ -427,7 +462,7 @@ describe("per-gesture notice dedup (D-098)", () => {
 
   it("re-emits the same notice on a NEW gesture — pointerUp/pointerDown resets the per-gesture set", () => {
     const { objects, journal } = commit([tableObject(1, [10]), xDrivenRect()]);
-    const firstGesture = pointerDown({ x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    const firstGesture = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY);
     const moved = pointerMove(firstGesture, { x: 25, y: 5 }, objects, journal, CAMERA_IDENTITY);
     expect(moved.notices).toHaveLength(1);
 
@@ -435,7 +470,7 @@ describe("per-gesture notice dedup (D-098)", () => {
     expect(released.drag).toBeUndefined(); // The per-gesture set is discarded WITH the drag.
 
     // A fresh gesture on the same object — its top edge is now (10,5)-(30,5).
-    const secondGesture = pointerDown({ x: 20, y: 5 }, moved.objects, CAMERA_IDENTITY);
+    const secondGesture = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 5 }, moved.objects, CAMERA_IDENTITY);
     expect(secondGesture.drag?.emittedNotices).toEqual([]); // D-098: a fresh gesture starts with nothing surfaced yet.
 
     const movedAgain = pointerMove(secondGesture, { x: 25, y: 9 }, moved.objects, moved.journal, CAMERA_IDENTITY);

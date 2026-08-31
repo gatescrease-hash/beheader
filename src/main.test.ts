@@ -140,7 +140,7 @@ describe("submitLine — a command word alone enters its prompt sequence (D-072)
     expect(state.pending).toBeDefined();
     const escaped = escape(state);
     expect(escaped.pending).toBeUndefined();
-    expect(escaped.interaction.selectedObjectId).toBeUndefined();
+    expect(escaped.interaction.selectedObjectIds).toEqual([]);
     expect(escaped.log[escaped.log.length - 1]).toBe("cancelled");
   });
 });
@@ -150,14 +150,14 @@ describe("performEffect — select (D-075, D-082)", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const id = objectNamed(state, "polygon_1").id;
     const performed = performEffect({ kind: "select", objectId: id }, state, VIEWPORT).state;
-    expect(performed.interaction.selectedObjectId).toBe(id);
+    expect(performed.interaction.selectedObjectIds).toEqual([id]);
   });
 
   it("is what makes `select <name>` from the input bar actually select something", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const id = objectNamed(state, "polygon_1").id;
     state = typed(state, "select polygon_1");
-    expect(state.interaction.selectedObjectId).toBe(id);
+    expect(state.interaction.selectedObjectIds).toEqual([id]);
   });
 
   it("clears any drag, because a selection made from the input bar has no pointer holding it", () => {
@@ -171,7 +171,7 @@ describe("performEffect — select (D-075, D-082)", () => {
   it("refuses an unknown name in `commands.ts`, which is why no arm here has to (D-075 clause 1)", () => {
     const before = opened();
     const after = typed(before, "select nothing_here");
-    expect(after.interaction.selectedObjectId).toBeUndefined();
+    expect(after.interaction.selectedObjectIds).toEqual([]);
     expect(newLines(before, after).join("\n")).toContain("nothing_here");
   });
 });
@@ -300,7 +300,7 @@ describe("performEffect — save and load are the two this file cannot finish al
     }
     const reopened = replaceDocument(state, loaded.document, "loaded test.json");
     expect(saveDocument(reopened.document)).toBe(saved);
-    expect(reopened.interaction.selectedObjectId).toBeUndefined();
+    expect(reopened.interaction.selectedObjectIds).toEqual([]);
     expect(reopened.pending).toBeUndefined();
   });
 });
@@ -379,13 +379,30 @@ describe("pointer and wheel (§5.9)", () => {
   it("selects what is under the pointer and arms a drag", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const pressed = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
-    expect(pressed.interaction.selectedObjectId).toBe(objectNamed(state, "polygon_1").id);
+    expect(pressed.interaction.selectedObjectIds).toEqual([objectNamed(state, "polygon_1").id]);
     expect(pressed.interaction.drag?.objectId).toBe(objectNamed(state, "polygon_1").id);
   });
 
   it("selects nothing on empty canvas", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
-    expect(pointerDownAt(state, { x: 9999, y: 9999 }, VIEWPORT).state.interaction.selectedObjectId).toBeUndefined();
+    expect(pointerDownAt(state, { x: 9999, y: 9999 }, VIEWPORT).state.interaction.selectedObjectIds).toEqual([]);
+  });
+
+  it("a shift-click (the `additive` flag) ADDS to the selection instead of replacing it (D-100 clauses 3-4)", () => {
+    let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    state = typed(state, "circle x=200 y=0 r=20");
+    const polygonId = objectNamed(state, "polygon_1").id;
+    const circleId = objectNamed(state, "circle_1").id;
+
+    const first = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    expect(first.interaction.selectedObjectIds).toEqual([polygonId]);
+
+    const second = pointerDownAt(first, { x: 200, y: 20 }, VIEWPORT, true).state;
+    expect(second.interaction.selectedObjectIds).toEqual([polygonId, circleId]);
+
+    // Shift-clicking the SAME object again toggles it back out (D-100 clause 4).
+    const third = pointerDownAt(second, { x: 200, y: 20 }, VIEWPORT, true).state;
+    expect(third.interaction.selectedObjectIds).toEqual([polygonId]);
   });
 
   it("answers a live prompt step with a PICKED world point instead of selecting (D-072)", () => {
@@ -394,7 +411,7 @@ describe("pointer and wheel (§5.9)", () => {
     // The pointer is over the polygon: without D-072's rule this press would
     // select it. During a live sequence it is an answer to the step instead.
     const picked = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
-    expect(picked.interaction.selectedObjectId).toBeUndefined();
+    expect(picked.interaction.selectedObjectIds).toEqual([]);
     expect(picked.pending?.stepIndex).toBe(1);
   });
 
@@ -506,7 +523,7 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     }
     const onStroke = worldToScreen(state.document.camera, vertex);
     state = pointerDownAt(state, onStroke, VIEWPORT).state;
-    expect(state.interaction.selectedObjectId).toBe(polygon.id);
+    expect(state.interaction.selectedObjectIds).toEqual([polygon.id]);
 
     // 5. Drag it. The origin slots are literal, so both components move, and
     //    they move through `mutate` — the journal grows (Rule 2).
@@ -518,7 +535,7 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     expect(originXAfter).toBeCloseTo(originXBefore + 40 / state.document.camera.zoom, 9);
     expect(state.document.journal.length).toBeGreaterThan(journalBefore);
     expect(state.interaction.drag).toBeUndefined();
-    expect(state.interaction.selectedObjectId).toBe(polygon.id);
+    expect(state.interaction.selectedObjectIds).toEqual([polygon.id]);
 
     // 6. And the picture keeps up: a second render sees the moved polygon.
     const second = createFakeContext();

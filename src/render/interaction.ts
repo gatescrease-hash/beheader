@@ -12,11 +12,23 @@
  * engine/* , own layer. NEVER imported by engine/*.
  *
  * WHAT THIS IS
- *   `InteractionState` is what is selected, plus — while a drag runs — the
- *   world point the last committed step moved from. Four transitions
- *   (`pointerDown`, `pointerMove`, `pointerUp`, `deselect`), each returning new
- *   state instead of mutating it, so a caller can wire them straight onto DOM
- *   events without this file knowing DOM exists (`main.ts`'s job).
+ *   `InteractionState` is what is selected — a LIST of object ids, in click
+ *   order (**D-100**) — plus, while a drag runs, the world point the last
+ *   committed step moved from. Four transitions (`pointerDown`, `pointerMove`,
+ *   `pointerUp`, `deselect`), each returning new state instead of mutating it,
+ *   so a caller can wire them straight onto DOM events without this file
+ *   knowing DOM exists (`main.ts`'s job).
+ *
+ *   **D-100's click model.** A plain click REPLACES the selection with
+ *   whatever is under the pointer, or clears it on empty canvas (clause 2). A
+ *   shift-click ADDS the object hit to the selection, unless it is already
+ *   there, in which case it is REMOVED — the conventional toggle (clause 4,
+ *   **PROVISIONAL(Q-015)**: the human's own open question, not yet ruled
+ *   final). A shift-click on EMPTY canvas changes nothing — clause 3's
+ *   deliberate choice, so an accidental miss cannot destroy a selection built
+ *   one object at a time. A drag always targets exactly the object under THIS
+ *   press (clause 6), never the whole selection — dragging a multi-selection
+ *   as a group is a further feature and is not built here.
  *
  *   A drag builds `setSlot` operations and hands them to `mutate`; nothing here
  *   ever assigns to a slot (Rule 2). It does so PER COMPONENT (§5.9): a
@@ -106,15 +118,22 @@ export interface DragState {
   readonly emittedNotices: readonly string[];
 }
 
-/** §5.9's whole interaction state: what is selected, and what a drag is moving. Plain data — a caller may keep it anywhere. */
+/**
+ * §5.9's whole interaction state: what is selected, and what a drag is moving.
+ * Plain data — a caller may keep it anywhere.
+ *
+ * `selectedObjectIds` is a LIST, in click order (**D-100** clause 1) — plain,
+ * serializable, IDs not references, matching every other collection here. An
+ * id may appear at most once; `pointerDown`'s toggle is what keeps that true.
+ */
 export interface InteractionState {
-  readonly selectedObjectId: string | undefined;
+  readonly selectedObjectIds: readonly string[];
   readonly drag: DragState | undefined;
 }
 
 /** Nothing selected, no drag running — where `main.ts` starts and where `deselect` returns to. */
 export const INITIAL_INTERACTION_STATE: InteractionState = {
-  selectedObjectId: undefined,
+  selectedObjectIds: [],
   drag: undefined,
 };
 
@@ -150,28 +169,50 @@ export interface PointerMoveOutcome {
 }
 
 /**
- * §5.9's "click to select", plus arming a drag on whatever was hit. Takes no
- * prior state because a press does not depend on any: what is under the pointer
- * decides the whole interaction state. A press on empty canvas therefore selects
- * nothing and arms nothing — "click to select" reading the selection off the hit
- * result, `undefined` included, rather than growing a branch that keeps a stale
- * selection alive. Escape (`deselect`) remains the keyboard path §5.9 names.
+ * §5.9's "click to select", widened by **D-100** to a multi-object selection,
+ * plus arming a drag on whatever was hit.
  *
- * A press is not itself a move: the object does not shift until `pointerMove`
- * reports a pointer position different from this one, so a click that never
- * moves commits no mutation at all.
+ * `additive` is the shift key. `false` (a plain click) REPLACES the whole
+ * selection with the object hit, or clears it on empty canvas (D-100 clause
+ * 2) — reading the selection off the hit result rather than growing a branch
+ * that keeps a stale one alive, same as before this ruling. `true` (a
+ * shift-click) ADDS the object hit, unless it is already selected, in which
+ * case it is REMOVED (clause 4, **PROVISIONAL(Q-015)**); on empty canvas it
+ * changes nothing at all (clause 3) — prior `state` comes back exactly,
+ * drag included, since nothing here should ever leave a drag running from
+ * BEFORE this press.
+ *
+ * A drag arms on the object under THIS press regardless of whether the
+ * selection just grew or shrank (clause 6: a drag targets exactly the
+ * pressed object, "whatever else is selected"). A press is not itself a
+ * move: the object does not shift until `pointerMove` reports a pointer
+ * position different from this one, so a click that never moves commits no
+ * mutation at all. Escape (`deselect`) remains the keyboard path that clears
+ * everything.
  */
-export function pointerDown(screenPoint: ScreenPoint, objects: readonly GraphObject[], camera: CameraState): InteractionState {
+export function pointerDown(
+  state: InteractionState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  camera: CameraState,
+  additive: boolean = false,
+): InteractionState {
   const object = hitTest(screenPoint, objects, camera);
   if (object === undefined) {
-    return INITIAL_INTERACTION_STATE;
+    return additive ? state : INITIAL_INTERACTION_STATE;
   }
+  const selectedObjectIds = additive ? toggleSelection(state.selectedObjectIds, object.id) : [object.id];
   // The ID, never the object — see the file header's INVARIANTS. D-098: every
   // gesture starts with no notice yet surfaced.
   return {
-    selectedObjectId: object.id,
+    selectedObjectIds,
     drag: { objectId: object.id, lastWorldPoint: screenToWorld(camera, screenPoint), emittedNotices: [] },
   };
+}
+
+/** D-100 clause 4's toggle (PROVISIONAL(Q-015)): adds `objectId` if absent, removes it if present. Preserves the rest of the list's click order either way. */
+function toggleSelection(selectedObjectIds: readonly string[], objectId: string): readonly string[] {
+  return selectedObjectIds.includes(objectId) ? selectedObjectIds.filter((id) => id !== objectId) : [...selectedObjectIds, objectId];
 }
 
 /**
@@ -206,7 +247,7 @@ export function pointerMove(
     // nothing. D-023: the raw id is printed LABELLED as an id, because there is
     // no name left to resolve it to.
     return {
-      state: { selectedObjectId: state.selectedObjectId, drag: undefined },
+      state: { selectedObjectIds: state.selectedObjectIds, drag: undefined },
       objects,
       journal,
       notices: [`the object being dragged (id "${drag.objectId}") no longer exists — drag ended`],
@@ -228,7 +269,7 @@ export function pointerMove(
   // has nothing to do with whether some OTHER component's mutation commits.
   const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
-    selectedObjectId: state.selectedObjectId,
+    selectedObjectIds: state.selectedObjectIds,
     drag: { objectId: drag.objectId, lastWorldPoint: worldPoint, emittedNotices: widenedEmittedNotices },
   };
 
@@ -255,7 +296,7 @@ export function pointerMove(
       return { state, objects, journal, notices: freshNotices, rejection: result.message };
     }
     const unmoved: InteractionState = {
-      selectedObjectId: state.selectedObjectId,
+      selectedObjectIds: state.selectedObjectIds,
       drag: { objectId: drag.objectId, lastWorldPoint: drag.lastWorldPoint, emittedNotices: widenedEmittedNotices },
     };
     return { state: unmoved, objects, journal, notices: freshNotices, rejection: result.message };
@@ -286,7 +327,7 @@ export function pointerUp(state: InteractionState): InteractionState {
   if (state.drag === undefined) {
     return state;
   }
-  return { selectedObjectId: state.selectedObjectId, drag: undefined };
+  return { selectedObjectIds: state.selectedObjectIds, drag: undefined };
 }
 
 /**

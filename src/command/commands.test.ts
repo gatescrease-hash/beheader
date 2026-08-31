@@ -20,7 +20,7 @@ import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
 import { mutate } from "../engine/mutation.ts";
 import { MAX_TABLE_LINES } from "../engine/primitives/table.ts";
 import { hitTest } from "../render/hittest.ts";
-import { pointerDown, pointerMove } from "../render/interaction.ts";
+import { INITIAL_INTERACTION_STATE, pointerDown, pointerMove } from "../render/interaction.ts";
 import { COMMAND_NAMES, isCommandParseFailure, parseCommand, type Command } from "./parser.ts";
 import { beginCommand, respond } from "./prompt.ts";
 import { COMMANDS_WITH_HANDLERS, executeCommand, isCommandFailure, MAX_POLYGON_SIDES, type CommandOutcome } from "./commands.ts";
@@ -527,7 +527,7 @@ describe("end to end — a typed line, and a picked one, reach the same object",
   it("makes a command-created table draggable, because its origin slots are the ones §5.9's per-component rule writes", () => {
     const document = committed("table x=40 y=20 rows=2 cols=3", createEmptyDocument());
     const camera = { x: 0, y: 0, zoom: 1 };
-    const pressed = pointerDown({ x: 41, y: 21 }, document.objects, camera);
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 41, y: 21 }, document.objects, camera);
     const moved = pointerMove(pressed, { x: 51, y: 26 }, document.objects, document.journal, camera);
     expect(moved.rejection).toBeUndefined();
     expect(moved.notices).toEqual([]);
