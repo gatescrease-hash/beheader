@@ -1,118 +1,75 @@
-# STATUS — as of entry 0126
+# STATUS — as of entry 0127
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1342/1342** tests pass,
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1375/1375** tests pass,
 0 skipped, 0 `.only`.
-**PHASE 5 IS OPEN. THE WIRING SLICE IS IN PROGRESS AS A BATCH — CYCLE 1 (0126) IS DONE, PENDING
-REVIEW.** Entry 0126 built **D-116 + D-117** (the `!` display of a broken embedded span) entirely
-inside `primitives/text.ts`. §6.1 trigger 5 fired (four `text.test.ts` expectations flipped from
-error-propagation to `!`-mark rendering — authorised in advance by D-116 clause 2 / D-117).
+**PHASE 5 IS OPEN. THE WIRING BATCH IS AT ITS §6.3 CAP AND STOPPED FOR REVIEW.** Two cycles since
+0125-REVIEW — **0126** (D-116 + D-117's `!` display in `evaluateBlockTree`) and **0127** (the `text`
+schema entry + `resolvedContent` + D-114). Batch additions **~923 lines / 10 files** (0126: 146/2;
+0127: 777/10) — over the 800/10 cap. **Both cycles await ONE review.**
 Last review point: **0125-REVIEW-phase5**, verdict ACCEPT WITH EDITS.
-Cycles since last review: **1/3** · diff since last review: **146 lines / 2 files** (cap 800/10).
+Cycles since last review: **2/3** · diff since last review: **923 lines / 10 files (cap 800/10 — HIT)**.
 
-**ENTRY 0124 — THE INJECTED-MEASURER TRAP IS SOLVED, BUILT AND REVIEWED.** Leaf file
-`src/engine/eval-context.ts`: `EvalContext` (`{ measurer: TextMeasurer }`), `TextMeasurer`
-(Rule 1's interface — `measure(text, style)`), `TextStyle` (§5.6's size-relevant style subset:
-`font`/`fontSize`/`lineHeight`), and `NULL_EVAL_CONTEXT` (a frozen null-object — **outer object
-AND its measurer both frozen** after 0125-REVIEW's F17 fix — zero measurement, the documented
-default for the many callers with no text). `DerivedSlotCompute` gains `context?: EvalContext`
-(optional ONLY for the isolated-unit-test path — `graph/eval.ts` always supplies it). `evaluate`,
-`deriveValidateAndEvaluate` and `mutate` each take `context = NULL_EVAL_CONTEXT` and forward it
-untouched down to every `derived`-slot compute. **No behavioural consumer yet** — `measuredHeight`
-is the next slice and IS the end-to-end threading test (**D-118 clause 5** makes that mandatory).
-`geometry.ts`'s "no `EvalContext` reaches a compute" comment was falsified and fixed (D-065).
+**ENTRY 0127 — `text` IS A REAL OBJECT TYPE (`resolvedContent` half). `primitives/schema.ts`'s
+`TEXT_SCHEMA`**: nine `static` non-derived slot paths (`content`, `width`, `height`, `overflow`,
+`style.font/fontSize/lineHeight/color/align`) and ONE derived slot, **`resolvedContent`**. Its
+`dynamic` dependency resolver (`primitives/text.ts`'s `resolveTextDependencyAddresses`) and its
+compute (`computeResolvedContent`) both re-parse `content` (never cached — **D-114** clause 4) and
+evaluate the block tree through the SAME `read`/`readRange` a formula slot's AST gets. **D-114 is
+BUILT IN FULL**: `graph/eval.ts`'s `evaluateDerivedSlot` widened so `read` runs D-110's
+empty-in-extent coercion BEFORE the D-013 membership check (clause 3, pinned by a test that goes red
+if the two are swapped — mutation-checked), and a real `readRange` (extracted `buildRangeReader`,
+shared with `evaluateFormula`) handles an embedded `SUM(A1:A4)` (was `#PARSE`). An embedded range's
+edges are expanded per cell by the SAME `enumerateRangeCellAddresses`; an empty in-extent cell gets
+no edge (D-110 c4 / D-047 c1); an out-of-extent embedding is a dangling reference and refuses the
+mutation (D-110 c6). The Phase 5 gate's **non-taken-branch reactivity** property is now real
+end-to-end (`resolvedContent` re-resolves through the topological pass when a cell referenced only
+in the dormant branch changes) — pinned in `eval.test.ts` and `mutation.test.ts`.
 
-**D-118 (0125-REVIEW) — a null-measurer measurement must be LOUD.** `NULL_EVAL_CONTEXT` measures
-every box as `0`; that is right for a text-free document but a **silent wrong value** for a real
-`text` object's `measuredHeight`. The wiring cycle's `measuredHeight` compute MUST detect it is
-running without a real measurer and return an `ErrorValue` (suggested `#MEASURE`), never height 0.
-Mechanism is the implementer's choice (identity check vs `context === undefined` vs a capability
-marker); `evaluate`/`mutate` stay uninspecting. One test covers both this and "the context is
-threaded at all". 0124 flagged this risk itself; D-118 answers it so the wiring cycle inherits a
-contract, not a question.
+**SIGNATURE WIDENINGS 0127 MADE (all load-bearing, all additive/non-breaking):**
+- `DerivedSlotCompute` gains a 4th optional param `deps?: DerivedSlotComputeDeps`
+  (`{ readRange?: ReadRange; objects: readonly GraphObject[] }`) — the extra environment a compute
+  needs ONLY to evaluate an embedded formula AST. The existing `context?: EvalContext` 3rd param is
+  untouched (the `eval-context.test.ts` `DerivedSlotCompute`-typed fixtures still compile).
+- `DerivedSlotDependencies`'s `dynamic.resolve` gains a 2nd param `objects` (name resolution + range
+  expansion). Fewer-params-is-assignable → existing `schema.test.ts` fixture unchanged.
+- `derivedSlotDependencyAddresses` gains a 3rd param `objects = []` (defaulted → static-only call
+  sites + unit tests unchanged). `mutation.ts`'s `deriveEdges` Source 2 passes `objects`.
+- `graph/eval.ts`'s `evaluateDerivedSlot` gains an `objects` param (from `evaluateSlot`).
+- `graph/eval.ts` extracted `isEmptyInExtentCell` + `buildRangeReader` from `evaluateFormula`
+  (verbatim behaviour — full range-test suite green), now shared by both slot kinds (D-114 clause 2).
 
-**D-116 + D-117 ARE BUILT (0126), PENDING REVIEW.** Two related, DIFFERENT mechanisms, both marked
-with a `!` prefix, both now live in `primitives/text.ts`'s `evaluateBlockTree`:
+**ENTRY 0126 — D-116 + D-117 ARE BUILT (pending this review).** `evaluateBlockTree` renders a
+parse-broken span as `!` + its verbatim source (D-116) and a runtime-broken span as `!` + the error
+CODE (D-117), and ALWAYS returns a `string`. `resolvedContent` (0127) inherits this: a broken
+embedding never blanks the box, `resolvedContent` never holds an `ErrorValue` for a broken span.
+Four `text.test.ts` expectations were flipped — authorised by D-116 clause 2 / D-117 (see 0126).
 
-- **D-116** (Q-019, entry 0122) — a span that never PARSED (`{= 1 + }`) renders its own SOURCE back,
-  verbatim, delimiters included: `!{= 1 + }`. A broken CONDITIONAL renders its whole construct
-  (`!{? 1 + }yes{:}no{?}`), never its `orphaned` branches. There is no computed value; the source
-  IS the diagnostic.
-- **D-117** (Q-020, entry 0123) — a span that parsed fine but EVALUATED to an `ErrorValue`
-  (`{= 1 / 0 }`), or a conditional whose condition does or is a non-boolean, renders `!` + the
-  error's CODE, not its source: `!#DIV0`, `!#TYPE`. A broken condition takes NEITHER branch.
+**WHAT IS STILL UNBUILT IN PHASE 5**, after 0127: **`measuredHeight`** (§5.6's other derived slot)
+and its `TextMeasurer` call, carrying **D-118**'s null-measurer `#MEASURE` guard AND an unresolved
+brief inconsistency — §5.6 lists `width` as a `measuredHeight` input, but Rule 1's / 0124's
+`measure(text, style)` interface has no `width`. **The next cycle owns `measuredHeight` and MUST
+raise Q-021 for that.** Also unbuilt: the `text` command (`COMMANDS_SPECIFIED_BUT_NOT_BUILT` still
+lists `text`), `render/measure.ts`'s Canvas2D measurer, markdown-lite rendering, layout/wrapping,
+and threading a real `EvalContext` through every non-test `mutate` caller (`command/commands.ts` ×4
+lines 374/571/706/753, `engine/document.ts:380`, `render/interaction.ts:291`).
 
-Both: the rest of the text object renders normally — `evaluateBlockTree` now ALWAYS returns a
-`string` (D-116 clause 3 / D-117 clause 4 fall out of this — `resolvedContent` cannot hold an
-`ErrorValue`); no §5.9 error badge (the `!` mark IS the signifier); the mark is emitted by the
-ENGINE (`primitives/text.ts`'s `BROKEN_SPAN_MARK` / `renderRuntimeError`), never added at draw time
-(`measuredHeight` is computed FROM `resolvedContent`). Entry 0122 had already built D-116's DATA
-SHAPE (`BlockParseErrorBlock.source` = whole span with delimiters; `start` at the `{`; `orphaned`
-holds a broken conditional's branches, walked for dependencies, never rendered). **`resolvedContent`
-does not exist yet** — 0126 built the `evaluateBlockTree` behaviour these rulings govern, tested
-directly; wiring it into a `text` schema entry is a later cycle of this batch.
-
-**0125-REVIEW's F16 — 0122 (a reviewer entry) changed `finishConditional`'s shape but left the
-prose describing the old one.** `text.ts`'s header invariant and the `finishConditional` doc
-comment still said "keeps BOTH branches inline" and cited Q-019 as open. 0125-REVIEW rewrote both
-to the `orphaned` shape / D-116+D-117 as ruled, and fixed `evaluateBlockTree`'s "no adapter"
-comment (F18, corrected by D-114's rationale but never applied in code) and several present-tense
-"`main.ts` injects the real measurer" claims about unbuilt wiring. All comment-only. **The lesson:
-an entry that changes code — reviewer entries included — owes the prose that describes it (D-060,
-D-065). This is F13's shape, one batch later.**
-
-**ENTRY 0120'S BLOCK-TREE ENGINE IS BUILT AND REVIEWED (0121-REVIEW: ACCEPT WITH EDITS).**
-`src/engine/primitives/text.ts` parses §5.6's `{= }` / `{? }{:}{?}` (nestable) out of a raw
-`content` string into a `Block[]`, evaluates it with short-circuiting, and extracts its dependencies
-eagerly and totally including untaken branches. §6.1 trigger 2 (first file of a new subsystem) is
-**DISCHARGED** — Phase 5 may continue. No load-bearing (§6.2) file was touched by that cycle at all.
-0121-REVIEW made three edits (two defect fixes, one criterion pin) and issued **D-114**, **D-115**
-and **Q-019**.
-
-**WHAT IS STILL UNBUILT IN PHASE 5**, after 0126: no `text` OBJECT type, no schema entry, no
-`resolvedContent`/`measuredHeight` derived slots, no `text` command, no markdown-lite rendering, no
-layout, **D-114**'s `evaluateDerivedSlot` widening, and **D-118**'s null-measurer `#MEASURE` guard.
-D-116 + D-117's `evaluateBlockTree` behaviour IS built (0126, pending review).
-`TextMeasurer`/`EvalContext` threading into `graph/eval.ts` is DONE and REVIEWED (0124/0125) —
-but nothing consumes the measurer yet, and no real (Canvas2D) measurer is wired anywhere. **Every
-non-test `mutate` caller passes no context today**: `command/commands.ts` ×4 (lines 374, 571, 706,
-753), `engine/document.ts:380`, `render/interaction.ts:291` (the drag path). The wiring cycle owns
-threading a real context through all of them; D-118 makes a miss loud rather than silent.
+**D-118 (0125-REVIEW) — RULED, UNBUILT — owed by the `measuredHeight` cycle.** A `measuredHeight`
+compute that can see only `NULL_EVAL_CONTEXT`'s null measurer MUST return an `ErrorValue` (suggested
+`#MEASURE`), never height `0`. Note `#MEASURE` is not in `graph/node.ts`'s `ErrorCode` — that cycle
+must widen it (a brief deviation D-118 sanctions, D-028's move) or use an existing code.
 
 **PHASE 4 IS PASSED AND ITS GATE IS CLOSED.** 0116-REVIEW closed the gate; 0119-REVIEW cleared
-entries 0117 and 0118. §6.2's block on starting a later phase was lifted there and has not been
-re-armed.
+0117/0118. §6.2's block on starting a later phase was lifted there and has not been re-armed.
 
-**D-109 CLAUSE 3 IS BUILT (0117) AND REVIEWED (0119).** `main.ts`'s command-bar `keydown` listener
-clears `input.value` only when `submitLine`'s returned `AppTransition.refused` is `false`, computed
-once in `advance()`. **D-113 affirms that this covers a refused PROMPT STEP answer too**, not only a
-refused complete command — entry 0117 declared that reading rather than assuming it, and it is now
-binding, so do not "narrow it back" to the ruling's worked examples.
+**D-109 CLAUSE 3 (0117, reviewed 0119) and D-110 IN FULL (0118, reviewed 0119) are BUILT.** See
+0119-REVIEW / DECISIONS. D-110's `read`-closure coercion is now shared by BOTH `evaluateFormula` and
+`evaluateDerivedSlot` via `isEmptyInExtentCell` (0127) — one predicate, two call sites.
 
-**D-110 IS BUILT IN FULL (0118) AND REVIEWED (0119).** A bare reference to a cell inside an EXISTING
-table's current extent that has no slot (or holds `null`) evaluates to the number `0` and gets **no
-edge at all**. Shared helper: `primitives/table.ts`'s `isInExtentTableCellAddress(address, objects)`.
-Changed: `mutation.ts`'s `deriveEdges` (skips the edge — clause 4) and `graph/eval.ts`'s
-`evaluateFormula`'s `read` closure (coerces to `0` — clauses 1-3). D-111 clause 3's pin is built at
-the `mutate` level (last test in `mutation.test.ts`'s D-110 block) **and, since 0119-REVIEW, at the
-command line too** (`commands.test.ts`'s `set` block). Two existing tests flipped from asserting
-refusal to asserting acceptance-and-`0`, exactly as D-110's own ruling text said they would.
-
-**Owed next: CYCLE 2 of the wiring batch — the `text` schema entry + `evaluateDerivedSlot`
-widening**, and it inherits a decided direction, not an open question. Rule 1's injected-measurer
-trap is SOLVED AND REVIEWED (0124/0125): `EvalContext` carries a `TextMeasurer` and is threaded
-through `evaluate`/`deriveValidateAndEvaluate`/`mutate` to every `derived` compute. What remains for
-cycle 2: wire `text.ts`'s three functions into `primitives/schema.ts` (a `text` schema entry,
-`resolvedContent` + `measuredHeight` derived slots — `measuredHeight` is the first thing to actually
-call `context.measurer`), and widen `graph/eval.ts`'s `evaluateDerivedSlot` per **D-114** so an
-embedded `{= }`/`{? }` AST gets the same `read`/`readRange` a formula slot's AST gets (D-110
-coercion, a real range reader, clause 3's coercion-BEFORE-membership ordering — MUST be pinned by a
-test that fails if the two checks are swapped). **D-118** rides along: `measuredHeight` against
-`NULL_EVAL_CONTEXT` returns an `ErrorValue` (suggested `#MEASURE`), never height 0; one test covers
-that and "is `context` threaded at all" (D-118 clause 5). Cycle 2 is a §6.1 trigger of its own
-(`graph/eval.ts` and `primitives/schema.ts` are load-bearing, §6.2). **Cycle 3**: the `text`
-command, `render/measure.ts`'s Canvas2D `TextMeasurer`, and threading a real context through every
-non-test `mutate` caller (list above). Still separately owed, unchanged: **D-109 clauses 1–2** (cell
-decimals + clipping, `render/` only) · **Q-017** (table headers).
+**Owed next: CYCLE 3 of the wiring batch — `measuredHeight` + D-118 + Q-021.** After the review of
+this batch. It is a §6.1 trigger of its own (`primitives/schema.ts` load-bearing; likely `graph/node.ts`
+for `#MEASURE`). Then, separately owed and unchanged: the `text` command + `render/measure.ts` +
+context threading through every non-test `mutate` caller · **D-109 clauses 1–2** (cell decimals +
+clipping, `render/` only) · **Q-017** (table headers).
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column commands).
@@ -121,6 +78,18 @@ Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape v
 
 ## Read this first — what a cold reader needs
 
+**0. THE `text` SCHEMA ENTRY IS HALF-BUILT ON PURPOSE.** `resolvedContent` is real (0127);
+`measuredHeight` is not. `TEXT_SCHEMA.derivedSlots` has exactly one entry. Do not read the missing
+`measuredHeight` as a bug — it is the next cycle, and it is deferred because it drags in D-118 and
+the width/wrapping question (§5.6 vs. the 0124 `TextMeasurer` interface).
+
+**0a. `content` IS READ `literal`-ONLY (0127).** `resolveTextDependencyAddresses` and
+`computeResolvedContent` both treat a `formula`/`derived`/missing `content` slot as "no references,
+empty resolved text" — the Rule 6 guard `readTableDimension` applies to `rows`/`cols`. So a
+`link`ed `content` would NOT track what its formula names. This is a **silent gap**, recorded in
+Known problems, owed a ruling by the cycle that builds the `text` command (D-046's move for
+dimensions). Not reachable today (no `text` command).
+
 **1. PHASE 4'S GATE TEST IS `main.test.ts`'s LAST DESCRIBE BLOCK, AND IT IS THE PHASE'S ONLY
 PROTECTION.** Seven tests over one document (`table_1` 4×4, `polygon_1` driven, `polygon_2`
 driving): the whole document builds with no refusal and both bindings are `formula` **by KIND, not
@@ -128,118 +97,82 @@ only by value**; (a) `set table_1.A1 650` moves `polygon_1.origin.x` and its der
 (b) dragging `polygon_2` updates `table_1.B1` to twice its new `origin.x` in the same mutation;
 (c) dragging `polygon_1` moves Y only and the log names `table_1.A1`; all three over ONE final
 state; a real cycle is still refused and leaves `state.document` the same object; and §5.1's own
-round trip through ONE object is accepted and propagates. **If a future cycle breaks two-directional
-binding, these are what go red.** Do not weaken them; do not fold them into another block.
+round trip through ONE object is accepted and propagates. **Do not weaken them; do not fold them
+into another block.**
 
 **2. WHY THE SEVENTH TEST EXISTS (0116-REVIEW, D-111 clause 2).** The gate document binds through
-TWO polygons, so its object-level graph is `polygon_2 → table_1 → polygon_1` — a DAG. An
-implementation whose graph was OBJECT-granular (§5.1's named mistake) would accept it too, so
-`not.toContain("cyclic")` over that document could never have failed. The discriminating shape is
-the round trip through ONE object — `table_1.A1 → polygon_1.origin.x → polygon_1.centroid.x →
-table_1.C1` — which is legal, is accepted, propagates in one pass, and was pinned nowhere before
-0116-REVIEW. `geometry.test.ts:418` is the one-directional half of it.
+TWO polygons (`polygon_2 → table_1 → polygon_1`, a DAG), so `not.toContain("cyclic")` over it could
+never fail. The discriminating shape is the round trip through ONE object — `table_1.A1 →
+polygon_1.origin.x → polygon_1.centroid.x → table_1.C1` — legal, accepted, propagates in one pass.
+`geometry.test.ts:418` is the one-directional half.
 
-**3. D-110's DISCLOSED CONSEQUENCE IS NARROWER THAN IT READS — `refs` HAS TWO FORMS AND THEY ANSWER
-DIFFERENT QUESTIONS (D-112, 0119-REVIEW).** `refs <cell>` reports the CURRENT edge set, so it does
-**not** name a formula reading a still-empty in-extent cell — that is clause 4 working as ruled.
-`refs <object>` **does** name it, and is right to: it derives its blocking half over the document
-**without** the target, so the reference stops being in-extent, the edge reappears, and the report
-matches the `delete <object>` that is in fact refused. **Neither may be "fixed" to match the other.**
-§5.1.1's "see what points at something before deleting it" survives D-110 intact by exactly this
-mechanism, which `refs`'s own header has documented since 0082-REVIEW for the D-047 range case.
-Pinned by a test in `commands.test.ts`'s `refs` block.
+**3. D-110's DISCLOSED CONSEQUENCE — `refs` HAS TWO FORMS (D-112, 0119-REVIEW).** `refs <cell>`
+reports the CURRENT edge set, so it does **not** name a formula reading a still-empty in-extent cell
+(clause 4 working as ruled). `refs <object>` **does**, deriving its blocking half over the document
+without the target. **Neither may be "fixed" to match the other.** Pinned in `commands.test.ts`.
 
 **4. THE PANEL IS FULLY BUILT AND FULLY REVIEWED — DO NOT RE-BUILD ANY OF IT.** D-094 (display),
-D-100 (selection), D-101 (N panels), D-106 (dismiss), D-102 (writing), D-107 (F1–F4's focus and
-identity rules) are ALL implemented and ALL reviewed (0110-REVIEW cleared D-101/D-106/D-102;
-0113-REVIEW cleared D-107). **Q-014 is CLOSED in code.** In one line each, what the fix list at
-entry 0111 fixed: **F1** a panel press left the keyboard homeless — `pointerdown` now prevents the
-DOM's own focus move on every panel press *except* one landing inside an already-open row editor's
-input, and `onCommit`/`onCancel` restore the command bar's focus; **F2** a stale blur from a repaint
-could clear a freshly-opened editor — `onCancel` acts only while `openEditor` still names the exact
-row it was built for; **F3** the editor seeded from the D-099-ROUNDED display value — `PanelRow`
-gained a separate unrounded `editSeed`; **F4** the skip-rebuild gate could latch with no input —
-`updatePanels` clears `openEditor` when a rebuild produces no matching input.
+D-100 (selection), D-101 (N panels), D-106 (dismiss), D-102 (writing), D-107 (F1–F4) are ALL
+implemented and reviewed. **Q-014 is CLOSED in code.**
 
-**5. ONE READING DECISION IS STILL WORTH A HUMAN'S EYES: a panel-typed STRING reaches a FORMULA
-slot, never a literal one.** A panel row has no quoting affordance, so `"hello"` typed into a row
-lands as a `formula` slot holding that string, and bare `hello` is a formula naming an object called
-`hello` (refused if none exists). Correct per D-102 clause 6; **Q-016** carries the grammar question.
+**5. A panel-typed STRING reaches a FORMULA slot, never a literal one.** `"hello"` → a `formula`
+slot holding that string; bare `hello` → a formula naming an object. Correct per D-102 clause 6;
+**Q-016** carries the grammar question.
 
-**6. `main.ts`'s DOM HALF (`start`) IS UNTESTED BY CONSTRUCTION (D-001) AND KEEPS GROWING.** Entry
-0109 added the largest single expansion (the editing machinery); entry 0111 amended it; entry 0117
-added the `if (!outcome.refused)` guard around the input clear. Verified live in a real browser at
-0109 and 0111 (Playwright, transiently installed, zero console/page errors) — that is several runs by
-one person, not a re-runnable assertion, and **entry 0117's own DOM line has not had one**. The
-tests reach `main.ts`'s PURE half only: they assert `submitLine`'s returned `refused`, not that the
-listener acted on it.
+**6. `main.ts`'s DOM half (`start`) IS UNTESTED BY CONSTRUCTION (D-001) AND KEEPS GROWING.** Verified
+live at 0109/0111 (Playwright, transient); entry 0117's own DOM line has not had a live run. Tests
+reach `main.ts`'s PURE half only.
 
 **7. THE VANISHING-TABLE DEFECT IS FIXED (entry 0101) — D-097/D-098/D-099 are CLOSED.**
-`mutation.ts`'s `findInvalidDimensionWrites` rejects a `setSlot` that would leave `table`'s
-`rows`/`cols` non-`literal`, non-number, non-integer, or outside `MIN_TABLE_LINES..MAX_TABLE_LINES`.
-**D-102's panel writes inherit that refusal for free**, because every panel write is a synthesised
-`Command` through `executeCommand`.
+`mutation.ts`'s `findInvalidDimensionWrites` rejects a `setSlot` that would leave `rows`/`cols`
+non-`literal`, non-number, non-integer, or outside `MIN_TABLE_LINES..MAX_TABLE_LINES`. D-102's panel
+writes inherit that refusal.
 
 **8. D-104 IS OWED BY A CYCLE THAT HAS NOT BEEN SCHEDULED.** `insertTableLine`/`deleteTableLine` are
-not bounded by `MIN_TABLE_LINES`/`MAX_TABLE_LINES` the way `setSlot` now is. **Not reachable by any
-command today** (§5.10's row/column commands are unbuilt). Owed by whichever cycle builds them; the
-fix goes in `findInvalidTableResizes`, never in `findInvalidDimensionWrites`.
+not bounded by `MIN_TABLE_LINES`/`MAX_TABLE_LINES`. Not reachable by any command today. Fix goes in
+`findInvalidTableResizes`.
 
 **9. D-108 IS OWED BY §5.11's LOAD CYCLE, AND ITS CLAUSE 3 BINDS EVERY CYCLE BEFORE THAT ONE.**
-`deserializeDocument`'s "never throws" claim is FALSE for a malformed loaded `ast` (`ast: null`, a
-`binaryOp` with absent or `null` children, a `functionCall` whose `args` is not an array). **Do not
-"fix" it by guarding `exceedsMaxFormulaAstDepth` or any other single walker** — clause 3 forbids it
-explicitly, because that only moves the throw. Not operator-reachable today: nothing calls
-`loadDocument` outside tests.
+`deserializeDocument`'s "never throws" claim is FALSE for a malformed loaded `ast`. **Do not "fix"
+it by guarding a single walker** — clause 3 forbids it. Not operator-reachable today.
 
-**10. D-081 AND D-083 CLAUSE 4 ARE BUILT (0112) AND REVIEWED (0113) — do not re-build either.**
-`createObject`'s own name passes the SAME gate a rename does, via `mutation.ts`'s `findInvalidNames`
-(renamed from `findInvalidRenames`; no `excludeId` for a creation). A loaded formula's AST depth is
-checked in EXACTLY ONE place, `document.ts`'s `reconstructSlot`, via `formula/ast.ts`'s
-`exceedsMaxFormulaAstDepth` — `deps.ts` and `eval.ts` still carry no depth parameter of their own,
-and that is what makes the single check safe.
+**10. D-081 AND D-083 CLAUSE 4 ARE BUILT (0112) AND REVIEWED (0113).** `createObject`'s own name
+passes `findInvalidNames`; a loaded formula's AST depth is checked in EXACTLY ONE place,
+`document.ts`'s `reconstructSlot`.
 
 **11. THE TEXT BLOCK TREE IS DERIVED STATE, RE-PARSED FROM `content` ON DEMAND, AND MUST NEVER BE
-CACHED (D-114 clause 4).** `content` is a **literal** slot holding the raw source, so — unlike a
-cell formula — it is NEVER refused at commit time: any string is legal document state, half-typed
-`{= }` included. Parsing therefore happens downstream, and a broken span becomes an `error`-kind
-`Block` (§5.6 lists three variants; the fourth is sanctioned by **D-115**, the same move D-028 made
-for `FormulaAst`'s `ErrorNode` — do NOT "restore" the union to three). An `error` block MUST carry
-the offending `source` and its `start` offset **into `content`** (D-115 clause 2, discharging D-038
-clauses 2 and 4). **Since D-116 the span is the WHOLE construct, delimiters included** — `{= 1 + }`,
-and for a conditional everything from `{?` through its matching `{?}` — because that is what
-`evaluateBlockTree` now renders back verbatim (`!` + `source`, D-116 built at 0126). A broken
-conditional's parsed branches live in the error block's **`orphaned`** field: walked by
-`extractTextDependencies`, NEVER by `evaluateBlocks` (an inlined branch WOULD now render — `yesno`
-for `{? 1 + }yes{:}no{?}` — since an `error` block no longer aborts the tree). Keeping them at all
-is D-115 clause 3: dropping them made extraction silently non-total (0121-REVIEW §4 measured `[]`
-for a reference living only in the false branch).
+CACHED (D-114 clause 4).** `content` is a **literal** slot (any string is legal state); parsing
+happens downstream. Since 0127 the tree is re-parsed in TWO places every mutation —
+`resolveTextDependencyAddresses` (edge-derivation time) and `computeResolvedContent` (evaluation
+time) — both over the SAME staged object list, so name→id resolution agrees (0119-REVIEW §3's
+argument, now a third consumer). A broken span becomes an `error`-kind `Block` (**D-115**), carrying
+the WHOLE construct's `source` + `start`; its parsed branches live in `orphaned`, walked by
+`extractTextDependencies`, never rendered.
 
-**12. THE PAPERCLIP CANNOT REACH A TABLE CELL.** `props.ts` collapses every cell into ONE
-`synthetic` summary row and D-102 clause 2 deliberately gives a `synthetic` row no paperclip. **Cell
-values must be TYPED** (`set table_1.A1 5`, `set table_1.B1 = polygon_1.origin.x * 2` — the latter
-is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and strings left-aligned per
-§5.4. **A table drawn as an empty grid is empty, not broken.** What is genuinely NOT built is
-§5.4's last line, the formula bar / in-place cell editing.
+**12. THE PAPERCLIP CANNOT REACH A TABLE CELL.** Cell values must be TYPED. A table drawn as an
+empty grid is empty, not broken. §5.4's formula bar / in-place cell editing is NOT built.
+
+**13. `resolvedContent`'s EDGES include `content` ITSELF (0127).** §5.6: "from `content` plus every
+referenced slot". `resolveTextDependencyAddresses` returns `[content, ...refs]`. This is what lets
+`computeResolvedContent` `read` `content` under D-013, and what a future `formula`-content would
+re-trigger on.
 
 ## Next slice (recommended)
 
-**Wiring batch cycle 2 — the `text` schema entry + `evaluateDerivedSlot` widening (D-114) +
-D-118.** Add a `text` `ObjectSchema` entry in `primitives/schema.ts` (non-derived slots — `content`
-literal, `width`/`height`/`overflow`/`style.*` — and two derived slots `resolvedContent` +
-`measuredHeight`, with `dynamic` dependencies from `extractTextDependencies`). Widen
-`graph/eval.ts`'s `evaluateDerivedSlot` per **D-114**: an embedded `{= }`/`{? }` AST gets the same
-`read`/`readRange` a formula slot's AST gets — D-110's empty-in-extent coercion, a real
-`readRange` on `enumerateRangeCellAddresses`, and clause 3's **coercion-BEFORE-membership**
-ordering (MUST be pinned by a test that fails if the two checks are swapped). Never a second
-evaluation path; never give text its own extent arithmetic. **D-118** rides along: `measuredHeight`
-against `NULL_EVAL_CONTEXT` returns an `ErrorValue` (suggested `#MEASURE`), never height 0 — one
-test covers that AND "is `context` threaded at all" (D-118 clause 5). Cycle 2 is a §6.1 trigger of
-its own (`graph/eval.ts`, `primitives/schema.ts` load-bearing). Then **cycle 3**: the `text`
-command, `render/measure.ts`, context threading through every non-test `mutate` caller.
-Independently, **D-109 clauses 1–2** (cell decimals + clipping, `render/renderer.ts` only) and
-**Q-017**'s headers remain the smallest un-owed items if the human wants a render-only slice
-instead.
+**AFTER THE BATCH REVIEW: wiring batch cycle 3 — `measuredHeight` + D-118 + Q-021.** Add
+`measuredHeight` to `TEXT_SCHEMA.derivedSlots` (`static` deps on `resolvedContent` + `width` +
+`style.font/fontSize/lineHeight` per §5.6; compute in `primitives/text.ts` calling
+`context.measurer`). **D-118**: a compute that sees only `NULL_EVAL_CONTEXT`'s null measurer returns
+an `ErrorValue` (suggested `#MEASURE` — not in `ErrorCode`, so widen `graph/node.ts` or pick an
+existing code and say why), never height `0`; one test covers that AND "is `context` threaded at
+all" (D-118 clause 5). **Q-021 MUST be raised**: §5.6 says `measuredHeight` is computed "from
+`resolvedContent`, `width`, and `style`", but 0124's `TextMeasurer.measure(text, style)` has no
+`width` parameter — decide whether to widen the interface (reversible; `eval-context.ts` is not on
+§6.2's list), and how wrapping reaches `measuredHeight`. Then, separately: the `text` command
+(`command/parser.ts` + `commands.ts` + move `text` out of `COMMANDS_SPECIFIED_BUT_NOT_BUILT` in the
+same cycle), `render/measure.ts`, context threading through every non-test `mutate` caller.
+Independently, **D-109 clauses 1–2** and **Q-017**'s headers remain the smallest un-owed items for a
+render-only slice.
 
 ## Built and reviewed
 
@@ -247,159 +180,134 @@ Phase 0 (0027-REVIEW) · formula engine (0037) · table primitive through row/co
 `delete <table> force` (0054) · `render/camera.ts` + entry 0055's header audit (0058) ·
 `primitives/geometry.ts` (0060) · `render/renderer.ts`'s original body/table drawing (0062, widened
 by 0093/0094/0107) · `render/hittest.ts` (0064) · entry 0065's header audit · `render/interaction.ts`
-(0067, its D-098 widening at 0102 reviewed at 0103) · `command/parser.ts` (0069) ·
-`command/prompt.ts` + D-071's formula path (0071) · entries 0072–0073's fix-list work (0074) ·
-`command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`,
-`TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · `commands.ts`'s four slot commands through one
-`writeSlot` path, `engine/formula/format.ts` (0080) · `commands.ts`'s `delete`/`refs`/`list` (0082) ·
-`mutation.ts`'s `RenameObjectOperation` + `findInvalidNames`, `commands.ts`'s `rename` (0084, D-081's
-widening at 0112 reviewed at 0113) · `CommandEffect` and the five effect handlers (0086) · the two
-formula depth limits (0088) · `main.ts` rewritten from the stub, `render/camera.ts`'s
-`clampCamera`/`clampZoom`, `render/extent.ts`'s `documentExtent`, `index.html` (0089, reviewed
-0090/0091, widened at 0107/0109/0117) · entry 0093's selection highlight / error badge /
-formula-driven indicator (D-068) and D-092 clause 1's name label, entry 0094's chrome-anchor fix
-(0095) · entry 0096's `render/slots.ts` + `render/extent.ts` split (D-093) and entry 0097's
-`command/props.ts` + `props` command (0098, ACCEPT WITH EDITS; D-096) · entry 0099's
-`render/panel.ts` + the panel DOM (0100) · entry 0104's selection-list widening (0105, D-105) ·
-entries 0107/0109's N panels, drag, dismiss and panel editing — D-101, D-106, D-102 (0110-REVIEW:
-REVISE, four findings) · entry 0111's F1–F4 fix list and D-107, entry 0112's D-081 + D-083 clause 4
-(0113-REVIEW: ACCEPT, no edits) · entry 0115's Phase 4 gate test (0116-REVIEW: ACCEPT WITH EDITS) ·
-**entry 0117's D-109 clause 3 and entry 0118's D-110 in full (0119-REVIEW: ACCEPT WITH EDITS — two
-tests and one comment added by the reviewer; D-112, D-113)** · **entry 0120's `primitives/text.ts`
-block-tree engine (0121-REVIEW: ACCEPT WITH EDITS — three edits; D-114, D-115, Q-019)** · entry
-0122's D-116 data-shape change (rulings entry; the human's Q-019 answer — clauses 1-4 built at 0126) ·
-entry 0123's D-117 (rulings entry; the human's Q-020 answer — built at 0126, no shape change needed) ·
-**entry 0124's `src/engine/eval-context.ts` + the `context` threading through
-`evaluate`/`deriveValidateAndEvaluate`/`mutate` (0125-REVIEW: ACCEPT WITH EDITS — 4 edits, all
-comment/prose except `Object.freeze` on the null measurer + 2 test assertions; D-118)**.
+(0067, D-098 widening reviewed 0103) · `command/parser.ts` (0069) · `command/prompt.ts` (0071) ·
+entries 0072–0073's fix-list work (0074) · `command/commands.ts`'s seam + four creation handlers,
+`document.ts`'s `mintObjectId`, `TABLE_SCHEMA`'s `origin.x/y` (0078) · four slot commands through
+`writeSlot`, `engine/formula/format.ts` (0080) · `commands.ts`'s `delete`/`refs`/`list` (0082) ·
+`mutation.ts`'s `RenameObjectOperation` + `findInvalidNames`, `commands.ts`'s `rename` (0084, D-081
+widening reviewed 0113) · `CommandEffect` + five effect handlers (0086) · two formula depth limits
+(0088) · `main.ts` rewritten, `render/camera.ts`'s `clampCamera`/`clampZoom`, `render/extent.ts`'s
+`documentExtent`, `index.html` (0089, reviewed 0090/0091, widened 0107/0109/0117) · entry 0093's
+selection highlight / error badge / formula-driven indicator + D-092 clause 1's name label, entry
+0094's chrome-anchor fix (0095) · entry 0096's `render/slots.ts` + `render/extent.ts` split, entry
+0097's `command/props.ts` + `props` command (0098, D-096) · entry 0099's `render/panel.ts` + panel
+DOM (0100) · entry 0104's selection-list widening (0105, D-105) · entries 0107/0109's N panels,
+drag, dismiss, panel editing (0110-REVIEW) · entry 0111's F1–F4 + D-107, entry 0112's D-081 +
+D-083 clause 4 (0113-REVIEW: ACCEPT) · entry 0115's Phase 4 gate test (0116-REVIEW) · **entry 0117's
+D-109 clause 3 + entry 0118's D-110 in full (0119-REVIEW; D-112, D-113)** · **entry 0120's
+`primitives/text.ts` block-tree engine (0121-REVIEW; D-114, D-115, Q-019)** · entry 0122's D-116
+data-shape + entry 0123's D-117 (rulings) · **entry 0124's `src/engine/eval-context.ts` +
+`context` threading (0125-REVIEW; D-118)**.
 
 ## Built this batch, not yet reviewed
 
-**Entry 0126 — D-116 + D-117 in `primitives/text.ts`'s `evaluateBlockTree`.** A parse-broken span
-renders `!` + its own verbatim source (D-116); a runtime-broken formula/conditional renders `!` +
-the error CODE (D-117); the rest of the tree always renders and `evaluateBlockTree` now always
-returns a `string`. `text.ts` +102/−69, `text.test.ts` +44/−14 (four expectations flipped —
-authorised by D-116 clause 2 / D-117 — plus new tests for a parse-broken span, a runtime-broken
-formula, a runtime-broken conditional condition, D-116 clause 5's whole-construct rendering, and a
-five-embedding paragraph). §6.1 trigger 5 fired. Cycle 1/3 of the wiring batch.
+**Entry 0126 — D-116 + D-117 in `evaluateBlockTree`.** A parse-broken span renders `!` + verbatim
+source; a runtime-broken span renders `!` + error CODE; the tree always returns a `string`.
+`text.ts` +102/−69, `text.test.ts` +44/−14 (four expectations flipped — authorised by D-116 clause
+2 / D-117).
+
+**Entry 0127 — the `text` schema entry + `resolvedContent` + D-114.** `TEXT_SCHEMA` in
+`primitives/schema.ts` (nine non-derived paths + `resolvedContent`); `resolveTextDependencyAddresses`
++ `computeResolvedContent` in `primitives/text.ts`; `graph/eval.ts`'s `evaluateDerivedSlot` widened
+per D-114 (D-110 coercion before D-013 membership — clause 3, mutation-checked; shared
+`buildRangeReader`); `DerivedSlotCompute` / `DerivedSlotDependencies.dynamic` / `derivedSlotDependencyAddresses`
+signature widenings; `deriveEdges` Source 2 passes `objects`. `props.test.ts` fixture swapped
+(`text`→`script`) + `main.test.ts` comment fixed — §6.1 trigger 5. +777/−101 across 10 files.
+1342→1375 tests.
 
 ## Not started
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
-`polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
-(D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
-(drag-linking between two panels) · **D-109 clauses 1–2** · Phase 5's `text` object/schema/derived
-slots/command, D-114's `evaluateDerivedSlot` widening, D-118, and markdown-lite rendering (the
-block-tree engine is built and reviewed — 0120/0121; D-116 + D-117's `evaluateBlockTree` display is
-built, pending review — 0126; the `EvalContext`/`TextMeasurer` seam is built and reviewed —
-0124/0125; `render/measure.ts` and the real measurer wiring are not started) · Phases 6–7.
+`polyline`/`explode`/`addvertex`/`delvertex` · `style` slots (as authorable — the `text` `style.*`
+paths are declared but nothing writes them) · point-in-polygon fill hit-testing (D-067) · §5.4's
+formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9 · **D-109 clauses
+1–2** · Phase 5's `measuredHeight` + D-118 + Q-021, the `text` command, `render/measure.ts`, the
+real measurer wiring, markdown-lite rendering · Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
-Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
+Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unless noted.
 
-1. **DONE at entry 0112**, reviewed at 0113. §5.11's loader validates a loaded formula's AST depth
-   once, at the boundary (**D-083** clause 4), and `createObject`'s own name passes **D-081**'s gate.
-   Listed only so no later reader mistakes it for open debt.
-2. **Give the missing-slot refusal a remedy.** Message only; D-047 clause 4 does not move — except
-   where **D-110** now moves it, which narrows this item to the cases D-110 clause 6 keeps refusing.
-3. **`findDanglingReferences` names one dependent once per MISSING SOURCE.** `mutation.ts`.
-4. **`zoom`'s refusal names `Infinity` rather than what was typed.** Message only.
-5. **Carried from 0074-REVIEW §9, all six unchanged, none blocking.**
+1. **DONE at entry 0112**, reviewed 0113.
+2. **Give the missing-slot refusal a remedy.** Message only; narrowed by D-110 to the cases D-110
+   clause 6 keeps refusing.
+3. **`findDanglingReferences` names one dependent once per MISSING SOURCE.**
+4. **`zoom`'s refusal names `Infinity`.** Message only.
+5. **Carried from 0074-REVIEW §9, all six unchanged.**
 6. **A middle-drag pan started outside the canvas is untested.** Owned by D-088's cycle.
-7. **`TABLE_GRID_STROKE_STYLE` has no comment** where its neighbour has a paragraph (**D-091**).
-   Owned by the `style`-slots cycle.
-8. **The screen-space chrome constants and `PANEL_OBJECT_GAP_CSS` are untuned** — chosen, not
-   measured (Rule 5). The human has seen the panel and did not object to the gap.
-9. **The chrome pass leaves `ctx.font`/`textAlign`/`textBaseline` set on return.** Harmless today.
-10. **The formula-driven indicator's narrowness (`origin.x`/`origin.y` only) should be RE-DECIDED**
-    now that `props.ts` exists (0095-REVIEW §4).
-11. **A display-only panel's `overflow: auto` scroll position resets on every paint**, because
-    `writePanel` rebuilds each non-editing panel's rows whole and paint runs on every pointer move.
-    D-102 clause 8 discharged the EDITING case (entry 0109); this narrower scope is still open.
-12. **A right-flipped panel that hits the right clamp overlaps its own object.** Correct per D-094
-    clause 11 as written; revisit only if the human asks after seeing it.
-13. **`insertTableLine`/`deleteTableLine` are not bounded by `MIN_TABLE_LINES`/`MAX_TABLE_LINES`** —
-    **D-104**, owed by the cycle that builds §5.10's row/column commands, which must not land
-    without it. Not operator-reachable today.
-14. **0110-REVIEW's F1–F4 — BUILT (0111), REVIEWED (0113).** Closed; listed so no later reader
-    mistakes them for unowned debt. **Q-016** still carries F3's string/boolean tail to the human.
-15. **F5 (0113-REVIEW) — `deserializeDocument`'s "never throws" invariant is FALSE for a malformed
-    loaded `ast`.** Four shapes throw a `TypeError`. Pre-existing. **Ruled D-108**, owned by §5.11's
-    load cycle; clause 3 forbids hardening any single walker in the meantime. `document.test.ts`'s
-    "never throws" test must be extended to those four shapes by that cycle.
-16. **F6 (0113-REVIEW) — a panel row's text can no longer be selected with the mouse.** D-107 fix
-    item 1's `preventDefault()` on every panel press also suppresses the native drag-select the
-    panel BODY used to start. Read off the code, not browser-verified. Recorded, not scheduled —
-    D-095's "build nothing here until a human asks" governs.
-17. **F7/F8 (0114-REVIEW) — ruled D-109. F8 (clause 3) BUILT at 0117 and REVIEWED at 0119; F7
-    (clauses 1–2) NOT BUILT.** A table cell draws its number at full float precision
-    (`formatCellValue` returns `String(value)`) and nothing clips a cell's text to its cell — two
-    independent causes, both in `render/renderer.ts`'s `drawCellText`; still open, `render/` only.
-18. **F9 (0116-REVIEW) — CLOSED IN THE SAME REVIEW, recorded for its lesson.** The gate document
-    could not fail its own "no false cycle" clause: two polygons make it acyclic even at object
-    granularity. Fixed by adding §5.1's one-object round trip to the same block.
-19. **F10 (0119-REVIEW) — CLOSED IN THE SAME REVIEW, ruled D-112.** D-110's disclosed consequence
-    was stated unqualified where it is true only of `refs <cell>`. See "Read this first" item 3.
-20. **F11 (0119-REVIEW) — new, open, no owner needed.** Shrinking a table's extent under a formula
-    that reads an empty in-extent cell is now REFUSED (`set table_1.rows 2` while
-    `polygon_1.origin.x = table_1.A4`, A4 empty → "references a slot that does not exist"). Correct
-    per D-110 clause 6 and arguably better than the stranding a *populated* out-of-bounds cell still
-    gets — but new, reachable, and previously unrecorded. Recorded, not scheduled.
-21. **F12 (0119-REVIEW) — new, open, DO NOT RE-LITIGATE.** With `B1`/`B2` empty and in-extent,
-    `MIN(B1, B2)` is `0` while `MIN(B1:B2)` is `#TYPE (Infinity)`; `AVG` likewise (`0` vs
-    `#TYPE (NaN)`); `CONCAT("x", B1)` is `#TYPE: argument 2 must be a string, got number`. All
-    compliant: D-110 clause 3 moves the scalar half explicitly and gives no function a special case,
-    and the range half is pre-existing D-047 behaviour. **D-110's cost paragraph forbids reopening
-    this on the grounds that it is surprising.** Recorded so it is met on paper before it is met
-    live.
+7. **`TABLE_GRID_STROKE_STYLE` has no comment** (D-091). Owned by the `style`-slots cycle.
+8. **The screen-space chrome constants + `PANEL_OBJECT_GAP_CSS` are untuned** (Rule 5).
+9. **The chrome pass leaves `ctx.font`/`textAlign`/`textBaseline` set on return.** Harmless.
+10. **The formula-driven indicator's narrowness (`origin.x`/`origin.y` only) should be RE-DECIDED.**
+11. **A display-only panel's `overflow: auto` scroll resets on every paint.**
+12. **A right-flipped panel that hits the right clamp overlaps its own object.** Correct per D-094 c11.
+13. **`insertTableLine`/`deleteTableLine` are not bounded by `MIN`/`MAX_TABLE_LINES`** — **D-104**.
+14. **0110-REVIEW's F1–F4 — BUILT (0111), REVIEWED (0113).** Closed. **Q-016** carries F3's tail.
+15. **F5 (0113-REVIEW) — `deserializeDocument`'s "never throws" is FALSE for a malformed loaded
+    `ast`.** Ruled **D-108**; clause 3 forbids hardening any single walker meanwhile.
+16. **F6 (0113-REVIEW) — a panel row's text can no longer be mouse-selected.** D-095 governs.
+17. **F7/F8 (0114-REVIEW) — ruled D-109. F8 BUILT (0117), REVIEWED (0119); F7 (clauses 1–2) NOT
+    BUILT.** Cell number precision + no cell-text clipping, both in `render/renderer.ts`.
+18. **F9 (0116-REVIEW) — CLOSED in the same review.**
+19. **F10 (0119-REVIEW) — CLOSED, ruled D-112.**
+20. **F11 (0119-REVIEW) — open, no owner.** Shrinking a table's extent under a formula reading an
+    empty in-extent cell is REFUSED. Correct per D-110 clause 6.
+21. **F12 (0119-REVIEW) — open, DO NOT RE-LITIGATE.** `MIN(B1, B2)` = `0` vs `MIN(B1:B2)` = `#TYPE`
+    on empty in-extent cells; all compliant per D-110 clause 3. D-110's cost paragraph forbids
+    reopening.
+22. **F13 (0127) — new, open, owed a ruling by the `text` command cycle.** A `formula`-driven
+    `content` slot's references are untracked: `resolveTextDependencyAddresses` reads `content`
+    `literal`-only (Rule 6, D-046's move). Not reachable today. See "Read this first" 0a.
 
 ## Known problems (detail lives where the pointer says)
 
-- **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** rather
-  than removing it — see `primitives/table.ts`'s header. Unchanged. (Its EMPTY-cell sibling now
-  refuses instead — fix-list item 20.)
-- **`main.ts`'s `start` is untested code and keeps growing.** Verified live, not by assertion —
-  and entry 0117's own DOM line has not been.
+- **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** —
+  `primitives/table.ts`'s header. Its EMPTY-cell sibling now refuses (fix-list item 20).
+- **A `formula`/`derived`/missing `content` slot yields no `resolvedContent` references** — read
+  `literal`-only (fix-list item 22). Not reachable today.
+- **`measuredHeight` is unbuilt, and §5.6 vs. the 0124 `TextMeasurer` interface disagree about
+  `width`** — the next cycle raises Q-021.
+- **`main.ts`'s `start` is untested code and keeps growing.** Verified live, not by assertion.
 - **The properties panel positions an off-screen selected object's panel clamped to a canvas edge.**
-- **The chrome layout is UNSEEN beyond entry 0094's anchor fix.** Labels of two adjacent objects can
-  overlap — **D-095**: build no collision avoidance until a human asks; D-101 clause 3 extends that
-  stance to panels.
+- **The chrome layout is UNSEEN beyond entry 0094's anchor fix.** **D-095**: no collision avoidance
+  until a human asks; D-101 clause 3 extends that to panels.
 - **A prompt sequence still shows nothing where you clicked** — ruled **D-090**, queued.
 - **The formula-driven indicator is read NARROWLY** — `origin.x`/`origin.y` only.
 - **A printable keystroke does not reach the command input unless it is focused** — D-088 clauses
-  2–4 not built. **There is no command history** (**D-089**, queued — and **D-109 clause 4 says
-  clause 3 does not discharge it**).
+  2–4 not built. **No command history** (**D-089**, queued; D-109 clause 4 says clause 3 does not
+  discharge it).
 - **Every pointer move repaints the canvas and rewrites the whole log's `textContent`; every panel
   not currently editing is rebuilt whole every paint.** Immediate-mode, unmeasured, acceptable
-  (Rule 5). The one place this became a CORRECTNESS requirement — a row's own open input — is
-  handled (D-102 clause 8).
-- **`escape` is bound to the window**, so it cancels a live prompt from anywhere. Innermost-first
-  order — input, then prompt, then selection — is achieved STRUCTURALLY: a row's own `keydown`
-  `stopPropagation`s. Dismissing a panel is deliberately NOT on this list (D-106 clause 8).
-- **`zoom`'s echoed line names the REQUEST and `main.ts` adds a second line with the RESULT** —
-  deliberate, D-082 clause 5.
-- **`format.ts`'s elision does not re-parse** — a disclosed exception to the round-trip property.
+  (Rule 5). The one CORRECTNESS case (a row's own open input) is handled (D-102 clause 8).
+- **`escape` is bound to the window.** Innermost-first order is STRUCTURAL (a row's `keydown`
+  `stopPropagation`s).
+- **`zoom`'s echoed line names the REQUEST; `main.ts` adds a second line with the RESULT** — D-082
+  clause 5.
+- **`format.ts`'s elision does not re-parse** — a disclosed round-trip exception.
 - **A `delete` refusal can name the same dependent twice** — fix-list item 3.
 - **`refs` names a range's START cell as the source** when the range's table is being removed.
 - **Two sites ask the schema whether it declares a path** — `declaresSlotPath` and
   `resolveWritableSlot`'s inline check. A THIRD is forbidden.
-- **`refs <address>` REFUSES for a cell of a table whose `rows` is a formula** (D-046) — a state
-  D-097 makes unreachable BY COMMAND, though a loaded file can still carry it.
-- **SETTLED at 0118, REVIEWED at 0119 — do not re-raise.** A bare reference to an EMPTY cell WITHIN
-  a table's extent used to be refused; **D-110** reverses that (reads `0`, gets no edge) for
-  in-extent cells specifically. Outside a table's extent, or to an unknown object, the refusal
-  stands unchanged (D-110 clause 6). Its two live consequences are fix-list items 20 and 21, and
-  its `refs` consequence is item 19 / **D-112**.
+- **`refs <address>` REFUSES for a cell of a table whose `rows` is a formula** (D-046) — unreachable
+  by command (D-097), reachable via a loaded file.
+- **SETTLED at 0118, REVIEWED 0119 — do not re-raise.** A bare reference to an EMPTY in-extent cell
+  reads `0`, gets no edge (**D-110**). Outside the extent, or to an unknown object, the refusal
+  stands (D-110 clause 6). Since 0127 this same coercion applies to an embedded `{= }` in a `text`
+  object (D-114), through the same `isEmptyInExtentCell` predicate.
 - **Eight §5.10 commands have no registry entry** — `polyline`/`text`/`script`/`image`/`explode`/
-  `addvertex`/`delvertex` wait on a schema or an `Operation` kind; **`pan` waits on Q-012**.
+  `addvertex`/`delvertex` wait on a schema or an `Operation` kind (`text` now HAS a schema but no
+  command); **`pan` waits on Q-012**.
 - **`createObjectFromCommand`'s "type has no schema" branch is uncovered**, as are
   `describeSlotValue`'s `Point`/`Point[]` arms.
-- **A 1000×1000 table is legal and costs ~1.5 s per MUTATION.** Rule 5's accepted trade, **not a
-  defect** (D-077 clause 3).
-- **`renderer.ts`'s `formatCellValue` and `props.ts`'s `describeSlotValue` are two separate
-  `Value`-to-text formatters** never reconciled (D-099 clause 5, deliberate). `mutation.ts`'s
-  `describeDimensionSlotValue` is a THIRD, narrower one, scoped to one rejection message.
+- **A 1000×1000 table is legal and costs ~1.5 s per MUTATION.** Rule 5's accepted trade (D-077 c3).
+- **`renderer.ts`'s `formatCellValue`, `props.ts`'s `describeSlotValue`, and `mutation.ts`'s
+  `describeDimensionSlotValue` are three separate `Value`-to-text formatters** — deliberate.
+- **`primitives/text.ts` now imports `primitives/table.ts`** (for `enumerateRangeCellAddresses` /
+  `isInExtentTableCellAddress`) and `import type`s `DerivedSlotComputeDeps` from `primitives/schema.ts`
+  — mirroring the existing `geometry.ts` ⇄ `schema.ts` type-only cycle. `text.ts` CANNOT import
+  `mutation.ts` (would close `mutation → schema → text → mutation`), which is why
+  `resolveTextDependencyAddresses` re-implements `deriveEdges` Source 1's reference/range handling
+  rather than sharing it.
 - **Carried unchanged, each with its pointer:** `set-formula` is a `kind` not a registry name ·
   comment debt in TEST files only · mixed line endings in the WORKING TREE only (`core.autocrlf=true`)
   · dangling-reference messages name the DEPENDENT not the missing SOURCE · D-022's bounded-correctness
@@ -412,201 +320,98 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
 
 Every ruling in `DECISIONS.md` (D-001 through **D-118**) binds without restatement here.
 
-**D-114 THROUGH D-118 ALL BIND THE PHASE 5 WIRING BATCH — read all five before writing any of it.**
-**D-118 (0125-REVIEW)**: a `measuredHeight` (or any measurement-dependent compute) that can see
-only `NULL_EVAL_CONTEXT`'s null measurer MUST return an `ErrorValue`, never height 0; mechanism is
-the implementer's; `evaluate`/`mutate` stay uninspecting; one test covers this and "is the context
-threaded at all". **RULED, UNBUILT** — owed by wiring cycle 2. D-114: an embedded `{= }` AST
-evaluates through the SAME `read`/`readRange` contract a formula slot's AST gets — D-110's coercion
-included, plus a REAL `readRange` built on `enumerateRangeCellAddresses` (today `evaluateDerivedSlot`
-supplies none, so an embedded `SUM(A1:A4)` derives correct edges and then evaluates `#PARSE`). Widen
-`evaluateDerivedSlot`; never add a second evaluation path; never give text its own extent
-arithmetic. **Clause 3 is the trap**: an empty in-extent cell has NO edge (D-110 clause 4), so
-D-013's membership check rejects it before D-110 can return `0` — the coercion runs FIRST for that
-address class only. **RULED, UNBUILT** — owed by wiring cycle 2. D-115: the block tree's `error`
-variant is sanctioned, must carry `source` (the WHOLE broken span, delimiters included, since D-116)
-+ `start`, and must not narrow dependency extraction (a broken conditional's branches live in
-`orphaned`, walked for deps, never rendered). **BUILT (0121/0122).** D-116: a parse-broken span
-renders its own source, marked `!`; the object keeps rendering. D-117: a runtime-broken evaluation
-renders `!` + the error's CODE instead — a DIFFERENT mechanism from D-116's, do not merge them.
-**BOTH BUILT at entry 0126, PENDING REVIEW** — `evaluateBlockTree` no longer returns `#PARSE` for a
-tree with an `error` block; it always returns a `string`. `BROKEN_SPAN_MARK` + `renderRuntimeError`
-in `primitives/text.ts` are the mechanism. The 0122 data-shape change (span covers the whole
-construct, `orphaned` field) was already built and reviewed.
+**D-114 IS BUILT IN FULL (0127).** An embedded `{= }`/`{? }` AST evaluates through the SAME
+`read`/`readRange` a formula slot's AST gets — `graph/eval.ts`'s `evaluateDerivedSlot` widened, NOT
+a second evaluation path; D-110 coercion consulted BEFORE D-013's membership check (clause 3, pinned
+by a test that goes red if swapped); a real `readRange` on `enumerateRangeCellAddresses`
+(`buildRangeReader`, shared with `evaluateFormula`); the block tree re-parsed every mutation, never
+cached (clause 4). **D-115 IS BUILT (0121/0122).** **D-116 + D-117 ARE BUILT (0126)**, pending this
+review — `evaluateBlockTree` always returns a `string`, a broken span marked `!` in place.
+
+**D-118 (0125-REVIEW) — RULED, UNBUILT — owed by the `measuredHeight` cycle.** A measurement-needing
+compute that sees only the null measurer returns an `ErrorValue`, never height `0`. `#MEASURE` is not
+in `ErrorCode`.
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 (0101/0102, cleared 0103) · D-100
-(0104, cleared 0105; Q-015 CLOSED) · D-101, D-106, D-102 (0107/0109, cleared 0110) · D-107 (0111,
-cleared 0113) · D-081 and D-083 clause 4 (0112, cleared 0113) · Phase 4's gate test (0115, cleared
-0116) · **D-109 clause 3 (0117, cleared 0119) · D-110 in full, with D-111 clause 3's pin at both the
-`mutate` and command-line levels (0118 + 0119's own edit, cleared 0119).**
+(0104, cleared 0105) · D-101, D-106, D-102 (0107/0109, cleared 0110) · D-107 (0111, cleared 0113) ·
+D-081 and D-083 clause 4 (0112, cleared 0113) · Phase 4's gate test (0115, cleared 0116) · **D-109
+clause 3 (0117, cleared 0119) · D-110 in full (0118 + 0119's edit, cleared 0119).**
 
 **NOT implemented, each owned by a named future cycle:** **D-104** (§5.10's row/column commands) ·
 **D-108** (§5.11's load path; clause 3 binds every cycle before it) · **D-109 clauses 1–2** (cell
-decimals + clipping, `render/` only).
+decimals + clipping, `render/` only) · **D-118** (the `measuredHeight` cycle).
 
-**Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted** — `set <address> = <formula>` stays the
-spelling, and D-102's panel reuses that exact synthesised form. **Q-016 and Q-017 remain OPEN**, both
-the human's, neither blocking. **Q-019 is ANSWERED → D-116** (the human, entry 0122): a parse-broken
-span renders itself with a `!` prefix and the box keeps rendering. **Q-020 is ANSWERED → D-117**
-(the human, entry 0123, option (b)): a span that parses but evaluates to an error renders `!` + the
-error's CODE (`!#DIV0`), not its source — a different mechanism from D-116's, sharing only the `!`.
-Both **BUILT at 0126**, pending review. **No question was raised by entries 0122–0126.** Next free:
-**Q-021**.
+**Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
+human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — both BUILT at 0126, pending this
+review. **No question was raised by entries 0122–0127.** Next free: **Q-021** — the `measuredHeight`
+width/wrapping inconsistency, to be raised by the next cycle.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
-D-097's write-time refusal sits BESIDE that read, not inside it. **This is also what makes D-110
-safe**: the extent both callers consult can never be an evaluated value.
+This is also what makes D-110 (and now D-114) safe. `content` (0127) inherits the same posture.
 
-**D-094's fourteen clauses stand**, with clause 10 SUPERSEDED by D-102 clause 1 and clause 3
-generalised by D-100 clause 8 and again by D-106 clause 5. **D-096's four clauses stand** — in
-particular clause 1: a ruling's file/move list is a CEILING, its rationale governs a divergence, and
-a divergence **must be named in the log entry**.
+**D-094's fourteen clauses stand** (clause 10 superseded by D-102 clause 1; clause 3 generalised by
+D-100 clause 8 and D-106 clause 5). **D-096's four clauses stand** — a ruling's file/move list is a
+CEILING, its rationale governs a divergence, and a divergence must be named in the log entry (0127
+names two: extracting `buildRangeReader`/`isEmptyInExtentCell` in `eval.ts`, and widening
+`schema.test.ts`'s "no schema entry" list).
 
 **From 0091-REVIEW (the human's session):** **D-088** (clause 1 built, 2–4 queued) · **D-089**
-(queued) · **D-090** (queued) · **D-091** (the grey grid stands). **From 0090-REVIEW:** D-084,
-D-085, D-086, D-087 all implemented. Still owed, unchanged: **D-074**.
+(queued) · **D-090** (queued) · **D-091** (the grey grid stands). **From 0090-REVIEW:** D-084–D-087
+implemented. Still owed, unchanged: **D-074**.
 
 ## Live PROVISIONAL tags and open questions
 
 **`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** and **`src/render/slots.ts`**
 (`DEFAULT_SHAPE_STROKE_WIDTH`, `TABLE_CELL_*`, `SELECTION_HIGHLIGHT_WIDTH`): world units or screen
-pixels? Provisional (a) world units. Due with the `style`-slots cycle. `PANEL_OBJECT_GAP_CSS` does
-NOT take a side — it is CSS pixels by a stated reason.
+pixels? Provisional (a) world units. Due with the `style`-slots cycle. `eval-context.ts`'s
+`TextStyle` doc restates provisional (a) for `fontSize`/`lineHeight` without settling it.
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
-**No other `PROVISIONAL` tags exist** — **Q-016** deliberately has none (no operator can reach the
-site).
+**No other `PROVISIONAL` tags exist.** Q-016/Q-017 deliberately have none (no operator can reach the
+site). Q-021 is not yet raised, so has none.
 
 ## Gotchas for the next model
 
-- **D-116 + D-117 ARE BUILT (0126) but `resolvedContent`/`measuredHeight` are NOT.** `evaluateBlockTree`
-  now renders a broken span in place (`!` + source / `!` + code) and always returns a `string` —
-  but there is still no `text` schema entry, so nothing in a real document exercises it yet. The
-  four flipped `text.test.ts` expectations are authorised (D-116 clause 2 / D-117); do NOT
-  "restore" them.
-- **`NULL_EVAL_CONTEXT` measures every box as ZERO and never errors** (`eval-context.ts`, 0124;
-  both the object and its measurer are frozen after 0125-REVIEW's F17). It is the right inert
-  answer for a text-free document, but a `measuredHeight` compute running against it for a REAL
-  `text` object would read height 0 silently — **so D-118 (0125-REVIEW) requires that compute to
-  return an `ErrorValue` instead.** The mechanism (identity check / `context === undefined` /
-  capability marker) is wiring cycle 2's to pick; the outcome is ruled.
-- **`DerivedSlotCompute`'s `context` parameter is typed `context?` but `graph/eval.ts` ALWAYS
-  passes it.** The optionality is only so an isolated unit test can call `compute(OBJECT, read)`.
-  Do not read `context` as "sometimes absent in the pipeline" — it never is.
-- **`context` reaches `derived` compute functions, NOT `formula`/`literal` slots.** The formula
-  language has nothing that measures text; `evaluateFormula` was deliberately left unthreaded.
-- **A safety argument that rests on what ANOTHER component currently does is only as durable as that
-  component's current behaviour.** 0121-REVIEW justified keeping a broken conditional's branches
-  inline with "rendering is unaffected, because the error block short-circuits evaluation first" —
-  true when written, invalidated one entry later when D-116 ruled that an error block stops
-  aborting the tree. **As of 0126 that change is BUILT** — an `error` block now renders its
-  `source` and `evaluateBlocks` keeps going — so an inlined branch WOULD print `yesno`. 0122's fix
-  (`orphaned`) is the structural version of the claim: those blocks are not rendered because
-  NOTHING renders them, not because something else returns first. Prefer the structural form.
-  **0125-REVIEW's F16 is the same lesson at the comment level** — 0122 moved the code to
-  `orphaned` but left the header/doc describing the inline shape. An entry that changes code owes
-  the prose (D-060, D-065).
-- **When a recovery path DROPS a subtree, ask what else reads that subtree.** Entry 0120 reasoned
-  about a broken conditional's recovery purely as a display choice ("which branch would we show?")
-  and dropped the false branch. Display was inert AT THE TIME (an `error` block aborted evaluation
-  before either branch was reached), so the ONLY observable effect of the choice was that
-  dependency extraction went half-total, silently (0121-REVIEW §4, F13). The reasoning was applied
-  to the one consumer that did not exist yet, and not to the one that did. (Since 0126 the
-  `orphaned` branches genuinely never render — structurally, not by short-circuit.)
-- **`{= }` inside text is NOT a second formula language.** It is `formula/parser.ts` and
-  `formula/eval.ts` called with no `tableObjectId` — which is also the entire reason "bare refs in
-  text formulas are a parse error" (§5.3) is true, with no special case anywhere. Do not add one.
+- **`text` HAS A SCHEMA NOW (0127) but only `resolvedContent`.** `getObjectSchema("text")` is no
+  longer `undefined`. Any code that branched on `text` being schema-less has been updated
+  (`props.test.ts`, `main.test.ts` comment); grep `type === "text"` / `"text"` before assuming.
+  Creating a `text` object via `createObject` MUST include the `resolvedContent` derived-slot
+  placeholder (`{ kind: "derived", value: null }`) or `validateIntegrity`'s D-018 check rejects it.
+- **`measuredHeight` is deliberately NOT in `TEXT_SCHEMA` yet.** D-118 + Q-021 are why. Do not "add
+  the missing slot" without reading D-118 and raising Q-021.
+- **`DerivedSlotCompute`'s 4th param `deps?` is `undefined` only in isolated unit tests** — the same
+  "optional for tests, always supplied in the pipeline" shape `context?` has. `evaluateDerivedSlot`
+  always passes `{ readRange, objects }`.
+- **`evaluateDerivedSlot`'s `read` runs the D-110 coercion BEFORE the D-013 membership check
+  (D-114 clause 3).** Do not "tidy" it by checking membership first — an empty in-extent cell is
+  edge-less by design (D-110 clause 4) and must still read `0`, not `#REF`. There is a test that
+  goes red if you swap them.
+- **`isEmptyInExtentCell` and `buildRangeReader` (`graph/eval.ts`) are shared by `evaluateFormula`
+  AND `evaluateDerivedSlot`.** A change to either affects both slot kinds. That sharing IS D-114
+  clause 2 ("never a second evaluation path").
+- **The block tree is parsed in TWO places every mutation** — `resolveTextDependencyAddresses`
+  (edges) and `computeResolvedContent` (values) — over the SAME staged object list, so name→id
+  resolution cannot drift. This is the 0119-REVIEW §3 argument with a third consumer. Do NOT cache
+  the tree to "avoid the double parse" (D-114 clause 4).
+- **`resolveTextDependencyAddresses` mirrors `deriveEdges` Source 1's reference/range/D-110 logic by
+  hand** because an import cycle forbids sharing (`text.ts` cannot import `mutation.ts`). If you
+  change D-110/D-047 edge handling in `deriveEdges`, change it here too — they are a pair with no
+  compiler link.
+- **An out-of-extent embedded reference (`{= table_1.Z99 }` on an 8×8 table) REFUSES the whole
+  mutation** (dangling reference, D-110 clause 6) — same as a cell formula. An IN-extent empty cell
+  reads `0`. Do not confuse the two.
+- **`NULL_EVAL_CONTEXT` measures every box as ZERO and never errors.** For `measuredHeight` (next
+  cycle) that is a silent wrong value — **D-118** requires that compute to error instead.
+- **D-116 + D-117 are BUILT (0126) but only reviewed as part of THIS batch.** The four flipped
+  `text.test.ts` expectations are authorised (D-116 clause 2 / D-117); do NOT "restore" them.
 - **The three countable claims a log entry makes — diff total, test counts, mutation-check red
-  sets — are checked by every review now.** Entry 0120's all reproduced exactly; 0115's and 0118's
-  did not. Paste the runner's tail.
-- **A mutation check is only worth the accuracy of "which tests went red and why."** Entry 0118's
-  two checks reproduce with 5 red / 3 green each, not the 6 / 2 it reports, and the two red SETS
-  differ — which is *stronger* evidence for its own conclusion than what it claimed. Write that
-  section from the runner's output, not from what you expected (0119-REVIEW §5). Entry 0117 did
-  paste its real tail; copy that.
-- **A negative assertion is only worth what the positive case behind it costs.** "No false cycle"
-  over the two-polygon gate document could never have gone red — that document is acyclic even at
-  object granularity. Before asserting that something is NOT reported, build the case where it
-  WOULD be, and check the assertion can actually fail (0116-REVIEW, **D-111** clause 2).
-- **A test that passes on its FIRST run is not yet trusted — mutation-check it.** Entries 0109,
-  0112, 0115, 0117, 0118, and both of 0119-REVIEW's own added tests each carry a check
-  broken-then-reverted.
-- **A gate test pins its criterion; it does not anticipate an unbuilt ruling** (D-111 clause 1).
-- **"Does this edge exist" and "what does this address read as" are TWO different questions, asked
-  in TWO different files, over TWO different pieces of state** — `mutation.ts`'s `deriveEdges` asks
-  the first of a candidate OBJECT LIST; `graph/eval.ts`'s `read` closure asks the second of THIS
-  PASS's EVALUATED VALUES. D-110 needed both answered the same way for one case without merging the
-  two checks — `isInExtentTableCellAddress` (`primitives/table.ts`) is the ONE thing they share, and
-  it answers neither question itself, only "is this address in bounds." **They cannot drift**,
-  because `evaluateGraph` passes evaluation the SAME staged object list `deriveEdges` saw and
-  accumulates results in a separate map (0119-REVIEW §3).
-- **A cell that HAS a slot holding `null` and a cell that has NO slot at all are the same "empty" to
-  a bare reference (D-110) exactly as they already were to a range (D-047) — but they reach that
-  sameness through DIFFERENT edges.** The null cell gets a real edge and evaluates normally to
-  `null`; the coercion to `0` happens only at the `read` closure, after evaluation. The missing cell
-  gets NO edge, so its "value" is simply never in `evaluatedValues` — same closure, same `0`, two
-  different roads there. Do not "simplify" by giving the missing cell a synthetic edge. **This is
-  also why the two mutation checks fail different test sets.**
-- **`refs <object>` and `refs <cell>` are not two spellings of one query** (**D-112**) — the object
-  form derives edges over the document WITHOUT the target, which is what keeps it honest about what
-  a `delete` will refuse. Same mechanism, older cause: an unwritten range (D-047 item 1).
-- **`preventDefault()` on a press cancels the element's ENTIRE native mousedown handling, not just
-  "focus".** Reach for the narrowest target, never the container (entry 0111; 0113-REVIEW item 16).
-- **A loaded AST is cast unchecked and TWO walkers trust that cast** — `document.ts`'s
-  `exceedsMaxFormulaAstDepth` call and `mutation.ts`'s `collectIllegalAstLiterals`. **D-108 clause 3
-  forbids guarding either on its own**; the fix is one shape validation at the boundary.
-- **`mutation.ts`'s name-availability check is `findInvalidNames`, not `findInvalidRenames`.**
-- **A loaded formula's AST depth is checked in EXACTLY ONE place** — `document.ts`'s
-  `reconstructSlot`. Do not add a second guard in `deps.ts` or `eval.ts`.
-- **The DOM moves focus on a press unless you `preventDefault()` it, and a repaint that removes a
-  focused element fires that element's `blur`.** Those two facts are all of F1 and F2, and **D-107**
-  is the rule they produced.
-- **A panel row's DISPLAY value and its EDIT SEED are two different strings** — `value` is rounded
-  (D-099), `editSeed` is not. Neither is a fourth formatter.
-- **A gate that "skips a rebuild while editing" must default to REBUILDING, never to skipping.**
-- **`event.stopPropagation()` on a row input's OWN `keydown`** is what gives Escape its "input only"
-  meaning.
-- **A panel-typed bare word with no quotes and no leading `=` is a FORMULA reference, not a string
-  literal** (D-102 clause 6).
-- **`AppState.interaction` is assigned in exactly ONE place: `withInteraction`.** **`AppTransition`
-  now carries a third field, `refused`** — set only in `advance()`, defaulted by `transition()`, and
-  read only by the command bar's `keydown` listener (D-109 clause 3, D-113).
-- **`renderDocument`'s `panelledObjectIds` and `selectedObjectIds` are DELIBERATELY two different
-  lists** (D-106 clause 5) — do not collapse them.
-- **A panel's DOM element is NOT the thing to hang gesture state off of** — panels rebuild whole
-  every paint BY DEFAULT. The one deliberate exception is a row's own open `<input>`.
-- **`mouse.click(..., { modifiers })` in Playwright/Chromium does NOT reliably set the modifier flag
-  on the synthesized `pointerdown`** — `keyboard.down("Shift")` around a plain click does.
-- **A dismissed panel's object does NOT un-dismiss on a click that merely narrows a multi-selection
-  down to it** — only if the object actually LEFT the selection first.
-- **A drag notice dedupes by TEXT, per GESTURE.** Do NOT reach for `Date.now()` in `interaction.ts`.
-- **`describeSlotValue` must never be copied.** `maxDecimals` is its one optional argument.
-- **`render/panel.ts` is PURE and tested; the panel DOM in `main.ts` is not.**
-- **The panel is positioned in CSS pixels; `worldToScreen` returns BACKING pixels.**
-- **The canvas is a FLEX CHILD, so nothing floats over it as written** — `#stage` is `position:
-  relative` (D-065).
-- **A properties panel is not a `table` object and must never be spoken of as one** (D-094 clause 1).
-- **`main.ts` can be tested, and the trick is the bottom of the file** — the bootstrap is guarded on
-  `typeof document !== "undefined"`. **The global `document` and `state.document` are different
-  things.**
-- **An object's non-derived slot paths are NOT a list you may render** (D-077).
-- **`origin` does not mean the same thing across object types** — a circle's/polygon's CENTRE, a
-  rect's/table's TOP-LEFT CORNER. "Where is this object, visually" wants `objectExtent`.
-- **A test that asserts an OFFSET cannot catch a wrong ANCHOR.** Pin the ABSOLUTE position for at
-  least two geometries that differ.
-- **A review's fix list authorises a CHANGE, never an exemption from the trigger that change fires.**
-- **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it**
-  (D-065).
-- **`clampZoom` takes `(requestedZoom, fallbackZoom)`, not a camera.** · **An `effect` is a REQUEST,
-  not a report** (D-082 clause 5). · **A pan gesture is not the `pan` command.** · **`command/` may
-  not see a `CameraState`, a selection, or a DOM handle** (`render/panel.ts` may — it is `render/`).
-  · **`parser.ts` validates the FORM of a number, not its usefulness.** · **A name §5.2 allows is not
-  automatically a name §5.3 can READ (D-080).** · **`writeSlot` in `commands.ts` is the ONE place a
-  slot is written by COMMAND-LINE command**, `runPanelCommand` in `main.ts` the ONE place by PANEL
-  command (both are `executeCommand` underneath — D-069 stays singular), and `withCamera` the ONE
-  place the camera is written. · **A formula's SOURCE does not exist anywhere** — it is reconstructed
-  from the AST against current names, every paint. · **Find the recursion before you bound it.**
-- **The operator cannot see what you can see.** The panel exists because that question kept going
-  unasked. Phase 4's gate session answered a third version: what the operator hits first is not the
-  graph being wrong, it is a number overrunning its cell and a refused line vanishing (D-109).
+  sets — are checked by every review.** 0127's: +777/−101 across 10 files; 1342→1375; the two
+  mutation-checks reproduce 1 red and 2 red respectively, as stated.
+- **A safety argument that rests on what another component currently does is only as durable as that
+  component's current behaviour** (0121→0126's lesson). 0127's range-half safety rests on the
+  resolver and `buildRangeReader` both calling `enumerateRangeCellAddresses` — a STRUCTURAL
+  argument, not a behavioural one.
+- **The operator cannot see what you can see.** Phase 5's own version: a text box that silently
+  renders empty (a broken `content` slot, a null measurer) is the injury D-116 and D-118 are ruled
+  against.

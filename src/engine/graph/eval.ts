@@ -36,6 +36,12 @@
  *     argument defaults to `NULL_EVAL_CONTEXT`, and every caller takes that default
  *     today — no compute reads it yet. A document with real `text` objects is meant to
  *     get a Canvas2D-backed measurer threaded from `main.ts` through `mutate`.
+ *     Since **D-114** a compute that evaluates an embedded `{= }`/`{? }` AST
+ *     (§5.6's `resolvedContent`) is ALSO handed a `read`/`readRange` pair built to a
+ *     `formula` slot's own contract (`isEmptyInExtentCell` / `buildRangeReader` below —
+ *     the same helpers `evaluateFormula` uses), plus the object list for re-parsing.
+ *     `evaluateDerivedSlot`'s `read` runs the D-110 coercion BEFORE its D-013
+ *     membership check (D-114 clause 3).
  *
  *   Topological order is a DFS postorder reversal — the standard DAG construction, and
  *   the same traversal FAMILY `graph/cycles.ts` uses (same direction), but simpler:
@@ -80,6 +86,10 @@
  *     all — `primitives/table.ts`'s `enumerateRangeCellAddresses` (D-044/D-046) is the
  *     ONE place that happens; this file only calls it and resolves the addresses it
  *     returns against this pass's own `evaluatedValues`.
+ *   - Parsing a `text` object's `content` into a block tree, or extracting its
+ *     dependencies — `primitives/text.ts` (D-114 clause 4: re-parsed, never cached).
+ *     This file only builds the `read`/`readRange` its `resolvedContent` compute
+ *     hands through to `formula/eval.ts`.
  *   - Cloning, committing, journaling (`mutation.ts`) — this file only evaluates; it
  *     does not decide what becomes the document's new current state.
  */
@@ -235,7 +245,7 @@ function evaluateSlot(
     case "formula":
       return evaluateFormula(slot.ast, objects, evaluatedValues);
     case "derived":
-      return evaluateDerivedSlot(object, key, edges, evaluatedValues, context);
+      return evaluateDerivedSlot(object, key, objects, edges, evaluatedValues, context);
   }
 }
 
@@ -274,39 +284,62 @@ function nextSlot(slot: Slot, value: Value): Slot {
  * dependency) is `formula/eval.ts`'s own job to turn into `#REF`, not this
  * function's.
  *
- * `readRange` resolves a range's two endpoints to the ordered list of Values
- * every cell WITHIN THE TABLE'S CURRENT EXTENT currently holds (D-044),
- * bounded by the SAME `enumerateRangeCellAddresses` (`primitives/table.ts`,
- * D-046's `literal`-only dimension guard) that `mutation.ts`'s `deriveEdges`
- * already used to decide this formula's edges — calling that SAME function
- * here, rather than re-deriving the bound independently, is what makes
- * evaluation and edge derivation structurally unable to disagree about which
- * cells a range spans (the exact D-017-shaped hazard a second, parallel
- * bounding computation would risk). `objects` (this pass's full, PRE-
- * evaluation object list) is what lets this file resolve "which object does
- * the range's table id name" — `formula/eval.ts` is deliberately never given
- * that access itself (see its own file header).
+ * `read` and `readRange` are built by the two shared helpers below —
+ * `isEmptyInExtentCell` (D-110's empty-cell-reads-`0` coercion) and
+ * `buildRangeReader` (D-044/D-046's extent-bounded range flattening) — so a
+ * `formula` slot's AST and, since **D-114**, an embedded `{= }` AST in a `text`
+ * object's `resolvedContent` get the SAME contract from the SAME code. See each
+ * helper for its own rules.
  */
 function evaluateFormula(ast: FormulaAst, objects: readonly GraphObject[], evaluatedValues: ReadonlyMap<string, Value>): Value {
   const read: ReadSlot = (address) => {
     const value = evaluatedValues.get(addressKey(address));
-    // D-110 clauses 1-3: a bare reference to an EMPTY cell within an EXISTING
-    // table's current extent — no slot at all (never evaluated in this pass,
-    // so `value` is `undefined` here; D-110 clause 4 means `deriveEdges` never
-    // gave it an edge) or a slot holding `null` (evaluated normally, since it
-    // DOES have an edge) — reads as the NUMBER `0`, before `formula/eval.ts`
-    // or anything downstream ever sees it. Both representations of "empty"
-    // must agree (D-110 clause 2, restating D-047 clause 3's own principle for
-    // ranges). Anything else — a wrong object, a cell outside the extent, a
-    // path the schema does not declare — is UNCHANGED: whatever this pass
-    // actually resolved, `undefined` included, which `evaluateReference`
-    // (formula/eval.ts) turns into `#REF` exactly as before.
-    if ((value === undefined || value === null) && isInExtentTableCellAddress(address, objects)) {
-      return 0;
-    }
-    return value;
+    return isEmptyInExtentCell(address, value, objects) ? 0 : value;
   };
-  const readRange: ReadRange = (start, end) => {
+  return evaluateFormulaAst(ast, read, buildRangeReader(objects, evaluatedValues));
+}
+
+/**
+ * **D-110** clauses 1-3: does `address` name an EMPTY cell — no value this pass
+ * (`undefined`; D-110 clause 4 means `deriveEdges` gave it no edge), or a slot
+ * holding `null` — within an EXISTING table's CURRENT extent? Both
+ * `evaluateFormula`'s `read` and `evaluateDerivedSlot`'s coerce such a cell to
+ * the NUMBER `0` (D-110 clause 2: both spellings of "empty" agree). Every OTHER
+ * unresolved address stays whatever it was — a wrong object, an out-of-extent
+ * cell, an undeclared path — which `formula/eval.ts` turns into `#REF`.
+ *
+ * `evaluateDerivedSlot` (D-114 clause 3) consults this BEFORE its D-013
+ * membership check precisely because an empty in-extent cell is edge-less and so
+ * absent from that slot's declared-dependency set — checking membership first
+ * would return `#REF` where a cell formula reads `0`, and "a reference means the
+ * same thing in a cell and in a text box" (D-114).
+ */
+function isEmptyInExtentCell(address: Address, rawValue: Value | undefined, objects: readonly GraphObject[]): boolean {
+  return (rawValue === undefined || rawValue === null) && isInExtentTableCellAddress(address, objects);
+}
+
+/**
+ * Builds the `readRange` callback `formula/eval.ts` needs: a range's two
+ * endpoints -> the ordered list of Values every cell WITHIN THE TABLE'S CURRENT
+ * EXTENT holds (D-044), bounded by the SAME `enumerateRangeCellAddresses`
+ * (`primitives/table.ts`, D-046's `literal`-only dimension guard) that
+ * `mutation.ts`'s `deriveEdges` used to decide the edges — calling that SAME
+ * function here, never re-deriving the bound, is what makes evaluation and edge
+ * derivation structurally unable to disagree about which cells a range spans
+ * (the D-017-shaped hazard a parallel bounding computation would risk). Since
+ * **D-114** this is a THIRD consumer — an embedded `SUM(A1:A4)` in a `text`
+ * object — and the structural-agreement argument (0119-REVIEW §3) carries to it
+ * unchanged because it is the same code over the same staged object list.
+ *
+ * A cell that never resolved (no slot — `deriveEdges` derived no edge, D-047
+ * item 1) or resolved to `null` is EMPTY, not an error, and is omitted from the
+ * flattened list (D-047 items 2-3: both spellings of "empty" agree). An
+ * unresolvable table is `#REF`. `objects` is this pass's full PRE-evaluation
+ * list — how this file resolves "which object is the range's table"
+ * (`formula/eval.ts` is deliberately never handed that; see its header).
+ */
+function buildRangeReader(objects: readonly GraphObject[], evaluatedValues: ReadonlyMap<string, Value>): ReadRange {
+  return (start, end) => {
     const tableObject = objects.find((candidate) => candidate.id === start.objectId);
     if (tableObject === undefined) {
       return { error: "#REF", message: "a range references an object that does not exist" };
@@ -318,14 +351,6 @@ function evaluateFormula(ast: FormulaAst, objects: readonly GraphObject[], evalu
     const values: Value[] = [];
     for (const cellAddress of cellAddresses) {
       const value = evaluatedValues.get(addressKey(cellAddress));
-      // D-047 items 2-3: a cell within the range's bound that never resolved
-      // (no slot on the table — mutation.ts's `deriveEdges` never derived an
-      // edge for it, item 1) or that resolved to `null` is EMPTY, not an
-      // error, and is simply omitted from the flattened values. Both
-      // representations of "empty" must agree (D-047 item 3), so neither
-      // reaches `formula/eval.ts`'s aggregate arguments at all — see
-      // `MIN`/`MAX`'s zero-argument fallback in functions.ts for the case
-      // where every cell in the range is empty.
       if (value === undefined || value === null) {
         continue;
       }
@@ -333,7 +358,6 @@ function evaluateFormula(ast: FormulaAst, objects: readonly GraphObject[], evalu
     }
     return values;
   };
-  return evaluateFormulaAst(ast, read, readRange);
 }
 
 /**
@@ -357,10 +381,19 @@ function evaluateFormula(ast: FormulaAst, objects: readonly GraphObject[], evalu
  * matching schema entry gets `#REF` — this should not happen for a
  * document mutation.ts actually built, but this function does not trust
  * that and fails closed rather than indexing into `undefined`.
+ *
+ * **D-114**: a compute that must itself evaluate an embedded formula AST
+ * (§5.6's `resolvedContent`) is handed the SAME `read`/`readRange` a `formula`
+ * slot's AST gets — `read` applies D-110's empty-in-extent coercion (clause 3:
+ * BEFORE the D-013 membership check, because an empty in-extent cell is
+ * deliberately edge-less), `readRange` is `buildRangeReader` verbatim. Never a
+ * second evaluation path; `evaluateBlockTree` calls `formula/eval.ts` with these
+ * exactly as `evaluateFormula` does.
  */
 function evaluateDerivedSlot(
   object: GraphObject,
   key: string,
+  objects: readonly GraphObject[],
   edges: readonly Edge[],
   evaluatedValues: ReadonlyMap<string, Value>,
   context: EvalContext,
@@ -379,8 +412,17 @@ function evaluateDerivedSlot(
   );
 
   const read = (address: Address): Value | undefined => {
-    const key = addressKey(address);
-    if (!declaredDependencyKeys.has(key)) {
+    const addressAsKey = addressKey(address);
+    const rawValue = evaluatedValues.get(addressAsKey);
+    // D-114 clause 3: the D-110 coercion is consulted FIRST. An empty cell
+    // inside an existing table's current extent has NO edge (D-110 clause 4),
+    // so it is NOT in `declaredDependencyKeys` — and D-110 says it reads `0`,
+    // not `#REF`. Ordering the membership check first would break "a reference
+    // means the same thing in a cell and in a text box" (D-114).
+    if (isEmptyInExtentCell(address, rawValue, objects)) {
+      return 0;
+    }
+    if (!declaredDependencyKeys.has(addressAsKey)) {
       // D-013 violation: this address was never declared as a dependency of
       // this derived slot, so the edge set never ordered it before this slot
       // and it may not even be evaluated yet. Fail closed rather than return
@@ -390,10 +432,16 @@ function evaluateDerivedSlot(
         message: "derived slot's compute function read an address outside its declared dependencies (D-013)",
       };
     }
-    return evaluatedValues.get(key);
+    return rawValue;
   };
 
-  return schemaEntry.compute(object, read, context);
+  // A range's cells are bounded by the SAME `enumerateRangeCellAddresses` the
+  // dynamic resolver used to derive this slot's edges, so — like a formula
+  // slot's own range — the reader and the edge set structurally agree and no
+  // per-cell D-013 check is needed here (0119-REVIEW §3, D-114).
+  const readRange = buildRangeReader(objects, evaluatedValues);
+
+  return schemaEntry.compute(object, read, context, { readRange, objects });
 }
 
 /**

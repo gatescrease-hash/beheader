@@ -12,14 +12,17 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";
-import type { ObjectType } from "../graph/node.ts";
+import type { GraphObject, ObjectType, Slot } from "../graph/node.ts";
 import type { ErrorValue, Value } from "../graph/node.ts";
 import type { ReadRange, ReadSlot } from "../formula/eval.ts";
 import {
+  computeResolvedContent,
   evaluateBlockTree,
   extractTextDependencies,
   MAX_BLOCK_TREE_DEPTH,
   parseTextContent,
+  resolveTextDependencyAddresses,
+  TEXT_CONTENT_PATH,
   type Block,
 } from "./text.ts";
 
@@ -449,5 +452,153 @@ describe("PROJECT_BRIEF §6's Phase 5 acceptance-criterion string, verbatim (add
 
   it("markdown-lite markup survives as literal text for render/ to interpret, uninterpreted here", () => {
     expect(evaluateBlockTree(parseTextContent(CRITERION, TABLE_X), () => 80)).toContain("**LARGE**");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The `text` schema entry's two halves (entry 0127, D-114)
+// ---------------------------------------------------------------------------
+
+/** A `text` GraphObject with a literal `content` slot and the `resolvedContent` derived-slot placeholder D-018 requires. */
+function textObject(id: string, name: string, content: Value): GraphObject {
+  return {
+    id,
+    name,
+    type: "text",
+    slots: {
+      [TEXT_CONTENT_PATH.join(".")]: { kind: "literal", value: content },
+      resolvedContent: { kind: "derived", value: null },
+    },
+  };
+}
+
+/** A `table` GraphObject: literal `rows`/`cols` plus a `cells.<ref>` literal slot for each populated cell. */
+function tableWithCells(id: string, name: string, rows: number, cols: number, cells: Record<string, Value>): GraphObject {
+  const slots: Record<string, Slot> = {
+    rows: { kind: "literal", value: rows },
+    cols: { kind: "literal", value: cols },
+  };
+  for (const [ref, value] of Object.entries(cells)) {
+    slots[`cells.${ref}`] = { kind: "literal", value };
+  }
+  return { id, name, type: "table", slots };
+}
+
+function addr(objectId: string, ...path: readonly string[]): Address {
+  return { objectId, path };
+}
+
+describe("resolveTextDependencyAddresses — the resolvedContent dynamic dependency resolver (§5.1, D-114)", () => {
+  const table = tableWithCells("obj_t", "table_1", 4, 4, { A1: 10, A2: 20, A3: 30, A4: 40 });
+
+  it("always returns `content` itself first (§5.6: 'from content plus every referenced slot')", () => {
+    const text = textObject("obj_x", "text_1", "no markers here");
+    expect(resolveTextDependencyAddresses(text, [text])).toEqual([addr("obj_x", "content")]);
+  });
+
+  it("returns `content` alone for a non-literal or non-string content slot (Rule 6 — parsed literal-only)", () => {
+    const formulaContent: GraphObject = {
+      id: "obj_x",
+      name: "text_1",
+      type: "text",
+      slots: { content: { kind: "formula", ast: { type: "literal", value: "x" }, value: "x" }, resolvedContent: { kind: "derived", value: null } },
+    };
+    expect(resolveTextDependencyAddresses(formulaContent, [formulaContent])).toEqual([addr("obj_x", "content")]);
+  });
+
+  it("subscribes to every populated cell an embedding names", () => {
+    const text = textObject("obj_x", "text_1", "sum is {= table_1.A1 + table_1.A3 }");
+    expect(resolveTextDependencyAddresses(text, [text, table])).toEqual([
+      addr("obj_x", "content"),
+      addr("obj_t", "cells", "A1"),
+      addr("obj_t", "cells", "A3"),
+    ]);
+  });
+
+  it("subscribes to BOTH branches of a conditional, eagerly and totally (§5.3) — including the one not taken", () => {
+    const text = textObject("obj_x", "text_1", "{? table_1.A1 > 0 }{= table_1.A2 }{:}{= table_1.A4 }{?}");
+    const addresses = resolveTextDependencyAddresses(text, [text, table]);
+    expect(addresses).toContainEqual(addr("obj_t", "cells", "A2"));
+    expect(addresses).toContainEqual(addr("obj_t", "cells", "A4"));
+  });
+
+  it("still subscribes to a reference living only in a BROKEN conditional's branch (D-115 clause 3, via `orphaned`)", () => {
+    const text = textObject("obj_x", "text_1", "{? 1 + }x{:}{= table_1.A4 }{?}");
+    expect(resolveTextDependencyAddresses(text, [text, table])).toContainEqual(addr("obj_t", "cells", "A4"));
+  });
+
+  it("expands an embedded range per in-extent populated cell, via the SAME enumeration a cell formula's range uses (D-114 clause 1)", () => {
+    const text = textObject("obj_x", "text_1", "total {= SUM(table_1.A1:table_1.A4) }");
+    expect(resolveTextDependencyAddresses(text, [text, table])).toEqual([
+      addr("obj_x", "content"),
+      addr("obj_t", "cells", "A1"),
+      addr("obj_t", "cells", "A2"),
+      addr("obj_t", "cells", "A3"),
+      addr("obj_t", "cells", "A4"),
+    ]);
+  });
+
+  it("gives an EMPTY in-extent cell NO edge (D-110 clause 4) — the bare-reference mirror of a range member", () => {
+    const text = textObject("obj_x", "text_1", "{= table_1.B2 }"); // B2 is in a 4x4 extent but has no slot
+    expect(resolveTextDependencyAddresses(text, [text, table])).toEqual([addr("obj_x", "content")]);
+  });
+
+  it("DOES emit an edge for an OUT-OF-extent cell, so validateIntegrity's dangling check still names it (D-110 clause 6)", () => {
+    const text = textObject("obj_x", "text_1", "{= table_1.Z9 }"); // Z9 is beyond the 4x4 extent
+    expect(resolveTextDependencyAddresses(text, [text, table])).toContainEqual(addr("obj_t", "cells", "Z9"));
+  });
+
+  it("contributes nothing for a parse-broken span (D-028's 'absence of a dependency, made explicit')", () => {
+    const text = textObject("obj_x", "text_1", "before {= 1 + } after");
+    expect(resolveTextDependencyAddresses(text, [text])).toEqual([addr("obj_x", "content")]);
+  });
+
+  it("never throws for a table that does not exist — falls back to the range start so the dangling check catches it", () => {
+    const text = textObject("obj_x", "text_1", "{= SUM(gone.A1:gone.A4) }");
+    expect(() => resolveTextDependencyAddresses(text, [text])).not.toThrow();
+  });
+});
+
+describe("computeResolvedContent — the resolvedContent compute (§5.6, D-114 clause 4)", () => {
+  const CONTENT_KEY = "obj_x::content";
+  const text = textObject("obj_x", "text_1", "unused — read supplies content");
+  const table = tableWithCells("obj_t", "table_1", 4, 4, { A1: 10, A2: 20, A3: 30, A4: 40 });
+
+  function readWith(content: Value, extra: Record<string, Value> = {}): ReadSlot {
+    return reader({ [CONTENT_KEY]: content, ...extra });
+  }
+
+  it("returns plain content verbatim", () => {
+    expect(computeResolvedContent(text, readWith("hello **world**"), undefined, { objects: [text] })).toBe("hello **world**");
+  });
+
+  it("evaluates an embedded formula, re-parsing content every call (never cached — D-114 clause 4)", () => {
+    expect(computeResolvedContent(text, readWith("2 + 3 = {= 2 + 3 }"), undefined, { objects: [text] })).toBe("2 + 3 = 5");
+  });
+
+  it("reads `content` through `read`, so it is a declared dependency, not an object-slots peek", () => {
+    // A `read` that returns undefined for the content path -> empty resolved content.
+    expect(computeResolvedContent(text, () => undefined, undefined, { objects: [text] })).toBe("");
+  });
+
+  it("propagates an ErrorValue `content` (a formula-driven content slot that errored — §5.1: errors propagate)", () => {
+    const errored: ErrorValue = { error: "#DIV0", message: "content formula divided by zero" };
+    expect(computeResolvedContent(text, readWith(errored), undefined, { objects: [text] })).toEqual(errored);
+  });
+
+  it("marks a broken embedded span in place rather than blanking (delegates to evaluateBlockTree — D-116)", () => {
+    expect(computeResolvedContent(text, readWith("ok {= 1 + } still ok"), undefined, { objects: [text] })).toBe("ok !{= 1 + } still ok");
+  });
+
+  it("uses the injected `readRange` for an embedded aggregate (D-114 clause 1 — without it a RangeNode is #PARSE)", () => {
+    const readRange: ReadRange = () => [1, 2, 3, 4];
+    const withRange = computeResolvedContent(text, readWith("total {= SUM(table_1.A1:table_1.A4) }"), undefined, { readRange, objects: [text, table] });
+    expect(withRange).toBe("total 10");
+    const withoutRange = computeResolvedContent(text, readWith("total {= SUM(table_1.A1:table_1.A4) }"), undefined, { objects: [text, table] });
+    expect(withoutRange).toBe("total !#PARSE");
+  });
+
+  it("never throws for a nonsense content string", () => {
+    expect(() => computeResolvedContent(text, readWith("{? {= {:} }} {?"), undefined, { objects: [text] })).not.toThrow();
   });
 });

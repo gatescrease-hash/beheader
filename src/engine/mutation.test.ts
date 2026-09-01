@@ -3848,3 +3848,85 @@ describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the sam
     );
   });
 });
+
+describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry 0127)", () => {
+  /** A `text` object as `createObjectFromCommand` would build it — literal `content`, the D-018 derived placeholder, and the render/style slots absent (D-047-legal). */
+  function textObject(id: string, name: string, content: string): GraphObject {
+    return { id, name, type: "text", slots: { content: { kind: "literal", value: content }, resolvedContent: { kind: "derived", value: null } } };
+  }
+
+  function resolvedContentOf(objects: readonly GraphObject[], textId: string): unknown {
+    const created = mutate([], objects.map((object) => ({ kind: "createObject", object }) as const), []);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.message);
+    }
+    return created.objects.find((o) => o.id === textId)?.slots.resolvedContent?.value;
+  }
+
+  it("derives one edge per referenced cell plus the content self-edge, and no edge for an empty in-extent cell (D-110 clause 4)", () => {
+    const table = tableObject("obj_t", "table_1", 4, 4, { "cells.A1": { kind: "literal", value: 3 } });
+    const text = textObject("obj_x", "text_1", "{= table_1.A1 } vs empty {= table_1.C3 }");
+    expectSameEdges(deriveEdges([table, text]), [
+      { sourceSlot: addr("obj_x", "content"), dependentSlot: addr("obj_x", "resolvedContent") },
+      { sourceSlot: addr("obj_t", "cells", "A1"), dependentSlot: addr("obj_x", "resolvedContent") },
+    ]);
+  });
+
+  it("resolves an embedded formula against a real cell, end to end", () => {
+    const table = tableObject("obj_t", "table_1", 4, 4, { "cells.A1": { kind: "literal", value: 21 } });
+    const text = textObject("obj_x", "text_1", "double is {= table_1.A1 * 2 }");
+    expect(resolvedContentOf([table, text], "obj_x")).toBe("double is 42");
+  });
+
+  it("re-resolves when a referenced cell changes — a fresh mutation, full re-derive (Rule 5)", () => {
+    const table = tableObject("obj_t", "table_1", 4, 4, { "cells.A1": { kind: "literal", value: 10 } });
+    const text = textObject("obj_x", "text_1", "value {= table_1.A1 }");
+    const created = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: text }], []);
+    expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error(created.message);
+    expect(created.objects.find((o) => o.id === "obj_x")?.slots.resolvedContent?.value).toBe("value 10");
+
+    const bumped = mutate(created.objects, [{ kind: "setSlot", address: addr("obj_t", "cells", "A1"), slot: { kind: "literal", value: 99 } }], created.journal);
+    expect(bumped.ok).toBe(true);
+    if (!bumped.ok) throw new Error(bumped.message);
+    expect(bumped.objects.find((o) => o.id === "obj_x")?.slots.resolvedContent?.value).toBe("value 99");
+  });
+
+  it("subscribes to a range and a non-taken conditional branch, so both drive resolvedContent (Phase 5 gate property)", () => {
+    const table = tableObject("obj_t", "table_1", 4, 4, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: 2 },
+      "cells.B1": { kind: "literal", value: 5 },
+    });
+    const text = textObject("obj_x", "text_1", "{? table_1.B1 > 0 }sum {= SUM(table_1.A1:table_1.A2) }{:}neg {= table_1.B1 }{?}");
+    const edges = deriveEdges([table, text]);
+    const sources = edges.filter((e) => addressKey(e.dependentSlot) === addressKey(addr("obj_x", "resolvedContent"))).map((e) => addressKey(e.sourceSlot));
+    // content self-edge, the condition's B1, both range cells, AND B1 again from the untaken branch's own embedding.
+    expect(sources).toContain(addressKey(addr("obj_t", "cells", "A1")));
+    expect(sources).toContain(addressKey(addr("obj_t", "cells", "A2")));
+    expect(sources).toContain(addressKey(addr("obj_t", "cells", "B1")));
+    expect(resolvedContentOf([table, text], "obj_x")).toBe("sum 3");
+  });
+
+  it("a cycle through resolvedContent is rejected, naming the slots (§5.1 step 5)", () => {
+    // table_1.A1 = text_1.resolvedContent (a formula cell), and text_1's content
+    // reads table_1.A1 — a real slot-level cycle.
+    const table = tableObject("obj_t", "table_1", 4, 4, {
+      "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_x", "resolvedContent") }, value: null },
+    });
+    const text = textObject("obj_x", "text_1", "loop {= table_1.A1 }");
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: text }], []);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toContain("cyclic");
+    expect(result.ok === false && result.message).toContain("resolvedContent");
+  });
+
+  it("an embedding of an OUT-OF-extent cell is a dangling reference and the whole mutation is refused (D-110 clause 6)", () => {
+    const table = tableObject("obj_t", "table_1", 2, 2, {});
+    const text = textObject("obj_x", "text_1", "{= table_1.D4 }");
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: text }], []);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toContain("does not exist");
+  });
+});

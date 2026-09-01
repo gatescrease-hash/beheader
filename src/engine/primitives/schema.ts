@@ -21,14 +21,17 @@
  *   (`primitives/table.ts`'s `enumerateTableCellSlotPaths`).
  *
  *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
- *   D-011), `table` (§5.4), and the three PARAMETRIC geometry presets `circle`/
- *   `polygon`/`rect` (§5.5 — `primitives/geometry.ts` owns their pure math and
- *   `DerivedSlotCompute` functions; this file only wires them into the registry,
- *   the same split `table`'s own entry already uses). `polyline`, `text`,
- *   `script`, and `image` have no entry; `getObjectSchema` returns `undefined`
- *   for them, honestly, rather than a placeholder. Their schemas belong to the
- *   phases/cycles that introduce them — building them now would be building
- *   ahead of the brief's §6 build order.
+ *   D-011), `table` (§5.4), the three PARAMETRIC geometry presets `circle`/
+ *   `polygon`/`rect` (§5.5), and `text` (§5.6 — its `content`/`width`/`height`/
+ *   `overflow`/`style.*` non-derived slots and the `resolvedContent` derived
+ *   slot; `measuredHeight` is the next cycle). Every derived-slot's pure math
+ *   lives in its own primitive file (`primitives/geometry.ts`,
+ *   `primitives/text.ts`); this file only wires it into the registry, the same
+ *   split `table`'s own entry already uses. `polyline`, `script`, and `image`
+ *   have no entry; `getObjectSchema` returns `undefined` for them, honestly,
+ *   rather than a placeholder. Their schemas belong to the phases/cycles that
+ *   introduce them — building them now would be building ahead of the brief's §6
+ *   build order.
  *
  * INVARIANTS UPHELD HERE
  *   - Everything is declared by PATH (`["out", "result"]`), never by a hand-built key
@@ -51,11 +54,13 @@
  *     calling it mid-evaluation would let the dependency set drift while slots are
  *     being computed.
  *   - No `recompute()` phase is implied or supported. A `compute` function is a pure
- *     function of (object, resolved inputs, injected `EvalContext` services) that
- *     `graph/eval.ts` calls ONCE per derived slot, inside the same topological pass
- *     as every other slot kind (§5.1:
- *     "derived slots are first-class graph nodes and are evaluated inside the
- *     topological pass, exactly like formula slots").
+ *     function of (object, resolved inputs via `read`, injected `EvalContext`
+ *     services, and — for a compute that evaluates an embedded formula AST, i.e.
+ *     `text.resolvedContent` — a `DerivedSlotComputeDeps` carrying `readRange` and
+ *     the object list) that `graph/eval.ts` calls ONCE per derived slot, inside the
+ *     same topological pass as every other slot kind (§5.1: "derived slots are
+ *     first-class graph nodes and are evaluated inside the topological pass, exactly
+ *     like formula slots").
  *   - `compute` NEVER throws. `add`'s implementation demonstrates the required shape:
  *     propagate an upstream `ErrorValue` unchanged, then fail closed with a typed
  *     `ErrorValue` — `#REF` for an unresolved dependency, `#TYPE` for a wrong-shaped
@@ -82,11 +87,12 @@
  *     rather than carrying its own.
  *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
  *     which consumes this file), cycle detection, or topological evaluation.
- *   - `polyline`/text/script/image schema entries (later Phase 3 cycles, Phases
- *     5, 6).
+ *   - `text`'s `measuredHeight` derived slot (§5.6) — the next cycle. `polyline`/
+ *     `script`/`image` schema entries (later Phase 3 cycle, Phases 6).
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";
+import type { ReadRange } from "../formula/eval.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 import {
   computeCircleVerticesSlot,
@@ -103,6 +109,7 @@ import {
   verticesDerivedSlots,
 } from "./geometry.ts";
 import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
+import { computeResolvedContent, resolveTextDependencyAddresses, TEXT_CONTENT_PATH } from "./text.ts";
 
 // ---------------------------------------------------------------------------
 // Dependency declarations (§5.1: "Dependencies may be declared statically ...
@@ -117,18 +124,24 @@ import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from ".
  *   schema alone with no need to inspect the object's current state (§5.1's own
  *   example: `centroid` reading `vertices`). Both Phase 0 fixture types use only
  *   this form.
- * - `dynamic` — a function of the object's CURRENT state, returning full
- *   `Address`es rather than same-object paths, because the two documented cases
- *   are not same-object: `text.resolvedContent` depends on whatever slots its
- *   parsed content happens to reference (anywhere in the document, and it
- *   changes on every edit); `script.out.*` depends on all of that node's
- *   currently declared `in.*` slots (which change as ports are added/removed).
- *   MUST be evaluated only during edge derivation, never during evaluation
- *   (§5.1) — see `derivedSlotDependencyAddresses` below.
+ * - `dynamic` — a function of the object's CURRENT state AND the document's
+ *   object list, returning full `Address`es rather than same-object paths,
+ *   because the two documented cases are not same-object: `text.resolvedContent`
+ *   depends on whatever slots its parsed content happens to reference (anywhere
+ *   in the document, and it changes on every edit — and RESOLVING those
+ *   references needs the object list to map names to ids and to expand a range
+ *   by the target table's current extent, hence the second parameter);
+ *   `script.out.*` depends on all of that node's currently declared `in.*` slots
+ *   (which change as ports are added/removed — same-object, so it ignores the
+ *   second parameter). MUST be evaluated only during edge derivation, never
+ *   during evaluation (§5.1) — see `derivedSlotDependencyAddresses` below.
  */
 export type DerivedSlotDependencies =
   | { readonly kind: "static"; readonly paths: readonly (readonly string[])[] }
-  | { readonly kind: "dynamic"; readonly resolve: (object: GraphObject) => readonly Address[] };
+  | {
+      readonly kind: "dynamic";
+      readonly resolve: (object: GraphObject, objects: readonly GraphObject[]) => readonly Address[];
+    };
 
 /**
  * A derived slot's compute function (§5.1). Called by `graph/eval.ts` once per
@@ -149,6 +162,13 @@ export type DerivedSlotDependencies =
  * compute that reads `context` must handle its absence (treat it as
  * `NULL_EVAL_CONTEXT`), though in the real pipeline it is never absent.
  *
+ * `deps` carries the extra evaluation environment a compute needs only when it
+ * must ITSELF evaluate an embedded formula AST — §5.6's `resolvedContent`
+ * (`primitives/text.ts`) is the sole user today. `graph/eval.ts` always supplies
+ * it in the real pipeline; typed optional for the same reason `context` is (an
+ * isolated unit test of a compute that ignores it — every geometry / `add`
+ * compute — needn't build one). See `DerivedSlotComputeDeps` below.
+ *
  * MUST NOT throw. A broken input (an error value, a wrong-shaped value, a
  * missing one) is legitimate graph state (§5.1) and must come back as an
  * `ErrorValue`, never an unwound exception.
@@ -157,7 +177,29 @@ export type DerivedSlotCompute = (
   object: GraphObject,
   read: (address: Address) => Value | undefined,
   context?: EvalContext,
+  deps?: DerivedSlotComputeDeps,
 ) => Value;
+
+/**
+ * The extra evaluation environment `graph/eval.ts`'s `evaluateDerivedSlot`
+ * hands a `DerivedSlotCompute` — needed ONLY by a compute that evaluates an
+ * embedded formula sub-language (§5.6's `resolvedContent`; **D-114**).
+ *
+ * - `readRange` — the range analogue of `read`, built on the SAME
+ *   `primitives/table.ts` `enumerateRangeCellAddresses` a formula slot's
+ *   evaluation uses (D-114 clause 1). A compute embedding `SUM(A1:A4)` hands
+ *   this straight to `formula/eval.ts` via `evaluateBlockTree`. Optional,
+ *   matching `formula/eval.ts`'s own `evaluate` — a `RangeNode` with no
+ *   `readRange` wired evaluates to a disclosed `#PARSE`.
+ * - `objects` — the document's object identity table, needed to RE-PARSE
+ *   `content` into a block tree on demand for name -> id resolution. The tree is
+ *   NEVER cached (D-114 clause 4: `content` is the single source of truth), so
+ *   this is re-consulted every pass.
+ */
+export interface DerivedSlotComputeDeps {
+  readonly readRange?: ReadRange;
+  readonly objects: readonly GraphObject[];
+}
 
 /**
  * One derived slot's full declaration (§5.1): its stored path (D-010 — a path,
@@ -290,18 +332,23 @@ export interface ObjectSchema {
  *
  * `static`: pairs each declared same-object path with `object.id` — this is the
  * only place a static dependency path becomes a full `Address`.
- * `dynamic`: calls `dependencies.resolve(object)` directly against the object's
- * CURRENT state. The caller is responsible for calling this during edge
- * derivation and not from inside the topological pass (see file header).
+ * `dynamic`: calls `dependencies.resolve(object, objects)` directly against the
+ * object's CURRENT state and the current document (the latter for name -> id
+ * resolution and range expansion — `text.resolvedContent`). The caller is
+ * responsible for calling this during edge derivation and not from inside the
+ * topological pass (see file header). `objects` defaults to `[]` so the existing
+ * `static`-only call sites and unit tests need no change; a `dynamic` resolver
+ * that ignores it (`script.out.*`) is unaffected either way.
  */
 export function derivedSlotDependencyAddresses(
   object: GraphObject,
   dependencies: DerivedSlotDependencies,
+  objects: readonly GraphObject[] = [],
 ): readonly Address[] {
   if (dependencies.kind === "static") {
     return dependencies.paths.map((path) => ({ objectId: object.id, path }));
   }
-  return dependencies.resolve(object);
+  return dependencies.resolve(object, objects);
 }
 
 // ---------------------------------------------------------------------------
@@ -482,6 +529,75 @@ const RECT_SCHEMA: ObjectSchema = {
 };
 
 /**
+ * Path constants for `text`'s non-derived slots (§5.6's `TextBox` shape). All
+ * `static`: a `text` object's slot set never changes (Rule 6). `content` comes
+ * from `primitives/text.ts` (which reads it for parsing); the rest are declared
+ * here because nothing in the engine reads them yet — `width`/`height`/`overflow`
+ * and the five `style.*` fields are `render/`'s and (for `width`/`style`) the
+ * next cycle's `measuredHeight`. Declaring them is what lets a formula drive one
+ * (§5.6: "Any style field may be a formula slot bound elsewhere") — only a
+ * DECLARED path may hold a `formula` slot (D-017).
+ */
+const TEXT_WIDTH_PATH: readonly string[] = ["width"];
+const TEXT_HEIGHT_PATH: readonly string[] = ["height"];
+const TEXT_OVERFLOW_PATH: readonly string[] = ["overflow"];
+const TEXT_STYLE_FONT_PATH: readonly string[] = ["style", "font"];
+const TEXT_STYLE_FONT_SIZE_PATH: readonly string[] = ["style", "fontSize"];
+const TEXT_STYLE_LINE_HEIGHT_PATH: readonly string[] = ["style", "lineHeight"];
+const TEXT_STYLE_COLOR_PATH: readonly string[] = ["style", "color"];
+const TEXT_STYLE_ALIGN_PATH: readonly string[] = ["style", "align"];
+
+/** `text`'s one derived slot built this cycle — `measuredHeight` is the next (see `primitives/text.ts`). */
+const TEXT_RESOLVED_CONTENT_PATH: readonly string[] = ["resolvedContent"];
+
+/**
+ * `text` (PROJECT_BRIEF §5.6): "One text object type, not two." NINE fixed
+ * non-derived slots (`content` + `width`/`height`/`overflow` + five `style.*`)
+ * and — this cycle — ONE derived slot, `resolvedContent`.
+ *
+ * `resolvedContent`'s dependencies are `dynamic` (§5.1 names it as one of the two
+ * cases that require the form): they are whatever `content`'s parsed block tree
+ * references, re-derived every mutation by `primitives/text.ts`'s
+ * `resolveTextDependencyAddresses` — which also returns `content` itself, so a
+ * `formula`-driven `content` re-triggers and `computeResolvedContent` may `read`
+ * it. Its compute, `computeResolvedContent`, evaluates the block tree through the
+ * `read`/`readRange` `graph/eval.ts`'s `evaluateDerivedSlot` builds to a formula
+ * slot's own contract (**D-114**: D-110 coercion, a real range reader, clause 3's
+ * coercion-before-membership ordering) — never a second evaluation path.
+ *
+ * `measuredHeight` (§5.6's other derived slot) is deliberately NOT here yet: it
+ * calls `context.measurer`, which brings **D-118**'s null-measurer guard and the
+ * width/wrapping question the 0124 `TextMeasurer` interface does not answer —
+ * its own slice (`primitives/text.ts`'s NOT DONE HERE).
+ */
+const TEXT_SCHEMA: ObjectSchema = {
+  type: "text",
+  nonDerivedSlotPaths: [
+    {
+      kind: "static",
+      paths: [
+        TEXT_CONTENT_PATH,
+        TEXT_WIDTH_PATH,
+        TEXT_HEIGHT_PATH,
+        TEXT_OVERFLOW_PATH,
+        TEXT_STYLE_FONT_PATH,
+        TEXT_STYLE_FONT_SIZE_PATH,
+        TEXT_STYLE_LINE_HEIGHT_PATH,
+        TEXT_STYLE_COLOR_PATH,
+        TEXT_STYLE_ALIGN_PATH,
+      ],
+    },
+  ],
+  derivedSlots: [
+    {
+      path: TEXT_RESOLVED_CONTENT_PATH,
+      dependencies: { kind: "dynamic", resolve: resolveTextDependencyAddresses },
+      compute: computeResolvedContent,
+    },
+  ],
+};
+
+/**
  * The full registry. `Partial` because most `ObjectType`s have no schema entry
  * yet (see file header) — those genuinely have none, and `getObjectSchema`
  * reports that honestly via `undefined` rather than a stand-in entry that
@@ -494,6 +610,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   circle: CIRCLE_SCHEMA,
   polygon: POLYGON_SCHEMA,
   rect: RECT_SCHEMA,
+  text: TEXT_SCHEMA,
 };
 
 /** Looks up an object type's schema. Pure; never throws. `undefined` for a type with no entry yet (see file header). */

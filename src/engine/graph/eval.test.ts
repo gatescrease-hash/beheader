@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../eval-context.ts";
-import type { GraphObject, Slot } from "./node.ts";
+import type { GraphObject, Slot, Value } from "./node.ts";
 import { addressKey, type Edge } from "./edge.ts";
 import { evaluate } from "./eval.ts";
 
@@ -505,5 +505,95 @@ describe("evaluate — the evaluation ORDER comes from the edges, not from the i
     expect(objectById(result, "obj_3").slots["out.result"]).toEqual({ kind: "derived", value: 7 });
     expect(objectById(result, "obj_5").slots["in.a"]).toMatchObject({ kind: "formula", value: 7 });
     expect(objectById(result, "obj_5").slots["out.result"]).toEqual({ kind: "derived", value: 8 });
+  });
+});
+
+describe("evaluate — a derived slot's compute evaluating an embedded formula AST (D-114, §5.6's text.resolvedContent)", () => {
+  // Hand-built the way `deriveEdges` would build them, per this file's
+  // convention (header) — a real `text` object with a literal `content` slot
+  // and the `resolvedContent` derived placeholder, plus the edges the resolver
+  // (`primitives/text.ts`) would derive.
+
+  function textTable(id: string, name: string, rows: number, cols: number, cellValues: Record<string, Value>): GraphObject {
+    const slots: Record<string, Slot> = { rows: { kind: "literal", value: rows }, cols: { kind: "literal", value: cols } };
+    for (const [ref, value] of Object.entries(cellValues)) {
+      slots[`cells.${ref}`] = { kind: "literal", value };
+    }
+    return { id, name, type: "table", slots };
+  }
+
+  function textObject(id: string, name: string, content: string): GraphObject {
+    return { id, name, type: "text", slots: { content: { kind: "literal", value: content }, resolvedContent: { kind: "derived", value: null } } };
+  }
+
+  /** The `content` self-edge every `resolvedContent` gets, plus one per address given. */
+  function textEdges(textId: string, ...sources: Address[]): Edge[] {
+    return [edge(addr(textId, "content"), addr(textId, "resolvedContent")), ...sources.map((s) => edge(s, addr(textId, "resolvedContent")))];
+  }
+
+  function resolvedContentOf(objects: readonly GraphObject[], edges: readonly Edge[], textId: string): Value {
+    return objectById(evaluate(objects, edges), textId).slots.resolvedContent?.value ?? null;
+  }
+
+  it("resolves a plain embedded formula through the same evaluator a cell formula uses (Rule 4)", () => {
+    const text = textObject("obj_x", "text_1", "two plus three is {= 2 + 3 }");
+    expect(resolvedContentOf([text], textEdges("obj_x"), "obj_x")).toBe("two plus three is 5");
+  });
+
+  it("reads a referenced slot's value from THIS pass — the topological order places the reference first", () => {
+    const table = textTable("obj_t", "table_1", 4, 4, { A1: 42 });
+    const text = textObject("obj_x", "text_1", "cell says {= table_1.A1 }");
+    expect(resolvedContentOf([table, text], textEdges("obj_x", addr("obj_t", "cells", "A1")), "obj_x")).toBe("cell says 42");
+  });
+
+  it("D-114 clause 3: an EMPTY in-extent cell reads as 0 — coercion BEFORE the D-013 membership check", () => {
+    // A2 is inside the 4x4 extent but has no slot, so the resolver gave it NO
+    // edge (D-110 clause 4) — deliberately absent from resolvedContent's
+    // declared dependencies. If `evaluateDerivedSlot`'s `read` checked
+    // membership first it would return #REF and this would resolve to
+    // "sum: !#REF"; the D-110 coercion running first is what makes it "sum: 5",
+    // matching what the same reference reads in a cell formula (D-114).
+    const table = textTable("obj_t", "table_1", 4, 4, { A1: 5 });
+    const text = textObject("obj_x", "text_1", "sum: {= table_1.A1 + table_1.A2 }");
+    expect(resolvedContentOf([table, text], textEdges("obj_x", addr("obj_t", "cells", "A1")), "obj_x")).toBe("sum: 5");
+  });
+
+  it("D-110 clause 2: a cell that HAS a slot holding `null`, in-extent, also reads as 0", () => {
+    const table = textTable("obj_t", "table_1", 4, 4, { A1: null });
+    const text = textObject("obj_x", "text_1", "value {= table_1.A1 + 1 }");
+    expect(resolvedContentOf([table, text], textEdges("obj_x", addr("obj_t", "cells", "A1")), "obj_x")).toBe("value 1");
+  });
+
+  it("D-013 still bites: an address the block tree names but the edge set does NOT declare resolves to #REF", () => {
+    const other = { id: "obj_v", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 99 } } } satisfies GraphObject;
+    const text = textObject("obj_x", "text_1", "reads {= value_1.value }");
+    // Edges WITHOUT value_1.value -> resolvedContent: the compute must not be
+    // able to read it out of band (D-013), even though it is a real value in
+    // this pass. `value_1.value` is not an in-extent table cell, so the D-110
+    // coercion does not apply and the membership check is decisive.
+    expect(resolvedContentOf([other, text], textEdges("obj_x"), "obj_x")).toBe("reads !#REF");
+    expect(resolvedContentOf([other, text], textEdges("obj_x", addr("obj_v", "value")), "obj_x")).toBe("reads 99");
+  });
+
+  it("evaluates an embedded aggregate over a range, through the shared buildRangeReader (D-114 clause 1)", () => {
+    const table = textTable("obj_t", "table_1", 4, 4, { A1: 1, A2: 2, A3: 3, A4: 4 });
+    const text = textObject("obj_x", "text_1", "total {= SUM(table_1.A1:table_1.A4) }");
+    const cells = (["A1", "A2", "A3", "A4"] as const).map((ref) => addr("obj_t", "cells", ref));
+    expect(resolvedContentOf([table, text], textEdges("obj_x", ...cells), "obj_x")).toBe("total 10");
+  });
+
+  it("a broken embedded span is marked in place, the rest of resolvedContent still resolves (D-116)", () => {
+    const text = textObject("obj_x", "text_1", "ok {= 1 + } and {= 6 * 7 }");
+    expect(resolvedContentOf([text], textEdges("obj_x"), "obj_x")).toBe("ok !{= 1 + } and 42");
+  });
+
+  it("re-renders when a value referenced only inside the currently NON-taken branch changes (Phase 5 gate property)", () => {
+    // A1 > 0 -> true branch ("ok"); A1 <= 0 -> false branch, which reads A2.
+    // Both branches' cells are subscribed (extractTextDependencies is total),
+    // so flipping A1 negative surfaces A2's value in the SAME pass.
+    const text = textObject("obj_x", "text_1", "{? table_1.A1 > 0 }ok{:}fallback is {= table_1.A2 }{?}");
+    const edges = textEdges("obj_x", addr("obj_t", "cells", "A1"), addr("obj_t", "cells", "A2"));
+    expect(resolvedContentOf([textTable("obj_t", "table_1", 4, 4, { A1: 5, A2: 20 }), text], edges, "obj_x")).toBe("ok");
+    expect(resolvedContentOf([textTable("obj_t", "table_1", 4, 4, { A1: -1, A2: 20 }), text], edges, "obj_x")).toBe("fallback is 20");
   });
 });

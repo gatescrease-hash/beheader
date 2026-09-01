@@ -11,8 +11,10 @@
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   Three pure functions over `content`'s parsed shape, nothing about a `text` OBJECT
- *   or its schema yet (see NOT DONE HERE):
+ *   Three pure functions over `content`'s parsed shape, plus the two halves of the
+ *   `text` schema entry that wrap them (`resolveTextDependencyAddresses` +
+ *   `computeResolvedContent` — see the section further down; `measuredHeight` is still
+ *   a later cycle, NOT DONE HERE):
  *   - `parseTextContent(content, objects)` -> a `Block[]`. Never throws, and never
  *     rejects `content` — it is a LITERAL slot (§5.6), so any string is legal document
  *     state; a malformed `{= }`/`{? }` becomes an `error`-kind `Block` INSTEAD OF a
@@ -75,35 +77,48 @@
  *     arithmetic, extended here to text embedding for the same reason (there is no
  *     sensible flat text form for either shape).
  *
+ * THE `text` SCHEMA ENTRY'S TWO HALVES ALSO LIVE HERE (entry 0127), wiring the three
+ * pure functions above into `primitives/schema.ts`'s `TEXT_SCHEMA` the same split
+ * `primitives/geometry.ts` already uses (pure math here, registry wiring there):
+ *   - `resolveTextDependencyAddresses(object, objects)` — the `dynamic` dependency
+ *     resolver for the `resolvedContent` derived slot. Re-parses `content` (never
+ *     cached — **D-114** clause 4) and returns `content` itself plus every address the
+ *     block tree references, ranges expanded per cell via the SAME
+ *     `primitives/table.ts` enumeration a cell formula's range uses. Runs at
+ *     EDGE-DERIVATION time only (Rule 6).
+ *   - `computeResolvedContent(object, read, context, deps)` — the `resolvedContent`
+ *     compute. Re-parses `content` and hands the block tree to `evaluateBlockTree`
+ *     with the `read`/`readRange` `graph/eval.ts`'s `evaluateDerivedSlot` built to a
+ *     formula slot's contract (**D-114**: D-110 coercion, a real range reader,
+ *     clause 3's ordering). No evaluation logic of its own (Rule 4).
+ *
  * NOT DONE HERE
- *   - Any `text` OBJECT type, schema entry, or derived slot (`resolvedContent`,
- *     `measuredHeight`) — a later cycle wires this file's three functions into
- *     `primitives/schema.ts`. The `EvalContext`/`TextMeasurer` seam that
- *     `measuredHeight` consumes is already threaded through `graph/eval.ts` (entry
- *     0124, `engine/eval-context.ts`); what remains is the schema entry itself. D-116
- *     clause 3 / D-117 clause 4 ("`resolvedContent` holds a `string`, not an
- *     `ErrorValue`") fall out of `evaluateBlockTree` now always returning a string.
- *   - `resolvedContent`'s `read`/`readRange` closures — **D-114** rules them built to
- *     the same contract a formula slot's AST gets (D-110's empty-in-extent coercion, a
- *     real range reader, and clause 3's coercion-before-membership ordering), by
- *     widening `graph/eval.ts`'s `evaluateDerivedSlot`. This file's
- *     `evaluateBlockTree`/`extractTextDependencies` take whatever `read`/`readRange`/
- *     dependency list they are handed and have no opinion on where those come from.
+ *   - `measuredHeight` (§5.6) and its `TextMeasurer` call — the next cycle, with
+ *     **D-118**'s null-measurer `#MEASURE` guard and the width/wrapping question the
+ *     0124 `measure(text, style)` interface does not yet answer.
  *   - Markdown-lite parsing/rendering, layout, wrapping — `render/`, later. Deliberately
  *     not this file's concern even now: `**bold**`/`# heading`/etc. have no dependency
  *     and no reactive value, so they need no AST — they stay literal text inside a
  *     `text`-kind `Block` for `render/`'s eventual layout pass to interpret (Rule 1:
  *     glyph styling is not engine logic).
+ *   - A `formula`/`derived`-kind `content` slot's OWN references. `content` is read
+ *     `literal`-only for parsing (the Rule 6 guard `readTableDimension` applies to
+ *     `rows`/`cols`), so a `link`ed `content` would not track what its formula names —
+ *     a documented gap (STATUS.md), owed a ruling by the cycle that builds the `text`
+ *     command, exactly as D-046 settled the dimension case.
  *   - The `{= }`/`{? }` command-line or panel authoring surface — `content` is always
  *     written as a plain string (§5.10's `text` command's own literal argument), the
  *     same way a table cell's formula source is typed, and needs no new mechanism here.
  */
-import type { AddressableObject } from "../address.ts";
+import type { Address, AddressableObject } from "../address.ts";
+import type { EvalContext } from "../eval-context.ts";
 import type { FormulaAst } from "../formula/ast.ts";
 import { extractDependencies, type Dependency } from "../formula/deps.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
 import { isParseError, parseFormula } from "../formula/parser.ts";
-import { isErrorValue, type ErrorValue, type Value } from "../graph/node.ts";
+import { getSlot, isErrorValue, resolveSlot, type ErrorValue, type GraphObject, type Value } from "../graph/node.ts";
+import type { DerivedSlotComputeDeps } from "./schema.ts";
+import { enumerateRangeCellAddresses, isInExtentTableCellAddress, isRangeEnumerationError } from "./table.ts";
 
 // ---------------------------------------------------------------------------
 // The block tree (§5.6)
@@ -690,4 +705,130 @@ function evaluateBlocks(blocks: readonly Block[], read: ReadSlot, readRange: Rea
  */
 export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, readRange?: ReadRange): string {
   return evaluateBlocks(blocks, read, readRange);
+}
+
+// ---------------------------------------------------------------------------
+// The `text` schema entry's two halves (entry 0127) — wired into
+// `primitives/schema.ts`'s `TEXT_SCHEMA` the same "pure logic here, registry
+// there" split `primitives/geometry.ts` uses. See the file header.
+// ---------------------------------------------------------------------------
+
+/**
+ * The stored path of a `text` object's `content` slot (§5.6: "content: string //
+ * literal slot: raw source including markup"). Exported so `primitives/schema.ts`'s
+ * `TEXT_SCHEMA` declares the SAME path this file reads for parsing.
+ */
+export const TEXT_CONTENT_PATH: readonly string[] = ["content"];
+
+/**
+ * The `dynamic` dependency resolver for a `text` object's `resolvedContent`
+ * derived slot (§5.1: "text_1.resolvedContent depends on whatever slots its parsed
+ * block tree happens to reference, which changes whenever content is edited").
+ * Called by `mutation.ts`'s `deriveEdges` at EDGE-DERIVATION time only, never
+ * during evaluation (Rule 6 / `primitives/schema.ts`'s header).
+ *
+ * Returns, as a flat `Address[]` — one edge each — :
+ *   - `content` itself. §5.6: "resolvedContent (from content plus every referenced
+ *     slot)". Unconditional, so a `formula`-driven `content` slot still forces a
+ *     re-resolve and so `computeResolvedContent` may `read` it under D-013.
+ *   - every address the block tree references, EAGERLY and TOTALLY
+ *     (`extractTextDependencies` walks both branches of every conditional AND a
+ *     broken conditional's `orphaned` branches — §5.3, D-115 clause 3). A
+ *     `RangeDependency` is expanded here, per cell, via the SAME
+ *     `enumerateRangeCellAddresses` a cell formula's range uses in `deriveEdges`
+ *     and `graph/eval.ts` (**D-114** clause 1): an in-extent cell with no slot
+ *     contributes no edge (D-047 clause 1); an unresolvable table falls back to
+ *     the range's start address so the dangling-reference check still names it.
+ *   - NOT a bare reference to an EMPTY in-extent table cell (**D-110** clause 4):
+ *     no edge, exactly as `deriveEdges`'s own bare-reference handling; the
+ *     coercion to `0` happens at read time (`graph/eval.ts`), not here.
+ *
+ * `content` is read `literal`-only — the Rule 6 guard `primitives/table.ts`'s
+ * `readTableDimension` applies to `rows`/`cols`, for the identical reason: a
+ * `formula` slot's value is written at evaluation time, AFTER this runs. A
+ * non-literal or missing `content` slot yields `[content]` alone (see the file
+ * header's NOT DONE HERE).
+ *
+ * Never throws. This mirrors `deriveEdges`'s own reference/range handling rather
+ * than sharing it: that walks a slot's `FormulaAst`, this walks a `Block[]`, and
+ * a shared helper would have to live in a module both import without a cycle —
+ * `primitives/text.ts` cannot import `mutation.ts` (it would close
+ * mutation -> schema -> text -> mutation).
+ */
+export function resolveTextDependencyAddresses(
+  object: GraphObject,
+  objects: readonly GraphObject[],
+): readonly Address[] {
+  const addresses: Address[] = [{ objectId: object.id, path: TEXT_CONTENT_PATH }];
+  const contentSlot = getSlot(object, TEXT_CONTENT_PATH);
+  if (contentSlot === undefined || contentSlot.kind !== "literal" || typeof contentSlot.value !== "string") {
+    return addresses;
+  }
+  const blocks = parseTextContent(contentSlot.value, objects);
+  for (const dependency of extractTextDependencies(blocks)) {
+    if (dependency.kind === "reference") {
+      // D-110 clause 4: an empty cell within an existing table's current extent
+      // gets NO edge — the bare-reference mirror of D-047 clause 1, exactly as
+      // `deriveEdges` treats the same address for a cell formula.
+      if (resolveSlot(dependency.address, objects) === undefined && isInExtentTableCellAddress(dependency.address, objects)) {
+        continue;
+      }
+      addresses.push(dependency.address);
+      continue;
+    }
+    // range: one address per in-extent cell that HAS a slot (D-047 clause 1).
+    const tableObject = objects.find((candidate) => candidate.id === dependency.start.objectId);
+    if (tableObject === undefined) {
+      addresses.push(dependency.start);
+      continue;
+    }
+    const cellAddresses = enumerateRangeCellAddresses(dependency.start, dependency.end, tableObject);
+    if (isRangeEnumerationError(cellAddresses)) {
+      addresses.push(dependency.start);
+      continue;
+    }
+    for (const cellAddress of cellAddresses) {
+      if (getSlot(tableObject, cellAddress.path) === undefined) {
+        continue;
+      }
+      addresses.push(cellAddress);
+    }
+  }
+  return addresses;
+}
+
+/**
+ * The `resolvedContent` derived-slot compute (§5.6: "resolvedContent (from
+ * content plus every referenced slot)"). Re-parses `content` into a block tree
+ * and evaluates it — the tree is NEVER cached (**D-114** clause 4: `content` is
+ * the single source of truth, and a cached tree is a second one that can
+ * disagree).
+ *
+ * `read`/`readRange` come from `graph/eval.ts`'s `evaluateDerivedSlot`, built to
+ * the SAME contract a formula slot's AST gets (**D-114**: D-110's empty-in-extent
+ * coercion, a real range reader on `enumerateRangeCellAddresses`, and clause 3's
+ * coercion-before-membership ordering). This function hands them straight to
+ * `evaluateBlockTree` and adds no evaluation logic of its own (Rule 4).
+ * `deps.objects` is the document's object identity table, needed to RE-PARSE for
+ * name -> id resolution (never stored — D-114 clause 4).
+ *
+ * ALWAYS returns a `string`, unless `content` ITSELF is an `ErrorValue` (a
+ * `formula`-driven `content` slot that evaluated to one — §5.1: errors
+ * propagate). A broken embedded span is marked in place by `evaluateBlockTree`
+ * (`!`, D-116 / D-117), never propagated (D-116 clause 3 / D-117 clause 4).
+ * Never throws.
+ */
+export function computeResolvedContent(
+  object: GraphObject,
+  read: ReadSlot,
+  _context: EvalContext | undefined,
+  deps: DerivedSlotComputeDeps | undefined,
+): Value {
+  const rawContent = read({ objectId: object.id, path: TEXT_CONTENT_PATH });
+  if (rawContent !== undefined && isErrorValue(rawContent)) {
+    return rawContent;
+  }
+  const content = typeof rawContent === "string" ? rawContent : "";
+  const blocks = parseTextContent(content, deps?.objects ?? []);
+  return evaluateBlockTree(blocks, read, deps?.readRange);
 }

@@ -301,8 +301,10 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
 
   it("says so, and moves nothing, when objects exist but none of them draws anything", () => {
     // Reachable only through a document this build did not create by command —
-    // `text` has no schema yet. It is the other emptiness `documentExtent`
-    // reports, and the branch exists because `commands.ts` cannot see it.
+    // there is no `text` command, and a slotless `text` object is not one
+    // `createObject` would build (entry 0127 gave `text` a schema; `initialAppState`
+    // does not re-validate). It is the other emptiness `documentExtent` reports,
+    // and the branch exists because `commands.ts` cannot see it.
     const undrawable: Document = { ...createEmptyDocument(), objects: [{ id: "obj_1", name: "text_1", type: "text", slots: {} }] };
     const before = initialAppState(undrawable);
     const after = performEffect({ kind: "fit" }, before, VIEWPORT).state;

@@ -57,15 +57,15 @@ describe("getObjectSchema", () => {
   });
 
   // D-008's lesson: test the unspecified cases, not just the brief's examples.
-  // Every non-fixture ObjectType has no schema yet (file header) — this must be
-  // an honest `undefined`, not a placeholder that would silently pass a future
-  // validation check. `table`/`circle`/`polygon`/`rect` have real entries
-  // (their own describe blocks below), so they are not in this list;
-  // `polyline` and `script` are the remaining unregistered types. Narrowed
-  // at entry 0059 — PROCESS_BRIEF §6.1 trigger 5.
+  // A not-yet-built ObjectType must be an honest `undefined`, not a placeholder
+  // that would silently pass a future validation check. `table`/`circle`/
+  // `polygon`/`rect`/`text` have real entries (their own describe blocks below);
+  // `polyline`/`script`/`image` are the remaining unregistered types. Narrowed
+  // at entry 0059, `text` added at 0127 — PROCESS_BRIEF §6.1 trigger 5.
   it("returns undefined for an ObjectType with no schema entry yet", () => {
     expect(getObjectSchema("polyline")).toBeUndefined();
     expect(getObjectSchema("script")).toBeUndefined();
+    expect(getObjectSchema("image")).toBeUndefined();
   });
 
   it("returns a real entry for 'table' (D-017's dynamic-slot-family mechanism), with no derived slots", () => {
@@ -100,6 +100,26 @@ describe("getObjectSchema", () => {
       ]),
     );
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type, slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual(paths);
+  });
+
+  // primitives/text.ts owns the resolver/compute behaviour (its own test file);
+  // this only confirms the §5.6 registry wiring built at entry 0127.
+  it("returns a real entry for 'text' (§5.6), with nine static non-derived paths and one derived slot, resolvedContent", () => {
+    const schema = getObjectSchema("text");
+    expect(schema).toBeDefined();
+    expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
+      ["content"],
+      ["width"],
+      ["height"],
+      ["overflow"],
+      ["style", "font"],
+      ["style", "fontSize"],
+      ["style", "lineHeight"],
+      ["style", "color"],
+      ["style", "align"],
+    ]);
+    expect(schema?.derivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"]]);
+    expect(schema?.derivedSlots[0]?.dependencies.kind).toBe("dynamic");
   });
 });
 
@@ -259,6 +279,20 @@ describe("derivedSlotDependencyAddresses", () => {
     };
     const addresses = derivedSlotDependencyAddresses(addObject, dynamicDependency);
     expect(addresses).toEqual([{ objectId: "elsewhere_obj", path: ["add", "whatever"] }]);
+  });
+
+  it("forwards the document object list to a dynamic resolver that needs it (0127 — `text.resolvedContent`)", () => {
+    const seen: string[][] = [];
+    const dynamicDependency: DerivedSlotDependencies = {
+      kind: "dynamic",
+      resolve: (_object, objects) => {
+        seen.push(objects.map((o) => o.id));
+        return [];
+      },
+    };
+    const otherObject: GraphObject = { id: "obj_other", name: "other", type: "value", slots: {} };
+    derivedSlotDependencyAddresses(addObject, dynamicDependency, [addObject, otherObject]);
+    expect(seen).toEqual([["obj_2", "obj_other"]]);
   });
 });
 

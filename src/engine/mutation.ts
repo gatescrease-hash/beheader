@@ -58,7 +58,13 @@
  *   2. Every schema-declared derived slot's dependencies, via
  *      `primitives/schema.ts`'s `derivedSlotDependencyAddresses` — the ONLY place a
  *      dynamic dependency resolver may run, precisely because this IS edge-derivation
- *      time (Rule 6).
+ *      time (Rule 6). `text.resolvedContent`'s resolver
+ *      (`primitives/text.ts`'s `resolveTextDependencyAddresses`) is the first
+ *      `dynamic` one: it re-parses `content` and returns `content` itself plus every
+ *      address the block tree names, a `RangeDependency` expanded per cell by the
+ *      SAME `enumerateRangeCellAddresses` Source 1 uses, and an empty in-extent cell
+ *      given no edge exactly as Source 1's bare-reference arm does (D-110 clause 4,
+ *      D-114). It gets `objects` for name resolution and range expansion.
  *
  * `validateIntegrity(objects, edges)` — step 4 / §5.1.1. Takes a candidate post-apply
  * object list and its freshly derived edge set, and rejects with a human-readable
@@ -283,9 +289,12 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
 
     // Source 2: every schema-declared derived slot's dependencies, resolved
     // NOW (edge-derivation time) — the only moment a dynamic resolver may run
-    // (primitives/schema.ts's header; Rule 6).
+    // (primitives/schema.ts's header; Rule 6). `objects` is passed for the
+    // `dynamic` case that needs it — `text.resolvedContent`, whose references
+    // are names to resolve and ranges to expand against the current document
+    // (D-114); a `static` or same-object `dynamic` resolver ignores it.
     for (const derivedSlotEntry of schema.derivedSlots) {
-      const dependencyAddresses = derivedSlotDependencyAddresses(object, derivedSlotEntry.dependencies);
+      const dependencyAddresses = derivedSlotDependencyAddresses(object, derivedSlotEntry.dependencies, objects);
       for (const sourceSlot of dependencyAddresses) {
         edges.push({
           sourceSlot,
