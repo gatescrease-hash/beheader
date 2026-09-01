@@ -3656,3 +3656,43 @@ tests asserting the REFUSAL (`"references a slot that does not exist"` for an in
 will FLIP — that is the intended visible diff, not a test being weakened, and it fires §6.1 trigger
 5 for the cycle that does it. Fix-list item 2 ("give the missing-slot refusal a remedy") narrows to
 the cases clause 6 keeps refusing.
+
+---
+
+## D-111 — Phase 4's gate does NOT owe an empty-cell cycle case; D-110's own cycle owes it, and must pin clause 5 executably
+Answers: entry 0115's question for the reviewer   Ruled: entry 0116-REVIEW-phase4-gate   Binding on:
+the cycle that builds **D-110**, and on any later reading of what Phase 4's gate covers
+
+**Ruling.**
+
+1. **Phase 4's gate is not widened for it.** Entry 0115 asked whether "no false cycle" wants a third
+   case — a cycle that closes only once an empty cell is populated. It does not, because that case
+   is UNREACHABLE today: an in-extent empty cell is still a refused dangling reference until D-110
+   is built. A test written now would pin the CURRENT refusal, not the future cycle, and D-110's own
+   cycle would have to rewrite it. **A gate test pins its criterion; it does not anticipate a
+   ruling.**
+2. **The third case the gate DID owe is a different one, and it is now built** (0116-REVIEW's edit
+   to `main.test.ts`): the round trip through ONE object — `table_1.A1 → polygon_1.origin.x →
+   polygon_1.centroid.x → table_1.C1`. Rationale: the gate document binds through TWO polygons, so
+   its object-level graph (`polygon_2 → table_1 → polygon_1`) is acyclic even for an implementation
+   whose graph is object-granular rather than slot-granular. `not.toContain("cyclic")` over that
+   document therefore could not fail, whatever the graph's granularity. §5.1's own motivating
+   example is the shape where it CAN fail, and "no false cycle" is the clause that exists to catch
+   it. **A negative assertion is only worth what the positive case behind it costs.**
+3. **D-110's implementing cycle MUST pin clause 5 executably**, in the same cycle, and its log must
+   name the test: `A2 = D1` with `D1` empty is ACCEPTED and reads `0`; the later `set D1 = A2` is
+   REFUSED as cyclic, naming both slots; and the refused mutation leaves prior state bit-for-bit
+   unchanged (§5.1). Clause 5 is the half of D-110 that is easiest to believe without checking —
+   "the cycle appears on its own at the populating mutation" is a claim about edge re-derivation
+   (clause 4), not a claim about a message, and nothing else in the suite reaches it.
+
+**Rationale.** This is the answer to a question the gate's author put to their reviewer, and both
+halves matter: what the gate must NOT grow (an anticipation of an unbuilt ruling, which dates the
+moment the ruling lands) and what it was actually missing (the only shape in which its own
+"no false cycle" clause could ever have gone red). It protects §5.1's slot-granularity decision,
+which is the most expensive structural choice in the project and until now was pinned nowhere as a
+composite — `geometry.test.ts:418` pins a table driving a polygon's derived slot, which is the
+one-directional half.
+
+Reconciliation required: none now. No `PROVISIONAL` tag. Clause 3 binds the D-110 cycle at the
+moment it is scheduled.

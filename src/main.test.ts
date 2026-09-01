@@ -793,6 +793,10 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     // by mutation-checking this very test — see entry 0115).
     expect(getSlot(objectNamed(state, "polygon_1"), ["origin", "x"])?.kind).toBe("formula");
     expect(getSlot(objectNamed(state, "table_1"), ["cells", "B1"])?.kind).toBe("formula");
+    // (b)'s driving polygon is LITERAL in X — the half of the brief's own wording
+    // ("polygon_b.origin.x is a literal slot") that is what makes it draggable at
+    // all, and therefore what makes (b) and (c) different tests (0116-REVIEW).
+    expect(getSlot(objectNamed(state, "polygon_2"), ["origin", "x"])?.kind).toBe("literal");
     expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(500);
     expect(numberAt(objectNamed(state, "table_1"), ["cells", "B1"])).toBe(600);
     expect(state.log.join("\n")).not.toContain("cyclic");
@@ -885,5 +889,29 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     expect(newLines(state, outcome.state).join("\n")).toContain("cyclic");
     // §5.1: a rejected mutation leaves prior state bit-for-bit unchanged.
     expect(outcome.state.document).toBe(state.document);
+  });
+
+  it("no false cycle in §5.1's OWN shape either — ONE object driven BY the table and driving it back", () => {
+    // Added at 0116-REVIEW, because the document above cannot fail this way.
+    // The gate binds through TWO polygons, so its object-level graph —
+    // polygon_2 → table_1 → polygon_1 — is acyclic even for an implementation
+    // whose graph is object-granular rather than slot-granular. The shape §5.1
+    // names as the whole reason for slot granularity is the round trip through
+    // ONE object: "a chain like `table_x.A1 → polygon_1.origin.x →
+    // table_x.B1` would register as `table → polygon → table` and be falsely
+    // rejected as a cycle." That is where "no false cycle" can actually fail,
+    // and it is legal: A1, C1 and origin.x are three distinct slots.
+    let state = typed(gateDocument(), "set table_1.C1 = polygon_1.centroid.x");
+
+    expect(state.log.join("\n")).not.toContain("cyclic");
+    expect(getSlot(objectNamed(state, "table_1"), ["cells", "C1"])?.kind).toBe("formula");
+    expect(numberAt(objectNamed(state, "table_1"), ["cells", "C1"])).toBeCloseTo(500, 9);
+
+    // And the round trip propagates in one pass: the cell drives the polygon's
+    // origin, and that same polygon's DERIVED centroid drives the cell beside it.
+    state = typed(state, "set table_1.A1 650");
+
+    expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(650);
+    expect(numberAt(objectNamed(state, "table_1"), ["cells", "C1"])).toBeCloseTo(650, 9);
   });
 });
