@@ -222,6 +222,12 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
     // on every call, never cached (D-036 constraint 2), and reading those
     // dimensions `literal`-only (D-046) inside that one function, not
     // duplicated here.
+    //
+    // D-119: the reference / range / D-110-clause-4 / D-047-clause-1 handling
+    // below is mirrored by hand in `primitives/text.ts`'s
+    // `resolveTextDependencyAddresses` (an import cycle forbids sharing). Any
+    // change here MUST be made there too; a third consumer forces extraction to
+    // a shared module.
     for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
       const slot = object.slots[slotKey(path)];
       if (slot === undefined || slot.kind !== "formula") {

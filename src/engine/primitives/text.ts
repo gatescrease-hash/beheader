@@ -745,15 +745,20 @@ export const TEXT_CONTENT_PATH: readonly string[] = ["content"];
  *
  * `content` is read `literal`-only — the Rule 6 guard `primitives/table.ts`'s
  * `readTableDimension` applies to `rows`/`cols`, for the identical reason: a
- * `formula` slot's value is written at evaluation time, AFTER this runs. A
- * non-literal or missing `content` slot yields `[content]` alone (see the file
- * header's NOT DONE HERE).
+ * `formula` slot's value is written at evaluation time, AFTER this runs. Both the
+ * non-literal and the missing case yield `[content]` alone, but their outcomes
+ * DIFFER: a `formula`/`derived` `content` slot EXISTS, so its self-edge is valid
+ * and the object commits with its inner references untracked (the F13 gap, owed a
+ * ruling by the `text` command cycle); a MISSING `content` slot makes that same
+ * self-edge dangling, so `validateIntegrity` REFUSES the object — a `text` with no
+ * `content` is malformed (§5.6). See the file header's NOT DONE HERE.
  *
- * Never throws. This mirrors `deriveEdges`'s own reference/range handling rather
- * than sharing it: that walks a slot's `FormulaAst`, this walks a `Block[]`, and
- * a shared helper would have to live in a module both import without a cycle —
- * `primitives/text.ts` cannot import `mutation.ts` (it would close
- * mutation -> schema -> text -> mutation).
+ * Never throws. This mirrors `deriveEdges` Source 1's own reference/range handling
+ * rather than sharing it — `primitives/text.ts` cannot import `mutation.ts` (it
+ * would close mutation -> schema -> text -> mutation). The two are a sanctioned
+ * hand-maintained PAIR with no compiler link between them: **D-119** binds any
+ * change to bare-reference / range / D-110 / D-047 edge derivation to touch both,
+ * and forces extraction to a shared module the moment a third consumer appears.
  */
 export function resolveTextDependencyAddresses(
   object: GraphObject,

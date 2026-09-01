@@ -4017,3 +4017,47 @@ build to is loud.
 
 Reconciliation required: none yet — nothing consumes the measurer. Binding on the cycle that writes
 `measuredHeight`.
+
+---
+
+## D-119 — `resolveTextDependencyAddresses` and `deriveEdges` Source 1 are a sanctioned hand-maintained PAIR; a change to one is a change to both, and a third consumer forces extraction
+Answers: entry 0127's Decision 3 / its reviewer question 2   Ruled: entry 0128-REVIEW-phase5 (reviewer)
+Binding on: `mutation.ts`'s `deriveEdges` Source 1, `primitives/text.ts`'s `resolveTextDependencyAddresses`,
+and any future third consumer of reference/range edge derivation
+
+**Ruling.**
+
+1. **The duplication stands for now.** `resolveTextDependencyAddresses` re-implements, by hand,
+   `deriveEdges` Source 1's `ReferenceDependency` / `RangeDependency` → `Address[]` logic, including
+   **D-110** clause 4's empty-in-extent skip and **D-047** clause 1's absent-cell skip. It cannot
+   share the code: `primitives/text.ts` importing `mutation.ts` closes the cycle
+   `mutation → schema → text → mutation`. Extracting a shared helper into a neutral module now is
+   real design work and touches code not written in the 0127 batch (§4) — it is not ordered.
+
+2. **The two are a PAIR with no compiler link.** A verification at 0128-REVIEW confirmed they are
+   currently byte-equivalent in behaviour (`getSlot(o,p)` ≡ `o.slots[slotKey(p)]`; same `resolveSlot`
+   / `isInExtentTableCellAddress` / `enumerateRangeCellAddresses` / `isRangeEnumerationError` calls,
+   same order, same fallbacks). Nothing but this ruling and two cross-referencing comments keeps them
+   so. **Any change to bare-reference handling, range expansion, the D-110 clause 4 skip, or the
+   D-047 clause 1 skip in EITHER site MUST be made in the other in the same cycle**, and that cycle's
+   log MUST name both files. A test passing after a one-sided change is not evidence of correctness —
+   each site has its own tests, and neither suite exercises the other's code.
+
+3. **A third consumer forces extraction.** If any later cycle needs this same
+   `Dependency → Address[]` expansion a third time (a plausible candidate: `script.out.*`'s dynamic
+   resolver, or a loader-side check), it MUST NOT add a third hand-maintained copy. It extracts the
+   shared logic into a module `mutation.ts`, `primitives/text.ts`, and the new consumer can all
+   import without a cycle (`primitives/table.ts` is the natural home — it already owns
+   `enumerateRangeCellAddresses` and both sites import it), and collapses all copies onto it in that
+   cycle.
+
+**Rationale.** This is the hazard STATUS.md's gotcha names but a rewritten STATUS cannot bind: a
+future cycle changes D-110/D-047 edge derivation in `deriveEdges`, every suite stays green because
+the text resolver has separate tests the author never thought to touch, and text-embedded references
+silently stop meaning the same thing a cell reference means — violating **D-114** clause 1 ("a
+reference means the same thing in a cell and in a text box"), which is the whole point of routing
+embedded ASTs through `evaluateDerivedSlot` rather than a parallel path. A binding decision converts
+"someone should remember" into "the process caught it."
+
+Reconciliation required: none — the pair is already in sync (verified 0128). No `PROVISIONAL` tag.
+Cross-referencing comments were added to both sites by this review.
