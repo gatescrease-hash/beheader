@@ -52,6 +52,23 @@ Provisional choice taken: **(a)**, as built at entry 0109. **No `PROVISIONAL(Q-0
 no site an operator can reach, and a tag on unreachable code is debt without a reader. The relevant
 paragraph of `buildPanelSetCommand`'s own doc comment already states the behaviour and its reason.
 
+**Added at 0113-REVIEW-phase4 — a neighbour that should be ruled WITH this question, not before
+it.** F3's fix (entry 0111's `PanelRow.editSeed`) closed the *silent* half of the seed problem, but
+one tail remains and it is the same grammar question wearing different clothes: `parseCommandNumber`'s
+`NUMBER_PATTERN` (`/^[+-]?[0-9]+(\.[0-9]+)?$/`) has **no exponent form**, while `editSeed` is
+`String(value)`, which switches to exponential below `1e-6`. So a literal of `1e-7` seeds the text
+`"1e-7"`, which the panel then reads as a formula rather than a number. It is reachable — link a slot
+to a formula computing a tiny value, then `unlink`, which stores the computed value as a literal —
+but it fails **LOUDLY** (a parse refusal in the log), where the case F3 fixed failed silently. It is
+also **not made worse** by F3: the pre-fix seed was D-099 clause 3's exponential display form, which
+`NUMBER_PATTERN` rejects just the same.
+
+Whichever option the human picks above decides this too, because both are the same question — *what
+grammar does a panel row speak, and must it be exactly the command line's?* Option (b)'s "make the
+panel and the command line agree" answer would most naturally widen `NUMBER_PATTERN` to accept an
+exponent on BOTH surfaces, which is a change to the typed command line and therefore squarely the
+human's. Do not patch the seed alone to dodge it.
+
 ---
 
 ## Q-015 — Does a shift-click on an ALREADY-SELECTED object remove it from the selection?

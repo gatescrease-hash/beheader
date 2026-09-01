@@ -3493,3 +3493,48 @@ D-102 clause 9 and its successors add.
 
 **This does not license a retained-mode panel.** Rebuild-every-paint stays the default (D-101,
 D-102 clause 8's exception is the only one); these rules are what make that default safe to keep.
+
+---
+
+## D-108 — A loaded `FormulaAst`'s SHAPE is validated once, at the load boundary, by the cycle that builds §5.11's load path — and no walker is hardened piecemeal in the meantime
+Answers: finding F5 at 0113-REVIEW-phase4 (the loader's "never throws" invariant is false for a
+malformed loaded AST)   Ruled: entry 0113-REVIEW-phase4 (reviewer)   Binding on: `document.ts`,
+`mutation.ts`, `formula/ast.ts`, and the cycle that builds §5.11's file-input load path
+
+**Ruling.**
+
+1. **The claim is corrected now; the code is fixed by the load cycle.** `document.ts`'s header and
+   `deserializeDocument`'s doc comment both state "never throws" without qualification, and that is
+   false today: `reconstructSlot` casts `raw.ast as FormulaAst` unchecked, and a loaded `ast` of
+   `null`, a `binaryOp` with absent or `null` children, or a `functionCall` whose `args` is not an
+   array throws a `TypeError` out of the loader. Any cycle that opens either doc comment for another
+   reason MUST correct the claim to name the exception. A false invariant in a header is worse than
+   a missing one — it is what stops the next reader from probing.
+2. **The fix is ONE shape validation at the boundary, not a guard in each walker.** The loaded AST
+   is validated once, where it enters the program, against `FormulaAst`'s own variants — the same
+   posture D-083 clause 4 established for its DEPTH and for the same reason. This is the shape
+   D-083's rationale already anticipated: "a document is validated when it is read, once, the way
+   every other unchecked-cast field in a loaded document will have to be."
+3. **Until that cycle runs, NO walker over a loaded AST is individually hardened.** Guarding
+   `exceedsMaxFormulaAstDepth` against a non-node would not restore the invariant — it would only
+   move the throw back to `mutation.ts`'s `collectIllegalAstLiterals`, which threw on the identical
+   four inputs before entry 0112 existed. A local guard here buys nothing and costs a reader the
+   evidence that the real defect is one level up. The same applies to `collectIllegalAstLiterals`,
+   and to `deps.ts`/`eval.ts` if they ever become reachable with an unvalidated AST.
+4. **`parser.ts`'s `default:` branch is the model for a walker's own posture, and it stands.** A
+   walk that meets a variant the compiler believes impossible returns a value rather than throwing
+   (0032-REVIEW). `exceedsMaxFormulaAstDepth`'s `default: return false` is correct as written and is
+   not what this ruling asks anyone to change.
+
+**Rationale.** This is the third sighting of one hazard: 0032-REVIEW reasoned about it for
+`parser.ts`, D-083's rationale probed it and found `RangeError`s in three functions, and 0113-REVIEW
+found it throwing out of the loader itself. Each time it surfaced, the cycle in front of it could
+only have patched its own walker, which is why it keeps coming back. It is not reachable by any
+operator today — §5.11's file input is unbuilt, so `loadDocument` has no caller outside tests — and
+the cycle that builds that input is the one that has to weigh what refusing a user's saved file
+costs. That cycle therefore owns it, and inherits a decided direction rather than an open question,
+exactly as **D-081** handed the name gate to the cycle that could actually reach it.
+
+Reconciliation required: none outstanding. `document.test.ts`'s "never throws for any of the
+malformed inputs above" test does not currently cover a formula slot at all; the load cycle MUST
+extend it to the four shapes named in clause 1, and that extension is the intended visible diff.

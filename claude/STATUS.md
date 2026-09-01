@@ -1,35 +1,32 @@
-# STATUS — as of entry 0112-load-boundary-name-and-depth
+# STATUS — as of entry 0113-REVIEW-phase4
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1262/1262** tests pass, 0
-skipped, 0 `.only`. **A REVIEW POINT IS NOW MANDATORY — see "Last review point" below.**
+skipped, 0 `.only`. **NO REVIEW IS OWED. NO FIX CYCLE IS OWED.** The gate entry 0112 opened is
+CLOSED.
 
-Entries 0107 (D-101 + D-106) and 0109 (D-102) are built; **0110-REVIEW-phase4** reviewed them
-(REVISE — three reachable DOM-half defects, everything else ACCEPTED). Entry 0111 built that fix
-list in full (D-107). **Entry 0112 closes two long-standing owed rulings**: **D-081**
-(`createObject`'s own name now passes the same gate a rename does — `mutation.ts`'s
-`findInvalidNames`, formerly `findInvalidRenames`) and **D-083 clause 4** (a loaded formula's AST
-depth is checked ONCE, at `document.ts`'s load boundary, via `formula/ast.ts`'s new
-`exceedsMaxFormulaAstDepth`). **D-107, D-101, D-106, D-102, D-081 and D-083 clause 4 are all now
-IMPLEMENTED. D-107/D-101/D-106/D-102 are not yet reviewed; D-081/D-083 clause 4 are built exactly
-as ruled with no open question.**
+Entries 0107 (D-101 + D-106) and 0109 (D-102) were reviewed at **0110-REVIEW-phase4** (REVISE —
+three reachable DOM-half defects, everything else ACCEPTED). Entry 0111 built that fix list in full
+(D-107). **Entry 0112 closed two long-standing owed rulings**: **D-081** (`createObject`'s own name
+now passes the same gate a rename does — `mutation.ts`'s `findInvalidNames`, formerly
+`findInvalidRenames`) and **D-083 clause 4** (a loaded formula's AST depth is checked ONCE, at
+`document.ts`'s load boundary, via `formula/ast.ts`'s new `exceedsMaxFormulaAstDepth`).
+**0113-REVIEW-phase4 reviewed entries 0111 and 0112 and ACCEPTED both, with no edits.** D-101,
+D-106, D-102, D-107, D-081 and D-083 clause 4 are therefore ALL implemented AND reviewed.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
-Last review point: **0110-REVIEW-phase4** (**REVISE**; **D-107** ruled, **Q-016** raised). Its fix
-list is built at entry 0111. **Entry 0112 FIRED PROCESS_BRIEF §6.1 trigger 5** (a previously-passing
-test's expectation was changed — `mutation.test.ts`'s D-081 "KNOWN GAP" test FLIPPED from asserting
-acceptance to asserting rejection, exactly as D-081's own ruling text requires and names as the
-intended visible diff) — **the next session MUST route this to review before starting a new
-implementation slice**; see entry 0112's own "Review point" section.
-Cycles since last review: **2/3** (entry 0111 was cycle 1, entry 0112 cycle 2). Diff since
-0110-REVIEW: 418 insertions / 70 deletions across 9 files (cap 800/10 — not the reason review is
-required; trigger 5 is).
+Last review point: **0113-REVIEW-phase4** (**ACCEPT**, no edits; **D-108** ruled; findings **F5**
+and **F6** recorded as fix-list items 15 and 16, both with owners, neither blocking). The §6.1
+trigger 5 that forced it (entry 0112's flipped D-081 test) was the intended diff D-081's own ruling
+text names, confirmed by the review.
+Cycles since last review: **0/3**. Diff since 0113-REVIEW: 0 lines / 0 files (cap 800/10).
 
-## Read this first — the eleven things a cold reader needs
+## Read this first — the fourteen things a cold reader needs
 
-**1. 0110-REVIEW's FIX LIST IS BUILT (entry 0111) — NOT YET REVIEWED.** Read entry 0111's own log
-before touching panel code again. In one line each, what was wrong and what entry 0111 did about it:
+**1. 0110-REVIEW's FIX LIST IS BUILT (entry 0111) AND REVIEWED (0113-REVIEW: ACCEPT).** Read entry
+0111's own log before touching panel code again. In one line each, what was wrong and what entry
+0111 did about it:
 **F1** — a press on a panel outside its header (dismiss, a blue paperclip, empty body) and the end of
 every panel edit left the keyboard on the body; FIXED — `pointerdown` now prevents the DOM's own
 default focus move on every panel press (except one landing inside an already-open row editor's own
@@ -109,14 +106,15 @@ with one object (D-100 clause 7), and `buildSlotDescriptors`/`describeSlotValue`
 enumeration/formatter D-094 clause 9 requires, read by `props`, every panel's display, AND now every
 panel's edit seed.
 
-**11. A REVIEW POINT IS MANDATORY BEFORE THE NEXT IMPLEMENTATION SLICE.** Entry 0112 (D-081 +
-D-083 clause 4, both closed as ruled — see items 12-13 below) fired PROCESS_BRIEF §6.1 trigger 5: it
-FLIPPED a previously-passing test (`mutation.test.ts`'s D-081 "KNOWN GAP" pin, now asserting
-rejection instead of acceptance) — exactly what D-081's own ruling text authorises and names as the
-intended diff, but a ruling authorising a change is not an exemption from the trigger that change
-fires (this file's own gotcha, restated because entry 0112 is the cycle that actually hit it). **Do
-not start a new slice until this has been to review.** Nothing about the fix itself is in question —
-see entry 0112's own log for the full reasoning — this is a process gate, not an open defect.
+**11. THE REVIEW GATE IS CLEARED — 0113-REVIEW-phase4, verdict ACCEPT, no edits.** Entry 0112 fired
+PROCESS_BRIEF §6.1 trigger 5 (it FLIPPED a previously-passing test — `mutation.test.ts`'s D-081
+"KNOWN GAP" pin, now asserting rejection instead of acceptance). The review confirmed that flip is
+exactly the diff D-081's own reconciliation text names, and that entry 0112 was right to report the
+trigger anyway: **a ruling authorising a change is not an exemption from the trigger that change
+fires.** Entry 0112 is the first cycle to actually hit that gotcha and it applied it correctly.
+**Nothing is owed now — no fix cycle, no re-review.** The review added one ruling (**D-108**,
+item 14 below) and two non-blocking findings (fix-list items 15 and 16), and ratified every
+implementation decision in both entries.
 
 **12. D-081 IS FULLY BUILT (entry 0112) — DO NOT RE-BUILD IT.** `createObject`'s own name now passes
 `address.ts`'s `checkNameAvailable` — the SAME gate a rename passes, via `mutation.ts`'s
@@ -131,22 +129,40 @@ REJECTED at load, loudly, instead of silently committed.
 by `document.ts`'s `reconstructSlot` at the load boundary. `formula/deps.ts` and `formula/eval.ts`
 still carry NO depth parameter of their own (D-083 clause 3 stands) — this is what makes that safe.
 A formula slot nested past `MAX_FORMULA_AST_DEPTH` is refused with `parser.ts`'s own message
-vocabulary; nothing downstream of the loader can now receive one.
+vocabulary; nothing downstream of the loader can now receive one. **0113-REVIEW verified the depth
+counting matches `parser.ts`'s `walkForRangePlacement` exactly** (root at depth 1, check before
+recursing) — so a formula the parser accepts can always be reloaded, which is the property that
+would have hurt most if it had drifted.
 
-## Next — a review point (entry 0112, mandatory), then a human session for Phase 4's own gate
+**14. D-108 IS NEW AND NOT IMPLEMENTED** (0113-REVIEW, finding F5). `deserializeDocument`'s "never
+throws" claim is FALSE for a malformed loaded `ast` — `null`, a `binaryOp` with absent/`null`
+children, or a `functionCall` whose `args` is not an array each throw a `TypeError` out of the
+loader. **This is NOT entry 0112's regression** — the review checked, and the identical four inputs
+threw identically before it, out of `mutation.ts`'s `collectIllegalAstLiterals`; entry 0112 only
+moved the throw earlier. **Do not "fix" it by guarding `exceedsMaxFormulaAstDepth`** — that only
+restores the old throw site (D-108 clause 3 forbids it explicitly). It is owed by the cycle that
+builds §5.11's file-input load path. Not operator-reachable today: nothing calls `loadDocument`
+outside tests. See fix-list item 15.
 
-**The immediate next thing is NOT more code — it is the review entry 0112's own log requires (item
-11 above).** Once that clears, the standing next step resumes: a human session for **Phase 4's own
-gate**, two polygons bound through a table in one document, now authored either by typed commands or
-by clicking a grey paperclip and typing into a row, with the keyboard behaving (entry 0111's own
-F1/F2 fixes). Everything built through entry 0112 makes that session easier; none of it IS that
-session.
+## Next — a human session for Phase 4's own gate
 
-Entry 0111 flagged one question for whoever next reviews this area (its narrowing of fix item 1's
-literal wording to preserve caret placement inside an open row editor — see its own log and this
-file's gotchas below). Entry 0112 flagged none — D-081's own ruling text already answers the one
-thing a reviewer might otherwise ask (whether the flipped test is the intended diff). Neither blocks
-the human session; both are notes for the review, not known defects.
+**Nothing is owed. No review, no fix cycle.** The standing next step is unchanged and is not code: a
+human session for **Phase 4's own gate**, two polygons bound through a table in one document, now
+authored either by typed commands or by clicking a grey paperclip and typing into a row, with the
+keyboard behaving (entry 0111's F1/F2 fixes, now reviewed). Everything built through entry 0112
+makes that session easier; none of it IS that session.
+
+**If a coding slice is wanted before that session, 0113-REVIEW named D-108's loader-shape validation
+as the one with the clearest brief** — small, engine-only and therefore fully testable (unlike
+everything F1-F4 touched), and it closes the last of the three load-boundary items §5.11 has been
+accumulating since Phase 0. It should NOT be started if it would delay the human session; the gate
+outranks it.
+
+Entry 0111's one question for the reviewer (its narrowing of fix item 1's literal wording to
+preserve caret placement inside an open row editor) is **ANSWERED at 0113-REVIEW: RATIFIED — the
+narrower shape is the better reading of D-107, and the fix list's literal "unconditionally" was
+wrong.** Keep the carve-out; re-verify the caret probe before ever removing it. Entry 0112 flagged
+no question.
 
 **Still queued behind all of that, unchanged:** D-090's prompt-sequence preview · D-088 clauses 2–4
 and D-089 (the command input's behaviour) · **D-104** (open fix-list item 13, owed by whichever cycle
@@ -180,7 +196,7 @@ at 0100-REVIEW, no edits; its D-099 widening at 0102 reviewed at 0103) · entry 
 `interaction.ts`/`renderer.ts`/`main.ts` selection-list widening (REVIEWED: ACCEPT WITH EDITS at
 0105-REVIEW; D-105).
 
-## Built at entry 0111 — 0110-REVIEW's fix list, not yet reviewed
+## Built at entry 0111 — 0110-REVIEW's fix list — REVIEWED at 0113-REVIEW (ACCEPT, no edits)
 
 **Entry 0111 — F1-F4, D-107.** `src/main.ts`'s `PanelRow.editSeed` (F3), `panelEditHandlers`'s
 focus-restoring and identity-guarded `onCommit`/`onCancel` (F1 item 2, F2 item 3),
@@ -191,7 +207,7 @@ the full transcript. **REVIEW: NOT NEEDED was entry 0111's own verdict** (no §6
 nowhere close) — it still flagged its one implementation-level decision as a question for whoever
 next looks at this file.
 
-## Built at entry 0112 — D-081 + D-083 clause 4, not yet reviewed — REVIEW: REQUIRED
+## Built at entry 0112 — D-081 + D-083 clause 4 — REVIEWED at 0113-REVIEW (ACCEPT, no edits)
 
 **Entry 0112.** `formula/ast.ts`'s `exceedsMaxFormulaAstDepth` (D-083 clause 4); `document.ts`'s
 `reconstructSlot` calling it before accepting a loaded formula slot; `mutation.ts`'s
@@ -202,7 +218,9 @@ GAP pin, now asserting rejection — D-081's own ruling text names this the inte
 checks mutation-checked (D-016): disabling the name gate failed 7 tests; disabling the depth guard
 failed 6 tests, including a GENUINE `RangeError` at 40,000 levels — direct evidence, not just an
 assertion. **This is the cycle that fired §6.1 trigger 5 (a previously-passing test's expectation
-changed) — see "Read this first" item 11. `REVIEW: REQUIRED` was entry 0112's own verdict.**
+changed) — see "Read this first" item 11. `REVIEW: REQUIRED` was entry 0112's own verdict, and
+0113-REVIEW confirmed both the trigger call and the fix: ACCEPT, all five implementation decisions
+ratified.**
 
 ## Reviewed at 0110-REVIEW-phase4 — verdict REVISE (the rulings' implementation ACCEPTED, four findings)
 
@@ -273,13 +291,29 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
     operation. **D-104** owns it and binds the cycle that builds §5.10's row/column commands, which
     **must not land without it**; the fix goes in `findInvalidTableResizes`, never in
     `findInvalidDimensionWrites`.
-14. **0110-REVIEW's F1-F4 — BUILT at entry 0111, awaiting review.** Not open items any more — listed
-    here only so no later reader mistakes them for unowned debt. **F1** keyboard homeless after a
-    panel press or an edit — fixed. **F2** first click on a panel swallowed while an editor is open —
-    fixed. **F3** the editor's seed was the rounded display value — fixed (`PanelRow.editSeed`).
-    **F4** the skip gate could latch with no input — fixed. **D-107** rules F1 and F2 generally, both
-    built; **Q-016** still carries F3's string/boolean tail to the human, UNCHANGED by entry 0111
-    (which fixed the rounding defect, not the grammar question).
+14. **0110-REVIEW's F1-F4 — BUILT at entry 0111, REVIEWED at 0113-REVIEW (ACCEPT).** Closed, not
+    open items — listed here only so no later reader mistakes them for unowned debt. **F1** keyboard
+    homeless after a panel press or an edit — fixed. **F2** first click on a panel swallowed while an
+    editor is open — fixed. **F3** the editor's seed was the rounded display value — fixed
+    (`PanelRow.editSeed`). **F4** the skip gate could latch with no input — fixed. **D-107** rules F1
+    and F2 generally, both built; **Q-016** still carries F3's string/boolean tail to the human,
+    UNCHANGED by entry 0111 (which fixed the rounding defect, not the grammar question).
+15. **F5 (0113-REVIEW) — `deserializeDocument`'s "never throws" invariant is FALSE for a malformed
+    loaded `ast`.** Four shapes throw a `TypeError` out of the loader: `ast: null`, a `binaryOp` with
+    `null` children, a `binaryOp` with its children absent, and a `functionCall` whose `args` is not
+    an array. **Pre-existing, NOT entry 0112's regression** (verified: identical four inputs threw
+    identically before it, from `mutation.ts`'s `collectIllegalAstLiterals`). **Ruled D-108** — owned
+    by the cycle that builds §5.11's file-input load path; clause 3 explicitly FORBIDS hardening
+    `exceedsMaxFormulaAstDepth` or any other single walker in the meantime, because that only moves
+    the throw. Not operator-reachable today. `document.test.ts`'s "never throws" test must be
+    extended to these four shapes by that cycle.
+16. **F6 (0113-REVIEW) — a panel row's text can no longer be selected with the mouse.** D-107 fix
+    item 1's `preventDefault()` on every panel press also suppresses the native drag-select a press
+    on the panel BODY used to start (the old code only reached `preventDefault()` in the header-drag
+    branch). Same mechanism as the caret regression entry 0111 caught, one step further out. Read off
+    the code and entry 0111's live evidence, NOT independently browser-verified. Nothing promises
+    selectable panel text and F3 gives another route to an unrounded value, so this is recorded, not
+    scheduled — D-095's "build nothing here until a human asks" governs, and it cuts both ways.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -337,7 +371,7 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-106**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-108**) binds without restatement here.
 
 **D-097, D-098, D-099 are all IMPLEMENTED AND REVIEWED** — entries 0101 and 0102, cleared at
 0103-REVIEW-phase4 (ACCEPT WITH EDITS). Do not re-attempt or duplicate any of them.
@@ -346,8 +380,13 @@ Every ruling in `DECISIONS.md` (D-001 through **D-106**) binds without restateme
 EDITS; D-105 ruled there). Q-015 is CLOSED (confirmed by the human at 0106-RULINGS).
 
 **D-101 and D-106 are IMPLEMENTED at entry 0107. D-102 is IMPLEMENTED at entry 0109. D-107 IS
-IMPLEMENTED at entry 0111. NONE OF THE FOUR ARE YET REVIEWED.** Do not re-build any of them; the
-next thing owed on this ground is a review, not more code.
+IMPLEMENTED at entry 0111. ALL FOUR ARE NOW REVIEWED** — 0110-REVIEW cleared D-101/D-106/D-102 and
+0113-REVIEW cleared D-107. Do not re-build any of them; nothing is owed on this ground.
+
+**D-108 is NEW and NOT implemented** (0113-REVIEW, finding F5). It is not owed by the next cycle —
+it is owed by the cycle that builds §5.11's file-input load path. See "Read this first" item 14 and
+fix-list item 15. **Its clause 3 is a prohibition binding on every cycle before that one**: do not
+harden a single AST walker to paper over it.
 
 **D-104 is NEW and NOT implemented** (0103-REVIEW). It is not owed by the next cycle — it is owed by
 the cycle that builds §5.10's row/column commands. See "Read this first" item 8 and fix-list 13.
@@ -393,10 +432,11 @@ the other direction inside `placePropertiesPanel`/`placePanelElement`.
 **From entry 0089:** **D-075**/**D-082** · **D-062** · **D-061** · **D-066** · **D-072** ·
 **D-027 clause 2**. Still owed, unchanged: **D-074**.
 
-**D-081 AND D-083 CLAUSE 4 ARE IMPLEMENTED (entry 0112) — NOT REVIEWED YET, but with no open
-question: both are built exactly as their own ruling text specifies.** `mutation.ts`'s
-`findInvalidNames` (D-081) and `formula/ast.ts`'s `exceedsMaxFormulaAstDepth` (D-083 clause 4). Do
-not re-build either. See "Read this first" items 11-13.
+**D-081 AND D-083 CLAUSE 4 ARE IMPLEMENTED (entry 0112) AND REVIEWED (0113-REVIEW: ACCEPT).** Both
+are built exactly as their own ruling text specifies — the review checked D-081 clause by clause and
+confirmed D-083 clause 4's depth counting matches `parser.ts`'s. `mutation.ts`'s `findInvalidNames`
+(D-081) and `formula/ast.ts`'s `exceedsMaxFormulaAstDepth` (D-083 clause 4). Do not re-build either.
+See "Read this first" items 11-13.
 
 ## Live PROVISIONAL tags and open questions
 
@@ -412,9 +452,18 @@ reach the site, and a tag on unreachable code is debt without a reader). Next fr
 
 ## Gotchas for the next model
 
-- **A REVIEW POINT IS MANDATORY BEFORE THE NEXT IMPLEMENTATION SLICE (entry 0112 fired §6.1 trigger
-  5).** Do not start a new slice — including anything on the standing queue — until entry 0112 has
-  been to review. See "Read this first" item 11.
+- **`preventDefault()` on a press cancels the element's ENTIRE native mousedown handling, not just
+  "focus".** Caret placement inside a text input and drag-selection of ordinary text both ride on
+  it. This batch produced two instances of the same lesson: entry 0111 caught the caret one live
+  (hence the `.panel-row__input` carve-out) and 0113-REVIEW found the text-selection one (fix-list
+  item 16) reading the same mechanism one step further out. **Reach for the narrowest target, never
+  the container**, and probe more than "did focus land where I wanted".
+- **A loaded AST is cast unchecked and TWO walkers now trust that cast — `document.ts`'s
+  `exceedsMaxFormulaAstDepth` call and `mutation.ts`'s `collectIllegalAstLiterals`.** A malformed
+  `ast` throws a `TypeError` out of the loader despite its "never throws" doc comment (fix-list item
+  15, **D-108**). **D-108 clause 3 forbids guarding either walker on its own** — that moves the
+  throw rather than fixing it. The fix is one shape validation at the boundary, and it belongs to
+  the load cycle.
 - **`mutation.ts`'s name-availability check is `findInvalidNames`, not `findInvalidRenames`** — the
   old name is stale as of entry 0112 (D-081): it now checks `createObject`'s own name too, with no
   `excludeId` (a fresh object has no prior name to be excused against). If a future grep for
