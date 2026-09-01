@@ -1,36 +1,36 @@
-# STATUS — as of entry 0109
+# STATUS — as of entry 0110-REVIEW-phase4
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1244/1244** tests pass, 0
-skipped, 0 `.only`, `npm run build` succeeds. Entry **0109** built **D-102** — the properties panel
-becomes WRITABLE: a paperclip per modifiable row (blue for `formula`, grey for `literal`), every
-write the `Command` the command line would have built, run through `executeCommand`. **This is a
-MANDATORY review point (D-103 clause 4) — REVIEW: REQUIRED, regardless of the batch cap.**
+STATE: **GREEN** (compiles, all tests pass) — **but the batch just reviewed came back REVISE.** Both
+configs compile, **1244/1244** tests pass, 0 skipped, 0 `.only` (re-run by the reviewer, not taken on
+report). Entries 0107 (D-101 + D-106) and 0109 (D-102) are built; **0110-REVIEW-phase4 accepted the
+rulings' implementation and found three reachable defects in the DOM half, all in the panel feature
+itself.** The next cycle is that fix list and nothing else.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
-Last review point: **0105-REVIEW-phase4** (ACCEPT WITH EDITS; **D-105** ruled). Entries 0106-RULINGS
-(the human, no code), 0107 (D-101+D-106), 0108 (verdict correction, no code), and 0109 (D-102,
-**this entry**) all landed since, with NO review point in between.
-Cycles since last review: **3/3 — the cap, AND D-103 clause 4, both fire on this same entry.**
-Cumulative diff since 0105-REVIEW (excluding `claude/`): **960 insertions, 102 deletions across
-exactly 10 files** — `git diff --stat 052f156 -- . ':!claude'`. That is over the 800-line half of
-the cap and exactly at the 10-file half; either alone would have forced a review here even without
-D-103 clause 4's own mandatory trigger. Both point the same direction: **stop, and get this reviewed
-before any further cycle.**
+Last review point: **0110-REVIEW-phase4** (**REVISE**; **D-107** ruled, **Q-016** raised). It
+reviewed entries 0107, 0108 and 0109 together — forced by D-103 clause 4 and, independently, by the
+§6.3 cap (960 insertions / 102 deletions across 10 files since 0105-REVIEW).
+Cycles since last review: **0/3 — the counter reset at 0110-REVIEW.** The fix cycle below is 1/3.
 
 ## Read this first — the ten things a cold reader needs
 
-**1. ENTRY 0109 BUILT D-102. REVIEW: REQUIRED — do not build anything else before this is reviewed.**
-D-103 clause 4 names this cycle by description ("D-102 is the first code in this project that writes
-state from a mouse gesture in the DOM") and the batch cap is independently exceeded (see above). Both
-`commitPanelEdit`/`unlinkPanelSlot` (the pure, tested half — six new tests) and the DOM half
-(`openEditor`, `panelEditHandlers`, `panelClipElement`, `panelEditInput`, the extended click delegate)
-are built. Read entry 0109's own log in full — in particular its Decision 2 (a self-caught bug: the
-naive "skip rebuild while editing" gate would have frozen every panel after its first paint, fixed
-before it ever ran) and its two questions for the reviewer.
+**1. THE NEXT CYCLE IS 0110-REVIEW's FIX LIST AND NOTHING ELSE.** Read that entry's Findings and Fix
+list in full first. In one line each: **F1** — a press on a panel outside its header (dismiss, a blue
+paperclip, empty body) and the end of every panel edit leave the keyboard on the body, so the command
+bar is dead until the operator clicks it (§5.10's always-focused rule); **F2** — with a row's editor
+open, the first click on any panel is swallowed, because the press's own default blurs the input, the
+cancel repaints, and the clicked node is detached before `click` is dispatched; **F3** — the row
+editor is seeded with the D-099-ROUNDED display value, so committing an untouched row can silently
+truncate a literal to four decimals; **F4** — a latent freeze if the edited row ever leaves the model
+while its object stays panelled. **D-107** is the general ruling behind F1 and F2. Fix items 1-3 and
+6 (a live browser confirmation) are the verdict; 4 and 5 go in the same cycle.
 
-**2. D-102 IS FULLY BUILT — DO NOT RE-BUILD IT.** Every clause: pointer-events lifted off the whole
+The rest of both cycles was ACCEPTED as written: every clause of D-101, D-106 and D-102 is built as
+ruled, `engine/` is untouched, and Rule 2 holds through `executeCommand` alone.
+
+**2. D-102 IS FULLY BUILT — DO NOT RE-BUILD IT** (the fix list above amends it, never re-builds it). Every clause: pointer-events lifted off the whole
 panel body (clause 1, disclosed cost: a panel can now block clicks on the part of its object it
 overlaps — D-101 clause 5's drag is the remedy); a paperclip on every modifiable, non-`synthetic` row
 (clause 2 — `SlotDescriptor` gained `readonly synthetic?: true`, set only on the table's `cells`
@@ -89,12 +89,13 @@ with one object (D-100 clause 7), and `buildSlotDescriptors`/`describeSlotValue`
 enumeration/formatter D-094 clause 9 requires, read by `props`, every panel's display, AND now every
 panel's edit seed.
 
-## Next — this cycle's own review, then Phase 4's own human session
+## Next — 0110-REVIEW's fix list, then Phase 4's own human session
 
-D-102's review point is not optional and not batch-absorbable (item 1 above). **Nothing should build
-on top of `main.ts`/`index.html`/`props.ts` until it lands.**
+**Entry 0111 is the fix list (item 1 above), in `src/main.ts` plus its tests, and nothing else.** It
+must end with the live browser confirmation fix item 6 names — typing a command straight after an
+Enter-commit, after a blue-paperclip unlink, and opening a second row's editor on the FIRST click.
 
-After that review clears, the honest next step is the standing one: **a human session for Phase 4's
+After that lands, the honest next step is the standing one: **a human session for Phase 4's
 own gate** — two polygons bound through a table in one document, now authored either by typed
 commands or by clicking a grey paperclip and typing into a row. Everything built through entry 0109
 makes that session easier; none of it IS that session.
@@ -130,7 +131,7 @@ at 0100-REVIEW, no edits; its D-099 widening at 0102 reviewed at 0103) · entry 
 `interaction.ts`/`renderer.ts`/`main.ts` selection-list widening (REVIEWED: ACCEPT WITH EDITS at
 0105-REVIEW; D-105).
 
-## Built this batch, NOT yet reviewed (cycle 3/3 since 0105-REVIEW — review REQUIRED, see above)
+## Reviewed at 0110-REVIEW-phase4 — verdict REVISE (the rulings' implementation ACCEPTED, four findings)
 
 **Entry 0107 — D-101 + D-106, N panels with drag and dismiss.** See entries 0107/0108's own text for
 full detail. **REVIEW: NOT NEEDED was entry 0107's OWN verdict** (no §6.1 trigger fired on its own
@@ -148,8 +149,8 @@ helpers) plus the DOM half's editing machinery; `index.html`'s interactive-panel
 in `main.test.ts`'s own describe block, three existing test expectations widened (D-096 clause 1's
 disclosure duty — see entry 0109's log). Mutation-checked (three checks, each confirmed red then
 green) and manually verified live in a real browser (two scripts, zero console/page errors — see
-entry 0109's own log for the full transcript). **REVIEW: REQUIRED** (D-103 clause 4 — see the top of
-this file).
+entry 0109's own log for the full transcript). **Reviewed at 0110: every D-102 clause built as
+ruled; findings F1-F4 are amendments to it, not a re-build.**
 
 ## Not started
 
@@ -197,6 +198,12 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
     operation. **D-104** owns it and binds the cycle that builds §5.10's row/column commands, which
     **must not land without it**; the fix goes in `findInvalidTableResizes`, never in
     `findInvalidDimensionWrites`.
+14. **0110-REVIEW's F1-F4 — OWED BY THE NEXT CYCLE, not carried as debt.** They are the fix list at
+    "Read this first" item 1 and are the only thing entry 0111 does. Listed here so no later reader
+    mistakes them for open items nobody owns: **F1** keyboard homeless after a panel press or an
+    edit, **F2** first click on a panel swallowed while an editor is open, **F3** the editor's seed
+    is the rounded display value, **F4** the skip gate can latch with no input. **D-107** rules F1
+    and F2 generally; **Q-016** carries F3's string/boolean tail to the human.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -272,6 +279,10 @@ re-build any of them while waiting for it.
 **D-104 is NEW and NOT implemented** (0103-REVIEW). It is not owed by the next cycle — it is owed by
 the cycle that builds §5.10's row/column commands. See "Read this first" item 8 and fix-list 13.
 
+**D-107 IS NEW (0110-REVIEW) and NOT implemented** — it is fix items 1-3 and binds every future
+panel control. **Q-016 IS NEW and OPEN** (may a panel row write a literal string/boolean?) — the
+human's, non-blocking, nothing tagged, unreachable in today's schemas.
+
 **Q-014 IS CLOSED** — every ruling that answers it (D-094, D-100, D-101, D-106, D-102) is now BUILT,
 as of entry 0109. **Q-013 is NOT mooted** — `set <address> = <formula>` stays the spelling; D-102's
 panel reuses the exact same synthesised form (entry 0109's `buildPanelSetCommand`), never a second
@@ -318,12 +329,22 @@ NOT take a side — it is CSS pixels by a stated reason.
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
-**No other `PROVISIONAL` tags exist.** Next free: **Q-016**.
+**No other `PROVISIONAL` tags exist** — **Q-016** deliberately has none (0110-REVIEW: no operator can
+reach the site, and a tag on unreachable code is debt without a reader). Next free: **Q-017**.
 
 ## Gotchas for the next model
 
-- **ENTRY 0109 IS BUILT AND UNREVIEWED. REVIEW: REQUIRED (D-103 clause 4) — do not build anything
-  else on `main.ts`/`index.html`/`props.ts` until it clears.** Read entry 0109's log in full first.
+- **ENTRY 0109 IS REVIEWED (0110-REVIEW, REVISE). Build the fix list, then stop.** Read
+  0110-REVIEW's Findings and Fix list, then entry 0109's own log, before touching `main.ts`.
+- **The DOM moves focus on a press unless you `preventDefault()` it, and a repaint that removes a
+  focused element fires that element's `blur`.** Those two facts together are all of F1 and F2, and
+  **D-107** is the rule they produced: prevent the press's default, place focus deliberately, and
+  make a handler on transient DOM identity-check what it is cancelling. Reach for this before
+  reaching for a retained-mode panel — rebuild-every-paint stays the default.
+- **A panel row's DISPLAY value and its EDIT SEED are two different strings** (F3). Display is
+  rounded (D-099); the seed must be what the command line would accept back, or a commit silently
+  rewrites the value. Neither is a fourth formatter — both are `describeSlotValue`, with and without
+  `maxDecimals`.
 - **A gate that "skips a rebuild while editing" must default to REBUILDING, never to skipping.**
   Entry 0109's own near-miss (its Decision 2): comparing a persisted "not editing" marker to itself
   is always equal, so a naive version of the D-102 clause 8 skip would have frozen every panel
@@ -362,6 +383,8 @@ NOT take a side — it is CSS pixels by a stated reason.
   scripts the browser again.
 - **A dismissed panel's object does NOT automatically un-dismiss on a plain click that merely
   narrows a multi-selection down to it** — only if the object actually LEFT the selection first.
+  This matches D-106 clause 6 as the human wrote it; 0110-REVIEW declined to extend their words and
+  left it for their next session to judge in use. Do not "fix" it on suspicion.
 - **`placePropertiesPanel` needed NO change for N panels, and needs none for D-102 either** — it
   takes the extent as an argument and knows nothing about a row's own content.
 - **A drag notice dedupes by TEXT, per GESTURE.** Do NOT reach for `Date.now()` for this or anything

@@ -3461,3 +3461,35 @@ should be a way to 'hide' panels, but the default behavior should be to show the
    a second UI for managing a UI is Rule 5's failure mode, and nobody has asked for one.
 8. **Escape's duty list is unchanged** (D-100 clause 5, D-102 clause 7). Dismissal is a click on a
    control, never a key — escape releases the whole selection, which already hides every panel.
+
+---
+
+## D-107 — A panel gesture never leaves the keyboard homeless, and a handler on DOM a repaint will destroy must own its identity
+Answers: findings F1 and F2 against entries 0107 and 0109   Ruled: entry 0110-REVIEW-phase4
+(reviewer)   Binding on: `src/main.ts`, and every control the properties panel grows hereafter
+
+Two rules, from one cause: the panel is interactive DOM (D-102 clause 1) that `updatePanels`
+rebuilds whole on every paint, and paint runs on every pointer move.
+
+1. **After any panel gesture that is not itself an open text editor, the command input holds the
+   keyboard.** §5.10's "always focused when the user is not editing text or a cell" is a rule about
+   the whole application, not about the canvas — and `canvas`'s own `pointerdown` has called
+   `preventDefault()` + `input.focus()` since entry 0091 for exactly this reason. A press on a
+   panel, and the end of a panel edit, owe the same. Concretely: prevent the press's default so the
+   DOM never moves focus on its own, then place focus deliberately — the command bar when no row
+   editor is open, the row's input when one is.
+2. **A listener bound to an element a repaint will destroy must check that it still owns what it is
+   about to change.** A blur fired *by* the repaint that removed the element is indistinguishable
+   from a blur the operator caused; `panelEditInput`'s `settled` flag (entry 0109) is half of the
+   answer and covers one input's own double-fire. The other half is that `onCancel` must act only
+   while the editor it names is still the open one. The general form: **an event handler for
+   transient DOM is idempotent AND identity-checked, or it will eventually cancel someone else's
+   gesture.**
+
+Rationale: F2's swallowed click is what happens when neither holds — the press's own default blurs
+an open input, the resulting cancel repaints, and the node the click was destined for is gone before
+the click is dispatched. Both halves are cheap, and both get more load-bearing with every control
+D-102 clause 9 and its successors add.
+
+**This does not license a retained-mode panel.** Rebuild-every-paint stays the default (D-101,
+D-102 clause 8's exception is the only one); these rules are what make that default safe to keep.

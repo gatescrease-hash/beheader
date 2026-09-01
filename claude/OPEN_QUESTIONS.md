@@ -8,11 +8,49 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-016**
+Next free ID: **Q-017**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-016 — May a panel row write a literal STRING or BOOLEAN, and how is it spelled with no quoting affordance?
+Raised: entry 0110-REVIEW-phase4 (reviewer)   Brief section: §5.10, D-102 clause 6   Status: **OPEN
+— the human's, non-blocking, nothing tagged.**
+
+D-102 clause 6 disambiguates a row's typed text in two ways only: "a bare number" is a literal
+write, "anything else" is a formula write. Entry 0109 built exactly that and disclosed the
+consequence (its Decision 1): a panel row is a bare text box with no quoting affordance, so a string
+is reachable only the way a formula reaches one — typing `"hello"`, which lands as a **formula**
+slot holding that string, not as a literal one. `TRUE`/`FALSE` behave the same way.
+
+That is the ruling read literally, and the reviewer ratified it as "not this cycle's to widen." What
+it is not is a confirmed end state: it decides what an operator can type into a box, which is
+product behaviour and the human's (D-042).
+
+Options:
+
+(a) **Stands as built.** The panel's grammar is number-or-formula, permanently. A string is a
+    formula holding a string, which evaluates to the same value and shows the same text — the only
+    visible difference is the slot's `kind`, and therefore the paperclip's colour.
+(b) **Widen `buildPanelSetCommand`** to read a quoted `"..."` and bare `TRUE`/`FALSE` as LITERAL
+    writes, matching `parser.ts`'s own `set` grammar. One branch, one test; makes the panel and the
+    command line agree about what a typed value means.
+(c) **Widen it further** — a per-row kind toggle, or a literal/formula switch on the row. Rejected
+    on sight here: it is a second UI for a distinction the paperclip's colour already reports
+    (D-106 clause 7's stance).
+
+Recommendation: **(b)** if the human ever wants a literal string from the panel, **(a)** until then.
+No schema in today's registry gives the panel a string or boolean row — every modifiable row on a
+`circle`, `polygon`, `rect` or `table` holds a number — so nothing is reachable either way and
+nothing is blocked.
+
+Reversible? **Yes** — one branch in `main.ts`'s `buildPanelSetCommand`, one test.
+Provisional choice taken: **(a)**, as built at entry 0109. **No `PROVISIONAL(Q-016)` tag**: there is
+no site an operator can reach, and a tag on unreachable code is debt without a reader. The relevant
+paragraph of `buildPanelSetCommand`'s own doc comment already states the behaviour and its reason.
 
 ---
 
