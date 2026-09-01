@@ -250,9 +250,10 @@ describe("extractTextDependencies", () => {
   it("a reference living ONLY in the false branch of a BROKEN conditional is still reported (D-115) — the case that made extraction non-total before 0121-REVIEW", () => {
     const other = objects(["obj_9", "poly_1", "polygon"]);
     const blocks = parseTextContent("{? 1 + }x{:}{= poly_1.rows }{?}", [...TABLE_1, ...other]);
-    // The condition is broken, so this whole tree evaluates to #PARSE either way — but
-    // the address the content NAMES must still be reported, or the object would
-    // subscribe to strictly fewer slots than its own content mentions.
+    // The condition is broken, so this whole construct renders `!` + its own source
+    // (D-116) and `orphaned` is never evaluated — but the address the content NAMES
+    // must still be reported, or the object would subscribe to strictly fewer slots
+    // than its own content mentions.
     expect(extractTextDependencies(blocks)).toEqual([
       { kind: "reference", address: { objectId: "obj_9", path: ["rows"] } },
     ]);
@@ -291,21 +292,32 @@ describe("evaluateBlockTree — plain text and formula embedding", () => {
     expect(evaluateBlockTree(blocks, read)).toBe("1");
   });
 
-  it("a broken embedded formula's ErrorValue propagates as the WHOLE tree's result, stopping there (left to right)", () => {
+  it("a RUNTIME-broken embedded formula renders `!` + its error CODE in place, and the text around it still renders (D-117)", () => {
     const blocks = parseTextContent("before {= 1 / 0 } after", []);
-    expectError(evaluateBlockTree(blocks, EMPTY_READ), "#DIV0");
+    expect(evaluateBlockTree(blocks, EMPTY_READ)).toBe("before !#DIV0 after");
   });
 
-  it("an error block (a parse-time failure) propagates as #PARSE", () => {
-    const blocks = parseTextContent("{= 1 + }", []);
-    expectError(evaluateBlockTree(blocks, EMPTY_READ), "#PARSE");
+  it("a PARSE-broken span renders `!` + its own source verbatim, delimiters and all — not #PARSE, and the text around it still renders (D-116)", () => {
+    const blocks = parseTextContent("before {= 1 + } after", []);
+    expect(evaluateBlockTree(blocks, EMPTY_READ)).toBe("before !{= 1 + } after");
   });
 
-  it("a Point/Point[] value cannot be embedded directly — #TYPE, matching §5.1's 'read a scalar component instead'", () => {
+  it("every broken span in a paragraph of five embeddings is marked independently — the injury D-116 was ruled against", () => {
+    const read: ReadSlot = () => 5;
+    const blocks = parseTextContent("{= table_1.rows } ok {= 1 + } mid {= 1 / 0 } end", TABLE_1);
+    expect(evaluateBlockTree(blocks, read)).toBe("5 ok !{= 1 + } mid !#DIV0 end");
+  });
+
+  it("evaluateBlockTree ALWAYS returns a string, broken spans included (D-116 clause 3 / D-117 clause 4: resolvedContent never holds an ErrorValue)", () => {
+    expect(typeof evaluateBlockTree(parseTextContent("{= 1 + }", []), EMPTY_READ)).toBe("string");
+    expect(typeof evaluateBlockTree(parseTextContent("{= 1 / 0 }", []), EMPTY_READ)).toBe("string");
+  });
+
+  it("a Point/Point[] value that cannot be embedded renders `!#TYPE` in place — D-117, matching §5.1's 'read a scalar component instead'", () => {
     const read: ReadSlot = (address) => (address.path[0] === "origin" ? { x: 1, y: 2 } : undefined);
     const addr: Address = { objectId: "obj_1", path: ["origin"] };
-    const blocks: readonly Block[] = [{ type: "formula", ast: { type: "reference", address: addr } }];
-    expectError(evaluateBlockTree(blocks, read), "#TYPE");
+    const blocks: readonly Block[] = [{ type: "text", value: "at " }, { type: "formula", ast: { type: "reference", address: addr } }];
+    expect(evaluateBlockTree(blocks, read)).toBe("at !#TYPE");
   });
 });
 
@@ -336,11 +348,29 @@ describe("evaluateBlockTree — conditionals short-circuit (§5.6: 'evaluation o
     expect(evaluateBlockTree(blocks, EMPTY_READ, NO_RANGE)).toBe("ok");
   });
 
-  it("a non-boolean condition is #TYPE", () => {
+  it("a non-boolean condition renders `!#TYPE` in place and takes NEITHER branch (D-117 clause 6)", () => {
     const blocks: readonly Block[] = [
-      { type: "conditional", condition: { type: "literal", value: "not a bool" }, trueBranch: [], falseBranch: [] },
+      { type: "text", value: "x " },
+      { type: "conditional", condition: { type: "literal", value: "not a bool" }, trueBranch: [{ type: "text", value: "T" }], falseBranch: [{ type: "text", value: "F" }] },
+      { type: "text", value: " y" },
     ];
-    expectError(evaluateBlockTree(blocks, EMPTY_READ), "#TYPE");
+    expect(evaluateBlockTree(blocks, EMPTY_READ)).toBe("x !#TYPE y");
+  });
+
+  it("a RUNTIME-broken condition renders `!` + its error CODE in place, taking neither branch (D-117 clause 6)", () => {
+    const blocks = parseTextContent("a {? 1 / 0 }yes{:}no{?} b", []);
+    expect(evaluateBlockTree(blocks, EMPTY_READ)).toBe("a !#DIV0 b");
+  });
+
+  it("a PARSE-broken conditional renders its WHOLE construct source verbatim behind `!`, never its branches (D-116 clause 5)", () => {
+    const blocks = parseTextContent("x {? 1 + }yes{:}no{?} y", []);
+    // `!{? 1 + }yes{:}no{?}`, NOT `!{? 1 + }` followed by `yesno` — orphaned is never rendered.
+    expect(evaluateBlockTree(blocks, EMPTY_READ)).toBe("x !{? 1 + }yes{:}no{?} y");
+  });
+
+  it("a broken embedding INSIDE the taken branch is marked there, recursively — no new case (D-117 clause 6)", () => {
+    const blocks = parseTextContent("{? TRUE }val {= 1 / 0 }{:}skipped{?}", []);
+    expect(evaluateBlockTree(blocks, EMPTY_READ)).toBe("val !#DIV0");
   });
 
   it("PROJECT_BRIEF §5.6's own worked example evaluates to the PASS branch and leaves the others untouched", () => {
