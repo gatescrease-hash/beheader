@@ -697,4 +697,11 @@ describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, Q-
     expect(() => computeMeasuredHeight(OBJECT, styleRead({ resolvedContent: 7 }), context, undefined)).not.toThrow();
     expect(lastCall()?.[0]).toBe("");
   });
+
+  it("fails closed with #TYPE if a (buggy) measurer returns a non-finite height — validateIntegrity runs before evaluate, so nothing else would catch it (0129-REVIEW)", () => {
+    const nanMeasurer: EvalContext = { measurer: { measure: () => ({ width: 0, height: Number.NaN }) } };
+    expect(computeMeasuredHeight(OBJECT, styleRead(), nanMeasurer, undefined)).toMatchObject({ error: "#TYPE" });
+    const infMeasurer: EvalContext = { measurer: { measure: () => ({ width: 0, height: Infinity }) } };
+    expect(computeMeasuredHeight(OBJECT, styleRead(), infMeasurer, undefined)).toMatchObject({ error: "#TYPE" });
+  });
 });

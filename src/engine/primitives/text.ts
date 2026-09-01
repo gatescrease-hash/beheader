@@ -122,7 +122,7 @@ import type { FormulaAst } from "../formula/ast.ts";
 import { extractDependencies, type Dependency } from "../formula/deps.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
 import { isParseError, parseFormula } from "../formula/parser.ts";
-import { getSlot, isErrorValue, resolveSlot, type ErrorValue, type GraphObject, type Value } from "../graph/node.ts";
+import { getSlot, hasIllegalNumber, isErrorValue, resolveSlot, type ErrorValue, type GraphObject, type Value } from "../graph/node.ts";
 import type { DerivedSlotComputeDeps } from "./schema.ts";
 import { enumerateRangeCellAddresses, isInExtentTableCellAddress, isRangeEnumerationError } from "./table.ts";
 
@@ -895,6 +895,11 @@ export function computeResolvedContent(
  *      fail-closed: the `text` command cycle owns creating objects with sensible
  *      style defaults; until then a bare `text` object measures as `#TYPE` rather
  *      than the compute inventing a font.
+ *   4. A non-finite height back from `measure` → `#TYPE`. `eval-context.ts`'s
+ *      contract promises finite/non-negative, but an injected measurer is exactly
+ *      the component D-118 rules we cannot trust blindly, and `mutation.ts`'s
+ *      D-025 slot-value check runs BEFORE `evaluate` and never re-inspects a
+ *      derived result — the same gap `add`'s compute guards its sum against.
  *
  * `PROVISIONAL(Q-021)`: a numeric `width` slot becomes `measure`'s `maxWidth`
  * (the wrap boundary); `"auto"` — or any non-number — means `undefined`, i.e. no
@@ -945,7 +950,19 @@ export function computeMeasuredHeight(
   // PROVISIONAL(Q-021): the `width` slot is the wrap boundary when numeric.
   const maxWidth = typeof width === "number" ? width : undefined;
 
-  // `measure` never throws and always returns finite, non-negative numbers
-  // (eval-context.ts's contract), so `.height` is a legal `Value` as-is.
-  return context.measurer.measure(text, style, maxWidth).height;
+  // `measure` never throws (eval-context.ts's contract). It also PROMISES a
+  // finite, non-negative height — but 4. below does not take that on trust: an
+  // injected measurer is the component D-118 exists because we cannot trust
+  // blindly, and a non-finite value cached into `measuredHeight` here would
+  // commit uncaught (mutation.ts's D-025 check runs before `evaluate`), then
+  // propagate through any `= text_1.measuredHeight` binding. `add`'s compute
+  // guards its arithmetic result the same way and for the same reason.
+  const height = context.measurer.measure(text, style, maxWidth).height;
+  if (hasIllegalNumber(height)) {
+    return {
+      error: "#TYPE",
+      message: `measuredHeight: ${object.name}'s text measurer returned a non-finite height (${height})`,
+    };
+  }
+  return height;
 }

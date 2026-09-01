@@ -16,7 +16,13 @@ Next free ID: **Q-022**
 Raised: entry 0129-measured-height (implementer)   Brief section: §5.6 (`measuredHeight` "from
 `resolvedContent`, `width`, and `style`"; "Layout: fixed width + auto height (wrap, grow down) is
 the default"), Rule 1 (`interface TextMeasurer { measure(text, style): {width, height} }`)
-Status: **OPEN — reversible provisional choice (a) taken, tagged.**
+Status: **ANSWERED → D-120** (entry 0130-REVIEW-phase5, reviewer). Provisional choice **(a)** is
+confirmed: `measure` gains an optional trailing `maxWidth`, and line-breaking lives in the measurer
+implementation, never in `src/engine/`. Ruled by the reviewer rather than escalated to the human
+because the operator sees identical wrapped text either way — it is an internal seam-shape question
+Rule 1 settles (glyph-metric work, including line-breaking, goes behind the `TextMeasurer`
+interface). Reversible if the human overrules. Reconciliation: grep `PROVISIONAL(Q-021)` — owed by
+the `render/measure.ts` / `text` command cycle.
 
 Ambiguity: two brief passages cannot both be read literally. §5.6 makes `measuredHeight` a function
 of `width` and expects it to reflect wrapping ("fixed width + auto height (wrap, grow down)"; the

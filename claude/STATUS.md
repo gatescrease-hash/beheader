@@ -1,28 +1,31 @@
-# STATUS — as of entry 0129
+# STATUS — as of entry 0130 (0129 reviewed)
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1398/1398** tests pass,
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1399/1399** tests pass,
 0 skipped, 0 `.only`.
-**PHASE 5 IS OPEN.** Entry **0129** built `measuredHeight` (§5.6's second `text` derived slot),
-D-118's `#MEASURE` guard, and raised **Q-021** (reversible provisional choice taken + tagged).
-One cycle since 0128-REVIEW; **not yet reviewed**.
-Last review point: **0128-REVIEW-phase5**, verdict ACCEPT WITH EDITS.
-Cycles since last review: **1/3** · diff since last review: **586 lines / 10 files (cap 800/10)**.
+**PHASE 5 IS OPEN. ENTRY 0129 IS REVIEWED — 0130-REVIEW-phase5, verdict ACCEPT WITH EDITS.** One
+reviewer edit (F21 — a non-finite-height guard in `computeMeasuredHeight`, +1 test); one ruling,
+**D-120**, answering **Q-021**. The §6.3 batch cap is reset.
+Last review point: **0130-REVIEW-phase5**, verdict ACCEPT WITH EDITS.
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files (cap 800/10)**.
 
-**ENTRY 0129 — `measuredHeight` IS BUILT (pending review).** `TEXT_SCHEMA.derivedSlots` now has TWO
+**ENTRY 0129 — `measuredHeight` IS BUILT AND REVIEWED.** `TEXT_SCHEMA.derivedSlots` now has TWO
 entries. `measuredHeight`'s `static` deps: `resolvedContent` + `width` +
 `style.font`/`fontSize`/`lineHeight` (§5.6; `color`/`align` omitted — they do not affect size). Its
 compute, `primitives/text.ts`'s **`computeMeasuredHeight`**, is a pass-through: read the five slots,
 propagate any upstream `ErrorValue`, then `#MEASURE` if only the null measurer is wired (**D-118**),
-then `#TYPE` for an unusable style, then `context.measurer.measure(resolvedText, style, maxWidth)`.
+then `#TYPE` for an unusable style, then `context.measurer.measure(resolvedText, style, maxWidth)`,
+then `#TYPE` if that height is non-finite (**F21**, 0130-REVIEW — a buggy future measurer's result
+would otherwise commit uncaught, the gap `add`'s compute already guards).
 `#MEASURE` is a **sixth `ErrorCode`** (`graph/node.ts`) — D-028's move, sanctioned by D-118 c2;
 derived values never serialize so it never reaches disk.
 
-**Q-021 (0129) — OPEN, reversible provisional (a) taken, tagged.** §5.6 makes `measuredHeight`
-depend on `width` but 0124's `TextMeasurer.measure(text, style)` has no width parameter. Provisional
-call: widen to `measure(text, style, maxWidth?)`, and **line-breaking lives in the measurer
+**Q-021 → D-120 (0130-REVIEW).** Reviewer confirmed the implementer's provisional choice (a):
+`TextMeasurer.measure(text, style, maxWidth?)`, and **line-breaking lives in the measurer
 implementation, not `src/engine/`**. `maxWidth` = the `width` slot iff numeric; `"auto"` → no wrap
-(§5.6 layout). Tagged `PROVISIONAL(Q-021)` at `eval-context.ts` (`TextMeasurer.measure`'s
-`maxWidth`) and `primitives/text.ts` (`computeMeasuredHeight`).
+(§5.6 layout). Ruled by the reviewer (not escalated) because the operator sees identical wrapped
+text either way — Rule 1 settles the seam. **`PROVISIONAL(Q-021)` tags still sit at `eval-context.ts`
+and `primitives/text.ts`** — reconciliation (swap tag → `(D-120)` citation) is owed by the
+`render/measure.ts` / `text` command cycle.
 
 **FIVE `text` SLOTS ARE NOW EFFECTIVELY-REQUIRED (0129, narrows 0128's F20).** `measuredHeight`'s
 `static` deps make `deriveEdges` emit an edge from `width`/`style.font`/`style.fontSize`/
@@ -43,11 +46,12 @@ Non-test `mutate` callers that pass no context: `command/commands.ts` ×4 (lines
 **PHASE 4 IS PASSED AND ITS GATE IS CLOSED.** 0116-REVIEW closed the gate; 0119-REVIEW cleared
 0117/0118. §6.2's block on starting a later phase was lifted there and has not been re-armed.
 
-**Owed next: after this batch's review — the `text` command + `render/measure.ts` + context
-threading** (which also settles F13/F20 and makes `measuredHeight` actually useful). Then, separately
-owed and unchanged: **D-109 clauses 1–2** (cell decimals + clipping, `render/` only) · **Q-017**
-(table headers). Still unimplemented and unowned by any scheduled cycle: **D-108** (loader AST shape
-validation) · **D-104** (table resize bounds).
+**Owed next: the `text` command + `render/measure.ts` + context threading** (settles F13/F20, makes
+`measuredHeight` useful, and reconciles `PROVISIONAL(Q-021)` → `(D-120)`). `render/measure.ts` MUST
+honour **D-120**'s `maxWidth` (line-break with `ctx.measureText`; the engine never wraps). Then,
+separately owed and unchanged: **D-109 clauses 1–2** (cell decimals + clipping, `render/` only) ·
+**Q-017** (table headers). Still unimplemented and unowned by any scheduled cycle: **D-108** (loader
+AST shape validation) · **D-104** (table resize bounds).
 
 ---
 
@@ -68,7 +72,7 @@ today (no `text` command).
 WIRED (D-118).** `hasRealMeasurer(context)` (`eval-context.ts`) is the detector — it checks the
 *measurer* is not `NULL_TEXT_MEASURER`, so wrapping the null measurer in a fresh `EvalContext` does
 not sneak past. `computeMeasuredHeight`'s failure order: upstream `ErrorValue` → `#MEASURE` →
-`#TYPE` (unusable style) → the height.
+`#TYPE` (unusable style) → `#TYPE` (non-finite height back from `measure` — F21) → the height.
 
 **1. PHASE 4'S GATE TEST IS `main.test.ts`'s LAST DESCRIBE BLOCK, AND IT IS THE PHASE'S ONLY
 PROTECTION.** Seven tests over one document. Do not weaken; do not fold. See 0116-REVIEW / D-111
@@ -127,16 +131,16 @@ box; `evaluateBlockTree` always returns a `string`.** The four flipped `text.tes
 
 ## Next slice (recommended)
 
-**AFTER THE BATCH REVIEW.** Two candidates, roughly equal size:
+Two candidates, roughly equal size:
 
 - **The `text` command + `render/measure.ts` + context threading.** `command/parser.ts` +
   `commands.ts` `text` handler (move `text` out of `COMMANDS_SPECIFIED_BUT_NOT_BUILT`), creating a
   `text` object with all nine non-derived slots + both derived placeholders and sensible style
   defaults (settling F13/F20 and 0129's five-required-slots consequence). `render/measure.ts`'s
-  Canvas2D `TextMeasurer` (honouring `PROVISIONAL(Q-021)`'s `maxWidth` — line-break with
-  `ctx.measureText`). Thread a real `EvalContext` through `executeCommand` and the other non-test
-  `mutate` callers. This is what makes `measuredHeight` stop being `#MEASURE` and lets the Phase 5
-  gate be approached.
+  Canvas2D `TextMeasurer` (honouring **D-120**'s `maxWidth` — line-break with `ctx.measureText`; the
+  engine never wraps) and reconciling `PROVISIONAL(Q-021)` → `(D-120)` at its two sites. Thread a
+  real `EvalContext` through `executeCommand` and the other non-test `mutate` callers. This is what
+  makes `measuredHeight` stop being `#MEASURE` and lets the Phase 5 gate be approached.
 - **Render-only:** **D-109 clauses 1–2** (cell number precision + no cell-text clipping,
   `render/renderer.ts`) and **Q-017**'s display-only table headers — the smallest un-owed items.
 
@@ -165,16 +169,13 @@ D-109 clause 3 + entry 0118's D-110 in full (0119-REVIEW; D-112, D-113) · entry
 data-shape + entry 0123's D-117 (rulings) · entry 0124's `src/engine/eval-context.ts` +
 `context` threading (0125-REVIEW; D-118) · entry 0126's `!`-marked broken-span rendering + entry
 0127's `text` schema entry, `resolvedContent`, D-114's `evaluateDerivedSlot` widening (0128-REVIEW:
-ACCEPT WITH EDITS; D-119).
+ACCEPT WITH EDITS; D-119) · entry 0129's `measuredHeight` (§5.6's second `text` derived slot) +
+`#MEASURE` `ErrorCode` + `TextMeasurer.measure`'s `maxWidth` + `hasRealMeasurer` (**0130-REVIEW:
+ACCEPT WITH EDITS; F21 fixed; D-120 answers Q-021**).
 
 ## Built this batch, not yet reviewed
 
-**Entry 0129 — `measuredHeight` + D-118 + Q-021.** `graph/node.ts` `ErrorCode` += `#MEASURE`;
-`eval-context.ts` `TextMeasurer.measure` += `maxWidth?` (`PROVISIONAL(Q-021)`) + `hasRealMeasurer`;
-`primitives/text.ts` `computeMeasuredHeight` + all `TEXT_*_PATH` constants (moved from `schema.ts`);
-`primitives/schema.ts` `TEXT_SCHEMA.derivedSlots` += `measuredHeight`; `graph/eval.ts` header only.
-+586/−101 across 10 src files. 1375→1398 tests. Two mutation-checks (threading → 3 red; D-118 guard
-→ 6 red) reproduce as stated.
+Nothing. Entry 0129 was cleared at 0130-REVIEW.
 
 ## Not started
 
@@ -187,7 +188,7 @@ Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
-Numbering follows 0090-REVIEW §9. Items 2–13, 15–21 unchanged and open unless noted.
+Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unless noted.
 
 1. **DONE at entry 0112**, reviewed 0113.
 2. **Give the missing-slot refusal a remedy.** Message only; narrowed by D-110 to D-110 clause 6's cases.
@@ -219,6 +220,10 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21 unchanged and open unle
     commits anyway. A MISSING `content` slot REFUSES the object (F20/0128). Since 0129 the same "must
     exist" now also binds `width`/`style.font`/`style.fontSize`/`style.lineHeight` (they feed
     `measuredHeight`). Not reachable today. See "Read this first" 0a.
+23. **F21 (0130-REVIEW) — CLOSED in the same review.** `computeMeasuredHeight` returned
+    `measure(…).height` on trust; a buggy future `render/measure.ts` returning `NaN`/`Infinity` would
+    cache it uncaught (`validateIntegrity` runs before `evaluate`). Reviewer added a non-finite →
+    `#TYPE` guard, mirroring `add`'s compute. +1 test.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -228,8 +233,11 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21 unchanged and open unle
   or it is refused (0129); a `formula`/`derived` `content` commits with inner references untracked**
   (fix-list item 22 / F13). Neither reachable today.
 - **`measuredHeight` is `#MEASURE` for every real document** until `render/measure.ts` + context
-  threading land (D-118 working as ruled).
-- **Q-021 is a provisional choice** — `TextMeasurer.measure`'s `maxWidth` and where wrapping lives.
+  threading land (D-118 working as ruled). Consequence: a real `text` object lights §5.9's error
+  badge until then — D-118 working as intended (loud, not silent), self-resolves when wired.
+- **`PROVISIONAL(Q-021)` tags remain at `eval-context.ts` + `primitives/text.ts`** though the
+  question is ruled (**D-120**: measurer wraps, `maxWidth` param stays). Reconciliation (swap tag →
+  `(D-120)`) owed by the `render/measure.ts` cycle.
 - **`resolveTextDependencyAddresses` and `deriveEdges` Source 1 are a hand-maintained PAIR (D-119).**
 - **`main.ts`'s `start` is untested code and keeps growing.** Verified live, not by assertion.
 - **The properties panel positions an off-screen selected object's panel clamped to a canvas edge.**
@@ -279,16 +287,21 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21 unchanged and open unle
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-119**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-120**) binds without restatement here.
 
 **D-114 / D-115 / D-116 / D-117 ARE BUILT IN FULL AND REVIEWED (0126/0127, cleared 0128).**
 
-**D-118 (0125-REVIEW) — BUILT (0129), pending review.** `measuredHeight` returns `#MEASURE` (a new
+**D-118 (0125-REVIEW) — BUILT (0129), REVIEWED (0130).** `measuredHeight` returns `#MEASURE` (a new
 sixth `ErrorCode`) when it can see only `NULL_EVAL_CONTEXT`'s measurer; `hasRealMeasurer`
 (`eval-context.ts`) is the detector; `evaluate`/`mutate` still forward `context` untouched.
 
 **D-119 (0128-REVIEW) — RULED, RECONCILED.** The `resolveTextDependencyAddresses` / `deriveEdges`
 Source 1 pair; change one → change both; a third consumer forces extraction.
+
+**D-120 (0130-REVIEW) — RULED, answers Q-021. Reconciliation OWED.** `TextMeasurer.measure(text,
+style, maxWidth?)` stays; line-breaking lives in the measurer implementation, never `src/engine/`;
+`maxWidth` = the `width` slot iff numeric. The `PROVISIONAL(Q-021)` tags at `eval-context.ts` +
+`primitives/text.ts` are swapped for `(D-120)` by the `render/measure.ts` cycle.
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · **D-114/D-115/D-116/D-117.**
@@ -299,8 +312,8 @@ decimals + clipping, `render/` only).
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — both BUILT and REVIEWED (0128).
-**Q-021 (0129) is OPEN** — reversible provisional (a) taken (widen `measure` with `maxWidth?`,
-wrapping in the measurer), tagged at `eval-context.ts` + `primitives/text.ts`. Next free: **Q-022**.
+**Q-021 → D-120 (0130-REVIEW)** — provisional choice (a) confirmed; tags await reconciliation. Next
+free: **Q-022**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 This is what makes D-110 / D-114 safe. `content` (0127) inherits the same posture.
@@ -315,8 +328,9 @@ named divergence).
 
 **`PROVISIONAL(Q-021)` → `src/engine/eval-context.ts`** (`TextMeasurer.measure`'s `maxWidth`
 parameter) and **`src/engine/primitives/text.ts`** (`computeMeasuredHeight`, the `width` → `maxWidth`
-line): does `measuredHeight` become width-aware by the measurer wrapping (a — taken), by not
-wrapping (b), or by an engine-side wrap loop (c)? The human's, non-blocking, reversible.
+line): **RULED — D-120** (0130-REVIEW): the measurer wraps, `maxWidth` stays. The tags are still in
+source pending reconciliation (swap → `(D-120)` citation) by the `render/measure.ts` cycle; they
+mark done debt, not an open choice.
 
 **`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** and **`src/render/slots.ts`**: world units or
 screen pixels for stroke width / cell size / font? Provisional (a) world units. Due with the
@@ -338,13 +352,14 @@ screen pixels for stroke width / cell size / font? Provisional (a) world units. 
   cycle that fixes it.
 - **`hasRealMeasurer` checks the MEASURER, not the context object.** `{ measurer:
   NULL_EVAL_CONTEXT.measurer }` is still "no real measurer".
-- **Q-021's provisional: `TextMeasurer.measure(text, style, maxWidth?)`.** Line-breaking is the
-  measurer implementation's job. If the human rules otherwise, `computeMeasuredHeight`'s body and/or
-  the interface param change — two sites tagged.
+- **Q-021 → D-120: `TextMeasurer.measure(text, style, maxWidth?)` is final.** Line-breaking is the
+  measurer implementation's job; `render/measure.ts` MUST do the wrap with `ctx.measureText`, the
+  engine never wraps. Two `PROVISIONAL(Q-021)` sites await a `(D-120)` swap.
 - **`#MEASURE` is a real `ErrorCode` now** (`graph/node.ts`), sixth after `#SCRIPT`. It is only ever
   produced by `measuredHeight` and never serialized (derived values are not — §5.11).
-- **`computeMeasuredHeight`'s failure order** — upstream `ErrorValue` → `#MEASURE` → `#TYPE` → the
-  height. Pinned; reviewer question 4 asks whether it is right.
+- **`computeMeasuredHeight`'s failure order** (0130-REVIEW confirmed it) — upstream `ErrorValue` →
+  `#MEASURE` (no real measurer) → `#TYPE` (unusable style) → `#TYPE` (non-finite height, F21) → the
+  height.
 - **`TEXT_*_PATH` constants live in `primitives/text.ts` now**, not `schema.ts` (0129 move). `schema.ts`
   imports them.
 - **The block tree is parsed in TWO places every mutation** and must NOT be cached (D-114 clause 4).

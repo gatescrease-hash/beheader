@@ -4061,3 +4061,46 @@ embedded ASTs through `evaluateDerivedSlot` rather than a parallel path. A bindi
 
 Reconciliation required: none — the pair is already in sync (verified 0128). No `PROVISIONAL` tag.
 Cross-referencing comments were added to both sites by this review.
+
+---
+
+## D-120 — `measuredHeight` becomes width-aware by WIDENING `TextMeasurer.measure` with an optional `maxWidth`; line-breaking lives in the measurer implementation, never in `src/engine/` (Q-021 answered)
+Answers: **Q-021**   Ruled: entry 0130-REVIEW-phase5 (reviewer)   Binding on: `src/engine/eval-context.ts`,
+`src/engine/primitives/text.ts` (`computeMeasuredHeight`), `src/render/measure.ts` (unbuilt), and any
+future compute that needs a wrap-aware measurement
+
+**Ruling — the implementer's provisional choice (a), entry 0129, is confirmed.**
+
+1. **`TextMeasurer.measure(text, style, maxWidth?)` is the interface.** `maxWidth` is optional and
+   trailing, so every `measure(text, style)` call still type-checks and behaves identically; an
+   implementation free to ignore it (`NULL_TEXT_MEASURER`, an early fake) simply does not wrap.
+
+2. **Line-breaking is the measurer implementation's job, not the engine's.** `computeMeasuredHeight`
+   stays a pass-through: it reads the declared slots, hands `width` (when numeric) to `measure` as
+   `maxWidth`, and returns `.height`. It runs no word-wrap loop, no whitespace collapsing, no
+   markdown-aware line-fitting — those are `render/measure.ts`'s, with `ctx.measureText`.
+
+3. **`maxWidth` is the `width` slot iff it holds a number; `"auto"` (or any non-number) is
+   `undefined` = no wrapping** (§5.6: "Auto width + auto height means no wrapping").
+
+4. **Not the human's to weigh, because the operator sees identical wrapped text either way.** This
+   is an internal seam-shape question, and Rule 1 settles it: measuring text requires glyph metrics
+   and Rule 1 puts glyph-metric work behind the `TextMeasurer` interface; line-breaking *is*
+   glyph-metric work, so it belongs there too. Option (c) — an engine-side wrap loop — would put a
+   text-layout algorithm in `src/engine/`, the exact concern Rule 1 and §9 push out, for a larger
+   and fiddlier diff. Option (b) — no wrap-awareness — trades away the Phase 5 gate's "wraps at its
+   set width".
+
+**Rationale.** §5.6 makes `measuredHeight` a function of `width` and the Phase 5 gate requires
+wrapping, but Rule 1's `TextMeasurer` interface as built at entry 0124 had no width parameter —
+a genuine brief inconsistency (§6.1 trigger 3), correctly raised rather than guessed. The widening
+is the smallest change that honours both passages, keeps `computeMeasuredHeight` the dumb
+pass-through every other compute is, and does not couple `src/engine/` to a layout algorithm. It is
+reversible if the human overrules: `eval-context.ts` is not on §6.2's load-bearing list, the
+parameter is optional, and `measuredHeight` is a `derived` slot whose value never serializes, so no
+stored document can depend on the answer.
+
+Reconciliation required: grep `PROVISIONAL(Q-021)` and resolve every site (`src/engine/eval-context.ts`,
+`src/engine/primitives/text.ts`) — replace the tag with a `(D-120)` citation; the surrounding prose
+explaining why `maxWidth` exists stays. Owed by the next cycle, which is the `render/measure.ts` /
+`text` command cycle — the first to build the real measurer against this.
