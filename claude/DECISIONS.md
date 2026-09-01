@@ -3966,3 +3966,54 @@ wiring cycle lands `resolvedContent`'s real compute function — that cycle now 
 clauses 1-4 and D-117 in the same slice, with a test for each of: a parse-broken span, a
 runtime-broken formula block, and a runtime-broken conditional condition. `Q-020`'s own "state which
 way you assumed if still open" escape clause is now moot — nothing is open.
+
+---
+
+## D-118 — A derived-slot compute that needs a real text measurement MUST surface an `ErrorValue` when it can see only the null measurer — never a height it did not earn
+Answers: entry 0124's flagged risk (its Decision 3)   Ruled: entry 0125-REVIEW-phase5 (reviewer)
+Binding on: `primitives/schema.ts`'s future `text` entry (`measuredHeight`, and any later
+compute whose result depends on `context.measurer`)
+
+**Ruling.**
+
+1. `NULL_EVAL_CONTEXT`'s measurer reports `{ width: 0, height: 0 }` for every string. That is the
+   correct inert answer for the many evaluation passes that touch no `text` object — and it is kept
+   for exactly that reason. But for a compute that genuinely needs a measurement — `measuredHeight`
+   of a real `text` object whose `content` is non-empty — a zero it did not earn is a silent wrong
+   value, the class §5.1 ("a broken input is legitimate graph state and must come back as an
+   `ErrorValue`") and this project's whole posture rule against.
+
+2. Such a compute MUST detect that it is running without a real measurer and return an `ErrorValue`
+   (suggested code `#MEASURE`, message naming the object) instead of a height. It MUST NOT return
+   `0`, and MUST NOT return a real height computed from the zero-measurement (which would be `0` or
+   near it anyway).
+
+3. **The detection mechanism is the implementer's to choose.** An identity check against the
+   exported `NULL_EVAL_CONTEXT`; a `context === undefined` guard for the isolated-unit-test path
+   (the two are equivalent for this purpose); or, if a cleaner shape emerges, a capability marker on
+   `EvalContext`. What is ruled is the outcome — "measured non-empty text, got `0`, returned `0`" is
+   not acceptable — not the check.
+
+4. `evaluate` / `deriveValidateAndEvaluate` / `mutate` are unchanged by this ruling: they still
+   forward `context` untouched and never inspect it (0124's shape stands). The guard lives in the
+   compute function, where §5.1 already places the "turn a broken input into an `ErrorValue`"
+   obligation. Nothing throws, rejects, or couples evaluation to schema types.
+
+5. The wiring cycle's `measuredHeight` test MUST cover this: a real `text` object evaluated with
+   `NULL_EVAL_CONTEXT` yields an `ErrorValue`, not height `0`. This is also the test 0124 identified
+   as the end-to-end proof that `context` is threaded at all — one test discharges both.
+
+**Rationale.** Entry 0124 built the seam correctly and flagged this gap rather than papering over
+it. A flag deserves an answer before the consuming cycle starts, so that cycle implements a decided
+contract instead of discovering the hole at the keyboard and guessing (or worse, not noticing). The
+zero-default is retained because it is right for the common case; the compute-side guard is what
+makes it safe. The `render/interaction.ts` drag path and the four `command/commands.ts` `mutate`
+calls all pass no context today — D-118 is what turns a missed wiring site there into a loud
+`ErrorValue` rather than a text box that silently collapses to zero height.
+
+This is reversible implementer-adjacent territory and the human may overrule the "must error"
+stance if a silent zero is genuinely wanted for some case; the default the wiring cycle should
+build to is loud.
+
+Reconciliation required: none yet — nothing consumes the measurer. Binding on the cycle that writes
+`measuredHeight`.

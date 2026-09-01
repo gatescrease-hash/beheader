@@ -1,22 +1,34 @@
-# STATUS — as of entry 0124
+# STATUS — as of entry 0125-REVIEW
 
-STATE: **GREEN** (compiles, all tests pass) — but **REVIEW: REQUIRED before the next slice.**
-Both configs compile, **1337/1337** tests pass, 0 skipped, 0 `.only`.
-**PHASE 5 IS OPEN. Entry 0124 built the `EvalContext`/`TextMeasurer` seam** — §6.1 trigger 2
-fired (first file of a new subsystem, `src/engine/eval-context.ts`), so the next slice waits on
-0124's review. Batch: cycle 1/3 since 0121-REVIEW · diff 344 lines / 8 files (cap 800/10).
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1337/1337** tests pass,
+0 skipped, 0 `.only`.
+**PHASE 5 IS OPEN AND THE WIRING SLICE IS UNBLOCKED.** 0125-REVIEW cleared entry 0124
+(**ACCEPT WITH EDITS** — 4 edits, all comment/prose except a one-word `Object.freeze` fix and
+two added test assertions; **D-118** ruled). §6.1 trigger 2 (first file of the injected-services
+subsystem, `eval-context.ts`) is **DISCHARGED**; §6.2's block on Phase 6 is lifted.
+Last review point: **0125-REVIEW-phase5**, verdict ACCEPT WITH EDITS.
+Cycles since last review: **0/3** · diff since last review: 0 lines / 0 files (cap 800/10).
 
-**ENTRY 0124 — THE INJECTED-MEASURER TRAP IS SOLVED, PENDING REVIEW.** New leaf file
+**ENTRY 0124 — THE INJECTED-MEASURER TRAP IS SOLVED, BUILT AND REVIEWED.** Leaf file
 `src/engine/eval-context.ts`: `EvalContext` (`{ measurer: TextMeasurer }`), `TextMeasurer`
 (Rule 1's interface — `measure(text, style)`), `TextStyle` (§5.6's size-relevant style subset:
-`font`/`fontSize`/`lineHeight`), and `NULL_EVAL_CONTEXT` (a deep-frozen null-object, zero
-measurement, the documented default for the many callers with no text). `DerivedSlotCompute`
-gains `context?: EvalContext` (optional ONLY for the isolated-unit-test path — `graph/eval.ts`
-always supplies it). `evaluate`, `deriveValidateAndEvaluate` and `mutate` each take
-`context = NULL_EVAL_CONTEXT` and forward it untouched down to every `derived`-slot compute.
-**No behavioural consumer yet** — `measuredHeight` is the next slice and IS the end-to-end
-threading test. `geometry.ts`'s "no `EvalContext` reaches a compute" comment was falsified and
-fixed (D-065).
+`font`/`fontSize`/`lineHeight`), and `NULL_EVAL_CONTEXT` (a frozen null-object — **outer object
+AND its measurer both frozen** after 0125-REVIEW's F17 fix — zero measurement, the documented
+default for the many callers with no text). `DerivedSlotCompute` gains `context?: EvalContext`
+(optional ONLY for the isolated-unit-test path — `graph/eval.ts` always supplies it). `evaluate`,
+`deriveValidateAndEvaluate` and `mutate` each take `context = NULL_EVAL_CONTEXT` and forward it
+untouched down to every `derived`-slot compute. **No behavioural consumer yet** — `measuredHeight`
+is the next slice and IS the end-to-end threading test (**D-118 clause 5** makes that mandatory).
+`geometry.ts`'s "no `EvalContext` reaches a compute" comment was falsified and fixed (D-065).
+
+**D-118 (0125-REVIEW) — a null-measurer measurement must be LOUD.** `NULL_EVAL_CONTEXT` measures
+every box as `0`; that is right for a text-free document but a **silent wrong value** for a real
+`text` object's `measuredHeight`. The wiring cycle's `measuredHeight` compute MUST detect it is
+running without a real measurer and return an `ErrorValue` (suggested `#MEASURE`), never height 0.
+Mechanism is the implementer's choice (identity check vs `context === undefined` vs a capability
+marker); `evaluate`/`mutate` stay uninspecting. One test covers both this and "the context is
+threaded at all". 0124 flagged this risk itself; D-118 answers it so the wiring cycle inherits a
+contract, not a question.
 
 **BOTH TEXT-ERROR-DISPLAY QUESTIONS ARE NOW RULED — NEITHER IS BUILT.** Two related, DIFFERENT
 mechanisms, both marked with a `!` prefix and both owed by the same future Phase 5 wiring cycle:
@@ -35,9 +47,18 @@ object); no §5.9 error badge (the `!` mark IS the signifier); the mark is emitt
 with delimiters; `start` points at the `{`; `orphaned` holds a broken conditional's branches for
 dependencies-without-rendering). **D-117 needed no shape change** — a runtime-broken formula is an
 ordinary `FormulaBlock`/`ConditionalBlock` that evaluates to an `ErrorValue`; nothing new to hold.
-**Neither ruling's actual behaviour is built.** The wiring cycle owes both, together, with a test
-each for: a parse-broken span, a runtime-broken formula block, and a runtime-broken conditional
-condition.
+**Neither ruling's actual behaviour is built.** `evaluateBlocks` still returns `#PARSE` for a tree
+with an `error` block. The wiring cycle owes both, together, with a test each for: a parse-broken
+span, a runtime-broken formula block, and a runtime-broken conditional condition.
+
+**0125-REVIEW's F16 — 0122 (a reviewer entry) changed `finishConditional`'s shape but left the
+prose describing the old one.** `text.ts`'s header invariant and the `finishConditional` doc
+comment still said "keeps BOTH branches inline" and cited Q-019 as open. 0125-REVIEW rewrote both
+to the `orphaned` shape / D-116+D-117 as ruled, and fixed `evaluateBlockTree`'s "no adapter"
+comment (F18, corrected by D-114's rationale but never applied in code) and several present-tense
+"`main.ts` injects the real measurer" claims about unbuilt wiring. All comment-only. **The lesson:
+an entry that changes code — reviewer entries included — owes the prose that describes it (D-060,
+D-065). This is F13's shape, one batch later.**
 
 **ENTRY 0120'S BLOCK-TREE ENGINE IS BUILT AND REVIEWED (0121-REVIEW: ACCEPT WITH EDITS).**
 `src/engine/primitives/text.ts` parses §5.6's `{= }` / `{? }{:}{?}` (nestable) out of a raw
@@ -47,11 +68,14 @@ eagerly and totally including untaken branches. §6.1 trigger 2 (first file of a
 0121-REVIEW made three edits (two defect fixes, one criterion pin) and issued **D-114**, **D-115**
 and **Q-019**.
 
-**WHAT IS STILL UNBUILT IN PHASE 5**, after 0124: no `text` OBJECT type, no schema entry, no
-`resolvedContent`/`measuredHeight` derived slots, no `text` command, no markdown-lite rendering, no
-layout, and D-116 clauses 1-4 / D-117 still unimplemented. `TextMeasurer`/`EvalContext` threading
-into `graph/eval.ts` is DONE (0124, pending review) — but nothing consumes the measurer yet, and no
-real (Canvas2D) measurer is wired into `main.ts` / `executeCommand`.
+**WHAT IS STILL UNBUILT IN PHASE 5**, after 0124+0125-REVIEW: no `text` OBJECT type, no schema
+entry, no `resolvedContent`/`measuredHeight` derived slots, no `text` command, no markdown-lite
+rendering, no layout, and D-116 clauses 1-4 / D-117 / **D-118** still unimplemented.
+`TextMeasurer`/`EvalContext` threading into `graph/eval.ts` is DONE and REVIEWED (0124/0125) —
+but nothing consumes the measurer yet, and no real (Canvas2D) measurer is wired anywhere. **Every
+non-test `mutate` caller passes no context today**: `command/commands.ts` ×4 (lines 374, 571, 706,
+753), `engine/document.ts:380`, `render/interaction.ts:291` (the drag path). The wiring cycle owns
+threading a real context through all of them; D-118 makes a miss loud rather than silent.
 
 **PHASE 4 IS PASSED AND ITS GATE IS CLOSED.** 0116-REVIEW closed the gate; 0119-REVIEW cleared
 entries 0117 and 0118. §6.2's block on starting a later phase was lifted there and has not been
@@ -72,21 +96,25 @@ the `mutate` level (last test in `mutation.test.ts`'s D-110 block) **and, since 
 command line too** (`commands.test.ts`'s `set` block). Two existing tests flipped from asserting
 refusal to asserting acceptance-and-`0`, exactly as D-110's own ruling text said they would.
 
-**Owed next: the REST of the Phase 5 WIRING slice**, and it inherits a decided direction rather than
-an open question. Rule 1's injected-measurer trap is SOLVED (0124, pending review): `EvalContext`
+**Owed next: the REST of the Phase 5 WIRING slice**, and it inherits a decided direction, not an
+open question. Rule 1's injected-measurer trap is SOLVED AND REVIEWED (0124/0125): `EvalContext`
 carries a `TextMeasurer` and is threaded through `evaluate`/`deriveValidateAndEvaluate`/`mutate` to
 every `derived` compute. What remains: wire `text.ts`'s three functions into `primitives/schema.ts`
 (a `text` schema entry, `resolvedContent` + `measuredHeight` derived slots — `measuredHeight` is the
 first thing to actually call `context.measurer`), add `render/measure.ts`'s Canvas2D `TextMeasurer`
-and thread a real context through `executeCommand`/`main.ts`/`loadDocument`, and add the `text`
-command. **That slice is bound by D-114 in full**, including clause 3's non-obvious ordering, which
-it MUST pin with a test that fails if the two checks are swapped. It is a §6.1 trigger of its own
-(`graph/eval.ts` and `primitives/schema.ts` are load-bearing, §6.2).
-**That slice also owes D-116 clauses 1-4 AND D-117, together** (the `!` prefix on a parse-broken
-span's own source; the `!` + error CODE on a runtime-broken evaluation; `evaluateBlockTree` no
-longer propagating either as `#PARSE`/an `ErrorValue` for the whole tree) — both are now RULED, so
-this is implementation work, not a design question. Still separately owed, unchanged: **D-109
-clauses 1–2** (cell decimals + clipping, `render/` only) · **Q-017** (table headers).
+and thread a real context through every non-test `mutate` caller (see list above, not just
+`executeCommand`), and add the `text` command. **That slice is bound by D-114 in full**, including
+clause 3's non-obvious ordering, which it MUST pin with a test that fails if the two checks are
+swapped. It is a §6.1 trigger of its own (`graph/eval.ts` and `primitives/schema.ts` are
+load-bearing, §6.2).
+**That slice also owes D-116 clauses 1-4, D-117, AND D-118, together** (the `!` prefix on a
+parse-broken span's own source; the `!` + error CODE on a runtime-broken evaluation;
+`evaluateBlockTree` no longer propagating either as `#PARSE`/an `ErrorValue` for the whole tree;
+and `measuredHeight` returning an `ErrorValue` — not height 0 — against `NULL_EVAL_CONTEXT`). All
+three are RULED — implementation work, not design questions. Tests owed: a parse-broken span, a
+runtime-broken formula block, a runtime-broken conditional condition, and a real `text` object
+measured with `NULL_EVAL_CONTEXT`. Still separately owed, unchanged: **D-109 clauses 1–2** (cell
+decimals + clipping, `render/` only) · **Q-017** (table headers).
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column commands).
@@ -185,9 +213,11 @@ and for a conditional everything from `{?` through its matching `{?}` — becaus
 rendered back verbatim. A broken conditional's parsed branches live in the error block's
 **`orphaned`** field: walked by `extractTextDependencies`, never by `evaluateBlocks`. They were
 inline siblings for one commit (0121-REVIEW), which was safe only while an error block
-short-circuited evaluation; D-116 removes that, and inline branches would have printed `yesno` for
-`{? 1 + }yes{:}no{?}`. Keeping them at all is D-115 clause 3: dropping them made extraction silently
-non-total (0121-REVIEW §4 measured `[]` for a reference living only in the false branch).
+short-circuits evaluation; D-116 clause 2 rules that it must stop (wiring cycle owes it), at which
+point inline branches would print `yesno` for `{? 1 + }yes{:}no{?}`. Keeping them at all is D-115
+clause 3: dropping them made extraction silently non-total (0121-REVIEW §4 measured `[]` for a
+reference living only in the false branch). `text.ts`'s header and `finishConditional` doc were
+rewritten to this shape at 0125-REVIEW (F16 — 0122 had left them describing the inline form).
 
 **12. THE PAPERCLIP CANNOT REACH A TABLE CELL.** `props.ts` collapses every cell into ONE
 `synthetic` summary row and D-102 clause 2 deliberately gives a `synthetic` row no paperclip. **Cell
@@ -198,20 +228,21 @@ is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and string
 
 ## Next slice (recommended)
 
-**Wait for 0124's review, then the rest of Phase 5's wiring slice**: the `text` schema entry,
-`resolvedContent` + `measuredHeight` as derived slots (the FIRST consumer of 0124's
-`EvalContext` — its `measuredHeight` test must fail if the context is not threaded), the `text`
-command, D-116 clauses 1-4 + D-117 in `evaluateBlockTree`, `render/measure.ts`'s Canvas2D
-`TextMeasurer` and its wiring through `executeCommand`/`main.ts` and `loadDocument`. **Read
-D-114 before writing any of it** — it settles what `read`/`readRange` an embedded `{= }` gets
-(the same contract a cell formula's AST gets, D-110 coercion included), where the widening goes
-(`evaluateDerivedSlot`, never a second path), and the order the D-110 coercion and D-013's
+**The rest of Phase 5's wiring slice** (0124/0125 unblocked it): the `text` schema entry,
+`resolvedContent` + `measuredHeight` as derived slots (the FIRST consumer of `EvalContext` — its
+`measuredHeight` test must fail if the context is not threaded, per **D-118 clause 5**), the
+`text` command, D-116 clauses 1-4 + D-117 in `evaluateBlockTree`, `render/measure.ts`'s Canvas2D
+`TextMeasurer` and its wiring through EVERY non-test `mutate` caller
+(`command/commands.ts` ×4, `engine/document.ts:380`, `render/interaction.ts:291`). **Read D-114
+and D-118 before writing any of it.** D-114 settles what `read`/`readRange` an embedded `{= }`
+gets (the same contract a cell formula's AST gets, D-110 coercion included), where the widening
+goes (`evaluateDerivedSlot`, never a second path), and the order the D-110 coercion and D-013's
 membership check must run in (coercion first, for an in-extent empty cell only — they collide
-silently otherwise). **Decide there whether a `measuredHeight` running against
-`NULL_EVAL_CONTEXT` for a real `text` object must return an `ErrorValue` rather than a silent
-height 0** — 0124 flagged this and left it to the consuming cycle. Independently, **D-109
-clauses 1–2** (cell decimals + clipping, `render/renderer.ts` only) and **Q-017**'s headers
-remain the smallest un-owed items if the human wants a render-only slice instead.
+silently otherwise). **D-118 settles the `NULL_EVAL_CONTEXT` question 0124 flagged**:
+`measuredHeight` against the null measurer returns an `ErrorValue` (suggested `#MEASURE`), never
+height 0; mechanism is the implementer's choice. Independently, **D-109 clauses 1–2** (cell
+decimals + clipping, `render/renderer.ts` only) and **Q-017**'s headers remain the smallest
+un-owed items if the human wants a render-only slice instead.
 
 ## Built and reviewed
 
@@ -240,15 +271,14 @@ REVISE, four findings) · entry 0111's F1–F4 fix list and D-107, entry 0112's 
 tests and one comment added by the reviewer; D-112, D-113)** · **entry 0120's `primitives/text.ts`
 block-tree engine (0121-REVIEW: ACCEPT WITH EDITS — three edits; D-114, D-115, Q-019)** · entry
 0122's D-116 data-shape change (rulings entry; the human's Q-019 answer, clauses 1-4 still unbuilt) ·
-entry 0123's D-117 (rulings entry; the human's Q-020 answer, still unbuilt, no shape change needed).
+entry 0123's D-117 (rulings entry; the human's Q-020 answer, still unbuilt, no shape change needed) ·
+**entry 0124's `src/engine/eval-context.ts` + the `context` threading through
+`evaluate`/`deriveValidateAndEvaluate`/`mutate` (0125-REVIEW: ACCEPT WITH EDITS — 4 edits, all
+comment/prose except `Object.freeze` on the null measurer + 2 test assertions; D-118)**.
 
 ## Built this batch, not yet reviewed
 
-**Entry 0124** — `src/engine/eval-context.ts` (NEW: `EvalContext`, `TextMeasurer`, `TextStyle`,
-`NULL_EVAL_CONTEXT`); `DerivedSlotCompute` gains `context?`; `graph/eval.ts`'s `evaluate`,
-`mutation.ts`'s `deriveValidateAndEvaluate` + `mutate` gain `context = NULL_EVAL_CONTEXT`,
-forwarded to every `derived`-slot compute; `geometry.ts` one comment fixed (D-065). +344/−20,
-8 files. §6.1 trigger 2 fired — review required before the next slice.
+Nothing. 0125-REVIEW cleared the batch (entries 0122–0124). Next cycle starts fresh at 0/3.
 
 ## Not started
 
@@ -256,9 +286,10 @@ D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
 (drag-linking between two panels) · **D-109 clauses 1–2** · Phase 5's `text` object/schema/derived
-slots/command, D-116 clauses 1-4 + D-117, and markdown-lite rendering (the block-tree engine is
-built and reviewed — 0120/0121; the `EvalContext`/`TextMeasurer` seam is built pending review —
-0124; `render/measure.ts` and the real measurer wiring are not started) · Phases 6–7.
+slots/command, D-116 clauses 1-4 + D-117 + D-118, and markdown-lite rendering (the block-tree
+engine is built and reviewed — 0120/0121; the `EvalContext`/`TextMeasurer` seam is built and
+reviewed — 0124/0125; `render/measure.ts` and the real measurer wiring are not started) ·
+Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -376,10 +407,13 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-117**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-118**) binds without restatement here.
 
-**D-114 THROUGH D-117 ARE ALL NEW AND ALL BIND THE NEXT SLICE — read all four before writing any of
-it.** D-114: an embedded `{= }` AST evaluates through the SAME `read`/`readRange` contract a formula
+**D-114 THROUGH D-118 ALL BIND THE PHASE 5 WIRING SLICE — read all five before writing any of it.**
+**D-118 (0125-REVIEW)**: a `measuredHeight` (or any measurement-dependent compute) that can see
+only `NULL_EVAL_CONTEXT`'s null measurer MUST return an `ErrorValue`, never height 0; mechanism is
+the implementer's; `evaluate`/`mutate` stay uninspecting; one test covers this and "is the context
+threaded at all". D-114: an embedded `{= }` AST evaluates through the SAME `read`/`readRange` contract a formula
 slot's AST gets — D-110's coercion included, plus a REAL `readRange` built on
 `enumerateRangeCellAddresses` (today `evaluateDerivedSlot` supplies none, so an embedded
 `SUM(A1:A4)` derives correct edges and then evaluates `#PARSE`). Widen `evaluateDerivedSlot`; never
@@ -391,7 +425,11 @@ since D-116) + `start`, and must not narrow dependency extraction (a broken cond
 live in `orphaned`, walked for deps, never rendered). D-116: a parse-broken span renders its own
 source, marked `!`; the object keeps rendering. D-117: a runtime-broken evaluation renders `!` + the
 error's CODE instead — a DIFFERENT mechanism from D-116's, do not merge them. Both D-116 and D-117
-are RULED but **UNBUILT** — nothing in the tree today implements either.
+are RULED but **UNBUILT** — nothing in the tree today implements either; `evaluateBlocks` still
+returns `#PARSE` at an `error` block. **D-118 (0125-REVIEW)** is likewise RULED and UNBUILT.
+The 0122 data-shape change (span covers the whole construct, `orphaned` field) IS built and
+reviewed; 0125-REVIEW re-verified the `orphaned` mutation check (drop the recursion → exactly 1
+red).
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 (0101/0102, cleared 0103) · D-100
 (0104, cleared 0105; Q-015 CLOSED) · D-101, D-106, D-102 (0107/0109, cleared 0110) · D-107 (0111,
@@ -409,7 +447,7 @@ the human's, neither blocking. **Q-019 is ANSWERED → D-116** (the human, entry
 span renders itself with a `!` prefix and the box keeps rendering. **Q-020 is ANSWERED → D-117**
 (the human, entry 0123, option (b)): a span that parses but evaluates to an error renders `!` + the
 error's CODE (`!#DIV0`), not its source — a different mechanism from D-116's, sharing only the `!`.
-Next free: **Q-021**.
+**No question was raised by entries 0122–0125.** Next free: **Q-021**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 D-097's write-time refusal sits BESIDE that read, not inside it. **This is also what makes D-110
@@ -438,10 +476,12 @@ site).
 
 ## Gotchas for the next model
 
-- **`NULL_EVAL_CONTEXT` measures every box as ZERO and never errors** (`eval-context.ts`, 0124). It
-  is the right inert answer for a document with no text, but a `measuredHeight` compute that runs
-  against it for a REAL `text` object would read height 0 silently. The consuming cycle must decide
-  whether that case returns an `ErrorValue` instead — flagged in 0124, not decided there.
+- **`NULL_EVAL_CONTEXT` measures every box as ZERO and never errors** (`eval-context.ts`, 0124;
+  both the object and its measurer are frozen after 0125-REVIEW's F17). It is the right inert
+  answer for a text-free document, but a `measuredHeight` compute running against it for a REAL
+  `text` object would read height 0 silently — **so D-118 (0125-REVIEW) requires that compute to
+  return an `ErrorValue` instead.** The mechanism (identity check / `context === undefined` /
+  capability marker) is the wiring cycle's to pick; the outcome is ruled.
 - **`DerivedSlotCompute`'s `context` parameter is typed `context?` but `graph/eval.ts` ALWAYS
   passes it.** The optionality is only so an isolated unit test can call `compute(OBJECT, read)`.
   Do not read `context` as "sometimes absent in the pipeline" — it never is.
@@ -450,10 +490,13 @@ site).
 - **A safety argument that rests on what ANOTHER component currently does is only as durable as that
   component's current behaviour.** 0121-REVIEW justified keeping a broken conditional's branches
   inline with "rendering is unaffected, because the error block short-circuits evaluation first" —
-  true when written, false one entry later when D-116 stopped error blocks short-circuiting, at
-  which point those inline branches would have printed `yesno`. The fix (`orphaned`) is the
-  structural version of the same claim: those blocks are not rendered because NOTHING renders them,
-  not because something else returns first. Prefer the structural form.
+  true when written, invalidated one entry later when D-116 ruled that an error block must STOP
+  short-circuiting (the wiring cycle owes the change), at which point those inline branches would
+  print `yesno`. 0122's fix (`orphaned`) is the structural version of the same claim: those blocks
+  are not rendered because NOTHING renders them, not because something else returns first. Prefer
+  the structural form. **0125-REVIEW's F16 is the same lesson at the comment level** — 0122 moved
+  the code to `orphaned` but left the header and `finishConditional` doc describing the inline
+  shape and citing Q-019 as open. An entry that changes code owes the prose (D-060, D-065).
 - **When a recovery path DROPS a subtree, ask what else reads that subtree.** Entry 0120 reasoned
   about a broken conditional's recovery purely as a display choice ("which branch would we show?")
   and dropped the false branch. Display turned out to be inert — the error block short-circuits

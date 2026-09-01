@@ -30,11 +30,12 @@
  *     resolve is still `undefined`, which `formula/eval.ts` turns into `#REF`.
  *   - `derived` slots call their schema's compute function exactly once, INSIDE this
  *     same topological pass — never in a separate post-pass (§5.1, PROCESS_BRIEF §9) —
- *     and are handed the `EvalContext` (§5.1's "Evaluation context"): today just a
- *     `TextMeasurer` for §5.6's `measuredHeight`, injected by the caller so Rule 1
- *     holds (the engine never reaches for a canvas). `evaluate`'s `context` argument
- *     defaults to `NULL_EVAL_CONTEXT` for the many callers with no text to measure;
- *     `main.ts` threads a real Canvas2D-backed one through `mutate`.
+ *     and are handed the `EvalContext` (§5.1's "Evaluation context"): one service so
+ *     far, a `TextMeasurer` for §5.6's eventual `measuredHeight`, injected by the caller
+ *     so Rule 1 holds (the engine never reaches for a canvas). `evaluate`'s `context`
+ *     argument defaults to `NULL_EVAL_CONTEXT`, and every caller takes that default
+ *     today — no compute reads it yet. A document with real `text` objects is meant to
+ *     get a Canvas2D-backed measurer threaded from `main.ts` through `mutate`.
  *
  *   Topological order is a DFS postorder reversal — the standard DAG construction, and
  *   the same traversal FAMILY `graph/cycles.ts` uses (same direction), but simpler:

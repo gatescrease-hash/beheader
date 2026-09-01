@@ -22,11 +22,17 @@ describe("NULL_EVAL_CONTEXT — the documented default for callers with no text"
     expect(NULL_EVAL_CONTEXT.measurer.measure("", STYLE)).toEqual({ width: 0, height: 0 });
   });
 
-  it("is frozen, so a shared default cannot be corrupted for later passes", () => {
+  it("is frozen — measurer included — so a shared default cannot be corrupted for later passes", () => {
     expect(Object.isFrozen(NULL_EVAL_CONTEXT)).toBe(true);
+    expect(Object.isFrozen(NULL_EVAL_CONTEXT.measurer)).toBe(true);
     expect(() => {
       // @ts-expect-error — writing to a readonly, frozen object is the mistake this guards against.
       NULL_EVAL_CONTEXT.measurer = { measure: () => ({ width: 99, height: 99 }) };
+    }).toThrow();
+    expect(() => {
+      // The nested measurer is the other write path a shallow freeze would miss —
+      // type-legal, so no @ts-expect-error; it must fail at runtime instead.
+      NULL_EVAL_CONTEXT.measurer.measure = () => ({ width: 99, height: 99 });
     }).toThrow();
     expect(NULL_EVAL_CONTEXT.measurer.measure("x", STYLE)).toEqual({ width: 0, height: 0 });
   });

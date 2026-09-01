@@ -34,12 +34,17 @@
  *     position silently. Sanctioned and made binding by **D-115**, which also requires
  *     the two fields that make it useful: the offending span's `source` and its `start`
  *     offset into `content` (**D-038** clauses 4 and 2).
- *   - A broken CONDITIONAL keeps BOTH already-parsed branches inline after its `error`
- *     block (**D-115**). Keeping only the true branch made dependency extraction
- *     silently non-total for the very case §5.3's totality rule exists for; rendering is
- *     unaffected either way, because the `error` block short-circuits `evaluateBlocks`
- *     before either branch is reached. What a broken conditional would DISPLAY is
- *     **Q-019**, the human's, and is deliberately not decided here.
+ *   - A broken CONDITIONAL collapses to ONE `error` block that holds BOTH already-parsed
+ *     branches in its `orphaned` field (**D-115** clause 3, reshaped by **D-116** clause
+ *     5). `extractTextDependencies` walks `orphaned`, so extraction stays total for the
+ *     very case §5.3's totality rule exists for; `evaluateBlocks` never looks at it. The
+ *     0121-REVIEW shape kept the branches inline as siblings — safe only while an `error`
+ *     block short-circuits evaluation, which **D-116** clause 2 says must stop (owed by
+ *     the wiring cycle), at which point an inline branch would RENDER
+ *     (`{? 1 + }yes{:}no{?}` → `yesno`). What a broken span
+ *     DISPLAYS is now RULED, not open: **D-116** (parse-broken → `!` + its own source)
+ *     and **D-117** (a span that parsed but evaluated to an error → `!` + the error
+ *     code). Neither is built here yet — see NOT DONE HERE.
  *   - The marker scanner is QUOTE-AWARE over the identical one escape
  *     `formula/lexer.ts` honours (`\"` only) — `{= CONCAT("a}b", 1) }`'s embedded `}`
  *     inside the string must not end the block early (`findUnquotedBrace`). Two
@@ -73,13 +78,19 @@
  * NOT DONE HERE
  *   - Any `text` OBJECT type, schema entry, or derived slot (`resolvedContent`,
  *     `measuredHeight`) — a later cycle wires this file's three functions into
- *     `primitives/schema.ts`, which is also where `TextMeasurer`/`EvalContext`
- *     threading into `graph/eval.ts` belongs (Rule 1's injected-measurer trap, §5.1).
- *     That cycle must also decide whether `resolvedContent`'s dynamic dependency
- *     resolution and its `read` closure need **D-110**'s empty-in-extent-cell
- *     treatment — this file's `evaluateBlockTree`/`extractTextDependencies` take
- *     whatever `read`/`readRange`/dependency list they are handed and have no opinion
- *     on where those come from, so nothing here forecloses either answer.
+ *     `primitives/schema.ts`. The `EvalContext`/`TextMeasurer` seam that
+ *     `measuredHeight` consumes is already threaded through `graph/eval.ts` (entry
+ *     0124, `engine/eval-context.ts`); what remains is the schema entry itself.
+ *   - The `!`-prefixed display of a broken span — **D-116** (parse-broken → `!` + its
+ *     own `source`) and **D-117** (parsed-but-errored → `!` + the error code). Both are
+ *     RULED and neither is built: `evaluateBlockTree` still returns `#PARSE` for a tree
+ *     containing an `error` block. The wiring cycle owes both, with tests.
+ *   - `resolvedContent`'s `read`/`readRange` closures — **D-114** rules them built to
+ *     the same contract a formula slot's AST gets (D-110's empty-in-extent coercion, a
+ *     real range reader, and clause 3's coercion-before-membership ordering), by
+ *     widening `graph/eval.ts`'s `evaluateDerivedSlot`. This file's
+ *     `evaluateBlockTree`/`extractTextDependencies` take whatever `read`/`readRange`/
+ *     dependency list they are handed and have no opinion on where those come from.
  *   - Markdown-lite parsing/rendering, layout, wrapping — `render/`, later. Deliberately
  *     not this file's concern even now: `**bold**`/`# heading`/etc. have no dependency
  *     and no reactive value, so they need no AST — they stay literal text inside a
@@ -123,19 +134,21 @@ export interface ConditionalBlock {
 /**
  * A syntactically broken `{= }`/`{? }` span (see file header — this variant is this
  * file's own addition, not §5.6's literal union; sanctioned by **D-115**).
- * `evaluateBlockTree` turns it into a `#PARSE` `ErrorValue` for the whole tree it sits
- * in, the same "one broken thing poisons the derived value" posture an ordinary formula
- * slot already has.
+ * `evaluateBlockTree` currently turns it into a `#PARSE` `ErrorValue` for the whole tree
+ * it sits in, the same "one broken thing poisons the derived value" posture an ordinary
+ * formula slot has — but **D-116** clause 2 overrules that: the wiring cycle owes making
+ * `evaluateBlockTree` render the span (see `source`) with a `!` prefix and keep going.
  *
  * `source` and `start` are REQUIRED, not decoration (**D-038** clauses 2 and 4, applied
- * at this boundary by **D-115**): `source` is the raw expression text this block
- * replaced, and `start` is its offset INTO `content` — content-space, so a caller can
- * underline the span in the operator's own text without re-scanning. D-038 clause 2
- * says a rejection carries "the offending name and its position... retrofitting
- * positions is the expensive kind of change," and clause 4 says the rejecting layer
- * never discards the source. Both are what keep **Q-019** answerable either way: a
- * consumer that decides to render a broken span literally instead of erroring needs
- * exactly these two fields, and cannot recover them from `message`.
+ * at this boundary by **D-115**, widened by **D-116**): `source` is the whole broken
+ * span exactly as written, delimiters included, and `start` is its offset INTO
+ * `content` — content-space, so a caller can render or underline the span in the
+ * operator's own text without re-scanning. D-038 clause 2 says a rejection carries "the
+ * offending name and its position... retrofitting positions is the expensive kind of
+ * change," and clause 4 says the rejecting layer never discards the source. Both are
+ * what let D-116 and D-117 render a broken span (`!{= 1 + }`) instead of blanking
+ * the object: a consumer needs exactly these two fields and cannot recover them from
+ * `message`.
  */
 export interface BlockParseErrorBlock {
   readonly type: "error";
@@ -392,17 +405,19 @@ function parseConditional(state: TextParseState, conditionSource: string, spanSt
 /**
  * Turns a parsed conditional's pieces into the `Block[]` `parseConditional` returns —
  * either a real `ConditionalBlock`, or (a broken condition, OR no matching `{?}` was
- * ever found) one `error` block followed by BOTH already-parsed branches, inline.
+ * ever found) ONE `error` block carrying BOTH already-parsed branches in its `orphaned`
+ * field, whole-construct `span` and all.
  *
- * **Both branches, not just the true one (D-115).** Keeping only the true branch made
- * `extractTextDependencies` silently NON-TOTAL for exactly the case §5.3's totality
- * rule exists for: with a broken condition, a reference living only in the false branch
- * was reported by nobody, so a text object subscribed to strictly fewer slots than its
- * own `content` names (measured at 0121-REVIEW: `{? 1 + }x{:}{= poly_1.radius }{?}`
- * extracted `[]`). Nothing about RENDERING changes by keeping both — the `error` block
- * sits first and `evaluateBlocks` returns `#PARSE` before reaching either branch — so
- * this is a pure restoration of totality, not a display decision. Which branch a broken
- * conditional would DISPLAY, if a consumer ever renders one, is **Q-019**, the human's.
+ * **Both branches, held in `orphaned` (D-115 clause 3, reshaped by D-116 clause 5).**
+ * Keeping only the true branch made `extractTextDependencies` silently NON-TOTAL for
+ * exactly the case §5.3's totality rule exists for: a reference living only in the false
+ * branch was reported by nobody (measured at 0121-REVIEW: `{? 1 + }x{:}{= poly_1.radius
+ * }{?}` extracted `[]`). 0121-REVIEW first fixed this by leaving both branches inline as
+ * siblings; **D-116** then ruled that an `error` block must stop poisoning the tree (not
+ * built yet), which would make those inline branches RENDER (`yesno`). `orphaned` keeps
+ * the dependency totality without that hazard — `extractTextDependencies` walks it,
+ * `evaluateBlocks` does not. What a broken span DISPLAYS is ruled by D-116/D-117 and is
+ * owed by the wiring cycle, not decided here.
  */
 function finishConditional(
   conditionSource: string,
@@ -633,9 +648,12 @@ function evaluateBlocks(blocks: readonly Block[], read: ReadSlot, readRange: Rea
  * `graph/eval.ts`'s own "builds the callbacks, hands them through" posture.
  *
  * Return type is the wider `Value` (not `string | ErrorValue`) to match
- * `primitives/schema.ts`'s `DerivedSlotCompute` contract directly — the future
- * `resolvedContent` schema entry can pass this function's result straight through
- * with no adapter.
+ * `primitives/schema.ts`'s `DerivedSlotCompute` contract directly — so the future
+ * `resolvedContent` schema entry passes this function's RESULT through unchanged. The
+ * `read`/`readRange` it passes IN are another matter: **D-114** requires them built to
+ * the same contract a formula slot's AST gets (D-110 coercion, a real range reader,
+ * D-013 ordering), by widening `graph/eval.ts`'s `evaluateDerivedSlot` — not adapted
+ * here. "No adapter" was Decision 4 of entry 0120 and is corrected by D-114.
  */
 export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, readRange?: ReadRange): Value {
   return evaluateBlocks(blocks, read, readRange);

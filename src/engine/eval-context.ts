@@ -28,15 +28,18 @@
  *   reports a zero-size box. This is NOT a module-level mutable global — it is a
  *   frozen null-object a caller passes explicitly (or accepts as a parameter
  *   default), so §5.1's "rather than reaching for module-level globals" still
- *   holds: nothing here is hidden state, and `main.ts` injects the real
- *   Canvas2D-backed measurer through `mutate`'s `context` argument.
+ *   holds: nothing here is hidden state. A document with real `text` objects is
+ *   meant to get a Canvas2D-backed measurer instead, injected by `main.ts`
+ *   through `mutate`'s `context` argument — that wiring is NOT DONE HERE and no
+ *   caller supplies a non-null context yet.
  *
  * INVARIANTS UPHELD HERE
  *   - `measure` NEVER throws and always returns two finite, non-negative numbers.
  *     A `derived`-slot compute calling it must be able to trust that, the same way
  *     it trusts `read` (§5.1: "Errors must never throw across the evaluation loop").
- *   - `NULL_EVAL_CONTEXT` is deep-frozen, so a stray write to it fails loudly in
- *     strict mode rather than corrupting every later pass that shares the default.
+ *   - `NULL_EVAL_CONTEXT` and its measurer are BOTH frozen, so a stray write to
+ *     either (`.measurer =`, or `.measurer.measure =`) fails loudly in strict mode
+ *     rather than corrupting every later pass that shares the default.
  *   - No `Value`/`ErrorValue` vocabulary here: a measurement is a pair of plain
  *     numbers, not graph state. Turning a nonsensical measurement into an
  *     `ErrorValue` is the calling compute function's job, not this interface's.
@@ -107,14 +110,15 @@ export interface EvalContext {
  * silent zero — that decision belongs to the cycle that builds `measuredHeight`
  * and is flagged in this file's NOT DONE HERE.
  */
-const NULL_TEXT_MEASURER: TextMeasurer = {
+const NULL_TEXT_MEASURER: TextMeasurer = Object.freeze({
   measure: () => ({ width: 0, height: 0 }),
-};
+});
 
 /**
  * The default `EvalContext` for callers with no text to measure — a frozen
- * null-object, not hidden mutable state (see the file header). `main.ts` passes
- * a real one through `mutate` for a document that actually has `text` objects.
+ * null-object (measurer included), not hidden mutable state (see the file
+ * header). A document with real `text` objects is meant to get a real one
+ * through `mutate`'s `context` argument instead; nothing wires that yet.
  */
 export const NULL_EVAL_CONTEXT: EvalContext = Object.freeze({
   measurer: NULL_TEXT_MEASURER,

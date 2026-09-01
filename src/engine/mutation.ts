@@ -384,9 +384,9 @@ export type GraphEvaluationResult =
  * guarantee, not this one's; there is nothing here for a caller's prior state
  * to be corrupted by, because this function is never given write access to it.
  *
- * `context` is §5.1's `EvalContext` (injected services — today a `TextMeasurer`
- * for §5.6's `measuredHeight`); it is forwarded untouched to `evaluate` (step 7)
- * and defaults to `NULL_EVAL_CONTEXT` for callers with no `text` object.
+ * `context` is §5.1's `EvalContext` (injected services — so far a `TextMeasurer`
+ * for §5.6's eventual `measuredHeight`); it is forwarded untouched to `evaluate`
+ * (step 7) and defaults to `NULL_EVAL_CONTEXT`, which every caller takes today.
  *
  * Never throws, matching every function it composes. Never mutates `objects`
  * — every step here is pure and returns new data.
@@ -1195,11 +1195,12 @@ export type MutationResult =
  * state provably unchanged" (§6, D-016) a structural guarantee of THIS
  * function's own shape, not an accident of every other file's discipline.
  *
- * `context` is §5.1's `EvalContext` — the injected services (today a
+ * `context` is §5.1's `EvalContext` — the injected services (so far a
  * `TextMeasurer`, §5.6) that step 7's `evaluate` hands to every `derived`-slot
- * compute function. It defaults to `NULL_EVAL_CONTEXT`; a caller that creates or
- * evaluates a `text` object MUST pass a real one (`main.ts` does, via the
- * Canvas2D-backed `render/measure.ts`). Forwarded untouched, never inspected here.
+ * compute function. It defaults to `NULL_EVAL_CONTEXT`, which every caller takes
+ * today; once a `text` schema entry exists, a caller that creates or evaluates a
+ * `text` object MUST pass a real one (`main.ts`, via the Canvas2D-backed
+ * `render/measure.ts`). Forwarded untouched, never inspected here.
  *
  * Never throws. Never mutates `objects` or `journal` — a rejection returns
  * without ever assigning either back to anything; both are exactly the
