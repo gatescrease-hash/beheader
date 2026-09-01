@@ -14,24 +14,18 @@
  * WHAT THIS IS
  *   `createCanvas2dTextMeasurer(ctx)` -> a `TextMeasurer`
  *   (`engine/eval-context.ts`). `ctx` is anything with a settable `font` and a
- *   `measureText` — a real `CanvasRenderingContext2D`, or a fake in a test. It
- *   answers §5.6's "how wide and how tall is this resolved text, at this style,
- *   wrapped to this width."
+ *   `measureText` — a real `CanvasRenderingContext2D` or a test fake. It answers
+ *   §5.6's "how wide and how tall is this resolved text, at this style, wrapped
+ *   to this width": width is the widest laid-out line from `ctx.measureText`,
+ *   height is `lineCount * style.lineHeight`. `lineHeight` (like `fontSize`) is
+ *   an ABSOLUTE length in the document's own unit, not a ratio — inherited from
+ *   `engine/eval-context.ts`'s `TextStyle` doc, not re-decided here.
  *
- *   Width is the widest laid-out line, from `ctx.measureText`. Height is
- *   `lineCount * style.lineHeight`. `lineHeight` (like `fontSize`) is an
- *   ABSOLUTE length in the document's own unit, not a ratio —
- *   `engine/eval-context.ts`'s `TextStyle` doc fixes that reading and this file
- *   inherits it rather than re-deciding it.
- *
- *   LINE-BREAKING (**D-120**): the text is split on its own newlines first (the
- *   hard breaks the operator typed), then — ONLY when `maxWidth` is a positive
- *   finite number — each hard line is greedily word-wrapped to fit, measuring
- *   candidate lines with `ctx.measureText`. A single word wider than `maxWidth`
- *   sits alone on its line and overflows: no mid-word breaking, no hyphenation
- *   (Rule 5 — the dumbest correct thing; §5.6 asks for none). With no `maxWidth`
- *   (`width` is `"auto"` — §5.6: "Auto width + auto height means no wrapping")
- *   nothing is wrapped.
+ *   LINE-BREAKING (**D-120**): split on the operator's own newlines first, then
+ *   — ONLY when `maxWidth` is a positive finite number — greedily word-wrap each
+ *   hard line, measuring candidates with `ctx.measureText`. A word wider than
+ *   `maxWidth` sits alone and overflows: no mid-word breaking, no hyphenation
+ *   (Rule 5; §5.6 asks for none). No `maxWidth` (`width` is `"auto"`) -> no wrap.
  *
  * INVARIANTS UPHELD HERE
  *   - `measure` NEVER throws and ALWAYS returns two finite, non-negative
