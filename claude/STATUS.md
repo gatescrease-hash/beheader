@@ -1,130 +1,109 @@
-# STATUS — as of entry 0108
+# STATUS — as of entry 0109
 
-STATE: **CLEAR TO PROCEED.** Both configs compile, **1238/1238** tests pass, 0 skipped, 0 `.only`,
-`npm run build` succeeds. Entry **0107** built **D-101 + D-106 together** (N properties panels, each
-draggable by its header and each with a dismiss control that hides it without deselecting). Its
-verdict is **REVIEW: NOT NEEDED** — corrected at entry 0108 (no code; see item 1) from a hedged
-"RECOMMENDED" the human directly overruled: **"You cannot recommend a review. It is either required
-or it is not."**
-
-**THE NEXT SLICE IS D-102 — the paperclip and editing.** It is queued behind entry 0107 per D-103
-clause 4, and per PROCESS_BRIEF §6 it gets its own **mandatory** review point regardless of the batch
-cap once it lands, independent of anything above. Nothing blocks starting it now.
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1244/1244** tests pass, 0
+skipped, 0 `.only`, `npm run build` succeeds. Entry **0109** built **D-102** — the properties panel
+becomes WRITABLE: a paperclip per modifiable row (blue for `formula`, grey for `literal`), every
+write the `Command` the command line would have built, run through `executeCommand`. **This is a
+MANDATORY review point (D-103 clause 4) — REVIEW: REQUIRED, regardless of the batch cap.**
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
-Last review point: **0105-REVIEW-phase4** (ACCEPT WITH EDITS; **D-105** ruled). Entry 0106-RULINGS
-(the human, no code), entry 0107 (D-101+D-106), and entry 0108 (this verdict correction, no code)
-all landed since. Entry 0107 is **REVIEW: NOT NEEDED** — decided from PROCESS_BRIEF §6.1's objective
-triggers, not from how untested the DOM work feels (§6: "apply them honestly rather than by how
-confident you feel").
-Cycles since last review: **2/3** · diff since last review: **510 insertions, 86 deletions across 6
-files** (cap 800/10) — well under; entry 0108 added no diff of its own.
+Last review point: **0105-REVIEW-phase4** (ACCEPT WITH EDITS; **D-105** ruled). Entries 0106-RULINGS
+(the human, no code), 0107 (D-101+D-106), 0108 (verdict correction, no code), and 0109 (D-102,
+**this entry**) all landed since, with NO review point in between.
+Cycles since last review: **3/3 — the cap, AND D-103 clause 4, both fire on this same entry.**
+Cumulative diff since 0105-REVIEW (excluding `claude/`): **960 insertions, 102 deletions across
+exactly 10 files** — `git diff --stat 052f156 -- . ':!claude'`. That is over the 800-line half of
+the cap and exactly at the 10-file half; either alone would have forced a review here even without
+D-103 clause 4's own mandatory trigger. Both point the same direction: **stop, and get this reviewed
+before any further cycle.**
 
-## Read this first — the nine things a cold reader needs
+## Read this first — the ten things a cold reader needs
 
-**1. ENTRY 0107 BUILT D-101 + D-106; ITS VERDICT IS REVIEW: NOT NEEDED (corrected at entry 0108,
-which changed no code) — READ 0107'S OWN LOG BEFORE BUILDING D-102 ON TOP OF IT.** No
-`PROCESS_BRIEF §6.1` trigger fired (it is not a phase gate, not a new subsystem's first file, no
-brief deviation, no worked-around rule, no changed test expectation, no new dependency in the
-PROJECT itself — see the next paragraph, no repeated failed attempt, nothing from §8), and the batch
-cap is not reached — so the honest verdict, decided from the objective rule and not from how the
-work feels, is **NOT NEEDED**, full stop; D-102 may start in this same batch. Entry 0107 originally
-reported `REVIEW: RECOMMENDED`; the human overruled that verdict shape directly ("it is either
-required or it is not"), and entry 0108 restates the correct verdict without touching 0107's own
-(append-only) text. What is still worth a read from 0107's log is its interaction pattern for panel
-dragging and dismissal — delegated listeners on the panel container plus a `window`-level
-drag-gesture tracker, deliberately UNLIKE the canvas's own per-element pattern, because
-`updatePanels` rebuilds every panel element on every paint and a listener bound to a specific header
-would be torn down mid-gesture. It was verified live, in a real Chromium instance driven by
-Playwright — installed transiently outside the project (`npm install --no-save` in the OS scratch
-directory; **`package.json`/`package-lock.json` are unchanged, confirmed by `git status`**) —
-clicking, shift-clicking, dragging a panel header, and clicking a dismiss button through real
-browser events, with zero console/page errors. D-102 is the cycle that DOES get a mandatory review
-(D-103 clause 4) — entry 0107's two open questions (its log, bottom) are aimed at that review.
+**1. ENTRY 0109 BUILT D-102. REVIEW: REQUIRED — do not build anything else before this is reviewed.**
+D-103 clause 4 names this cycle by description ("D-102 is the first code in this project that writes
+state from a mouse gesture in the DOM") and the batch cap is independently exceeded (see above). Both
+`commitPanelEdit`/`unlinkPanelSlot` (the pure, tested half — six new tests) and the DOM half
+(`openEditor`, `panelEditHandlers`, `panelClipElement`, `panelEditInput`, the extended click delegate)
+are built. Read entry 0109's own log in full — in particular its Decision 2 (a self-caught bug: the
+naive "skip rebuild while editing" gate would have frozen every panel after its first paint, fixed
+before it ever ran) and its two questions for the reviewer.
 
-**2. D-101 AND D-106 ARE BOTH FULLY BUILT — DO NOT RE-BUILD EITHER.** `AppState` gained a `panels:
-PanelUiRegistry` field (`Record<string, { dismissed: boolean; manualPosition: PanelPlacement |
-undefined }>`) — APPLICATION state, never touched by `mutate`, never saved (D-101 clause 7, D-106
-clause 6). `withInteraction` is the ONE place `AppState.interaction` is ever assigned; it prunes
-`panels` down to the current selection every time, which is what makes D-101 clause 6 / D-106
-clause 6's "discarded when the object leaves the selection" true everywhere at once rather than at
-each call site. `dismissPanel`/`movePanel` are the two panel-only transitions, both no-ops for an
-object that is not currently selected. The DOM half now builds ONE panel element per PANELLED
-object (`panelElements: Map<string, HTMLElement>` in `start`'s closure), each with a header carrying
-a name and a `×` dismiss button; the header is the ONLY interactive part of a panel this cycle
-(`pointer-events: auto`; the body stays `pointer-events: none` until D-102). `renderDocument` gained
-a 7th parameter, `panelledObjectIds`, defaulting to `selectedObjectIds` — a SEPARATE list from the
-selection (D-106 clause 5): a selected-but-dismissed object keeps its highlight but gets its canvas
-name label back, because nothing else is showing it. Entry 0104's interim "the panel shows only for
-a selection of exactly one" reading is GONE, as D-106 clause 1 required.
+**2. D-102 IS FULLY BUILT — DO NOT RE-BUILD IT.** Every clause: pointer-events lifted off the whole
+panel body (clause 1, disclosed cost: a panel can now block clicks on the part of its object it
+overlaps — D-101 clause 5's drag is the remedy); a paperclip on every modifiable, non-`synthetic` row
+(clause 2 — `SlotDescriptor` gained `readonly synthetic?: true`, set only on the table's `cells`
+summary row, D-096 clause 2's deferred field, now read); bold blue / faded grey by `kind` (clause 3);
+blue unlinks immediately, grey opens a seeded input (clause 4); every write is a synthesised `Command`
+through `executeCommand`, never `mutate`/`writeSlot` (clause 5); disambiguation at commit — bare
+number is a literal `set`, anything else a formula `set` with a leading `=` absorbed, not doubled
+(clause 6); the log gets the echoed synthesised command plus the result or refusal, and Escape with
+an input open closes ONLY the input (clause 7, achieved structurally — the input's own `keydown`
+`stopPropagation`s, so the keystroke never reaches the window-level Escape handler at all, no guard
+needed there); the editing panel is not rebuilt while its input is open, and EVERY OTHER PANEL (and
+this one whenever nothing on it is being edited) still rebuilds every paint exactly as before (clause
+8 — see item 1's self-caught bug); drag-linking between two panels is explicitly NOT built (clause 9).
 
-**3. THAT BATCH (0101/0102) WAS REVIEWED AND CLEARED (0103-REVIEW-phase4, ACCEPT WITH EDITS); ENTRY
-0104 (D-100) WAS THEN BUILT, REVIEWED (0105-REVIEW, ACCEPT WITH EDITS), AND RULED ON (0106-RULINGS).**
-Entry 0101 fixed D-097 (the vanishing table). Entry 0102 built D-098 (drag-notice dedup) and D-099
-(the panel's 4-decimal rounding). Entry 0104 built D-100 (the selection becomes a list); 0105-REVIEW
-fixed one defect (D-105: a press must always end a drag armed before it) and ratified the rest;
-0106-RULINGS closed Q-015 (the shift-click toggle, confirmed final) and ruled D-106 (item 2 above).
+**3. Q-014 IS NOW FULLY CLOSED, IN CODE.** D-094 (display), D-100 (selection), D-101 (N panels),
+D-106 (dismiss), D-102 (writing) — every ruling that answers it is built. What is left of the whole
+arc is a HUMAN SESSION actually using it (see item 9 below), and D-102's own review.
 
-**4. THE VANISHING-TABLE DEFECT IS FIXED (entry 0101).** `mutation.ts`'s `findInvalidDimensionWrites`
+**4. ONE READING DECISION IS WORTH THE REVIEWER'S EYES: a panel-typed STRING reaches a FORMULA slot,
+never a literal one.** D-102 clause 6 says "a bare number... anything else...", and a panel row has
+no quoting affordance — so `"hello"` typed into a row is read the same way a formula reads it (a
+string-literal expression), landing as a `formula` slot holding that string. Typing `hello` with no
+quotes is a formula naming an object called `hello`, which will refuse if none exists — also correct
+per the literal ruling, also worth a second look. See entry 0109's "Decisions I made" 1 and its first
+question for the reviewer.
+
+**5. `main.ts`'s DOM HALF (`start`) IS STILL UNTESTED BY CONSTRUCTION (D-001) AND IS NOW LARGER
+AGAIN.** Entry 0109 added the largest single expansion to it so far in one entry: `openEditor`,
+`panelEditHandlers`, `panelClipElement`, `panelEditInput` (with a `settled`-flag reentrancy guard —
+see entry 0109's Decision 4 for why one is needed), and the click delegate's second branch. Verified
+live in a real browser (two Playwright scripts, described in entry 0109's log, zero console/page
+errors) — that is several runs, by one person, not a re-runnable assertion.
+
+**6. D-101 AND D-106 ARE STILL FULLY BUILT from entry 0107** — nothing about N panels, drag, or
+dismiss changed this cycle. See prior STATUS revisions (0105→0108's own text, preserved in `entries/`)
+for their own detail; not restated here now that D-102 sits on top of them cleanly.
+
+**7. THE VANISHING-TABLE DEFECT IS FIXED (entry 0101).** `mutation.ts`'s `findInvalidDimensionWrites`
 rejects a `setSlot` that would leave `table`'s `rows`/`cols` non-`literal`, non-number, non-integer,
-or outside `MIN_TABLE_LINES..MAX_TABLE_LINES` (now in `engine/primitives/table.ts`). D-097, D-098,
-D-099 are all CLOSED — do not re-fix any of them.
+or outside `MIN_TABLE_LINES..MAX_TABLE_LINES`. D-097, D-098, D-099 are all CLOSED — do not re-fix any
+of them. **D-102's own writes inherit this refusal for free** (item 2 above, clause 5's whole point).
 
-**5. `main.ts`'s DOM HALF (`start`) IS STILL UNTESTED BY CONSTRUCTION (D-001) AND IS NOW LARGER.**
-Entry 0107 added the panel container map, the placement/drag/dismiss helpers, and three new listeners
-(one delegated `pointerdown`, one delegated `click`, two `window`-level for the drag gesture's
-continuation). All of it was verified by hand — see item 1 — but none of it is under an assertion.
-D-102 will grow this further (row inputs, the paperclip). **Before adding another interactive
-control here, read entry 0107's "Decisions I made" 1-2 for why the delegated/`window`-level pattern
-was chosen over the canvas's own per-element one**, and reconsider whether it still fits once a row
-can hold focus (D-102 clause 8's own no-rebuild-while-editing requirement).
-
-**6. D-104 IS STILL OWED BY A CYCLE THAT HAS NOT BEEN SCHEDULED YET.** `insertTableLine`/
-`deleteTableLine` write the same two dimension slots `findInvalidDimensionWrites` bounds for
-`setSlot`, but `findInvalidTableResizes` only bounds their INDEX, not the resulting COUNT — so a
-`deleteTableLine` on a one-row table would still land `rows` on `0`. **Not reachable by any command
-today** (§5.10's row/column commands are unbuilt). D-104 binds whichever cycle builds those commands
-to close this in `findInvalidTableResizes`, not `findInvalidDimensionWrites`. Untouched by entry 0107.
-
-**7. THE PROPERTIES PANEL IS NOW WRITABLE IN DESIGN ONLY — D-102 HAS NOT STARTED.** D-094 built the
-read-only display; D-101/D-106 (entry 0107) built N of them with drag and dismiss; **D-102 is what
-makes a row's own value editable** (the paperclip affordance, `set`/`unlink` through `executeCommand`,
-never `mutate` directly) and it has not started.
-
-**8. `commands.ts`'s D-100-era `select` effect and `command/props.ts`'s enumeration are UNCHANGED by
-entry 0107** — `select <name>` still replaces the whole selection with one object (D-100 clause 7; no
-command-line multi-select syntax exists), and `buildSlotDescriptors`/`describeSlotValue` are the same
-ONE enumeration D-094 clause 9 requires, read by both `props` and every panel alike.
+**8. D-104 IS STILL OWED BY A CYCLE THAT HAS NOT BEEN SCHEDULED YET.** `insertTableLine`/
+`deleteTableLine` are not bounded by `MIN_TABLE_LINES`/`MAX_TABLE_LINES` the way `setSlot` now is.
+**Not reachable by any command today** (§5.10's row/column commands are unbuilt). Owed by whichever
+cycle builds those commands (`findInvalidTableResizes`, never `findInvalidDimensionWrites`).
+Untouched by entries 0107 or 0109.
 
 **9. A HUMAN SESSION IS STILL OWED FOR PHASE 4'S OWN GATE** — two polygons bound through a table, in
-one document. Nothing in entries 0101-0107 is that session; all of it makes that session easier to
-run once it happens.
+one document. Nothing in entries 0101-0109 is that session; entry 0109 in particular makes that
+session's LINKING half doable with the mouse instead of only the command line, for the first time.
 
-## Next cycles — D-103's order, and it is binding
+**10. `commands.ts`'s D-100-era `select` effect and `props.ts`'s enumeration are UNCHANGED by entry
+0109 beyond the one added `synthetic` field** — `select <name>` still replaces the whole selection
+with one object (D-100 clause 7), and `buildSlotDescriptors`/`describeSlotValue` are still the ONE
+enumeration/formatter D-094 clause 9 requires, read by `props`, every panel's display, AND now every
+panel's edit seed.
 
-Numbering shifted again: the phase-4 review took entry 0103, D-100 took entry 0104, entry 0106 was
-the human's own rulings (no build), D-101+D-106 together took entry 0107, and entry 0108 was a
-verdict correction (no build, no code — see "Read this first" item 1).
+## Next — this cycle's own review, then Phase 4's own human session
 
-1. ~~**Entry 0101 — D-097, the vanishing table.**~~ **DONE.**
-2. ~~**Entry 0102 — D-098 + D-099.**~~ **DONE.**
-3. ~~**Entry 0104 — D-100, the selection becomes a list.**~~ **DONE and REVIEWED** (0105-REVIEW).
-   ~~**Entry 0106-RULINGS**~~ — the human closed Q-015 and ruled D-106.
-4. ~~**Entry 0107 — D-101 + D-106 together: N panels, drag and dismiss.**~~ **DONE. REVIEW: NOT
-   NEEDED** (verdict corrected at entry 0108, no code).
-5. **Entry 0109 (or whichever number follows) — D-102, the paperclip and editing.** Gets its own
-   mandatory review point regardless of the batch cap (D-103 clause 4). Read entry 0107's log in
-   full first, in particular its two questions for the reviewer — a ruling on either could change
-   how D-102's own mouse-driven writes should be wired.
+D-102's review point is not optional and not batch-absorbable (item 1 above). **Nothing should build
+on top of `main.ts`/`index.html`/`props.ts` until it lands.**
+
+After that review clears, the honest next step is the standing one: **a human session for Phase 4's
+own gate** — two polygons bound through a table in one document, now authored either by typed
+commands or by clicking a grey paperclip and typing into a row. Everything built through entry 0109
+makes that session easier; none of it IS that session.
 
 **Still queued behind all of that, unchanged:** D-090's prompt-sequence preview · D-088 clauses 2–4
 and D-089 (the command input's behaviour) · §5.11's load boundary in `document.ts` (D-083 clause 4's
-depth check, D-081's `createObject` name gate, whose pinned "duplicate DOES commit" test must FLIP).
-
-**A human session is still owed for Phase 4's own gate** — two polygons bound through a table, in
-one document. Everything above makes that session easier; none of it IS that session.
+depth check, D-081's `createObject` name gate, whose pinned "duplicate DOES commit" test must FLIP) ·
+**D-104** (fix-list item 13, owed by whichever cycle builds row/column commands) · D-102 clause 9
+(drag-linking between two panels — not asked for yet).
 
 ## Built and reviewed
 
@@ -141,40 +120,49 @@ by 0093/0094/0107) · `render/hittest.ts` (0064) · entry 0065's header audit ·
 `CommandEffect` and the five effect handlers (0086) · the two formula depth limits (0088) ·
 `main.ts` rewritten from the stub, `render/camera.ts`'s `clampCamera`/`clampZoom`,
 `render/hittest.ts`'s `documentExtent` (moved to `render/extent.ts` at 0096), `index.html` (0089,
-reviewed 0090/0091, widened at 0107) · entry 0093's selection highlight / error badge / formula-driven
+reviewed 0090/0091, widened at 0107/0109) · entry 0093's selection highlight / error badge / formula-driven
 indicator (D-068) and D-092 clause 1's name label, entry 0094's chrome-anchor fix (0095-REVIEW, ACCEPT) ·
 entry 0096's `render/slots.ts` + `render/extent.ts` split (D-093) and entry 0097's `command/props.ts`
 + `props` command (0098-REVIEW, ACCEPT WITH EDITS; D-096, its D-099 widening at 0102 reviewed at
-0103) · entry 0099's `render/panel.ts` + `buildPanelModel` + the panel DOM + clause
-3's name suppression (REVIEWED: ACCEPT at 0100-REVIEW, no edits; its D-099 widening at 0102 reviewed
-at 0103) · entry 0104's `interaction.ts`/`renderer.ts`/`main.ts` selection-list widening (REVIEWED:
-ACCEPT WITH EDITS at 0105-REVIEW; D-105).
+0103, its D-102 `synthetic` widening at entry 0109 NOT yet reviewed — see below) · entry 0099's
+`render/panel.ts` + `buildPanelModel` + the panel DOM + clause 3's name suppression (REVIEWED: ACCEPT
+at 0100-REVIEW, no edits; its D-099 widening at 0102 reviewed at 0103) · entry 0104's
+`interaction.ts`/`renderer.ts`/`main.ts` selection-list widening (REVIEWED: ACCEPT WITH EDITS at
+0105-REVIEW; D-105).
 
-## Built this batch, NOT yet reviewed (cycle 2/3 since 0105-REVIEW)
+## Built this batch, NOT yet reviewed (cycle 3/3 since 0105-REVIEW — review REQUIRED, see above)
 
-**Entry 0107 — D-101 + D-106, N panels with drag and dismiss.** `main.ts`'s `PanelUiState`/
-`PanelUiRegistry`/`AppState.panels`, `withInteraction`/`prunePanelsToSelection`, `dismissPanel`/
-`movePanel`, and the DOM half's `panelElements` map, `panelledObjectIds()`, `updatePanels`,
-`panelElement`, `placePanelElement`, and the delegated drag/dismiss listeners; `renderer.ts`'s
-`panelledObjectIds` parameter and the split `panelledIds`/`selectedIds` sets in the chrome pass;
-`index.html`'s `#panels` container and its CSS. Tests in `main.test.ts` (9 new) and
-`renderer.test.ts` (4 new). Mutation-checked (see entry 0107's own log) and manually verified live in
-a real browser (see item 1 above). **REVIEW: NOT NEEDED** (corrected at entry 0108, no code) — not
-yet reviewed simply means no review has happened yet, not that one is owed before the next slice.
+**Entry 0107 — D-101 + D-106, N panels with drag and dismiss.** See entries 0107/0108's own text for
+full detail. **REVIEW: NOT NEEDED was entry 0107's OWN verdict** (no §6.1 trigger fired on its own
+diff) — that verdict stands for THAT diff, but the batch it belongs to now has a mandatory review
+regardless, forced by entry 0109 (item 1 above). Nothing here supersedes 0107's own honest
+self-assessment; it is simply being reviewed together with what came after it, per D-103's own
+"batching is about fewer, larger reviews" spirit.
 
 **Entry 0108 — verdict correction, no code.** Restates entry 0107's verdict as `REVIEW: NOT NEEDED`
 after the human overruled a hedged `RECOMMENDED`. Adds nothing to the batch's diff total.
 
+**Entry 0109 — D-102, the paperclip and editing.** `command/props.ts`'s `synthetic` field;
+`main.ts`'s panel-write pure functions (`commitPanelEdit`, `unlinkPanelSlot`, and their private
+helpers) plus the DOM half's editing machinery; `index.html`'s interactive-panel CSS. Six new tests
+in `main.test.ts`'s own describe block, three existing test expectations widened (D-096 clause 1's
+disclosure duty — see entry 0109's log). Mutation-checked (three checks, each confirmed red then
+green) and manually verified live in a real browser (two scripts, zero console/page errors — see
+entry 0109's own log for the full transcript). **REVIEW: REQUIRED** (D-103 clause 4 — see the top of
+this file).
+
 ## Not started
 
-**D-102** · D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
+D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation (D-081,
-D-083 clause 4) · D-088 clauses 2–4 · D-089 · Phases 5–7.
+D-083 clause 4) · D-088 clauses 2–4 · D-089 · D-102 clause 9 (drag-linking between two panels) ·
+Phases 5–7.
 
 **Phase 4 is OPEN and NOT claimed.** (a) data drives geometry and (b) geometry drives data are both
-reachable from typed lines; (c) partial binding under drag is demonstrated in `main.test.ts`. What
-is missing is all three in ONE document, authored by a human.
+reachable from typed lines OR, as of entry 0109, from a panel's paperclip; (c) partial binding under
+drag is demonstrated in `main.test.ts`. What is missing is all three in ONE document, authored by a
+human.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -192,15 +180,15 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 8. **The screen-space chrome constants and `PANEL_OBJECT_GAP_CSS` are untuned** — chosen, not
    measured (Rule 5). The human has now seen the panel and did not object to the gap.
 9. **The chrome pass leaves `ctx.font`/`textAlign`/`textBaseline` set on return.** Harmless today.
-   Still owned by whichever cycle actually addresses it — untouched by entry 0107 (which changed
-   ONLY which objects count as panelled for the suppression pass, not the function's own state-leak).
+   Still owned by whichever cycle actually addresses it.
 10. **The formula-driven indicator's narrowness (`origin.x`/`origin.y` only) should be RE-DECIDED**
     now that `props.ts` exists (0095-REVIEW §4).
-11. **The panel's `overflow: auto` scroll position resets on every paint**, because
-    `writePanel` rebuilds each panel's rows whole and paint runs on every pointer move (0100-REVIEW
-    §3). **Superseded for the editing case by D-102 clause 8**, which must solve the general form —
-    entry 0107 did NOT solve it (drag/dismiss do not need a row's scroll position preserved; a row's
-    own open text input, D-102's, does).
+11. **The panel's `overflow: auto` scroll position resets on every paint** for a panel that is NOT
+    currently editing, because `writePanel` still rebuilds each such panel's rows whole and paint
+    runs on every pointer move (0100-REVIEW §3). **D-102 clause 8's supersession for the EDITING
+    case is now DISCHARGED** (entry 0109: a panel with an open row input is not rebuilt while it is
+    open, so ITS scroll position is preserved for the duration of the edit) — this item's remaining,
+    narrower scope is the ORDINARY display-only case, still open, still nobody's yet.
 12. **A right-flipped panel that hits the right clamp overlaps its own object** (0100-REVIEW §3).
     Correct per D-094 clause 11 as written; revisit only if the human asks after seeing it.
 13. **`insertTableLine`/`deleteTableLine` are not bounded by `MIN_TABLE_LINES`/`MAX_TABLE_LINES`**
@@ -213,36 +201,31 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 ## Known problems (detail lives where the pointer says)
 
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** rather
-  than removing it — a narrower, disclosed remnant of the vanishing-table gap. D-097 (entry 0101)
-  closed the KIND/RANGE half; this stranded-slot half is ordinary D-047 empty state (invisible to
-  `enumerateTableCellSlotPaths`, not a defect), not reachable except through a raw `setSlot`
-  bypassing `insertTableLine`/`deleteTableLine`. See `primitives/table.ts`'s header.
-- **`main.ts`'s `start` is untested code and D-102 will grow it further still** — the panel drag/
-  dismiss listeners entry 0107 added join the existing list, canvas sizing, the log rewrite, the
-  file picker, and the selection hand-off as untested-by-construction (D-001). 0090-REVIEW found
-  four defects here and none elsewhere; entry 0107 verified its own additions live in a real
-  browser (see "Read this first" item 1) but that is one run, not a re-runnable assertion.
+  than removing it — see `primitives/table.ts`'s header. Unchanged.
+- **`main.ts`'s `start` is untested code and keeps growing** — entry 0109 added the biggest single
+  expansion yet (item 5 above). Verified live but not by a re-runnable assertion.
 - **The properties panel positions an off-screen selected object's panel clamped to a canvas edge.**
-  D-094 does not ask for hiding it and the selection highlight is equally off-screen — consistent,
-  not fixed on suspicion (Rule 5). Unchanged by N panels: each is clamped independently.
+  Unchanged by N panels or by D-102: each is clamped independently.
 - **The chrome layout is still UNSEEN beyond entry 0094's anchor fix.** Labels of two adjacent
   objects can still overlap — **D-095 says build no collision avoidance until a human asks, and
-  D-101 clause 3 extends that stance to panels** (confirmed live at entry 0107: two panels CAN
-  overlap, by design).
+  D-101 clause 3 extends that stance to panels.**
 - **A prompt sequence still shows nothing where you clicked** — ruled **D-090**, queued.
 - **The formula-driven indicator is read NARROWLY** — `origin.x`/`origin.y` only.
 - **A printable keystroke does not reach the command input unless it is focused** — D-088 clauses
   2–4 not built. **There is no command history** (**D-089**, queued).
 - **A hand-edited saved file can throw a `RangeError` out of the Load button** — fix-list item 1.
-- **Every pointer move repaints the canvas, rewrites the whole log's `textContent`, and rebuilds
-  every panel's DOM whole.** Immediate-mode. Unmeasured and acceptable today (Rule 5) — **but D-102
-  clause 8 makes it a correctness problem the moment a row's text input is open, and that clause is
-  binding.** Entry 0107's drag/dismiss listeners were deliberately designed NOT to depend on any
-  element surviving a rebuild (see its "Decisions I made" 1-2) precisely because of this.
-- **`escape` is bound to the window**, so it cancels a live prompt from anywhere. **D-100 clause 5
-  and D-102 clause 7 give it a third duty and an innermost-first order** — input, then prompt, then
-  selection. Dismissing a panel is deliberately NOT on this list (D-106 clause 8: dismissal is a
-  click on a control, never a key).
+- **Every pointer move repaints the canvas and rewrites the whole log's `textContent`; every panel
+  NOT currently editing is still rebuilt whole every paint too** (fix-list item 11's own remaining
+  scope). Immediate-mode, unmeasured and acceptable today (Rule 5) — the one place this is now a
+  CORRECTNESS requirement rather than a performance question, a row's own open input, is handled
+  (D-102 clause 8, entry 0109).
+- **`escape` is bound to the window**, so it cancels a live prompt from anywhere. D-100 clause 5 and
+  D-102 clause 7 give it a third duty and an innermost-first order — input, then prompt, then
+  selection. **Entry 0109 achieves the innermost step STRUCTURALLY**: a row's own `keydown` listener
+  `stopPropagation`s, so the window handler never even sees the key while an editor is open — no
+  explicit guard was added there, and `updatePanels`'s own pruning is the self-healing backstop if
+  focus is ever somehow elsewhere. Dismissing a panel is deliberately NOT on this list (D-106 clause
+  8: dismissal is a click on a control, never a key).
 - **`zoom`'s echoed line names the REQUEST and `main.ts` adds a second line with the RESULT** —
   deliberate, D-082 clause 5.
 - **`format.ts`'s elision does not re-parse** — a disclosed exception to the round-trip property.
@@ -251,8 +234,7 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 - **Two sites ask the schema whether it declares a path** — `declaresSlotPath` and
   `resolveWritableSlot`'s inline check. A THIRD is forbidden.
 - **`refs <address>` REFUSES for a cell of a table whose `rows` is a formula** (D-046) — a state
-  D-097 makes unreachable BY COMMAND (entry 0101), though a loaded file can still carry it, so the
-  refusal stays.
+  D-097 makes unreachable BY COMMAND, though a loaded file can still carry it, so the refusal stays.
 - **A bare reference to an EMPTY cell is REFUSED.** 0080-REVIEW F4 ruled it STANDS.
 - **`createObject` does not check the name it carries** — pinned by a test asserting a duplicate
   DOES commit, which **D-081** says must FLIP in the load cycle.
@@ -263,12 +245,8 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 - **A 1000×1000 table is legal and costs ~1.5 s per MUTATION.** Rule 5's accepted trade, **not a
   defect** (D-077 clause 3).
 - **`render/renderer.ts`'s `formatCellValue` and `command/props.ts`'s `describeSlotValue` are two
-  separate `Value`-to-text formatters** never reconciled. **D-099 clause 5 keeps it that way
-  deliberately** — the human chose panel-only rounding (entry 0102 built it), so on-canvas cell
-  text keeps full precision and the two now disagree on purpose. Reconciling them is its own slice
-  and needs its own ask. `mutation.ts`'s `describeDimensionSlotValue` (entry 0101) is a THIRD,
-  narrower formatter, scoped to one rejection message's "Got:" clause — not a display path, and
-  not a precedent for a fourth anywhere else.
+  separate `Value`-to-text formatters** never reconciled (D-099 clause 5, deliberate). `mutation.ts`'s
+  `describeDimensionSlotValue` is a THIRD, narrower formatter, scoped to one rejection message.
 - **Carried unchanged, each with its pointer:** `set-formula` is a `kind` not a registry name ·
   comment debt in TEST files only · mixed line endings in the WORKING TREE only (`core.autocrlf=true`)
   · dangling-reference messages name the DEPENDENT not the missing SOURCE · D-022's bounded-correctness
@@ -287,46 +265,41 @@ Every ruling in `DECISIONS.md` (D-001 through **D-106**) binds without restateme
 **D-100 is IMPLEMENTED AND REVIEWED** — entry 0104, cleared at 0105-REVIEW-phase4 (ACCEPT WITH
 EDITS; D-105 ruled there). Q-015 is CLOSED (confirmed by the human at 0106-RULINGS).
 
-**D-101 and D-106 are IMPLEMENTED at entry 0107, NOT YET REVIEWED.** Do not re-build either — see
-"Read this first" items 1-2 for exactly what is built and what the reviewer should look at first.
+**D-101 and D-106 are IMPLEMENTED at entry 0107. D-102 is IMPLEMENTED at entry 0109. NONE OF THE
+THREE ARE YET REVIEWED** — entry 0109 is what makes the review mandatory (item 1 above); do not
+re-build any of them while waiting for it.
 
 **D-104 is NEW and NOT implemented** (0103-REVIEW). It is not owed by the next cycle — it is owed by
-the cycle that builds §5.10's row/column commands. See "Read this first" item 6 and fix-list 13.
+the cycle that builds §5.10's row/column commands. See "Read this first" item 8 and fix-list 13.
 
-**D-102 (queued, next):** the panel becomes writable, `pointer-events: none` is lifted OFF THE BODY
-(the header already lost it at entry 0107), the paperclip is blue for a `formula` slot and grey for
-a `literal` one, and **every panel write goes through `executeCommand`, never `mutate`**.
+**Q-014 IS CLOSED** — every ruling that answers it (D-094, D-100, D-101, D-106, D-102) is now BUILT,
+as of entry 0109. **Q-013 is NOT mooted** — `set <address> = <formula>` stays the spelling; D-102's
+panel reuses the exact same synthesised form (entry 0109's `buildPanelSetCommand`), never a second
+one.
 
-**Q-014 IS CLOSED → D-102.** The human ruled the writing/linking half at entry 0100. §5.10's "no
-panels, no toolbars" now carries one amendment, made twice by the same human: a display panel
-(D-094, extended to N by D-101/D-106) that is also an authoring surface (D-102, not yet built).
-**Q-013 is NOT mooted** — `set <address> = <formula>` stays the spelling and D-102 clause 6 reuses
-it verbatim.
-
-**D-094's fourteen clauses stand, with clause 10 amended by D-102 clause 1 (queued) and clause 3
-generalised by D-100 clause 8 and again by D-106 clause 5.** Everything else in it is unchanged and
-IMPLEMENTED at entry 0099.
+**D-094's fourteen clauses stand, with clause 10 now SUPERSEDED by D-102 clause 1 (entry 0109 —
+`pointer-events: none` is LIFTED off the panel body) and clause 3 generalised by D-100 clause 8 and
+again by D-106 clause 5.** Everything else in it is unchanged and IMPLEMENTED at entry 0099.
 
 **From 0098-REVIEW — D-096, four clauses:** (1) a ruling's file/move list is a CEILING, its
 rationale governs a divergence, and a divergence **must be named in the log entry** — entries 0099,
-0101, 0102, and 0107 have each disclosed their own; (2) the table `cells` summary keeps
-`kind: "literal"` and `SlotDescriptor` grows no fourth kind — the optional `synthetic?: true` that
-ruling deferred is D-102's; (3) a new `dynamic` group MUST add its own summary branch in `props.ts`
-in the same cycle — **D-097 clause 6 extends that duty to the write check**; (4) `props`'s registry
-position and unknown-name message stand.
+0101, 0102, 0107, and 0109 have each disclosed their own; (2) the table `cells` summary keeps
+`kind: "literal"` and `SlotDescriptor`'s deferred `synthetic?: true` field is now ADDED, at entry
+0109, exactly as clause 2 anticipated ("when editing arrives... that cycle adds..."); (3) a new
+`dynamic` group MUST add its own summary branch in `props.ts` in the same cycle — **D-097 clause 6
+extends that duty to the write check**; (4) `props`'s registry position and unknown-name message
+stand.
 
 **From 0095-REVIEW — D-093** (the `render/` split — IMPLEMENTED at 0096) · **D-094** (the panel —
-IMPLEMENTED at 0099, extended to N panels at 0107) · **D-095** (chrome hangs from the extent's
-top-centre; **no inter-object label collision avoidance is to be built** — extended to panels by
-D-101 clause 3, confirmed live at entry 0107).
+IMPLEMENTED at 0099, extended to N panels at 0107, made writable at 0109) · **D-095** (chrome hangs
+from the extent's top-centre; no inter-object label collision avoidance is to be built — extended to
+panels by D-101 clause 3).
 
 **From 0091-REVIEW (the human's session):** **D-088** (clause 1 built, 2–4 queued) · **D-089**
 (queued) · **D-090** (queued) · **D-091** (the grey grid stands).
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
-D-097's write-time refusal (entry 0101) sits BESIDE that read, not inside it, and does not weaken
-it. Anyone tempted to "fix" a future dimension bug by honouring a formula dimension's cached value
-is about to violate Rule 6 — read D-046's rationale first.
+D-097's write-time refusal sits BESIDE that read, not inside it, and does not weaken it.
 
 **Superseded in part: D-086 clause 2's "one backing pixel is one CSS pixel"** — the backing store
 matches the DISPLAY, and clause 3's conversion is built at `screenPointOf` and, since entry 0099, in
@@ -345,87 +318,84 @@ NOT take a side — it is CSS pixels by a stated reason.
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
-**No other `PROVISIONAL` tags exist.** Q-015 was closed and reconciled at entry 0106-RULINGS.
-Q-014 is closed (→ D-102). Next free: **Q-016**.
+**No other `PROVISIONAL` tags exist.** Next free: **Q-016**.
 
 ## Gotchas for the next model
 
-- **ENTRY 0107 IS BUILT AND UNREVIEWED, VERDICT REVIEW: NOT NEEDED** (corrected at entry 0108 — no
-  code — after the human rejected a hedged `RECOMMENDED`: "it is either required or it is not").
-  Read "Read this first" item 1 anyway before building D-102 on the SAME interaction pattern; D-102
-  itself gets a MANDATORY review regardless (D-103 clause 4). **A verdict is REQUIRED or NOT
-  NEEDED, decided from PROCESS_BRIEF §6.1's triggers — never a third, hedged option**, however
-  novel or untested the work feels.
+- **ENTRY 0109 IS BUILT AND UNREVIEWED. REVIEW: REQUIRED (D-103 clause 4) — do not build anything
+  else on `main.ts`/`index.html`/`props.ts` until it clears.** Read entry 0109's log in full first.
+- **A gate that "skips a rebuild while editing" must default to REBUILDING, never to skipping.**
+  Entry 0109's own near-miss (its Decision 2): comparing a persisted "not editing" marker to itself
+  is always equal, so a naive version of the D-102 clause 8 skip would have frozen every panel
+  forever after its first paint, the moment ANY panel existed — not only the one being edited. The
+  correct shape checks `editing !== undefined` FIRST; the skip is the exception, never the default.
+- **`event.stopPropagation()` on a row input's OWN `keydown` is what gives Escape its "input only,
+  not the selection" meaning (D-102 clause 7) — no change was needed at the window-level Escape
+  listener.** DOM event bubbling already orders "innermost first"; stopping it at the input is the
+  narrowest fix. If a future control needs the same property, reach for this before touching the
+  shared window listener.
+- **Removing a FOCUSED element from the DOM fires its own `blur`.** `panelEditInput`'s `settled`
+  flag exists because committing or cancelling a row's edit triggers exactly the repaint that
+  removes that very input — without the guard, `onCancel` would fire a second, reentrant time from
+  inside the first call's own repaint. Relevant to any future DOM code in this file that removes a
+  focused element as a side effect of its own event handler.
+- **A panel-typed bare word with no quotes and no leading `=` is a FORMULA reference, not a string
+  literal** (D-102 clause 6, entry 0109's Decision 1) — typing `hello` into a row asks for an object
+  named `hello`, and refuses if none exists. A literal string needs to be typed quoted
+  (`"hello"`), the same as inside any formula.
 - **`AppState.interaction` is assigned in exactly ONE place: `withInteraction`.** It is what keeps
   `AppState.panels` pruned to the current selection (D-101 clause 6, D-106 clause 6). A future call
-  site that assigns `interaction` directly (as three call sites did before entry 0107) SILENTLY
-  reopens the bug D-105's own class of finding was about — a stale flag surviving a selection change
-  nothing pointed at.
+  site that assigns `interaction` directly SILENTLY reopens the bug D-105's own class of finding was
+  about — a stale flag surviving a selection change nothing pointed at.
 - **`renderDocument`'s `panelledObjectIds` and `selectedObjectIds` are DELIBERATELY two different
-  lists** (D-106 clause 5) — do not collapse them back into one. The highlight pass reads
-  `selectedObjectIds`; the name-suppression pass reads `panelledObjectIds`; a selected-but-dismissed
-  object is in the first list and not the second, ON PURPOSE.
-- **A panel's DOM element is NOT the thing to hang gesture state off of.** `updatePanels` rebuilds
-  every panel whole on every paint (immediate-mode, same as the log and the canvas), so a listener
-  or `setPointerCapture` bound to a specific header element is torn down mid-gesture. Entry 0107's
-  drag tracks a closure variable (`panelDrag`) and continues on `window`; the dismiss/drag-start
-  listeners are delegated on `panelsContainer`, never on a per-panel element. Read this before D-102
-  adds row-level interactivity that might be tempted to bind a listener to a row that gets rebuilt.
+  lists** (D-106 clause 5) — do not collapse them back into one.
+- **A panel's DOM element is NOT the thing to hang MOST gesture state off of** — `updatePanels`
+  rebuilds every panel whole on every paint BY DEFAULT (D-101's drag/dismiss track their own state
+  in closures for exactly this reason). **The one deliberate exception is a row's own open `<input>`
+  while it is being edited** (D-102 clause 8): that ONE element is kept alive on purpose, which is
+  why `panelEditInput`'s own listeners may safely be bound DIRECTLY to it rather than delegated —
+  see entry 0109's answer to entry 0107's first open question.
 - **`mouse.click(..., { modifiers: [...] })` in Playwright/Chromium does NOT set the corresponding
-  modifier flag (e.g. `shiftKey`) on the synthesized `pointerdown` in at least one observed
-  combination** — `page.keyboard.down("Shift")` / `up("Shift")` around a plain click does. Cost real
-  time at entry 0107 (a shift-click test looked like a real `additive` regression until isolated).
-  Relevant only if a future cycle scripts the browser again for verification.
+  modifier flag on the synthesized `pointerdown` in at least one observed combination** —
+  `page.keyboard.down("Shift")`/`up("Shift")` around a plain click does. Cost real time at entry
+  0107; not hit again at entry 0109 (no modifier-click was needed), but still true if a future cycle
+  scripts the browser again.
 - **A dismissed panel's object does NOT automatically un-dismiss on a plain click that merely
-  narrows a multi-selection down to it** — only if the object actually LEFT the selection first
-  (shift-click it out and back in, or escape and reselect, per D-106 clause 6's own words). Confirmed
-  both in a unit test and live in a real browser at entry 0107; see its log's manual-verification
-  step 6 and its second open question for the reviewer.
-- **`placePropertiesPanel` needed NO change for N panels** — it takes the extent as an argument,
-  which is exactly why D-094 clause 11 put it in `render/`. `main.ts`'s `placePanelElement` is the
-  new wrapper that decides whether to call it at all (skipped outright for a DETACHED/dragged panel
-  — D-101 clause 5's "no longer consulted," taken literally).
-- **A drag notice dedupes by TEXT, per GESTURE** — `pointerDown` resets it, `pointerUp` discards
-  it. Do NOT reach for `Date.now()` for this or anything else in `interaction.ts`; it is
-  deterministic and every test depends on that (D-098's own rationale for rejecting a wall-clock
-  throttle).
-- **`describeSlotValue` must never be copied.** D-099 clause 1 gives it an optional `maxDecimals`
-  instead. `renderer.ts`'s `formatCellValue` is already a second, disclosed formatter (D-099
-  clause 5); `mutation.ts`'s `describeDimensionSlotValue` (entry 0101) is a narrow THIRD, scoped
-  to one rejection message's "Got:" clause — not a display path, and not a precedent for adding a
-  fourth anywhere else.
-- **A test that passes on its FIRST run is not yet trusted — mutation-check it.** Entry 0107's own
-  log names three such checks (the pruning helper, the `panelledObjectIds` split, the two no-op
-  guards), each broken-then-reverted with the affected tests confirmed red then green.
-- **`buildSlotDescriptors` is the ONE schema walk for display** (D-094 clause 9). N panels and
-  `props` all read it. Before writing any other reader of `schema.nonDerivedSlotPaths`/
-  `derivedSlots`, check whether it already answers the question.
-- **An editable panel MUST NOT be rebuilt whole on every paint** (D-102 clause 8, still queued).
-  Entry 0107's panels ARE still rebuilt whole every paint — correct for now, because nothing in
-  them can hold focus yet. This becomes a live correctness requirement the moment D-102 adds a row
-  text input, not before.
-- **The panel writes through `executeCommand` and nothing else** (D-102 clause 5, still queued). Not
-  `mutate`, not `writeSlot`. Entry 0107 added no write path of its own to document state — dismissal
-  and manual position are APPLICATION state only (see the gotcha above on `withInteraction`).
+  narrows a multi-selection down to it** — only if the object actually LEFT the selection first.
+- **`placePropertiesPanel` needed NO change for N panels, and needs none for D-102 either** — it
+  takes the extent as an argument and knows nothing about a row's own content.
+- **A drag notice dedupes by TEXT, per GESTURE.** Do NOT reach for `Date.now()` for this or anything
+  else in `interaction.ts`.
+- **`describeSlotValue` must never be copied.** `maxDecimals` is its one optional argument (D-099);
+  `renderer.ts`'s `formatCellValue` is a disclosed second formatter; `mutation.ts`'s
+  `describeDimensionSlotValue` a narrow third. No fourth, anywhere.
+- **A test that passes on its FIRST run is not yet trusted — mutation-check it.** Entry 0109's own
+  log names three such checks for its new pure functions, each broken-then-reverted with the
+  affected test confirmed red then green.
+- **`buildSlotDescriptors` is the ONE schema walk for display** (D-094 clause 9). `props`, every
+  panel's DISPLAY, and now every panel's EDIT SEED (entry 0109's `commitPanelEdit`'s row value comes
+  from the SAME `PanelRow.value` the display already computed) all read it.
+- **The panel writes through `executeCommand` and nothing else** (D-102 clause 5, entry 0109). Not
+  `mutate`, not `writeSlot`. `runPanelCommand` is the ONE place a panel-synthesised `Command` meets
+  `executeCommand` — mirroring `commands.ts`'s own D-069 stance one layer up.
 - **`render/panel.ts` is PURE and tested; the panel DOM in `main.ts` is not.**
 - **The panel is positioned in CSS pixels; `worldToScreen` returns BACKING pixels.** Divide by the
-  ratio the canvas actually has (`canvas.width / bounds.width`), never `devicePixelRatio` by
-  assumption. This has shipped as a bug once, in the other direction (entry 0091's pan speed).
-- **The canvas is a FLEX CHILD, so nothing floats over it as written** — entry 0099 wrapped it in a
-  `position: relative` `#stage`, and `index.html`'s header comment says so (D-065).
+  ratio the canvas actually has, never `devicePixelRatio` by assumption.
+- **The canvas is a FLEX CHILD, so nothing floats over it as written** — `#stage` is `position:
+  relative` (D-065).
 - **A properties panel is not a `table` object and must never be spoken of as one** (D-094 clause 1).
   It is DOM furniture; it never enters `state.document`, never goes through `mutate`, is never
-  saved, never appears in `list`. **D-101 clause 7 says the same about a dragged panel's position,
-  and D-106 clause 6 the same again about a dismissal.**
+  saved, never appears in `list`. The same is true of a row's OPEN INPUT and its typed-but-uncommitted
+  text — `openEditor` and its handlers are closure state in `start`, never `AppState`.
 - **`main.ts` can be tested, and the trick is the bottom of the file** — the bootstrap is guarded on
   `typeof document !== "undefined"`.
 - **The global `document` and `state.document` are different things.**
-- **An object's non-derived slot paths are NOT a list you may render** — `resolveNonDerivedSlotPaths`
-  on a large table returns 90,000–130,000 paths. Never spread a collection the user can size (D-077).
+- **An object's non-derived slot paths are NOT a list you may render** — a large table's full set
+  can be six figures. Never spread a collection the user can size (D-077).
 - **`origin` does not mean the same thing across object types** — a circle's/polygon's CENTRE, a
   rect's/table's TOP-LEFT CORNER. "Where is this object, visually" wants `objectExtent`.
-- **A test that asserts an OFFSET cannot catch a wrong ANCHOR** (entries 0093/0094). When adding a
-  positioned thing, pin the ABSOLUTE position for at least two geometries that differ.
+- **A test that asserts an OFFSET cannot catch a wrong ANCHOR.** When adding a positioned thing, pin
+  the ABSOLUTE position for at least two geometries that differ.
 - **A review's fix list authorises a CHANGE, never an exemption from the trigger that change fires.**
 - **A comment saying another file does not exist — or OWNS something — is YOURS once you falsify it**
   (D-065).
@@ -434,12 +404,13 @@ Q-014 is closed (→ D-102). Next free: **Q-016**.
   not see a `CameraState`, a selection, or a DOM handle** (`render/panel.ts` may — it is `render/`).
   · **`parser.ts` validates the FORM of a number, not its usefulness.** · **A name §5.2 allows is not
   automatically a name §5.3 can READ (D-080).** · **`writeSlot` in `commands.ts` is the ONE place a
-  slot is written by command**, and `withCamera` in `main.ts` the ONE place the camera is written. ·
-  **A formula's SOURCE does not exist anywhere** — it is reconstructed from the AST against current
-  names, every paint. · **`executeCommand` is the ONLY place a `Command` meets a `Document`
-  (D-069)** — and D-102 clause 5 is what keeps that true once the panel can write. · **Find the
-  recursion before you bound it** (entry 0087).
+  slot is written by COMMAND-LINE command**, `runPanelCommand` in `main.ts` the ONE place a slot is
+  written by PANEL command (both, underneath, are `executeCommand` calls — D-069 stays singular),
+  and `withCamera` in `main.ts` the ONE place the camera is written. · **A formula's SOURCE does not
+  exist anywhere** — it is reconstructed from the AST against current names, every paint. ·
+  **`executeCommand` is the ONLY place a `Command` meets a `Document` (D-069)** — true for a typed
+  line AND for a panel write, as of entry 0109. · **Find the recursion before you bound it.**
 - **The operator cannot see what you can see.** The panel exists because that question kept going
-  unasked. **The human's session at 0100 produced three ruled fixes (D-097/D-098/D-099), all three
-  now built (entries 0101/0102) — the panel is what made all three visible in the first place.**
-  Entry 0107 made that true for MORE THAN ONE object at once.
+  unasked. Entry 0109 answers a second version of it — "I can see it, but can I CHANGE it without
+  leaving the mouse" — the same way: build the surface, wire it through the one path everything else
+  already trusts, and inherit every refusal that path already has.

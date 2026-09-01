@@ -20,6 +20,7 @@ import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
 import {
   buildPanelModel,
+  commitPanelEdit,
   dismissPanel,
   escape,
   initialAppState,
@@ -32,6 +33,7 @@ import {
   replaceDocument,
   respondToPrompt,
   submitLine,
+  unlinkPanelSlot,
   wheelZoomAt,
   type AppState,
   type Viewport,
@@ -339,7 +341,9 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const state = typed(opened(), "circle x=10 y=20 r=5");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     const originX = model.modifiable.find((row) => row.path === "origin.x");
-    expect(originX).toEqual({ path: "origin.x", value: "10", formulaSource: undefined });
+    // `kind`/`synthetic` (D-102) round-trip `SlotDescriptor`'s own fields —
+    // see the next `describe` block for what a row's writer does with them.
+    expect(originX).toEqual({ path: "origin.x", value: "10", formulaSource: undefined, kind: "literal", synthetic: false });
   });
 
   it("carries a formula slot's reconstructed source and keeps it in the modifiable group (D-094 clause 6)", () => {
@@ -351,6 +355,9 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const originX = model.modifiable.find((row) => row.path === "origin.x");
     expect(originX?.formulaSource).toBe("table_1.A1");
     expect(model.derived.some((row) => row.path === "origin.x")).toBe(false);
+    // D-102 clause 3: the paperclip's colour comes from `kind`, not from
+    // whether a source string happens to be present.
+    expect(originX?.kind).toBe("formula");
   });
 
   it("summarises a table's cells as ONE modifiable row, never one per cell (D-077, D-094 clause 8)", () => {
@@ -358,6 +365,10 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const model = buildPanelModel(objectNamed(state, "table_1"), state.document.objects);
     expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
     expect(model.derived).toEqual([]);
+    // D-102 clause 2: the cells row is `synthetic` — it stands for a whole
+    // family, not one slot, so the DOM writer must refuse it a paperclip.
+    expect(model.modifiable.find((row) => row.path === "cells")?.synthetic).toBe(true);
+    expect(model.modifiable.find((row) => row.path === "origin.x")?.synthetic).toBe(false);
   });
 
   it("rounds a derived number's float dust to 4 decimals (D-099), while `props` keeps full precision — the two formatters disagree on purpose", () => {
@@ -374,6 +385,68 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const propsState = typed(state, "props circle_1");
     const propsLines = newLines(state, propsState);
     expect(propsLines.some((line) => line.includes("centroid.x = 10.000000000000002"))).toBe(true);
+  });
+});
+
+describe("commitPanelEdit / unlinkPanelSlot — writing through the panel (D-102)", () => {
+  it("a bare number is a LITERAL write, echoed as the synthesised command the operator would have typed (clauses 5-7)", () => {
+    const state = typed(opened(), "circle x=10 y=20 r=5");
+    const circleId = objectNamed(state, "circle_1").id;
+    const after = commitPanelEdit(state, circleId, "origin.x", "42");
+    expect(newLines(state, after)).toEqual(["> set circle_1.origin.x 42", "circle_1.origin.x = 42"]);
+    expect(numberAt(objectNamed(after, "circle_1"), ["origin", "x"])).toBe(42);
+  });
+
+  it("anything else is a FORMULA write (clause 6) — the same degenerate-formula reference `link` produces", () => {
+    let state = typed(opened(), "table x=200 y=0 rows=2 cols=2");
+    state = typed(state, "set table_1.A1 7");
+    state = typed(state, "circle x=0 y=0 r=5");
+    const circleId = objectNamed(state, "circle_1").id;
+
+    const after = commitPanelEdit(state, circleId, "origin.x", "table_1.A1");
+    const model = buildPanelModel(objectNamed(after, "circle_1"), after.document.objects);
+    expect(model.modifiable.find((row) => row.path === "origin.x")).toMatchObject({ kind: "formula", formulaSource: "table_1.A1", value: "7" });
+  });
+
+  it("absorbs a leading '=' the operator typed rather than doubling it (clause 6)", () => {
+    let state = typed(opened(), "table x=200 y=0 rows=2 cols=2");
+    state = typed(state, "set table_1.A1 7");
+    state = typed(state, "circle x=0 y=0 r=5");
+    const circleId = objectNamed(state, "circle_1").id;
+
+    // A doubled `=` would reach `parseFormula` as a malformed expression and
+    // come back as a refusal, not a formula.
+    const after = commitPanelEdit(state, circleId, "origin.x", "=table_1.A1");
+    expect(numberAt(objectNamed(after, "circle_1"), ["origin", "x"])).toBe(7);
+    expect(newLines(state, after).some((line) => line.includes("PARSE"))).toBe(false);
+  });
+
+  it("a refusal (a derived slot) reaches the log and changes the document not at all", () => {
+    const state = typed(opened(), "circle x=10 y=20 r=5");
+    const circleId = objectNamed(state, "circle_1").id;
+    const after = commitPanelEdit(state, circleId, "centroid.x", "5");
+    expect(after.document).toBe(state.document);
+    expect(newLines(state, after).some((line) => line.includes("derived slot"))).toBe(true);
+  });
+
+  it("is a no-op for an object id the document no longer has — nothing to name (D-023's posture)", () => {
+    const state = typed(opened(), "circle x=10 y=20 r=5");
+    expect(commitPanelEdit(state, "obj_404", "origin.x", "5")).toBe(state);
+    expect(unlinkPanelSlot(state, "obj_404", "origin.x")).toBe(state);
+  });
+
+  it("unlink reverts a formula slot to a literal holding the last computed value (D-041), echoed the same way", () => {
+    let state = typed(opened(), "table x=200 y=0 rows=2 cols=2");
+    state = typed(state, "set table_1.A1 7");
+    state = typed(state, "circle x=0 y=0 r=5");
+    state = typed(state, "link circle_1.origin.x table_1.A1");
+    const circleId = objectNamed(state, "circle_1").id;
+
+    const after = unlinkPanelSlot(state, circleId, "origin.x");
+    expect(newLines(state, after)[0]).toBe("> unlink circle_1.origin.x");
+    expect(numberAt(objectNamed(after, "circle_1"), ["origin", "x"])).toBe(7);
+    const model = buildPanelModel(objectNamed(after, "circle_1"), after.document.objects);
+    expect(model.modifiable.find((row) => row.path === "origin.x")?.kind).toBe("literal");
   });
 });
 

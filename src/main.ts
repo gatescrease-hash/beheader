@@ -5,10 +5,13 @@
  * bar and scrolling log, §5.11's save/load through the DOM. Binding here: D-075
  * and D-082 (performing a `CommandEffect`), D-062 (clamping a loaded camera),
  * D-061 and D-066 (`fit`), D-027 clause 2 (`camera` is written directly, never
- * through `mutate`), D-072 (a canvas pick answers a live prompt step), **D-101**
- * (one properties panel per selected object, dragged by its header) and
- * **D-106** (every selected object's panel shows by default; a dismiss control
- * hides one without deselecting, and a dismissed object's canvas name returns).
+ * through `mutate`), D-072 (a canvas pick answers a live prompt step), D-101
+ * (one properties panel per selected object, dragged by its header), D-106
+ * (every selected object's panel shows by default; a dismiss control hides one
+ * without deselecting, and a dismissed object's canvas name returns), and
+ * **D-102** (the panel becomes WRITABLE: a paperclip per modifiable row, every
+ * write the `Command` the command line would have built, run through
+ * `executeCommand` — never `mutate`, never `writeSlot`).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -34,6 +37,12 @@
  *     `render/interaction.ts`, both of which call `mutate` (Rule 2). The one
  *     field this file writes directly is `camera`, which D-027 clause 2 and
  *     D-075 clause 5 keep OUT of `mutate` — it is view state, not graph state.
+ *   - **D-102 clause 5**: a panel row's write is a `Command`
+ *     (`buildPanelSetCommand`/`unlink`) run through `executeCommand`, the exact
+ *     same seam a typed line uses (D-069) — never a direct `mutate` call, and
+ *     never `commands.ts`'s internal `writeSlot`. A panel write therefore
+ *     inherits every refusal a typed `set`/`link`/`unlink` already has, D-097's
+ *     table-dimension guard included, for free.
  *   - An effect is performed through a `switch` on `kind` with the `never`
  *     default (D-082 clause 3), because `effect` is optional on the success arm
  *     and a missing arm would otherwise be silent rather than a compile error.
@@ -54,9 +63,11 @@
  *     a drawn extent, from `command/props.ts`'s descriptors (D-094 clause 9),
  *     re-placed every paint (clause 13) unless the operator has DRAGGED it —
  *     **D-101** clause 5's manual position, held in `AppState.panels`, wins
- *     instead. The body of each panel stays READ-ONLY this cycle: no row
- *     listeners, no `mutate` — only the HEADER (drag handle, dismiss control)
- *     is interactive (D-101 clause 4). Editing a row is **D-102**, still queued.
+ *     instead.
+ *   - **Slot-to-slot linking BY DRAGGING between two panels** (D-102 clause 9,
+ *     explicitly NOT this cycle's). A row now takes typed text, which is D-102's
+ *     whole mechanism for Q-014's remaining half; dragging one row onto another
+ *     is a further feature the human has not asked for.
  *   - **Which objects get a panel at all** is `AppState.panels`' own
  *     `dismissed` flag (**D-106**): every selected object with a drawn extent
  *     shows one BY DEFAULT, and dismissing it hides that one panel without
@@ -79,6 +90,7 @@
 import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
 import { slotKey, type GraphObject } from "./engine/graph/node.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
+import { parseCommandNumber, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
@@ -544,11 +556,21 @@ export function replaceDocument(state: AppState, document: Document, line: strin
  * decimal places, per **D-099** — and — only for a formula slot (D-094 clause
  * 6) — the source `formula/format.ts` reconstructed, without a leading `=`
  * (the DOM writer adds one).
+ *
+ * `kind` and `synthetic` (**D-102** clause 2) carry `command/props.ts`'s
+ * `SlotDescriptor` fields of the same name through to the DOM writer, which is
+ * what decides whether a row gets a paperclip at all (never for a `derived` or
+ * `synthetic` row) and which colour it gets (clause 3: blue for `formula`,
+ * grey for `literal`). A `derived` row's `kind` is carried too, though nothing
+ * reads it there — `main.ts`'s own `derived: boolean` grouping is what the DOM
+ * writer actually branches on, the same split `PanelModel` already made.
  */
 export interface PanelRow {
   readonly path: string;
   readonly value: string;
   readonly formulaSource: string | undefined;
+  readonly kind: "literal" | "formula" | "derived";
+  readonly synthetic: boolean;
 }
 
 /**
@@ -577,6 +599,8 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
       // as precision. `props`'s own output (`commands.ts`) stays untouched.
       value: describeSlotValue(descriptor.value, { maxDecimals: 4 }),
       formulaSource: descriptor.formulaSource,
+      kind: descriptor.kind,
+      synthetic: descriptor.synthetic === true,
     },
     derived: descriptor.kind === "derived",
   }));
@@ -585,6 +609,104 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
     modifiable: grouped.filter((entry) => !entry.derived).map((entry) => entry.row),
     derived: grouped.filter((entry) => entry.derived).map((entry) => entry.row),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Writing through the panel (**D-102**) — every write is the `Command` the
+// command line would have built for the same input, run through the SAME
+// `executeCommand` (D-069). Nothing here calls `mutate` or `writeSlot`
+// directly (clause 5).
+// ---------------------------------------------------------------------------
+
+/** The full address a panel row's write targets, exactly as the operator would type it after the object's name (D-094 clause 4) — `row.path` already IS that suffix, so this is one string join, never a second address-building idiom. */
+function panelSlotAddress(objectName: string, path: string): string {
+  return `${objectName}.${path}`;
+}
+
+/**
+ * D-102 clause 6: disambiguates the text a panel row's input held at commit
+ * into the SAME two `Command` shapes the command line's own `set` produces —
+ * a bare number is a LITERAL write, anything else a FORMULA write. A leading
+ * `=` the operator typed is absorbed rather than doubled, so retyping what was
+ * already shown (a formula's own reconstructed source, or a plain edit) does
+ * not accidentally nest a second `=`.
+ *
+ * This is deliberately narrower than `parser.ts`'s own `set` grammar: there is
+ * no quoted-string or `TRUE`/`FALSE` reading here, because a panel row is a
+ * bare text input with no quoting affordance. A string literal is reachable
+ * the same way a formula reaches one — typing `"hello"` — which is D-102
+ * clause 6 read literally, not a gap this cycle is leaving open.
+ */
+function buildPanelSetCommand(target: string, raw: string): SetLiteralCommand | SetFormulaCommand {
+  const trimmed = raw.trim();
+  const asNumber = parseCommandNumber(trimmed);
+  if (asNumber !== undefined) {
+    return { kind: "set", target, value: asNumber };
+  }
+  const expression = trimmed.startsWith("=") ? trimmed.slice(1) : trimmed;
+  return { kind: "set-formula", target, source: `=${expression}` };
+}
+
+/** One panel-synthesised `Command`, rendered the way the operator would have typed it — D-102 clause 7's "echo of the synthesised command itself". */
+function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand): string {
+  switch (command.kind) {
+    case "set":
+      return `set ${command.target} ${command.value}`;
+    case "set-formula":
+      return `set ${command.target} ${command.source}`;
+    case "unlink":
+      return `unlink ${command.target}`;
+    default: {
+      const exhaustive: never = command;
+      void exhaustive;
+      return "";
+    }
+  }
+}
+
+/**
+ * Runs one panel-synthesised `Command` through `executeCommand` (D-102 clause
+ * 5) and echoes it into the log exactly as a typed line would be (clause 7):
+ * the synthesised command first, then whatever `executeCommand` itself would
+ * have echoed — its result lines, or its refusal message.
+ *
+ * A panel write is always `set`/`set-formula`/`unlink`, none of which ever
+ * carries a `CommandEffect` (D-075 — those five belong to `select`/`zoom`/
+ * `fit`/`save`/`load`), so there is no effect to perform here and none is
+ * looked for; a future panel-built command that DID carry one would need this
+ * function widened deliberately, not silently ignored.
+ */
+function runPanelCommand(state: AppState, command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand): AppState {
+  const echoed = withLog(state, [`> ${describePanelCommand(command)}`]);
+  const outcome = executeCommand(command, echoed.document);
+  if (!outcome.ok) {
+    return withLog(echoed, [outcome.message]);
+  }
+  return withLog({ ...echoed, document: outcome.document }, outcome.lines);
+}
+
+/**
+ * Commits a panel row's open text input (D-102 clauses 4-7) — the GREY
+ * paperclip's Enter key. A stale `objectId` (the object was deleted or left
+ * the selection while the input was open) is a no-op, `state` returned
+ * unchanged, rather than a throw or a refusal with nothing to name (D-023's
+ * posture, applied to a UI event instead of a stored address).
+ */
+export function commitPanelEdit(state: AppState, objectId: string, path: string, raw: string): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  return runPanelCommand(state, buildPanelSetCommand(panelSlotAddress(object.name, path), raw));
+}
+
+/** Unlinks one panel row (D-102 clause 4's BLUE paperclip) — `unlink <address>`, run the same way `commitPanelEdit` runs a `set`. Same stale-id no-op posture. */
+export function unlinkPanelSlot(state: AppState, objectId: string, path: string): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  return runPanelCommand(state, { kind: "unlink", target: panelSlotAddress(object.name, path) });
 }
 
 // ---------------------------------------------------------------------------
@@ -615,6 +737,18 @@ interface PanelDragGesture {
   readonly offsetTop: number;
 }
 
+/** What to do with the text an open panel row input holds (**D-102** clauses 4, 6-7): Enter's `onCommit`, Escape's or blur's `onCancel`. Built fresh per row, once, when the row's editor opens — see `panelEditInput`'s own doc comment for why one input never needs a second pair. */
+interface PanelEditHandlers {
+  readonly onCommit: (raw: string) => void;
+  readonly onCancel: () => void;
+}
+
+/** Which row is open for editing, and what its input should do (**D-102** clause 8: at most one, across every panel — `openEditor` below is a single value, not a per-panel map). */
+interface PanelRowEdit {
+  readonly path: string;
+  readonly handlers: PanelEditHandlers;
+}
+
 /**
  * Builds the canvas, the log and the input bar, wires every listener, and paints
  * (§5.9, §5.10).
@@ -642,6 +776,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   // the other directly.
   const panelElements = new Map<string, HTMLElement>();
   let panelDrag: PanelDragGesture | undefined;
+  // The one panel row currently open for editing, across every panel (**D-102**
+  // clause 4's GREY paperclip). `undefined` — the common case — means no row
+  // anywhere is being edited. `updatePanels` reads this to decide which panel
+  // (if any) must NOT be rebuilt whole this paint (clause 8).
+  let openEditor: { readonly objectId: string; readonly path: string } | undefined;
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
 
@@ -725,9 +864,27 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * churn, not correctness — nothing here relies on element identity
    * surviving a paint, because the drag gesture below tracks its own state in
    * `panelDrag`, not in the DOM).
+   *
+   * **D-102 clause 8**: the one panel whose row `openEditor` names is the
+   * exception — `writePanel`'s `replaceChildren` would drop that row's open
+   * input's focus, caret and typed text on the very next paint, which runs on
+   * every pointer move, making the feature unusable rather than slow. So a
+   * panel is skipped ONLY while it is already showing exactly the editor it
+   * should be (its own `dataset.editingPath` already matches); every other
+   * panel, and this one whenever nothing on it is being edited, is rebuilt
+   * every paint exactly as before — the skip must never fire for "nothing is
+   * being edited", or a panel that is never edited would freeze after its
+   * first paint.
    */
   const updatePanels = (panelledIds: readonly string[]): void => {
     const shown = new Set(panelledIds);
+    if (openEditor !== undefined && !shown.has(openEditor.objectId)) {
+      // Its object left the panelled set — deselected, dismissed, or its
+      // extent vanished — while the row's editor was open. Nothing left to
+      // edit; D-023's posture, applied to a UI gesture instead of a stored
+      // address.
+      openEditor = undefined;
+    }
     for (const objectId of panelledIds) {
       const object = state.document.objects.find((candidate) => candidate.id === objectId);
       const extent = object === undefined ? undefined : objectExtent(object);
@@ -735,7 +892,31 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         continue; // Unreachable — `panelledObjectIds` already checked both — but this file never throws on a stale id (D-023's posture).
       }
       const element = panelElement(objectId);
-      writePanel(element, buildPanelModel(object, state.document.objects));
+      const editing: PanelRowEdit | undefined =
+        openEditor !== undefined && openEditor.objectId === objectId
+          ? { path: openEditor.path, handlers: panelEditHandlers(objectId, openEditor.path) }
+          : undefined;
+      // The skip applies ONLY while THIS panel is already showing exactly the
+      // editor it should be showing — every other panel, and this one
+      // whenever nothing on it is being edited, is rebuilt every paint
+      // exactly as before (immediate-mode, so a live value — a derived
+      // `centroid` moving mid-drag — keeps updating on screen). `editing ===
+      // undefined` must never take the skip path, or a panel that is never
+      // edited would freeze after its first paint.
+      const alreadyShowingThisEditor = editing !== undefined && element.dataset.editingPath === editing.path;
+      if (!alreadyShowingThisEditor) {
+        writePanel(element, buildPanelModel(object, state.document.objects), editing);
+        element.dataset.editingPath = editing?.path ?? "";
+        if (editing !== undefined) {
+          // The input was just built into the DOM above — focus it and select
+          // its seeded text so typing straight over it works, matching the
+          // command bar's own "always focused" spirit for the one control
+          // that now competes with it (§5.10: "not editing text or a cell").
+          const opened = element.querySelector<HTMLInputElement>(".panel-row__input");
+          opened?.focus();
+          opened?.select();
+        }
+      }
       placePanelElement(element, extent, panelUiState(state, objectId).manualPosition);
     }
     for (const [objectId, element] of panelElements) {
@@ -745,6 +926,24 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
     }
   };
+
+  /**
+   * Builds the `onCommit`/`onCancel` pair for the one row currently open at
+   * `objectId`/`path` (**D-102** clauses 4, 6-7). Reads `state` live at call
+   * time, like every other closure in `start` — the input this is attached to
+   * survives many paints (clause 8), so a snapshot taken when it was CREATED
+   * would go stale the moment anything else in the document changed.
+   */
+  const panelEditHandlers = (objectId: string, path: string): PanelEditHandlers => ({
+    onCommit: (raw: string) => {
+      openEditor = undefined;
+      apply(commitPanelEdit(state, objectId, path, raw));
+    },
+    onCancel: () => {
+      openEditor = undefined;
+      paint();
+    },
+  });
 
   /** The DOM element for `objectId`'s panel, creating and appending it the first time it is shown. */
   const panelElement = (objectId: string): HTMLElement => {
@@ -956,15 +1155,40 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   panelsContainer.addEventListener("click", (event: MouseEvent) => {
     const target = event.target as HTMLElement;
     const dismissButton = target.closest(".panel-dismiss");
-    if (dismissButton === null) {
+    if (dismissButton !== null) {
+      const element = dismissButton.closest(".panel") as HTMLElement | null;
+      const objectId = element?.dataset.objectId;
+      if (objectId !== undefined) {
+        apply(dismissPanel(state, objectId));
+      }
       return;
     }
-    const element = dismissButton.closest(".panel") as HTMLElement | null;
-    const objectId = element?.dataset.objectId;
-    if (objectId === undefined) {
+
+    // D-102 clauses 2-4: a paperclip on a modifiable row. Delegated the same
+    // way and for the same reason as the dismiss control above — the row it
+    // sits on is rebuilt whole on every paint (until its own editor opens,
+    // clause 8), so a listener bound to the paperclip element itself would be
+    // torn down mid-gesture.
+    const clip = target.closest(".panel-clip");
+    if (clip === null) {
       return;
     }
-    apply(dismissPanel(state, objectId));
+    const rowElement = clip.closest(".panel-row") as HTMLElement | null;
+    const panelNode = clip.closest(".panel") as HTMLElement | null;
+    const objectId = panelNode?.dataset.objectId;
+    const path = rowElement?.dataset.path;
+    if (objectId === undefined || path === undefined) {
+      return;
+    }
+    if (clip.classList.contains("panel-clip--formula")) {
+      // Clause 4: BLUE unlinks immediately — no input to open.
+      apply(unlinkPanelSlot(state, objectId, path));
+      return;
+    }
+    // Clause 4: GREY opens that row's own text input. `updatePanels` (next
+    // paint) is what actually builds it and moves focus into it.
+    openEditor = { objectId, path };
+    paint();
   });
 
   apply(state);
@@ -990,7 +1214,7 @@ function drawLog(logElement: HTMLElement, lines: readonly string[]): void {
  * this function rebuild the header whole on every call without breaking a
  * gesture already in progress (see `panelDrag`'s own doc comment in `start`).
  */
-function writePanel(panelElement: HTMLElement, model: PanelModel): void {
+function writePanel(panelElement: HTMLElement, model: PanelModel, editing: PanelRowEdit | undefined): void {
   const header = document.createElement("div");
   header.className = "panel-header";
   const name = document.createElement("span");
@@ -1005,34 +1229,130 @@ function writePanel(panelElement: HTMLElement, model: PanelModel): void {
   const children: HTMLElement[] = [header];
 
   for (const row of model.modifiable) {
-    children.push(panelRowElement(row, false));
+    children.push(panelRowElement(row, false, editing));
   }
   if (model.derived.length > 0) {
     const rule = document.createElement("div");
     rule.className = "panel-rule";
     children.push(rule);
     for (const row of model.derived) {
-      children.push(panelRowElement(row, true));
+      // A derived row is never the one `editing` names (D-102 clause 2: it
+      // carries no paperclip at all, so nothing can have opened one on it),
+      // but `editing` is still passed through rather than hard-coded
+      // `undefined` — one caller, one meaning, never two spellings of "not
+      // editable" for what is structurally the same row-building call.
+      children.push(panelRowElement(row, true, editing));
     }
   }
   panelElement.replaceChildren(...children);
 }
 
-/** One panel row: `<path>` and `<value>`, the value carrying the reconstructed source (prefixed `=`) for a formula slot (D-094 clause 6). `derived` rows get the italic class (clause 5). */
-function panelRowElement(row: PanelRow, derived: boolean): HTMLElement {
+/**
+ * One panel row: `<path>` and, on its right, either the value (D-094 clause 6
+ * shows a formula's reconstructed source too) or — when `editing` names this
+ * row — a text input in its place (**D-102** clauses 4, 6-7). `derived` rows
+ * get the italic class (D-094 clause 5) and, being read-only, never a
+ * paperclip; neither does a `synthetic` row (D-102 clause 2 — the table
+ * `cells` summary stands for a whole family, not one slot to write).
+ *
+ * `dataset.path` is what the delegated paperclip-click listener in `start`
+ * reads to know which row was clicked — never a listener bound to the row
+ * itself, for the same rebuild-mid-gesture reason every other panel listener
+ * here is delegated (see `panelDrag`'s own doc comment).
+ */
+function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit | undefined): HTMLElement {
   const element = document.createElement("div");
   element.className = derived ? "panel-row panel-row--derived" : "panel-row";
+  element.dataset.path = row.path;
 
   const path = document.createElement("span");
   path.className = "panel-row__path";
   path.textContent = row.path;
 
-  const value = document.createElement("span");
-  value.className = "panel-row__value";
-  value.textContent = row.formulaSource === undefined ? row.value : `= ${row.formulaSource}  (${row.value})`;
+  const right = document.createElement("span");
+  right.className = "panel-row__right";
+  if (editing !== undefined && editing.path === row.path) {
+    right.append(panelEditInput(row.value, editing.handlers));
+  } else {
+    if (!derived && !row.synthetic) {
+      right.append(panelClipElement(row));
+    }
+    const value = document.createElement("span");
+    value.className = "panel-row__value";
+    value.textContent = row.formulaSource === undefined ? row.value : `= ${row.formulaSource}  (${row.value})`;
+    right.append(value);
+  }
 
-  element.append(path, value);
+  element.append(path, right);
   return element;
+}
+
+/**
+ * D-102 clauses 2-3: a paperclip on a MODIFIABLE, non-synthetic row — bold
+ * blue when the slot's KIND is `formula`, faded grey when it is `literal`.
+ * The icon reports the kind, never whether a formula happens to reference
+ * anything, so it can never disagree with the `= ...` text beside it (the
+ * human's own reasoning at D-102 clause 3). A plain glyph, like the dismiss
+ * control's `×` (Rule 5) — no icon font, no SVG.
+ */
+function panelClipElement(row: PanelRow): HTMLElement {
+  const clip = document.createElement("span");
+  clip.className = row.kind === "formula" ? "panel-clip panel-clip--formula" : "panel-clip panel-clip--literal";
+  clip.textContent = "📎";
+  clip.setAttribute("aria-label", row.kind === "formula" ? `unlink ${row.path} — it is driven by a formula` : `edit ${row.path}`);
+  return clip;
+}
+
+/**
+ * The GREY paperclip's text input (D-102 clauses 4, 6-7), seeded with the
+ * row's current display value.
+ *
+ * Every keydown here `stopPropagation`s, unconditionally: none of it may
+ * reach the window-level handlers built for the ALWAYS-focused command bar
+ * (space held for a pan-drag, Escape's cancel-then-deselect) — §5.10's own
+ * carve-out, "not editing text or a cell," made true of a panel row for the
+ * first time this cycle. This is also what gives Escape its D-102 clause 7
+ * meaning here for free: stopped before it ever reaches the `window`
+ * listener, so ONLY this input's own handler sees it, and the selection is
+ * never touched — no separate check needed at that outer listener.
+ *
+ * `settled` guards against calling a handler twice: committing or cancelling
+ * triggers a repaint that removes this very input from the DOM (D-102 clause
+ * 8 — the panel is rebuilt once, to show the plain row again), and removing a
+ * focused element fires its OWN `blur` — which would otherwise re-invoke
+ * `onCancel` a second time, reentrantly, from inside the repaint the first
+ * call already started.
+ */
+function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "panel-row__input";
+  input.value = seed;
+  let settled = false;
+  const commit = (): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    handlers.onCommit(input.value);
+  };
+  const cancel = (): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    handlers.onCancel();
+  };
+  input.addEventListener("keydown", (event: KeyboardEvent) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      commit();
+    } else if (event.key === "Escape") {
+      cancel();
+    }
+  });
+  input.addEventListener("blur", cancel);
+  return input;
 }
 
 /** §5.11's "save via JSON download". */

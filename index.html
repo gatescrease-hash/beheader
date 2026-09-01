@@ -11,15 +11,18 @@
       #panels is D-094's properties panel container, now **D-101**'s N of
       them — one child `.panel` per selected object with a drawn extent
       (D-106's default), each built and positioned by main.ts every paint. The
-      container itself takes no clicks (`pointer-events: none`, so an area
-      with no panel falls through to the canvas beneath); each `.panel`
-      likewise passes clicks through everywhere except its `.panel-header`,
-      which D-101 clause 4 makes the drag handle and D-106 clause 2 gives a
-      dismiss control — the only two things this cycle makes interactive.
-      Editing a row's own value is D-102, still queued (D-094 clause 10's
-      `pointer-events: none` on the BODY stands until then). It floats over
-      the canvas, so the canvas lives inside a positioned #stage. Nothing here
-      holds state or behaviour.
+      container itself still takes no clicks (`pointer-events: none`, so an
+      area with no panel falls through to the canvas beneath), but **D-102**
+      lifts that off each `.panel` itself: the whole body is interactive now,
+      not only its `.panel-header` (D-101 clause 4's drag handle, D-106 clause
+      2's dismiss control). The disclosed cost (D-102 clause 1) is that a
+      panel overlapping its own object hides that part of it from the mouse —
+      D-101 clause 5 (drag the panel away) is the remedy. `.panel-clip` is the
+      per-row paperclip main.ts builds only for a modifiable, non-synthetic
+      row (D-102 clause 2); `.panel-row__input` is the text box that replaces
+      a row's value when its GREY paperclip is clicked (clause 4). It floats
+      over the canvas, so the canvas lives inside a positioned #stage. Nothing
+      here holds state or behaviour.
     -->
     <style>
       html,
@@ -62,8 +65,8 @@
         max-width: 320px;
         max-height: 100%;
         overflow: auto;
-        /* D-094 clause 10: the BODY stays display-only until D-102 — clicks pass through to the canvas. */
-        pointer-events: none;
+        /* D-094 clause 10's `pointer-events: none` is LIFTED here at D-102 clause 1: every row is now interactive (the paperclip; the row's own input once opened). */
+        pointer-events: auto;
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid #d0d0d0;
         padding: 4px 6px;
@@ -108,6 +111,33 @@
       }
       .panel-row__path {
         color: #555555;
+      }
+      /* D-102: the row's right-hand cluster — the paperclip (if any) beside the value, or the row's own text input once opened. */
+      .panel-row__right {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+      }
+      .panel-clip {
+        cursor: pointer;
+        line-height: 1;
+      }
+      /* D-102 clause 3: bold blue for a `formula` slot — clicking it unlinks. */
+      .panel-clip--formula {
+        color: #1a56db;
+        font-weight: bold;
+      }
+      /* D-102 clause 3: "faded and small, doesn't want to be that apparent" (the human's own words) — clicking it opens the row's input. */
+      .panel-clip--literal {
+        color: #999999;
+        font-size: 0.85em;
+        opacity: 0.7;
+      }
+      .panel-row__input {
+        font: inherit;
+        width: 10em;
+        box-sizing: border-box;
       }
       #log {
         flex: 0 0 auto;

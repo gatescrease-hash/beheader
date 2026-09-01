@@ -67,12 +67,20 @@ import { TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
  * `kind === "formula"` — the expression `formula/format.ts` reconstructed,
  * WITHOUT a leading `=` (the same convention `formatFormula` itself states),
  * so a caller that wants the authoring form prefixes one.
+ *
+ * `synthetic` (**D-096** clause 2, added at **D-102**) marks a row that
+ * stands in for a whole slot FAMILY rather than naming one real slot — today
+ * only the table's `cells` summary row. `kind: "literal"` still puts it in
+ * the modifiable group (D-096 clause 2's own reasoning is unchanged), but
+ * D-102 clause 2 refuses it a paperclip: there is no single slot behind it
+ * to `set`, `link`, or `unlink`. Absent (not `false`) on every ordinary row.
  */
 export interface SlotDescriptor {
   readonly path: readonly string[];
   readonly kind: "literal" | "formula" | "derived";
   readonly value: Value;
   readonly formulaSource?: string;
+  readonly synthetic?: true;
 }
 
 /**
@@ -160,6 +168,7 @@ function tableCellsSummary(object: GraphObject): SlotDescriptor {
     path: [TABLE_CELL_PATH_PREFIX],
     kind: "literal",
     value: `${rows}×${cols} grid — ${written} of ${rows * cols} cells written`,
+    synthetic: true,
   };
 }
 

@@ -97,7 +97,9 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
     it("names the grid shape and how many cells are WRITTEN, never the declared extent (D-047's absent-is-empty)", () => {
       const object = table(4, 4, { A1: 1, B2: 2 });
       const summary = buildSlotDescriptors(object, [object]).find((descriptor) => descriptor.path[0] === "cells");
-      expect(summary).toEqual({ path: ["cells"], kind: "literal", value: "4×4 grid — 2 of 16 cells written" });
+      // `synthetic: true` since D-102 (D-096 clause 2): the cells row stands
+      // in for a whole slot family, so D-102 clause 2 refuses it a paperclip.
+      expect(summary).toEqual({ path: ["cells"], kind: "literal", value: "4×4 grid — 2 of 16 cells written", synthetic: true });
     });
 
     it("reports zero written cells honestly for a freshly created table (D-047: creation makes no cell slots)", () => {
