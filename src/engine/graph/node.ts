@@ -60,11 +60,20 @@ export interface Point {
 }
 
 /**
- * The five error codes a broken slot can hold (§5.1). There is deliberately no
- * `#CYCLE` — cycles are rejected at mutation time and never enter the graph as
- * state (§5.1, PROCESS_BRIEF §9's forbidden-moves list).
+ * The error codes a broken slot can hold. §5.1 enumerates five (`#REF`, `#TYPE`,
+ * `#DIV0`, `#PARSE`, `#SCRIPT`); `#MEASURE` is a SIXTH, added at entry 0129 under
+ * **D-118** — the same move **D-028** made for `formula/ast.ts`'s `ErrorNode`
+ * (not in §5.3's grammar either): the type system needs a case the brief's list
+ * did not foresee. `#MEASURE` is what §5.6's `measuredHeight` compute returns
+ * when it must measure a real `text` object but only the null `TextMeasurer` is
+ * wired (`eval-context.ts`) — a height it did not earn is worse than an honest
+ * error (D-118). It is only ever produced by a `derived` slot, whose value is
+ * never serialized (§5.11), so no saved document can carry it.
+ *
+ * There is deliberately no `#CYCLE` — cycles are rejected at mutation time and
+ * never enter the graph as state (§5.1, PROCESS_BRIEF §9's forbidden-moves list).
  */
-export type ErrorCode = "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT";
+export type ErrorCode = "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT" | "#MEASURE";
 
 /**
  * An error is legitimate graph state, not an exception (§5.1: "An ErrorValue in

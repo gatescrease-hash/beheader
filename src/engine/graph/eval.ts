@@ -31,11 +31,12 @@
  *   - `derived` slots call their schema's compute function exactly once, INSIDE this
  *     same topological pass — never in a separate post-pass (§5.1, PROCESS_BRIEF §9) —
  *     and are handed the `EvalContext` (§5.1's "Evaluation context"): one service so
- *     far, a `TextMeasurer` for §5.6's eventual `measuredHeight`, injected by the caller
- *     so Rule 1 holds (the engine never reaches for a canvas). `evaluate`'s `context`
- *     argument defaults to `NULL_EVAL_CONTEXT`, and every caller takes that default
- *     today — no compute reads it yet. A document with real `text` objects is meant to
- *     get a Canvas2D-backed measurer threaded from `main.ts` through `mutate`.
+ *     far, a `TextMeasurer` for §5.6's `measuredHeight` (`primitives/text.ts`'s
+ *     `computeMeasuredHeight`, entry 0129), injected by the caller so Rule 1 holds
+ *     (the engine never reaches for a canvas). `evaluate`'s `context` argument
+ *     defaults to `NULL_EVAL_CONTEXT`, and every `mutate` caller still takes that
+ *     default — so `measuredHeight` reports `#MEASURE` (**D-118**) until a real
+ *     Canvas2D-backed measurer is threaded from `main.ts` through `mutate`.
  *     Since **D-114** a compute that evaluates an embedded `{= }`/`{? }` AST
  *     (§5.6's `resolvedContent`) is ALSO handed a `read`/`readRange` pair built to a
  *     `formula` slot's own contract (`isEmptyInExtentCell` / `buildRangeReader` below —

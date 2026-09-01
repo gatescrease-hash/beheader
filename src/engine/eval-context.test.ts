@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "./address.ts";
-import { NULL_EVAL_CONTEXT, type EvalContext, type TextMeasurer, type TextStyle } from "./eval-context.ts";
+import { hasRealMeasurer, NULL_EVAL_CONTEXT, type EvalContext, type TextMeasurer, type TextStyle } from "./eval-context.ts";
 import type { DerivedSlotCompute } from "./primitives/schema.ts";
 import type { GraphObject, Value } from "./graph/node.ts";
 
@@ -20,6 +20,10 @@ describe("NULL_EVAL_CONTEXT — the documented default for callers with no text"
     expect(() => NULL_EVAL_CONTEXT.measurer.measure("anything at all", STYLE)).not.toThrow();
     expect(NULL_EVAL_CONTEXT.measurer.measure("anything at all", STYLE)).toEqual({ width: 0, height: 0 });
     expect(NULL_EVAL_CONTEXT.measurer.measure("", STYLE)).toEqual({ width: 0, height: 0 });
+  });
+
+  it("ignores the PROVISIONAL(Q-021) maxWidth argument — it never wraps, so it never needs one", () => {
+    expect(NULL_EVAL_CONTEXT.measurer.measure("anything", STYLE, 120)).toEqual({ width: 0, height: 0 });
   });
 
   it("is frozen — measurer included — so a shared default cannot be corrupted for later passes", () => {
@@ -68,5 +72,19 @@ describe("DerivedSlotCompute — a compute function receives the injected EvalCo
       return context.measurer.measure("hello", STYLE).width;
     };
     expect(widthLike(OBJECT, noRead)).toBe(0);
+  });
+});
+
+describe("hasRealMeasurer — D-118's null-measurer detector", () => {
+  it("is false for NULL_EVAL_CONTEXT and for undefined; true for an injected measurer", () => {
+    expect(hasRealMeasurer(NULL_EVAL_CONTEXT)).toBe(false);
+    expect(hasRealMeasurer(undefined)).toBe(false);
+    expect(hasRealMeasurer({ measurer: { measure: () => ({ width: 1, height: 1 }) } })).toBe(true);
+  });
+
+  it("catches a context that was hand-built to REUSE the null measurer, not just NULL_EVAL_CONTEXT by identity", () => {
+    // It checks the measurer, not the context object — so wrapping the null
+    // measurer in a fresh EvalContext does not sneak past D-118.
+    expect(hasRealMeasurer({ measurer: NULL_EVAL_CONTEXT.measurer })).toBe(false);
   });
 });

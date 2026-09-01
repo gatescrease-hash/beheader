@@ -11,10 +11,11 @@
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
  * WHAT THIS IS
- *   Three pure functions over `content`'s parsed shape, plus the two halves of the
- *   `text` schema entry that wrap them (`resolveTextDependencyAddresses` +
- *   `computeResolvedContent` — see the section further down; `measuredHeight` is still
- *   a later cycle, NOT DONE HERE):
+ *   Three pure functions over `content`'s parsed shape, plus §5.6's `TextBox`
+ *   slot-path constants and the wiring for BOTH `text` derived slots that
+ *   `primitives/schema.ts` registers — `resolveTextDependencyAddresses` +
+ *   `computeResolvedContent` (entry 0127) and `computeMeasuredHeight` (entry
+ *   0129) — see the section further down:
  *   - `parseTextContent(content, objects)` -> a `Block[]`. Never throws, and never
  *     rejects `content` — it is a LITERAL slot (§5.6), so any string is legal document
  *     state; a malformed `{= }`/`{? }` becomes an `error`-kind `Block` INSTEAD OF a
@@ -77,9 +78,11 @@
  *     arithmetic, extended here to text embedding for the same reason (there is no
  *     sensible flat text form for either shape).
  *
- * THE `text` SCHEMA ENTRY'S TWO HALVES ALSO LIVE HERE (entry 0127), wiring the three
- * pure functions above into `primitives/schema.ts`'s `TEXT_SCHEMA` the same split
- * `primitives/geometry.ts` already uses (pure math here, registry wiring there):
+ * THE `text` SCHEMA WIRING ALSO LIVES HERE (entries 0127, 0129), plugged into
+ * `primitives/schema.ts`'s `TEXT_SCHEMA` the same split `primitives/geometry.ts`
+ * uses (pure logic here, registry wiring there):
+ *   - `TEXT_*_PATH` constants — §5.6's `TextBox` slot paths, owned here because
+ *     this file reads several of them and one spelling must serve both.
  *   - `resolveTextDependencyAddresses(object, objects)` — the `dynamic` dependency
  *     resolver for the `resolvedContent` derived slot. Re-parses `content` (never
  *     cached — **D-114** clause 4) and returns `content` itself plus every address the
@@ -91,11 +94,14 @@
  *     with the `read`/`readRange` `graph/eval.ts`'s `evaluateDerivedSlot` built to a
  *     formula slot's contract (**D-114**: D-110 coercion, a real range reader,
  *     clause 3's ordering). No evaluation logic of its own (Rule 4).
+ *   - `computeMeasuredHeight(object, read, context, deps)` — the `measuredHeight`
+ *     compute (§5.6). A pass-through: reads `resolvedContent`/`width`/`style.*`,
+ *     hands them to `context.measurer.measure`, returns `.height`. Returns
+ *     `#MEASURE` when only the null measurer is wired (**D-118**), `#TYPE` for an
+ *     unusable style, and propagates any upstream `ErrorValue`. Line-breaking is
+ *     the measurer's job, not this function's (`PROVISIONAL(Q-021)`).
  *
  * NOT DONE HERE
- *   - `measuredHeight` (§5.6) and its `TextMeasurer` call — the next cycle, with
- *     **D-118**'s null-measurer `#MEASURE` guard and the width/wrapping question the
- *     0124 `measure(text, style)` interface does not yet answer.
  *   - Markdown-lite parsing/rendering, layout, wrapping — `render/`, later. Deliberately
  *     not this file's concern even now: `**bold**`/`# heading`/etc. have no dependency
  *     and no reactive value, so they need no AST — they stay literal text inside a
@@ -111,7 +117,7 @@
  *     same way a table cell's formula source is typed, and needs no new mechanism here.
  */
 import type { Address, AddressableObject } from "../address.ts";
-import type { EvalContext } from "../eval-context.ts";
+import { hasRealMeasurer, type EvalContext, type TextStyle } from "../eval-context.ts";
 import type { FormulaAst } from "../formula/ast.ts";
 import { extractDependencies, type Dependency } from "../formula/deps.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
@@ -708,17 +714,39 @@ export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, read
 }
 
 // ---------------------------------------------------------------------------
-// The `text` schema entry's two halves (entry 0127) — wired into
-// `primitives/schema.ts`'s `TEXT_SCHEMA` the same "pure logic here, registry
-// there" split `primitives/geometry.ts` uses. See the file header.
+// The `text` schema entry's wiring halves (entries 0127, 0129) — the "pure
+// logic here, registry there" split `primitives/geometry.ts` uses. This file
+// owns §5.6's `TextBox` slot-path vocabulary AND the two derived-slot computes
+// (`resolvedContent`, `measuredHeight`); `primitives/schema.ts`'s `TEXT_SCHEMA`
+// imports the paths and wires the computes. See the file header.
 // ---------------------------------------------------------------------------
 
 /**
- * The stored path of a `text` object's `content` slot (§5.6: "content: string //
- * literal slot: raw source including markup"). Exported so `primitives/schema.ts`'s
- * `TEXT_SCHEMA` declares the SAME path this file reads for parsing.
+ * The stored paths of a `text` object's slots (§5.6's `TextBox` shape). All nine
+ * non-derived paths are `static` — a `text` object's slot set never changes
+ * (Rule 6). Owned here (not in `primitives/schema.ts`) because this file reads
+ * several of them (`content` for parsing; `resolvedContent`/`width`/`style.*` in
+ * `computeMeasuredHeight`) and one spelling must serve both; `TEXT_SCHEMA`
+ * imports the list.
+ *
+ * `style.color`/`style.align` are declared (so a formula may drive them — §5.6,
+ * D-017) but neither compute here reads them: they change how text is PAINTED,
+ * not how much room it takes (`eval-context.ts`'s `TextStyle` omits them for the
+ * same reason).
  */
 export const TEXT_CONTENT_PATH: readonly string[] = ["content"];
+export const TEXT_WIDTH_PATH: readonly string[] = ["width"];
+export const TEXT_HEIGHT_PATH: readonly string[] = ["height"];
+export const TEXT_OVERFLOW_PATH: readonly string[] = ["overflow"];
+export const TEXT_STYLE_FONT_PATH: readonly string[] = ["style", "font"];
+export const TEXT_STYLE_FONT_SIZE_PATH: readonly string[] = ["style", "fontSize"];
+export const TEXT_STYLE_LINE_HEIGHT_PATH: readonly string[] = ["style", "lineHeight"];
+export const TEXT_STYLE_COLOR_PATH: readonly string[] = ["style", "color"];
+export const TEXT_STYLE_ALIGN_PATH: readonly string[] = ["style", "align"];
+
+/** The two `derived` slot paths (§5.6). `resolvedContent` — entry 0127; `measuredHeight` — entry 0129. */
+export const TEXT_RESOLVED_CONTENT_PATH: readonly string[] = ["resolvedContent"];
+export const TEXT_MEASURED_HEIGHT_PATH: readonly string[] = ["measuredHeight"];
 
 /**
  * The `dynamic` dependency resolver for a `text` object's `resolvedContent`
@@ -836,4 +864,88 @@ export function computeResolvedContent(
   const content = typeof rawContent === "string" ? rawContent : "";
   const blocks = parseTextContent(content, deps?.objects ?? []);
   return evaluateBlockTree(blocks, read, deps?.readRange);
+}
+
+/**
+ * The `measuredHeight` derived-slot compute (§5.6: "measuredHeight (from
+ * `resolvedContent`, `width`, and `style`, computed via the injected
+ * `TextMeasurer`)"). A dumb pass-through: read the declared slots, hand them to
+ * `context.measurer.measure`, return `.height`. No layout logic of its own —
+ * line-breaking lives in the measurer implementation (`PROVISIONAL(Q-021)`).
+ *
+ * Declared `static` dependencies (`primitives/schema.ts`): `resolvedContent`,
+ * `width`, and `style.font`/`style.fontSize`/`style.lineHeight` — the fields a
+ * height computation actually depends on (`eval-context.ts`'s `TextStyle`).
+ * `style.color`/`style.align` and the `height` slot are NOT read: color/align
+ * do not affect size, and `height` is the operator's fixed-height/overflow
+ * choice, a different thing from "how tall would this be if it grew to fit."
+ *
+ * Order of failure, all `ErrorValue`s, never a throw:
+ *   1. An upstream `ErrorValue` in `resolvedContent`/`width`/any style field
+ *      propagates unchanged (§5.1: "errors propagate" — these slots may be
+ *      `formula`-driven, §5.6).
+ *   2. No real measurer (`hasRealMeasurer` — only `NULL_EVAL_CONTEXT`'s zero-box
+ *      stand-in, or `context === undefined` in an isolated unit test) → `#MEASURE`
+ *      (**D-118**): a height measured against a zero-box measurer is a height not
+ *      earned, worse than an honest error. This fires BEFORE the shape check
+ *      below, because with no measurer the shape does not matter — nothing can be
+ *      measured either way.
+ *   3. A wrong-shaped style (`font` not a string, `fontSize`/`lineHeight` not
+ *      numbers — including a missing slot, `undefined`) → `#TYPE`. This is a
+ *      fail-closed: the `text` command cycle owns creating objects with sensible
+ *      style defaults; until then a bare `text` object measures as `#TYPE` rather
+ *      than the compute inventing a font.
+ *
+ * `PROVISIONAL(Q-021)`: a numeric `width` slot becomes `measure`'s `maxWidth`
+ * (the wrap boundary); `"auto"` — or any non-number — means `undefined`, i.e. no
+ * wrapping (§5.6 layout). The provisional call is that the measurer wraps, not
+ * this function.
+ */
+export function computeMeasuredHeight(
+  object: GraphObject,
+  read: ReadSlot,
+  context: EvalContext | undefined,
+  _deps: DerivedSlotComputeDeps | undefined,
+): Value {
+  const resolved = read({ objectId: object.id, path: TEXT_RESOLVED_CONTENT_PATH });
+  const width = read({ objectId: object.id, path: TEXT_WIDTH_PATH });
+  const font = read({ objectId: object.id, path: TEXT_STYLE_FONT_PATH });
+  const fontSize = read({ objectId: object.id, path: TEXT_STYLE_FONT_SIZE_PATH });
+  const lineHeight = read({ objectId: object.id, path: TEXT_STYLE_LINE_HEIGHT_PATH });
+
+  // 1. §5.1: errors propagate. Deterministic order (resolvedContent, width, then
+  //    the three style fields) so a doubly-broken object reports the same code
+  //    regardless of evaluation timing — the same discipline `add`'s compute uses.
+  for (const upstream of [resolved, width, font, fontSize, lineHeight]) {
+    if (upstream !== undefined && isErrorValue(upstream)) {
+      return upstream;
+    }
+  }
+
+  // 2. D-118: no real measurer -> #MEASURE, never a height off the zero-box one.
+  if (!hasRealMeasurer(context)) {
+    return {
+      error: "#MEASURE",
+      message: `measuredHeight: ${object.name} has no real text measurer wired (only the null EvalContext) — cannot measure`,
+    };
+  }
+
+  // 3. Fail closed on a style the measurer cannot use. A missing slot reads
+  //    `undefined` here and lands in this branch too (D-047's absent spelling is
+  //    legal state; a measurement off it is not).
+  if (typeof font !== "string" || typeof fontSize !== "number" || typeof lineHeight !== "number") {
+    return {
+      error: "#TYPE",
+      message: `measuredHeight: ${object.name} needs style.font (string) and style.fontSize / style.lineHeight (numbers)`,
+    };
+  }
+  const style: TextStyle = { font, fontSize, lineHeight };
+
+  const text = typeof resolved === "string" ? resolved : "";
+  // PROVISIONAL(Q-021): the `width` slot is the wrap boundary when numeric.
+  const maxWidth = typeof width === "number" ? width : undefined;
+
+  // `measure` never throws and always returns finite, non-negative numbers
+  // (eval-context.ts's contract), so `.height` is a legal `Value` as-is.
+  return context.measurer.measure(text, style, maxWidth).height;
 }

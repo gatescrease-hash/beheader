@@ -3850,9 +3850,30 @@ describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the sam
 });
 
 describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry 0127)", () => {
-  /** A `text` object as `createObjectFromCommand` would build it — literal `content`, the D-018 derived placeholder, and the render/style slots absent (D-047-legal). */
+  /**
+   * A well-formed `text` object (§5.6): the five non-derived slots a derived slot
+   * reads (`content` for `resolvedContent`; `width` + `style.font/fontSize/lineHeight`
+   * for `measuredHeight`, entry 0129) plus both D-018 derived placeholders. The
+   * four pure render-config slots (`height`/`overflow`/`style.color`/`style.align`)
+   * are omitted — nothing computes from them, so an absent one is D-047-legal.
+   * `width: "auto"` (no wrap). `measuredHeight` evaluates to `#MEASURE` here
+   * (`mutate` passes `NULL_EVAL_CONTEXT`) — legitimate state, not a refusal.
+   */
   function textObject(id: string, name: string, content: string): GraphObject {
-    return { id, name, type: "text", slots: { content: { kind: "literal", value: content }, resolvedContent: { kind: "derived", value: null } } };
+    return {
+      id,
+      name,
+      type: "text",
+      slots: {
+        content: { kind: "literal", value: content },
+        width: { kind: "literal", value: "auto" },
+        "style.font": { kind: "literal", value: "sans" },
+        "style.fontSize": { kind: "literal", value: 12 },
+        "style.lineHeight": { kind: "literal", value: 14 },
+        resolvedContent: { kind: "derived", value: null },
+        measuredHeight: { kind: "derived", value: null },
+      },
+    };
   }
 
   function resolvedContentOf(objects: readonly GraphObject[], textId: string): unknown {
@@ -3868,8 +3889,17 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
     const table = tableObject("obj_t", "table_1", 4, 4, { "cells.A1": { kind: "literal", value: 3 } });
     const text = textObject("obj_x", "text_1", "{= table_1.A1 } vs empty {= table_1.C3 }");
     expectSameEdges(deriveEdges([table, text]), [
+      // resolvedContent (dynamic): content self-edge + one per populated referenced
+      // cell. table_1.C3 is empty in-extent -> no edge (D-110 clause 4).
       { sourceSlot: addr("obj_x", "content"), dependentSlot: addr("obj_x", "resolvedContent") },
       { sourceSlot: addr("obj_t", "cells", "A1"), dependentSlot: addr("obj_x", "resolvedContent") },
+      // measuredHeight (static, entry 0129): resolvedContent + width + the three
+      // size-relevant style fields, all same-object.
+      { sourceSlot: addr("obj_x", "resolvedContent"), dependentSlot: addr("obj_x", "measuredHeight") },
+      { sourceSlot: addr("obj_x", "width"), dependentSlot: addr("obj_x", "measuredHeight") },
+      { sourceSlot: addr("obj_x", "style", "font"), dependentSlot: addr("obj_x", "measuredHeight") },
+      { sourceSlot: addr("obj_x", "style", "fontSize"), dependentSlot: addr("obj_x", "measuredHeight") },
+      { sourceSlot: addr("obj_x", "style", "lineHeight"), dependentSlot: addr("obj_x", "measuredHeight") },
     ]);
   });
 
@@ -3928,5 +3958,74 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
     const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: text }], []);
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.message).toContain("does not exist");
+  });
+});
+
+describe("text.measuredHeight end-to-end through mutate (§5.6, D-118 — entry 0129)", () => {
+  const WELL_FORMED_TEXT_SLOTS: Record<string, Slot> = {
+    content: { kind: "literal", value: "hello world" },
+    width: { kind: "literal", value: "auto" },
+    "style.font": { kind: "literal", value: "sans" },
+    "style.fontSize": { kind: "literal", value: 12 },
+    "style.lineHeight": { kind: "literal", value: 14 },
+    resolvedContent: { kind: "derived", value: null },
+    measuredHeight: { kind: "derived", value: null },
+  };
+
+  /** A `text` object with the well-formed slot set minus whatever `omit` names (§5.6, entry 0129). */
+  function textObject(id: string, name: string, omit: readonly string[] = []): GraphObject {
+    const slots: Record<string, Slot> = {};
+    for (const [key, slot] of Object.entries(WELL_FORMED_TEXT_SLOTS)) {
+      if (!omit.includes(key)) {
+        slots[key] = slot;
+      }
+    }
+    return { id, name, type: "text", slots };
+  }
+
+  function createAndGet(object: GraphObject): GraphObject {
+    const r = mutate([], [{ kind: "createObject", object }], []);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error(r.message);
+    const found = r.objects.find((o) => o.id === object.id);
+    if (found === undefined) throw new Error("created object missing from result");
+    return found;
+  }
+
+  it("D-118: a real text object created through mutate (which passes NULL_EVAL_CONTEXT) gets measuredHeight = #MEASURE, and the mutation still commits", () => {
+    const created = createAndGet(textObject("obj_x", "text_1"));
+    expect(created.slots.measuredHeight?.value).toMatchObject({ error: "#MEASURE" });
+    // §5.1: an ErrorValue is legitimate state, not a reason to reject.
+    expect(created.slots.resolvedContent?.value).toBe("hello world");
+  });
+
+  it("measuredHeight subscribes to width and the size-relevant style fields (deriveEdges Source 2, static)", () => {
+    const edges = deriveEdges([textObject("obj_x", "text_1")]);
+    const intoMeasuredHeight = edges
+      .filter((e) => addressKey(e.dependentSlot) === addressKey(addr("obj_x", "measuredHeight")))
+      .map((e) => addressKey(e.sourceSlot))
+      .sort();
+    expect(intoMeasuredHeight).toEqual(
+      [
+        addr("obj_x", "resolvedContent"),
+        addr("obj_x", "width"),
+        addr("obj_x", "style", "font"),
+        addr("obj_x", "style", "fontSize"),
+        addr("obj_x", "style", "lineHeight"),
+      ]
+        .map(addressKey)
+        .sort(),
+    );
+  });
+
+  it("a text object missing a measuredHeight input slot (style.font) is REFUSED — the static dep would be a dangling edge (§5.1.1)", () => {
+    const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["style.font"]) }], []);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.message).toContain("does not exist");
+  });
+
+  it("a text object with NO measuredHeight derived-slot placeholder is REFUSED (D-018)", () => {
+    const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["measuredHeight"]) }], []);
+    expect(r.ok).toBe(false);
   });
 });

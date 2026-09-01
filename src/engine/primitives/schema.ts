@@ -22,16 +22,15 @@
  *
  *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
  *   D-011), `table` (§5.4), the three PARAMETRIC geometry presets `circle`/
- *   `polygon`/`rect` (§5.5), and `text` (§5.6 — its `content`/`width`/`height`/
- *   `overflow`/`style.*` non-derived slots and the `resolvedContent` derived
- *   slot; `measuredHeight` is the next cycle). Every derived-slot's pure math
- *   lives in its own primitive file (`primitives/geometry.ts`,
- *   `primitives/text.ts`); this file only wires it into the registry, the same
- *   split `table`'s own entry already uses. `polyline`, `script`, and `image`
- *   have no entry; `getObjectSchema` returns `undefined` for them, honestly,
- *   rather than a placeholder. Their schemas belong to the phases/cycles that
- *   introduce them — building them now would be building ahead of the brief's §6
- *   build order.
+ *   `polygon`/`rect` (§5.5), and `text` (§5.6 — its nine non-derived slots and
+ *   BOTH derived slots, `resolvedContent` and `measuredHeight`). Every
+ *   derived-slot's pure math lives in its own primitive file
+ *   (`primitives/geometry.ts`, `primitives/text.ts`); this file only wires it
+ *   into the registry, the same split `table`'s own entry already uses.
+ *   `polyline`, `script`, and `image` have no entry; `getObjectSchema` returns
+ *   `undefined` for them, honestly, rather than a placeholder. Their schemas
+ *   belong to the phases/cycles that introduce them — building them now would be
+ *   building ahead of the brief's §6 build order.
  *
  * INVARIANTS UPHELD HERE
  *   - Everything is declared by PATH (`["out", "result"]`), never by a hand-built key
@@ -87,8 +86,7 @@
  *     rather than carrying its own.
  *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
  *     which consumes this file), cycle detection, or topological evaluation.
- *   - `text`'s `measuredHeight` derived slot (§5.6) — the next cycle. `polyline`/
- *     `script`/`image` schema entries (later Phase 3 cycle, Phases 6).
+ *   - `polyline`/`script`/`image` schema entries (later Phase 3 cycle, Phase 6).
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";
@@ -109,7 +107,22 @@ import {
   verticesDerivedSlots,
 } from "./geometry.ts";
 import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
-import { computeResolvedContent, resolveTextDependencyAddresses, TEXT_CONTENT_PATH } from "./text.ts";
+import {
+  computeMeasuredHeight,
+  computeResolvedContent,
+  resolveTextDependencyAddresses,
+  TEXT_CONTENT_PATH,
+  TEXT_HEIGHT_PATH,
+  TEXT_MEASURED_HEIGHT_PATH,
+  TEXT_OVERFLOW_PATH,
+  TEXT_RESOLVED_CONTENT_PATH,
+  TEXT_STYLE_ALIGN_PATH,
+  TEXT_STYLE_COLOR_PATH,
+  TEXT_STYLE_FONT_PATH,
+  TEXT_STYLE_FONT_SIZE_PATH,
+  TEXT_STYLE_LINE_HEIGHT_PATH,
+  TEXT_WIDTH_PATH,
+} from "./text.ts";
 
 // ---------------------------------------------------------------------------
 // Dependency declarations (§5.1: "Dependencies may be declared statically ...
@@ -153,14 +166,16 @@ export type DerivedSlotDependencies =
  * typed `ErrorValue` rather than treating it as a JS `undefined` value, because
  * `undefined` is not a member of `Value` (§5.1).
  *
- * `context` carries §5.1's injected services — today just a `TextMeasurer`, for
- * §5.6's `measuredHeight`. Rule 1's text-measurement trap: a compute needing to
- * measure text calls `context.measurer`, and NEVER reaches for a canvas itself.
- * `graph/eval.ts` ALWAYS supplies it (defaulting to `NULL_EVAL_CONTEXT`); it is
- * typed optional ONLY so a unit test can call a compute that ignores it in
- * isolation without threading a context — §5.1's "keeps tests trivial". A
- * compute that reads `context` must handle its absence (treat it as
- * `NULL_EVAL_CONTEXT`), though in the real pipeline it is never absent.
+ * `context` carries §5.1's injected services — today just a `TextMeasurer`, used
+ * by §5.6's `measuredHeight` (`primitives/text.ts`'s `computeMeasuredHeight`).
+ * Rule 1's text-measurement trap: a compute needing to measure text calls
+ * `context.measurer`, and NEVER reaches for a canvas itself. `graph/eval.ts`
+ * ALWAYS supplies it (defaulting to `NULL_EVAL_CONTEXT`); it is typed optional
+ * ONLY so a unit test can call a compute that ignores it in isolation — §5.1's
+ * "keeps tests trivial". A compute that genuinely NEEDS a measurement must not
+ * treat `undefined`/`NULL_EVAL_CONTEXT` as "measure as zero": **D-118** requires
+ * it to return an `ErrorValue` (`#MEASURE`) instead — see `hasRealMeasurer`
+ * (`eval-context.ts`).
  *
  * `deps` carries the extra evaluation environment a compute needs only when it
  * must ITSELF evaluate an embedded formula AST — §5.6's `resolvedContent`
@@ -529,46 +544,32 @@ const RECT_SCHEMA: ObjectSchema = {
 };
 
 /**
- * Path constants for `text`'s non-derived slots (§5.6's `TextBox` shape). All
- * `static`: a `text` object's slot set never changes (Rule 6). `content` comes
- * from `primitives/text.ts` (which reads it for parsing); the rest are declared
- * here because nothing in the engine reads them yet — `width`/`height`/`overflow`
- * and the five `style.*` fields are `render/`'s and (for `width`/`style`) the
- * next cycle's `measuredHeight`. Declaring them is what lets a formula drive one
- * (§5.6: "Any style field may be a formula slot bound elsewhere") — only a
- * DECLARED path may hold a `formula` slot (D-017).
- */
-const TEXT_WIDTH_PATH: readonly string[] = ["width"];
-const TEXT_HEIGHT_PATH: readonly string[] = ["height"];
-const TEXT_OVERFLOW_PATH: readonly string[] = ["overflow"];
-const TEXT_STYLE_FONT_PATH: readonly string[] = ["style", "font"];
-const TEXT_STYLE_FONT_SIZE_PATH: readonly string[] = ["style", "fontSize"];
-const TEXT_STYLE_LINE_HEIGHT_PATH: readonly string[] = ["style", "lineHeight"];
-const TEXT_STYLE_COLOR_PATH: readonly string[] = ["style", "color"];
-const TEXT_STYLE_ALIGN_PATH: readonly string[] = ["style", "align"];
-
-/** `text`'s one derived slot built this cycle — `measuredHeight` is the next (see `primitives/text.ts`). */
-const TEXT_RESOLVED_CONTENT_PATH: readonly string[] = ["resolvedContent"];
-
-/**
  * `text` (PROJECT_BRIEF §5.6): "One text object type, not two." NINE fixed
- * non-derived slots (`content` + `width`/`height`/`overflow` + five `style.*`)
- * and — this cycle — ONE derived slot, `resolvedContent`.
+ * non-derived slots (`content` + `width`/`height`/`overflow` + five `style.*`,
+ * all `static` — a `text` object's slot set never changes, Rule 6) and TWO
+ * derived slots, `resolvedContent` (entry 0127) and `measuredHeight` (entry
+ * 0129). The slot PATHS and both compute functions live in `primitives/text.ts`
+ * (the pure-logic-here / registry-there split — `text.ts` reads several of the
+ * paths, so one spelling must serve both); this entry only wires them.
  *
  * `resolvedContent`'s dependencies are `dynamic` (§5.1 names it as one of the two
- * cases that require the form): they are whatever `content`'s parsed block tree
- * references, re-derived every mutation by `primitives/text.ts`'s
- * `resolveTextDependencyAddresses` — which also returns `content` itself, so a
- * `formula`-driven `content` re-triggers and `computeResolvedContent` may `read`
- * it. Its compute, `computeResolvedContent`, evaluates the block tree through the
- * `read`/`readRange` `graph/eval.ts`'s `evaluateDerivedSlot` builds to a formula
- * slot's own contract (**D-114**: D-110 coercion, a real range reader, clause 3's
- * coercion-before-membership ordering) — never a second evaluation path.
+ * cases that require the form): whatever `content`'s parsed block tree
+ * references, re-derived every mutation by `resolveTextDependencyAddresses` —
+ * which also returns `content` itself, so a `formula`-driven `content`
+ * re-triggers and `computeResolvedContent` may `read` it. Its compute evaluates
+ * the block tree through the `read`/`readRange` `graph/eval.ts`'s
+ * `evaluateDerivedSlot` builds to a formula slot's own contract (**D-114**: D-110
+ * coercion, a real range reader, clause 3's ordering) — never a second
+ * evaluation path.
  *
- * `measuredHeight` (§5.6's other derived slot) is deliberately NOT here yet: it
- * calls `context.measurer`, which brings **D-118**'s null-measurer guard and the
- * width/wrapping question the 0124 `TextMeasurer` interface does not answer —
- * its own slice (`primitives/text.ts`'s NOT DONE HERE).
+ * `measuredHeight`'s dependencies are `static`: `resolvedContent` + `width` +
+ * `style.font`/`style.fontSize`/`style.lineHeight` (§5.6: "from `resolvedContent`,
+ * `width`, and `style`"; `color`/`align` do not affect size). Its compute,
+ * `computeMeasuredHeight`, calls `context.measurer` — and returns `#MEASURE`
+ * (**D-118**) rather than a height off `NULL_EVAL_CONTEXT`'s zero-box measurer,
+ * which is what every current `mutate` caller still passes. `PROVISIONAL(Q-021)`:
+ * the `width` slot reaches `measure` as `maxWidth` and wrapping is the measurer
+ * implementation's job.
  */
 const TEXT_SCHEMA: ObjectSchema = {
   type: "text",
@@ -593,6 +594,20 @@ const TEXT_SCHEMA: ObjectSchema = {
       path: TEXT_RESOLVED_CONTENT_PATH,
       dependencies: { kind: "dynamic", resolve: resolveTextDependencyAddresses },
       compute: computeResolvedContent,
+    },
+    {
+      path: TEXT_MEASURED_HEIGHT_PATH,
+      dependencies: {
+        kind: "static",
+        paths: [
+          TEXT_RESOLVED_CONTENT_PATH,
+          TEXT_WIDTH_PATH,
+          TEXT_STYLE_FONT_PATH,
+          TEXT_STYLE_FONT_SIZE_PATH,
+          TEXT_STYLE_LINE_HEIGHT_PATH,
+        ],
+      },
+      compute: computeMeasuredHeight,
     },
   ],
 };

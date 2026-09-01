@@ -103,8 +103,9 @@ describe("getObjectSchema", () => {
   });
 
   // primitives/text.ts owns the resolver/compute behaviour (its own test file);
-  // this only confirms the §5.6 registry wiring built at entry 0127.
-  it("returns a real entry for 'text' (§5.6), with nine static non-derived paths and one derived slot, resolvedContent", () => {
+  // this only confirms the §5.6 registry wiring — resolvedContent at entry 0127,
+  // measuredHeight added at 0129.
+  it("returns a real entry for 'text' (§5.6), with nine static non-derived paths and two derived slots (resolvedContent, measuredHeight)", () => {
     const schema = getObjectSchema("text");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -118,8 +119,14 @@ describe("getObjectSchema", () => {
       ["style", "color"],
       ["style", "align"],
     ]);
-    expect(schema?.derivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"]]);
+    expect(schema?.derivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"]]);
+    // resolvedContent's deps are `dynamic` (parsed content); measuredHeight's are
+    // `static` (§5.6: resolvedContent + width + the size-relevant style fields).
     expect(schema?.derivedSlots[0]?.dependencies.kind).toBe("dynamic");
+    expect(schema?.derivedSlots[1]?.dependencies).toEqual({
+      kind: "static",
+      paths: [["resolvedContent"], ["width"], ["style", "font"], ["style", "fontSize"], ["style", "lineHeight"]],
+    });
   });
 });
 

@@ -597,3 +597,95 @@ describe("evaluate — a derived slot's compute evaluating an embedded formula A
     expect(resolvedContentOf([textTable("obj_t", "table_1", 4, 4, { A1: -1, A2: 20 }), text], edges, "obj_x")).toBe("fallback is 20");
   });
 });
+
+describe("evaluate — §5.6's measuredHeight derived slot (D-118, Q-021 — entry 0129)", () => {
+  /**
+   * A well-formed `text` object: the five slots a derived slot reads, plus both
+   * D-018 derived placeholders. `width` and `style.*` are literals here; §5.6
+   * allows any of them to be a formula, and the edges below are what would
+   * order `measuredHeight` after such a formula.
+   */
+  function textObject(id: string, name: string, content: string, width: Value = "auto", fontSizeSlot?: Slot): GraphObject {
+    return {
+      id,
+      name,
+      type: "text",
+      slots: {
+        content: { kind: "literal", value: content },
+        width: { kind: "literal", value: width },
+        "style.font": { kind: "literal", value: "sans" },
+        "style.fontSize": fontSizeSlot ?? { kind: "literal", value: 12 },
+        "style.lineHeight": { kind: "literal", value: 16 },
+        resolvedContent: { kind: "derived", value: null },
+        measuredHeight: { kind: "derived", value: null },
+      },
+    };
+  }
+
+  /** resolvedContent's content self-edge + measuredHeight's five static-dependency edges. */
+  function textEdges(textId: string): Edge[] {
+    return [
+      edge(addr(textId, "content"), addr(textId, "resolvedContent")),
+      edge(addr(textId, "resolvedContent"), addr(textId, "measuredHeight")),
+      edge(addr(textId, "width"), addr(textId, "measuredHeight")),
+      edge(addr(textId, "style", "font"), addr(textId, "measuredHeight")),
+      edge(addr(textId, "style", "fontSize"), addr(textId, "measuredHeight")),
+      edge(addr(textId, "style", "lineHeight"), addr(textId, "measuredHeight")),
+    ];
+  }
+
+  /** A fake measurer: height is 10 with no wrap boundary, 20 with one — so a test can prove BOTH that context was threaded and that the `width` slot reached `measure` as `maxWidth` (Q-021). */
+  function fakeMeasurer(): EvalContext {
+    return {
+      measurer: {
+        measure: (_text, _style, maxWidth) => ({ width: 0, height: maxWidth === undefined ? 10 : 20 }),
+      },
+    };
+  }
+
+  function measuredHeightOf(object: GraphObject, context?: EvalContext): Value {
+    return objectById(evaluate([object], textEdges(object.id), context), object.id).slots.measuredHeight?.value ?? null;
+  }
+
+  it("D-118: evaluated with NULL_EVAL_CONTEXT, a real text object's measuredHeight is #MEASURE — never height 0", () => {
+    // This is also 0124's end-to-end proof that `context` is threaded at all:
+    // mutation-checked by making `evaluateDerivedSlot` pass NULL_EVAL_CONTEXT
+    // instead of `context` -> the "threads a real measurer" test below goes red.
+    const height = measuredHeightOf(textObject("obj_x", "text_1", "some text here"), NULL_EVAL_CONTEXT);
+    expect(height).toEqual({ error: "#MEASURE", message: expect.stringContaining("text_1") });
+  });
+
+  it("D-118: the same is true with NO context passed (evaluate's own default is NULL_EVAL_CONTEXT)", () => {
+    expect(measuredHeightOf(textObject("obj_x", "text_1", "x"))).toMatchObject({ error: "#MEASURE" });
+  });
+
+  it("threads a real (fake) measurer through the topological pass and returns its height (Rule 1)", () => {
+    expect(measuredHeightOf(textObject("obj_x", "text_1", "hello"), fakeMeasurer())).toBe(10);
+  });
+
+  it("PROVISIONAL(Q-021): a numeric `width` slot reaches the measurer as maxWidth; \"auto\" does not", () => {
+    expect(measuredHeightOf(textObject("obj_x", "text_1", "hello", 120), fakeMeasurer())).toBe(20); // maxWidth defined
+    expect(measuredHeightOf(textObject("obj_x", "text_1", "hello", "auto"), fakeMeasurer())).toBe(10); // maxWidth undefined
+  });
+
+  it("measures resolvedContent AFTER the embedded formula resolves — measuredHeight sits downstream of resolvedContent", () => {
+    // The fake makes height a function of maxWidth, not text, so assert the
+    // ORDER via resolvedContent instead: it must be the resolved string, not
+    // the raw content, by the time anything downstream could read it.
+    const object = textObject("obj_x", "text_1", "n is {= 2 + 2 }");
+    const result = objectById(evaluate([object], textEdges("obj_x"), fakeMeasurer()), "obj_x");
+    expect(result.slots.resolvedContent?.value).toBe("n is 4");
+    expect(result.slots.measuredHeight?.value).toBe(10);
+  });
+
+  it("propagates an ErrorValue from a formula-driven style slot (§5.1: errors propagate)", () => {
+    // style.fontSize is a binding to a slot that does not resolve -> #REF.
+    const object = textObject("obj_x", "text_1", "x", "auto", {
+      kind: "formula",
+      ast: { type: "reference", address: addr("gone", "v") },
+      value: null,
+    });
+    // Even with a real measurer, a broken input short-circuits measuredHeight to that error.
+    expect(measuredHeightOf(object, fakeMeasurer())).toMatchObject({ error: "#REF" });
+  });
+});

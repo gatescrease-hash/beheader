@@ -8,9 +8,59 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-021**
+Next free ID: **Q-022**
 
 ---
+
+## Q-021 — How does `measuredHeight` become width-aware, given `TextMeasurer.measure(text, style)` takes no width and §5.6 says the height depends on `width`?
+Raised: entry 0129-measured-height (implementer)   Brief section: §5.6 (`measuredHeight` "from
+`resolvedContent`, `width`, and `style`"; "Layout: fixed width + auto height (wrap, grow down) is
+the default"), Rule 1 (`interface TextMeasurer { measure(text, style): {width, height} }`)
+Status: **OPEN — reversible provisional choice (a) taken, tagged.**
+
+Ambiguity: two brief passages cannot both be read literally. §5.6 makes `measuredHeight` a function
+of `width` and expects it to reflect wrapping ("fixed width + auto height (wrap, grow down)"; the
+Phase 5 gate says a text box "wraps at its set width"). Rule 1's `TextMeasurer` interface — built at
+entry 0124, reviewed 0125 — is `measure(text, style)`, with no width parameter and therefore no way
+for the measurer to know where to wrap. Nothing in the brief says whether wrapping is the measurer's
+job or the engine's.
+
+Options:
+
+(a) **Widen the interface to `measure(text, style, maxWidth?)`; wrapping is the measurer
+    implementation's job.** `maxWidth` is the `width` slot when it holds a number, `undefined` when
+    `width` is `"auto"` (§5.6: "Auto width + auto height means no wrapping"). The engine's
+    `computeMeasuredHeight` stays a dumb pass-through: read the slots, hand them to `measure`, return
+    `.height`. The real Canvas2D measurer (`render/measure.ts`, unbuilt) does the line-breaking with
+    `ctx.measureText`; the test fake fakes it. Rule 1 is untouched — glyph metrics and line-breaking
+    are exactly the "measuring text needs a canvas" work Rule 1 says to push behind this interface.
+
+(b) **`measuredHeight` is not wrap-aware in v1** — `measure(text, style)` unchanged, height is the
+    unwrapped single-run height (or naive `\n`-split). Smallest change, but it contradicts the Phase
+    5 gate's "wraps at its set width" and §5.6's layout paragraph, so the gate could not be honestly
+    claimed later without redoing this.
+
+(c) **Engine-side word wrap** — `computeMeasuredHeight` runs its own greedy line-break loop, calling
+    `measure(word, style)` per word/segment and summing line heights. Keeps the interface at two
+    params, but puts a text-layout algorithm inside `src/engine/` — arguably the exact render-layer
+    concern Rule 1 and §9 push out, and a much larger, fiddlier diff (hyphenation, whitespace
+    collapsing, the markdown-lite markup still in `resolvedContent`).
+
+Recommendation: **(a)**. It is the smallest engine diff, it keeps `computeMeasuredHeight` a
+pass-through the way every other compute is, and line-breaking genuinely belongs with the glyph
+measurement it depends on — which is behind this interface by Rule 1's own design. (c)'s "keep the
+interface pure" benefit is not worth a layout engine in `src/engine/`; (b) trades a gate criterion
+away.
+
+Reversible? **Yes.** `eval-context.ts` is not on §6.2's load-bearing list; `maxWidth` is an OPTIONAL
+trailing parameter, so every existing `measure(text, style)` call still type-checks and behaves
+identically. `measuredHeight` is a `derived` slot whose value is never serialized (§5.11), so no
+stored document can depend on the answer. Reverting to (c) later changes `computeMeasuredHeight`'s
+body and drops one interface parameter; reverting to (b) drops the parameter and the `width`
+dependency.
+Provisional choice taken: **(a)**. Tagged at: `src/engine/eval-context.ts` (`TextMeasurer.measure`'s
+`maxWidth` parameter) and `src/engine/primitives/text.ts` (`computeMeasuredHeight`, where the `width`
+slot becomes `maxWidth`).
 
 ## Q-020 — Does a span that PARSES but evaluates to an error (`{= 1 / 0 }` → `#DIV0`) also render itself with `!`, or does it propagate?
 Raised: entry 0122-RULINGS (reviewer), alongside D-116   Brief section: §5.6, §5.1 ("errors

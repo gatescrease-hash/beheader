@@ -42,15 +42,23 @@
  *     rather than corrupting every later pass that shares the default.
  *   - No `Value`/`ErrorValue` vocabulary here: a measurement is a pair of plain
  *     numbers, not graph state. Turning a nonsensical measurement into an
- *     `ErrorValue` is the calling compute function's job, not this interface's.
+ *     `ErrorValue` is the calling compute function's job, not this interface's —
+ *     `hasRealMeasurer` (below) is the one hook it gets, and even that returns a
+ *     plain boolean, not a `Value`.
  *
  * NOT DONE HERE
  *   - The real Canvas2D `TextMeasurer` (`render/measure.ts`) and its wiring into
- *     `mutate` (`main.ts`) — that is render-layer plus the cycle that gives `text`
- *     a schema entry, since `command/commands.ts`'s `executeCommand` is where a
- *     real context must start being threaded through to `mutate`.
- *   - `measuredHeight`/`resolvedContent` themselves (`primitives/schema.ts`'s
- *     future `text` entry) — this file only defines the service they consume.
+ *     `mutate` (`main.ts`) — that is render-layer plus the cycle that threads a
+ *     real context through `command/commands.ts`'s `executeCommand` and the other
+ *     non-test `mutate` callers. `measuredHeight` (entry 0129) is BUILT and
+ *     consumes `measurer`, but no caller supplies a non-null context yet, so it
+ *     reports `#MEASURE` in the running app until that wiring lands (D-118).
+ *   - Wrapping / line-breaking itself — that lives inside the `TextMeasurer`
+ *     IMPLEMENTATION (`PROVISIONAL(Q-021)`: `measure`'s `maxWidth` parameter is
+ *     the wrap boundary; the engine never breaks lines). `render/measure.ts` does
+ *     it with `ctx.measureText`; the test fake fakes it.
+ *   - `resolvedContent` (`primitives/text.ts`) — this file only defines the
+ *     service `measuredHeight` consumes.
  *   - Any service beyond `TextMeasurer`. §5.1: "currently just the TextMeasurer."
  *     Widen `EvalContext` when a second injected service actually exists.
  */
@@ -88,9 +96,18 @@ export interface TextMeasurement {
  * Guarantees: never throws; always returns finite, non-negative `width`/`height`
  * (§5.1's never-throw discipline — a compute function calling this must be able
  * to trust the result the same way it trusts `read`).
+ *
+ * `maxWidth` is `PROVISIONAL(Q-021)`: the wrap boundary in the same length unit
+ * as `TextStyle.fontSize`, from a `text` object's `width` slot when it holds a
+ * number; `undefined` means no wrapping (§5.6: "Auto width + auto height means no
+ * wrapping"). §5.6 makes `measuredHeight` depend on `width`, but Rule 1's
+ * interface as written at entry 0124 had no width parameter — Q-021 is that
+ * inconsistency, and the provisional call is that LINE-BREAKING lives in the
+ * measurer implementation, not in `src/engine/`. An implementation that ignores
+ * `maxWidth` (the null measurer, an early fake) just does not wrap.
  */
 export interface TextMeasurer {
-  measure(text: string, style: TextStyle): TextMeasurement;
+  measure(text: string, style: TextStyle, maxWidth?: number): TextMeasurement;
 }
 
 /**
@@ -104,11 +121,11 @@ export interface EvalContext {
 
 /**
  * The measurer inside `NULL_EVAL_CONTEXT`: every box is zero-sized. Used only by
- * evaluation call sites that touch no `text` object (all of them today). A
- * future `measuredHeight` compute that finds itself running against this
- * measurer for a real `text` object should report an `ErrorValue` rather than a
- * silent zero — that decision belongs to the cycle that builds `measuredHeight`
- * and is flagged in this file's NOT DONE HERE.
+ * evaluation call sites that touch no `text` object (all of them today, until a
+ * `mutate` caller threads a real context). §5.6's `measuredHeight` compute
+ * (`primitives/text.ts`) MUST NOT return a height measured against this — it
+ * detects the null measurer via `hasRealMeasurer` and returns `#MEASURE`
+ * instead (**D-118**).
  */
 const NULL_TEXT_MEASURER: TextMeasurer = Object.freeze({
   measure: () => ({ width: 0, height: 0 }),
@@ -123,3 +140,22 @@ const NULL_TEXT_MEASURER: TextMeasurer = Object.freeze({
 export const NULL_EVAL_CONTEXT: EvalContext = Object.freeze({
   measurer: NULL_TEXT_MEASURER,
 });
+
+/**
+ * Is `context` carrying a measurer that can actually measure text — as opposed
+ * to `NULL_EVAL_CONTEXT`'s zero-box stand-in, or no context at all?
+ *
+ * **D-118**: a `measuredHeight`-style compute that would otherwise measure a real
+ * `text` object against the null measurer MUST return an `ErrorValue` (`#MEASURE`)
+ * rather than a height it did not earn. This predicate is how it tells. The check
+ * lives here, next to `NULL_TEXT_MEASURER` (this file's private constant), rather
+ * than as an identity compare scattered through every compute that measures —
+ * D-118 clause 3 leaves the mechanism to the implementer and names exactly this
+ * as one option ("an identity check against the exported `NULL_EVAL_CONTEXT`").
+ * `context === undefined` is the isolated-unit-test path and is equivalent for
+ * this purpose (D-118 clause 3). Typed as a guard so a caller that passes the
+ * check can use `context.measurer` without re-narrowing.
+ */
+export function hasRealMeasurer(context: EvalContext | undefined): context is EvalContext {
+  return context !== undefined && context.measurer !== NULL_TEXT_MEASURER;
+}
