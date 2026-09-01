@@ -343,7 +343,25 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const originX = model.modifiable.find((row) => row.path === "origin.x");
     // `kind`/`synthetic` (D-102) round-trip `SlotDescriptor`'s own fields —
     // see the next `describe` block for what a row's writer does with them.
-    expect(originX).toEqual({ path: "origin.x", value: "10", formulaSource: undefined, kind: "literal", synthetic: false });
+    // `editSeed` (D-107, F3) equals `value` here because an integer has
+    // nothing D-099's rounding would ever change — see the dedicated test
+    // below for the case where they diverge.
+    expect(originX).toEqual({ path: "origin.x", value: "10", editSeed: "10", formulaSource: undefined, kind: "literal", synthetic: false });
+  });
+
+  it("seeds a row's editor with the value the command line would accept back, not the D-099-rounded display value (D-107, F3)", () => {
+    const state = typed(opened(), "circle x=0.123456789 y=20 r=5");
+    const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
+    const originX = model.modifiable.find((row) => row.path === "origin.x");
+    expect(originX?.value).toBe("0.1235"); // D-099's rounded DISPLAY value — unchanged.
+    expect(originX?.editSeed).toBe("0.123456789"); // The unrounded SEED.
+
+    // Committing the seed back UNTOUCHED must leave the number bit-for-bit
+    // as it was — this is the failure the review's F3 named: seeding with
+    // `value` instead would have written back the truncated "0.1235".
+    const circleId = objectNamed(state, "circle_1").id;
+    const after = commitPanelEdit(state, circleId, "origin.x", originX?.editSeed ?? "");
+    expect(numberAt(objectNamed(after, "circle_1"), ["origin", "x"])).toBe(0.123456789);
   });
 
   it("carries a formula slot's reconstructed source and keeps it in the modifiable group (D-094 clause 6)", () => {

@@ -8,10 +8,13 @@
  * through `mutate`), D-072 (a canvas pick answers a live prompt step), D-101
  * (one properties panel per selected object, dragged by its header), D-106
  * (every selected object's panel shows by default; a dismiss control hides one
- * without deselecting, and a dismissed object's canvas name returns), and
+ * without deselecting, and a dismissed object's canvas name returns),
  * **D-102** (the panel becomes WRITABLE: a paperclip per modifiable row, every
  * write the `Command` the command line would have built, run through
- * `executeCommand` — never `mutate`, never `writeSlot`).
+ * `executeCommand` — never `mutate`, never `writeSlot`), and **D-107** (a
+ * panel gesture never leaves the command bar's keyboard homeless, and a
+ * handler bound to DOM a repaint can destroy acts only while it still owns
+ * what it names).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -43,6 +46,11 @@
  *     never `commands.ts`'s internal `writeSlot`. A panel write therefore
  *     inherits every refusal a typed `set`/`link`/`unlink` already has, D-097's
  *     table-dimension guard included, for free.
+ *   - **D-107**: every panel `pointerdown` prevents the DOM's own default focus
+ *     move and places focus deliberately instead — the command bar, unless a
+ *     row editor already owns the keyboard. `onCancel` acts only while
+ *     `openEditor` still names the exact row it was built for, so a blur fired
+ *     by a repaint that already moved on cannot cancel someone else's gesture.
  *   - An effect is performed through a `switch` on `kind` with the `never`
  *     default (D-082 clause 3), because `effect` is optional on the success arm
  *     and a missing arm would otherwise be silent rather than a compile error.
@@ -557,6 +565,16 @@ export function replaceDocument(state: AppState, document: Document, line: strin
  * 6) — the source `formula/format.ts` reconstructed, without a leading `=`
  * (the DOM writer adds one).
  *
+ * `editSeed` (**D-107**, fixing F3) is a SEPARATE string from `value`: the
+ * same slot rendered through `describeSlotValue` with NO `maxDecimals`, which
+ * is what the command line would accept back unchanged. `value` stays rounded
+ * for display — D-099 is not weakened — but seeding a row's editor with the
+ * ROUNDED string let committing an untouched row silently truncate a literal
+ * (`0.123456789` opened as `0.1235` and, if left untouched, committed as
+ * `0.1235`). Two formatter calls over the SAME value, never a fourth
+ * formatter (`STATUS.md`'s standing rule) — `describeSlotValue`'s one
+ * optional argument is all either needs.
+ *
  * `kind` and `synthetic` (**D-102** clause 2) carry `command/props.ts`'s
  * `SlotDescriptor` fields of the same name through to the DOM writer, which is
  * what decides whether a row gets a paperclip at all (never for a `derived` or
@@ -568,6 +586,7 @@ export function replaceDocument(state: AppState, document: Document, line: strin
 export interface PanelRow {
   readonly path: string;
   readonly value: string;
+  readonly editSeed: string;
   readonly formulaSource: string | undefined;
   readonly kind: "literal" | "formula" | "derived";
   readonly synthetic: boolean;
@@ -598,6 +617,10 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
       // places, trimmed — so float dust (`10.000000000000002`) doesn't read
       // as precision. `props`'s own output (`commands.ts`) stays untouched.
       value: describeSlotValue(descriptor.value, { maxDecimals: 4 }),
+      // D-107 (F3): the EDIT seed, unrounded — what an untouched commit must
+      // write back bit-for-bit. Same formatter, no `maxDecimals`, never a
+      // third copy of the display logic.
+      editSeed: describeSlotValue(descriptor.value),
       formulaSource: descriptor.formulaSource,
       kind: descriptor.kind,
       synthetic: descriptor.synthetic === true,
@@ -908,13 +931,23 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         writePanel(element, buildPanelModel(object, state.document.objects), editing);
         element.dataset.editingPath = editing?.path ?? "";
         if (editing !== undefined) {
-          // The input was just built into the DOM above — focus it and select
-          // its seeded text so typing straight over it works, matching the
-          // command bar's own "always focused" spirit for the one control
-          // that now competes with it (§5.10: "not editing text or a cell").
           const opened = element.querySelector<HTMLInputElement>(".panel-row__input");
-          opened?.focus();
-          opened?.select();
+          if (opened === null) {
+            // F4 / D-107: the row `openEditor` names is not in the model just
+            // built — its path left the object's schema while the object
+            // stayed panelled. Nothing exists to focus, commit, or cancel;
+            // clearing the gate here is what stops it latching forever
+            // (`alreadyShowingThisEditor` would otherwise keep matching a
+            // dataset string that names nothing, freezing this panel).
+            openEditor = undefined;
+          } else {
+            // Focus it and select its seeded text so typing straight over it
+            // works, matching the command bar's own "always focused" spirit
+            // for the one control that now competes with it (§5.10: "not
+            // editing text or a cell").
+            opened.focus();
+            opened.select();
+          }
         }
       }
       placePanelElement(element, extent, panelUiState(state, objectId).manualPosition);
@@ -933,14 +966,26 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * time, like every other closure in `start` — the input this is attached to
    * survives many paints (clause 8), so a snapshot taken when it was CREATED
    * would go stale the moment anything else in the document changed.
+   *
+   * **D-107 fix items 2-3 (F1, F2)**: both branches restore the command bar's
+   * keyboard, and `onCancel` acts only while `openEditor` still names THIS
+   * exact row. Without the guard, a blur fired by the repaint that opens a
+   * DIFFERENT row's editor — this row's own input being torn out of the DOM as
+   * a side effect — would clear the editor that repaint just opened, out from
+   * under it (F2's "the operator must click twice").
    */
   const panelEditHandlers = (objectId: string, path: string): PanelEditHandlers => ({
     onCommit: (raw: string) => {
       openEditor = undefined;
+      input.focus();
       apply(commitPanelEdit(state, objectId, path, raw));
     },
     onCancel: () => {
+      if (openEditor === undefined || openEditor.objectId !== objectId || openEditor.path !== path) {
+        return; // Stale: some other gesture already moved `openEditor` on.
+      }
       openEditor = undefined;
+      input.focus();
       paint();
     },
   });
@@ -1097,10 +1142,32 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   // `updatePanels` rebuild) so a rebuild mid-gesture cannot drop it — see
   // `panelDrag`'s own doc comment for why the gesture continues on `window`
   // rather than on the header element for the same reason. The dismiss
-  // button sits inside the header (D-106 clause 2), so it is excluded here
+  // button sits inside the header (D-106 clause 2), so it is excluded below
   // FIRST — otherwise pressing it would also arm a drag.
+  //
+  // **D-107 fix item 1 (F1)**: `preventDefault()` now runs for every panel
+  // press — not only a header press, which is all the previous version
+  // covered — EXCEPT a press inside the row editor's OWN input: that element
+  // already legitimately owns the keyboard (§5.10's "editing text or a cell"
+  // carve-out), and its native mousedown handling is what places the caret at
+  // the clicked character, not merely "moves focus" — preventing THAT default
+  // would break clicking inside an open editor to reposition the caret while
+  // fixing nothing, since a focused input never suffers the "focus falls to
+  // body" bug this exists to stop (verified live: without this carve-out, a
+  // click anywhere in an open input's text moved the caret to the END
+  // regardless of where the pointer landed). Everywhere else, focus is placed
+  // DELIBERATELY: the command bar, but only when no row editor is open — an
+  // open editor's input keeps the keyboard, never both at once and never
+  // neither.
   panelsContainer.addEventListener("pointerdown", (event: PointerEvent) => {
     const target = event.target as HTMLElement;
+    const insideOpenEditor = target.closest(".panel-row__input") !== null;
+    if (!insideOpenEditor) {
+      event.preventDefault();
+    }
+    if (openEditor === undefined && !insideOpenEditor) {
+      input.focus();
+    }
     if (target.closest(".panel-dismiss") !== null) {
       return;
     }
@@ -1113,10 +1180,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // D-101 clause 8: a panel drag must not reach the canvas. This listener
     // is on `panelsContainer`, a sibling of `canvas` under `#stage`, so the
     // press never fires there to begin with — nothing to suppress, unlike
-    // the canvas's own pointerdown (D-088). Keeps the input focused the same
-    // way a canvas press does (§5.10).
-    event.preventDefault();
-    input.focus();
+    // the canvas's own pointerdown (D-088).
     const bounds = element.getBoundingClientRect();
     panelDrag = { objectId, offsetLeft: event.clientX - bounds.left, offsetTop: event.clientY - bounds.top };
   });
@@ -1272,7 +1336,9 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
   const right = document.createElement("span");
   right.className = "panel-row__right";
   if (editing !== undefined && editing.path === row.path) {
-    right.append(panelEditInput(row.value, editing.handlers));
+    // D-107 (F3): the SEED, not the rounded display `value` — see
+    // `PanelRow.editSeed`'s own doc comment for why they must differ.
+    right.append(panelEditInput(row.editSeed, editing.handlers));
   } else {
     if (!derived && !row.synthetic) {
       right.append(panelClipElement(row));
@@ -1304,8 +1370,9 @@ function panelClipElement(row: PanelRow): HTMLElement {
 }
 
 /**
- * The GREY paperclip's text input (D-102 clauses 4, 6-7), seeded with the
- * row's current display value.
+ * The GREY paperclip's text input (D-102 clauses 4, 6-7), seeded with
+ * `PanelRow.editSeed` — the unrounded value, per D-107's own fix (F3), not
+ * the rounded `value` text shown beside it.
  *
  * Every keydown here `stopPropagation`s, unconditionally: none of it may
  * reach the window-level handlers built for the ALWAYS-focused command bar
