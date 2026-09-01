@@ -5,7 +5,10 @@
  * bar and scrolling log, §5.11's save/load through the DOM. Binding here: D-075
  * and D-082 (performing a `CommandEffect`), D-062 (clamping a loaded camera),
  * D-061 and D-066 (`fit`), D-027 clause 2 (`camera` is written directly, never
- * through `mutate`), D-072 (a canvas pick answers a live prompt step).
+ * through `mutate`), D-072 (a canvas pick answers a live prompt step), **D-101**
+ * (one properties panel per selected object, dragged by its header) and
+ * **D-106** (every selected object's panel shows by default; a dismiss control
+ * hides one without deselecting, and a dismissed object's canvas name returns).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -46,15 +49,23 @@
  *     which this file hands `state.interaction.selectedObjectIds` to and
  *     nothing more (D-082 clause 4: no name resolved, no chrome drawn here).
  *   - **The placement ARITHMETIC of D-094's properties panel** — a pure tested
- *     function in `render/panel.ts` (clause 11). This file only builds the
- *     panel's DOM rows from `command/props.ts`'s descriptors (clause 9), shows
- *     it when the selection resolves to an object with a drawn extent
- *     (clause 2), and re-places it every paint (clause 13). It is READ-ONLY:
- *     no listeners, no `mutate` (clause 10) — `index.html` gives it
- *     `pointer-events: none`. **D-101's N panels are not built yet** (that is
- *     the next cycle's own slice) — this cycle keeps today's ONE panel, shown
- *     only while the selection holds EXACTLY one object, and hidden for zero
- *     or for two-or-more (see `updatePanel`).
+ *     function in `render/panel.ts` (clause 11), called once per PANEL now
+ *     (**D-101**). This file builds one panel element per selected object with
+ *     a drawn extent, from `command/props.ts`'s descriptors (D-094 clause 9),
+ *     re-placed every paint (clause 13) unless the operator has DRAGGED it —
+ *     **D-101** clause 5's manual position, held in `AppState.panels`, wins
+ *     instead. The body of each panel stays READ-ONLY this cycle: no row
+ *     listeners, no `mutate` — only the HEADER (drag handle, dismiss control)
+ *     is interactive (D-101 clause 4). Editing a row is **D-102**, still queued.
+ *   - **Which objects get a panel at all** is `AppState.panels`' own
+ *     `dismissed` flag (**D-106**): every selected object with a drawn extent
+ *     shows one BY DEFAULT, and dismissing it hides that one panel without
+ *     touching the selection. Both `dismissed` and a dragged panel's manual
+ *     position are discarded the moment the object leaves the selection
+ *     (D-101 clause 6, D-106 clause 6) — `withInteraction` is the one place
+ *     that prunes `AppState.panels` down to the current selection, so every
+ *     caller that replaces `interaction` goes through it rather than
+ *     assigning the field directly.
  *   - Injecting a Canvas2D `TextMeasurer` (Rule 1). Nothing evaluates text yet —
  *     §5.6 is Phase 5 — so there is no `EvalContext` to inject one into.
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
@@ -71,9 +82,9 @@ import { executeCommand, type CommandEffect } from "./command/commands.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
-import { documentExtent, objectExtent } from "./render/extent.ts";
+import { documentExtent, objectExtent, type WorldExtent } from "./render/extent.ts";
 import { deselect, pointerDown, pointerMove, pointerUp, INITIAL_INTERACTION_STATE, type InteractionState } from "./render/interaction.ts";
-import { placePropertiesPanel } from "./render/panel.ts";
+import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { renderDocument } from "./render/renderer.ts";
 
 // ---------------------------------------------------------------------------
@@ -87,19 +98,44 @@ export interface Viewport {
 }
 
 /**
+ * One selected object's panel, as the operator has left it (**D-101**, **D-106**).
+ * `dismissed` is D-106 clause 2's per-panel hide; `manualPosition` is D-101
+ * clause 5's drag-detached CSS point, `undefined` while the panel still
+ * follows its object via `placePropertiesPanel`. A missing entry in
+ * `AppState.panels` means both defaults: shown, auto-placed — the common case,
+ * which is why `panelUiState` below returns this shape rather than every
+ * caller writing `?? { dismissed: false, manualPosition: undefined }` itself.
+ *
+ * APPLICATION state, never DOCUMENT state (D-101 clause 7, D-106 clause 6): it
+ * never enters `state.document`, never goes through `mutate`, is never saved.
+ */
+export interface PanelUiState {
+  readonly dismissed: boolean;
+  readonly manualPosition: PanelPlacement | undefined;
+}
+
+const DEFAULT_PANEL_UI_STATE: PanelUiState = { dismissed: false, manualPosition: undefined };
+
+/** Every selected object's panel state that differs from the default, keyed by object id. Plain and serializable, like every other collection here — though nothing ever serializes it (it is UI state, not document state). */
+export type PanelUiRegistry = Readonly<Record<string, PanelUiState>>;
+
+/**
  * Everything the application holds. Plain data, like every other state shape in
  * this codebase — the DOM half below keeps exactly one of these in one variable
  * and replaces it wholesale, so there is no second place a change can hide.
  *
  * `pending` is the prompt sequence in progress (D-072), `undefined` when the
  * input bar is waiting for a fresh command word. `log` is §5.10's scrolling
- * echo, oldest first.
+ * echo, oldest first. `panels` is D-101/D-106's per-panel UI state — see
+ * `PanelUiState`'s own doc comment, and `withInteraction` below for the one
+ * place it is kept in sync with the selection.
  */
 export interface AppState {
   readonly document: Document;
   readonly interaction: InteractionState;
   readonly pending: PendingCommand | undefined;
   readonly log: readonly string[];
+  readonly panels: PanelUiRegistry;
 }
 
 /** What §5.11 asks the DOM half to do with a file. `save`/`load` are the only two effects this file cannot finish on its own. */
@@ -133,6 +169,7 @@ export function initialAppState(document: Document, log: readonly string[] = [])
     interaction: INITIAL_INTERACTION_STATE,
     pending: undefined,
     log,
+    panels: {},
   };
 }
 
@@ -150,6 +187,63 @@ function withCamera(state: AppState, camera: CameraState): AppState {
 /** A state with `lines` appended to the log — §5.10's "echo results and errors in a small scrolling log above the input". */
 function withLog(state: AppState, lines: readonly string[]): AppState {
   return lines.length === 0 ? state : { ...state, log: [...state.log, ...lines] };
+}
+
+/**
+ * A state with `interaction` replaced, its selection kept in sync with
+ * `panels` (**D-101** clause 6, **D-106** clause 6). This is the ONE place
+ * that assigns `interaction`, so that pruning cannot be forgotten at a new
+ * call site the way a hand-repeated check could be (D-010's shape, applied to
+ * a state transition rather than a schema walk).
+ *
+ * Every caller that can CHANGE which objects are selected — a press, escape,
+ * `select <name>` — goes through here. `pointerMoveTo`/`pointerUpNow` do not:
+ * neither ever changes `selectedObjectIds`, only `drag`, so routing them here
+ * too would cost a call for a prune that is always a no-op.
+ */
+function withInteraction(state: AppState, interaction: InteractionState): AppState {
+  return { ...state, interaction, panels: prunePanelsToSelection(state.panels, interaction.selectedObjectIds) };
+}
+
+/** Drops every `panels` entry whose object id is no longer selected — D-101 clause 6 and D-106 clause 6's shared rule, stated once. Returns `panels` BY REFERENCE when nothing needed dropping, matching this file's existing "no same-valued rebuild" posture (`interaction.ts`'s own `widenEmittedNotices` takes the same care). */
+function prunePanelsToSelection(panels: PanelUiRegistry, selectedObjectIds: readonly string[]): PanelUiRegistry {
+  const selected = new Set(selectedObjectIds);
+  const kept = Object.entries(panels).filter(([objectId]) => selected.has(objectId));
+  return kept.length === Object.keys(panels).length ? panels : Object.fromEntries(kept);
+}
+
+/** `state.panels[objectId]`, defaulted (see `PanelUiState`'s own doc comment) — the one place that reads the registry, so a caller never repeats the `?? DEFAULT` fallback. */
+function panelUiState(state: AppState, objectId: string): PanelUiState {
+  return state.panels[objectId] ?? DEFAULT_PANEL_UI_STATE;
+}
+
+/**
+ * Hides one selected object's panel WITHOUT deselecting it (**D-106** clauses
+ * 2-3) — the dismiss control in the panel's header calls this. A no-op,
+ * returning `state` unchanged, for an object that is not currently selected:
+ * there is no panel to hide, and `withInteraction` would discard the entry on
+ * the very next selection change anyway (clause 6), so writing it here too
+ * would be a write nothing can ever observe.
+ */
+export function dismissPanel(state: AppState, objectId: string): AppState {
+  if (!state.interaction.selectedObjectIds.includes(objectId)) {
+    return state;
+  }
+  return { ...state, panels: { ...state.panels, [objectId]: { ...panelUiState(state, objectId), dismissed: true } } };
+}
+
+/**
+ * Records a panel's manually-dragged CSS position (**D-101** clause 5) — the
+ * operator dragging it by its header. Detaching it this way means
+ * `placePropertiesPanel` is no longer consulted for this object's panel until
+ * it leaves and re-enters the selection (clause 6): the position here WINS.
+ * Same no-op posture as `dismissPanel` for an object that is not selected.
+ */
+export function movePanel(state: AppState, objectId: string, position: PanelPlacement): AppState {
+  if (!state.interaction.selectedObjectIds.includes(objectId)) {
+    return state;
+  }
+  return { ...state, panels: { ...state.panels, [objectId]: { ...panelUiState(state, objectId), manualPosition: position } } };
 }
 
 /** A transition that changed state and asked for no file. */
@@ -195,7 +289,7 @@ export function respondToPrompt(state: AppState, response: PromptResponse, viewp
 /** Abandons a live prompt sequence (D-072 clause 7 — the only path that discards gathered answers), and clears the selection: §5.9's "escape to deselect", one key doing both. */
 export function escape(state: AppState): AppState {
   const cancelled = state.pending === undefined ? state : withLog({ ...state, pending: undefined }, [sessionMessage(cancelCommand())]);
-  return { ...cancelled, interaction: deselect() };
+  return withInteraction(cancelled, deselect());
 }
 
 /**
@@ -289,7 +383,7 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
       // selection made from the input bar has no pointer holding it, and
       // `render/interaction.ts`'s `DragState` means "a pointer is dragging
       // this right now".
-      return transition({ ...state, interaction: { selectedObjectIds: [effect.objectId], drag: undefined } });
+      return transition(withInteraction(state, { selectedObjectIds: [effect.objectId], drag: undefined }));
     case "zoom":
       return transition(zoomBy(state, effect.factor, viewport));
     case "fit":
@@ -390,7 +484,7 @@ export function pointerDownAt(state: AppState, screenPoint: ScreenPoint, viewpor
     const world = screenToWorld(state.document.camera, screenPoint);
     return respondToPrompt(state, { kind: "picked", point: { x: world.x, y: world.y } }, viewport);
   }
-  return transition({ ...state, interaction: pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive) });
+  return transition(withInteraction(state, pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive)));
 }
 
 /**
@@ -509,6 +603,19 @@ interface PanGesture {
 }
 
 /**
+ * Where a panel-drag gesture stands (**D-101** clause 4). `offsetLeft`/`Top`
+ * is the pointer's position WITHIN the panel at the moment the header was
+ * pressed, in CSS pixels — held constant for the gesture so the point the
+ * operator grabbed stays under the pointer, the same "delta from a fixed
+ * reference" shape `PanGesture` uses for the canvas.
+ */
+interface PanelDragGesture {
+  readonly objectId: string;
+  readonly offsetLeft: number;
+  readonly offsetTop: number;
+}
+
+/**
  * Builds the canvas, the log and the input bar, wires every listener, and paints
  * (§5.9, §5.10).
  *
@@ -518,7 +625,7 @@ interface PanGesture {
  * here is listener wiring and drawing — checked by hand, described in the log
  * entry, and NOT covered by any assertion.
  */
-function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLInputElement, panel: HTMLElement): void {
+function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLInputElement, panelsContainer: HTMLElement): void {
   const context = canvas.getContext("2d");
   if (context === null) {
     logElement.textContent = "this browser gave no 2D canvas context — nothing can be drawn";
@@ -528,6 +635,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
   let pan: PanGesture | undefined;
   let spaceHeld = false;
+  // One DOM element per PANELLED object id, reused across paints — D-101's N
+  // panels, each held here rather than in `AppState` (D-101 clause 7: a DOM
+  // handle is not plain, serializable state). Keyed the same way `AppState.panels`
+  // is, so the two stay easy to reason about together even though neither reads
+  // the other directly.
+  const panelElements = new Map<string, HTMLElement>();
+  let panelDrag: PanelDragGesture | undefined;
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
 
@@ -572,42 +686,101 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // Every selected object reaches the renderer as an ID only (D-082 clause
     // 4's own rule, applied here too): this file resolves no name, and
     // `renderer.ts` draws no highlight at all for an id naming nothing
-    // (D-068), now over the whole list (D-100 clause 8).
-    renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectIds);
-    updatePanel();
+    // (D-068), now over the whole list (D-100 clause 8). `panelledIds` is a
+    // SEPARATE list (D-106 clause 5) — every selected object with a drawn
+    // extent whose panel is not dismissed — because a dismissed panel's
+    // object keeps its highlight but gets its canvas name label back.
+    const panelledIds = panelledObjectIds();
+    renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectIds, panelledIds);
+    updatePanels(panelledIds);
   };
 
   /**
-   * D-094's properties panel: shown exactly when the selection resolves to an
-   * object with a drawn extent (clause 2), its rows built from
-   * `command/props.ts`'s descriptors (clause 9), re-placed every paint in CSS
-   * pixels (clauses 12-13). Read-only — this closure never calls `mutate`.
-   *
-   * **D-100 leaves this at ONE panel** — D-101's N panels are the next
-   * cycle's own slice. So a selection of exactly one object shows its panel,
-   * same as before this ruling; an empty selection or a multi-selection shows
-   * none, rather than guessing which of several objects it belongs to.
+   * Which selected objects actually show a panel right now (**D-106** clause
+   * 5's `panelledObjectIds`): selected, drawing something (so there is an
+   * extent to hang a panel off — D-094 clause 2's rule, unchanged), and not
+   * dismissed. Computed once per paint and handed to both `renderDocument`
+   * (the suppression pass) and `updatePanels` (which panels to build), so the
+   * two can never disagree about which objects have one (D-010's shape).
    */
-  const updatePanel = (): void => {
-    const selectedIds = state.interaction.selectedObjectIds;
-    const selectedId = selectedIds.length === 1 ? selectedIds[0] : undefined;
-    const object = selectedId === undefined ? undefined : state.document.objects.find((candidate) => candidate.id === selectedId);
-    const extent = object === undefined ? undefined : objectExtent(object);
-    if (object === undefined || extent === undefined) {
-      // A stale id draws no highlight either (D-094 clause 2); an object that
-      // draws nothing has no extent to hang a panel off.
-      panel.hidden = true;
+  const panelledObjectIds = (): readonly string[] => {
+    const ids: string[] = [];
+    for (const objectId of state.interaction.selectedObjectIds) {
+      const object = state.document.objects.find((candidate) => candidate.id === objectId);
+      const extent = object === undefined ? undefined : objectExtent(object);
+      if (object === undefined || extent === undefined || panelUiState(state, objectId).dismissed) {
+        continue;
+      }
+      ids.push(objectId);
+    }
+    return ids;
+  };
+
+  /**
+   * Builds, fills and places one panel per id in `panelledIds` (**D-101**),
+   * and removes every panel element whose id is no longer in it — the
+   * "everything currently shown, nothing else" immediate-mode posture this
+   * file already takes for the log and the canvas. `panelElements` persists
+   * elements across paints (a fresh `<div>` per id every time would only cost
+   * churn, not correctness — nothing here relies on element identity
+   * surviving a paint, because the drag gesture below tracks its own state in
+   * `panelDrag`, not in the DOM).
+   */
+  const updatePanels = (panelledIds: readonly string[]): void => {
+    const shown = new Set(panelledIds);
+    for (const objectId of panelledIds) {
+      const object = state.document.objects.find((candidate) => candidate.id === objectId);
+      const extent = object === undefined ? undefined : objectExtent(object);
+      if (object === undefined || extent === undefined) {
+        continue; // Unreachable — `panelledObjectIds` already checked both — but this file never throws on a stale id (D-023's posture).
+      }
+      const element = panelElement(objectId);
+      writePanel(element, buildPanelModel(object, state.document.objects));
+      placePanelElement(element, extent, panelUiState(state, objectId).manualPosition);
+    }
+    for (const [objectId, element] of panelElements) {
+      if (!shown.has(objectId)) {
+        element.remove();
+        panelElements.delete(objectId);
+      }
+    }
+  };
+
+  /** The DOM element for `objectId`'s panel, creating and appending it the first time it is shown. */
+  const panelElement = (objectId: string): HTMLElement => {
+    const existing = panelElements.get(objectId);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const element = document.createElement("div");
+    element.className = "panel";
+    element.dataset.objectId = objectId;
+    panelsContainer.appendChild(element);
+    panelElements.set(objectId, element);
+    return element;
+  };
+
+  /**
+   * One panel's placement (D-094 clauses 11-13, **D-101** clause 5): a
+   * DRAGGED panel's manual CSS position wins outright and `placePropertiesPanel`
+   * is not even called — clause 5's "no longer consulted while detached,"
+   * taken literally, and also what makes a detached panel NOT follow pan or
+   * zoom (nothing here re-derives its position from the camera). Otherwise
+   * the same measured-after-the-rows-are-in placement D-094 always used.
+   */
+  const placePanelElement = (element: HTMLElement, extent: WorldExtent, manualPosition: PanelPlacement | undefined): void => {
+    if (manualPosition !== undefined) {
+      element.style.left = `${manualPosition.left}px`;
+      element.style.top = `${manualPosition.top}px`;
       return;
     }
-    writePanel(panel, buildPanelModel(object, state.document.objects));
-    panel.hidden = false;
-    // Measured AFTER the rows are in and the element is visible. D-094 clause
-    // 12: worldToScreen is in BACKING pixels, the panel is laid out in CSS
-    // pixels — divide by the ratio the canvas actually has, read off the canvas
-    // the way `screenPointOf` reads it, never `devicePixelRatio` by assumption.
+    // D-094 clause 12: worldToScreen is in BACKING pixels, the panel is laid
+    // out in CSS pixels — divide by the ratio the canvas actually has, read
+    // off the canvas the way `screenPointOf` reads it, never
+    // `devicePixelRatio` by assumption.
     const bounds = canvas.getBoundingClientRect();
     const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
-    const panelRect = panel.getBoundingClientRect();
+    const panelRect = element.getBoundingClientRect();
     const placement = placePropertiesPanel(
       extent,
       state.document.camera,
@@ -615,8 +788,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       { width: bounds.width, height: bounds.height },
       { width: panelRect.width, height: panelRect.height },
     );
-    panel.style.left = `${placement.left}px`;
-    panel.style.top = `${placement.top}px`;
+    element.style.left = `${placement.left}px`;
+    element.style.top = `${placement.top}px`;
   };
 
   const apply = (next: AppState): void => {
@@ -720,6 +893,80 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     { passive: false },
   );
 
+  // D-101 clause 4: a panel is dragged by its HEADER only. ONE delegated
+  // listener on the container (rather than one per header, re-attached every
+  // `updatePanels` rebuild) so a rebuild mid-gesture cannot drop it — see
+  // `panelDrag`'s own doc comment for why the gesture continues on `window`
+  // rather than on the header element for the same reason. The dismiss
+  // button sits inside the header (D-106 clause 2), so it is excluded here
+  // FIRST — otherwise pressing it would also arm a drag.
+  panelsContainer.addEventListener("pointerdown", (event: PointerEvent) => {
+    const target = event.target as HTMLElement;
+    if (target.closest(".panel-dismiss") !== null) {
+      return;
+    }
+    const header = target.closest(".panel-header");
+    const element = header === null ? null : (header.closest(".panel") as HTMLElement | null);
+    const objectId = element?.dataset.objectId;
+    if (element === null || objectId === undefined) {
+      return;
+    }
+    // D-101 clause 8: a panel drag must not reach the canvas. This listener
+    // is on `panelsContainer`, a sibling of `canvas` under `#stage`, so the
+    // press never fires there to begin with — nothing to suppress, unlike
+    // the canvas's own pointerdown (D-088). Keeps the input focused the same
+    // way a canvas press does (§5.10).
+    event.preventDefault();
+    input.focus();
+    const bounds = element.getBoundingClientRect();
+    panelDrag = { objectId, offsetLeft: event.clientX - bounds.left, offsetTop: event.clientY - bounds.top };
+  });
+
+  /**
+   * D-101's drag gesture continues on `window`, deliberately NOT on the
+   * header element `pointerdown` fired on. `updatePanels` rebuilds every
+   * panel element on every paint, and a paint runs on every `apply` this very
+   * listener triggers — so a listener or `setPointerCapture` bound to that
+   * header would be torn down mid-gesture the moment the first `pointermove`
+   * repainted it. Reading `panelDrag` from `window` events instead survives
+   * that by construction, the same reason `pan` above is tracked in a
+   * closure variable rather than on the canvas element's own state.
+   */
+  window.addEventListener("pointermove", (event: PointerEvent) => {
+    if (panelDrag === undefined) {
+      return;
+    }
+    const bounds = canvas.getBoundingClientRect();
+    apply(
+      movePanel(state, panelDrag.objectId, {
+        left: event.clientX - bounds.left - panelDrag.offsetLeft,
+        top: event.clientY - bounds.top - panelDrag.offsetTop,
+      }),
+    );
+  });
+  const endPanelDrag = (): void => {
+    panelDrag = undefined;
+  };
+  window.addEventListener("pointerup", endPanelDrag);
+  window.addEventListener("pointercancel", endPanelDrag);
+
+  // D-106 clauses 2-3: the dismiss control hides one panel without touching
+  // the selection. Delegated the same way and for the same reason as the
+  // drag listener above.
+  panelsContainer.addEventListener("click", (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const dismissButton = target.closest(".panel-dismiss");
+    if (dismissButton === null) {
+      return;
+    }
+    const element = dismissButton.closest(".panel") as HTMLElement | null;
+    const objectId = element?.dataset.objectId;
+    if (objectId === undefined) {
+      return;
+    }
+    apply(dismissPanel(state, objectId));
+  });
+
   apply(state);
   input.focus();
 }
@@ -736,11 +983,25 @@ function drawLog(logElement: HTMLElement, lines: readonly string[]): void {
  * rule (clause 5) and the derived rows. Every piece of text goes in through
  * `textContent`: an object's name and a slot's value are user-controlled, and
  * `<b>` is a legal object name (D-094 clause 14).
+ *
+ * The header now carries a DISMISS control beside the name (**D-106** clause
+ * 2) — `main.ts`'s delegated listeners above find both it and the header's
+ * drag handle by class name, never by element identity, which is what lets
+ * this function rebuild the header whole on every call without breaking a
+ * gesture already in progress (see `panelDrag`'s own doc comment in `start`).
  */
 function writePanel(panelElement: HTMLElement, model: PanelModel): void {
   const header = document.createElement("div");
   header.className = "panel-header";
-  header.textContent = model.header;
+  const name = document.createElement("span");
+  name.className = "panel-header__name";
+  name.textContent = model.header;
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "panel-dismiss";
+  dismiss.textContent = "×"; // ×, a plain glyph rather than an icon (Rule 5).
+  dismiss.setAttribute("aria-label", `hide the ${model.header} panel`);
+  header.append(name, dismiss);
   const children: HTMLElement[] = [header];
 
   for (const row of model.modifiable) {
@@ -826,8 +1087,8 @@ if (typeof document !== "undefined") {
   const canvas = document.querySelector<HTMLCanvasElement>("#canvas");
   const logElement = document.querySelector<HTMLElement>("#log");
   const input = document.querySelector<HTMLInputElement>("#command");
-  const panel = document.querySelector<HTMLElement>("#panel");
-  if (canvas !== null && logElement !== null && input !== null && panel !== null) {
-    start(canvas, logElement, input, panel);
+  const panelsContainer = document.querySelector<HTMLElement>("#panels");
+  if (canvas !== null && logElement !== null && input !== null && panelsContainer !== null) {
+    start(canvas, logElement, input, panelsContainer);
   }
 }

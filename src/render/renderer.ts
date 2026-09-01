@@ -13,11 +13,12 @@
  *
  * WHAT THIS IS
  *   `renderDocument(ctx, viewportWidth, viewportHeight, objects, camera,
- *   selectedObjectIds?)` — the one exported entry point, a pure function of
- *   its arguments. It takes `objects`, not a whole engine `Document`: this
- *   file draws graph state, and the narrow argument both keeps it testable
- *   and sidesteps `Document` colliding with the DOM's own global `Document`
- *   type, which this file — unlike `engine/document.ts` — sits alongside.
+ *   selectedObjectIds?, panelledObjectIds?)` — the one exported entry point, a
+ *   pure function of its arguments. It takes `objects`, not a whole engine
+ *   `Document`: this file draws graph state, and the narrow argument both
+ *   keeps it testable and sidesteps `Document` colliding with the DOM's own
+ *   global `Document` type, which this file — unlike `engine/document.ts` —
+ *   sits alongside.
  *
  *   THREE passes, in this order:
  *     1. Clear the WHOLE viewport in screen space (transform reset to
@@ -35,11 +36,21 @@
  *        — a name label (D-092 clause 1), an error badge, a formula-driven
  *        indicator (§5.9, D-068) — each converted through `worldToScreen`
  *        explicitly, because chrome text must stay a constant size regardless
- *        of zoom, unlike the geometry in pass 2. EVERY selected object's name
- *        label is suppressed here (D-094 clause 3, generalised by D-100
- *        clause 8): its name moves into its properties panel's header, which
- *        `main.ts` draws. Its badge and ticks still draw — they mark the
- *        shape, and the panel says the same in words.
+ *        of zoom, unlike the geometry in pass 2. Every id in `panelledObjectIds`
+ *        (**D-106** clause 5) has its name label suppressed here: its name
+ *        moves into its properties panel's header, which `main.ts` draws.
+ *        Its badge and ticks still draw — they mark the shape, and the panel
+ *        says the same in words.
+ *
+ *   `selectedObjectIds` (the highlight) and `panelledObjectIds` (the name
+ *   suppression) are DELIBERATELY two separate lists, not one collapsed back
+ *   together (**D-106** clause 5): a selected object whose panel has been
+ *   DISMISSED keeps its highlight — the operator is still working with it —
+ *   but gets its canvas name label back, because nothing else is showing it
+ *   any more. `panelledObjectIds` defaults to `selectedObjectIds`, which is
+ *   what keeps every pre-D-106 call site (every test written before this
+ *   ruling, and any future one that has no reason to dismiss a panel) meaning
+ *   "the panel follows the selection" without passing a second argument.
  *
  *   The highlight is drawn in a SEPARATE pass after every object (not
  *   inline with pass 2's per-object loop) so it is never occluded by a LATER
@@ -168,12 +179,12 @@ function clearScreen(ctx: CanvasRenderingContext2D, viewportWidth: number, viewp
 }
 
 /**
- * §5.9's whole sequence, widened by D-068/D-092/D-100: clear, apply the
+ * §5.9's whole sequence, widened by D-068/D-092/D-100/D-106: clear, apply the
  * camera transform, draw every object in z-order (array order — see file
  * header), draw every selected object's highlight, then reset to identity and
- * draw every object's screen-space chrome. An empty `selectedObjectIds`, or
- * one holding only stale ids (D-023-shaped), draws no highlight and
- * suppresses no label; never throws.
+ * draw every object's screen-space chrome. An empty list, or one holding only
+ * stale ids (D-023-shaped), draws no highlight and suppresses no label;
+ * never throws.
  */
 export function renderDocument(
   ctx: CanvasRenderingContext2D,
@@ -182,6 +193,7 @@ export function renderDocument(
   objects: readonly GraphObject[],
   camera: CameraState,
   selectedObjectIds: readonly string[] = [],
+  panelledObjectIds: readonly string[] = selectedObjectIds,
 ): void {
   clearScreen(ctx, viewportWidth, viewportHeight);
 
@@ -215,11 +227,15 @@ export function renderDocument(
   // applies again — a transform-warped label is not screen-space), then one
   // explicit worldToScreen per object (file header's pass 3).
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // D-106 clause 5: a SEPARATE set from `selectedIds` — see file header.
+  const panelledIds = new Set(panelledObjectIds);
   for (const object of objects) {
-    // D-094 clause 3, generalised by D-100 clause 8: every SELECTED object's
-    // NAME moves into its properties panel's header, so it is not also drawn
-    // on the canvas. Its badge and ticks are not suppressed.
-    drawObjectChrome(ctx, camera, object, selectedIds.has(object.id));
+    // D-094 clause 3, generalised by D-100 clause 8, narrowed again by D-106
+    // clause 4: a PANELLED object's NAME moves into its properties panel's
+    // header, so it is not also drawn on the canvas. A selected-but-dismissed
+    // object is NOT in `panelledIds` and gets its name back. Its badge and
+    // ticks are never suppressed either way.
+    drawObjectChrome(ctx, camera, object, panelledIds.has(object.id));
   }
 }
 

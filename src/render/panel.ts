@@ -36,11 +36,15 @@
  *     second hand-written copy of it (D-010).
  *
  * NOT DONE HERE
- *   - Whether the panel is shown at all (that is "does the selection resolve
- *     to an object with a drawn extent" — `main.ts`, and since **D-100** a
- *     selection of more than one shows no panel until D-101 builds N of
- *     them), what it contains, or the sketch's dashed leader line to the
- *     object (D-094 defers that).
+ *   - Whether the panel is shown at all — `main.ts`'s job (D-094 clause 2:
+ *     the object must have a drawn extent; **D-106**: its panel must not be
+ *     dismissed) — what it contains, or the sketch's dashed leader line to
+ *     the object (D-094 defers that).
+ *   - Where a DRAGGED panel goes (**D-101** clause 5). This function is not
+ *     even called for one: `main.ts` holds its manual CSS position instead
+ *     once the operator has detached it, which is what makes clause 5's "not
+ *     following pan or zoom" true — nothing here re-derives a position for a
+ *     panel this file was never consulted about.
  */
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";

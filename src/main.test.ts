@@ -20,8 +20,10 @@ import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
 import {
   buildPanelModel,
+  dismissPanel,
   escape,
   initialAppState,
+  movePanel,
   performEffect,
   pointerDownAt,
   pointerMoveTo,
@@ -441,6 +443,89 @@ describe("pointer and wheel (§5.9)", () => {
     expect(screenToWorld(zoomedIn.document.camera, cursor).x).toBeCloseTo(worldBefore.x, 9);
     expect(screenToWorld(zoomedIn.document.camera, cursor).y).toBeCloseTo(worldBefore.y, 9);
     expect(wheelZoomAt(state, cursor, 100).document.camera.zoom).toBeLessThan(state.document.camera.zoom);
+  });
+});
+
+describe("panel UI state — dismissal and manual position (D-101, D-106)", () => {
+  it("starts with no panel UI state for a freshly selected object — shown, auto-placed, is the default", () => {
+    const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    const selected = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    expect(selected.panels).toEqual({});
+  });
+
+  it("dismissPanel hides one selected object's panel without touching the selection (D-106 clauses 2-3)", () => {
+    const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    const selected = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    const id = objectNamed(selected, "polygon_1").id;
+    const dismissed = dismissPanel(selected, id);
+    expect(dismissed.panels[id]?.dismissed).toBe(true);
+    expect(dismissed.interaction.selectedObjectIds).toEqual([id]);
+  });
+
+  it("dismissPanel is a no-op for an object that is not currently selected", () => {
+    const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    const id = objectNamed(state, "polygon_1").id;
+    expect(dismissPanel(state, id)).toBe(state);
+  });
+
+  it("movePanel records a manual CSS position for a selected object's panel (D-101 clause 5)", () => {
+    const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    const selected = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    const id = objectNamed(selected, "polygon_1").id;
+    const moved = movePanel(selected, id, { left: 12, top: 34 });
+    expect(moved.panels[id]?.manualPosition).toEqual({ left: 12, top: 34 });
+  });
+
+  it("movePanel is a no-op for an object that is not currently selected", () => {
+    const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    const id = objectNamed(state, "polygon_1").id;
+    expect(movePanel(state, id, { left: 1, top: 1 })).toBe(state);
+  });
+
+  it("discards a dismissed panel's state when its object leaves the selection, and re-selecting shows it again (D-101 clause 6, D-106 clause 6)", () => {
+    const opening = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    let state = pointerDownAt(opening, { x: 50, y: 0 }, VIEWPORT).state;
+    const id = objectNamed(state, "polygon_1").id;
+    state = dismissPanel(state, id);
+    expect(state.panels[id]?.dismissed).toBe(true);
+
+    state = escape(state); // Clears the whole selection (D-100 clause 5).
+    expect(state.panels[id]).toBeUndefined();
+
+    state = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state; // Re-selects it.
+    expect(state.panels[id]).toBeUndefined(); // Fresh — shown again, per D-106 clause 6.
+  });
+
+  it("discards a manual position the same way, when a plain click REPLACES the selection (D-100 clause 2, D-101 clause 6)", () => {
+    let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    state = typed(state, "circle x=200 y=0 r=20");
+    const polygonId = objectNamed(state, "polygon_1").id;
+    state = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    state = movePanel(state, polygonId, { left: 5, top: 5 });
+    expect(state.panels[polygonId]?.manualPosition).toEqual({ left: 5, top: 5 });
+
+    state = pointerDownAt(state, { x: 200, y: 20 }, VIEWPORT).state; // A plain click elsewhere.
+    expect(state.panels[polygonId]).toBeUndefined();
+  });
+
+  it("keeps an object's panel state when a shift-click ADDS another object — nothing left the selection (D-100 clause 3)", () => {
+    let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    state = typed(state, "circle x=200 y=0 r=20");
+    const polygonId = objectNamed(state, "polygon_1").id;
+    state = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    state = dismissPanel(state, polygonId);
+    state = pointerDownAt(state, { x: 200, y: 20 }, VIEWPORT, true).state; // Shift-click adds the circle.
+    expect(state.panels[polygonId]?.dismissed).toBe(true);
+  });
+
+  it("`select <name>` from the input bar prunes panel state the same way a plain click does — it too REPLACES the selection (D-100 clause 7)", () => {
+    let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    state = typed(state, "circle x=200 y=0 r=20");
+    const polygonId = objectNamed(state, "polygon_1").id;
+    state = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    state = dismissPanel(state, polygonId);
+    state = typed(state, "select circle_1");
+    expect(state.panels[polygonId]).toBeUndefined();
   });
 });
 

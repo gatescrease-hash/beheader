@@ -666,3 +666,35 @@ describe("renderDocument — the selected object's name label is suppressed (D-0
     expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
   });
 });
+
+describe("renderDocument — panelledObjectIds is a SEPARATE list from selectedObjectIds (D-106 clause 5)", () => {
+  it("defaults panelledObjectIds to selectedObjectIds when the 7th argument is omitted, so every pre-D-106 call site is unchanged", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"]);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(false);
+  });
+
+  it("suppresses a name for an id in panelledObjectIds even when selectedObjectIds is empty", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, [], ["obj_1"]);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(false);
+  });
+
+  it("does NOT suppress a selected object's name once its panel is dismissed (panelledObjectIds excludes it) — the name comes back (D-106 clause 4)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"], []);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
+  });
+
+  it("still highlights a selected object whose panel was dismissed — dismissal is about screen space, not the selection (D-106 clause 3)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle = circleObject("obj_1", "circle_1");
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"], []);
+    // 1 arc for the ordinary draw, 1 more for the highlight — panelledObjectIds
+    // being empty does not touch the highlight pass, which reads selectedObjectIds.
+    expect(calls.filter((call) => call.op === "arc")).toHaveLength(2);
+  });
+});
