@@ -149,6 +149,44 @@ describe("submitLine — a command word alone enters its prompt sequence (D-072)
   });
 });
 
+describe("submitLine — the returned AppTransition reports whether the line was REFUSED (D-109 clause 3)", () => {
+  it("is NOT refused for an accepted complete command", () => {
+    expect(submitLine(opened(), "polygon sides=5 x=0 y=0 r=50", VIEWPORT).refused).toBe(false);
+  });
+
+  it("IS refused for a complete command the handler rejects", () => {
+    expect(submitLine(opened(), "delete nothing_here", VIEWPORT).refused).toBe(true);
+  });
+
+  it("IS refused for a line no command can be parsed from", () => {
+    expect(submitLine(opened(), "wobble 3", VIEWPORT).refused).toBe(true);
+  });
+
+  it("is NOT refused for a bare command word entering its prompt sequence — nothing was refused yet", () => {
+    expect(submitLine(opened(), "circle", VIEWPORT).refused).toBe(false);
+  });
+
+  it("is NOT refused when a prompt step's answer is accepted and the sequence moves to the next step", () => {
+    const midSequence = typed(opened(), "circle");
+    const outcome = submitLine(midSequence, "100,100", VIEWPORT);
+    expect(outcome.refused).toBe(false);
+    expect(outcome.state.pending?.stepIndex).toBe(1); // moved on, not re-asking step 0
+  });
+
+  it("IS refused when a prompt step's own answer is refused, so the same step re-asks (D-072 clause 7)", () => {
+    const midSequence = typed(typed(opened(), "circle"), "100,100");
+    const outcome = submitLine(midSequence, "not-a-radius", VIEWPORT);
+    expect(outcome.refused).toBe(true);
+    expect(outcome.state.pending?.stepIndex).toBe(1); // re-asks the SAME step
+  });
+
+  it("is NOT refused for an accepted command that also requests a file (save)", () => {
+    const outcome = submitLine(opened(), "save", VIEWPORT);
+    expect(outcome.refused).toBe(false);
+    expect(outcome.fileRequest).toBe("save");
+  });
+});
+
 describe("performEffect — select (D-075, D-082)", () => {
   it("selects the ID the effect carried, resolving no name of its own", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");

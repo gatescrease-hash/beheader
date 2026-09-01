@@ -11,10 +11,11 @@
  * without deselecting, and a dismissed object's canvas name returns),
  * **D-102** (the panel becomes WRITABLE: a paperclip per modifiable row, every
  * write the `Command` the command line would have built, run through
- * `executeCommand` — never `mutate`, never `writeSlot`), and **D-107** (a
+ * `executeCommand` — never `mutate`, never `writeSlot`), **D-107** (a
  * panel gesture never leaves the command bar's keyboard homeless, and a
  * handler bound to DOM a repaint can destroy acts only while it still owns
- * what it names).
+ * what it names), and **D-109** clause 3 (a refused line stays in the input;
+ * only an accepted one clears it).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -51,6 +52,9 @@
  *     row editor already owns the keyboard. `onCancel` acts only while
  *     `openEditor` still names the exact row it was built for, so a blur fired
  *     by a repaint that already moved on cannot cancel someone else's gesture.
+ *   - **D-109 clause 3**: the command bar's `keydown` listener clears
+ *     `input.value` only when `submitLine`'s returned `AppTransition.refused`
+ *     is `false`. A refusal leaves the line in place for correction.
  *   - An effect is performed through a `switch` on `kind` with the `never`
  *     default (D-082 clause 3), because `effect` is optional on the success arm
  *     and a missing arm would otherwise be silent rather than a compile error.
@@ -163,16 +167,23 @@ export type FileRequest = "save" | "load";
 
 /**
  * A transition's result: the new state, plus a file request when the operator
- * asked for one.
+ * asked for one, plus whether the line that produced it was REFUSED.
  *
  * Why the request travels back out rather than being done in place: the pure
  * half cannot open a file picker, and returning a description keeps every
  * transition testable — the same reason `commands.ts` returns an effect instead
- * of performing one (D-075).
+ * of performing one (D-075). `refused` exists for the same reason, one layer
+ * up: **D-109** clause 3 says a refused command keeps the operator's typed line
+ * in the input bar rather than clearing it, and only the DOM half owns
+ * `input.value`. Meaningless outside `submitLine`'s own path — `pointerDownAt`'s
+ * plain click and every branch of `performEffect` are reached only once a
+ * command has already been ACCEPTED, so they carry `false` via `transition`'s
+ * own default parameter and are never read for it.
  */
 export interface AppTransition {
   readonly state: AppState;
   readonly fileRequest: FileRequest | undefined;
+  readonly refused: boolean;
 }
 
 /**
@@ -266,9 +277,13 @@ export function movePanel(state: AppState, objectId: string, position: PanelPlac
   return { ...state, panels: { ...state.panels, [objectId]: { ...panelUiState(state, objectId), manualPosition: position } } };
 }
 
-/** A transition that changed state and asked for no file. */
-function transition(state: AppState): AppTransition {
-  return { state, fileRequest: undefined };
+/**
+ * A transition that changed state and asked for no file. `refused` defaults to
+ * `false` — every caller except `advance`'s own refusal branches wants that,
+ * since D-109 clause 3's distinction only exists on `submitLine`'s path.
+ */
+function transition(state: AppState, refused: boolean = false): AppTransition {
+  return { state, fileRequest: undefined, refused };
 }
 
 /**
@@ -326,17 +341,27 @@ function advance(state: AppState, session: CommandSession, viewport: Viewport): 
       const cleared: AppState = { ...state, pending: undefined };
       const outcome = executeCommand(session.command, cleared.document);
       if (!outcome.ok) {
-        return transition(withLog(cleared, [outcome.message]));
+        // D-109 clause 3: refused — the operator's line stays in the input.
+        return transition(withLog(cleared, [outcome.message]), true);
       }
       const executed = withLog({ ...cleared, document: outcome.document }, outcome.lines);
       // The document part is done; the rest is this file's (D-075 clause 3).
       return outcome.effect === undefined ? transition(executed) : performEffect(outcome.effect, executed, viewport);
     }
     case "prompting":
-      return transition(withLog({ ...state, pending: session.pending }, sessionLines(session)));
+      // D-109 clause 3, applied to one step of a live sequence: `session.error`
+      // is set exactly when THIS answer was refused and the same step is being
+      // asked again (`sessionLines`'s own reading of it) — the typed answer
+      // stays put, same as a refused `set`. No error means the previous answer
+      // was ACCEPTED and the sequence moved on to the next step; the input
+      // clears for it, same as any other accepted line.
+      return transition(withLog({ ...state, pending: session.pending }, sessionLines(session)), session.error !== undefined);
     case "failed":
     case "cancelled":
-      return transition(withLog({ ...state, pending: undefined }, [sessionMessage(session)]));
+      // "cancelled" never actually reaches here (`respond` never returns it;
+      // `escape` builds it directly, bypassing `advance`) — `true` is the
+      // conservative reading if that ever changes, not a claim it is exercised.
+      return transition(withLog({ ...state, pending: undefined }, [sessionMessage(session)]), true);
     default: {
       const exhaustive: never = session;
       void exhaustive;
@@ -409,9 +434,9 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
     case "fit":
       return transition(fitToDocument(state, viewport));
     case "save":
-      return { state, fileRequest: "save" };
+      return { state, fileRequest: "save", refused: false };
     case "load":
-      return { state, fileRequest: "load" };
+      return { state, fileRequest: "load", refused: false };
     default: {
       const exhaustive: never = effect;
       void exhaustive;
@@ -1061,8 +1086,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     const line = input.value;
-    input.value = "";
-    applyTransition(submitLine(state, line, viewport()));
+    const outcome = submitLine(state, line, viewport());
+    // D-109 clause 3: a refused command keeps what the operator typed, so it
+    // can be corrected in place; only an accepted line clears the input.
+    if (!outcome.refused) {
+      input.value = "";
+    }
+    applyTransition(outcome);
   });
 
   // §5.10: the input bar is "always focused when the user is not editing text or

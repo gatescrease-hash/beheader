@@ -1,6 +1,6 @@
-# STATUS — as of entry 0116-REVIEW-phase4-gate
+# STATUS — as of entry 0117-refused-line-stays-in-the-input
 
-STATE: **GREEN.** Both configs compile, **1269/1269** tests pass, 0 skipped, 0 `.only`.
+STATE: **GREEN.** Both configs compile, **1276/1276** tests pass, 0 skipped, 0 `.only`.
 
 **PHASE 4 IS PASSED AND ITS GATE IS CLOSED. PHASE 5 IS OPEN.** Both halves of PROCESS_BRIEF §12.1
 are satisfied for the first time: the criterion was **witnessed** by the human's own session (entry
@@ -12,14 +12,21 @@ different session reviewed it, as it required.
 
 **NOTHING IS OWED ON PHASE 4.** No fix cycle, no re-review.
 
-**Owed next, in the order 0116-REVIEW recommends (routing advice, not a gate):** **D-109 clause 3**
-(a refused command keeps the typed line — smallest change on the board, taxes every refusal until it
-lands) · **D-110** (the human's Q-018 ruling — an empty in-extent cell reads `0`; load-bearing,
-`REVIEW: REQUIRED`, and **D-111 clause 3** binds that cycle to pin D-110 clause 5 executably) ·
-**D-109 clauses 1–2** (cell decimals + clipping, `render/` only) · **Q-017** (table headers, open) ·
-then **Phase 5** (the text primitive). **The one ordering worth arguing about: D-110 before Phase
-5** — it changes what a reference MEANS and what edges a reference emits, and Phase 5's text walker
-is a second consumer of exactly that. One flip surface instead of two. See 0116-REVIEW §10.
+**D-109 CLAUSE 3 IS BUILT (entry 0117), NOT YET REVIEWED.** `main.ts`'s command-bar `keydown`
+listener no longer clears `input.value` unconditionally: it clears only when `submitLine`'s returned
+`AppTransition.refused` is `false`, computed once in `advance()` and threaded through the existing
+`fileRequest`-shaped transition-result type. Seven new tests in `main.test.ts`, mutation-checked (two
+of them go red when the fix is reverted). Cycle 1 of up to 3 since 0116-REVIEW; 82 lines / 2 files —
+`REVIEW: NOT NEEDED` by this cycle's own honest application of §6.1/§6.3 (no trigger fired, well
+under the cap), but it is still an UNREVIEWED cycle until a review point lands, same as any other.
+
+**Owed next, in the order 0116-REVIEW recommends (routing advice, not a gate):** **D-110** (the
+human's Q-018 ruling — an empty in-extent cell reads `0`; load-bearing, `REVIEW: REQUIRED`, and
+**D-111 clause 3** binds that cycle to pin D-110 clause 5 executably) · **D-109 clauses 1–2** (cell
+decimals + clipping, `render/` only) · **Q-017** (table headers, open) · then **Phase 5** (the text
+primitive). **The one ordering worth arguing about: D-110 before Phase 5** — it changes what a
+reference MEANS and what edges a reference emits, and Phase 5's text walker is a second consumer of
+exactly that. One flip surface instead of two. See 0116-REVIEW §10.
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column
@@ -119,12 +126,11 @@ is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and string
 
 ## Next slice (recommended)
 
-**D-109 clause 3 first** — `main.ts` clears `input.value` unconditionally BEFORE submitting; clear
-it only on success. One file, no engine change, and it removes the tax every refusal currently pays.
-**Then D-110**, which is a `REVIEW: REQUIRED` slice of its own and should land before Phase 5 for the
-reason in 0116-REVIEW §10. Whoever takes D-110: read D-110 and D-111 clause 3 in full first, expect
-to flip existing refusal tests, and disclose the `refs` consequence in both the log entry and this
-file's known problems.
+**D-109 clause 3 is DONE (entry 0117)** — see the summary block above; do not re-touch the
+`keydown` listener for this. **D-110 is next**, and it is a `REVIEW: REQUIRED` slice of its own that
+should land before Phase 5 for the reason in 0116-REVIEW §10. Whoever takes D-110: read D-110 and
+D-111 clause 3 in full first, expect to flip existing refusal tests, and disclose the `refs`
+consequence in both the log entry and this file's known problems.
 
 ## Built and reviewed
 
@@ -151,12 +157,20 @@ F1–F4 fix list and D-107, entry 0112's D-081 + D-083 clause 4 (0113-REVIEW: AC
 **entry 0115's Phase 4 gate test (0116-REVIEW: ACCEPT WITH EDITS — one test and one assertion added
 by the reviewer, §5 and §6 of that entry).**
 
+## Built this batch, not yet reviewed
+
+- **Entry 0117 — D-109 clause 3.** `AppTransition` gains `refused`; `advance()` sets it; the
+  `keydown` listener uses it to keep a refused line in the input and clear only an accepted one.
+  `REVIEW: NOT NEEDED` was this cycle's own honest call (no §6.1 trigger, 82 lines / 2 files), which
+  is not the same as reviewed — cycle 1/3 since 0116-REVIEW.
+
 ## Not started
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
-(drag-linking between two panels) · **D-109** (all three clauses) · **D-110** · Phases 5–7.
+(drag-linking between two panels) · **D-109 clauses 1–2** (clause 3 built at entry 0117, not yet
+reviewed) · **D-110** · Phases 5–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -197,11 +211,12 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
     item 1's `preventDefault()` on every panel press also suppresses the native drag-select the
     panel BODY used to start. Read off the code, not browser-verified. Recorded, not scheduled —
     D-095's "build nothing here until a human asks" governs.
-17. **F7/F8 (0114-REVIEW) — ruled D-109, all three clauses NOT BUILT.** A table cell draws its
-    number at full float precision (`formatCellValue` returns `String(value)`) and nothing clips a
-    cell's text to its cell — two independent causes, both in `render/renderer.ts`'s `drawCellText`;
-    and a refused command DISCARDS what the operator typed (`main.ts` clears `input.value` before
-    submitting, unconditionally). **F8 is the smallest fix on the board and taxes every refusal.**
+17. **F7/F8 (0114-REVIEW) — ruled D-109. F8 (clause 3) BUILT at entry 0117, not yet reviewed. F7
+    (clauses 1–2) NOT BUILT.** A table cell draws its number at full float precision
+    (`formatCellValue` returns `String(value)`) and nothing clips a cell's text to its cell — two
+    independent causes, both in `render/renderer.ts`'s `drawCellText`; still open, `render/` only.
+    F8 — a refused command DISCARDING what the operator typed — is fixed: `main.ts`'s `keydown`
+    listener clears `input.value` only when `submitLine`'s result is not `refused`.
 18. **F9 (0116-REVIEW) — CLOSED IN THE SAME REVIEW, recorded for its lesson.** The gate document
     could not fail its own "no false cycle" clause: two polygons make it acyclic even at object
     granularity. Fixed by adding §5.1's one-object round trip to the same block. The lesson is item
@@ -267,9 +282,9 @@ cleared 0113) · D-081 and D-083 clause 4 (0112, cleared 0113) · **Phase 4's ga
 0116)**.
 
 **NOT implemented, each owned by a named future cycle:** **D-104** (§5.10's row/column commands) ·
-**D-108** (§5.11's load path; clause 3 binds every cycle before it) · **D-109** (three clauses, no
-owner assigned — take clause 3 first) · **D-110** (its own `REVIEW: REQUIRED` slice, with **D-111**
-clause 3 binding what it must pin).
+**D-108** (§5.11's load path; clause 3 binds every cycle before it) · **D-109 clauses 1–2** (cell
+decimals + clipping, `render/` only — clause 3 is built at entry 0117, not yet reviewed) · **D-110**
+(its own `REVIEW: REQUIRED` slice, with **D-111** clause 3 binding what it must pin).
 
 **Q-014 IS CLOSED** — every ruling that answers it is built. **Q-013 is NOT mooted** — `set <address>
 = <formula>` stays the spelling, and D-102's panel reuses that exact synthesised form.
