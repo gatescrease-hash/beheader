@@ -3854,3 +3854,63 @@ comes back, and that the dependency half is not quietly wrong in the meantime.
 
 Reconciliation required: none outstanding — both halves were applied and mutation-checked at
 0121-REVIEW. No `PROVISIONAL` tag; Q-019 governs display only and nothing is built against it.
+
+---
+
+## D-116 — A broken embedded span RENDERS ITSELF, verbatim and delimiters included, prefixed with `!` — it does not blank the text object (Q-019 answered by the human: a hybrid of options (b) and (c))
+Answers: **Q-019**   Ruled: the human, directly, 2026-09-01 (in response to 0121-REVIEW's raise)
+Recorded: entry 0122-RULINGS (reviewer, recording the human's decision)
+Binding on: `primitives/text.ts`'s `evaluateBlockTree`, the `text` schema entry's `resolvedContent`,
+and `render/`'s eventual text pass
+
+**The human's words:** "Let's try and do a hybrid of B and C. If a broken span is written, it should
+render literally, but with some signifyier in the text itself to add an indication that it's broken
+beyond just writing out the literal. Could we do something where a broken span renders literally but
+just has an exclamation mark added at the beginning: `{= 1 + }` renders as `!{= 1 + }`"
+
+**Ruling.**
+
+1. **A broken span renders as `!` + the span exactly as written.** `{= 1 + }` resolves to the eight
+   characters `!{= 1 + }` — nine with the mark. Delimiters are part of it: the operator sees what
+   they typed, where they typed it, so the diagnostic and the thing to fix are the same characters.
+2. **The rest of the text object renders normally.** One broken span no longer costs the whole box.
+   This REVERSES what entry 0120 built and 0121-REVIEW accepted (an `error` block returned `#PARSE`
+   for the entire tree); that behaviour was a default by omission, never a decision, and it is now
+   overruled. `evaluateBlockTree` therefore keeps going past an `error` block.
+3. **`resolvedContent` holds a `string`, not an `ErrorValue`, for a broken span.** Consequences,
+   both intended: `= text_1.resolvedContent` reads ordinary text, and §5.9's error badge — which
+   fires on objects holding `ErrorValue`s — does NOT light up for a parse-broken span. **The `!` IS
+   the signifier; do not also add a badge for this case.** That is the whole content of "a hybrid of
+   B and C": the marker (C's half) without the whole-object failure (B's half).
+4. **The `!` is emitted by the ENGINE, into `resolvedContent` — never added by `render/`.** §5.6
+   makes `measuredHeight` a function of `resolvedContent`, so a mark added at draw time would be
+   measured out of one string and drawn into another. One string, one source of truth. This is
+   content resolution, not glyph styling, so Rule 1 is untouched.
+5. **A broken CONSTRUCT renders whole.** For a conditional the span runs from `{?` through its
+   matching `{?}`, branches included: `{? 1 + }yes{:}no{?}` renders as `!{? 1 + }yes{:}no{?}`, NOT
+   as `!{? 1 + }` followed by `yesno`. Its already-parsed branches live in the error block's
+   `orphaned` field — walked for dependencies (D-115 clause 3's totality survives), never rendered.
+   Applied at entry 0122; see its own note on why inline siblings stopped being safe.
+6. **Scope: this covers a PARSE-broken span only.** A well-formed formula that evaluates to an
+   `ErrorValue` (`{= 1 / 0 }` -> `#DIV0`, or a reference reading an error slot) is a different
+   question and is NOT decided here — see **Q-020**, raised alongside this ruling. Do not extend
+   this ruling to runtime errors by analogy, and do not narrow it away from parse errors either.
+
+**Rationale (the human's, plus what recording it surfaced).** The failure this replaces was
+disproportionate: a paragraph with five embeddings went blank because the fifth had a typo, which is
+the same injury **D-109** clause 3 was ruled against — losing work to one refusal — arriving in a
+different surface. It also removes an inconsistency nobody chose: a stray `{?}` and an unterminated
+`{=` already degraded to literal text, while a `{= 1 + }` that closed correctly poisoned everything;
+all three now behave the same way, with the broken one marked.
+
+Recording the ruling surfaced two things the question had not: clause 4 (the mark must be engine-side
+or `measuredHeight` measures a different string than gets drawn) and clause 5 (once an `error` block
+stops poisoning the tree, D-115 clause 3's inlined branches would start RENDERING — `yesno` — so
+they had to move inside the block). Both are consequences of the ruling rather than amendments to
+it.
+
+Reconciliation required: **entry 0122 applied clause 5's data shape only** (the span now covers the
+whole construct, delimiters included; `orphaned` added; five test expectations updated — authorised
+here, so not a §6.1 trigger 5 escalation for that cycle). **Clauses 1-4 are NOT built**: the `!`
+prefix and the removal of `#PARSE` propagation are owed by the Phase 5 wiring cycle, which MUST land
+them with tests, and MUST have Q-020 answered first or state which way it assumed.

@@ -8,13 +8,67 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-020**
+Next free ID: **Q-021**
+
+---
+
+## Q-020 — Does a span that PARSES but evaluates to an error (`{= 1 / 0 }` → `#DIV0`) also render itself with `!`, or does it propagate?
+Raised: entry 0122-RULINGS (reviewer), alongside D-116   Brief section: §5.6, §5.1 ("errors
+propagate", "an ErrorValue in the graph is legitimate state")   Status: **OPEN — the human's.
+BLOCKING the display half of the Phase 5 wiring cycle** (that cycle needs to know what
+`resolvedContent` holds for a `#DIV0`); not blocking its structural half.
+
+**D-116** settled the PARSE-broken span: it renders itself, marked with `!`, and the rest of the box
+renders normally. It deliberately did not settle the neighbour one step away, because the human was
+asked about typos and this is not a typo: `{= 1 / 0 }` is a perfectly well-formed formula whose
+VALUE is an error, and §5.1 says an `ErrorValue` is legitimate graph state that PROPAGATES.
+
+So `Total: {= table_1.A1 / table_1.A2 }` with `A2` empty currently makes the whole text object
+`#DIV0`. Three options:
+
+(a) **Same as D-116 — render the span with `!`.** `!{= 1 / 0 }` appears in place, rest of the box
+    fine. One rule for "this embedding did not produce text," whatever the cause; the operator
+    never loses a paragraph. Cost: `resolvedContent` never holds an `ErrorValue`, so the §5.9 error
+    badge never fires for a text object at all, and "errors propagate" stops being true at the text
+    boundary — a text box becomes a place where errors go to become strings.
+(b) **Render the ERROR CODE in place, marked.** `!#DIV0` (or `!{= 1 / 0 } → #DIV0`) — the operator
+    sees WHICH error, not just which formula. Same "box keeps rendering" benefit, more diagnostic,
+    and closer to what a spreadsheet cell shows. Cost: a second display convention to specify, and
+    the mark now decorates a computed value rather than the operator's own text.
+(c) **Propagate — the whole object becomes that `ErrorValue`.** Faithful to §5.1, keeps the error
+    badge working, and keeps `= text_1.resolvedContent` honest (a formula reading a broken text box
+    gets an error, not the string "#DIV0"). Cost: re-introduces exactly the blank-paragraph failure
+    D-116 just removed, for a cause the operator can trigger just as easily as a typo.
+
+Recommendation: **(b)**, with (a) as the simpler second choice. Reason: it keeps D-116's promise
+(one bad embedding never costs the paragraph) while telling the operator more than `!` alone does,
+and a text box is prose — the reason (c)'s propagation is defensible for a CELL is that a cell is
+one atomic value, which a paragraph is not. The reviewer notes (c) is the only option that keeps
+§5.1's propagation rule literally true, and would not argue against a human who weighted that
+higher.
+
+Reversible? **Yes** — it is one arm of `evaluateBlockTree`'s `formula` case, plus whatever the
+wiring cycle does with the result. No stored data depends on it (the block tree is derived, never
+serialized — D-114 clause 4).
+Provisional choice taken: **none, and nothing is built either way.** Today's tree still propagates
+for BOTH cases, because D-116 clauses 1-4 are themselves unbuilt; the wiring cycle is the first that
+must act, and D-116's own reconciliation note requires it to state which way it assumed if this is
+still open when it runs.
 
 ---
 
 ## Q-019 — When one embedded formula in a text box is broken, does the WHOLE text box go blank, or does the broken span show literally?
 Raised: entry 0121-REVIEW-phase5 (reviewer)   Brief section: §5.6, §5.1 ("errors propagate"), §5.9
-(the error badge)   Status: **OPEN — the human's, non-blocking, nothing tagged.**
+(the error badge)
+Status: **ANSWERED → D-116** — the human ruled a **hybrid of (b) and (c)** at entry 0122-RULINGS: the
+broken span renders literally, delimiters included, prefixed with `!` (`{= 1 + }` → `!{= 1 + }`), and
+the rest of the object renders normally. So option (b) below is taken as to *what happens to the
+box*, and (c)'s "mark it" half is satisfied by the `!` in the text itself rather than by a badge —
+which is why no second mechanism is needed. See D-116 for the full ruling, including the two things
+recording it surfaced that this question did not anticipate: the mark must be emitted engine-side
+(else `measuredHeight` measures a different string than is drawn), and a broken conditional's span
+covers the WHOLE construct. **Clauses 1-4 are not yet built** — owed by the Phase 5 wiring cycle.
+The runtime-error neighbour this ruling deliberately did not cover is **Q-020**, above.
 
 Text's `content` is a **literal** slot, so unlike a cell formula it is never refused at commit time:
 any string is legal, half-typed formulas included. That makes "what does a broken `{= }` look like?"

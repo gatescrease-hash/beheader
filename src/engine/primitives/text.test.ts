@@ -169,18 +169,29 @@ describe("parseTextContent — {? }{:}{?} conditionals", () => {
     expect(inner).toBeDefined();
   });
 
-  it("a condition that fails to parse becomes an error block, with the true branch kept inline", () => {
+  it("a condition that fails to parse becomes ONE error block spanning the whole construct, its branches held in `orphaned` rather than inline (D-116)", () => {
     const blocks = parseTextContent("{? 1 + }kept text{?}", []);
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0]?.type).toBe("error");
-    expect(blocks[1]).toEqual({ type: "text", value: "kept text" });
+    expect(blocks).toHaveLength(1);
+    const block = blocks[0] as Block;
+    if (block.type !== "error") {
+      throw new Error(`expected an error block, got ${block.type}`);
+    }
+    // Inline siblings would RENDER once D-116 stops an error block poisoning the tree;
+    // held here they still carry every dependency and print nothing.
+    expect(block.orphaned).toEqual([{ type: "text", value: "kept text" }]);
+    expect(block.source).toBe("{? 1 + }kept text{?}");
   });
 
-  it("an unclosed conditional (no matching {?}) becomes an error block, with the true branch so far kept inline", () => {
-    const blocks = parseTextContent("{? TRUE }never closed", []);
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0]?.type).toBe("error");
-    expect(blocks[1]).toEqual({ type: "text", value: "never closed" });
+  it("an unclosed conditional (no matching {?}) becomes an error block whose span runs to the end of content", () => {
+    const content = "{? TRUE }never closed";
+    const blocks = parseTextContent(content, []);
+    expect(blocks).toHaveLength(1);
+    const block = blocks[0] as Block;
+    if (block.type !== "error") {
+      throw new Error(`expected an error block, got ${block.type}`);
+    }
+    expect(block.orphaned).toEqual([{ type: "text", value: "never closed" }]);
+    expect(block.source).toBe(content);
   });
 
   it("a stray top-level {?} with no opening {? } is kept as literal text, not dropped or fatal — as three text blocks, adjacent text is not merged (Rule 5: no consumer needs it, evaluateBlockTree concatenates regardless)", () => {
@@ -215,8 +226,10 @@ describe("extractTextDependencies", () => {
     expect(extractTextDependencies([{ type: "text", value: "hi" }])).toEqual([]);
   });
 
-  it("an error block contributes nothing (D-028's own 'absence of a dependency' move, applied here)", () => {
-    expect(extractTextDependencies([{ type: "error", message: "broken", source: "1 + ", start: 2 }])).toEqual([]);
+  it("an error block with no orphaned blocks contributes nothing (D-028's own 'absence of a dependency' move, applied here)", () => {
+    expect(
+      extractTextDependencies([{ type: "error", message: "broken", source: "{= 1 + }", start: 2, orphaned: [] }]),
+    ).toEqual([]);
   });
 
   it("a formula block contributes its own extractDependencies", () => {
@@ -348,28 +361,30 @@ describe("recovered parse errors carry a readable message", () => {
     expect(soleErrorMessage(parseTextContent("{= 1 + }", []))).not.toBe("");
   });
 
-  it("an error block carries the offending SOURCE and its offset into content (D-038 clauses 2 and 4, via D-115)", () => {
+  it("an error block carries the whole broken SPAN, delimiters included, and its offset into content (D-038 clauses 2 and 4, via D-115/D-116)", () => {
     const content = "aaaaaaaaaaaaaaaaaaaa{= SUMM(1) }bbbb";
     const blocks = parseTextContent(content, []);
     const error = blocks.find((block) => block.type === "error");
     if (error === undefined || error.type !== "error") {
       throw new Error(`expected an error block, got: ${JSON.stringify(blocks)}`);
     }
-    expect(error.source).toBe(" SUMM(1) ");
-    // The offset must be into CONTENT, not into the extracted source — a caller
-    // underlining the span reads the operator's own text, not a substring of it.
+    // Delimiters included: D-116 renders this span back verbatim, so `{=` and `}` are
+    // part of it — ` SUMM(1) ` alone could not be printed without re-inventing them.
+    expect(error.source).toBe("{= SUMM(1) }");
+    // The offset must be into CONTENT — a caller underlining the span reads the
+    // operator's own text, not a substring of it. This round trip is the contract.
     expect(content.slice(error.start, error.start + error.source.length)).toBe(error.source);
-    expect(error.start).toBe(22);
+    expect(error.start).toBe(20);
   });
 
-  it("a broken CONDITION's error block carries its own source and offset too, not just a broken {= } one", () => {
-    const content = "hi {? 1 + }kept{?}";
+  it("a broken CONDITION's span covers the ENTIRE construct through its matching {?}, not just the condition", () => {
+    const content = "hi {? 1 + }kept{?} bye";
     const blocks = parseTextContent(content, []);
     const error = blocks.find((block) => block.type === "error");
     if (error === undefined || error.type !== "error") {
       throw new Error(`expected an error block, got: ${JSON.stringify(blocks)}`);
     }
-    expect(error.source).toBe(" 1 + ");
+    expect(error.source).toBe("{? 1 + }kept{?}");
     expect(content.slice(error.start, error.start + error.source.length)).toBe(error.source);
   });
 });

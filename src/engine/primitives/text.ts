@@ -140,10 +140,27 @@ export interface ConditionalBlock {
 export interface BlockParseErrorBlock {
   readonly type: "error";
   readonly message: string;
-  /** The raw expression source this block replaced, verbatim (D-038 clause 4). Excludes the `{=`/`{?` and `}` delimiters. */
+  /**
+   * The broken span EXACTLY as the operator wrote it, **delimiters included** —
+   * `{= 1 + }`, not ` 1 + ` (**D-116**). It is the whole construct: for a conditional
+   * that means `{? c }` through its matching `{?}`, branches and all. This is what
+   * D-116 requires be rendered back, so it must round-trip:
+   * `content.slice(start, start + source.length) === source`, pinned by test.
+   */
   readonly source: string;
-  /** Offset of `source`'s first character within `content` (D-038 clause 2). */
+  /** Offset of `source`'s first character — the opening `{` — within `content` (D-038 clause 2). */
   readonly start: number;
+  /**
+   * Blocks that parsed successfully INSIDE this broken construct (a broken
+   * conditional's two branches). They are walked by `extractTextDependencies` and
+   * NEVER by `evaluateBlocks` — D-115 clause 3 keeps them so extraction stays total,
+   * and D-116 is why they cannot simply sit inline as siblings any more: once an
+   * `error` block stops poisoning the tree, an inlined branch would RENDER, and a
+   * broken `{? c }yes{:}no{?}` would print "yesno". Held here instead, they contribute
+   * every address the content names and contribute nothing to the text. `[]` for a
+   * broken `{= }`, which has no inner blocks.
+   */
+  readonly orphaned: readonly Block[];
 }
 
 /** §5.6's block tree, widened by one variant — see the file header. */
@@ -288,24 +305,30 @@ function parseBlockSequence(state: TextParseState): { readonly blocks: readonly 
         state.pos = marker.end;
         return { blocks, terminator: "close" };
       case "formulaOpen": {
-        // The source always begins two characters past the marker's own start (`{=`),
-        // so this is the one arithmetic the offset needs — captured BEFORE `state.pos`
-        // moves (D-038 clause 2, via D-115).
-        const sourceStart = state.pos + 2;
+        // The span starts at the `{` itself, not at the expression inside it (D-116):
+        // what gets rendered back on a failure is what the operator typed, delimiters
+        // and all. Captured BEFORE `state.pos` moves.
+        const spanStart = state.pos;
         state.pos = marker.end;
         const parsed = parseFormula(marker.source, state.objects);
         blocks.push(
           isParseError(parsed)
-            ? { type: "error", message: parsed.message, source: marker.source, start: sourceStart }
+            ? {
+                type: "error",
+                message: parsed.message,
+                source: state.content.slice(spanStart, marker.end),
+                start: spanStart,
+                orphaned: [],
+              }
             : { type: "formula", ast: parsed },
         );
         textStart = state.pos;
         break;
       }
       case "conditionalOpen": {
-        const sourceStart = state.pos + 2; // Same `{?`-is-two-characters arithmetic as above.
+        const spanStart = state.pos; // Same span-starts-at-the-`{` rule as above.
         state.pos = marker.end;
-        for (const block of parseConditional(state, marker.source, sourceStart)) {
+        for (const block of parseConditional(state, marker.source, spanStart)) {
           blocks.push(block);
         }
         textStart = state.pos;
@@ -332,14 +355,18 @@ function parseBlockSequence(state: TextParseState): { readonly blocks: readonly 
  * accepted: nothing legitimate nests 64 `{? }` levels, and "never throws" outranks
  * "recovers perfectly placed" at a depth no operator reaches.
  */
-function parseConditional(state: TextParseState, conditionSource: string, sourceStart: number): readonly Block[] {
+function parseConditional(state: TextParseState, conditionSource: string, spanStart: number): readonly Block[] {
   if (state.depth >= MAX_BLOCK_TREE_DEPTH) {
     return [
       {
         type: "error",
         message: `text conditional nests too deeply (limit ${MAX_BLOCK_TREE_DEPTH})`,
-        source: conditionSource,
-        start: sourceStart,
+        // Only the opening marker was consumed at this point — this arm deliberately
+        // does not scan for the matching `{?}` (see this function's doc comment), so
+        // the opening marker IS the whole span it can honestly claim.
+        source: state.content.slice(spanStart, state.pos),
+        start: spanStart,
+        orphaned: [],
       },
     ];
   }
@@ -353,7 +380,13 @@ function parseConditional(state: TextParseState, conditionSource: string, source
     unclosed = falseResult.terminator === "eof";
   }
   state.depth -= 1;
-  return finishConditional(conditionSource, sourceStart, state.objects, trueResult.blocks, falseBranch, unclosed);
+  // `state.pos` now sits just past this conditional's own closing `{?}` (or at the end
+  // of `content` if it never had one), so the whole construct — markers, branches and
+  // all — is exactly `content.slice(spanStart, state.pos)`. That is what D-116 renders
+  // back, and computing it HERE is what stops a consumer having to re-derive where a
+  // conditional ended (two computations that could disagree).
+  const span = state.content.slice(spanStart, state.pos);
+  return finishConditional(conditionSource, span, spanStart, state.objects, trueResult.blocks, falseBranch, unclosed);
 }
 
 /**
@@ -373,30 +406,27 @@ function parseConditional(state: TextParseState, conditionSource: string, source
  */
 function finishConditional(
   conditionSource: string,
-  sourceStart: number,
+  span: string,
+  spanStart: number,
   objects: readonly AddressableObject[],
   trueBranch: readonly Block[],
   falseBranch: readonly Block[],
   unclosed: boolean,
 ): readonly Block[] {
+  const orphaned = [...trueBranch, ...falseBranch];
   const condition = parseFormula(conditionSource, objects);
   if (isParseError(condition)) {
-    return [
-      { type: "error", message: condition.message, source: conditionSource, start: sourceStart },
-      ...trueBranch,
-      ...falseBranch,
-    ];
+    return [{ type: "error", message: condition.message, source: span, start: spanStart, orphaned }];
   }
   if (unclosed) {
     return [
       {
         type: "error",
         message: "unclosed {? ... } conditional (no matching {?})",
-        source: conditionSource,
-        start: sourceStart,
+        source: span,
+        start: spanStart,
+        orphaned,
       },
-      ...trueBranch,
-      ...falseBranch,
     ];
   }
   return [{ type: "conditional", condition, trueBranch, falseBranch }];
@@ -444,7 +474,16 @@ export function extractTextDependencies(blocks: readonly Block[]): readonly Depe
   for (const block of blocks) {
     switch (block.type) {
       case "text":
+        break;
       case "error":
+        // The block itself has no AST (D-028's "absence of a dependency, made
+        // explicit"), but a broken CONSTRUCT still holds blocks that parsed fine, and
+        // every address they name is an address the content names — D-115 clause 3's
+        // totality, now carried inside the error block rather than inline beside it
+        // (D-116; see `BlockParseErrorBlock.orphaned`).
+        for (const dependency of extractTextDependencies(block.orphaned)) {
+          dependencies.push(dependency);
+        }
         break;
       case "formula":
         for (const dependency of extractDependencies(block.ast)) {

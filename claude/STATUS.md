@@ -1,7 +1,16 @@
-# STATUS — as of entry 0121-REVIEW-phase5
+# STATUS — as of entry 0122-RULINGS
 
 STATE: **GREEN.** Both configs compile, **1329/1329** tests pass, 0 skipped, 0 `.only`.
 **PHASE 5 IS OPEN AND ITS FIRST SLICE IS REVIEWED. Nothing is owed before the next slice.**
+
+**THE HUMAN RULED Q-019 AT ENTRY 0122 → D-116, AND IT IS ONLY PARTLY BUILT.** A parse-broken
+embedded span (`{= 1 + }`) must render ITSELF, verbatim and delimiters included, prefixed with `!`
+(`!{= 1 + }`), while the REST of the text object renders normally — no `#PARSE` for the whole
+object, no error badge, the `!` is the signifier. **Entry 0122 built the DATA SHAPE only**
+(`BlockParseErrorBlock.source` is now the whole span with delimiters; `start` points at the `{`;
+`orphaned` holds a broken conditional's branches for dependencies-without-rendering). **D-116
+clauses 1-4 — the `!` itself and the removal of `#PARSE` propagation — are NOT BUILT and are owed by
+the wiring cycle**, which must also have **Q-020** answered or say which way it assumed.
 
 **ENTRY 0120'S BLOCK-TREE ENGINE IS BUILT AND REVIEWED (0121-REVIEW: ACCEPT WITH EDITS).**
 `src/engine/primitives/text.ts` parses §5.6's `{= }` / `{? }{:}{?}` (nestable) out of a raw
@@ -42,9 +51,10 @@ question. Wire `text.ts`'s three functions into `primitives/schema.ts` (a `text`
 add the `text` command. **That slice is bound by D-114 in full**, including clause 3's non-obvious
 ordering, which it MUST pin with a test that fails if the two checks are swapped. It is a §6.1
 trigger of its own (`graph/eval.ts` and `primitives/schema.ts` are load-bearing, §6.2).
-Still separately owed, unchanged: **D-109 clauses 1–2** (cell decimals + clipping, `render/` only) ·
-**Q-017** (table headers) · **Q-019** (new — what a broken embedded formula displays; answer it
-before the wiring cycle bakes in today's default, or accept that default knowingly).
+**That slice also owes D-116 clauses 1-4** (the `!` prefix; `evaluateBlockTree` no longer returning
+`#PARSE` for a tree holding an `error` block) — with tests, and with **Q-020** answered first or its
+assumption stated. Still separately owed, unchanged: **D-109 clauses 1–2** (cell decimals +
+clipping, `render/` only) · **Q-017** (table headers).
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column commands).
@@ -138,10 +148,14 @@ cell formula — it is NEVER refused at commit time: any string is legal documen
 `Block` (§5.6 lists three variants; the fourth is sanctioned by **D-115**, the same move D-028 made
 for `FormulaAst`'s `ErrorNode` — do NOT "restore" the union to three). An `error` block MUST carry
 the offending `source` and its `start` offset **into `content`** (D-115 clause 2, discharging D-038
-clauses 2 and 4) — that is what keeps **Q-019** answerable either way. A broken CONDITIONAL keeps
-**both** branches inline after its error block, because keeping only the true one made dependency
-extraction silently non-total (0121-REVIEW §4 measured `[]` for a reference living only in the false
-branch).
+clauses 2 and 4). **Since D-116 the span is the WHOLE construct, delimiters included** — `{= 1 + }`,
+and for a conditional everything from `{?` through its matching `{?}` — because that is what gets
+rendered back verbatim. A broken conditional's parsed branches live in the error block's
+**`orphaned`** field: walked by `extractTextDependencies`, never by `evaluateBlocks`. They were
+inline siblings for one commit (0121-REVIEW), which was safe only while an error block
+short-circuited evaluation; D-116 removes that, and inline branches would have printed `yesno` for
+`{? 1 + }yes{:}no{?}`. Keeping them at all is D-115 clause 3: dropping them made extraction silently
+non-total (0121-REVIEW §4 measured `[]` for a reference living only in the false branch).
 
 **12. THE PAPERCLIP CANNOT REACH A TABLE CELL.** `props.ts` collapses every cell into ONE
 `synthetic` summary row and D-102 clause 2 deliberately gives a `synthetic` row no paperclip. **Cell
@@ -188,7 +202,8 @@ REVISE, four findings) · entry 0111's F1–F4 fix list and D-107, entry 0112's 
 (0113-REVIEW: ACCEPT, no edits) · entry 0115's Phase 4 gate test (0116-REVIEW: ACCEPT WITH EDITS) ·
 **entry 0117's D-109 clause 3 and entry 0118's D-110 in full (0119-REVIEW: ACCEPT WITH EDITS — two
 tests and one comment added by the reviewer; D-112, D-113)** · **entry 0120's `primitives/text.ts`
-block-tree engine (0121-REVIEW: ACCEPT WITH EDITS — three edits; D-114, D-115, Q-019).**
+block-tree engine (0121-REVIEW: ACCEPT WITH EDITS — three edits; D-114, D-115, Q-019)** · entry
+0122's D-116 data-shape change (rulings entry; the human's Q-019 answer, clauses 1-4 still unbuilt).
 
 ## Built this batch, not yet reviewed
 
@@ -343,10 +358,11 @@ decimals + clipping, `render/` only).
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted** — `set <address> = <formula>` stays the
 spelling, and D-102's panel reuses that exact synthesised form. **Q-016 and Q-017 remain OPEN**, both
-the human's, neither blocking. **Q-019 is NEW and also the human's** (0121-REVIEW): when one embedded
-formula in a text box is broken, does the whole box go blank (today's default, by omission not
-decision) or does the broken span show literally? Reviewer recommends the latter; nothing is built
-against it and D-115 clause 2 keeps both one line away. Next free: **Q-020**.
+the human's, neither blocking. **Q-019 is ANSWERED → D-116** (the human, entry 0122): a parse-broken
+span renders itself with a `!` prefix and the box keeps rendering. **Q-020 is NEW, the human's, and
+BLOCKS the wiring cycle's display half**: does a span that PARSES but evaluates to an error
+(`{= 1 / 0 }` → `#DIV0`) get the same treatment, or propagate as §5.1 says errors do? Reviewer
+recommends rendering the error code in place, marked. Next free: **Q-021**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 D-097's write-time refusal sits BESIDE that read, not inside it. **This is also what makes D-110
@@ -375,6 +391,13 @@ site).
 
 ## Gotchas for the next model
 
+- **A safety argument that rests on what ANOTHER component currently does is only as durable as that
+  component's current behaviour.** 0121-REVIEW justified keeping a broken conditional's branches
+  inline with "rendering is unaffected, because the error block short-circuits evaluation first" —
+  true when written, false one entry later when D-116 stopped error blocks short-circuiting, at
+  which point those inline branches would have printed `yesno`. The fix (`orphaned`) is the
+  structural version of the same claim: those blocks are not rendered because NOTHING renders them,
+  not because something else returns first. Prefer the structural form.
 - **When a recovery path DROPS a subtree, ask what else reads that subtree.** Entry 0120 reasoned
   about a broken conditional's recovery purely as a display choice ("which branch would we show?")
   and dropped the false branch. Display turned out to be inert — the error block short-circuits
