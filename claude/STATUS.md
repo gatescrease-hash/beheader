@@ -147,16 +147,39 @@ outside tests. See fix-list item 15.
 ## Next — a human session for Phase 4's own gate
 
 **Nothing is owed. No review, no fix cycle.** The standing next step is unchanged and is not code: a
-human session for **Phase 4's own gate**, two polygons bound through a table in one document, now
-authored either by typed commands or by clicking a grey paperclip and typing into a row, with the
-keyboard behaving (entry 0111's F1/F2 fixes, now reviewed). Everything built through entry 0112
-makes that session easier; none of it IS that session.
+human session for **Phase 4's own gate**, two polygons bound through a table in one document.
 
-**If a coding slice is wanted before that session, 0113-REVIEW named D-108's loader-shape validation
-as the one with the clearest brief** — small, engine-only and therefore fully testable (unlike
-everything F1-F4 touched), and it closes the last of the three load-boundary items §5.11 has been
-accumulating since Phase 0. It should NOT be started if it would delay the human session; the gate
-outranks it.
+**CORRECTION to 0113-REVIEW's own wording (`entries/` is append-only, so the correction lives here).**
+That entry, and this section before this revision, said the gate can now be authored "either by typed
+commands or by the panel's paperclip." **That is true of the POLYGON half only.** The paperclip
+cannot reach a table CELL: `props.ts` collapses every cell into ONE `synthetic` summary row
+(`buildSlotDescriptors`, the `TABLE_CELL_PATH_PREFIX` branch), and D-102 clause 2 deliberately gives
+a `synthetic` row no paperclip. **Every cell value in the gate session must be TYPED.** The rest of
+that entry's verdict and findings are unaffected.
+
+**What IS reachable for cells today, and is fully built and tested** — the human asked, so it is
+recorded here rather than left to be rediscovered: `set table_1.A1 5` writes a literal cell
+(`commands.test.ts`, "set table_1.A1 5" → slot `cells.A1`) and `set table_1.B1 = polygon_1.origin.x
+* 2` writes a formula cell — which is Phase 4(b) verbatim. Cell values DO render, numbers
+right-aligned and strings left-aligned per §5.4 (`renderer.test.ts` pins the exact `fillText` calls).
+**A table drawn as an empty grid is empty, not broken.**
+
+**What is genuinely NOT built, and is what a human expects to find**: §5.4's last line, "Formula bar
+/ in-place editing for the selected cell." Already listed under "Not started". The gate does not
+require it. Nothing else about a cell is missing.
+
+**Q-017 (NEW, the human's) — should a table draw persistent A1-style row/column headers?** §5.4
+permits and does not require them ("Optional header row (display only in v1)"). Raised because the
+human hit the real cost of their absence: with no headers AND no in-place editing, aiming `set
+table_1.C3` means counting grid squares by eye, which makes the gate session error-prone for a
+reason unrelated to what the gate tests. See `OPEN_QUESTIONS.md`. **Non-blocking** — the gate is
+achievable without it.
+
+**If a coding slice is wanted before that session**, the two candidates are **Q-017's headers**
+(display-only, `render/` only, cheap, and it directly de-risks the gate session) and **D-108's
+loader-shape validation** (small, engine-only, fully testable, and it closes the last of the three
+load-boundary items §5.11 has accumulated since Phase 0). Neither should delay the session if the
+human would rather just run it; the gate outranks both.
 
 Entry 0111's one question for the reviewer (its narrowing of fix item 1's literal wording to
 preserve caret placement inside an open row editor) is **ANSWERED at 0113-REVIEW: RATIFIED — the

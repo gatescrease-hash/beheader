@@ -8,11 +8,60 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-017**
+Next free ID: **Q-018**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-017 — Should a table draw persistent A1-style row/column headers?
+Raised: entry 0113-REVIEW-phase4 (reviewer), at the human's prompt   Brief section: §5.4
+Status: **OPEN — the human's, non-blocking, nothing tagged.**
+
+§5.4 says: "A1-style addressing scoped to the table. **Optional header row (display only in v1).**"
+So headers are explicitly PERMITTED and explicitly NOT REQUIRED. This is not a brief silence — it is
+a brief deferral, which makes it the human's call rather than an implementer's.
+
+**Why it is being raised now rather than left dormant.** The human hit the practical cost while
+preparing Phase 4's gate session. A table today renders as a grid of empty cells with no coordinate
+markings anywhere. Cell values are only reachable by TYPING an address (`set table_1.C3 5`) —
+§5.4's "formula bar / in-place editing for the selected cell" is unbuilt, and the properties panel
+cannot reach a cell either (`props.ts` collapses all cells into one `synthetic` summary row; D-102
+clause 2 gives a synthetic row no paperclip). So the only way to aim a write at a specific cell is
+to **count grid squares by eye**. That is a real source of error in the gate session, and it is
+error unrelated to what the gate actually tests.
+
+Options:
+
+(a) **Build display-only headers now.** A column letter above each column and a row number beside
+    each row, drawn in `render/renderer.ts`'s table pass, outside the grid's own extent. Display
+    only — no slot, no schema change, no addressing change, nothing enters `state.document`. This is
+    the option §5.4's "display only in v1" sentence describes.
+(b) **Stands as built — no headers.** The operator reads coordinates off the command line's own
+    refusals and off `props table_1`. Defensible while tables stay small (default 8×8) and while the
+    only author is someone who knows A1 addressing.
+(c) **Wait for §5.4's formula bar / in-place cell editing**, and let clicking a cell report which
+    cell it is, making headers redundant. Larger, and it is the surface the human expected to find;
+    but it is a Phase 4+ chunk of work, not a gate-session enabler.
+
+Recommendation: **(a)**, and before the gate session rather than after it. It is `render/`-only,
+touches no engine file, changes no addressing, is fully testable the way every other chrome element
+already is (`renderer.test.ts` pins `fillText` calls directly), and it removes a counting error from
+a session whose whole purpose is to observe whether binding works. (c) is the better END state and
+does not conflict — headers stay useful once in-place editing exists.
+
+Two things the answering cycle must NOT do: draw headers INSIDE the grid (they would be mistaken for
+cells, and `hittest.ts` would have to know about them), and give a header any slot, name or presence
+in `state.document` (D-094 clause 1's stance on panels applies identically — chrome is not an
+object). If (a) is chosen, the D-095/D-101 clause 3 stance also applies: no collision avoidance
+between a header and anything else until a human asks.
+
+Reversible? **Yes** — display-only drawing in one function, deletable in one diff.
+Provisional choice taken: **NO.** (b) is the current behaviour by default, not by a decision, and no
+site is tagged: this is a "should we add a thing" question, not an "we guessed which way" question,
+so a `PROVISIONAL(Q-017)` tag would have no site to sit at and no reader to serve.
 
 ---
 
