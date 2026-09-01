@@ -1,16 +1,28 @@
-# STATUS — as of entry 0122-RULINGS
+# STATUS — as of entry 0123-RULINGS
 
 STATE: **GREEN.** Both configs compile, **1329/1329** tests pass, 0 skipped, 0 `.only`.
 **PHASE 5 IS OPEN AND ITS FIRST SLICE IS REVIEWED. Nothing is owed before the next slice.**
 
-**THE HUMAN RULED Q-019 AT ENTRY 0122 → D-116, AND IT IS ONLY PARTLY BUILT.** A parse-broken
-embedded span (`{= 1 + }`) must render ITSELF, verbatim and delimiters included, prefixed with `!`
-(`!{= 1 + }`), while the REST of the text object renders normally — no `#PARSE` for the whole
-object, no error badge, the `!` is the signifier. **Entry 0122 built the DATA SHAPE only**
-(`BlockParseErrorBlock.source` is now the whole span with delimiters; `start` points at the `{`;
-`orphaned` holds a broken conditional's branches for dependencies-without-rendering). **D-116
-clauses 1-4 — the `!` itself and the removal of `#PARSE` propagation — are NOT BUILT and are owed by
-the wiring cycle**, which must also have **Q-020** answered or say which way it assumed.
+**BOTH TEXT-ERROR-DISPLAY QUESTIONS ARE NOW RULED — NEITHER IS BUILT.** Two related, DIFFERENT
+mechanisms, both marked with a `!` prefix and both owed by the same future Phase 5 wiring cycle:
+
+- **D-116** (Q-019, entry 0122) — a span that never PARSED (`{= 1 + }`) renders its own SOURCE back,
+  verbatim, delimiters included: `!{= 1 + }`. There is no computed value; the source IS the
+  diagnostic.
+- **D-117** (Q-020, entry 0123) — a span that parsed fine but EVALUATED to an `ErrorValue`
+  (`{= 1 / 0 }`) renders `!` + the error's CODE, not its source: `!#DIV0`. There IS a value, and
+  showing the operator's own source back would tell them less than the code does.
+
+Both: the rest of the text object renders normally (no `#PARSE`/error-value propagation to the whole
+object); no §5.9 error badge (the `!` mark IS the signifier); the mark is emitted by the ENGINE, into
+`resolvedContent`, never added at draw time (`measuredHeight` is computed FROM `resolvedContent`).
+**Entry 0122 built D-116's DATA SHAPE only** (`BlockParseErrorBlock.source` is now the whole span
+with delimiters; `start` points at the `{`; `orphaned` holds a broken conditional's branches for
+dependencies-without-rendering). **D-117 needed no shape change** — a runtime-broken formula is an
+ordinary `FormulaBlock`/`ConditionalBlock` that evaluates to an `ErrorValue`; nothing new to hold.
+**Neither ruling's actual behaviour is built.** The wiring cycle owes both, together, with a test
+each for: a parse-broken span, a runtime-broken formula block, and a runtime-broken conditional
+condition.
 
 **ENTRY 0120'S BLOCK-TREE ENGINE IS BUILT AND REVIEWED (0121-REVIEW: ACCEPT WITH EDITS).**
 `src/engine/primitives/text.ts` parses §5.6's `{= }` / `{? }{:}{?}` (nestable) out of a raw
@@ -51,10 +63,11 @@ question. Wire `text.ts`'s three functions into `primitives/schema.ts` (a `text`
 add the `text` command. **That slice is bound by D-114 in full**, including clause 3's non-obvious
 ordering, which it MUST pin with a test that fails if the two checks are swapped. It is a §6.1
 trigger of its own (`graph/eval.ts` and `primitives/schema.ts` are load-bearing, §6.2).
-**That slice also owes D-116 clauses 1-4** (the `!` prefix; `evaluateBlockTree` no longer returning
-`#PARSE` for a tree holding an `error` block) — with tests, and with **Q-020** answered first or its
-assumption stated. Still separately owed, unchanged: **D-109 clauses 1–2** (cell decimals +
-clipping, `render/` only) · **Q-017** (table headers).
+**That slice also owes D-116 clauses 1-4 AND D-117, together** (the `!` prefix on a parse-broken
+span's own source; the `!` + error CODE on a runtime-broken evaluation; `evaluateBlockTree` no
+longer propagating either as `#PARSE`/an `ErrorValue` for the whole tree) — both are now RULED, so
+this is implementation work, not a design question. Still separately owed, unchanged: **D-109
+clauses 1–2** (cell decimals + clipping, `render/` only) · **Q-017** (table headers).
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column commands).
@@ -203,7 +216,8 @@ REVISE, four findings) · entry 0111's F1–F4 fix list and D-107, entry 0112's 
 **entry 0117's D-109 clause 3 and entry 0118's D-110 in full (0119-REVIEW: ACCEPT WITH EDITS — two
 tests and one comment added by the reviewer; D-112, D-113)** · **entry 0120's `primitives/text.ts`
 block-tree engine (0121-REVIEW: ACCEPT WITH EDITS — three edits; D-114, D-115, Q-019)** · entry
-0122's D-116 data-shape change (rulings entry; the human's Q-019 answer, clauses 1-4 still unbuilt).
+0122's D-116 data-shape change (rulings entry; the human's Q-019 answer, clauses 1-4 still unbuilt) ·
+entry 0123's D-117 (rulings entry; the human's Q-020 answer, still unbuilt, no shape change needed).
 
 ## Built this batch, not yet reviewed
 
@@ -334,17 +348,22 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-115**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-117**) binds without restatement here.
 
-**D-114 AND D-115 ARE NEW AND BOTH BIND THE NEXT SLICE.** D-114: an embedded `{= }` AST evaluates
-through the SAME `read`/`readRange` contract a formula slot's AST gets — D-110's coercion included,
-plus a REAL `readRange` built on `enumerateRangeCellAddresses` (today `evaluateDerivedSlot` supplies
-none, so an embedded `SUM(A1:A4)` derives correct edges and then evaluates `#PARSE`). Widen
-`evaluateDerivedSlot`; never add a second evaluation path; never give text its own extent
-arithmetic. **Clause 3 is the trap**: an empty in-extent cell has NO edge (D-110 clause 4), so
-D-013's membership check rejects it before D-110 can return `0` — the coercion runs FIRST for that
-address class only. D-115: the block tree's `error` variant is sanctioned, must carry `source` +
-`start`, and must not narrow dependency extraction.
+**D-114 THROUGH D-117 ARE ALL NEW AND ALL BIND THE NEXT SLICE — read all four before writing any of
+it.** D-114: an embedded `{= }` AST evaluates through the SAME `read`/`readRange` contract a formula
+slot's AST gets — D-110's coercion included, plus a REAL `readRange` built on
+`enumerateRangeCellAddresses` (today `evaluateDerivedSlot` supplies none, so an embedded
+`SUM(A1:A4)` derives correct edges and then evaluates `#PARSE`). Widen `evaluateDerivedSlot`; never
+add a second evaluation path; never give text its own extent arithmetic. **Clause 3 is the trap**:
+an empty in-extent cell has NO edge (D-110 clause 4), so D-013's membership check rejects it before
+D-110 can return `0` — the coercion runs FIRST for that address class only. D-115: the block tree's
+`error` variant is sanctioned, must carry `source` (the WHOLE broken span, delimiters included,
+since D-116) + `start`, and must not narrow dependency extraction (a broken conditional's branches
+live in `orphaned`, walked for deps, never rendered). D-116: a parse-broken span renders its own
+source, marked `!`; the object keeps rendering. D-117: a runtime-broken evaluation renders `!` + the
+error's CODE instead — a DIFFERENT mechanism from D-116's, do not merge them. Both D-116 and D-117
+are RULED but **UNBUILT** — nothing in the tree today implements either.
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 (0101/0102, cleared 0103) · D-100
 (0104, cleared 0105; Q-015 CLOSED) · D-101, D-106, D-102 (0107/0109, cleared 0110) · D-107 (0111,
@@ -359,10 +378,10 @@ decimals + clipping, `render/` only).
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted** — `set <address> = <formula>` stays the
 spelling, and D-102's panel reuses that exact synthesised form. **Q-016 and Q-017 remain OPEN**, both
 the human's, neither blocking. **Q-019 is ANSWERED → D-116** (the human, entry 0122): a parse-broken
-span renders itself with a `!` prefix and the box keeps rendering. **Q-020 is NEW, the human's, and
-BLOCKS the wiring cycle's display half**: does a span that PARSES but evaluates to an error
-(`{= 1 / 0 }` → `#DIV0`) get the same treatment, or propagate as §5.1 says errors do? Reviewer
-recommends rendering the error code in place, marked. Next free: **Q-021**.
+span renders itself with a `!` prefix and the box keeps rendering. **Q-020 is ANSWERED → D-117**
+(the human, entry 0123, option (b)): a span that parses but evaluates to an error renders `!` + the
+error's CODE (`!#DIV0`), not its source — a different mechanism from D-116's, sharing only the `!`.
+Next free: **Q-021**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 D-097's write-time refusal sits BESIDE that read, not inside it. **This is also what makes D-110

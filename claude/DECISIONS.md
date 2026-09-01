@@ -3914,3 +3914,55 @@ whole construct, delimiters included; `orphaned` added; five test expectations u
 here, so not a §6.1 trigger 5 escalation for that cycle). **Clauses 1-4 are NOT built**: the `!`
 prefix and the removal of `#PARSE` propagation are owed by the Phase 5 wiring cycle, which MUST land
 them with tests, and MUST have Q-020 answered first or state which way it assumed.
+
+---
+
+## D-117 — A span that PARSES but EVALUATES to an error renders its error CODE, marked, in place; it does not propagate to the whole object (Q-020 answered by the human: option (b))
+Answers: **Q-020**   Ruled: the human, directly, 2026-09-01 ("Rule Q-020 with option b")
+Recorded: entry 0123-RULINGS (reviewer, recording the human's decision)
+Binding on: `primitives/text.ts`'s `evaluateBlockTree`, the `text` schema entry's `resolvedContent`
+
+**Ruling.**
+
+1. **A `{= }`/`{? }` that parses but evaluates to an `ErrorValue` renders `!` + the error CODE, in
+   place** — `{= 1 / 0 }` resolves to `!#DIV0`, not `!{= 1 / 0 }` and not the error's `message`. The
+   code alone: short, matches the vocabulary the operator already sees in a table cell, and does not
+   require deciding how much of a (possibly long) `message` string fits inline.
+2. **The rest of the text object renders normally.** Same promise **D-116** made for a parse-broken
+   span, extended to a runtime-broken one: one bad embedding never costs the paragraph.
+3. **This is a DIFFERENT case from D-116's, sharing only the `!` convention.** D-116's span is the
+   operator's own SOURCE TEXT, verbatim, because there is no computed value to show — the thing is
+   unparseable. This ruling's span is a COMPUTED VALUE's error code, because there IS a value, it is
+   simply an `ErrorValue` — showing the source back here would tell the operator less, not more
+   (they already see `{= 1 / 0 }` in their own text; what they don't see is which error it produced).
+   Do not merge the two mechanisms or read D-116's "render the span verbatim" as governing here too.
+4. **`resolvedContent` holds a `string` for this case, exactly as D-116 clause 3 already ruled for
+   the parse-broken one.** The same consequences follow, restated because clause 3 there was
+   explicit about them and they must not be quietly narrowed to "only the parse case": `=
+   text_1.resolvedContent` reads ordinary text (the string containing `!#DIV0`), and §5.9's error
+   badge does not fire for this case either — **the marked code IS the signifier**, matching D-116's
+   own "the `!` IS the signifier; do not also add a badge."
+5. **The mark and the code are emitted by the ENGINE**, for the identical reason D-116 clause 4
+   gives: `measuredHeight` is computed FROM `resolvedContent`, so anything `render/` added at draw
+   time would be invisible to layout.
+6. **Scope stays exactly as wide as the question and no wider.** This covers a `formula` block (an
+   embedded `{= }`) and a `conditional` block's CONDITION evaluating to an `ErrorValue` or a
+   non-boolean. It does **not** decide what a `conditional`'s branch containing a broken embedding
+   does — that is already covered, recursively, by this same ruling applied to the branch's own
+   blocks; no new case exists there.
+
+**Rationale.** The human's own reasoning for D-116 — one broken embedding should not cost a whole
+paragraph of otherwise-good prose — applies with equal force to a formula that is syntactically
+fine but semantically broken; there is no principled reason typos would be forgiven while division
+by zero is not. Option (b) over (a) is the one that keeps the operator informed of WHICH failure
+occurred, matching how a table cell already shows `#DIV0` rather than the source formula on error
+(`render/renderer.ts`'s cell drawing, unchanged by this ruling) — text inherits the same vocabulary
+rather than inventing a second one. Option (c) was the more "correct" reading of §5.1's propagation
+rule, and the reviewer said so; the human weighted the paragraph-survival property higher, which is
+theirs to weigh (D-042).
+
+Reconciliation required: **nothing built yet.** Like D-116, this ruling is unbuilt until the Phase 5
+wiring cycle lands `resolvedContent`'s real compute function — that cycle now owes BOTH D-116
+clauses 1-4 and D-117 in the same slice, with a test for each of: a parse-broken span, a
+runtime-broken formula block, and a runtime-broken conditional condition. `Q-020`'s own "state which
+way you assumed if still open" escape clause is now moot — nothing is open.

@@ -14,9 +14,14 @@ Next free ID: **Q-021**
 
 ## Q-020 — Does a span that PARSES but evaluates to an error (`{= 1 / 0 }` → `#DIV0`) also render itself with `!`, or does it propagate?
 Raised: entry 0122-RULINGS (reviewer), alongside D-116   Brief section: §5.6, §5.1 ("errors
-propagate", "an ErrorValue in the graph is legitimate state")   Status: **OPEN — the human's.
-BLOCKING the display half of the Phase 5 wiring cycle** (that cycle needs to know what
-`resolvedContent` holds for a `#DIV0`); not blocking its structural half.
+propagate", "an ErrorValue in the graph is legitimate state")
+Status: **ANSWERED → D-117** — the human ruled **option (b)** at entry 0123-RULINGS ("Rule Q-020
+with option b"): the span renders `!` + the error's CODE in place (`{= 1 / 0 }` → `!#DIV0`), not the
+source text and not the message, and the rest of the object renders normally. This is a DIFFERENT
+mechanism from D-116's, sharing only the `!` convention — D-116 shows the operator's own broken
+source (there is no value to show); this shows a computed value's error code (there IS a value, and
+it is an `ErrorValue`). **Not yet built** — owed by the Phase 5 wiring cycle alongside D-116 clauses
+1-4, in the same slice, with its own test.
 
 **D-116** settled the PARSE-broken span: it renders itself, marked with `!`, and the rest of the box
 renders normally. It deliberately did not settle the neighbour one step away, because the human was
