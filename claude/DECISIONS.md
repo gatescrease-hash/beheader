@@ -3586,3 +3586,73 @@ independent of how Q-018 is ruled, and removes most of the pain either way.
 
 Reconciliation required: none. No `PROVISIONAL` tag; no existing behaviour depends on a cell
 overrunning its border or on a refusal clearing the input.
+
+---
+
+## D-110 — A bare reference to an EMPTY in-extent cell reads as `0`. D-047 clause 4 is REVERSED for cells, and for cells only
+Answers: Q-018   Ruled: the human, at entry 0114-REVIEW-phase4-gate   Binding on: `mutation.ts`'s
+`deriveEdges` and `validateIntegrity`, `graph/eval.ts`, and every future reference consumer
+
+**Ruling.**
+
+1. **A `ReferenceNode` naming a cell of an EXISTING table, INSIDE that table's extent, evaluates to
+   `0` when that cell has no slot** — instead of being a dangling reference that `validateIntegrity`
+   rejects. This REVERSES D-047 clause 4's bare-reference half and supersedes 0080-REVIEW's F4.
+   Everything D-047 says about RANGES is untouched and still stands.
+2. **A cell holding `null` reads `0` under a bare reference too.** D-047 clause 3's principle is
+   preserved verbatim and is the reason: "Both representations of 'empty' must behave identically,
+   because which one a table uses is decided by the still-unbuilt creation/resize cycle and no
+   aggregate may depend on that choice." That principle now binds bare references as well as ranges.
+   A cycle that makes the two diverge has broken this ruling, not merely styled it differently.
+3. **The reference evaluates to the NUMBER `0`, before anything downstream sees it.** No function,
+   operator or aggregate gets a special case: `= A1 + 1` is `1`, and `SUM(A1, 1)` is `1`, on an empty
+   `A1`. This is the half of D-047 clause 4 that also moves — "an explicit scalar argument is
+   untouched" no longer holds when that argument is a reference to an empty CELL, because clause 1
+   has already turned it into `0` by the time arity and type checking run. An explicit `null`
+   LITERAL is not a reference and is not covered here; it stays `#TYPE`.
+4. **NO EDGE is emitted for a reference to an empty cell**, exactly as D-047 clause 1 already
+   requires for range members. Nothing needs to remember to add it later: the edge set is
+   re-derived from stored ASTs on every mutation and is never hand-maintained (Rule 6, §9's
+   standing prohibition), so populating the cell makes the edge appear on its own, at that
+   mutation, and the dependent recomputes in that same topological pass.
+5. **A cycle that only exists once the cell is populated is caught at THAT mutation**, and is
+   rejected there in the ordinary way. `[A2 = D1]` with `D1` empty is legal and acyclic; a later
+   `set D1 = A2` is rejected as cyclic when it is attempted. Cycles remain rejected at mutation
+   time and never become state (§9).
+6. **The narrowness is the ruling.** Each of these still REFUSES, unchanged: a cell OUTSIDE the
+   table's extent (there is no bound to make it legal — D-044); a reference to an unknown object; a
+   slot path the object's schema does not declare; any non-cell slot that does not exist. Q-018's
+   option (b), "any unset slot reads 0", was rejected on sight and stays rejected — outside a table
+   there is no extent, so it would make every mistyped address silent.
+
+**Rationale.** The human ruled this after meeting it live in the Phase 4 gate session, which is the
+context D-042 reserves product behaviour to them for. It is the spreadsheet idiom the brief already
+appeals to elsewhere, and §5.4 leans on that idiom explicitly ("`#REF` is the expected spreadsheet
+idiom"). It also does NOT weaken §5.1.1: an in-extent cell address is a legal, bounded address
+already (D-044 bounds ranges by extent for this exact reason), so "legal address, unpopulated" is
+expressible without any edge pointing at nothing. Clause 4 is what makes that true rather than
+merely claimed.
+
+**The cost, accepted with eyes open:** a typo inside the extent now goes silent. `= table_1.Q9` on
+an empty `Q9` computes `0` rather than saying `Q9` is empty. This was put to the human as the whole
+trade and they took it; a later cycle may NOT re-litigate it on the grounds that it is surprising.
+
+**Not an inconsistency, though it looks like one at a glance:** a RANGE still OMITS empty cells
+(D-047 clauses 1-3) while a BARE REFERENCE now reads them as `0`. Both match the idiom — every
+mainstream spreadsheet ignores blanks in `AVERAGE(A1:A5)` and yields `0` for `=A1` — and the
+distinction is D-047's own: a range names a REGION whose membership the system computed, a
+reference names ONE slot the user wrote. That distinction survives; what changed is only what the
+second one MEANS when the named cell is empty.
+
+**Consequence to disclose when built:** `refs` will not report a formula that references an empty
+cell as a dependent of it, because there is no edge (clause 4). That is correct and follows from
+the ruling, but it is surprising enough that the implementing cycle must state it in its log and
+in `STATUS.md`'s known problems.
+
+Reconciliation required: this is a `REVIEW: REQUIRED` slice — it touches `deriveEdges`,
+`validateIntegrity` and evaluation, all load-bearing (§6.2). It MUST NOT be taken as a provisional
+guess or folded into an unrelated cycle. `mutation.test.ts`'s and `commands.test.ts`'s existing
+tests asserting the REFUSAL (`"references a slot that does not exist"` for an in-extent empty cell)
+will FLIP — that is the intended visible diff, not a test being weakened, and it fires §6.1 trigger
+5 for the cycle that does it. Fix-list item 2 ("give the missing-slot refusal a remedy") narrows to
+the cases clause 6 keeps refusing.

@@ -18,8 +18,14 @@ Next free ID: **Q-019**
 
 ## Q-018 — Should a bare reference to an EMPTY in-extent cell read as 0 instead of being refused? (Reverses D-047 clause 4)
 Raised: entry 0114-REVIEW-phase4-gate (reviewer), at the human's request during the Phase 4 gate
-session   Brief section: §5.1.1, §5.4, D-047 clause 4, 0080-REVIEW F4   Status: **OPEN — the
-human's. It is a REVERSAL of a standing ruling, so only they can take it.**
+session   Brief section: §5.1.1, §5.4, D-047 clause 4, 0080-REVIEW F4
+Status: **ANSWERED → D-110** — the human took **option (a), the narrow reversal**, at entry 0114.
+An in-extent cell of an existing table reads as `0`; everything in option (b) stays refused. The
+silent-typo cost was put to them explicitly and accepted. **NOT YET BUILT** — D-110 is a
+`REVIEW: REQUIRED` slice touching `deriveEdges`/`validateIntegrity`/evaluation, and it will FLIP the
+existing tests that assert the refusal (§6.1 trigger 5). See D-110 for the full ruling, including
+the two things it settles that this question only flagged: a cell holding `null` behaves identically
+to a cell with no slot (clause 2), and `SUM(A1, 1)` on an empty `A1` is `1` (clause 3).
 
 The human, having hit it live: "I tried to reference a cell that had no data in it yet and so didn't
 exist, which basically 'quits' the formula and makes me re-type it in. Can't we have making a

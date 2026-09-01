@@ -1,18 +1,24 @@
-# STATUS — as of entry 0114-REVIEW-phase4-gate
+# STATUS — as of entry 0115-phase4-gate-test
 
-**PHASE 4'S CRITERION IS WITNESSED — the human ran the gate session and it PASSED.** Two polygons
-and a table in one document, binding in both directions at once, no false cycle ("data drives
-geometry which drives data"). **The gate is NOT YET CLOSED**: PROCESS_BRIEF §12.1 requires the
-criterion be pinned by an executable test, and no test asserts (a), (b) and (c) *simultaneously in
-one document* — `main.test.ts:723` pins (c) alone and explicitly disclaims being Phase 4's. **One
-slice is owed — one test, no production code — and Phase 5 does not begin before it lands (§12.4).**
-See entry 0114 for the full audit and for the human's own account of the session.
+STATE: **GREEN.** Both configs compile, **1268/1268** tests pass, 0 skipped, 0 `.only`.
 
-Two defects the session found, both ruled **D-109**, neither a regression: **F7** a table cell draws
-its number at full float precision and nothing clips to the cell (`146.8212157315694` overlapping
-its neighbour) · **F8** a refused command DISCARDS the typed line, taxing every refusal in the
-system, not just the one the human hit. **Q-018** raised (the human's): should a bare reference to
-an empty in-extent cell read as 0? It reverses D-047 clause 4, so only they can take it.
+**PHASE 4'S CRITERION IS CLAIMED COMPLETE — witnessed AND pinned, for the first time.** The human
+ran the gate document by hand and it passed (entry 0114: two polygons and a table, binding in both
+directions at once, no false cycle — "data drives geometry which drives data"). Entry 0115 pins the
+same document in six mutation-checked tests in `main.test.ts`, so §12.1's executable half is now
+satisfied too.
+
+**A REVIEW IS MANDATORY BEFORE PHASE 5 — and this session MUST NOT be the one to give it.** Entry
+0115 fired §6.1 trigger 1 (a phase criterion claimed), and it was written by the REVIEWER acting as
+implementer at the human's direction, so clearing it here would make the gate's verdict worthless.
+**Route entry 0115 to a fresh session.** The diff is one test file, no production code, and entry
+0115's three mutation checks are described concretely enough to re-run — it should be a cheap
+review, but it is not optional.
+
+**Owed, in priority order, none of it started:** **D-110** (the human's Q-018 ruling — an empty
+in-extent cell reads `0`; load-bearing, `REVIEW: REQUIRED`) · **D-109** (F7 cell rounding + clipping,
+F8 a refused command keeps the typed line) · **Q-017** (table headers, open) · **D-108** (loader AST
+shape validation).
 
 ---
 
@@ -162,28 +168,28 @@ restores the old throw site (D-108 clause 3 forbids it explicitly). It is owed b
 builds §5.11's file-input load path. Not operator-reachable today: nothing calls `loadDocument`
 outside tests. See fix-list item 15.
 
-## Next — the gate TEST (owed), then D-109's two fixes
+## Next — a review of entry 0115 (mandatory, and NOT by its author), then the owed rulings
 
-**The human session HAPPENED and PASSED (entry 0114).** What is owed now is the executable half of
-the gate, and it is the next slice:
-
-1. **THE GATE TEST — §12.1, blocks Phase 5.** One test in `main.test.ts` building the human's own
-   document (two polygons + a table) and asserting **(a)**, **(b)**, **(c)** and the absence of a
-   cycle rejection **in that one state**. No production code. The helpers exist (`typed`,
-   `objectNamed`, `numberAt`, `pointerDownAt`/`pointerMoveTo`), and `main.test.ts:723` is the
-   nearest model — it does (c) for one polygon and says in its own comment that it is not the gate.
-   The ingredients are each already tested; the COMPOSITE is not, and a false cycle is exactly the
-   defect that only appears when both directions are present at once. **Phase 4 may be claimed
-   complete the moment this lands.**
-2. **D-109 clause 3 (F8) — a refused command keeps the typed line.** Smallest fix on the board, and
+1. **REVIEW ENTRY 0115 — §6.1 trigger 1, blocks Phase 5, and must be a DIFFERENT session.** The gate
+   test is written, green and mutation-checked, but its author was the reviewer. See the header
+   above. **The gate closes at that review, not before.**
+2. **D-110 (the human's Q-018 ruling) — an empty in-extent cell reads `0`.** Load-bearing: it touches
+   `deriveEdges`, `validateIntegrity` and evaluation, and it will FLIP the existing tests asserting
+   the refusal (§6.1 trigger 5). `REVIEW: REQUIRED` in its own right. **Read D-110 in full first** —
+   it settles two things Q-018 only flagged (a cell holding `null` behaves identically to a cell with
+   no slot; `SUM(A1, 1)` on an empty `A1` is `1`), and it names a consequence the implementing cycle
+   MUST disclose (`refs` will not report a formula that references an empty cell, because clause 4
+   emits no edge).
+3. **D-109 clause 3 (F8) — a refused command keeps the typed line.** Smallest fix on the board, and
    it taxes every refusal in the system until it lands. `main.ts` clears `input.value`
    unconditionally BEFORE submitting; clear it only on success.
-3. **D-109 clauses 1-2 (F7) — bound a cell's decimals and clip its text to the cell.** `render/`
+4. **D-109 clauses 1-2 (F7) — bound a cell's decimals and clip its text to the cell.** `render/`
    only. Clause 2 is NOT covered by clause 1: a long string overruns just the same.
 
-**Do not start Q-018's work** (empty-cell references) — it is unanswered, it reverses D-047 clause
-4, and it is a load-bearing `REVIEW: REQUIRED` slice touching `deriveEdges`/evaluation/
-`validateIntegrity`. D-109 clause 3 removes most of the friction that prompted it regardless.
+**One open question entry 0115 left for its reviewer:** is "no false cycle" adequately pinned by its
+pair of tests (this document is not cyclic + a real cycle still is), or does it want a third case —
+a cycle that only closes once an empty cell is POPULATED, which **D-110** makes reachable and which
+nothing tests today? Worth answering before D-110 is built, not after.
 
 Background that the gate session confirmed, kept because it is still what a cold reader needs:
 

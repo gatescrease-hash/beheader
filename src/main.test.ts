@@ -745,3 +745,145 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     expect(state.log.slice(logBefore).join("\n")).toContain("table_1.A1");
   });
 });
+
+describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in ONE document, with no false cycle", () => {
+  /**
+   * The brief's §6 Phase 4 gate, verbatim: "all three hold simultaneously in
+   * one document, with no false cycle." The human ran this document by hand at
+   * the gate session (entry 0114) and it passed; this pins the same document so
+   * the result cannot silently regress. §12.1 is why it exists at all — a
+   * criterion shown only by a screenshot is not shown.
+   *
+   * TWO polygons, deliberately, because the brief says so and says why: "one
+   * polygon cannot satisfy both directions, because a bound `origin.x` is by
+   * definition not draggable."
+   *
+   * The ingredients are each already tested elsewhere (`commands.test.ts` for
+   * `link` and for a cell holding a formula; the drag test above for the
+   * per-component rule). What is tested HERE and nowhere else is that they
+   * COMPOSE — a false cycle is precisely the defect that appears only when both
+   * directions are present in one graph at once.
+   */
+  function firstVertexOf(object: GraphObject): { readonly x: number; readonly y: number } {
+    const vertices = getSlot(object, ["vertices"])?.value as readonly { x: number; y: number }[] | undefined;
+    const vertex = vertices?.[0];
+    if (vertex === undefined) {
+      throw new Error(`expected ${object.name}'s derived vertices to have been evaluated`);
+    }
+    return vertex;
+  }
+
+  /** The gate document: `polygon_1` driven BY the table, `polygon_2` driving it. */
+  function gateDocument(): AppState {
+    let state = typed(opened(), "table x=0 y=0 rows=4 cols=4");
+    state = typed(state, "set table_1.A1 500");
+    state = typed(state, "polygon sides=5 x=100 y=100 r=50"); // polygon_1 — the DRIVEN one.
+    state = typed(state, "polygon sides=4 x=300 y=300 r=40"); // polygon_2 — the DRIVING one.
+    state = typed(state, "link polygon_1.origin.x table_1.A1"); // (a)
+    state = typed(state, "set table_1.B1 = polygon_2.origin.x * 2"); // (b)
+    return state;
+  }
+
+  it("builds the whole document without a single refusal — both directions coexist in one graph", () => {
+    const state = gateDocument();
+    expect(state.document.objects.map((object) => object.name)).toEqual(["table_1", "polygon_1", "polygon_2"]);
+    // The binding is real in BOTH directions before anything is dragged. Assert
+    // the slot KINDS, not only the values: a literal that happens to hold the
+    // right number satisfies a value check and is not a binding at all (caught
+    // by mutation-checking this very test — see entry 0115).
+    expect(getSlot(objectNamed(state, "polygon_1"), ["origin", "x"])?.kind).toBe("formula");
+    expect(getSlot(objectNamed(state, "table_1"), ["cells", "B1"])?.kind).toBe("formula");
+    expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(500);
+    expect(numberAt(objectNamed(state, "table_1"), ["cells", "B1"])).toBe(600);
+    expect(state.log.join("\n")).not.toContain("cyclic");
+  });
+
+  it("(a) data drives geometry — typing a new number in the cell moves polygon_1", () => {
+    let state = gateDocument();
+    expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(500);
+
+    state = typed(state, "set table_1.A1 650");
+
+    expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(650);
+    // And the polygon's DERIVED geometry followed the origin, not just the slot.
+    expect(numberAt(objectNamed(state, "polygon_1"), ["centroid", "x"])).toBeCloseTo(650, 9);
+  });
+
+  it("(b) geometry drives data — dragging polygon_2 on canvas updates its cell live", () => {
+    let state = gateDocument();
+    const before = objectNamed(state, "polygon_2");
+    const originXBefore = numberAt(before, ["origin", "x"]);
+    expect(numberAt(objectNamed(state, "table_1"), ["cells", "B1"])).toBe(originXBefore * 2);
+
+    const onStroke = worldToScreen(state.document.camera, firstVertexOf(before));
+    state = pointerDownAt(state, onStroke, VIEWPORT).state;
+    expect(state.interaction.selectedObjectIds).toEqual([before.id]);
+    state = pointerMoveTo(state, { x: onStroke.x + 40, y: onStroke.y });
+    state = pointerUpNow(state);
+
+    const originXAfter = numberAt(objectNamed(state, "polygon_2"), ["origin", "x"]);
+    expect(originXAfter).toBeCloseTo(originXBefore + 40 / state.document.camera.zoom, 9);
+    // The cell recomputed inside the same mutation's topological pass — never a
+    // stale value, never a post-pass (§9's standing prohibition).
+    expect(numberAt(objectNamed(state, "table_1"), ["cells", "B1"])).toBeCloseTo(originXAfter * 2, 9);
+  });
+
+  it("(c) partial binding — dragging polygon_1 slides it in Y only, because its X is driven", () => {
+    let state = gateDocument();
+    const before = objectNamed(state, "polygon_1");
+    const originYBefore = numberAt(before, ["origin", "y"]);
+
+    const onStroke = worldToScreen(state.document.camera, firstVertexOf(before));
+    state = pointerDownAt(state, onStroke, VIEWPORT).state;
+    const logBefore = state.log.length;
+    state = pointerMoveTo(state, { x: onStroke.x + 30, y: onStroke.y + 30 });
+
+    const after = objectNamed(state, "polygon_1");
+    expect(numberAt(after, ["origin", "x"])).toBe(500); // driven by table_1.A1: did not move.
+    expect(numberAt(after, ["origin", "y"])).toBeCloseTo(originYBefore + 30 / state.document.camera.zoom, 9);
+    // §5.9's non-blocking feedback names what is holding X.
+    expect(state.log.slice(logBefore).join("\n")).toContain("table_1.A1");
+  });
+
+  it("all three hold in ONE state at once — the criterion's own wording", () => {
+    let state = gateDocument();
+
+    // (a) drive polygon_1 from the table.
+    state = typed(state, "set table_1.A1 650");
+    // (b) drive the table from polygon_2.
+    const polygon2 = objectNamed(state, "polygon_2");
+    const onPolygon2 = worldToScreen(state.document.camera, firstVertexOf(polygon2));
+    state = pointerDownAt(state, onPolygon2, VIEWPORT).state;
+    state = pointerMoveTo(state, { x: onPolygon2.x + 40, y: onPolygon2.y });
+    state = pointerUpNow(state);
+    // (c) drag the driven polygon; only Y gives.
+    const polygon1 = objectNamed(state, "polygon_1");
+    const onPolygon1 = worldToScreen(state.document.camera, firstVertexOf(polygon1));
+    state = pointerDownAt(state, onPolygon1, VIEWPORT).state;
+    state = pointerMoveTo(state, { x: onPolygon1.x + 30, y: onPolygon1.y + 30 });
+    state = pointerUpNow(state);
+
+    const finalPolygon1 = objectNamed(state, "polygon_1");
+    const finalPolygon2 = objectNamed(state, "polygon_2");
+    const finalTable = objectNamed(state, "table_1");
+
+    expect(numberAt(finalPolygon1, ["origin", "x"])).toBe(650); // (a) still driven.
+    expect(numberAt(finalPolygon1, ["origin", "y"])).toBeCloseTo(130, 9); // (c) Y moved, X did not.
+    expect(numberAt(finalTable, ["cells", "B1"])).toBeCloseTo(numberAt(finalPolygon2, ["origin", "x"]) * 2, 9); // (b) still live.
+    expect(state.log.join("\n")).not.toContain("cyclic");
+  });
+
+  it("no FALSE cycle, and cycle detection is still alive — a genuinely cyclic link is refused", () => {
+    // The distinction the criterion is really making: the document above must
+    // NOT be reported as cyclic, while a real cycle still must be. Asserting
+    // only the first would pass just as well if cycle detection were switched
+    // off entirely, which is the failure this second half exists to exclude.
+    const state = gateDocument();
+    // polygon_1.origin.x already reads table_1.A1, so pointing A1 back at it closes the loop.
+    const outcome = submitLine(state, "set table_1.A1 = polygon_1.origin.x", VIEWPORT);
+
+    expect(newLines(state, outcome.state).join("\n")).toContain("cyclic");
+    // §5.1: a rejected mutation leaves prior state bit-for-bit unchanged.
+    expect(outcome.state.document).toBe(state.document);
+  });
+});
