@@ -129,7 +129,7 @@ describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", 
     expect(second.selectedObjectIds).toEqual(["obj_1", "obj_3"]);
   });
 
-  it("a shift-click on an ALREADY-SELECTED object REMOVES it — the conventional toggle (D-100 clause 4, PROVISIONAL(Q-015))", () => {
+  it("a shift-click on an ALREADY-SELECTED object REMOVES it — the conventional toggle (D-100 clause 4, ruled final at 0105-REVIEW)", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const toggled = pointerDown(first, { x: 10, y: 0 }, objects, CAMERA_IDENTITY, true);

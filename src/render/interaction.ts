@@ -23,8 +23,8 @@
  *   whatever is under the pointer, or clears it on empty canvas (clause 2). A
  *   shift-click ADDS the object hit to the selection, unless it is already
  *   there, in which case it is REMOVED — the conventional toggle (clause 4,
- *   **PROVISIONAL(Q-015)**: the human's own open question, not yet ruled
- *   final). A shift-click on EMPTY canvas changes nothing — clause 3's
+ *   confirmed by the human at 0105-REVIEW; Q-015 is CLOSED). A shift-click on
+ *   EMPTY canvas changes nothing — clause 3's
  *   deliberate choice, so an accidental miss cannot destroy a selection built
  *   one object at a time — though it still ends a drag armed before it, the
  *   same as every other press. A drag always targets exactly the object under THIS
@@ -178,7 +178,7 @@ export interface PointerMoveOutcome {
  * 2) — reading the selection off the hit result rather than growing a branch
  * that keeps a stale one alive, same as before this ruling. `true` (a
  * shift-click) ADDS the object hit, unless it is already selected, in which
- * case it is REMOVED (clause 4, **PROVISIONAL(Q-015)**); on empty canvas it
+ * case it is REMOVED (clause 4, final — Q-015 closed); on empty canvas it
  * leaves the SELECTION exactly as it was (clause 3), but still ends any drag:
  * no press may inherit a gesture armed before it.
  *
@@ -218,7 +218,7 @@ export function pointerDown(
   };
 }
 
-/** D-100 clause 4's toggle (PROVISIONAL(Q-015)): adds `objectId` if absent, removes it if present. Preserves the rest of the list's click order either way. */
+/** D-100 clause 4's toggle, ruled final by the human at 0105-REVIEW (Q-015): adds `objectId` if absent, removes it if present. Preserves the rest of the list's click order either way. */
 function toggleSelection(selectedObjectIds: readonly string[], objectId: string): readonly string[] {
   return selectedObjectIds.includes(objectId) ? selectedObjectIds.filter((id) => id !== objectId) : [...selectedObjectIds, objectId];
 }

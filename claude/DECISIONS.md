@@ -3420,3 +3420,44 @@ cycle after it narrows suppression to the objects that actually have a panel. Un
 disclosed in `STATUS.md`'s known problems (reviewer edit at this entry), not silently carried.
 Building a throwaway interim would have been the Rule 5 failure; leaving the gap unnamed is the
 D-096 clause 1 failure. Neither is on offer.
+
+---
+
+## D-106 — Every selected object's panel is shown BY DEFAULT; a panel is dismissed one at a time, and dismissing it gives the object its canvas name back
+Answers: the human's ruling at entry 0105-REVIEW, points 1 and 2   Ruled: entry 0106-RULINGS
+(reviewer, recording the human's decision)   Binding on: `src/main.ts`, `src/render/renderer.ts`,
+`index.html`
+**Confirms D-100 clause 4 as final (closes Q-015). Extends D-101. Discharges D-105 clause 2.**
+
+**The human's words: "multi-select should default to showing panels for each selected object. There
+should be a way to 'hide' panels, but the default behavior should be to show them all."**
+
+1. **The default is SHOW ALL.** D-101 clause 1 is confirmed, not amended: selecting N objects shows
+   N panels, with no cap, no "too many panels" heuristic, and no collapse-to-one fallback (D-101
+   clause 3's stance — the operator has a mouse). Entry 0104's interim "hide the panel when two or
+   more are selected" is a placeholder and **must be gone at the end of the next cycle.**
+2. **A panel carries a DISMISS control in its header** — one per panel, hiding that panel alone.
+   The header is where it goes because D-101 clause 4 already makes the header the panel's own
+   chrome, and D-102 clause 2 makes the body rows' affordances mean something else entirely.
+3. **Dismissing a panel does NOT deselect its object.** The object stays selected and stays
+   highlighted. Hiding is about screen space, not about what the operator is working on — the two
+   were deliberately separated the moment the selection stopped being ephemeral (D-100).
+4. **A DISMISSED PANEL'S OBJECT GETS ITS CANVAS NAME LABEL BACK.** This is the general rule D-105
+   clause 2 was holding open, now settled: **a name is suppressed only where something else is
+   showing it.** D-094 clause 3's rationale is that the name MOVES into the panel header; with no
+   panel there is nothing to move it into, and an object with neither a label nor a panel is
+   unnameable on screen.
+5. **Therefore `renderDocument` takes the panelled ids as well**, and suppression reads THEM while
+   the highlight keeps reading the selection:
+   `renderDocument(ctx, w, h, objects, camera, selectedObjectIds, panelledObjectIds = selectedObjectIds)`.
+   The default is what keeps every existing call site and test meaning "the panel follows the
+   selection" without an edit, and it states the normal case in the signature. Two lists, because
+   the two passes now genuinely answer different questions — do NOT collapse them back into one.
+6. **Dismissal is APPLICATION state, keyed by object id, and is DISCARDED when the object leaves
+   the selection** — the same lifetime, the same place, and the same reasoning as D-101 clause 5's
+   manual positions. **Re-selecting a dismissed object shows its panel again**, which is also the
+   whole re-show gesture: shift-click it out and back in, or escape and reselect.
+7. **No panel manager, no "restore hidden panels" list, no count badge.** Clause 6 is the way back;
+   a second UI for managing a UI is Rule 5's failure mode, and nobody has asked for one.
+8. **Escape's duty list is unchanged** (D-100 clause 5, D-102 clause 7). Dismissal is a click on a
+   control, never a key — escape releases the whole selection, which already hides every panel.

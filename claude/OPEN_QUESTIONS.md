@@ -17,8 +17,11 @@ Next free ID: **Q-016**
 ---
 
 ## Q-015 — Does a shift-click on an ALREADY-SELECTED object remove it from the selection?
-Raised: entry 0100-REVIEW-phase4 (reviewer)   Brief section: §5.9   Status: **OPEN — the human's,
-but not blocking.**
+Raised: entry 0100-REVIEW-phase4 (reviewer)   Brief section: §5.9   Status: **ANSWERED → D-100
+clause 4, confirmed final by the human at entry 0105-REVIEW and recorded in D-106.** They ruled
+option (a) verbatim: "shift-clicking on an already selected object removes it from the selection
+set." The behaviour was already built (entry 0104) and needed no change; the `PROVISIONAL(Q-015)`
+tags in `render/interaction.ts` and `interaction.test.ts` were removed at entry 0106-RULINGS.
 
 The human chose the click model at entry 0100: a plain click replaces the selection, a shift-click
 adds to it, escape clears it (**D-100** clauses 2, 3, 5). What they were not asked, and did not say,

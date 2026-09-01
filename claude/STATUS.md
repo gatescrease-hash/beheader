@@ -1,11 +1,16 @@
-# STATUS — as of entry 0105-REVIEW-phase4
+# STATUS — as of entry 0106-RULINGS
 
 STATE: **CLEAR TO PROCEED.** Both configs compile, **1225/1225** tests pass, 0 skipped, 0 `.only`,
 `npm run build` succeeds. Entry **0104** (D-100, the selection becomes a list) has been reviewed:
 **ACCEPT WITH EDITS** at 0105-REVIEW-phase4, which fixed one defect (a shift-click on empty canvas
 inherited a drag armed before it), ruled **D-105**, and ratified all five of entry 0104's decisions.
-**The next slice is D-101 (N panels), and D-105 clause 2 puts a one-cycle clock on it** — see known
-problems.
+**Then the human ruled on both things that review put to them (entry 0106-RULINGS): Q-015 is CLOSED
+and D-106 is binding.**
+
+**THE NEXT SLICE IS D-101 + D-106 TOGETHER — N panels, each with a dismiss control.** They are one
+slice: N panels without the dismiss control ships the screen-space problem the human is already
+anticipating, and D-106 clause 1 requires entry 0104's interim "hide the panel on multi-select" to
+be gone at the end of that cycle. **No `PROVISIONAL(Q-NNN)` tag remains anywhere in `src/`.**
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
@@ -67,18 +72,23 @@ unbuilt), disclosed in two file headers, and **D-104 binds the cycle that builds
 close the floor inside `findInvalidTableResizes`. Do NOT widen
 `findInvalidDimensionWrites` for it — D-104 clause 3 says so explicitly. Untouched by entry 0104.
 
-**8. ENTRY 0104 BUILT D-100 AND IS AWAITING REVIEW — READ ITS OWN LOG BEFORE TOUCHING
-`interaction.ts`, `renderer.ts`, OR `main.ts`.** `InteractionState.selectedObjectId: string |
+**8. ENTRY 0104 BUILT D-100 AND IT IS REVIEWED (0105) AND RULED ON BY THE HUMAN (0106) — READ ITS
+OWN LOG BEFORE TOUCHING `interaction.ts`, `renderer.ts`, OR `main.ts`.** `InteractionState.selectedObjectId: string |
 undefined` is now `selectedObjectIds: readonly string[]`. `pointerDown` is reordered (`state` is now
 its first argument) and gains `additive: boolean = false` (the shift key): a plain click replaces
-the selection or clears it on empty canvas, a shift-click adds the hit object or — PROVISIONAL,
-**Q-015** — removes it if already selected, and a shift-click on empty canvas changes nothing. A
-drag always arms on the object under the press, even one a shift-click just toggled OUT of the
-selection (entry 0104's own reading of clause 6, not yet human-confirmed). `renderDocument`'s
+the selection or clears it on empty canvas, a shift-click adds the hit object or removes it if
+already selected (**Q-015 is CLOSED** — the human ruled exactly this at entry 0106-RULINGS), and a
+shift-click on empty canvas leaves the SELECTION alone while still ENDING any drag armed before the
+press (**D-105** clause 1, reviewer fix at 0105-REVIEW). A drag always arms on the object under the
+press, even one a shift-click just toggled OUT of the selection (entry 0104's reading of clause 6,
+ratified at 0105-REVIEW). `renderDocument`'s
 trailing parameter is the same list, defaulted to `[]`; every selected object is now highlighted and
-has its name suppressed, not just one. **The properties panel stays ONE panel this cycle** — shown
-only for a selection of exactly one, hidden for zero or two-or-more — because D-101 (N panels) is
-the next queued cycle and building interim multi-panel behaviour now would be thrown away. `select
+has its name suppressed, not just one. **The properties panel stays ONE panel FOR NOW** — shown only
+for a selection of exactly one, hidden for zero or two-or-more — because D-101 (N panels) is the
+next cycle and building interim multi-panel behaviour would be thrown away. **That interim MUST BE
+GONE at the end of the next cycle (D-106 clause 1), and with it goes the name gap: D-106 clauses 4-5
+make `renderDocument` suppress a name only for an object that actually HAS a panel, which is a
+second list beside the selection, defaulted to it.** `select
 <name>` is UNCHANGED: it still replaces the whole selection with one object (D-100 clause 7); no
 command-line multi-select syntax exists.
 
@@ -89,13 +99,13 @@ D-101 is entry **0105**.
 
 1. ~~**Entry 0101 — D-097, the vanishing table.**~~ **DONE.** See "Read this first" item 3.
 2. ~~**Entry 0102 — D-098 + D-099.**~~ **DONE.** See "Read this first" items 4–5.
-3. ~~**Entry 0104 — D-100, the selection becomes a list.**~~ **BUILT, NOT YET REVIEWED.** See "Read
-   this first" item 8. **A review of entry 0104 must land before entry 0105 starts** (D-100 clause
-   9 — this is not a batch-cap stop, it is unconditional).
-4. **Entry 0105 — D-101, N panels, draggable.** Then **entry 0106 — D-102, the paperclip and
-   editing**, which gets its own review point regardless of the batch cap. Both are written against
-   a selection that can hold more than one object, so both need D-100 actually reviewed first, not
-   merely built.
+3. ~~**Entry 0104 — D-100, the selection becomes a list.**~~ **DONE and REVIEWED** (0105-REVIEW,
+   ACCEPT WITH EDITS). ~~**Entry 0106-RULINGS**~~ — the human closed Q-015 and ruled **D-106**.
+4. **Entry 0107 — D-101 + D-106 together: N panels, each draggable and each with a dismiss
+   control.** ONE slice, not two: D-106 clause 1 requires entry 0104's interim single-panel reading
+   to be GONE at the end of it, and shipping N panels with no way to hide one lands the operator in
+   the screen-space problem the human already anticipated. Then **entry 0108 — D-102, the paperclip
+   and editing**, which gets its own review point regardless of the batch cap.
 
 **Still queued behind all of that, unchanged:** D-090's prompt-sequence preview · D-088 clauses 2–4
 and D-089 (the command input's behaviour) · §5.11's load boundary in `document.ts` (D-083 clause 4's
@@ -146,7 +156,7 @@ comment, both disclosing D-104's gap.
 
 **Entry 0104 — D-100, the selection becomes a list.** `render/interaction.ts`'s `InteractionState.
 selectedObjectIds: readonly string[]`, `pointerDown`'s reordered signature and its new `additive`
-parameter, `toggleSelection` (PROVISIONAL(Q-015)); `render/renderer.ts`'s `renderDocument` over the
+parameter, `toggleSelection` (Q-015, now closed); `render/renderer.ts`'s `renderDocument` over the
 whole list, for both the highlight pass and the chrome name-suppression pass; `main.ts`'s
 `performEffect`'s `"select"` case, `pointerDownAt`'s `additive` parameter and the DOM listener's
 `event.shiftKey`, and `updatePanel`'s single-panel-only-for-exactly-one-selected reading. Tests in
@@ -154,8 +164,8 @@ whole list, for both the highlight pass and the chrome name-suppression pass; `m
 `commands.test.ts`. **Reviewed at 0105-REVIEW-phase4** — one defect found and fixed by reviewer edit
 (`pointerDown`'s empty-canvas additive branch now ends a drag armed before the press, **D-105**
 clause 1, +2 tests), one test expectation deliberately narrowed there, and all five of the entry's
-"Decisions I made" ratified. **Q-015 stays OPEN and deferred to the human; the provisional toggle
-stands, built and tagged.**
+"Decisions I made" ratified. **Then the human ruled Q-015 exactly as built (entry 0106-RULINGS) —
+the toggle is final and its PROVISIONAL tags are gone.**
 
 ## Not started
 
@@ -206,10 +216,11 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 - **A selection of TWO OR MORE objects puts their names NOWHERE on screen** — D-100 clause 8
   suppresses every selected object's canvas label, and the panel that is supposed to carry the name
   instead is still ONE panel, shown only for a selection of exactly one. Accepted deliberately for
-  ONE cycle (building a throwaway interim is Rule 5's failure mode) and **bounded by D-105 clause
-  2**: if **D-101 does not land in the next cycle, the cycle after it narrows suppression to the
-  objects that actually have a panel.** Reached only by a deliberate shift-click and undone by a
-  plain click or escape.
+  ONE cycle (building a throwaway interim is Rule 5's failure mode). **D-106 clauses 4-5 settle the
+  general rule that closes it — a name is suppressed only where something else is showing it, so
+  `renderDocument`'s suppression pass reads the PANELLED ids, not the selected ones — and the next
+  cycle (D-101 + D-106) is where it goes away.** Reached only by a deliberate shift-click and undone
+  by a plain click or escape.
 
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** rather
   than removing it — a narrower, disclosed remnant of the vanishing-table gap. D-097 (entry 0101)
@@ -283,7 +294,10 @@ the cycle that builds §5.10's row/column commands. See "Read this first" item 7
 
 **From 0100-REVIEW — D-100 through D-103:** (**D-100**) the selection is a list; plain click
 replaces, shift-click adds, escape clears; D-094 clause 3 generalises to every selected object —
-**BUILT at entry 0104, awaiting review; do not re-build it** · (**D-101**, queued) one panel per
+**BUILT at entry 0104 and REVIEWED at 0105; do not re-build it** · (**D-106**, queued with D-101)
+every selected object's panel shows BY DEFAULT, each panel has a dismiss control that hides it
+WITHOUT deselecting, and a dismissed panel's object gets its canvas name label back ·
+(**D-101**, queued) one panel per
 selected object, dragged by its header, detaching until deselected, with no collision avoidance ·
 (**D-102**, queued) the panel becomes writable, `pointer-events: none` is lifted, the paperclip is
 blue for a `formula` slot and grey for a `literal` one, and **every panel write goes through
@@ -337,10 +351,9 @@ NOT take a side — it is CSS pixels by a stated reason.
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
-**`PROVISIONAL(Q-015)` → `src/render/interaction.ts`'s `toggleSelection`, added at entry 0104.** Does
-a shift-click on an ALREADY-SELECTED object REMOVE it from the selection? Provisional (a) yes, the
-conventional toggle, ruled provisionally as D-100 clause 4, now actually built that way. The
-human's to settle; blocking nothing; reversible in one branch and one test if overruled.
+**`PROVISIONAL(Q-015)` is GONE.** The human ruled at entry 0106-RULINGS that a shift-click on an
+already-selected object removes it — exactly what entry 0104 built — so all four tag sites were
+reconciled by comment edit and nothing behavioural moved.
 
 **Q-014 is CLOSED (→ D-102).** Next free: **Q-016**.
 
