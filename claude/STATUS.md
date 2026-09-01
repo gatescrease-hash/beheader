@@ -1,14 +1,16 @@
-# STATUS — as of entry 0117-refused-line-stays-in-the-input
+# STATUS — as of entry 0118-d110-empty-cell-reads-zero
 
-STATE: **GREEN.** Both configs compile, **1276/1276** tests pass, 0 skipped, 0 `.only`.
+STATE: **GREEN, BUT REVIEW IS REQUIRED before the next cycle starts.** Both configs compile,
+**1285/1285** tests pass, 0 skipped, 0 `.only`. **Do not begin Phase 5, or anything else, before this
+batch is reviewed** — see the D-110 paragraph below.
 
-**PHASE 4 IS PASSED AND ITS GATE IS CLOSED. PHASE 5 IS OPEN.** Both halves of PROCESS_BRIEF §12.1
-are satisfied for the first time: the criterion was **witnessed** by the human's own session (entry
-0114 — two shapes and a table, binding in both directions at once, no false cycle) and is now
-**pinned executably** — entry 0115's six tests in `main.test.ts`, plus a seventh added at
-0116-REVIEW. **0116-REVIEW-phase4-gate cleared it: ACCEPT WITH EDITS, two edits, both in that same
-describe block.** Entry 0115 was written by the reviewer at the human's direction and said so; a
-different session reviewed it, as it required.
+**PHASE 4 IS PASSED AND ITS GATE IS CLOSED. PHASE 5 IS OPEN BUT SHOULD NOT BE STARTED YET.** Both
+halves of PROCESS_BRIEF §12.1 are satisfied for the first time: the criterion was **witnessed** by the
+human's own session (entry 0114 — two shapes and a table, binding in both directions at once, no
+false cycle) and is now **pinned executably** — entry 0115's six tests in `main.test.ts`, plus a
+seventh added at 0116-REVIEW. **0116-REVIEW-phase4-gate cleared it: ACCEPT WITH EDITS, two edits, both
+in that same describe block.** Entry 0115 was written by the reviewer at the human's direction and
+said so; a different session reviewed it, as it required.
 
 **NOTHING IS OWED ON PHASE 4.** No fix cycle, no re-review.
 
@@ -16,17 +18,33 @@ different session reviewed it, as it required.
 listener no longer clears `input.value` unconditionally: it clears only when `submitLine`'s returned
 `AppTransition.refused` is `false`, computed once in `advance()` and threaded through the existing
 `fileRequest`-shaped transition-result type. Seven new tests in `main.test.ts`, mutation-checked (two
-of them go red when the fix is reverted). Cycle 1 of up to 3 since 0116-REVIEW; 82 lines / 2 files —
-`REVIEW: NOT NEEDED` by this cycle's own honest application of §6.1/§6.3 (no trigger fired, well
-under the cap), but it is still an UNREVIEWED cycle until a review point lands, same as any other.
+of them go red when the fix is reverted).
 
-**Owed next, in the order 0116-REVIEW recommends (routing advice, not a gate):** **D-110** (the
-human's Q-018 ruling — an empty in-extent cell reads `0`; load-bearing, `REVIEW: REQUIRED`, and
-**D-111 clause 3** binds that cycle to pin D-110 clause 5 executably) · **D-109 clauses 1–2** (cell
-decimals + clipping, `render/` only) · **Q-017** (table headers, open) · then **Phase 5** (the text
-primitive). **The one ordering worth arguing about: D-110 before Phase 5** — it changes what a
-reference MEANS and what edges a reference emits, and Phase 5's text walker is a second consumer of
-exactly that. One flip surface instead of two. See 0116-REVIEW §10.
+**D-110 IS BUILT IN FULL (entry 0118) AND `REVIEW: REQUIRED` — read this before touching `deriveEdges`,
+`graph/eval.ts`, or Phase 5.** A bare reference to a cell inside an EXISTING table's current extent
+that has no slot (or holds `null`) now evaluates to the number `0` and gets **no edge at all**, rather
+than being a dangling reference `validateIntegrity` rejects — the shape of D-047's own reversal, one
+level up. New shared helper: `primitives/table.ts`'s `isInExtentTableCellAddress(address, objects)`.
+Changed: `mutation.ts`'s `deriveEdges` (reference branch skips the edge for this one case — D-110
+clause 4) and `graph/eval.ts`'s `evaluateFormula`'s `read` closure (coerces `undefined`/`null` to `0`
+for this one case — D-110 clauses 1-3). **D-111 clause 3's pin is built**: `mutation.test.ts`'s new
+describe block's last test creates a table where an empty cell is read by another cell (accepted, no
+false cycle), THEN populates it with a formula reading back the first (a SECOND `mutate` call,
+rejected as cyclic, naming both slots, prior committed state left `toEqual` its own pre-call
+snapshot). Two of `mutation.test.ts`'s and `commands.test.ts`'s existing tests FLIPPED from asserting
+refusal to asserting acceptance-and-`0`, exactly as D-110's own ruling text said they would.
+**Disclosed consequence, pinned by a new test:** `refs` does not report a formula reading a
+still-empty in-extent cell as one of its dependents, because clause 4 gives that reference no edge —
+the report (and the edge) appear on their own once the cell is populated. Mutation-checked twice
+(the `deriveEdges` guard and the `read`-closure substitution independently) — see entry 0118 §"Where
+I got stuck" for none, and its Verification section for the actual mutation-check output.
+
+**Owed next, in the order 0116-REVIEW recommends (routing advice, not a gate) — ALL of it now waits
+on D-110's review:** **D-109 clauses 1–2** (cell decimals + clipping, `render/` only) · **Q-017**
+(table headers, open) · then **Phase 5** (the text primitive). **The reason D-110 had to land before
+Phase 5 stands even more now that it IS built and unreviewed**: Phase 5's text walker becomes a
+second consumer of exactly what a reference means, and §6.2 forbids starting a later phase while a
+load-bearing file touched this phase (`mutation.ts`, `graph/eval.ts`) carries unreviewed changes.
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column
@@ -60,13 +78,13 @@ today would pin the current refusal. **Clause 3 binds D-110's implementing cycle
 clause 5 executably in the same cycle: `A2 = D1` with `D1` empty is accepted and reads `0`; the
 later `set D1 = A2` is refused as cyclic naming both slots; prior state unchanged.
 
-**4. D-110 IS THE NEXT LOAD-BEARING SLICE AND IT IS NOT STARTED.** Read it in full before touching
-`deriveEdges`, `validateIntegrity` or evaluation. It settles two things Q-018 only flagged (a cell
-holding `null` behaves identically to a cell with no slot; `SUM(A1, 1)` on an empty `A1` is `1`), it
-names a consequence the implementing cycle MUST disclose (`refs` will not report a formula that
-references an empty cell, because clause 4 emits no edge), and it WILL FLIP the existing tests
-asserting the refusal — §6.1 trigger 5, `REVIEW: REQUIRED`, and that flip is the intended diff, not
-a test being weakened.
+**4. D-110 IS BUILT (entry 0118) AND `REVIEW: REQUIRED` — NOT YET REVIEWED. Do not re-touch
+`deriveEdges`/`graph/eval.ts`'s `read` closure for this.** It settled the two things Q-018 only
+flagged (a cell holding `null` behaves identically to a cell with no slot; `SUM(A1, 1)` on an empty
+`A1` is `1`) and the disclosed consequence is pinned by a test (`refs` does not report a formula that
+references a still-empty cell, because clause 4 emits no edge, until the cell is populated). The two
+existing tests asserting the refusal DID FLIP, exactly as anticipated — not a test being weakened.
+**This is the load-bearing change §6.2 says blocks Phase 5 from starting until reviewed.**
 
 **5. THE PANEL IS FULLY BUILT AND FULLY REVIEWED — DO NOT RE-BUILD ANY OF IT.** D-094 (display),
 D-100 (selection), D-101 (N panels), D-106 (dismiss), D-102 (writing), D-107 (F1–F4's focus and
@@ -126,11 +144,13 @@ is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and string
 
 ## Next slice (recommended)
 
-**D-109 clause 3 is DONE (entry 0117)** — see the summary block above; do not re-touch the
-`keydown` listener for this. **D-110 is next**, and it is a `REVIEW: REQUIRED` slice of its own that
-should land before Phase 5 for the reason in 0116-REVIEW §10. Whoever takes D-110: read D-110 and
-D-111 clause 3 in full first, expect to flip existing refusal tests, and disclose the `refs`
-consequence in both the log entry and this file's known problems.
+**Nothing — this batch needs a review point before any further implementation cycle.** D-109 clause 3
+(entry 0117) and D-110 in full (entry 0118) are both built and both UNREVIEWED; D-110 touches
+load-bearing files (§6.2). Route this to review before taking D-109 clauses 1-2, Q-017, or Phase 5.
+Whoever reviews: 0118's own log entry carries two questions for the reviewer (the `TABLE_TYPE` check
+in `isInExtentTableCellAddress`, and whether D-111 clause 3's pin wants a command-line-level test too)
+— worth answering explicitly rather than leaving open. Once cleared: D-109 clauses 1-2 (cell decimals
++ clipping, `render/` only), then Q-017 if wanted, then Phase 5.
 
 ## Built and reviewed
 
@@ -162,7 +182,14 @@ by the reviewer, §5 and §6 of that entry).**
 - **Entry 0117 — D-109 clause 3.** `AppTransition` gains `refused`; `advance()` sets it; the
   `keydown` listener uses it to keep a refused line in the input and clear only an accepted one.
   `REVIEW: NOT NEEDED` was this cycle's own honest call (no §6.1 trigger, 82 lines / 2 files), which
-  is not the same as reviewed — cycle 1/3 since 0116-REVIEW.
+  is not the same as reviewed.
+- **Entry 0118 — D-110 in full, plus D-111 clause 3's pin.** `primitives/table.ts`'s new
+  `isInExtentTableCellAddress`; `mutation.ts`'s `deriveEdges` skips the edge for an empty in-extent
+  cell reference; `graph/eval.ts`'s `read` closure coerces that same case (or an existing `null` cell)
+  to `0`. Two existing tests flipped as anticipated; eight new tests in `mutation.test.ts`, three in
+  `commands.test.ts`. `REVIEW: REQUIRED` by the ruling's own text — cycle 2/3 since 0116-REVIEW, and
+  this is the cycle that must be reviewed before the next one starts (§6.2: `mutation.ts`/
+  `graph/eval.ts` are load-bearing).
 
 ## Not started
 
@@ -170,7 +197,7 @@ D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
 (drag-linking between two panels) · **D-109 clauses 1–2** (clause 3 built at entry 0117, not yet
-reviewed) · **D-110** · Phases 5–7.
+reviewed) · Phases 5–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -252,9 +279,10 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
   `resolveWritableSlot`'s inline check. A THIRD is forbidden.
 - **`refs <address>` REFUSES for a cell of a table whose `rows` is a formula** (D-046) — a state
   D-097 makes unreachable BY COMMAND, though a loaded file can still carry it.
-- **A bare reference to an EMPTY cell is REFUSED — and this is what D-110 REVERSES for in-extent
-  cells.** 0080-REVIEW F4 let it stand; the human overruled that at entry 0114. Until D-110 is
-  built, the refusal is still the behaviour and the tests that assert it are still correct.
+- **RESOLVED at entry 0118 — do not re-raise.** A bare reference to an EMPTY cell WITHIN a table's
+  extent used to be refused; **D-110** reverses that (reads `0`, gets no edge) for in-extent cells
+  specifically. Outside a table's extent, or to an unknown object, the refusal stands unchanged
+  (D-110 clause 6). Listed only so a reader of an older commit does not mistake this for open debt.
 - **Eight §5.10 commands have no registry entry** — `polyline`/`text`/`script`/`image`/`explode`/
   `addvertex`/`delvertex` wait on a schema or an `Operation` kind; **`pan` waits on Q-012**.
 - **`createObjectFromCommand`'s "type has no schema" branch is uncovered**, as are
@@ -281,14 +309,18 @@ Every ruling in `DECISIONS.md` (D-001 through **D-111**) binds without restateme
 cleared 0113) · D-081 and D-083 clause 4 (0112, cleared 0113) · **Phase 4's gate test (0115, cleared
 0116)**.
 
+**Implemented, NOT YET reviewed — do not re-build; route to review instead:** **D-109 clause 3**
+(entry 0117) · **D-110 in full, with D-111 clause 3's pin** (entry 0118). Both are §6.2 gate items
+that must clear review before Phase 5 (or anything else) begins.
+
 **NOT implemented, each owned by a named future cycle:** **D-104** (§5.10's row/column commands) ·
 **D-108** (§5.11's load path; clause 3 binds every cycle before it) · **D-109 clauses 1–2** (cell
-decimals + clipping, `render/` only — clause 3 is built at entry 0117, not yet reviewed) · **D-110**
-(its own `REVIEW: REQUIRED` slice, with **D-111** clause 3 binding what it must pin).
+decimals + clipping, `render/` only).
 
 **Q-014 IS CLOSED** — every ruling that answers it is built. **Q-013 is NOT mooted** — `set <address>
 = <formula>` stays the spelling, and D-102's panel reuses that exact synthesised form.
-**Q-018 is ANSWERED → D-110. Q-016 and Q-017 remain OPEN**, both the human's, neither blocking.
+**Q-018 is ANSWERED → D-110, built at entry 0118, not yet reviewed. Q-016 and Q-017 remain OPEN**,
+both the human's, neither blocking.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 D-097's write-time refusal sits BESIDE that read, not inside it.
@@ -395,3 +427,15 @@ site). Next free: **Q-019**.
   unasked; entry 0109 answered its second version ("can I CHANGE it without leaving the mouse") the
   same way. Phase 4's gate session answered a third: what the operator hits first is not the graph
   being wrong, it is a number overrunning its cell and a refused line vanishing (D-109).
+- **"Does this edge exist" and "what does this address read as" are TWO different questions, asked
+  in TWO different files, over TWO different pieces of state — `mutation.ts`'s `deriveEdges` asks the
+  first of a candidate OBJECT LIST; `graph/eval.ts`'s `read` closure asks the second of THIS PASS's
+  EVALUATED VALUES.** D-110 needed both answered the same way for one case (an empty in-extent table
+  cell) without merging the two checks — `isInExtentTableCellAddress` (`primitives/table.ts`) is the
+  ONE thing they share, and it answers neither question itself, only "is this address in bounds."
+- **A cell that HAS a slot holding `null` and a cell that has NO slot at all are the same "empty" to
+  a bare reference (D-110) exactly as they already were to a range (D-047) — but they reach that
+  sameness through DIFFERENT edges.** The null cell gets a real edge and evaluates normally to
+  `null`; the coercion to `0` happens only at the `read` closure, after evaluation. The missing cell
+  gets NO edge, so its "value" is simply never in `evaluatedValues` — same closure, same `0`, two
+  different roads there. Do not "simplify" by trying to give the missing cell a synthetic edge too.

@@ -653,12 +653,17 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(slotOf(seeded, "table_1", ["cells", "B1"])).toEqual({ kind: "literal", value: 1 });
     });
 
-    it("refuses a reference to a cell that HAS no slot, because a plain reference to a missing slot is a dangling one (D-047 clause 4)", () => {
-      // Surprising but ruled: an empty cell is fine INSIDE a range, which names a
-      // region, and not fine as a bare reference, which names one slot the operator
-      // wrote. So `= B1` needs B1 to have been written; `= SUM(B1:B4)` does not.
-      expect(refused("set table_1.A1 = table_1.B1", sandbox())).toContain("references a slot that does not exist");
+    it("a bare reference to an EMPTY cell WITHIN the table's extent reads as 0 rather than being refused (D-110, reversing this test's own former D-047 clause 4 reading)", () => {
+      // B1 is inside table_1's 4x4 extent and has never been written — D-110's
+      // own case. A range over the same emptiness has always been fine (D-047),
+      // unaffected by this ruling; both are pinned here to keep the two together.
+      expect(slotOf(committed("set table_1.A1 = table_1.B1", sandbox()), "table_1", ["cells", "A1"])?.value).toBe(0);
       expect(slotOf(committed("set table_1.A1 = SUM(B1:B4)", sandbox()), "table_1", ["cells", "A1"])?.value).toBe(0);
+    });
+
+    it("a bare reference to a cell OUTSIDE the table's extent is STILL a dangling reference — D-110 clause 6's boundary: there is no extent to make it legal", () => {
+      // table_1 is 4x4 (sandbox() above); B9's row is past it entirely.
+      expect(refused("set table_1.A1 = table_1.B9", sandbox())).toContain("references a slot that does not exist");
     });
   });
 
@@ -885,6 +890,17 @@ describe("delete, refs, props and list — the object commands that need no new 
 
     it("accepts a cell path the table declares but nobody has written, because D-047 makes an absent cell ordinary state", () => {
       expect(lines("refs table_1.D4", sandbox())).toEqual(["nothing references table_1.D4"]);
+    });
+
+    it("D-110's disclosed consequence: does NOT report a formula that reads an EMPTY in-extent cell as one of its dependents, because clause 4 gives that reference no edge — until the cell is populated, which makes the edge (and the report) appear on its own", () => {
+      const linkedToEmptyCell = committed("link polygon_1.origin.x table_1.D4", sandbox()); // D4 is empty and in-extent.
+      expect(lines("refs table_1.D4", linkedToEmptyCell)).toEqual(["nothing references table_1.D4"]);
+
+      const populated = committed("set table_1.D4 1", linkedToEmptyCell);
+      expect(lines("refs table_1.D4", populated)).toEqual([
+        "table_1.D4 → polygon_1.origin.x",
+        "1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
+      ]);
     });
 
     it("names a dependent once even where the formula reads it twice, because the report is about which SLOTS read the target", () => {

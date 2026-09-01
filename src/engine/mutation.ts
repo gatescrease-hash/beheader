@@ -23,7 +23,10 @@
  *      resolves PER OBJECT (a `dynamic` group like `table`'s `cells.*` is a function
  *      of that object's own current `rows`/`cols`), never from `nonDerivedSlotPaths`
  *      directly. Each slot's AST is walked by `formula/deps.ts`'s
- *      `extractDependencies`: a `ReferenceDependency` becomes one edge; a
+ *      `extractDependencies`: a `ReferenceDependency` becomes one edge — UNLESS it
+ *      names an EMPTY cell within an existing table's current extent, which gets NO
+ *      edge at all (**D-110** clause 4, extending the range treatment below to a bare
+ *      reference; `primitives/table.ts`'s `isInExtentTableCellAddress`). A
  *      `RangeDependency` becomes one edge per cell currently within the named table's
  *      extent (D-044) that HAS a slot (D-047 — an in-bounds cell with no slot is
  *      ordinary empty state, not a dangling reference), via `primitives/table.ts`'s
@@ -160,6 +163,7 @@ import {
   enumerateRangeCellAddresses,
   getTableDimensions,
   insertTableLine,
+  isInExtentTableCellAddress,
   isRangeEnumerationError,
   isTableDimensionResizable,
   MAX_TABLE_LINES,
@@ -225,6 +229,19 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
       const dependentSlot = { objectId: object.id, path };
       for (const dependency of extractDependencies(slot.ast)) {
         if (dependency.kind === "reference") {
+          // D-110 clause 4: a reference to an EMPTY cell within an EXISTING
+          // table's current extent gets NO edge at all — the bare-reference
+          // mirror of D-047 clause 1's treatment of a range member, just below.
+          // Edges are re-derived from stored ASTs on every mutation and never
+          // hand-maintained (Rule 6), so populating the cell later makes the
+          // edge appear on its own, at THAT mutation (D-110 clause 5) — nothing
+          // here needs to remember to add it. A cell that EXISTS, holding
+          // `null` included, still gets its edge: D-110 clause 2's "empty"
+          // reading is `graph/eval.ts`'s question at evaluation time, not a
+          // question about whether this edge should exist.
+          if (resolveSlot(dependency.address, objects) === undefined && isInExtentTableCellAddress(dependency.address, objects)) {
+            continue;
+          }
           edges.push({ sourceSlot: dependency.address, dependentSlot });
           continue;
         }

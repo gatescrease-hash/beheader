@@ -2439,7 +2439,38 @@ describe("deriveEdges/mutate — D-047: an EMPTY cell inside a range is skipped,
     }
   });
 
-  it("D-047 item 4's boundary: a plain ReferenceNode (not a range) to an absent slot is STILL rejected as a dangling reference — this fix must not over-reach", () => {
+  it("a plain ReferenceNode (not a range) to an ABSENT slot OUTSIDE a table (or to an unknown object) is STILL rejected as a dangling reference — D-110 clause 6's boundary, formerly D-047 item 4's", () => {
+    const nowhere: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        // References an object that does not exist at all — not a table cell
+        // question, so D-110 has nothing to say about it (clause 6).
+        value: { kind: "formula", ast: { type: "reference", address: addr("obj_9", "value") }, value: null },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: nowhere }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("does not exist");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-110 (the human's ruling on Q-018, at entry 0114-REVIEW-phase4-gate): a
+// bare reference to an EMPTY cell within an EXISTING table's current extent
+// reads as the number `0` instead of being a dangling reference — reversing
+// D-047 clause 4's bare-reference half FOR CELLS ONLY. D-111 clause 3 binds
+// this cycle to pin clause 5 (the cycle-appears-once-populated case)
+// executably — see the last test below.
+// ---------------------------------------------------------------------------
+
+describe("mutate — D-110: a bare reference to an EMPTY IN-EXTENT table cell reads as 0, and gets no edge, instead of being refused", () => {
+  it("clause 1: accepts a formula referencing an in-extent cell with NO SLOT AT ALL, and it reads as 0", () => {
     const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } }); // A2 absent.
     const consumer: GraphObject = {
       id: "obj_2",
@@ -2452,10 +2483,153 @@ describe("deriveEdges/mutate — D-047: an EMPTY cell inside a range is skipped,
 
     const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
 
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 0 });
+    }
+  });
+
+  it("clause 2: a cell that EXISTS holding an explicit `null` literal reads as 0 too — both spellings of empty must agree", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.A2": { kind: "literal", value: null },
+    });
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A2") }, value: null },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 0 });
+    }
+  });
+
+  it("clause 3: arithmetic over an empty cell uses the coerced 0, not a special case — `= A2 + 1` on an empty A2 is 1", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } }); // A2 absent.
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "binaryOp", operator: "+", left: { type: "reference", address: addr("obj_1", "cells", "A2") }, right: { type: "literal", value: 1 } },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 1 });
+    }
+  });
+
+  it("clause 3: SUM(A2, 1) — an empty cell as an EXPLICIT SCALAR argument, not a range member — also coerces to 0, unlike SUM(A2, null) which stays #TYPE", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } }); // A2 absent.
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        value: {
+          kind: "formula",
+          ast: { type: "functionCall", name: "SUM", args: [{ type: "reference", address: addr("obj_1", "cells", "A2") }, { type: "literal", value: 1 }] },
+          value: null,
+        },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 1 });
+    }
+  });
+
+  it("clause 4: deriveEdges emits NO edge at all for a reference to an empty in-extent cell — mutation-checked (dropping the guard makes this fail)", () => {
+    const objects = [
+      tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } }), // A2 absent.
+      {
+        id: "obj_2",
+        name: "value_1",
+        type: "value" as const,
+        slots: { value: { kind: "formula" as const, ast: { type: "reference" as const, address: addr("obj_1", "cells", "A2") }, value: null } },
+      },
+    ];
+
+    expectSameEdges(deriveEdges(objects), []); // NOT [{ sourceSlot: A2, dependentSlot: value_1.value }] — verified by hand against the guard removed.
+  });
+
+  it("clause 6's other boundary: a cell OUTSIDE the table's extent is STILL a dangling reference — D-044 gives it no bound to be legal within", () => {
+    const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } }); // extent is A1:A2 only.
+    const consumer: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: {
+        // A5 is past the table's 2-row extent — not "empty", genuinely dangling.
+        value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A5") }, value: null },
+      },
+    };
+
+    const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: consumer }], []);
+
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("does not exist");
     }
+  });
+
+  it("clause 5 (D-111 clause 3's own pin): a cycle that only exists once the empty cell is populated is accepted while empty and caught at the mutation that populates it — prior state left bit-for-bit unchanged by the refusal", () => {
+    // table_x.A2 = table_x.A1, with A1 intentionally absent — legal and
+    // acyclic per clause 1, since A1 contributes no edge while it is empty.
+    const table = tableObject("obj_1", "table_x", 2, 1, {
+      "cells.A2": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: null },
+    });
+
+    const firstResult = mutate([], [{ kind: "createObject", object: table }], []);
+    expect(firstResult.ok).toBe(true); // ACCEPTED: no false cycle through the still-empty A1.
+    if (!firstResult.ok) {
+      return;
+    }
+    expect(firstResult.objects.find((o) => o.id === "obj_1")?.slots["cells.A2"]).toMatchObject({ value: 0 });
+
+    const committed = firstResult.objects;
+    const snapshotBefore = JSON.parse(JSON.stringify(committed)) as unknown;
+
+    // NOW populate A1 with a formula reading A2 — the genuine cycle appears
+    // only at THIS mutation, and must be rejected here, naming both slots.
+    const secondResult = mutate(
+      committed,
+      [
+        {
+          kind: "setSlot",
+          address: addr("obj_1", "cells", "A1"),
+          slot: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A2") }, value: null },
+        },
+      ],
+      [],
+    );
+
+    expect(secondResult.ok).toBe(false);
+    if (!secondResult.ok) {
+      expect(secondResult.message).toContain("cyclic dependency");
+      expect(secondResult.message).toContain("table_x.A1");
+      expect(secondResult.message).toContain("table_x.A2");
+    }
+    // §5.1 step 6 / D-016: a rejected mutation leaves prior state untouched.
+    expect(committed).toEqual(snapshotBefore);
   });
 });
 

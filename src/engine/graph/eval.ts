@@ -25,7 +25,9 @@
  *     references, `readRange` for a range inside an aggregate call (bounded by the
  *     table's current extent, D-044). `readRange` OMITS an empty cell — no slot at
  *     all, or one holding `null` — from the values it returns rather than erroring
- *     (D-047); a plain `read` miss is unaffected and still becomes `#REF`.
+ *     (D-047). `read` reads the SAME two "empty" shapes as the NUMBER `0` when the
+ *     address is an in-extent TABLE cell (**D-110**); anything else it cannot
+ *     resolve is still `undefined`, which `formula/eval.ts` turns into `#REF`.
  *   - `derived` slots call their schema's compute function exactly once, INSIDE this
  *     same topological pass — never in a separate post-pass (§5.1, PROCESS_BRIEF §9).
  *
@@ -78,7 +80,7 @@
 import type { Address } from "../address.ts";
 import type { FormulaAst } from "../formula/ast.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
-import { enumerateRangeCellAddresses, isRangeEnumerationError } from "../primitives/table.ts";
+import { enumerateRangeCellAddresses, isInExtentTableCellAddress, isRangeEnumerationError } from "../primitives/table.ts";
 import { getObjectSchema, type DerivedSlotSchema } from "../primitives/schema.ts";
 import { addressKey, type Edge } from "./edge.ts";
 import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
@@ -269,7 +271,24 @@ function nextSlot(slot: Slot, value: Value): Slot {
  * that access itself (see its own file header).
  */
 function evaluateFormula(ast: FormulaAst, objects: readonly GraphObject[], evaluatedValues: ReadonlyMap<string, Value>): Value {
-  const read: ReadSlot = (address) => evaluatedValues.get(addressKey(address));
+  const read: ReadSlot = (address) => {
+    const value = evaluatedValues.get(addressKey(address));
+    // D-110 clauses 1-3: a bare reference to an EMPTY cell within an EXISTING
+    // table's current extent — no slot at all (never evaluated in this pass,
+    // so `value` is `undefined` here; D-110 clause 4 means `deriveEdges` never
+    // gave it an edge) or a slot holding `null` (evaluated normally, since it
+    // DOES have an edge) — reads as the NUMBER `0`, before `formula/eval.ts`
+    // or anything downstream ever sees it. Both representations of "empty"
+    // must agree (D-110 clause 2, restating D-047 clause 3's own principle for
+    // ranges). Anything else — a wrong object, a cell outside the extent, a
+    // path the schema does not declare — is UNCHANGED: whatever this pass
+    // actually resolved, `undefined` included, which `evaluateReference`
+    // (formula/eval.ts) turns into `#REF` exactly as before.
+    if ((value === undefined || value === null) && isInExtentTableCellAddress(address, objects)) {
+      return 0;
+    }
+    return value;
+  };
   const readRange: ReadRange = (start, end) => {
     const tableObject = objects.find((candidate) => candidate.id === start.objectId);
     if (tableObject === undefined) {

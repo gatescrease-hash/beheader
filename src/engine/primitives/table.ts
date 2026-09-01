@@ -5,7 +5,9 @@
  * IMPLEMENTS: PROJECT_BRIEF §5.4 — "Default 8×8", the `rows`/`cols` dimension slots,
  * "rows and columns can be added or removed", and the reference-repair half of
  * §5.1.1 for a deleted line. Also the DYNAMIC SLOT FAMILY mechanism D-017 called for
- * and the range-enumeration helper D-036 asked for, bounded per D-044.
+ * and the range-enumeration helper D-036 asked for, bounded per D-044. **D-110**'s
+ * single-cell extent test, `isInExtentTableCellAddress`, is documented at the
+ * function itself rather than repeated here — see its own doc comment.
  * LAYER: engine (pure). May import: engine/* only.
  *        NEVER imports: DOM, window, document, canvas, render/*.
  *
@@ -112,7 +114,7 @@
  *     those two, not an engine primitive.
  */
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";
-import { getSlot, slotKey, type GraphObject, type Slot } from "../graph/node.ts";
+import { getSlot, slotKey, TABLE_TYPE, type GraphObject, type Slot } from "../graph/node.ts";
 
 /**
  * The bounds a `rows`/`cols` write must fall inside to stay `readTableDimension`-
@@ -175,6 +177,43 @@ export function cellAddressToCoordinates(address: Address): { readonly column: n
     return undefined;
   }
   return parseCellReference(cellReference);
+}
+
+/**
+ * Whether `address` names a cell of an EXISTING `table` object, INSIDE that
+ * table's CURRENT `rows`/`cols` extent — **D-110** clause 1's own distinction
+ * between "a legal, unpopulated cell" and "a reference to nothing at all,"
+ * for a single cell rather than a range. Bounded by the SAME
+ * `getTableDimensions` (D-046's `literal`-only guard) `enumerateRangeCellAddresses`
+ * already uses below, so a bare reference and a range can never disagree
+ * about a table's current extent.
+ *
+ * Says NOTHING about whether the cell actually carries a slot — that is each
+ * caller's own question, asked against its own state: `mutation.ts`'s
+ * `deriveEdges` asks it of a candidate object list (D-110 clause 4, no edge
+ * for an empty cell); `graph/eval.ts`'s `read` closure asks it of this pass's
+ * evaluated values (D-110 clauses 2-3, an empty cell reads `0`). Keeping the
+ * extent test here and the existence test at each call site is what lets the
+ * two agree about "in extent" without duplicating `getTableDimensions`' guard
+ * twice — the same split `enumerateRangeCellAddresses` already keeps between
+ * its own bounding and its callers' own "does this cell have a slot" checks.
+ *
+ * `false`, never `undefined`, for a malformed cell address, an unresolvable
+ * object, or an object that is not a `table` — there is nothing D-110 governs
+ * about any of those, and the caller's own existing (unchanged) handling
+ * applies.
+ */
+export function isInExtentTableCellAddress(address: Address, objects: readonly GraphObject[]): boolean {
+  const coordinates = cellAddressToCoordinates(address);
+  if (coordinates === undefined) {
+    return false;
+  }
+  const tableObject = objects.find((candidate) => candidate.id === address.objectId);
+  if (tableObject === undefined || tableObject.type !== TABLE_TYPE) {
+    return false;
+  }
+  const { rows, cols } = getTableDimensions(tableObject);
+  return coordinates.row <= rows && coordinates.column <= cols;
 }
 
 /**
