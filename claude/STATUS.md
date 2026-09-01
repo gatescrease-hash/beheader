@@ -1,45 +1,48 @@
-# STATUS — as of entry 0107
+# STATUS — as of entry 0108
 
 STATE: **CLEAR TO PROCEED.** Both configs compile, **1238/1238** tests pass, 0 skipped, 0 `.only`,
 `npm run build` succeeds. Entry **0107** built **D-101 + D-106 together** (N properties panels, each
-draggable by its header and each with a dismiss control that hides it without deselecting) and is
-**NOT YET REVIEWED** — see item 1 below for exactly what that does and does not block.
+draggable by its header and each with a dismiss control that hides it without deselecting). Its
+verdict is **REVIEW: NOT NEEDED** — corrected at entry 0108 (no code; see item 1) from a hedged
+"RECOMMENDED" the human directly overruled: **"You cannot recommend a review. It is either required
+or it is not."**
 
 **THE NEXT SLICE IS D-102 — the paperclip and editing.** It is queued behind entry 0107 per D-103
 clause 4, and per PROCESS_BRIEF §6 it gets its own **mandatory** review point regardless of the batch
-cap once it lands. Whether D-102 may **start** before entry 0107 is reviewed is NOT a hard block —
-no §6.1 trigger fired for entry 0107, and the batch cap (1/3 cycles, 510+86 lines / 6 files) is not
-reached — but entry 0107's own log entry recommends review first, for a reason worth reading before
-deciding to proceed anyway: see item 1.
+cap once it lands, independent of anything above. Nothing blocks starting it now.
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
 Last review point: **0105-REVIEW-phase4** (ACCEPT WITH EDITS; **D-105** ruled). Entry 0106-RULINGS
-(the human, no code) and entry 0107 (D-101+D-106) both landed since, neither yet reviewed.
-Cycles since last review: **1/3** · diff since last review: **510 insertions, 86 deletions across 6
-files** (cap 800/10) — well under, but see item 1 on why "under the cap" isn't the whole answer here.
+(the human, no code), entry 0107 (D-101+D-106), and entry 0108 (this verdict correction, no code)
+all landed since. Entry 0107 is **REVIEW: NOT NEEDED** — decided from PROCESS_BRIEF §6.1's objective
+triggers, not from how untested the DOM work feels (§6: "apply them honestly rather than by how
+confident you feel").
+Cycles since last review: **2/3** · diff since last review: **510 insertions, 86 deletions across 6
+files** (cap 800/10) — well under; entry 0108 added no diff of its own.
 
 ## Read this first — the nine things a cold reader needs
 
-**1. ENTRY 0107 BUILT D-101 + D-106 AND IT IS UNREVIEWED — READ ITS OWN LOG BEFORE TOUCHING
-`main.ts`, `render/renderer.ts`, OR `index.html`.** No `PROCESS_BRIEF §6.1` trigger fired (it is not
-a phase gate, not a new subsystem's first file, no brief deviation, no worked-around rule, no changed
-test expectation, no new dependency in the PROJECT — see the next paragraph, no repeated failed
-attempt, nothing from §8). The batch cap is not reached either. **So starting D-102 next in the same
-batch is technically permitted.** The entry's own log recommends review anyway, and says why: D-102
-is about to add the FIRST code that writes DOCUMENT state from a mouse gesture (D-103's own framing),
-and it will be built directly on top of entry 0107's interaction pattern for panel dragging and
-dismissal — delegated listeners on the panel container plus a `window`-level drag-gesture tracker,
-deliberately UNLIKE the canvas's own per-element pattern, because `updatePanels` rebuilds every panel
-element on every paint and a listener bound to a specific header would be torn down mid-gesture. A
-human has not seen this pattern run. It WAS verified live, in a real Chromium instance driven by
+**1. ENTRY 0107 BUILT D-101 + D-106; ITS VERDICT IS REVIEW: NOT NEEDED (corrected at entry 0108,
+which changed no code) — READ 0107'S OWN LOG BEFORE BUILDING D-102 ON TOP OF IT.** No
+`PROCESS_BRIEF §6.1` trigger fired (it is not a phase gate, not a new subsystem's first file, no
+brief deviation, no worked-around rule, no changed test expectation, no new dependency in the
+PROJECT itself — see the next paragraph, no repeated failed attempt, nothing from §8), and the batch
+cap is not reached — so the honest verdict, decided from the objective rule and not from how the
+work feels, is **NOT NEEDED**, full stop; D-102 may start in this same batch. Entry 0107 originally
+reported `REVIEW: RECOMMENDED`; the human overruled that verdict shape directly ("it is either
+required or it is not"), and entry 0108 restates the correct verdict without touching 0107's own
+(append-only) text. What is still worth a read from 0107's log is its interaction pattern for panel
+dragging and dismissal — delegated listeners on the panel container plus a `window`-level
+drag-gesture tracker, deliberately UNLIKE the canvas's own per-element pattern, because
+`updatePanels` rebuilds every panel element on every paint and a listener bound to a specific header
+would be torn down mid-gesture. It was verified live, in a real Chromium instance driven by
 Playwright — installed transiently outside the project (`npm install --no-save` in the OS scratch
-directory; **`package.json`/`package-lock.json` are unchanged, confirmed by `git status`**) — clicking,
-shift-clicking, dragging a panel header, and clicking a dismiss button through real browser events,
-with zero console/page errors. That is real signal, not a substitute for the human's own look before
-D-102 stacks more mouse-driven writes on the same pattern. The reviewer's two open questions (entry
-0107's log, bottom) are about exactly this.
+directory; **`package.json`/`package-lock.json` are unchanged, confirmed by `git status`**) —
+clicking, shift-clicking, dragging a panel header, and clicking a dismiss button through real
+browser events, with zero console/page errors. D-102 is the cycle that DOES get a mandatory review
+(D-103 clause 4) — entry 0107's two open questions (its log, bottom) are aimed at that review.
 
 **2. D-101 AND D-106 ARE BOTH FULLY BUILT — DO NOT RE-BUILD EITHER.** `AppState` gained a `panels:
 PanelUiRegistry` field (`Record<string, { dismissed: boolean; manualPosition: PanelPlacement |
@@ -102,15 +105,16 @@ run once it happens.
 ## Next cycles — D-103's order, and it is binding
 
 Numbering shifted again: the phase-4 review took entry 0103, D-100 took entry 0104, entry 0106 was
-the human's own rulings (no build), and D-101+D-106 together took entry 0107.
+the human's own rulings (no build), D-101+D-106 together took entry 0107, and entry 0108 was a
+verdict correction (no build, no code — see "Read this first" item 1).
 
 1. ~~**Entry 0101 — D-097, the vanishing table.**~~ **DONE.**
 2. ~~**Entry 0102 — D-098 + D-099.**~~ **DONE.**
 3. ~~**Entry 0104 — D-100, the selection becomes a list.**~~ **DONE and REVIEWED** (0105-REVIEW).
    ~~**Entry 0106-RULINGS**~~ — the human closed Q-015 and ruled D-106.
-4. ~~**Entry 0107 — D-101 + D-106 together: N panels, drag and dismiss.**~~ **DONE, NOT YET
-   REVIEWED** — see item 1.
-5. **Entry 0108 (or whichever number follows) — D-102, the paperclip and editing.** Gets its own
+4. ~~**Entry 0107 — D-101 + D-106 together: N panels, drag and dismiss.**~~ **DONE. REVIEW: NOT
+   NEEDED** (verdict corrected at entry 0108, no code).
+5. **Entry 0109 (or whichever number follows) — D-102, the paperclip and editing.** Gets its own
    mandatory review point regardless of the batch cap (D-103 clause 4). Read entry 0107's log in
    full first, in particular its two questions for the reviewer — a ruling on either could change
    how D-102's own mouse-driven writes should be wired.
@@ -146,7 +150,7 @@ entry 0096's `render/slots.ts` + `render/extent.ts` split (D-093) and entry 0097
 at 0103) · entry 0104's `interaction.ts`/`renderer.ts`/`main.ts` selection-list widening (REVIEWED:
 ACCEPT WITH EDITS at 0105-REVIEW; D-105).
 
-## Built this batch, NOT yet reviewed (cycle 1/3 since 0105-REVIEW)
+## Built this batch, NOT yet reviewed (cycle 2/3 since 0105-REVIEW)
 
 **Entry 0107 — D-101 + D-106, N panels with drag and dismiss.** `main.ts`'s `PanelUiState`/
 `PanelUiRegistry`/`AppState.panels`, `withInteraction`/`prunePanelsToSelection`, `dismissPanel`/
@@ -155,8 +159,11 @@ ACCEPT WITH EDITS at 0105-REVIEW; D-105).
 `panelledObjectIds` parameter and the split `panelledIds`/`selectedIds` sets in the chrome pass;
 `index.html`'s `#panels` container and its CSS. Tests in `main.test.ts` (9 new) and
 `renderer.test.ts` (4 new). Mutation-checked (see entry 0107's own log) and manually verified live in
-a real browser (see item 1 above). **Not yet reviewed** — see item 1 for what that does and does not
-block.
+a real browser (see item 1 above). **REVIEW: NOT NEEDED** (corrected at entry 0108, no code) — not
+yet reviewed simply means no review has happened yet, not that one is owed before the next slice.
+
+**Entry 0108 — verdict correction, no code.** Restates entry 0107's verdict as `REVIEW: NOT NEEDED`
+after the human overruled a hedged `RECOMMENDED`. Adds nothing to the batch's diff total.
 
 ## Not started
 
@@ -343,9 +350,12 @@ Q-014 is closed (→ D-102). Next free: **Q-016**.
 
 ## Gotchas for the next model
 
-- **ENTRY 0107 IS BUILT BUT UNREVIEWED.** No trigger makes this a hard stop, but its own log
-  recommends review before D-102 builds further mouse-driven writes on the SAME interaction pattern
-  — read "Read this first" item 1 before deciding to proceed anyway.
+- **ENTRY 0107 IS BUILT AND UNREVIEWED, VERDICT REVIEW: NOT NEEDED** (corrected at entry 0108 — no
+  code — after the human rejected a hedged `RECOMMENDED`: "it is either required or it is not").
+  Read "Read this first" item 1 anyway before building D-102 on the SAME interaction pattern; D-102
+  itself gets a MANDATORY review regardless (D-103 clause 4). **A verdict is REQUIRED or NOT
+  NEEDED, decided from PROCESS_BRIEF §6.1's triggers — never a third, hedged option**, however
+  novel or untested the work feels.
 - **`AppState.interaction` is assigned in exactly ONE place: `withInteraction`.** It is what keeps
   `AppState.panels` pruned to the current selection (D-101 clause 6, D-106 clause 6). A future call
   site that assigns `interaction` directly (as three call sites did before entry 0107) SILENTLY
