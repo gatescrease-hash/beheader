@@ -1,21 +1,24 @@
-# STATUS — as of entry 0120-text-block-tree
+# STATUS — as of entry 0121-REVIEW-phase5
 
-STATE: **GREEN, AWAITING REVIEW.** Both configs compile, **1322/1322** tests pass, 0 skipped, 0
-`.only`. **PHASE 5 HAS BEGUN.** Entry 0120 built the text primitive's block-tree engine
-(`src/engine/primitives/text.ts` — parse/evaluate/extract-dependencies over `{= }`/`{? }{:}{?}`),
-headless and fully unit-tested, and stopped there: it is the **first file of a new subsystem**
-(§6.1 trigger 2), which forces a review point regardless of size or the §6.3 batch cap. **This is
-unreviewed.** No `text` object, schema entry, derived slot, `TextMeasurer`/`EvalContext` threading,
-or command exists yet — see entry 0120's "Explicitly not in scope" and "Where I got stuck" for
-exactly what the next cycle (post-review) owes, including an open design question for the reviewer
-about D-110's interaction with `resolvedContent`'s future `read` closure.
+STATE: **GREEN.** Both configs compile, **1329/1329** tests pass, 0 skipped, 0 `.only`.
+**PHASE 5 IS OPEN AND ITS FIRST SLICE IS REVIEWED. Nothing is owed before the next slice.**
 
-**PHASE 4 IS PASSED, ITS GATE IS CLOSED, AND THE PRE-PHASE-5 BATCH IS REVIEWED.** 0116-REVIEW
-closed the gate; **0119-REVIEW cleared entries 0117 and 0118 (ACCEPT WITH EDITS, three edits: two
-tests and one comment, no production behaviour changed)**. §6.2's block on starting a later phase is
-**LIFTED** — `mutation.ts`, `graph/eval.ts` and `primitives/table.ts` no longer carry unreviewed
-changes. (This is unrelated to entry 0120's own, separate review point above — Phase 5's own first
-file needs its own review before Phase 5 continues.)
+**ENTRY 0120'S BLOCK-TREE ENGINE IS BUILT AND REVIEWED (0121-REVIEW: ACCEPT WITH EDITS).**
+`src/engine/primitives/text.ts` parses §5.6's `{= }` / `{? }{:}{?}` (nestable) out of a raw
+`content` string into a `Block[]`, evaluates it with short-circuiting, and extracts its dependencies
+eagerly and totally including untaken branches. §6.1 trigger 2 (first file of a new subsystem) is
+**DISCHARGED** — Phase 5 may continue. No load-bearing (§6.2) file was touched by that cycle at all.
+0121-REVIEW made three edits (two defect fixes, one criterion pin) and issued **D-114**, **D-115**
+and **Q-019**.
+
+**WHAT IS STILL UNBUILT IN PHASE 5**, and it is most of it: no `text` OBJECT type, no schema entry,
+no `resolvedContent`/`measuredHeight` derived slots, no `TextMeasurer`/`EvalContext` threading into
+`graph/eval.ts`, no `text` command, no markdown-lite rendering, no layout. The block-tree engine is
+the pure half only.
+
+**PHASE 4 IS PASSED AND ITS GATE IS CLOSED.** 0116-REVIEW closed the gate; 0119-REVIEW cleared
+entries 0117 and 0118. §6.2's block on starting a later phase was lifted there and has not been
+re-armed.
 
 **D-109 CLAUSE 3 IS BUILT (0117) AND REVIEWED (0119).** `main.ts`'s command-bar `keydown` listener
 clears `input.value` only when `submitLine`'s returned `AppTransition.refused` is `false`, computed
@@ -32,15 +35,16 @@ the `mutate` level (last test in `mutation.test.ts`'s D-110 block) **and, since 
 command line too** (`commands.test.ts`'s `set` block). Two existing tests flipped from asserting
 refusal to asserting acceptance-and-`0`, exactly as D-110's own ruling text said they would.
 
-**Owed next:** entry 0120's review point (§6.1 trigger 2, first file of `primitives/text.ts`) —
-Phase 5 may not continue until it clears. After that: wire `text.ts`'s three functions into
-`primitives/schema.ts` (a `text` schema entry, `resolvedContent`/`measuredHeight` derived slots),
-thread a `TextMeasurer` through an `EvalContext` into `graph/eval.ts` (Rule 1's injected-measurer
-trap), add the `text` command, and settle entry 0120's own open question — does `resolvedContent`'s
-`read` closure need D-110's empty-in-extent-cell treatment, given `graph/eval.ts`'s generic
-`evaluateDerivedSlot` `read` does not currently apply it (only `evaluateFormula`'s own `read` does).
+**Owed next: the Phase 5 WIRING slice**, and it inherits a decided direction rather than an open
+question. Wire `text.ts`'s three functions into `primitives/schema.ts` (a `text` schema entry,
+`resolvedContent` + `measuredHeight` derived slots), thread a `TextMeasurer` through an
+`EvalContext` into `graph/eval.ts` (Rule 1's injected-measurer trap — solve it FIRST, not last), and
+add the `text` command. **That slice is bound by D-114 in full**, including clause 3's non-obvious
+ordering, which it MUST pin with a test that fails if the two checks are swapped. It is a §6.1
+trigger of its own (`graph/eval.ts` and `primitives/schema.ts` are load-bearing, §6.2).
 Still separately owed, unchanged: **D-109 clauses 1–2** (cell decimals + clipping, `render/` only) ·
-**Q-017** (table headers, open — F12 strengthens the case).
+**Q-017** (table headers) · **Q-019** (new — what a broken embedded formula displays; answer it
+before the wiring cycle bakes in today's default, or accept that default knowingly).
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column commands).
@@ -127,7 +131,19 @@ checked in EXACTLY ONE place, `document.ts`'s `reconstructSlot`, via `formula/as
 `exceedsMaxFormulaAstDepth` — `deps.ts` and `eval.ts` still carry no depth parameter of their own,
 and that is what makes the single check safe.
 
-**11. THE PAPERCLIP CANNOT REACH A TABLE CELL.** `props.ts` collapses every cell into ONE
+**11. THE TEXT BLOCK TREE IS DERIVED STATE, RE-PARSED FROM `content` ON DEMAND, AND MUST NEVER BE
+CACHED (D-114 clause 4).** `content` is a **literal** slot holding the raw source, so — unlike a
+cell formula — it is NEVER refused at commit time: any string is legal document state, half-typed
+`{= }` included. Parsing therefore happens downstream, and a broken span becomes an `error`-kind
+`Block` (§5.6 lists three variants; the fourth is sanctioned by **D-115**, the same move D-028 made
+for `FormulaAst`'s `ErrorNode` — do NOT "restore" the union to three). An `error` block MUST carry
+the offending `source` and its `start` offset **into `content`** (D-115 clause 2, discharging D-038
+clauses 2 and 4) — that is what keeps **Q-019** answerable either way. A broken CONDITIONAL keeps
+**both** branches inline after its error block, because keeping only the true one made dependency
+extraction silently non-total (0121-REVIEW §4 measured `[]` for a reference living only in the false
+branch).
+
+**12. THE PAPERCLIP CANNOT REACH A TABLE CELL.** `props.ts` collapses every cell into ONE
 `synthetic` summary row and D-102 clause 2 deliberately gives a `synthetic` row no paperclip. **Cell
 values must be TYPED** (`set table_1.A1 5`, `set table_1.B1 = polygon_1.origin.x * 2` — the latter
 is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and strings left-aligned per
@@ -136,14 +152,16 @@ is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and string
 
 ## Next slice (recommended)
 
-**Review entry 0120 first** — it is a §6.1 trigger (first file of `primitives/text.ts`) and Phase 5
-may not continue past it unreviewed. After that clears: wire `text.ts` into `primitives/schema.ts`
-(schema entry, `resolvedContent`/`measuredHeight`), thread `TextMeasurer`/`EvalContext` into
-`graph/eval.ts`, add the `text` command — and settle 0120's own flagged question about D-110 and
-`resolvedContent`'s `read` closure before building it, not while building it. Independently,
-**D-109 clauses 1–2** (cell decimals + clipping, `render/renderer.ts` only, Rule 5's `save()`/
-`clip()`/`restore()` or measured truncation) and **Q-017**'s headers remain the smallest un-owed
-items on the board if the human wants a render-only slice instead.
+**Phase 5's wiring slice**, per 0121-REVIEW §10: the `text` schema entry, `resolvedContent` and
+`measuredHeight` as derived slots, `TextMeasurer` injected through an `EvalContext` into
+`graph/eval.ts`, and the `text` command. **Read D-114 before writing any of it** — it settles what
+`read`/`readRange` an embedded `{= }` gets (the same contract a cell formula's AST gets, D-110
+coercion included), where the widening goes (`evaluateDerivedSlot`, never a second path), and the
+order the D-110 coercion and D-013's membership check must run in (coercion first, for an in-extent
+empty cell only — they collide silently otherwise). Rule 1's injected-measurer trap is the other
+thing to design first rather than retrofit. It is a §6.1 trigger of its own (load-bearing files).
+Independently, **D-109 clauses 1–2** (cell decimals + clipping, `render/renderer.ts` only) and
+**Q-017**'s headers remain the smallest un-owed items if the human wants a render-only slice instead.
 
 ## Built and reviewed
 
@@ -169,16 +187,12 @@ entries 0107/0109's N panels, drag, dismiss and panel editing — D-101, D-106, 
 REVISE, four findings) · entry 0111's F1–F4 fix list and D-107, entry 0112's D-081 + D-083 clause 4
 (0113-REVIEW: ACCEPT, no edits) · entry 0115's Phase 4 gate test (0116-REVIEW: ACCEPT WITH EDITS) ·
 **entry 0117's D-109 clause 3 and entry 0118's D-110 in full (0119-REVIEW: ACCEPT WITH EDITS — two
-tests and one comment added by the reviewer; D-112, D-113).**
+tests and one comment added by the reviewer; D-112, D-113)** · **entry 0120's `primitives/text.ts`
+block-tree engine (0121-REVIEW: ACCEPT WITH EDITS — three edits; D-114, D-115, Q-019).**
 
 ## Built this batch, not yet reviewed
 
-**Entry 0120 — `src/engine/primitives/text.ts` + its tests.** §5.6's block-tree engine: parses
-`{= }`/`{? }{:}{?}` (nestable) out of a `content` string into a `Block[]` (widened by a fourth,
-non-brief `error` variant — see the entry), evaluates it with short-circuiting, and extracts its
-dependencies eagerly/totally including untaken branches. Headless; no `text` object, schema, derived
-slot, `TextMeasurer`, or command exists yet. This is the first file of a new subsystem (§6.1 trigger
-2) and needs its own review before Phase 5 continues.
+Nothing. The tree is fully reviewed as of 0121-REVIEW.
 
 ## Not started
 
@@ -186,8 +200,8 @@ D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
 (drag-linking between two panels) · **D-109 clauses 1–2** · Phase 5's `text` object/schema/derived
-slots/`TextMeasurer`/command (block-tree engine itself is entry 0120, above, awaiting review) ·
-Phases 6–7.
+slots/`TextMeasurer`/command and its markdown-lite rendering (the block-tree engine itself is built
+and reviewed — entries 0120/0121) · Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -305,7 +319,17 @@ Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-113**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-115**) binds without restatement here.
+
+**D-114 AND D-115 ARE NEW AND BOTH BIND THE NEXT SLICE.** D-114: an embedded `{= }` AST evaluates
+through the SAME `read`/`readRange` contract a formula slot's AST gets — D-110's coercion included,
+plus a REAL `readRange` built on `enumerateRangeCellAddresses` (today `evaluateDerivedSlot` supplies
+none, so an embedded `SUM(A1:A4)` derives correct edges and then evaluates `#PARSE`). Widen
+`evaluateDerivedSlot`; never add a second evaluation path; never give text its own extent
+arithmetic. **Clause 3 is the trap**: an empty in-extent cell has NO edge (D-110 clause 4), so
+D-013's membership check rejects it before D-110 can return `0` — the coercion runs FIRST for that
+address class only. D-115: the block tree's `error` variant is sanctioned, must carry `source` +
+`start`, and must not narrow dependency extraction.
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 (0101/0102, cleared 0103) · D-100
 (0104, cleared 0105; Q-015 CLOSED) · D-101, D-106, D-102 (0107/0109, cleared 0110) · D-107 (0111,
@@ -319,7 +343,10 @@ decimals + clipping, `render/` only).
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted** — `set <address> = <formula>` stays the
 spelling, and D-102's panel reuses that exact synthesised form. **Q-016 and Q-017 remain OPEN**, both
-the human's, neither blocking. Next free: **Q-019**.
+the human's, neither blocking. **Q-019 is NEW and also the human's** (0121-REVIEW): when one embedded
+formula in a text box is broken, does the whole box go blank (today's default, by omission not
+decision) or does the broken span show literally? Reviewer recommends the latter; nothing is built
+against it and D-115 clause 2 keeps both one line away. Next free: **Q-020**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 D-097's write-time refusal sits BESIDE that read, not inside it. **This is also what makes D-110
@@ -348,6 +375,18 @@ site).
 
 ## Gotchas for the next model
 
+- **When a recovery path DROPS a subtree, ask what else reads that subtree.** Entry 0120 reasoned
+  about a broken conditional's recovery purely as a display choice ("which branch would we show?")
+  and dropped the false branch. Display turned out to be inert — the error block short-circuits
+  evaluation before either branch is reached — so the ONLY observable effect of the choice was that
+  dependency extraction went half-total, silently (0121-REVIEW §4, F13). The reasoning was applied
+  to the one consumer that did not exist yet, and not to the one that did.
+- **`{= }` inside text is NOT a second formula language.** It is `formula/parser.ts` and
+  `formula/eval.ts` called with no `tableObjectId` — which is also the entire reason "bare refs in
+  text formulas are a parse error" (§5.3) is true, with no special case anywhere. Do not add one.
+- **The three countable claims a log entry makes — diff total, test counts, mutation-check red
+  sets — are checked by every review now.** Entry 0120's all reproduced exactly; 0115's and 0118's
+  did not. Paste the runner's tail.
 - **A mutation check is only worth the accuracy of "which tests went red and why."** Entry 0118's
   two checks reproduce with 5 red / 3 green each, not the 6 / 2 it reports, and the two red SETS
   differ — which is *stronger* evidence for its own conclusion than what it claimed. Write that

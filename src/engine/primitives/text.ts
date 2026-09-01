@@ -31,12 +31,15 @@
  *     a widened `LiteralNode`"), for the identical reason: `content` can hold a
  *     syntactically broken `{= }`/`{? }` (an unparseable expression, or a `{? }` never
  *     closed by a matching `{?}`), and this file must never throw or drop that
- *     position silently. A broken span becomes ONE `error` block naming why, and — for
- *     a broken CONDITIONAL — its already-parsed TRUE branch is kept inline rather than
- *     discarded, so the rest of the content survives; the false branch is dropped
- *     (there is no principled way to pick one without a working condition). This is an
- *     implementation decision, not a brief requirement (PROCESS_BRIEF §7 point 2:
- *     reversible, no ruling needed).
+ *     position silently. Sanctioned and made binding by **D-115**, which also requires
+ *     the two fields that make it useful: the offending span's `source` and its `start`
+ *     offset into `content` (**D-038** clauses 4 and 2).
+ *   - A broken CONDITIONAL keeps BOTH already-parsed branches inline after its `error`
+ *     block (**D-115**). Keeping only the true branch made dependency extraction
+ *     silently non-total for the very case §5.3's totality rule exists for; rendering is
+ *     unaffected either way, because the `error` block short-circuits `evaluateBlocks`
+ *     before either branch is reached. What a broken conditional would DISPLAY is
+ *     **Q-019**, the human's, and is deliberately not decided here.
  *   - The marker scanner is QUOTE-AWARE over the identical one escape
  *     `formula/lexer.ts` honours (`\"` only) — `{= CONCAT("a}b", 1) }`'s embedded `}`
  *     inside the string must not end the block early (`findUnquotedBrace`). Two
@@ -119,13 +122,28 @@ export interface ConditionalBlock {
 
 /**
  * A syntactically broken `{= }`/`{? }` span (see file header — this variant is this
- * file's own addition, not §5.6's literal union). `evaluateBlockTree` turns it into a
- * `#PARSE` `ErrorValue` for the whole tree it sits in, the same "one broken thing
- * poisons the derived value" posture an ordinary formula slot already has.
+ * file's own addition, not §5.6's literal union; sanctioned by **D-115**).
+ * `evaluateBlockTree` turns it into a `#PARSE` `ErrorValue` for the whole tree it sits
+ * in, the same "one broken thing poisons the derived value" posture an ordinary formula
+ * slot already has.
+ *
+ * `source` and `start` are REQUIRED, not decoration (**D-038** clauses 2 and 4, applied
+ * at this boundary by **D-115**): `source` is the raw expression text this block
+ * replaced, and `start` is its offset INTO `content` — content-space, so a caller can
+ * underline the span in the operator's own text without re-scanning. D-038 clause 2
+ * says a rejection carries "the offending name and its position... retrofitting
+ * positions is the expensive kind of change," and clause 4 says the rejecting layer
+ * never discards the source. Both are what keep **Q-019** answerable either way: a
+ * consumer that decides to render a broken span literally instead of erroring needs
+ * exactly these two fields, and cannot recover them from `message`.
  */
 export interface BlockParseErrorBlock {
   readonly type: "error";
   readonly message: string;
+  /** The raw expression source this block replaced, verbatim (D-038 clause 4). Excludes the `{=`/`{?` and `}` delimiters. */
+  readonly source: string;
+  /** Offset of `source`'s first character within `content` (D-038 clause 2). */
+  readonly start: number;
 }
 
 /** §5.6's block tree, widened by one variant — see the file header. */
@@ -270,15 +288,24 @@ function parseBlockSequence(state: TextParseState): { readonly blocks: readonly 
         state.pos = marker.end;
         return { blocks, terminator: "close" };
       case "formulaOpen": {
+        // The source always begins two characters past the marker's own start (`{=`),
+        // so this is the one arithmetic the offset needs — captured BEFORE `state.pos`
+        // moves (D-038 clause 2, via D-115).
+        const sourceStart = state.pos + 2;
         state.pos = marker.end;
         const parsed = parseFormula(marker.source, state.objects);
-        blocks.push(isParseError(parsed) ? { type: "error", message: parsed.message } : { type: "formula", ast: parsed });
+        blocks.push(
+          isParseError(parsed)
+            ? { type: "error", message: parsed.message, source: marker.source, start: sourceStart }
+            : { type: "formula", ast: parsed },
+        );
         textStart = state.pos;
         break;
       }
       case "conditionalOpen": {
+        const sourceStart = state.pos + 2; // Same `{?`-is-two-characters arithmetic as above.
         state.pos = marker.end;
-        for (const block of parseConditional(state, marker.source)) {
+        for (const block of parseConditional(state, marker.source, sourceStart)) {
           blocks.push(block);
         }
         textStart = state.pos;
@@ -305,9 +332,16 @@ function parseBlockSequence(state: TextParseState): { readonly blocks: readonly 
  * accepted: nothing legitimate nests 64 `{? }` levels, and "never throws" outranks
  * "recovers perfectly placed" at a depth no operator reaches.
  */
-function parseConditional(state: TextParseState, conditionSource: string): readonly Block[] {
+function parseConditional(state: TextParseState, conditionSource: string, sourceStart: number): readonly Block[] {
   if (state.depth >= MAX_BLOCK_TREE_DEPTH) {
-    return [{ type: "error", message: `text conditional nests too deeply (limit ${MAX_BLOCK_TREE_DEPTH})` }];
+    return [
+      {
+        type: "error",
+        message: `text conditional nests too deeply (limit ${MAX_BLOCK_TREE_DEPTH})`,
+        source: conditionSource,
+        start: sourceStart,
+      },
+    ];
   }
   state.depth += 1;
   const trueResult = parseBlockSequence(state);
@@ -319,18 +353,27 @@ function parseConditional(state: TextParseState, conditionSource: string): reado
     unclosed = falseResult.terminator === "eof";
   }
   state.depth -= 1;
-  return finishConditional(conditionSource, state.objects, trueResult.blocks, falseBranch, unclosed);
+  return finishConditional(conditionSource, sourceStart, state.objects, trueResult.blocks, falseBranch, unclosed);
 }
 
 /**
  * Turns a parsed conditional's pieces into the `Block[]` `parseConditional` returns —
  * either a real `ConditionalBlock`, or (a broken condition, OR no matching `{?}` was
- * ever found) one `error` block with the already-parsed `trueBranch` kept inline. See
- * the file header for why the false branch is dropped in the broken case rather than
- * guessed at.
+ * ever found) one `error` block followed by BOTH already-parsed branches, inline.
+ *
+ * **Both branches, not just the true one (D-115).** Keeping only the true branch made
+ * `extractTextDependencies` silently NON-TOTAL for exactly the case §5.3's totality
+ * rule exists for: with a broken condition, a reference living only in the false branch
+ * was reported by nobody, so a text object subscribed to strictly fewer slots than its
+ * own `content` names (measured at 0121-REVIEW: `{? 1 + }x{:}{= poly_1.radius }{?}`
+ * extracted `[]`). Nothing about RENDERING changes by keeping both — the `error` block
+ * sits first and `evaluateBlocks` returns `#PARSE` before reaching either branch — so
+ * this is a pure restoration of totality, not a display decision. Which branch a broken
+ * conditional would DISPLAY, if a consumer ever renders one, is **Q-019**, the human's.
  */
 function finishConditional(
   conditionSource: string,
+  sourceStart: number,
   objects: readonly AddressableObject[],
   trueBranch: readonly Block[],
   falseBranch: readonly Block[],
@@ -338,10 +381,23 @@ function finishConditional(
 ): readonly Block[] {
   const condition = parseFormula(conditionSource, objects);
   if (isParseError(condition)) {
-    return [{ type: "error", message: condition.message }, ...trueBranch];
+    return [
+      { type: "error", message: condition.message, source: conditionSource, start: sourceStart },
+      ...trueBranch,
+      ...falseBranch,
+    ];
   }
   if (unclosed) {
-    return [{ type: "error", message: "unclosed {? ... } conditional (no matching {?})" }, ...trueBranch];
+    return [
+      {
+        type: "error",
+        message: "unclosed {? ... } conditional (no matching {?})",
+        source: conditionSource,
+        start: sourceStart,
+      },
+      ...trueBranch,
+      ...falseBranch,
+    ];
   }
   return [{ type: "conditional", condition, trueBranch, falseBranch }];
 }

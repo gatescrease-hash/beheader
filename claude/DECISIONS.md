@@ -3762,3 +3762,95 @@ as unexercised rather than presented as tested behaviour.
 
 Reconciliation required: none. No `PROVISIONAL` tag. Pinned by two of entry 0117's seven tests, both
 mutation-checked in that entry and re-run at 0119-REVIEW.
+
+---
+
+## D-114 — An embedded `{= }` AST is evaluated through the SAME read/readRange contract a formula slot's AST gets; `graph/eval.ts` is widened for it, and text never grows its own
+Answers: entry 0120's own question for the reviewer ("does `resolvedContent`'s `read` closure need
+D-110's treatment?"), plus finding F15 at 0121-REVIEW   Ruled: entry 0121-REVIEW-phase5 (reviewer)
+Binding on: `graph/eval.ts`, `primitives/schema.ts`'s future `text` entry, `primitives/text.ts`, and
+every future derived slot whose dependencies come from an embedded formula AST
+
+**Ruling.**
+
+1. **Same contract, not a parallel one.** An AST embedded in text (`{= expr }`, and a `{? cond }`'s
+   condition) is evaluated with a `read` that applies **D-110**'s in-extent-empty-cell coercion and
+   with a REAL `readRange` built on `primitives/table.ts`'s `enumerateRangeCellAddresses` — the same
+   function `graph/eval.ts`'s `evaluateFormula` and `mutation.ts`'s `deriveEdges` already share. A
+   reference means the same thing in a cell and in a text box, or the ordering argument that put
+   D-110 before Phase 5 (0116-REVIEW §10) bought nothing.
+2. **The fix goes in `graph/eval.ts`'s `evaluateDerivedSlot`, by WIDENING it** — never a second
+   evaluation path beside it, and never by handing `resolvedContent`'s compute the formula-style
+   closures and quietly abandoning D-013's membership check. `formula/eval.ts`'s own header states
+   why the range half must not be re-derived independently ("STRUCTURALLY impossible for evaluation
+   and edge derivation to disagree"), and that reasoning binds a third consumer exactly as it bound
+   the first two.
+3. **The ORDER is the load-bearing half, and it is not obvious.** D-110 clause 4 means an empty
+   in-extent cell deliberately has NO edge, so its address is NOT in the declared-dependency set
+   `evaluateDerivedSlot` builds. A D-013 membership check applied first therefore returns `#REF` and
+   D-110 never gets the chance to return `0` — the two rules collide, and the collision is silent.
+   So: for an address `isInExtentTableCellAddress` accepts, the D-110 coercion is consulted BEFORE
+   the membership rejection; every other address keeps failing that check exactly as it does today.
+   D-013 is not weakened — it still rejects an undeclared read — it simply stops firing on the one
+   address class D-110 defines as legitimately edge-less.
+4. **The block tree is DERIVED state and is never stored.** It is re-parsed from `content` (a
+   literal slot) on demand, the same way the edge set is re-derived every mutation. Do NOT cache a
+   `Block[]` into a slot, a document field, or a module-level map: `content` is the single source of
+   truth, and a cached tree is a second one that can disagree with it (Rule 5's own posture, and the
+   reason nothing here needs to be serializable).
+
+**Rationale.** 0119-REVIEW §3 audited "does this edge exist" against "what does this address read
+as" and found the two could not drift, *because both consumers read the same staged object list*.
+Text is the THIRD consumer and the first whose `read` comes from a different closure — so that
+audit does not carry over on its own, and the gap is measurable today: an embedded
+`SUM(table_1.A1:table_1.A4)` extracts a correct `RangeDependency` (so its edges are right) while
+`evaluateBlockTree` with the derived-slot `read` returns `#PARSE`, because `evaluateDerivedSlot`
+supplies no `readRange` at all (measured at 0121-REVIEW). That is an edge/value disagreement of
+exactly the class this project has now ruled against three times (D-017, D-047 clause 1, D-110
+clause 4). Entry 0120's Decision 4 — that `evaluateBlockTree` "can pass through with no adapter" —
+is the optimistic half of this and is corrected here: the return TYPE composes, the callback
+contract does not.
+
+Reconciliation required: none in `primitives/text.ts`, which already takes both callbacks as
+parameters and has no opinion on their origin. Binding on the cycle that writes the `text` schema
+entry, which MUST land clause 3's ordering with a test that fails if the two are swapped.
+
+---
+
+## D-115 — The block tree's `error` variant is sanctioned, MUST carry the offending span's source and offset, and MUST NOT narrow dependency extraction
+Answers: findings F13 and F14 at 0121-REVIEW   Ruled: entry 0121-REVIEW-phase5 (reviewer)
+Binding on: `primitives/text.ts` and every consumer of a `Block[]`
+
+**Ruling.**
+
+1. **The fourth variant stays.** PROJECT_BRIEF §5.6 lists three `Block` shapes; a parser over text
+   that is a LITERAL slot needs a fourth, because `content` is never rejected at commit time the way
+   a cell formula is at parse time — any string is legal document state, broken markup included.
+   This is D-028's move (`ErrorNode` is not in §5.3's grammar either) for the same reason, and a
+   later cycle MUST NOT "restore" the union to three.
+2. **An `error` block carries `source` and `start`.** `source` is the raw expression text it
+   replaced; `start` is that text's offset INTO `content` — content-space, so a consumer can
+   underline the operator's own text without rescanning. This is **D-038** clause 4 ("a rejected
+   formula's source text is never discarded by the layer that rejects it") and clause 2 ("carries
+   the offending name and its position... retrofitting positions is the expensive kind of change")
+   applied at a boundary D-038 predates. Entry 0120 kept the message only; both fields were added by
+   this review while the shape had zero consumers, which is the cheapest moment that will ever exist.
+3. **A broken conditional keeps BOTH branches inline after its `error` block**, never just the true
+   one. Keeping one made `extractTextDependencies` silently NON-TOTAL for precisely the case §5.3's
+   totality rule exists for: measured at 0121-REVIEW, `{? 1 + }x{:}{= poly_1.radius }{?}` extracted
+   `[]` — a text object subscribing to strictly fewer slots than its own `content` names. Rendering
+   is unaffected either way (the `error` block short-circuits evaluation before either branch is
+   reached), so this is a restoration of totality, not a display decision.
+4. **What a broken span DISPLAYS is not ruled here — it is Q-019, the human's.** Clause 2 is what
+   keeps both answers reachable: rendering the raw span literally instead of erroring the whole
+   object is a one-line change in the consumer *given* `source`, and impossible without it.
+
+**Rationale.** Three flavours of malformed markup currently get three different recoveries — a
+stray `{?}` and an unterminated `{=` both degrade to literal text, while a `{= 1 + }` that closes
+correctly poisons the entire object with `#PARSE`. That inconsistency is real, is operator-visible,
+and is D-042's kind of question rather than a reviewer's; raising it as Q-019 rather than ruling it
+is deliberate. What IS the reviewer's is making sure the data shape can express whichever answer
+comes back, and that the dependency half is not quietly wrong in the meantime.
+
+Reconciliation required: none outstanding — both halves were applied and mutation-checked at
+0121-REVIEW. No `PROVISIONAL` tag; Q-019 governs display only and nothing is built against it.

@@ -216,7 +216,7 @@ describe("extractTextDependencies", () => {
   });
 
   it("an error block contributes nothing (D-028's own 'absence of a dependency' move, applied here)", () => {
-    expect(extractTextDependencies([{ type: "error", message: "broken" }])).toEqual([]);
+    expect(extractTextDependencies([{ type: "error", message: "broken", source: "1 + ", start: 2 }])).toEqual([]);
   });
 
   it("a formula block contributes its own extractDependencies", () => {
@@ -232,6 +232,17 @@ describe("extractTextDependencies", () => {
     const dependencies = extractTextDependencies(blocks);
     expect(dependencies).toContainEqual({ kind: "reference", address: { objectId: "obj_1", path: ["rows"] } });
     expect(dependencies).toContainEqual({ kind: "reference", address: { objectId: "obj_9", path: ["rows"] } });
+  });
+
+  it("a reference living ONLY in the false branch of a BROKEN conditional is still reported (D-115) — the case that made extraction non-total before 0121-REVIEW", () => {
+    const other = objects(["obj_9", "poly_1", "polygon"]);
+    const blocks = parseTextContent("{? 1 + }x{:}{= poly_1.rows }{?}", [...TABLE_1, ...other]);
+    // The condition is broken, so this whole tree evaluates to #PARSE either way — but
+    // the address the content NAMES must still be reported, or the object would
+    // subscribe to strictly fewer slots than its own content mentions.
+    expect(extractTextDependencies(blocks)).toEqual([
+      { kind: "reference", address: { objectId: "obj_9", path: ["rows"] } },
+    ]);
   });
 
   it("a cycle reachable only through an untaken branch is still a real, discoverable dependency (§5.3's own rule, applied at the block-tree level)", () => {
@@ -335,5 +346,63 @@ describe("evaluateBlockTree — conditionals short-circuit (§5.6: 'evaluation o
 describe("recovered parse errors carry a readable message", () => {
   it("names something about the failure, not just 'error'", () => {
     expect(soleErrorMessage(parseTextContent("{= 1 + }", []))).not.toBe("");
+  });
+
+  it("an error block carries the offending SOURCE and its offset into content (D-038 clauses 2 and 4, via D-115)", () => {
+    const content = "aaaaaaaaaaaaaaaaaaaa{= SUMM(1) }bbbb";
+    const blocks = parseTextContent(content, []);
+    const error = blocks.find((block) => block.type === "error");
+    if (error === undefined || error.type !== "error") {
+      throw new Error(`expected an error block, got: ${JSON.stringify(blocks)}`);
+    }
+    expect(error.source).toBe(" SUMM(1) ");
+    // The offset must be into CONTENT, not into the extracted source — a caller
+    // underlining the span reads the operator's own text, not a substring of it.
+    expect(content.slice(error.start, error.start + error.source.length)).toBe(error.source);
+    expect(error.start).toBe(22);
+  });
+
+  it("a broken CONDITION's error block carries its own source and offset too, not just a broken {= } one", () => {
+    const content = "hi {? 1 + }kept{?}";
+    const blocks = parseTextContent(content, []);
+    const error = blocks.find((block) => block.type === "error");
+    if (error === undefined || error.type !== "error") {
+      throw new Error(`expected an error block, got: ${JSON.stringify(blocks)}`);
+    }
+    expect(error.source).toBe(" 1 + ");
+    expect(content.slice(error.start, error.start + error.source.length)).toBe(error.source);
+  });
+});
+
+describe("PROJECT_BRIEF §6's Phase 5 acceptance-criterion string, verbatim (added 0121-REVIEW)", () => {
+  // The brief's own words, character for character. Added by the review rather than
+  // paraphrased, because §12 makes the criterion itself the contract: the tests above
+  // exercise the same machinery through fixtures the implementer chose, and a fixture
+  // an implementer chose cannot show that the SPEC's own string parses.
+  const CRITERION = "Radius: {= table_x.A1 }{? table_x.A1 > 50 } — **LARGE**{:} — small{?}";
+  const TABLE_X = objects(["obj_1", "table_x"]);
+  const cellA1 = { objectId: "obj_1", path: ["cells", "A1"] };
+
+  it("parses into text + formula + conditional, resolving table_x.A1 through D-005's stored path", () => {
+    const blocks = parseTextContent(CRITERION, TABLE_X);
+    expect(blocks.map((block) => block.type)).toEqual(["text", "formula", "conditional"]);
+  });
+
+  it("subscribes to the cell BOTH the embedding and the condition name (eager and total)", () => {
+    const dependencies = extractTextDependencies(parseTextContent(CRITERION, TABLE_X));
+    expect(dependencies).toEqual([
+      { kind: "reference", address: cellA1 },
+      { kind: "reference", address: cellA1 },
+    ]);
+  });
+
+  it("updates BOTH its number and its branch as the cell changes — the criterion's own clause", () => {
+    const blocks = parseTextContent(CRITERION, TABLE_X);
+    expect(evaluateBlockTree(blocks, () => 80)).toBe("Radius: 80 — **LARGE**");
+    expect(evaluateBlockTree(blocks, () => 12)).toBe("Radius: 12 — small");
+  });
+
+  it("markdown-lite markup survives as literal text for render/ to interpret, uninterpreted here", () => {
+    expect(evaluateBlockTree(parseTextContent(CRITERION, TABLE_X), () => 80)).toContain("**LARGE**");
   });
 });

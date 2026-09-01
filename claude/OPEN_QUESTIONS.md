@@ -8,7 +8,62 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-019**
+Next free ID: **Q-020**
+
+---
+
+## Q-019 — When one embedded formula in a text box is broken, does the WHOLE text box go blank, or does the broken span show literally?
+Raised: entry 0121-REVIEW-phase5 (reviewer)   Brief section: §5.6, §5.1 ("errors propagate"), §5.9
+(the error badge)   Status: **OPEN — the human's, non-blocking, nothing tagged.**
+
+Text's `content` is a **literal** slot, so unlike a cell formula it is never refused at commit time:
+any string is legal, half-typed formulas included. That makes "what does a broken `{= }` look like?"
+a real, reachable, operator-facing question — and today the answer is inconsistent three ways,
+without anyone having decided it:
+
+| What you typed | What happens now |
+| --- | --- |
+| `{?}` stray, no opening `{? }` | literal text; the box renders fine |
+| `{= 1 + 1` (never closed) | literal text; the box renders fine |
+| `{= 1 + }` (closes, bad expression) | the ENTIRE text object is `#PARSE`; nothing renders |
+
+The third row is the one to decide. It is not reachable yet — no `text` object, schema entry or
+command exists (entry 0120 built only the block-tree engine) — which is exactly why it is worth
+settling before the wiring cycle bakes it in.
+
+Options:
+
+(a) **Stands as built — one broken span errors the whole object.** Matches §5.1's "errors
+    propagate" and how a cell behaves, and gets §5.9's error badge for free (the badge is driven by
+    objects holding `ErrorValue`s, and `resolvedContent` would hold one). Cost: a paragraph of
+    correct prose with five embeddings goes blank because the fifth has a typo, and the operator is
+    told which formula broke but not where it sits in their text.
+(b) **The broken span renders literally, the rest of the box renders normally.** `{= 1 + }` appears
+    as those eight characters, in place, which is its own diagnostic — the operator sees exactly
+    what they mis-typed, where they typed it. Consistent with the two rows above it, and with how
+    markdown-lite already treats markup it cannot honour. **D-115** clause 2 already put `source`
+    and `start` on the error block specifically so this is a one-line change in the consumer. Cost:
+    no error badge unless something else supplies one, so a typo could sit unnoticed in a long box.
+(c) **Split — render the span literally AND mark the object as holding an error.** Best of both,
+    but `resolvedContent` is ONE slot holding ONE `Value`; it cannot be both a string and an
+    `ErrorValue`, so this needs a second mechanism (a separate derived slot, or a badge rule that
+    reads something other than an `ErrorValue`). Real work, and it widens §5.9's badge contract.
+
+Recommendation: **(b)**, with (c) as the better end state if the human ever wants the badge back.
+Reason: a text box is composite prose, not one atomic value, and the failure mode in (a) is
+disproportionate — losing an entire paragraph to one typo is the same injury **D-109** clause 3 was
+ruled against (losing a typed line to one refusal), arriving in a different surface. (b) also makes
+the two lenient rows above consistent with the strict one instead of leaving three behaviours in one
+file. The reason this is a QUESTION and not a ruling: it decides what the operator SEES, and
+**D-042** makes that the human's call, exactly as Q-016 and Q-017 are.
+
+Reversible? **Yes, cheaply and in one place** — `evaluateBlockTree`'s `case "error"` arm, plus
+whatever the wiring cycle does with its result. No stored data depends on it either way (the block
+tree is derived, never serialized — D-114 clause 4).
+Provisional choice taken: **(a)**, as built at entry 0120 and reviewed at 0121 — by default rather
+than by decision, and disclosed here rather than tagged. No `PROVISIONAL(Q-019)` site exists to tag:
+no operator can reach a `text` object at all yet, and a tag on unreachable code is debt without a
+reader (Q-016's own reasoning).
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
