@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { CameraState } from "../engine/document.ts";
+import type { EvalContext } from "../engine/eval-context.ts";
 import type { GraphObject } from "../engine/graph/node.ts";
 import { mutate, type MutationJournalEntry } from "../engine/mutation.ts";
 import { getObjectSchema } from "../engine/primitives/schema.ts";
@@ -539,5 +540,45 @@ describe("pointerMove — failure paths", () => {
     expect(() => pointerMove(dragFromOrigin("obj_1"), { x: 5, y: 5 }, [broken], [], CAMERA_IDENTITY)).not.toThrow();
     const outcome = pointerMove(dragFromOrigin("obj_1"), { x: 5, y: 5 }, [broken], [], CAMERA_IDENTITY);
     expect(outcome.notices).toHaveLength(2); // origin.x holds an error; origin.y has no slot at all.
+  });
+});
+
+// `pointerMove` gained a sixth argument at entry 0132 — §5.1's `EvalContext`,
+// forwarded to `mutate`. A drag re-evaluates the WHOLE graph (Rule 5), so a
+// `text` object sharing the document with the geometry being dragged has its
+// `measuredHeight` recomputed on every step: without a real measurer threaded it
+// is re-stamped `#MEASURE` (D-118); with one it stays a real height.
+describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)", () => {
+  /** The schema's five required non-derived `text` slots + both derived placeholders — hand-built, no `text` command exists. */
+  function textObject(): GraphObject {
+    return {
+      id: "obj_t",
+      name: "text_1",
+      type: "text",
+      slots: {
+        content: { kind: "literal", value: "label" },
+        width: { kind: "literal", value: "auto" },
+        "style.font": { kind: "literal", value: "sans" },
+        "style.fontSize": { kind: "literal", value: 12 },
+        "style.lineHeight": { kind: "literal", value: 14 },
+        resolvedContent: { kind: "derived", value: null },
+        measuredHeight: { kind: "derived", value: null },
+      },
+    };
+  }
+
+  const realMeasurer: EvalContext = { measurer: { measure: () => ({ width: 1, height: 33 }) } };
+
+  it("re-evaluates a co-resident text object's measuredHeight against the threaded measurer — #MEASURE without one", () => {
+    const { objects, journal } = commit([rectObject(0, 0), textObject()]);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+
+    const withoutContext = pointerMove(state, { x: 13, y: 7 }, objects, journal, CAMERA_IDENTITY);
+    expect(slotValue(withoutContext.objects, "obj_t", "measuredHeight")).toMatchObject({ error: "#MEASURE" });
+
+    const withContext = pointerMove(state, { x: 13, y: 7 }, objects, journal, CAMERA_IDENTITY, realMeasurer);
+    expect(withContext.rejection).toBeUndefined();
+    expect(slotValue(withContext.objects, "obj_t", "measuredHeight")).toBe(33);
+    expect(slotValue(withContext.objects, "obj_1", "origin.x")).toBe(3); // the drag itself still commits
   });
 });

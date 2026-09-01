@@ -47,6 +47,12 @@
  *   is rejected (D-020), so "loading nothing" cannot go through the batch API — there
  *   is nothing to apply. Handled directly.
  *
+ *   `loadDocument`/`deserializeDocument` take an optional `context` (§5.1's
+ *   `EvalContext`) forwarded to that batch's `mutate` — the injected `TextMeasurer`
+ *   a loaded `text` object's `measuredHeight` evaluates against. `main.ts` passes a
+ *   real one (`render/measure.ts`); the default `NULL_EVAL_CONTEXT` gives `#MEASURE`
+ *   (**D-118**), and every non-`main.ts` caller keeps that behaviour untouched.
+ *
  * INVARIANTS UPHELD HERE
  *   - Never throws. `loadDocument`'s `JSON.parse` is the one call here that CAN throw
  *     on malformed text — caught and returned as `{ ok: false, message }`.
@@ -100,6 +106,7 @@
  *     `DEFAULT_CAMERA`.
  */
 import { mutate, type MutationJournalEntry, type Operation } from "./mutation.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import { exceedsMaxFormulaAstDepth, MAX_FORMULA_AST_DEPTH, type FormulaAst } from "./formula/ast.ts";
 import { isIllegalNumber, type GraphObject, type ObjectType, type Slot, type Value } from "./graph/node.ts";
 
@@ -255,8 +262,15 @@ export function saveDocument(document: Document): string {
  * defers to `deserializeDocument`. `JSON.parse` is the one place in this file
  * that can throw (malformed JSON text) — caught here so this function upholds
  * the same never-throws discipline as everything else.
+ *
+ * `context` is §5.1's `EvalContext`, forwarded verbatim to `deserializeDocument`
+ * and from there to the load batch's `mutate` — so a loaded `text` object's
+ * `measuredHeight` measures against the real `TextMeasurer` `main.ts` injects
+ * (`render/measure.ts`). It defaults to `NULL_EVAL_CONTEXT`, under which
+ * `measuredHeight` is `#MEASURE` (**D-118**): a loaded document is legitimate
+ * state either way, and every existing caller keeps its behaviour.
  */
-export function loadDocument(json: string): DocumentLoadResult {
+export function loadDocument(json: string, context: EvalContext = NULL_EVAL_CONTEXT): DocumentLoadResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -264,7 +278,7 @@ export function loadDocument(json: string): DocumentLoadResult {
     const reason = error instanceof Error ? error.message : String(error);
     return { ok: false, message: `document is not valid JSON: ${reason}` };
   }
-  return deserializeDocument(parsed);
+  return deserializeDocument(parsed, context);
 }
 
 /** Narrows `value` to a non-null, non-array plain object — the shape every structural check below needs before indexing into it. */
@@ -310,8 +324,14 @@ function rawContainsIllegalNumber(raw: unknown): boolean {
  * — see the file header's INVARIANTS UPHELD HERE for exactly what this
  * function checks itself versus what it hands off to `mutate`'s own
  * validation. Never throws.
+ *
+ * `context` (§5.1's `EvalContext`) is forwarded untouched to the reconstruction
+ * batch's `mutate` call — the same "the loader trusts `mutate` for everything
+ * about the graph" stance as every other check, extended to the injected
+ * `TextMeasurer` a loaded `text` object's `measuredHeight` needs. Defaults to
+ * `NULL_EVAL_CONTEXT` (`measuredHeight` → `#MEASURE`, D-118).
  */
-export function deserializeDocument(raw: unknown): DocumentLoadResult {
+export function deserializeDocument(raw: unknown, context: EvalContext = NULL_EVAL_CONTEXT): DocumentLoadResult {
   if (!isPlainObject(raw)) {
     return { ok: false, message: `a document must be a JSON object, not ${describeTypeof(raw)}` };
   }
@@ -377,7 +397,7 @@ export function deserializeDocument(raw: unknown): DocumentLoadResult {
   // (deriveValidateAndEvaluate's step 7) as the last step of the SAME call,
   // so there is no separate "evaluate" call needed here.
   const operations: readonly Operation[] = reconstructedObjects.map((object) => ({ kind: "createObject", object }));
-  const result = mutate([], operations, []);
+  const result = mutate([], operations, [], context);
   if (!result.ok) {
     return { ok: false, message: result.message };
   }

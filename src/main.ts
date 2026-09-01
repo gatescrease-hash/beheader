@@ -89,12 +89,14 @@
  *     that prunes `AppState.panels` down to the current selection, so every
  *     caller that replaces `interaction` goes through it rather than
  *     assigning the field directly.
- *   - Injecting a Canvas2D `TextMeasurer` (Rule 1). `render/measure.ts`'s
- *     measurer is built (entry 0131) and §5.6's `measuredHeight` consumes one,
- *     but this file does not yet build an `EvalContext` around it or thread it
- *     through `executeCommand` / the loader / the drag path — so `measuredHeight`
- *     reports `#MEASURE` in the running app until it does (D-118). The next
- *     Phase 5 slice.
+ *   - Drawing a `text` object. `start` now builds an `EvalContext` around
+ *     `render/measure.ts`'s Canvas2D `TextMeasurer` (Rule 1) — over its OWN
+ *     offscreen 2D context, so setting `ctx.font` to measure never disturbs a
+ *     draw — and threads it through `executeCommand`, `loadDocument`, and the
+ *     drag path (`pointerMove`), so a `text` object's `measuredHeight` evaluates
+ *     for real rather than reporting `#MEASURE` (D-118). What is still NOT here:
+ *     a `text` COMMAND to create one, and `renderer.ts`'s text-drawing pass — so
+ *     a `text` object can only arrive by `load` today, and nothing paints it.
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
  *     D-083 clause 4 are owed by a `document.ts` cycle, not by this one; see
  *     STATUS.md's known problems for what that leaves reachable from the Load
@@ -104,6 +106,7 @@
  *     write outside the mutation API.
  */
 import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
 import { slotKey, type GraphObject } from "./engine/graph/node.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
 import { parseCommandNumber, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
@@ -114,6 +117,7 @@ import { documentExtent, objectExtent, type WorldExtent } from "./render/extent.
 import { deselect, pointerDown, pointerMove, pointerUp, INITIAL_INTERACTION_STATE, type InteractionState } from "./render/interaction.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { renderDocument } from "./render/renderer.ts";
+import { createCanvas2dTextMeasurer } from "./render/measure.ts";
 
 // ---------------------------------------------------------------------------
 // The pure half — application state, and every transition over it
@@ -302,12 +306,17 @@ function transition(state: AppState, refused: boolean = false): AppTransition {
  * routed as a typed empty answer anyway rather than special-cased here, because
  * the default belongs to the STEP and only `prompt.ts` can read it.
  */
-export function submitLine(state: AppState, line: string, viewport: Viewport): AppTransition {
+export function submitLine(
+  state: AppState,
+  line: string,
+  viewport: Viewport,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppTransition {
   const echoed = withLog(state, [`> ${line}`]);
   if (state.pending !== undefined) {
-    return advance(echoed, respond(state.pending, { kind: "typed", text: line }), viewport);
+    return advance(echoed, respond(state.pending, { kind: "typed", text: line }), viewport, context);
   }
-  return advance(echoed, beginCommand(line), viewport);
+  return advance(echoed, beginCommand(line), viewport, context);
 }
 
 /**
@@ -318,11 +327,16 @@ export function submitLine(state: AppState, line: string, viewport: Viewport): A
  * instead, but this is total so that a race between a click and a cancel cannot
  * misroute a point into a command that is no longer running.
  */
-export function respondToPrompt(state: AppState, response: PromptResponse, viewport: Viewport): AppTransition {
+export function respondToPrompt(
+  state: AppState,
+  response: PromptResponse,
+  viewport: Viewport,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppTransition {
   if (state.pending === undefined) {
     return transition(state);
   }
-  return advance(state, respond(state.pending, response), viewport);
+  return advance(state, respond(state.pending, response), viewport, context);
 }
 
 /** Abandons a live prompt sequence (D-072 clause 7 — the only path that discards gathered answers), and clears the selection: §5.9's "escape to deselect", one key doing both. */
@@ -339,11 +353,11 @@ export function escape(state: AppState): AppState {
  * prompting one is held in `pending` and its message echoed, and a failed or
  * cancelled one clears `pending` and echoes why.
  */
-function advance(state: AppState, session: CommandSession, viewport: Viewport): AppTransition {
+function advance(state: AppState, session: CommandSession, viewport: Viewport, context: EvalContext): AppTransition {
   switch (session.status) {
     case "complete": {
       const cleared: AppState = { ...state, pending: undefined };
-      const outcome = executeCommand(session.command, cleared.document);
+      const outcome = executeCommand(session.command, cleared.document, context);
       if (!outcome.ok) {
         // D-109 clause 3: refused — the operator's line stays in the input.
         return transition(withLog(cleared, [outcome.message]), true);
@@ -528,10 +542,16 @@ function describeZoom(actual: number, requested: number): string {
  * `render/camera.ts`, because `command/` may never import `render/` and must
  * receive a world point (D-069, D-072).
  */
-export function pointerDownAt(state: AppState, screenPoint: ScreenPoint, viewport: Viewport, additive: boolean = false): AppTransition {
+export function pointerDownAt(
+  state: AppState,
+  screenPoint: ScreenPoint,
+  viewport: Viewport,
+  additive: boolean = false,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppTransition {
   if (state.pending !== undefined) {
     const world = screenToWorld(state.document.camera, screenPoint);
-    return respondToPrompt(state, { kind: "picked", point: { x: world.x, y: world.y } }, viewport);
+    return respondToPrompt(state, { kind: "picked", point: { x: world.x, y: world.y } }, viewport, context);
   }
   return transition(withInteraction(state, pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive)));
 }
@@ -544,8 +564,19 @@ export function pointerDownAt(state: AppState, screenPoint: ScreenPoint, viewpor
  * feedback" on a component that is driven, and `mutate`'s own refusal is a
  * different thing that must not be swallowed.
  */
-export function pointerMoveTo(state: AppState, screenPoint: ScreenPoint): AppState {
-  const outcome = pointerMove(state.interaction, screenPoint, state.document.objects, state.document.journal, state.document.camera);
+export function pointerMoveTo(
+  state: AppState,
+  screenPoint: ScreenPoint,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const outcome = pointerMove(
+    state.interaction,
+    screenPoint,
+    state.document.objects,
+    state.document.journal,
+    state.document.camera,
+    context,
+  );
   const moved: AppState = {
     ...state,
     document: { ...state.document, objects: outcome.objects, journal: outcome.journal },
@@ -728,9 +759,13 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
  * looked for; a future panel-built command that DID carry one would need this
  * function widened deliberately, not silently ignored.
  */
-function runPanelCommand(state: AppState, command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand): AppState {
+function runPanelCommand(
+  state: AppState,
+  command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand,
+  context: EvalContext,
+): AppState {
   const echoed = withLog(state, [`> ${describePanelCommand(command)}`]);
-  const outcome = executeCommand(command, echoed.document);
+  const outcome = executeCommand(command, echoed.document, context);
   if (!outcome.ok) {
     return withLog(echoed, [outcome.message]);
   }
@@ -744,21 +779,32 @@ function runPanelCommand(state: AppState, command: SetLiteralCommand | SetFormul
  * unchanged, rather than a throw or a refusal with nothing to name (D-023's
  * posture, applied to a UI event instead of a stored address).
  */
-export function commitPanelEdit(state: AppState, objectId: string, path: string, raw: string): AppState {
+export function commitPanelEdit(
+  state: AppState,
+  objectId: string,
+  path: string,
+  raw: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
   const object = state.document.objects.find((candidate) => candidate.id === objectId);
   if (object === undefined) {
     return state;
   }
-  return runPanelCommand(state, buildPanelSetCommand(panelSlotAddress(object.name, path), raw));
+  return runPanelCommand(state, buildPanelSetCommand(panelSlotAddress(object.name, path), raw), context);
 }
 
 /** Unlinks one panel row (D-102 clause 4's BLUE paperclip) — `unlink <address>`, run the same way `commitPanelEdit` runs a `set`. Same stale-id no-op posture. */
-export function unlinkPanelSlot(state: AppState, objectId: string, path: string): AppState {
+export function unlinkPanelSlot(
+  state: AppState,
+  objectId: string,
+  path: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
   const object = state.document.objects.find((candidate) => candidate.id === objectId);
   if (object === undefined) {
     return state;
   }
-  return runPanelCommand(state, { kind: "unlink", target: panelSlotAddress(object.name, path) });
+  return runPanelCommand(state, { kind: "unlink", target: panelSlotAddress(object.name, path) }, context);
 }
 
 // ---------------------------------------------------------------------------
@@ -817,6 +863,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     logElement.textContent = "this browser gave no 2D canvas context — nothing can be drawn";
     return;
   }
+
+  // §5.1's `EvalContext` — the injected `TextMeasurer` (§5.6, Rule 1) every
+  // `mutate` call below is handed, so a `text` object's `measuredHeight`
+  // evaluates for real instead of `#MEASURE` (D-118). It measures on its OWN
+  // offscreen 2D context, NEVER `context`: `render/measure.ts` sets `ctx.font`
+  // per line, which would corrupt a draw in progress if it shared the renderer's
+  // (measure.ts's own header). A browser that gave `context` but declines a
+  // second one falls back to the null measurer — loud `#MEASURE`, not a silent
+  // wrong height.
+  const measureContext = document.createElement("canvas").getContext("2d");
+  const evalContext: EvalContext =
+    measureContext === null ? NULL_EVAL_CONTEXT : { measurer: createCanvas2dTextMeasurer(measureContext) };
 
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
   let pan: PanGesture | undefined;
@@ -1007,7 +1065,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     onCommit: (raw: string) => {
       openEditor = undefined;
       input.focus();
-      apply(commitPanelEdit(state, objectId, path, raw));
+      apply(commitPanelEdit(state, objectId, path, raw, evalContext));
     },
     onCancel: () => {
       if (openEditor === undefined || openEditor.objectId !== objectId || openEditor.path !== path) {
@@ -1079,6 +1137,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       openDocument(
         (loaded, line) => apply(replaceDocument(state, loaded, line)),
         (message) => apply(logLine(state, message)),
+        evalContext,
       );
     }
   };
@@ -1090,7 +1149,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     const line = input.value;
-    const outcome = submitLine(state, line, viewport());
+    const outcome = submitLine(state, line, viewport(), evalContext);
     // D-109 clause 3: a refused command keeps what the operator typed, so it
     // can be corrected in place; only an accepted line clears the input.
     if (!outcome.refused) {
@@ -1139,7 +1198,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     // D-100 clauses 3-4: shift is the additive-selection modifier.
-    applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey));
+    applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey, evalContext));
   });
 
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
@@ -1151,7 +1210,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
     }
-    apply(pointerMoveTo(state, point));
+    apply(pointerMoveTo(state, point, evalContext));
   });
 
   const endGesture = (event: PointerEvent): void => {
@@ -1280,7 +1339,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     if (clip.classList.contains("panel-clip--formula")) {
       // Clause 4: BLUE unlinks immediately — no input to open.
-      apply(unlinkPanelSlot(state, objectId, path));
+      apply(unlinkPanelSlot(state, objectId, path, evalContext));
       return;
     }
     // Clause 4: GREY opens that row's own text input. `updatePanels` (next
@@ -1479,8 +1538,16 @@ function downloadDocument(state: Document): void {
  * it. `onLoaded` receives the document only when there is one; `onRefused`
  * receives the message otherwise, so a caller cannot accidentally treat a
  * failure as a load.
+ *
+ * `context` is passed straight to `loadDocument` so a loaded `text` object's
+ * `measuredHeight` measures against the real `TextMeasurer` rather than
+ * `#MEASURE` (D-118).
  */
-function openDocument(onLoaded: (loaded: Document, line: string) => void, onRefused: (message: string) => void): void {
+function openDocument(
+  onLoaded: (loaded: Document, line: string) => void,
+  onRefused: (message: string) => void,
+  context: EvalContext,
+): void {
   const picker = document.createElement("input");
   picker.type = "file";
   picker.accept = "application/json,.json";
@@ -1490,7 +1557,7 @@ function openDocument(onLoaded: (loaded: Document, line: string) => void, onRefu
       return; // The picker was dismissed — not a refusal, and nothing to say.
     }
     void file.text().then((text) => {
-      const result = loadDocument(text);
+      const result = loadDocument(text, context);
       if (result.ok) {
         onLoaded(result.document, `loaded ${file.name}`);
         return;

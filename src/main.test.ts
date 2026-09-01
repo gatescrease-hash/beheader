@@ -15,6 +15,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createEmptyDocument, deserializeDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
+import type { EvalContext } from "./engine/eval-context.ts";
 import { getSlot, type GraphObject } from "./engine/graph/node.ts";
 import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
@@ -953,5 +954,65 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
 
     expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(650);
     expect(numberAt(objectNamed(state, "table_1"), ["cells", "C1"])).toBeCloseTo(650, 9);
+  });
+});
+
+// The pure transitions gained a trailing `context` (§5.1's `EvalContext`) at
+// entry 0132 so `start` can thread `render/measure.ts`'s Canvas2D measurer
+// through to every `mutate`. No `text` command exists, so the fixture document
+// carries a hand-built `text` object; `measuredHeight` is `#MEASURE` (D-118)
+// on the default path and a real height once a measurer is passed.
+describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-118)", () => {
+  function textObject(): GraphObject {
+    return {
+      id: "obj_t",
+      name: "text_1",
+      type: "text",
+      slots: {
+        content: { kind: "literal", value: "hello" },
+        width: { kind: "literal", value: "auto" },
+        "style.font": { kind: "literal", value: "sans" },
+        "style.fontSize": { kind: "literal", value: 12 },
+        "style.lineHeight": { kind: "literal", value: 14 },
+        resolvedContent: { kind: "derived", value: null },
+        measuredHeight: { kind: "derived", value: null },
+      },
+    };
+  }
+
+  function stateWithText(): AppState {
+    return initialAppState({ ...createEmptyDocument(), nextObjectId: 1, objects: [textObject()] });
+  }
+
+  function measuredHeightOf(state: AppState): unknown {
+    return getSlot(objectNamed(state, "text_1"), ["measuredHeight"])?.value;
+  }
+
+  const realMeasurer: EvalContext = { measurer: { measure: () => ({ width: 2, height: 44 }) } };
+
+  it("submitLine threads the context to executeCommand — a `set` re-evaluates measuredHeight for real, #MEASURE without it", () => {
+    const base = stateWithText();
+    expect(measuredHeightOf(submitLine(base, "set text_1.style.fontSize 16", VIEWPORT).state)).toMatchObject({
+      error: "#MEASURE",
+    });
+    expect(measuredHeightOf(submitLine(base, "set text_1.style.fontSize 16", VIEWPORT, realMeasurer).state)).toBe(44);
+  });
+
+  it("pointerMoveTo threads the context to pointerMove — a drag keeps a co-resident text object's measuredHeight real", () => {
+    // The rect is created through the real command path (correct schema slots);
+    // the text object was placed in the document directly (no `text` command).
+    const withRect = submitLine(stateWithText(), "rect x=0 y=0 w=20 h=20", VIEWPORT).state;
+    const corner = (getSlot(objectNamed(withRect, "rect_1"), ["vertices"])?.value as readonly { x: number; y: number }[])[0];
+    if (corner === undefined) {
+      throw new Error("expected the rect's derived vertices to have been evaluated");
+    }
+    const onStroke = worldToScreen(withRect.document.camera, corner);
+    const armed = pointerDownAt(withRect, onStroke, VIEWPORT).state;
+    expect(armed.interaction.selectedObjectIds).toEqual([objectNamed(withRect, "rect_1").id]);
+
+    const dragged = pointerMoveTo(armed, { x: onStroke.x + 8, y: onStroke.y + 6 }, realMeasurer);
+
+    expect(measuredHeightOf(dragged)).toBe(44);
+    expect(numberAt(objectNamed(dragged, "rect_1"), ["origin", "x"])).toBeCloseTo(8, 9); // the drag committed
   });
 });

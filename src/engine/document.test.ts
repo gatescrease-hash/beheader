@@ -24,6 +24,7 @@ import {
   type Document,
 } from "./document.ts";
 import { deriveValidateAndEvaluate } from "./mutation.ts";
+import type { EvalContext } from "./eval-context.ts";
 import type { GraphObject } from "./graph/node.ts";
 import { MAX_FORMULA_AST_DEPTH, type FormulaAst } from "./formula/ast.ts";
 
@@ -505,5 +506,61 @@ describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth i
     // entirely. It must not reach that far.
     const result = deserializeDocument(documentWithFormula(ladder(MAX_FORMULA_AST_DEPTH)));
     expect(result.ok === false && result.message.includes("nested operations")).toBe(true);
+  });
+});
+
+// `loadDocument`/`deserializeDocument` gained an optional `context` at entry
+// 0132 — §5.1's `EvalContext`, forwarded to the load batch's `mutate`. A loaded
+// `text` object's `measuredHeight` is regenerated on load (§5.11 — derived
+// values are never serialized), so it turns on the context: `#MEASURE` (D-118)
+// under the default null one, a real height under `main.ts`'s Canvas2D measurer.
+describe("deserializeDocument / loadDocument forward §5.1's EvalContext to the load batch (entry 0132, D-118)", () => {
+  /** The schema's five required non-derived `text` slots + both derived placeholders. */
+  function textObject(width: number | "auto" = "auto"): GraphObject {
+    return {
+      id: "obj_1",
+      name: "text_1",
+      type: "text",
+      slots: {
+        content: { kind: "literal", value: "loaded text" },
+        width: { kind: "literal", value: width },
+        "style.font": { kind: "literal", value: "sans" },
+        "style.fontSize": { kind: "literal", value: 12 },
+        "style.lineHeight": { kind: "literal", value: 14 },
+        resolvedContent: { kind: "derived", value: null },
+        measuredHeight: { kind: "derived", value: null },
+      },
+    };
+  }
+
+  function savedDocumentWithText(width: number | "auto" = "auto"): string {
+    return saveDocument({ ...createEmptyDocument(), nextObjectId: 1, objects: [textObject(width)] });
+  }
+
+  function measuredHeightOf(result: ReturnType<typeof loadDocument>): unknown {
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    return result.document.objects.find((object) => object.id === "obj_1")?.slots.measuredHeight?.value;
+  }
+
+  const realMeasurer: EvalContext = { measurer: { measure: () => ({ width: 4, height: 55 }) } };
+
+  it("regenerates measuredHeight as #MEASURE with no context (D-118) and as a real height once a measurer is threaded", () => {
+    const json = savedDocumentWithText();
+    expect(measuredHeightOf(loadDocument(json))).toMatchObject({ error: "#MEASURE" });
+    expect(measuredHeightOf(loadDocument(json, realMeasurer))).toBe(55);
+  });
+
+  it("deserializeDocument takes the same context as its second argument", () => {
+    const raw = JSON.parse(savedDocumentWithText());
+    expect(measuredHeightOf(deserializeDocument(raw, realMeasurer))).toBe(55);
+  });
+
+  it("passes a numeric `width` through as maxWidth on load (D-120)", () => {
+    const wrapAware: EvalContext = {
+      measurer: { measure: (_text, _style, maxWidth) => ({ width: 0, height: maxWidth === undefined ? 10 : 20 }) },
+    };
+    expect(measuredHeightOf(loadDocument(savedDocumentWithText(200), wrapAware))).toBe(20);
   });
 });

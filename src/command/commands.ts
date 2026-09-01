@@ -8,13 +8,19 @@
  *        layer. NEVER imported by engine/*.
  *
  * WHAT THIS IS
- *   `executeCommand(command, document)` is the ONLY place a `Command` meets a
- *   `Document` (D-069). Everything `parser.ts` and `prompt.ts` deliberately decline
+ *   `executeCommand(command, document, context?)` is the ONLY place a `Command` meets
+ *   a `Document` (D-069). Everything `parser.ts` and `prompt.ts` deliberately decline
  *   to do happens here: minting an id and a default name, building an `Operation`,
  *   and calling `mutate`. It returns a NEW document plus the lines §5.10 wants
  *   echoed above the input, or a failure message. It never mutates its arguments.
  *   It never throws: every refusal, including a formula too deep to walk, comes back
  *   as the failure arm.
+ *
+ *   `context` is §5.1's `EvalContext` — the injected `TextMeasurer` (§5.6) that
+ *   `mutate`'s step-7 evaluation hands every `derived`-slot compute. It is forwarded
+ *   verbatim to every `mutate` call a handler makes and never inspected here. It
+ *   defaults to `NULL_EVAL_CONTEXT`, so a `text` object's `measuredHeight` is
+ *   `#MEASURE` (**D-118**) until `main.ts` threads a real one from `render/measure.ts`.
  *
  *   GRAMMAR failures are `parser.ts`'s and cannot arrive here — a `Command` exists
  *   only because a line already parsed. DOMAIN and IDENTITY failures are this
@@ -99,6 +105,7 @@ import { isParseError, parseFormula } from "../engine/formula/parser.ts";
 import { addressKey, type Edge } from "../engine/graph/edge.ts";
 import { getSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
 import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import {
   MIN_POLYGON_SIDES,
   ORIGIN_X_PATH,
@@ -245,31 +252,31 @@ function refuseCountOutOfRange(name: string, value: number, minimum: number, max
  * than falling through to a default that silently does nothing. Five of them change
  * no document state and return a `CommandEffect` instead (D-075).
  */
-export function executeCommand(command: Command, document: Document): CommandOutcome {
+export function executeCommand(command: Command, document: Document, context: EvalContext = NULL_EVAL_CONTEXT): CommandOutcome {
   switch (command.kind) {
     case "circle":
-      return createCircle(command, document);
+      return createCircle(command, document, context);
     case "polygon":
-      return createPolygon(command, document);
+      return createPolygon(command, document, context);
     case "rect":
-      return createRect(command, document);
+      return createRect(command, document, context);
     case "table":
-      return createTable(command, document);
+      return createTable(command, document, context);
     // `set` and `set-formula` are one command word at the input bar (D-071); the
     // parser splits them by whether the value position began with `=`, and both
     // reach the same slot-writing path below.
     case "set":
-      return setLiteral(command, document);
+      return setLiteral(command, document, context);
     case "set-formula":
-      return setFormula(command, document);
+      return setFormula(command, document, context);
     case "link":
-      return link(command, document);
+      return link(command, document, context);
     case "unlink":
-      return unlink(command, document);
+      return unlink(command, document, context);
     case "rename":
-      return renameObject(command, document);
+      return renameObject(command, document, context);
     case "delete":
-      return deleteObject(command, document);
+      return deleteObject(command, document, context);
     case "refs":
       return refs(command, document);
     case "props":
@@ -349,7 +356,12 @@ interface LiteralSlotDeclaration {
  * `nextObjectId` advances only on success: a refused creation took no id, which is
  * what keeps a rejected `polygon sides=2` from leaving a gap in the counter.
  */
-function createObjectFromCommand(document: Document, type: ObjectType, literals: readonly LiteralSlotDeclaration[]): CommandOutcome {
+function createObjectFromCommand(
+  document: Document,
+  type: ObjectType,
+  literals: readonly LiteralSlotDeclaration[],
+  context: EvalContext,
+): CommandOutcome {
   const schema = getObjectSchema(type);
   if (schema === undefined) {
     // Unreachable for the four types below, all of which have entries — kept as a
@@ -371,7 +383,7 @@ function createObjectFromCommand(document: Document, type: ObjectType, literals:
 
   const object: GraphObject = { id: minted.id, name, type, slots };
   const operation: Operation = { kind: "createObject", object };
-  const result = mutate(document.objects, [operation], document.journal);
+  const result = mutate(document.objects, [operation], document.journal, context);
   if (!result.ok) {
     return { ok: false, message: result.message };
   }
@@ -383,16 +395,16 @@ function createObjectFromCommand(document: Document, type: ObjectType, literals:
 }
 
 /** `circle x=100 y=100 r=20` (§5.10) — §5.5's `circle(origin, radius)` preset. A negative radius is `#TYPE` on the derived `vertices` slot, not a rejection: it is a value, not a slot count (D-070). */
-function createCircle(command: CreateCircleCommand, document: Document): CommandOutcome {
+function createCircle(command: CreateCircleCommand, document: Document, context: EvalContext): CommandOutcome {
   return createObjectFromCommand(document, "circle", [
     { path: ORIGIN_X_PATH, value: command.x },
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: RADIUS_PATH, value: command.radius },
-  ]);
+  ], context);
 }
 
 /** `polygon sides=5 x=0 y=0 r=50` (§5.10) — §5.5's `polygon(sides, radius, origin, rotation)`. `sides` is bounded before an `Operation` exists (D-070). */
-function createPolygon(command: CreatePolygonCommand, document: Document): CommandOutcome {
+function createPolygon(command: CreatePolygonCommand, document: Document, context: EvalContext): CommandOutcome {
   const refusal = refuseCountOutOfRange("sides", command.sides, MIN_POLYGON_SIDES, MAX_POLYGON_SIDES);
   if (refusal !== undefined) {
     return { ok: false, message: refusal };
@@ -403,17 +415,17 @@ function createPolygon(command: CreatePolygonCommand, document: Document): Comma
     { path: ORIGIN_X_PATH, value: command.x },
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: POLYGON_ROTATION_PATH, value: DEFAULT_POLYGON_ROTATION },
-  ]);
+  ], context);
 }
 
 /** `rect x=0 y=0 w=200 h=100` (§5.10) — §5.5's `rect(origin, width, height)`, corner-anchored (D-072 clause 8 normalises a two-corner pick before it reaches here). */
-function createRect(command: CreateRectCommand, document: Document): CommandOutcome {
+function createRect(command: CreateRectCommand, document: Document, context: EvalContext): CommandOutcome {
   return createObjectFromCommand(document, "rect", [
     { path: ORIGIN_X_PATH, value: command.x },
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: RECT_WIDTH_PATH, value: command.width },
     { path: RECT_HEIGHT_PATH, value: command.height },
-  ]);
+  ], context);
 }
 
 /**
@@ -431,7 +443,7 @@ function createRect(command: CreateRectCommand, document: Document): CommandOutc
  * Both counts are checked before either is used, so `table rows=0 cols=0` names both
  * rather than sending the operator back twice (`mutate`'s own multi-problem style).
  */
-function createTable(command: CreateTableCommand, document: Document): CommandOutcome {
+function createTable(command: CreateTableCommand, document: Document, context: EvalContext): CommandOutcome {
   const refusals = [
     refuseCountOutOfRange("rows", command.rows, MIN_TABLE_LINES, MAX_TABLE_LINES),
     refuseCountOutOfRange("cols", command.cols, MIN_TABLE_LINES, MAX_TABLE_LINES),
@@ -444,7 +456,7 @@ function createTable(command: CreateTableCommand, document: Document): CommandOu
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: TABLE_ROWS_PATH, value: command.rows },
     { path: TABLE_COLS_PATH, value: command.cols },
-  ]);
+  ], context);
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +568,7 @@ type SlotWrite =
  * write, if the slot it lands on currently holds a formula, the report names that
  * formula's source. That is why this is one function and not three.
  */
-function writeSlot(write: SlotWrite, targetText: string, document: Document): CommandOutcome {
+function writeSlot(write: SlotWrite, targetText: string, document: Document, context: EvalContext): CommandOutcome {
   const resolved = resolveWritableSlot(targetText, document);
   if (!resolved.ok) {
     return { ok: false, message: resolved.message };
@@ -568,7 +580,7 @@ function writeSlot(write: SlotWrite, targetText: string, document: Document): Co
     return { ok: false, message: built.message };
   }
 
-  const result = mutate(document.objects, [{ kind: "setSlot", address, slot: built.slot }], document.journal);
+  const result = mutate(document.objects, [{ kind: "setSlot", address, slot: built.slot }], document.journal, context);
   if (!result.ok) {
     return { ok: false, message: result.message };
   }
@@ -651,25 +663,25 @@ function cellHostObjectId(target: WritableSlotTarget): string | undefined {
 }
 
 /** `set polygon_1.radius 42` (§5.10) — a literal. Over a formula slot this REPLACES it and says so (D-040). */
-function setLiteral(command: SetLiteralCommand, document: Document): CommandOutcome {
-  return writeSlot({ kind: "literal", value: command.value }, command.target, document);
+function setLiteral(command: SetLiteralCommand, document: Document, context: EvalContext): CommandOutcome {
+  return writeSlot({ kind: "literal", value: command.value }, command.target, document, context);
 }
 
 /** `set table_x.B1 = polygon_b.origin.x * 2` (D-071) — the same command word, writing a formula because the value position began with `=`. */
-function setFormula(command: SetFormulaCommand, document: Document): CommandOutcome {
+function setFormula(command: SetFormulaCommand, document: Document, context: EvalContext): CommandOutcome {
   // D-071 clause 1 keeps the `=` on the raw source so no offset is lost; `parseFormula`
   // wants the expression alone, and this is the one place the two meet.
-  return writeSlot({ kind: "formula", source: command.source.slice(1), mustBeReference: false }, command.target, document);
+  return writeSlot({ kind: "formula", source: command.source.slice(1), mustBeReference: false }, command.target, document, context);
 }
 
 /** `link polygon_1.origin.x table_x.A1` (§5.10) — §5.1's degenerate formula, so it is `set <target> = <source>` with the source constrained to a bare reference (D-071 clause 4). */
-function link(command: LinkCommand, document: Document): CommandOutcome {
-  return writeSlot({ kind: "formula", source: command.source, mustBeReference: true }, command.target, document);
+function link(command: LinkCommand, document: Document, context: EvalContext): CommandOutcome {
+  return writeSlot({ kind: "formula", source: command.source, mustBeReference: true }, command.target, document, context);
 }
 
 /** `unlink polygon_1.origin.x` (§5.10) — back to a literal holding whatever was last displayed (D-041). */
-function unlink(command: UnlinkCommand, document: Document): CommandOutcome {
-  return writeSlot({ kind: "unlink" }, command.target, document);
+function unlink(command: UnlinkCommand, document: Document, context: EvalContext): CommandOutcome {
+  return writeSlot({ kind: "unlink" }, command.target, document, context);
 }
 
 // ---------------------------------------------------------------------------
@@ -697,13 +709,13 @@ function unlink(command: UnlinkCommand, document: Document): CommandOutcome {
  * excludes the object being renamed, so it collides with nothing, and §5.2 gives no
  * reason to refuse a display-case change.
  */
-function renameObject(command: RenameCommand, document: Document): CommandOutcome {
+function renameObject(command: RenameCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
     return { ok: false, message: `no object named "${command.target}"` };
   }
 
-  const result = mutate(document.objects, [{ kind: "renameObject", objectId: object.id, name: command.newName }], document.journal);
+  const result = mutate(document.objects, [{ kind: "renameObject", objectId: object.id, name: command.newName }], document.journal, context);
   if (!result.ok) {
     return { ok: false, message: result.message };
   }
@@ -744,13 +756,13 @@ function renameObject(command: RenameCommand, document: Document): CommandOutcom
  *   guarantees every address in it resolves against the COMMITTED objects, so the
  *   report is formatted against `result.objects`, never the pre-deletion list.
  */
-function deleteObject(command: DeleteCommand, document: Document): CommandOutcome {
+function deleteObject(command: DeleteCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
     return { ok: false, message: `no object named "${command.target}"` };
   }
 
-  const result = mutate(document.objects, [{ kind: "deleteObject", objectId: object.id, force: command.force }], document.journal);
+  const result = mutate(document.objects, [{ kind: "deleteObject", objectId: object.id, force: command.force }], document.journal, context);
   if (!result.ok) {
     return {
       ok: false,

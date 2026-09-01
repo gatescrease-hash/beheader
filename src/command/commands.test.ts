@@ -16,6 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createEmptyDocument, type Document } from "../engine/document.ts";
+import type { EvalContext } from "../engine/eval-context.ts";
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
 import { mutate } from "../engine/mutation.ts";
 import { MAX_TABLE_LINES } from "../engine/primitives/table.ts";
@@ -1315,5 +1316,72 @@ describe("a formula too deep to walk is refused, not thrown (D-079)", () => {
     const withDeep = committed(`set table_1.A1 = ${chain(1000)}`, sandbox());
     const outcome = run("set table_1.A1 7", withDeep);
     expect(outcome.ok && outcome.lines.join("\n")).toContain("1 + 1");
+  });
+});
+
+// `executeCommand` gained a third argument at entry 0132 — §5.1's `EvalContext`,
+// forwarded to every `mutate` a handler calls. Nothing in this file can CREATE a
+// `text` object (no `text` command yet), so the fixture is a hand-built one, the
+// same well-formed shape `mutation.test.ts`/`eval.test.ts` use: `measuredHeight`
+// is `#MEASURE` under the default null context (D-118) and a real height once a
+// real measurer is threaded through the command seam.
+describe("executeCommand forwards §5.1's EvalContext to mutate's evaluation (entry 0132, D-118)", () => {
+  /** The schema's five required non-derived slots + both derived placeholders. `width: "auto"` — no wrap. */
+  function textObject(): GraphObject {
+    return {
+      id: "obj_t",
+      name: "text_1",
+      type: "text",
+      slots: {
+        content: { kind: "literal", value: "hello there" },
+        width: { kind: "literal", value: "auto" },
+        "style.font": { kind: "literal", value: "sans" },
+        "style.fontSize": { kind: "literal", value: 12 },
+        "style.lineHeight": { kind: "literal", value: 14 },
+        resolvedContent: { kind: "derived", value: null },
+        measuredHeight: { kind: "derived", value: null },
+      },
+    };
+  }
+
+  function docWithText(): Document {
+    return { ...createEmptyDocument(), nextObjectId: 1, objects: [textObject()] };
+  }
+
+  function measuredHeightOf(document: Document): unknown {
+    return getSlot(onlyNamed(document, "text_1"), ["measuredHeight"])?.value;
+  }
+
+  /** Height is a constant, so the assertion turns purely on WHETHER the measurer was reached. */
+  const realMeasurer: EvalContext = { measurer: { measure: () => ({ width: 3, height: 40 }) } };
+
+  it("a `set` on a text slot re-evaluates measuredHeight against the threaded measurer — #MEASURE without one (writeSlot -> mutate)", () => {
+    const doc = docWithText();
+    expect(measuredHeightOf(committed("set text_1.style.fontSize 16", doc))).toMatchObject({ error: "#MEASURE" });
+
+    const outcome = executeCommand(parsed("set text_1.style.fontSize 16"), doc, realMeasurer);
+    if (isCommandFailure(outcome)) {
+      throw new Error(outcome.message);
+    }
+    expect(measuredHeightOf(outcome.document)).toBe(40);
+  });
+
+  it("forwards the context on the creation path too — a new circle's mutate re-evaluates the text object (createObject -> mutate)", () => {
+    const outcome = executeCommand(parsed("circle x=0 y=0 r=5"), docWithText(), realMeasurer);
+    if (isCommandFailure(outcome)) {
+      throw new Error(outcome.message);
+    }
+    expect(measuredHeightOf(outcome.document)).toBe(40);
+  });
+
+  it("hands the numeric `width` slot to the measurer as maxWidth through the command seam (D-120)", () => {
+    const wrapAware: EvalContext = {
+      measurer: { measure: (_text, _style, maxWidth) => ({ width: 0, height: maxWidth === undefined ? 10 : 20 }) },
+    };
+    const outcome = executeCommand(parsed("set text_1.width 120"), docWithText(), wrapAware);
+    if (isCommandFailure(outcome)) {
+      throw new Error(outcome.message);
+    }
+    expect(measuredHeightOf(outcome.document)).toBe(20);
   });
 });

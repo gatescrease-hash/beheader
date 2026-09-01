@@ -92,6 +92,7 @@ import { formatAddress, isAddressError, type Address } from "../engine/address.t
 import { extractDependencies } from "../engine/formula/deps.ts";
 import { getSlot, type DerivedSlot, type FormulaSlot, type GraphObject } from "../engine/graph/node.ts";
 import { mutate, type MutationJournalEntry, type Operation } from "../engine/mutation.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
@@ -233,6 +234,12 @@ function toggleSelection(selectedObjectIds: readonly string[], objectId: string)
  * object with one bound component slides along the other axis, and only an
  * object whose every component is driven does nothing at all.
  *
+ * `context` is §5.1's `EvalContext`, forwarded to `mutate` untouched: a `text`
+ * object elsewhere in the same document keeps its real `measuredHeight` across a
+ * drag rather than being re-stamped `#MEASURE` (**D-118**) every time some
+ * geometry moves. It defaults to `NULL_EVAL_CONTEXT`; `main.ts` passes the real
+ * Canvas2D measurer (`render/measure.ts`).
+ *
  * Never throws, and never writes: the one state change here is `mutate`'s
  * (Rule 2).
  */
@@ -242,6 +249,7 @@ export function pointerMove(
   objects: readonly GraphObject[],
   journal: readonly MutationJournalEntry[],
   camera: CameraState,
+  context: EvalContext = NULL_EVAL_CONTEXT,
 ): PointerMoveOutcome {
   const drag = state.drag;
   if (drag === undefined) {
@@ -288,7 +296,7 @@ export function pointerMove(
     return { state: advanced, objects, journal, notices: freshNotices, rejection: undefined };
   }
 
-  const result = mutate(objects, plan.operations, journal);
+  const result = mutate(objects, plan.operations, journal, context);
   if (!result.ok) {
     // Prior state is untouched (Rule 2 / D-016) and `lastWorldPoint` is NOT
     // advanced, so this delta folds into the next move's instead of being

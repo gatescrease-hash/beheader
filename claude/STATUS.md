@@ -1,58 +1,68 @@
-# STATUS — as of entry 0131 (batching — 0131 not yet reviewed)
+# STATUS — as of entry 0132 (batch since 0130-REVIEW — **awaiting review**, cap reached)
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1418/1418** tests pass,
-0 skipped, 0 `.only`. **30 test files** (0131 added `src/render/measure.test.ts`).
-**PHASE 5 IS OPEN.** Last review point: **0130-REVIEW-phase5**, verdict ACCEPT WITH EDITS.
-Cycles since last review: **1/3** · diff since last review: **392 lines / 9 files (cap 800/10)**.
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1427/1427** tests pass,
+0 skipped, 0 `.only`. **30 test files**. **PHASE 5 IS OPEN.** Last review point: **0130-REVIEW-phase5**,
+verdict ACCEPT WITH EDITS. Cycles since last review: **2/3** · diff since last review:
+**~792 lines / 16 src files** — the **§6.3 file cap (10) is exceeded** and the line count is at
+~800, so **the batch stops here for review** (entries 0131 + 0132).
 
-**ENTRY 0131 — `render/measure.ts` IS BUILT (NOT YET REVIEWED).** The Canvas2D-backed `TextMeasurer`
-(`engine/eval-context.ts`'s interface, Rule 1's seam): `createCanvas2dTextMeasurer(ctx)` →
-a `measure` that splits on `/\r?\n/`, greedily word-wraps each hard line to `maxWidth` (**D-120**),
-measures each line with `ctx.measureText`, and returns `{ width: widestLine, height: lineCount *
-lineHeight }` — never throwing, always finite/non-negative (`eval-context.ts`'s contract, with
-defensive guards for NaN/`0`/negative `fontSize`/`lineHeight`/`maxWidth`, a non-finite `measureText`
-width, a blank family). 19 tests. **It has NO consumers yet** — the wiring slice is next.
+**ENTRY 0132 — THE Canvas2D `TextMeasurer` IS WIRED (NOT YET REVIEWED).** `main.ts`'s `start` builds
+one `EvalContext` around `createCanvas2dTextMeasurer` (entry 0131) over its **own separate offscreen
+2D context**, and threads it through every non-test `mutate` caller: `command/commands.ts`'s
+`executeCommand` (→ its 4 `mutate` calls, via `createObjectFromCommand`/`writeSlot`/`renameObject`/
+`deleteObject`), `render/interaction.ts`'s `pointerMove` (the drag), and `engine/document.ts`'s
+`deserializeDocument`/`loadDocument` (the loader). Each gained an optional trailing
+`context: EvalContext = NULL_EVAL_CONTEXT`, forwarded to `mutate` and never inspected. `main.ts`'s
+pure transitions (`submitLine`/`respondToPrompt`/`pointerDownAt`/`pointerMoveTo`/`commitPanelEdit`/
+`unlinkPanelSlot`) took the same optional param — threaded per call (like `Viewport`), NOT stored on
+`AppState`. **A `text` object loaded from JSON now gets a real, wrap-aware `measuredHeight`** (D-120's
+`maxWidth` = the numeric `width` slot) instead of `#MEASURE`.
 
-**Q-021 → D-120 IS RECONCILED (0131).** Every `PROVISIONAL(Q-021)` tag is removed and swapped for a
-`(D-120)` citation (`eval-context.ts`, `primitives/text.ts` ×3, `primitives/schema.ts`, and the test
-descriptions that carried the label). `grep -rnE "PROVISIONAL\(Q-021\)" src/` → nothing. The prose
-explaining why `maxWidth` exists stays (D-120's reconciliation note). **No `PROVISIONAL(Q-021)` site
-remains; it is off the Live PROVISIONAL list.**
+**`document.ts` (LOAD-BEARING, §6.2) HAS AN UNREVIEWED SIGNATURE CHANGE.** `loadDocument(json,
+context?)` and `deserializeDocument(raw, context?)` — additive optional param, forwarded to the load
+batch's one `mutate` call. No validation logic touched (D-108 clause 3 untouched).
 
-**ENTRY 0129 — `measuredHeight` IS BUILT AND REVIEWED (0130-REVIEW).** `TEXT_SCHEMA.derivedSlots` has
-TWO entries. `measuredHeight`'s `static` deps: `resolvedContent` + `width` +
-`style.font`/`fontSize`/`lineHeight` (§5.6; `color`/`align` omitted). Its compute,
-`primitives/text.ts`'s **`computeMeasuredHeight`**, is a pass-through: read the five slots, propagate
-any upstream `ErrorValue`, then `#MEASURE` if only the null measurer is wired (**D-118**), then `#TYPE`
-for an unusable style, then `context.measurer.measure(resolvedText, style, maxWidth)`, then `#TYPE`
-if that height is non-finite (**F21**, 0130-REVIEW). `#MEASURE` is a **sixth `ErrorCode`**
-(`graph/node.ts`) — D-028's move, sanctioned by D-118 c2; derived values never serialize.
+**ENTRY 0131 — `render/measure.ts` IS BUILT (NOT YET REVIEWED).** The Canvas2D-backed `TextMeasurer`:
+`createCanvas2dTextMeasurer(ctx)` → a `measure` that splits on `/\r?\n/`, greedily word-wraps each
+hard line to `maxWidth` (**D-120**), measures each line with `ctx.measureText`, returns
+`{ width: widestLine, height: lineCount * lineHeight }` — never throwing, always finite/non-negative,
+with defensive guards. 19 tests. As of 0132 it has ONE real caller: `main.ts`'s `evalContext`.
+
+**Q-021 → D-120 IS RECONCILED (0131).** Every `PROVISIONAL(Q-021)` tag is gone, `(D-120)` cited.
+`grep -rnE "PROVISIONAL\(Q-021\)" src/` → nothing.
+
+**ENTRY 0129 — `measuredHeight` IS BUILT AND REVIEWED (0130-REVIEW).** `TEXT_SCHEMA.derivedSlots`
+has TWO entries. `measuredHeight`'s `static` deps: `resolvedContent` + `width` +
+`style.font`/`fontSize`/`lineHeight`. Its compute, `primitives/text.ts`'s **`computeMeasuredHeight`**,
+is a pass-through: propagate any upstream `ErrorValue`, then `#MEASURE` if only the null measurer is
+wired (**D-118**), then `#TYPE` for an unusable style, then `context.measurer.measure(resolvedText,
+style, maxWidth)`, then `#TYPE` if that height is non-finite (**F21**). `#MEASURE` is a **sixth
+`ErrorCode`** (`graph/node.ts`); derived values never serialize.
 
 **FIVE `text` SLOTS ARE EFFECTIVELY-REQUIRED (0129).** `measuredHeight`'s `static` deps make
 `deriveEdges` emit an edge from `width`/`style.font`/`style.fontSize`/`style.lineHeight`/
-`resolvedContent` into `measuredHeight` every mutation. An edge may never point at a slot that does
-not exist (§5.1.1), so a `text` object created without one of those five is **refused** — same
-mechanism that refuses an `add` node with no `in.a`. `height`/`overflow`/`style.color`/`style.align`
-stay optional. **The `text` command cycle MUST create all nine non-derived slots + both derived
-placeholders**, with defaults (F13/F20's neighbour).
+`resolvedContent` into `measuredHeight` every mutation, so a `text` object created without one of
+those five is **refused** (§5.1.1's dangling-edge mechanism). `height`/`overflow`/`style.color`/
+`style.align` stay optional. **The `text` command MUST create all nine non-derived slots + both
+derived placeholders**, with defaults (F13/F20's neighbour).
 
-**STILL UNBUILT IN PHASE 5 (the wiring slice is what closes most of this):**
-- **Threading a real `EvalContext` through the non-test `mutate` callers.** `main.ts` must build an
-  `EvalContext` around `createCanvas2dTextMeasurer` (its own separate offscreen 2D context) and pass
-  it through: `command/commands.ts`'s `executeCommand` (×4 `mutate` calls, lines ~374/571/706/753 —
-  `executeCommand` needs a `context` param), `engine/document.ts:380` (loader), `render/interaction.ts:291`
-  (drag). This is the slice that makes `measuredHeight` stop being `#MEASURE`. Touches load-bearing
-  `document.ts` (§6.2) → likely `REVIEW: REQUIRED`.
+**STILL UNBUILT IN PHASE 5:**
 - **The `text` command.** `command/parser.ts` + `commands.ts` `text` handler (move `text` out of
   `COMMANDS_SPECIFIED_BUT_NOT_BUILT`), creating a `text` object with all nine non-derived slots +
   both derived placeholders and sensible `style` defaults (settles F13/F20 + 0129's five-required
   consequence). **Owes the F13 ruling** (a `formula`-driven `content` slot — refuse it, à la D-046?
-  §6.1 trigger 3).
-- **`render/renderer.ts`'s text-drawing pass**, markdown-lite rendering, layout — all unbuilt.
+  §6.1 trigger 3). This is the next slice — the measurer is now wired, so a created `text` object
+  gets a real `measuredHeight` immediately (in the running app).
+- **A `text` object's POSITION.** §5.6's `TextBox` has no `origin` slot — `content`/`width`/`height`/
+  `overflow`/`style.*` only. Nothing decides where a text box sits on the canvas yet; the `text`
+  command's `x=`/`y=` need somewhere to land (an `origin` slot? a schema question). Not touched by
+  0132.
+- **`render/renderer.ts`'s text-drawing pass**, markdown-lite rendering, layout — all unbuilt. A
+  `text` object draws as nothing today.
 
-**`measuredHeight` REPORTS `#MEASURE` FOR EVERY REAL DOCUMENT** until the threading slice lands
-(D-118 working as ruled — loud, not silent). A real `text` object also lights §5.9's error badge
-until then.
+**`measuredHeight` IS `#MEASURE` FOR EVERY DOCUMENT A USER CAN CURRENTLY MAKE** — because there is no
+`text` command, the only way to get a `text` object into the running app is `load`, and a loaded one
+now measures for real (0132). D-118 is working as ruled: loud, not silent.
 
 **PHASE 4 IS PASSED AND ITS GATE IS CLOSED.** 0116-REVIEW closed the gate; 0119-REVIEW cleared
 0117/0118. §6.2's block on starting a later phase was lifted there and has not been re-armed.
@@ -65,28 +75,32 @@ resize bounds).
 
 ## Read this first — what a cold reader needs
 
-**0. `render/measure.ts` EXISTS BUT IS WIRED TO NOTHING.** It implements `engine/eval-context.ts`'s
-`TextMeasurer`. Its `MeasurementContext` type (`{ font: string; measureText(t): { width } }`) a real
-`CanvasRenderingContext2D` satisfies with no cast. Line-breaking lives HERE (D-120), never in
-`src/engine/`.
+**0. THE MEASURER IS WIRED (0132) BUT NO USER-REACHABLE `text` OBJECT EXISTS.** `main.ts:start`
+builds `evalContext` from `createCanvas2dTextMeasurer` over a SECOND offscreen 2D context (never the
+renderer's — `measure` sets `ctx.font` per line). It flows through `executeCommand`, `pointerMove`,
+`loadDocument`, and `main.ts`'s pure transitions, all via an optional trailing `context` param
+(default `NULL_EVAL_CONTEXT`). Only a LOADED `text` object exercises it until the `text` command
+lands.
 
-**0a. `TEXT_SCHEMA` HAS BOTH DERIVED SLOTS.** `resolvedContent` (0127) and `measuredHeight` (0129).
+**0a. `render/measure.ts` — line-breaking lives HERE (D-120), never in `src/engine/`.** Its
+`MeasurementContext` type (`{ font: string; measureText(t): { width } }`) a real
+`CanvasRenderingContext2D` satisfies with no cast.
+
+**0b. `TEXT_SCHEMA` HAS BOTH DERIVED SLOTS.** `resolvedContent` (0127) and `measuredHeight` (0129).
 `getObjectSchema("text").derivedSlots` has length 2.
 
-**0b. A WELL-FORMED `text` OBJECT HAS 9 NON-DERIVED + 2 DERIVED SLOTS.** `content` + `width` +
-`style.font`/`fontSize`/`lineHeight` are **required** (they feed a derived slot → dangling-edge
-refusal if absent — 0129). `height`/`overflow`/`style.color`/`style.align` are optional. Both derived
-placeholders (`{ kind: "derived", value: null }`) are required by D-018. Not reachable today (no
-`text` command).
+**0c. A WELL-FORMED `text` OBJECT HAS 9 NON-DERIVED + 2 DERIVED SLOTS.** `content` + `width` +
+`style.font`/`fontSize`/`lineHeight` are **required** (dangling-edge refusal if absent — 0129).
+`height`/`overflow`/`style.color`/`style.align` are optional. Both derived placeholders
+(`{ kind: "derived", value: null }`) are required by D-018. The minimal well-formed shape (5
+non-derived + 2 derived) is what `mutation.test.ts`/`eval.test.ts`/`0132`'s new tests hand-build.
 
-**0c. `measuredHeight` READS `context.measurer` AND RETURNS `#MEASURE` UNTIL A REAL MEASURER IS
-THREADED THROUGH `mutate` (D-118).** `hasRealMeasurer(context)` (`eval-context.ts`) is the detector —
-it checks the *measurer* is not `NULL_TEXT_MEASURER`. Failure order in `computeMeasuredHeight`:
-upstream `ErrorValue` → `#MEASURE` → `#TYPE` (unusable style) → `#TYPE` (non-finite height — F21) →
-the height.
+**0d. `computeMeasuredHeight`'s failure order** — upstream `ErrorValue` → `#MEASURE` → `#TYPE`
+(unusable style) → `#TYPE` (non-finite height, F21) → the height. `hasRealMeasurer(context)`
+(`eval-context.ts`) checks the *measurer* is not `NULL_TEXT_MEASURER`.
 
-**1. PHASE 4'S GATE TEST IS `main.test.ts`'s LAST DESCRIBE BLOCK, AND IT IS THE PHASE'S ONLY
-PROTECTION.** Seven tests over one document. Do not weaken; do not fold.
+**1. PHASE 4'S GATE TEST IS `main.test.ts`'s LAST `describe` OVER ONE DOCUMENT.** Seven tests. Do
+not weaken; do not fold.
 
 **2. D-110's DISCLOSED CONSEQUENCE — `refs` HAS TWO FORMS (D-112).** `refs <cell>` reports the
 CURRENT edge set; `refs <object>` derives its blocking half without the target. **Neither may be
@@ -98,8 +112,10 @@ D-106/D-102/D-107 all implemented and reviewed. **Q-014 is CLOSED in code.**
 **4. A panel-typed STRING reaches a FORMULA slot, never a literal one.** Correct per D-102 clause 6;
 **Q-016** carries the grammar question.
 
-**5. `main.ts`'s DOM half (`start`) IS UNTESTED BY CONSTRUCTION (D-001) AND KEEPS GROWING.** Verified
-live at 0109/0111 (Playwright, transient). Tests reach `main.ts`'s PURE half only.
+**5. `main.ts`'s DOM half (`start`) IS UNTESTED BY CONSTRUCTION (D-001) AND KEEPS GROWING.** As of
+0132 it also builds `evalContext` and passes it into every DOM listener — checked by hand and by
+the pure-half tests that prove those functions thread `context` when given one, not by any assertion
+over `start`.
 
 **6. THE VANISHING-TABLE DEFECT IS FIXED (entry 0101) — D-097/D-098/D-099 are CLOSED.**
 
@@ -108,14 +124,14 @@ not bounded by `MIN`/`MAX_TABLE_LINES`. Not command-reachable today. Fix in `fin
 
 **8. D-108 IS OWED BY §5.11's LOAD CYCLE, AND ITS CLAUSE 3 BINDS EVERY CYCLE BEFORE IT.**
 `deserializeDocument`'s "never throws" is FALSE for a malformed loaded `ast`. **Do not "fix" it by
-guarding a single walker.** Not operator-reachable today.
+guarding a single walker.** 0132 added a forwarded `context` param there but touched no validation.
 
 **9. D-081 AND D-083 CLAUSE 4 ARE BUILT (0112) AND REVIEWED (0113).**
 
 **10. THE TEXT BLOCK TREE IS DERIVED STATE, RE-PARSED FROM `content` ON DEMAND, NEVER CACHED (D-114
 clause 4).** Re-parsed in TWO places every mutation — `resolveTextDependencyAddresses`
-(edge-derivation) and `computeResolvedContent` (evaluation) — over the SAME staged object list. A
-broken span becomes an `error`-kind `Block` (**D-115**); its parsed branches live in `orphaned`.
+(edge-derivation) and `computeResolvedContent` (evaluation). A broken span becomes an `error`-kind
+`Block` (**D-115**); its parsed branches live in `orphaned`.
 
 **11. THE PAPERCLIP CANNOT REACH A TABLE CELL.** Cell values must be TYPED. §5.4's formula bar /
 in-place cell editing is NOT built.
@@ -130,17 +146,22 @@ compiler link (D-119).** Change one → change both, same cycle, log names both.
 **14. A broken embedded span is marked `!` in place (D-116 parse / D-117 runtime), never blanks the
 box; `evaluateBlockTree` always returns a `string`.**
 
+**15. `EvalContext` IS THREADED PER CALL, NOT STORED (0132).** `executeCommand(cmd, doc, context?)`,
+`pointerMove(..., context?)`, `loadDocument(json, context?)`, and `main.ts`'s six pure transitions
+all take an optional trailing `context`. The internal `commands.ts` handlers take it as a REQUIRED
+param (compiler-enforced threading); only the public entry points default it to `NULL_EVAL_CONTEXT`.
+
 ## Next slice (recommended)
 
-**The `EvalContext` threading slice.** `main.ts` builds an `EvalContext` around
-`createCanvas2dTextMeasurer` (a fresh offscreen 2D context, kept separate from the renderer's so
-setting `font` there never disturbs a draw), and threads it through every non-test `mutate` caller:
-add a `context` parameter to `command/commands.ts`'s `executeCommand` and forward it to the four
-`mutate` calls; forward one through `engine/document.ts`'s loader; forward one through
-`render/interaction.ts`'s drag. This makes `measuredHeight` stop being `#MEASURE`. Touches
-load-bearing `document.ts` (§6.2) — expect `REVIEW: REQUIRED`. Then, separately, **the `text`
-command** (owes the F13 ruling). The render-only alternative (**D-109 clauses 1–2** + **Q-017**
-headers, the smallest un-owed items) is unchanged.
+**The `text` command.** `command/parser.ts` grammar + `commands.ts` handler, moving `text` out of
+`COMMANDS_SPECIFIED_BUT_NOT_BUILT`. It must create a `text` object with all nine non-derived slots +
+both derived placeholders and sane `style` defaults (settles F13/F20 and 0129's five-required
+consequence), and it **owes the F13 ruling** — a `formula`-driven `content` slot: refuse it à la
+D-046, or track its inner references? That is **§6.1 trigger 3** (brief ambiguity on something
+load-bearing), so that cycle likely escalates rather than completing. It also runs into the
+**position question** (§5.6's `TextBox` has no `origin` slot — where does `text x=… y=…` land?),
+which may itself be an open question. The render-only alternative (**D-109 clauses 1–2** +
+**Q-017** headers) is unchanged and needs no ruling.
 
 ## Built and reviewed
 
@@ -160,16 +181,22 @@ selection-list widening (0105, D-105) · N panels, drag, dismiss, panel editing 
 + D-107, D-081 + D-083 clause 4 (0113-REVIEW) · Phase 4 gate test (0116-REVIEW) · D-109 clause 3 +
 D-110 in full (0119-REVIEW; D-112, D-113) · `primitives/text.ts` block-tree engine (0121-REVIEW;
 D-114, D-115, Q-019) · D-116 data-shape + D-117 (rulings) · `src/engine/eval-context.ts` + `context`
-threading (0125-REVIEW; D-118) · `!`-marked broken-span rendering + `text` schema entry,
-`resolvedContent`, D-114's `evaluateDerivedSlot` widening (0128-REVIEW: ACCEPT WITH EDITS; D-119) ·
-`measuredHeight` (§5.6's second `text` derived slot) + `#MEASURE` `ErrorCode` + `TextMeasurer.measure`'s
-`maxWidth` + `hasRealMeasurer` (**0130-REVIEW: ACCEPT WITH EDITS; F21 fixed; D-120 answers Q-021**).
+threading through `mutate` (0125-REVIEW; D-118) · `!`-marked broken-span rendering + `text` schema
+entry, `resolvedContent`, D-114's `evaluateDerivedSlot` widening (0128-REVIEW: ACCEPT WITH EDITS;
+D-119) · `measuredHeight` (§5.6's second `text` derived slot) + `#MEASURE` `ErrorCode` +
+`TextMeasurer.measure`'s `maxWidth` + `hasRealMeasurer` (**0130-REVIEW: ACCEPT WITH EDITS; F21 fixed;
+D-120 answers Q-021**).
 
 ## Built this batch, not yet reviewed
 
 - **entry 0131** — `src/render/measure.ts` (the Canvas2D `TextMeasurer`, 19 tests) + Q-021 → D-120
-  reconciliation (every `PROVISIONAL(Q-021)` tag removed, `(D-120)` cited; doc/comment only). No
-  logic changed in any engine file. Load-bearing `primitives/schema.ts` touched comment-only.
+  reconciliation (doc/comment only). No engine logic changed. Load-bearing `primitives/schema.ts`
+  touched comment-only.
+- **entry 0132** — threading a real `EvalContext` from `main.ts` through `executeCommand`,
+  `pointerMove`, and `deserializeDocument`/`loadDocument` (each +optional trailing `context`), and
+  through `main.ts`'s pure transitions. +9 tests across `commands.test.ts`/`interaction.test.ts`/
+  `document.test.ts`/`main.test.ts`. **Load-bearing `engine/document.ts` signature change**
+  (additive optional param, no validation logic touched).
 
 ## Not started
 
@@ -177,7 +204,7 @@ D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable (the `text` `style.*`
 paths are declared; nothing writes them) · point-in-polygon fill hit-testing (D-067) · §5.4's
 formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9 · **D-109 clauses
-1–2** · the `EvalContext` threading slice, the `text` command, `renderer.ts`'s text pass, markdown-lite
+1–2** · the `text` command, a `text` object's position, `renderer.ts`'s text pass, markdown-lite
 rendering · Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
@@ -223,13 +250,19 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unle
 - **A `text` object must carry `content` + `width` + `style.font`/`fontSize`/`lineHeight` as slots,
   or it is refused (0129); a `formula`/`derived` `content` commits with inner references untracked**
   (fix-list item 22 / F13). Neither reachable today.
-- **`measuredHeight` is `#MEASURE` for every real document** until the `EvalContext` threading slice
-  lands (D-118 working as ruled). Consequence: a real `text` object lights §5.9's error badge until
-  then — self-resolves when wired. `render/measure.ts` (0131) is built and tested but has NO caller.
+- **`measuredHeight` is `#MEASURE` for every document a USER can make** — no `text` command, so the
+  only `text` object reachable is a LOADED one, which now (0132) measures for real. D-118 working
+  as ruled.
+- **`render/measure.ts` (0131) has exactly one caller** — `main.ts`'s `evalContext` (0132). No test
+  file drives it through `main.ts`; the wiring is pinned by pure-half tests over
+  `executeCommand`/`pointerMove`/`loadDocument`.
+- **A `text` object has no position.** §5.6's `TextBox` shape omits `origin`; `TEXT_SCHEMA` follows
+  it. `render/interaction.ts`'s drag would find no origin slots and do nothing. The `text` command
+  cycle has to decide where `x=`/`y=` land.
 - **`resolveTextDependencyAddresses` and `deriveEdges` Source 1 are a hand-maintained PAIR (D-119).**
 - **`main.ts`'s `start` is untested code and keeps growing.** Verified live, not by assertion. Its
-  "nothing evaluates text yet" NOT-DONE-HERE framing is stale since 0127; 0131 fixed the one bullet
-  about injecting a measurer, the rest is that batch's debt.
+  "nothing evaluates text yet" framing is stale since 0127; 0131 fixed the injecting-a-measurer
+  bullet and 0132 rewrote it (the injection is now done) — the rest of that batch's doc debt stands.
 - **The properties panel positions an off-screen selected object's panel clamped to a canvas edge.**
 - **The chrome layout is UNSEEN beyond entry 0094's anchor fix.** **D-095**: no collision avoidance
   until a human asks; D-101 clause 3 extends that to panels.
@@ -251,8 +284,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unle
 - **SETTLED at 0118, REVIEWED 0119 — do not re-raise.** A bare reference to an EMPTY in-extent cell
   reads `0`, gets no edge (**D-110**). Since 0127 the same coercion applies to an embedded `{= }` in
   a `text` object (D-114), through the same `isEmptyInExtentCell` predicate.
-- **`text.test.ts`'s `expectError` helper is unused** — kept deliberately; a future test author may
-  reach for it or remove it.
+- **`text.test.ts`'s `expectError` helper is unused** — kept deliberately.
 - **`render/measure.ts` measures markdown markup verbatim** (`**bold**`/`# heading` count toward the
   string) — §5.6 says "from `resolvedContent`", which holds the markup; a markdown-aware measurer is
   a later cycle's option (D-120's "the measurer's job" framing allows it). Flagged in `measure.ts`.
@@ -265,9 +297,8 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unle
 - **`renderer.ts`'s `formatCellValue`, `props.ts`'s `describeSlotValue`, and `mutation.ts`'s
   `describeDimensionSlotValue` are three separate `Value`-to-text formatters** — deliberate.
 - **`primitives/text.ts` imports `primitives/table.ts`** and `import type`s `DerivedSlotComputeDeps`
-  from `primitives/schema.ts` — mirroring the `geometry.ts` ⇄ `schema.ts` type-only cycle. It also
-  imports `hasRealMeasurer` + `TextStyle` from `eval-context.ts` (a leaf — no cycle). `text.ts`
-  CANNOT import `mutation.ts` (D-119).
+  from `primitives/schema.ts`. It also imports `hasRealMeasurer` + `TextStyle` from
+  `eval-context.ts` (a leaf — no cycle). `text.ts` CANNOT import `mutation.ts` (D-119).
 - **Carried unchanged, each with its pointer:** `set-formula` is a `kind` not a registry name ·
   comment debt in TEST files only · mixed line endings in the WORKING TREE only (`core.autocrlf=true`)
   · dangling-reference messages name the DEPENDENT not the missing SOURCE · D-022's bounded-correctness
@@ -282,27 +313,27 @@ Every ruling in `DECISIONS.md` (D-001 through **D-120**) binds without restateme
 
 **D-114 / D-115 / D-116 / D-117 ARE BUILT IN FULL AND REVIEWED (0126/0127, cleared 0128).**
 
-**D-118 (0125-REVIEW) — BUILT (0129), REVIEWED (0130).** `measuredHeight` returns `#MEASURE` when it
-can see only `NULL_EVAL_CONTEXT`'s measurer; `hasRealMeasurer` (`eval-context.ts`) is the detector.
+**D-118 (0125-REVIEW) — BUILT (0129), REVIEWED (0130), WIRED (0132, unreviewed).** `measuredHeight`
+returns `#MEASURE` when it can see only `NULL_EVAL_CONTEXT`'s measurer; `main.ts` now threads a real
+one through `executeCommand` / `pointerMove` / `loadDocument`.
 
 **D-119 (0128-REVIEW) — RULED, RECONCILED.** The `resolveTextDependencyAddresses` / `deriveEdges`
 Source 1 pair; change one → change both; a third consumer forces extraction.
 
 **D-120 (0130-REVIEW) — RULED, answers Q-021. RECONCILED at entry 0131.** `TextMeasurer.measure(text,
-style, maxWidth?)` stays; line-breaking lives in the measurer implementation (`render/measure.ts`,
-built 0131), never `src/engine/`; `maxWidth` = the `width` slot iff numeric. Every
-`PROVISIONAL(Q-021)` tag is gone.
+style, maxWidth?)`; line-breaking lives in `render/measure.ts` (built 0131, wired 0132), never
+`src/engine/`; `maxWidth` = the `width` slot iff numeric.
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · **D-114/D-115/D-116/D-117** ·
-**D-118.**
+**D-118** (the `#MEASURE` guard; its wiring is 0132, unreviewed).
 
 **NOT implemented, each owned by a named future cycle:** **D-104** (§5.10's row/column commands) ·
 **D-108** (§5.11's load path; clause 3 binds every cycle before it) · **D-109 clauses 1–2** (cell
 decimals + clipping, `render/` only).
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
-human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — both BUILT and REVIEWED (0128).
+human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — BUILT and REVIEWED (0128).
 **Q-021 → D-120 (0130-REVIEW), RECONCILED (0131).** Next free: **Q-022**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
@@ -322,25 +353,27 @@ screen pixels for stroke width / cell size / font? Provisional (a) world units. 
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
-**`PROVISIONAL(Q-021)` — GONE.** Reconciled at entry 0131 (D-120). No site remains.
-
 **No other `PROVISIONAL` tags exist.** Q-016/Q-017 deliberately have none.
 
 ## Gotchas for the next model
 
-- **`render/measure.ts` is built but has NO caller.** The next slice wires it: `main.ts` builds an
-  `EvalContext` around `createCanvas2dTextMeasurer(<its own offscreen 2D ctx>)` and threads it
-  through `executeCommand` (needs a `context` param) → the four `mutate` calls, plus `document.ts`'s
-  loader and `render/interaction.ts`'s drag. That is what makes `measuredHeight` stop being
-  `#MEASURE`.
-- **`MeasurementContext`** (`render/measure.ts`) is a hand-written structural type, not
-  `Pick<CanvasRenderingContext2D, …>` — a real ctx satisfies it, a fake needs only `font` +
-  `measureText`, no cast.
+- **The batch is at the §6.3 file cap (16 src files > 10) and awaiting review.** Do not start
+  another slice on top of 0131 + 0132 — hand off. The next slice (the `text` command) starts after
+  the review clears.
+- **`EvalContext` is threaded PER CALL, not on `AppState`.** `executeCommand(cmd, doc, context?)`,
+  `pointerMove(..., context?)`, `loadDocument(json, context?)`, `deserializeDocument(raw, context?)`,
+  and `main.ts`'s `submitLine`/`respondToPrompt`/`pointerDownAt`/`pointerMoveTo`/`commitPanelEdit`/
+  `unlinkPanelSlot` — all optional trailing, default `NULL_EVAL_CONTEXT`. `commands.ts`'s internal
+  handlers take it REQUIRED so a new `mutate`-reaching handler can't forget it.
+- **`main.ts` builds a SECOND offscreen 2D context for measurement** — never the renderer's
+  `context` (measure.ts sets `ctx.font` per line). A `null` second context → `NULL_EVAL_CONTEXT`
+  fallback (`#MEASURE`, loud).
+- **No `text` command exists.** Every `text`-object test hand-builds one (5 required non-derived + 2
+  derived) or loads it from JSON.
+- **`MeasurementContext`** (`render/measure.ts`) is a hand-written structural type — a real ctx
+  satisfies it, a fake needs only `font` + `measureText`, no cast.
 - **`TEXT_SCHEMA` has TWO derived slots.** `grep` for `derivedSlots` / `resolvedContent` /
   `measuredHeight` before touching the schema.
-- **A `text` object needs `content`/`width`/`style.font`/`style.fontSize`/`style.lineHeight` as
-  slots or `mutate` refuses it** (dangling edge into `measuredHeight`). The `text` command must
-  create them with defaults.
 - **`hasRealMeasurer` checks the MEASURER, not the context object.**
 - **`#MEASURE` is a real `ErrorCode`** (`graph/node.ts`), sixth after `#SCRIPT`. Only ever produced
   by `measuredHeight`, never serialized.
