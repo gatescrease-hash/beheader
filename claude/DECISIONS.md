@@ -3538,3 +3538,51 @@ exactly as **D-081** handed the name gate to the cycle that could actually reach
 Reconciliation required: none outstanding. `document.test.ts`'s "never throws for any of the
 malformed inputs above" test does not currently cover a formula slot at all; the load cycle MUST
 extend it to the four shapes named in clause 1, and that extension is the intended visible diff.
+
+---
+
+## D-109 — A table cell's text is bounded by its cell; and a REFUSED command keeps what the operator typed
+Answers: findings F7 and F8 at 0114-REVIEW-phase4-gate, both found by the human's own gate session
+Ruled: entry 0114-REVIEW-phase4-gate (reviewer)   Binding on: `render/renderer.ts`'s `drawCellText`
+and `formatCellValue`, and `main.ts`'s command input listener
+
+**Ruling.**
+
+1. **A cell's NUMBER is drawn with a decimal bound, the same way the properties panel's is.**
+   `formatCellValue` gets the treatment D-099 already gave `describeSlotValue`: round to at most
+   four decimals, trim trailing zeros so an integer stays bare. This is NOT a reconciliation of the
+   two formatters — D-099 clause 5 keeps them deliberately separate and that stands; it is the same
+   *rule* applied in the second place it was always needed. `146.8212157315694` drawing across its
+   neighbour is the defect; `146.8212` is the fix.
+2. **A cell's TEXT is clipped to its cell, whatever its type.** Rounding is not sufficient and must
+   not be mistaken for the whole fix: a long string ("Circle Radius Below") overruns identically,
+   and so would a large enough integer. `drawCellText` constrains what it draws to
+   `TABLE_CELL_WIDTH` minus its padding. **Rule 5 governs the mechanism** — the dumbest correct
+   thing (a `ctx.save()`/`clip()`/`restore()` around the cell rect, or a measured truncation with an
+   ellipsis) is the specified one; do not build column auto-sizing, wrapping, or a tooltip. Whether
+   an elided cell gets a visual marker is a display question for whoever builds it, and either
+   answer is compliant.
+3. **A refused command leaves the typed line in the input; only a SUCCESSFUL one clears it.**
+   `main.ts` currently clears unconditionally before submitting, so every refusal in the system —
+   a mistyped address, a cyclic formula, a D-097 dimension refusal, a `#PARSE` — costs the operator
+   the whole line, and costs most exactly where lines are longest. The refusal already reaches the
+   log; the text stays put so it can be corrected in place. Select-all-on-refusal is permitted (so
+   retyping over it still works); silently re-running anything is not.
+4. **This is not D-089 and does not discharge it.** Command HISTORY (recall a previous line) stays
+   queued and unbuilt. Clause 3 is the narrower thing: do not throw away the line the operator is
+   still holding. A cycle that builds D-089 must not treat clause 3 as already covered by it.
+
+**Rationale.** Both halves were found by a human using the application for ten minutes, and neither
+is reachable by any test the project would plausibly have written — `formatCellValue` has returned
+`String(value)` since entry 0062 and the input has cleared unconditionally since entry 0089, both
+reviewed and both green the whole time. That is the argument for **D-084**'s insistence on a human
+session at a gate, restated with evidence: `renderer.test.ts` pins the exact `fillText` calls for a
+cell and still could not see that the text was too wide for the box it was in, because no assertion
+compares the two.
+
+Clause 3 is separated from **Q-018** deliberately. The human raised losing a typed formula and the
+empty-cell refusal as one complaint; they are two defects, and this one is fixable now, is
+independent of how Q-018 is ruled, and removes most of the pain either way.
+
+Reconciliation required: none. No `PROVISIONAL` tag; no existing behaviour depends on a cell
+overrunning its border or on a refusal clearing the input.

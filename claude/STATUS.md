@@ -1,4 +1,22 @@
-# STATUS — as of entry 0113-REVIEW-phase4
+# STATUS — as of entry 0114-REVIEW-phase4-gate
+
+**PHASE 4'S CRITERION IS WITNESSED — the human ran the gate session and it PASSED.** Two polygons
+and a table in one document, binding in both directions at once, no false cycle ("data drives
+geometry which drives data"). **The gate is NOT YET CLOSED**: PROCESS_BRIEF §12.1 requires the
+criterion be pinned by an executable test, and no test asserts (a), (b) and (c) *simultaneously in
+one document* — `main.test.ts:723` pins (c) alone and explicitly disclaims being Phase 4's. **One
+slice is owed — one test, no production code — and Phase 5 does not begin before it lands (§12.4).**
+See entry 0114 for the full audit and for the human's own account of the session.
+
+Two defects the session found, both ruled **D-109**, neither a regression: **F7** a table cell draws
+its number at full float precision and nothing clips to the cell (`146.8212157315694` overlapping
+its neighbour) · **F8** a refused command DISCARDS the typed line, taxing every refusal in the
+system, not just the one the human hit. **Q-018** raised (the human's): should a bare reference to
+an empty in-extent cell read as 0? It reverses D-047 clause 4, so only they can take it.
+
+---
+
+## Previously — as of entry 0113-REVIEW-phase4
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1262/1262** tests pass, 0
 skipped, 0 `.only`. **NO REVIEW IS OWED. NO FIX CYCLE IS OWED.** The gate entry 0112 opened is
@@ -144,10 +162,30 @@ restores the old throw site (D-108 clause 3 forbids it explicitly). It is owed b
 builds §5.11's file-input load path. Not operator-reachable today: nothing calls `loadDocument`
 outside tests. See fix-list item 15.
 
-## Next — a human session for Phase 4's own gate
+## Next — the gate TEST (owed), then D-109's two fixes
 
-**Nothing is owed. No review, no fix cycle.** The standing next step is unchanged and is not code: a
-human session for **Phase 4's own gate**, two polygons bound through a table in one document.
+**The human session HAPPENED and PASSED (entry 0114).** What is owed now is the executable half of
+the gate, and it is the next slice:
+
+1. **THE GATE TEST — §12.1, blocks Phase 5.** One test in `main.test.ts` building the human's own
+   document (two polygons + a table) and asserting **(a)**, **(b)**, **(c)** and the absence of a
+   cycle rejection **in that one state**. No production code. The helpers exist (`typed`,
+   `objectNamed`, `numberAt`, `pointerDownAt`/`pointerMoveTo`), and `main.test.ts:723` is the
+   nearest model — it does (c) for one polygon and says in its own comment that it is not the gate.
+   The ingredients are each already tested; the COMPOSITE is not, and a false cycle is exactly the
+   defect that only appears when both directions are present at once. **Phase 4 may be claimed
+   complete the moment this lands.**
+2. **D-109 clause 3 (F8) — a refused command keeps the typed line.** Smallest fix on the board, and
+   it taxes every refusal in the system until it lands. `main.ts` clears `input.value`
+   unconditionally BEFORE submitting; clear it only on success.
+3. **D-109 clauses 1-2 (F7) — bound a cell's decimals and clip its text to the cell.** `render/`
+   only. Clause 2 is NOT covered by clause 1: a long string overruns just the same.
+
+**Do not start Q-018's work** (empty-cell references) — it is unanswered, it reverses D-047 clause
+4, and it is a load-bearing `REVIEW: REQUIRED` slice touching `deriveEdges`/evaluation/
+`validateIntegrity`. D-109 clause 3 removes most of the friction that prompted it regardless.
+
+Background that the gate session confirmed, kept because it is still what a cold reader needs:
 
 **CORRECTION to 0113-REVIEW's own wording (`entries/` is append-only, so the correction lives here).**
 That entry, and this section before this revision, said the gate can now be authored "either by typed

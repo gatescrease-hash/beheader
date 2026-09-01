@@ -8,11 +8,75 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-018**
+Next free ID: **Q-019**
 
 > **Revision note (2026-08-22, Manager cleanup):** compacted to STE; every question, option,
 > recommendation, reversibility call, and reviewer note is preserved in substance. Full original
 > wording is in the untouched sacred copy — see `MANAGER_CHANGELOG.md`.
+
+---
+
+## Q-018 — Should a bare reference to an EMPTY in-extent cell read as 0 instead of being refused? (Reverses D-047 clause 4)
+Raised: entry 0114-REVIEW-phase4-gate (reviewer), at the human's request during the Phase 4 gate
+session   Brief section: §5.1.1, §5.4, D-047 clause 4, 0080-REVIEW F4   Status: **OPEN — the
+human's. It is a REVERSAL of a standing ruling, so only they can take it.**
+
+The human, having hit it live: "I tried to reference a cell that had no data in it yet and so didn't
+exist, which basically 'quits' the formula and makes me re-type it in. Can't we have making a
+reference to a blank cell automatically assign that cell's value to 0?"
+
+**Note first that the two halves of that sentence are two different defects.** The retyping is
+**F8**, ruled independently at **D-109 clause 3** (a refused command keeps the typed line) — it is
+being fixed regardless of how this question is answered, and it removes most of the pain that
+prompted the question. What remains here is the narrower semantic question: *what does a bare
+reference to an empty cell MEAN?*
+
+**What the standing ruling says, and why.** D-047 clause 4: an empty cell inside a RANGE is skipped,
+but "an explicit scalar argument is untouched... a plain `ReferenceNode` to a non-existent slot
+remains a dangling reference that `validateIntegrity` rejects. The distinction is that a range names
+a REGION, whose membership the system computed, while a reference names ONE slot the user wrote."
+0080-REVIEW's F4 re-examined this at an implementer's request and left it standing, changing only
+the message ("references a slot that does not exist" — true, but it gives the operator nothing to
+do; that message fix is still open as fix-list item 2).
+
+Options:
+
+(a) **Narrow reversal — an in-extent cell of an existing table reads as empty/0; everything else
+    still refuses.** A cell address inside its table's extent is already a legal, bounded address
+    (D-044 bounds ranges by extent for exactly this reason), so "legal address, unpopulated" is
+    expressible without weakening §5.1.1: `deriveEdges` emits no edge for it (precisely D-047 clause
+    1's existing posture, extended from ranges to bare references), evaluation reads it as empty, and
+    the edge appears on its own the moment the cell is populated — edges are re-derived from stored
+    ASTs on every mutation and never hand-maintained, so nothing needs to remember to add it. A
+    cycle that only exists once the cell is populated is then caught at THAT mutation, correctly.
+(b) **Broad reversal — any reference to a declared-but-unset slot reads as 0.** Rejected on sight
+    here: outside a table there is no extent to bound it, so this makes every typo in every address
+    silent, and it collides head-on with §5.1.1's "reject or repair; there is no third option."
+(c) **Stands as built — keep the refusal**, and rely on D-109 clause 3 (keep the typed line) plus
+    fix-list item 2 (give the refusal a remedy in its message) to remove the friction, leaving the
+    semantics alone.
+
+Recommendation: **(a) or (c), and the reviewer does not have a strong preference between them** —
+this is genuinely a product taste question about which failure the human would rather have.
+
+The trade, stated plainly, because it is the whole decision: **(a) buys spreadsheet-idiomatic
+convenience and pays for it with silent typos.** `= table_1.Q9` on an empty in-extent Q9 would read
+0 rather than saying Q9 is empty; the formula commits and quietly computes the wrong answer. Every
+mainstream spreadsheet accepts that trade and users expect it. **(c) keeps every reference honest
+and pays for it with a refusal the operator must act on** — which, once D-109 clause 3 lands, costs
+a correction rather than a retype.
+
+One consequence to note either way: `SUM(a, b)` with an explicit `null` argument stays `#TYPE`
+(D-047 clause 4's other half). (a) would make `= A1 + 1` on an empty A1 give 1 while `= SUM(A1, 1)`
+on the same cell still errors — defensible (one is arithmetic coercion, the other an explicit
+argument), but it MUST be decided and stated by whoever implements (a), not discovered later.
+
+Reversible? **Yes, but not cheaply** — (a) touches `deriveEdges`, evaluation, and
+`validateIntegrity`'s dangling-reference check, which are load-bearing (§6.2). It is a
+`REVIEW: REQUIRED` slice with its own tests, not a one-liner, and it must not be taken as a
+provisional guess.
+Provisional choice taken: **NO.** Current behaviour is (c) by an existing ruling, not by a guess, so
+there is nothing to tag. **Nothing is built pending the human's answer.**
 
 ---
 
