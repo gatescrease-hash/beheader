@@ -8,7 +8,96 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-022**
+Next free ID: **Q-024**
+
+---
+
+## Q-023 — When a `text` object's `content` slot is a `formula`/`derived`, are its embedded `{= }`/`{? }` references tracked, or is that slot kind refused like a table dimension (D-046)?
+Raised: entry 0134-text-command (implementer), formalising fix-list item 22 / F13 (open since entry
+0127).   Brief section: §5.6, §5.1 (Rule 6), §5.3; precedent **D-046**.
+Status: **OPEN** — the `text` command cycle owes this ruling (0130-REVIEW / 0133-REVIEW). A
+reversible provisional exists (option (a)); nothing is built.
+
+Background: `content` is a `literal` slot by default (§5.6: "raw source including markup").
+`resolveTextDependencyAddresses` (`primitives/text.ts`) re-parses `content` at edge-derivation time
+(step 3) and reads it `literal`-only — because a `formula` slot's value is not written until step 7,
+the same Rule 6 timing that made **D-046** read a formula-valued dimension as its fail-closed empty.
+So today, if `content` is `link`ed or `set =`'d to a formula, the object commits, its self-edge is
+valid, and every reference inside the formula's resulting string is untracked — the box will not
+re-resolve when those cells change. Not reachable yet (no `text` command; `link text_1.content x` is
+the only route and there is no `text` object to aim it at).
+
+Options:
+
+(a) **Refuse a `formula`/`derived` `content` slot outright, à la D-046.** A guard in
+    `resolveWritableSlot` (or `mutate`) rejects `link text_1.content …` and `set text_1.content = …`,
+    with a message saying `content` is read as raw source only. `content` becomes literal-only, the
+    way a dimension slot fails closed. Small, reversible, consistent with the existing precedent.
+
+(b) **Track it** — when `content` is a formula, evaluate it first and parse the resulting string for
+    embedded references. Runs into D-046's exact Rule 6 obstacle: the string is not known at step 3,
+    so this needs the machinery D-046 declined to build.
+
+(c) **Leave the gap documented (status quo).** The object commits; reactivity is silently broken for
+    a formula-driven `content`. Rejected on sight — silent wrong reactivity is the failure D-116 /
+    D-118 and §5.3's totality rule all exist to prevent.
+
+Recommendation: **(a)**, and it may be taken as a **reversible provisional choice** by the cycle
+that builds the `text` command (a removable guard in a command handler — it shapes no data model and
+no stored state depends on it), tagged `PROVISIONAL(Q-023)`. Raised as a question rather than just
+done because it is the ruling 0130-REVIEW / 0133-REVIEW said this cycle owes, and it decides a slot's
+permanent kind.
+
+Reversible? **Yes** — (a) is one guard plus its test.
+Provisional choice taken: **none yet** — the cycle it belongs to is blocked on Q-022. If that cycle
+proceeds after Q-022 is ruled, it should take (a) provisionally and tag it.
+
+## Q-022 — Where does a `text` object's position live? §5.6's `TextBox` has no `origin` slot, but §5.10's `text x= y=` and Phase 7 both require one.
+Raised: entry 0134-text-command (implementer).   Brief section: §5.6 (`TextBox` shape —
+`content`/`width`/`height`/`overflow`/`style.*` only, no position), §5.10 (`text x=0 y=0 "Hello {=
+table_x.A1 }"`), §5.9 ("Objects with no `origin` slot … are dragged by applying the delta to every
+`vertex.N` slot"), §6 Phase 7 ("two text boxes … positioned relative to their intersection's
+center").
+Status: **OPEN — escalated, nothing built.** Not reversible (slot-set membership on a load-bearing
+schema — `primitives/schema.ts`, §6.2 — and a §5.6 deviation), so per PROCESS_BRIEF §7.3 the `text`
+command cycle stops here rather than guessing. This is the "A `text` object's POSITION" item STATUS
+has carried unbuilt since entry 0129, now raised as a formal question.
+
+Ambiguity: §5.6 lists a `TextBox`'s slots and none is a position. Yet §5.10's `text` form is `text
+x=0 y=0 "…"`, so the command carries two coordinates with nowhere to put them; §5.9's drag rule and
+Phase 7's "positioned relative to their intersection's center" both need a text object to HAVE a
+position, and Phase 7 needs it to be a slot (so `link text_1.origin.y intersection_a.centroid.y`
+works). The brief is internally inconsistent here, not merely silent.
+
+Options:
+
+(a) **Add `origin.x` / `origin.y` as two `literal` slots to `TEXT_SCHEMA`**, same path spelling
+    (`origin.x`/`origin.y`) and the same `ORIGIN_X_PATH`/`ORIGIN_Y_PATH` constants the three geometry
+    presets already use. `text x= y=` writes them. §5.9's existing origin-drag path in
+    `render/interaction.ts` then works for a text object with no change, and Phase 7's `link` works
+    because they are ordinary literal slots. Cost: two slots §5.6 does not list — a named deviation
+    from the brief's stated shape, and a load-bearing schema change.
+
+(b) **A `position` field on the `GraphObject` structure itself**, outside the slot system (like
+    `id`/`name`/`type`). Rejected here: it cannot be formula-driven, so Phase 7's data-bound label
+    positioning fails, and it is a much larger data-model change than (a).
+
+(c) **Text keeps no position** — `text` takes no `x=`/`y=`, and a text object draws at a fixed point
+    until a later cycle. Rejected: §5.10 explicitly shows `text x=0 y=0`, Phase 5's own gate wants a
+    box that "wraps at its set width" somewhere visible, and Phase 7 is unreachable.
+
+Recommendation: **(a)**. Smallest change; makes a text object consistent with every other positioned
+object (one spelling, one drag path, one `link` mechanism); §5.6's omission reads as an oversight —
+the section is about text CONTENT and layout, and every worked example in §1 and §6 treats a text
+box as something that sits at a place and can be bound there. Escalated and not taken provisionally
+because it changes which slots a schema declares — the Rule 6 / D-046 territory §7.3 says not to
+guess on — and it diverges from a brief section's explicit list (§6.1 trigger 3).
+
+Reversible? **In practice yes** — no `text` command exists, so no saved document can contain a text
+object, so no stored state depends on the answer; (a) is additive and its slots carry no derived
+value. But it is slot-set membership on `primitives/schema.ts`, so it takes a ruling, not a
+provisional guess.
+Provisional choice taken: **none.** The `text` command is blocked on this.
 
 ---
 
