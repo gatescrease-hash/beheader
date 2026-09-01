@@ -53,6 +53,9 @@
  *     attached, matching `graph/node.ts`'s `Slot` union.
  *   - `isReferenceNode` is the ONE sanctioned way to narrow `FormulaAst` to a binding
  *     (D-014: a predicate over a union is declared once, beside the union).
+ *   - **D-083 clause 4**: `exceedsMaxFormulaAstDepth` is the ONE depth check a loaded
+ *     `FormulaAst` passes through, called once by `document.ts` at the load boundary.
+ *     No other file grows a depth parameter of its own over this shape.
  *
  * NOT DONE HERE
  *   Lexing, parsing, evaluation, dependency extraction, the function registry — each
@@ -189,3 +192,48 @@ export function isReferenceNode(ast: FormulaAst): ast is ReferenceNode {
  * a hand-edited file is a real way for a deeper one to arrive.
  */
 export const MAX_FORMULA_AST_DEPTH = 1000;
+
+/**
+ * Whether `ast` nests deeper than `MAX_FORMULA_AST_DEPTH` — **D-083 clause 4**'s
+ * load-boundary check. `document.ts`'s loader is the ONE caller: depth is checked
+ * ONCE, at the moment a `FormulaAst` first enters the program from outside a parse,
+ * never by a guard threaded through every walk downstream. `formula/deps.ts` and
+ * `formula/eval.ts` do NOT carry a depth parameter of their own (D-083 clause 3 — "a
+ * recursion's limit lives at the recursion, not at its callers"); this function is
+ * what makes that safe, by refusing the document before either ever sees the AST.
+ *
+ * Counts the SAME way `parser.ts`'s own post-parse walk and `format.ts`'s own display
+ * guard do — the root is depth 1, each child one deeper — so a `FormulaAst` this
+ * function accepts is exactly one `parser.ts` could have built, and one this function
+ * refuses can only have arrived through a hand-edited or foreign saved file (nothing
+ * typed through `parser.ts` can produce one, since it refuses first).
+ *
+ * Never throws for a legal `FormulaAst`, however deep: the depth check runs BEFORE
+ * this function recurses into a node's children, so the call stack never grows past
+ * `MAX_FORMULA_AST_DEPTH` frames even for an adversarially deep input — the same
+ * "check first, recurse second" shape `format.ts`'s `formatNode` and `parser.ts`'s
+ * `walkForRangePlacement` already use for the identical reason.
+ */
+export function exceedsMaxFormulaAstDepth(ast: FormulaAst, depth = 1): boolean {
+  if (depth > MAX_FORMULA_AST_DEPTH) {
+    return true;
+  }
+  switch (ast.type) {
+    case "literal":
+    case "reference":
+    case "range":
+    case "error":
+      return false;
+    case "binaryOp":
+      return exceedsMaxFormulaAstDepth(ast.left, depth + 1) || exceedsMaxFormulaAstDepth(ast.right, depth + 1);
+    case "unaryOp":
+      return exceedsMaxFormulaAstDepth(ast.operand, depth + 1);
+    case "functionCall":
+      return ast.args.some((arg) => exceedsMaxFormulaAstDepth(arg, depth + 1));
+    default: {
+      const exhaustive: never = ast;
+      void exhaustive;
+      return false;
+    }
+  }
+}

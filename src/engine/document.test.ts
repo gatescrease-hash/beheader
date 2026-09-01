@@ -25,6 +25,7 @@ import {
 } from "./document.ts";
 import { deriveValidateAndEvaluate } from "./mutation.ts";
 import type { GraphObject } from "./graph/node.ts";
+import { MAX_FORMULA_AST_DEPTH, type FormulaAst } from "./formula/ast.ts";
 
 function addr(objectId: string, ...path: readonly string[]): Address {
   return { objectId, path };
@@ -298,6 +299,32 @@ describe("deserializeDocument — malformed input, never throws", () => {
     }
   });
 
+  it("rejects a document whose objects share a duplicate NAME (case-insensitively), via mutate's own D-081 check — the loader path D-081 was ruled for", () => {
+    const serialized = serializeDocument({
+      ...createEmptyDocument(),
+      objects: [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "VALUE_1", 2)],
+    });
+
+    const result = deserializeDocument(serialized);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("VALUE_1");
+      expect(result.message).toContain("already in use");
+    }
+  });
+
+  it("rejects a document whose object name fails §5.2's grammar, via mutate's own D-081 check", () => {
+    const serialized = serializeDocument({ ...createEmptyDocument(), objects: [valueObject("obj_1", "3bad", 1)] });
+
+    const result = deserializeDocument(serialized);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("not a valid name");
+    }
+  });
+
   it("never throws for any of the malformed inputs above", () => {
     expect(() => deserializeDocument(42)).not.toThrow();
     expect(() => deserializeDocument({})).not.toThrow();
@@ -430,5 +457,53 @@ describe("deserializeDocument — D-027: the same value rule over the document's
     const result = deserializeDocument({ ...legal, nextObjectId: 0, camera: { x: -12.5, y: 0, zoom: 0.25 } });
 
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth is checked ONCE, at the load boundary", () => {
+  /** A left-deep `1 + 1 + ...` ladder — the same fixture shape ast.test.ts's and format.test.ts's own depth-guard tests use. */
+  function ladder(levels: number): FormulaAst {
+    let ast: FormulaAst = { type: "literal", value: 1 };
+    for (let index = 0; index < levels; index += 1) {
+      ast = { type: "binaryOp", operator: "+", left: ast, right: { type: "literal", value: 1 } };
+    }
+    return ast;
+  }
+
+  /** A one-object document whose only object's only slot is the formula `ast` given — `value`'s ONE declared path, per `primitives/schema.ts`. */
+  function documentWithFormula(ast: FormulaAst): unknown {
+    return {
+      ...serializeDocument(createEmptyDocument()),
+      objects: [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast, value: null } } }],
+    };
+  }
+
+  it("accepts a formula slot's AST exactly at MAX_FORMULA_AST_DEPTH — the ceiling is not off by one", () => {
+    // MAX_FORMULA_AST_DEPTH - 1 binaryOp levels over one literal = depth 1000.
+    const result = deserializeDocument(documentWithFormula(ladder(MAX_FORMULA_AST_DEPTH - 1)));
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a formula slot's AST one level past MAX_FORMULA_AST_DEPTH, naming the object and slot, with parser.ts's own vocabulary", () => {
+    const result = deserializeDocument(documentWithFormula(ladder(MAX_FORMULA_AST_DEPTH)));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+      expect(result.message).toContain(`more than ${MAX_FORMULA_AST_DEPTH} nested operations`);
+    }
+  });
+
+  it("never throws a RangeError for an ADVERSARIALLY deep AST (40,000 levels) — the size that broke this recursion's siblings (parser.ts, format.ts) before their own guards existed", () => {
+    expect(() => deserializeDocument(documentWithFormula(ladder(40_000)))).not.toThrow();
+    expect(deserializeDocument(documentWithFormula(ladder(40_000))).ok).toBe(false);
+  });
+
+  it("rejects the too-deep AST before mutate ever runs — the message names the DEPTH problem, not a dangling reference or an evaluation failure", () => {
+    // A ladder of `1 + 1 + ...` is otherwise perfectly legal graph state (no
+    // dangling reference, nothing non-finite) — if this were accepted here
+    // and only failed downstream, the message would say something else
+    // entirely. It must not reach that far.
+    const result = deserializeDocument(documentWithFormula(ladder(MAX_FORMULA_AST_DEPTH)));
+    expect(result.ok === false && result.message.includes("nested operations")).toBe(true);
   });
 });

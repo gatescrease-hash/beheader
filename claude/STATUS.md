@@ -1,26 +1,32 @@
-# STATUS — as of entry 0111-panel-fix-list
+# STATUS — as of entry 0112-load-boundary-name-and-depth
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1245/1245** tests pass, 0
-skipped, 0 `.only`. Entries 0107 (D-101 + D-106) and 0109 (D-102) are built and were reviewed at
-**0110-REVIEW-phase4** (**REVISE** — three reachable DOM-half defects, everything else ACCEPTED as
-written). **Entry 0111 builds that fix list in full** (items 1 through 6) —
-**D-107, D-101, D-106 and D-102 are now all IMPLEMENTED. None of the four has been reviewed yet**;
-entry 0111's own diff fired no §6.1 trigger and the batch cap is nowhere close (1/3, 102/17 lines), so
-its own honest verdict is `REVIEW: NOT NEEDED` — but it disclosed one implementation-level decision
-(narrowing fix item 1's literal "unconditionally" to preserve caret placement inside an open row
-editor, verified live both ways) as a question for whoever next reviews this area. See entry 0111's
-own log for the full reasoning and the live-browser evidence.
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1262/1262** tests pass, 0
+skipped, 0 `.only`. **A REVIEW POINT IS NOW MANDATORY — see "Last review point" below.**
+
+Entries 0107 (D-101 + D-106) and 0109 (D-102) are built; **0110-REVIEW-phase4** reviewed them
+(REVISE — three reachable DOM-half defects, everything else ACCEPTED). Entry 0111 built that fix
+list in full (D-107). **Entry 0112 closes two long-standing owed rulings**: **D-081**
+(`createObject`'s own name now passes the same gate a rename does — `mutation.ts`'s
+`findInvalidNames`, formerly `findInvalidRenames`) and **D-083 clause 4** (a loaded formula's AST
+depth is checked ONCE, at `document.ts`'s load boundary, via `formula/ast.ts`'s new
+`exceedsMaxFormulaAstDepth`). **D-107, D-101, D-106, D-102, D-081 and D-083 clause 4 are all now
+IMPLEMENTED. D-107/D-101/D-106/D-102 are not yet reviewed; D-081/D-083 clause 4 are built exactly
+as ruled with no open question.**
 
 Current phase: **4 — cross-object linking, the validation moment.** **Phase 3 is PASSED and its gate
 is CLOSED** (0091-REVIEW). Phase 4 is OPEN and NOT claimed.
 
-Last review point: **0110-REVIEW-phase4** (**REVISE**; **D-107** ruled, **Q-016** raised). It
-reviewed entries 0107, 0108 and 0109 together — forced by D-103 clause 4 and, independently, by the
-§6.3 cap (960 insertions / 102 deletions across 10 files since 0105-REVIEW). **Its fix list is now
-built at entry 0111 — not yet reviewed.**
-Cycles since last review: **1/3** (the counter reset at 0110-REVIEW; entry 0111 is cycle 1).
+Last review point: **0110-REVIEW-phase4** (**REVISE**; **D-107** ruled, **Q-016** raised). Its fix
+list is built at entry 0111. **Entry 0112 FIRED PROCESS_BRIEF §6.1 trigger 5** (a previously-passing
+test's expectation was changed — `mutation.test.ts`'s D-081 "KNOWN GAP" test FLIPPED from asserting
+acceptance to asserting rejection, exactly as D-081's own ruling text requires and names as the
+intended visible diff) — **the next session MUST route this to review before starting a new
+implementation slice**; see entry 0112's own "Review point" section.
+Cycles since last review: **2/3** (entry 0111 was cycle 1, entry 0112 cycle 2). Diff since
+0110-REVIEW: 418 insertions / 70 deletions across 9 files (cap 800/10 — not the reason review is
+required; trigger 5 is).
 
-## Read this first — the ten things a cold reader needs
+## Read this first — the eleven things a cold reader needs
 
 **1. 0110-REVIEW's FIX LIST IS BUILT (entry 0111) — NOT YET REVIEWED.** Read entry 0111's own log
 before touching panel code again. In one line each, what was wrong and what entry 0111 did about it:
@@ -103,24 +109,50 @@ with one object (D-100 clause 7), and `buildSlotDescriptors`/`describeSlotValue`
 enumeration/formatter D-094 clause 9 requires, read by `props`, every panel's display, AND now every
 panel's edit seed.
 
-## Next — a human session for Phase 4's own gate (nothing is blocking it now)
+**11. A REVIEW POINT IS MANDATORY BEFORE THE NEXT IMPLEMENTATION SLICE.** Entry 0112 (D-081 +
+D-083 clause 4, both closed as ruled — see items 12-13 below) fired PROCESS_BRIEF §6.1 trigger 5: it
+FLIPPED a previously-passing test (`mutation.test.ts`'s D-081 "KNOWN GAP" pin, now asserting
+rejection instead of acceptance) — exactly what D-081's own ruling text authorises and names as the
+intended diff, but a ruling authorising a change is not an exemption from the trigger that change
+fires (this file's own gotcha, restated because entry 0112 is the cycle that actually hit it). **Do
+not start a new slice until this has been to review.** Nothing about the fix itself is in question —
+see entry 0112's own log for the full reasoning — this is a process gate, not an open defect.
 
-**0110-REVIEW's fix list is built (entry 0111) — the standing next step is the human session for
-Phase 4's own gate**: two polygons bound through a table in one document, now authored either by
-typed commands or by clicking a grey paperclip and typing into a row, with the keyboard behaving
-(entry 0111's own F1/F2 fixes). Everything built through entry 0111 makes that session easier; none
-of it IS that session.
+**12. D-081 IS FULLY BUILT (entry 0112) — DO NOT RE-BUILD IT.** `createObject`'s own name now passes
+`address.ts`'s `checkNameAvailable` — the SAME gate a rename passes, via `mutation.ts`'s
+`findInvalidNames` (renamed from `findInvalidRenames`, which now checks BOTH operation kinds). No
+`excludeId` for a `createObject` (nothing to be excused against). A refused creation claims no name
+for the simulation, mirroring the refused-rename branch exactly. This closes the gap `document.ts`'s
+loader motivated: a hand-edited file naming two objects identically, or one ungrammatically, is now
+REJECTED at load, loudly, instead of silently committed.
+
+**13. D-083 CLAUSE 4 IS FULLY BUILT (entry 0112) — DO NOT RE-BUILD IT.** `formula/ast.ts`'s new
+`exceedsMaxFormulaAstDepth` is the ONE depth check a loaded `FormulaAst` passes through, called once
+by `document.ts`'s `reconstructSlot` at the load boundary. `formula/deps.ts` and `formula/eval.ts`
+still carry NO depth parameter of their own (D-083 clause 3 stands) — this is what makes that safe.
+A formula slot nested past `MAX_FORMULA_AST_DEPTH` is refused with `parser.ts`'s own message
+vocabulary; nothing downstream of the loader can now receive one.
+
+## Next — a review point (entry 0112, mandatory), then a human session for Phase 4's own gate
+
+**The immediate next thing is NOT more code — it is the review entry 0112's own log requires (item
+11 above).** Once that clears, the standing next step resumes: a human session for **Phase 4's own
+gate**, two polygons bound through a table in one document, now authored either by typed commands or
+by clicking a grey paperclip and typing into a row, with the keyboard behaving (entry 0111's own
+F1/F2 fixes). Everything built through entry 0112 makes that session easier; none of it IS that
+session.
 
 Entry 0111 flagged one question for whoever next reviews this area (its narrowing of fix item 1's
 literal wording to preserve caret placement inside an open row editor — see its own log and this
-file's gotchas below). Nothing about it blocks the human session; it is a note for the review, not a
-known defect.
+file's gotchas below). Entry 0112 flagged none — D-081's own ruling text already answers the one
+thing a reviewer might otherwise ask (whether the flipped test is the intended diff). Neither blocks
+the human session; both are notes for the review, not known defects.
 
 **Still queued behind all of that, unchanged:** D-090's prompt-sequence preview · D-088 clauses 2–4
-and D-089 (the command input's behaviour) · §5.11's load boundary in `document.ts` (D-083 clause 4's
-depth check, D-081's `createObject` name gate, whose pinned "duplicate DOES commit" test must FLIP) ·
-**D-104** (fix-list item 13, owed by whichever cycle builds row/column commands) · D-102 clause 9
-(drag-linking between two panels — not asked for yet).
+and D-089 (the command input's behaviour) · **D-104** (open fix-list item 13, owed by whichever cycle
+builds row/column commands) · D-102 clause 9 (drag-linking between two panels — not asked for yet).
+**§5.11's load boundary — D-081 and D-083 clause 4, open fix-list item 1 — is DONE as of entry 0112;
+do not re-list it.**
 
 ## Built and reviewed
 
@@ -133,7 +165,8 @@ by 0093/0094/0107) · `render/hittest.ts` (0064) · entry 0065's header audit ·
 `command/commands.ts`'s seam and its four creation handlers, `document.ts`'s `mintObjectId`,
 `TABLE_SCHEMA`'s `origin.x`/`origin.y` (0078) · `commands.ts`'s four slot commands through one
 `writeSlot` path, `engine/formula/format.ts` (0080) · `commands.ts`'s `delete`/`refs`/`list` (0082) ·
-`mutation.ts`'s `RenameObjectOperation` + `findInvalidRenames`, `commands.ts`'s `rename` (0084) ·
+`mutation.ts`'s `RenameObjectOperation` + `findInvalidRenames` (renamed `findInvalidNames` at entry
+0112, D-081), `commands.ts`'s `rename` (0084) ·
 `CommandEffect` and the five effect handlers (0086) · the two formula depth limits (0088) ·
 `main.ts` rewritten from the stub, `render/camera.ts`'s `clampCamera`/`clampZoom`,
 `render/hittest.ts`'s `documentExtent` (moved to `render/extent.ts` at 0096), `index.html` (0089,
@@ -157,6 +190,19 @@ file's gotchas), and `updatePanels`'s latch guard (F4). One widened test, one ne
 the full transcript. **REVIEW: NOT NEEDED was entry 0111's own verdict** (no §6.1 trigger, batch cap
 nowhere close) — it still flagged its one implementation-level decision as a question for whoever
 next looks at this file.
+
+## Built at entry 0112 — D-081 + D-083 clause 4, not yet reviewed — REVIEW: REQUIRED
+
+**Entry 0112.** `formula/ast.ts`'s `exceedsMaxFormulaAstDepth` (D-083 clause 4); `document.ts`'s
+`reconstructSlot` calling it before accepting a loaded formula slot; `mutation.ts`'s
+`findInvalidRenames` widened and renamed `findInvalidNames`, now checking `createObject`'s own name
+too (D-081); `address.ts`'s `checkNameAvailable` doc comment updated to match. 17 new tests across
+`ast.test.ts`/`document.test.ts`/`mutation.test.ts`, plus ONE EXISTING TEST FLIPPED (the D-081 KNOWN
+GAP pin, now asserting rejection — D-081's own ruling text names this the intended diff). Both new
+checks mutation-checked (D-016): disabling the name gate failed 7 tests; disabling the depth guard
+failed 6 tests, including a GENUINE `RangeError` at 40,000 levels — direct evidence, not just an
+assertion. **This is the cycle that fired §6.1 trigger 5 (a previously-passing test's expectation
+changed) — see "Read this first" item 11. `REVIEW: REQUIRED` was entry 0112's own verdict.**
 
 ## Reviewed at 0110-REVIEW-phase4 — verdict REVISE (the rulings' implementation ACCEPTED, four findings)
 
@@ -183,9 +229,9 @@ ruled; findings F1-F4 are amendments to it, not a re-build.**
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
-(D-067) · §5.4's formula bar / in-place cell editing · §5.11's load-boundary validation (D-081,
-D-083 clause 4) · D-088 clauses 2–4 · D-089 · D-102 clause 9 (drag-linking between two panels) ·
-Phases 5–7.
+(D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
+(drag-linking between two panels) · Phases 5–7. (**§5.11's load-boundary validation — D-081, D-083
+clause 4 — is DONE as of entry 0112; no longer listed here.**)
 
 **Phase 4 is OPEN and NOT claimed.** (a) data drives geometry and (b) geometry drives data are both
 reachable from typed lines OR, as of entry 0109, from a panel's paperclip; (c) partial binding under
@@ -194,10 +240,12 @@ human.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
-Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
+Numbering follows 0090-REVIEW §9. Items 2–10 unchanged and open.
 
-1. **§5.11's loader validates a loaded formula's AST depth once, at the boundary** (**D-083**
-   clause 4), with **D-081**'s `createObject` name gate. Owned by `document.ts`'s cycle.
+1. **DONE at entry 0112.** §5.11's loader now validates a loaded formula's AST depth once, at the
+   boundary (**D-083** clause 4, `formula/ast.ts`'s `exceedsMaxFormulaAstDepth`), and
+   `createObject`'s own name now passes **D-081**'s gate (`mutation.ts`'s `findInvalidNames`). Listed
+   here only so no later reader mistakes it for open debt.
 2. **Give the missing-slot refusal a remedy.** Message only; D-047 clause 4 does not move.
 3. **`findDanglingReferences` names one dependent once per MISSING SOURCE.** `mutation.ts`.
 4. **`zoom`'s refusal names `Infinity` rather than what was typed.** Message only.
@@ -248,7 +296,6 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 - **The formula-driven indicator is read NARROWLY** — `origin.x`/`origin.y` only.
 - **A printable keystroke does not reach the command input unless it is focused** — D-088 clauses
   2–4 not built. **There is no command history** (**D-089**, queued).
-- **A hand-edited saved file can throw a `RangeError` out of the Load button** — fix-list item 1.
 - **Every pointer move repaints the canvas and rewrites the whole log's `textContent`; every panel
   NOT currently editing is still rebuilt whole every paint too** (fix-list item 11's own remaining
   scope). Immediate-mode, unmeasured and acceptable today (Rule 5) — the one place this is now a
@@ -271,8 +318,6 @@ Numbering follows 0090-REVIEW §9. Items 1–10 unchanged and open.
 - **`refs <address>` REFUSES for a cell of a table whose `rows` is a formula** (D-046) — a state
   D-097 makes unreachable BY COMMAND, though a loaded file can still carry it, so the refusal stays.
 - **A bare reference to an EMPTY cell is REFUSED.** 0080-REVIEW F4 ruled it STANDS.
-- **`createObject` does not check the name it carries** — pinned by a test asserting a duplicate
-  DOES commit, which **D-081** says must FLIP in the load cycle.
 - **Eight §5.10 commands have no registry entry** — `polyline`/`text`/`script`/`image`/`explode`/
   `addvertex`/`delvertex` wait on a schema or an `Operation` kind; **`pan` waits on Q-012**.
 - **`createObjectFromCommand`'s "type has no schema" branch is uncovered**, as are
@@ -346,7 +391,12 @@ the other direction inside `placePropertiesPanel`/`placePanelElement`.
 
 **From 0090-REVIEW, all four implemented:** **D-084** · **D-085** · **D-086** · **D-087**.
 **From entry 0089:** **D-075**/**D-082** · **D-062** · **D-061** · **D-066** · **D-072** ·
-**D-027 clause 2**. Still owed, unchanged: **D-074** · **D-081** · **D-083 clause 4**.
+**D-027 clause 2**. Still owed, unchanged: **D-074**.
+
+**D-081 AND D-083 CLAUSE 4 ARE IMPLEMENTED (entry 0112) — NOT REVIEWED YET, but with no open
+question: both are built exactly as their own ruling text specifies.** `mutation.ts`'s
+`findInvalidNames` (D-081) and `formula/ast.ts`'s `exceedsMaxFormulaAstDepth` (D-083 clause 4). Do
+not re-build either. See "Read this first" items 11-13.
 
 ## Live PROVISIONAL tags and open questions
 
@@ -362,6 +412,18 @@ reach the site, and a tag on unreachable code is debt without a reader). Next fr
 
 ## Gotchas for the next model
 
+- **A REVIEW POINT IS MANDATORY BEFORE THE NEXT IMPLEMENTATION SLICE (entry 0112 fired §6.1 trigger
+  5).** Do not start a new slice — including anything on the standing queue — until entry 0112 has
+  been to review. See "Read this first" item 11.
+- **`mutation.ts`'s name-availability check is `findInvalidNames`, not `findInvalidRenames`** — the
+  old name is stale as of entry 0112 (D-081): it now checks `createObject`'s own name too, with no
+  `excludeId` (a fresh object has no prior name to be excused against). If a future grep for
+  `findInvalidRenames` finds nothing, that is correct, not a regression.
+- **A loaded formula's AST depth is checked in EXACTLY ONE place: `document.ts`'s `reconstructSlot`,
+  via `formula/ast.ts`'s `exceedsMaxFormulaAstDepth`** (D-083 clause 4, entry 0112). `deps.ts` and
+  `eval.ts` still carry no depth parameter of their own — do not add one there; the loader's guard is
+  what makes that safe, and a second guard downstream would be exactly the "fifth pre-staging check"
+  D-081's own clause 2 warns against (the identical shape, applied to a different ruling).
 - **0110-REVIEW's fix list is BUILT (entry 0111), NOT YET REVIEWED.** Read entry 0111's own log
   before touching panel code again — its "Decisions I made" 1 carries a narrowing of the review's
   literal wording that the next review should weigh in on (next bullet).

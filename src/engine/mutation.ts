@@ -485,15 +485,18 @@ export interface DeleteObjectOperation {
  * starting slot values is that file's work, and this operation stays the one
  * primitive both routes commit through.
  *
- * PRECONDITION, enforced by `mutate` before this is ever called: `object.id`
- * must NOT already name an object at the moment THIS operation is folded —
- * the reverse of `setSlot`/`deleteObject`'s precondition, since creation is
- * the one operation kind that ADDS to the id set the existence simulation
- * tracks (see `mutate`'s own doc comment). Everything else about whether the
- * created object is well-formed (its slots matching its schema, no dangling
- * references, no non-finite values) is `validateIntegrity`'s job, run once
- * over the whole post-fold candidate — this operation does not duplicate any
- * of those checks.
+ * TWO PRECONDITIONS, both enforced by `mutate` before this is ever called:
+ * (1) `object.id` must NOT already name an object at the moment THIS
+ * operation is folded — the reverse of `setSlot`/`deleteObject`'s
+ * precondition, since creation is the one operation kind that ADDS to the id
+ * set the existence simulation tracks (see `mutate`'s own doc comment); (2)
+ * `object.name` passes §5.2's grammar and is unique case-insensitively as of
+ * this operation's own position in the batch — the SAME gate a rename passes
+ * (`findInvalidNames`, **D-081**), simulated left-to-right for the identical
+ * reason. Everything else about whether the created object is well-formed
+ * (its slots matching its schema, no dangling references, no non-finite
+ * values) is `validateIntegrity`'s job, run once over the whole post-fold
+ * candidate — this operation does not duplicate any of those checks.
  */
 export interface CreateObjectOperation {
   readonly kind: "createObject";
@@ -608,7 +611,7 @@ export interface DeleteTableLineOperation {
  * operation is folded — the same existence simulation every other
  * non-`createObject` variant passes; (2) `name` passes §5.2's grammar AND is
  * unique case-insensitively against every OTHER object as of this operation's
- * own position in the batch (`findInvalidRenames`, via `address.ts`'s
+ * own position in the batch (`findInvalidNames`, via `address.ts`'s
  * `checkNameAvailable` — §5.2's single gate, never a second copy of the rule
  * spelled out here). The uniqueness half is simulated left-to-right for the
  * same reason table resizes are (D-050): a batch can free a name by deleting
@@ -1152,11 +1155,12 @@ export type MutationResult =
  * `findInvalidTableResizes` (§5.4's row/column preconditions —
  * D-050/D-046/D-053), `findInvalidDimensionWrites` (a `setSlot` bounding
  * `table`'s `rows`/`cols` the same way at every write, not only at
- * `insertTableLine`/`deleteTableLine` — **D-097**), and `findInvalidRenames`
- * (§5.2's name rules, and D-080's reserved words). All three simulate the
- * batch LEFT-TO-RIGHT for the reason check 2 does: a table's extent, its
- * dimension slots' readability, and a name's availability are all functions
- * of an operation's own POSITION in the batch, not of the pre-batch document.
+ * `insertTableLine`/`deleteTableLine` — **D-097**), and `findInvalidNames`
+ * (§5.2's name rules and D-080's reserved words, for every `renameObject` AND
+ * `createObject` — **D-081**). All three simulate the batch LEFT-TO-RIGHT for
+ * the reason check 2 does: a table's extent, its dimension slots'
+ * readability, and a name's availability are all functions of an operation's
+ * own POSITION in the batch, not of the pre-batch document.
  *
  * Why staging matters even though every function downstream is already pure
  * (so `objects` was never going to be mutated regardless): Rule 5 asks for
@@ -1275,13 +1279,13 @@ export function mutate(
     return { ok: false, message: invalidDimensionMessages.join("; ") };
   }
 
-  // §5.2's name rules for every `renameObject` in the batch, simulated
-  // left-to-right the same way the checks above are — see
-  // `findInvalidRenames`'s own doc comment for why a duplicate name cannot
-  // be caught after the fold instead.
-  const invalidRenameMessages = findInvalidRenames(operations, objects);
-  if (invalidRenameMessages.length > 0) {
-    return { ok: false, message: invalidRenameMessages.join("; ") };
+  // §5.2's name rules for every `renameObject` AND `createObject` in the
+  // batch (D-081), simulated left-to-right the same way the checks above
+  // are — see `findInvalidNames`'s own doc comment for why a duplicate name
+  // cannot be caught after the fold instead.
+  const invalidNameMessages = findInvalidNames(operations, objects);
+  if (invalidNameMessages.length > 0) {
+    return { ok: false, message: invalidNameMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -2093,31 +2097,38 @@ function describeDimensionSlotValue(value: Value): string {
 }
 
 /**
- * §5.2's name rules for every `renameObject` in a batch, checked before
- * staging — the same posture `findInvalidTableResizes` takes, and for the
- * same reason (D-050): a name's availability is a function of the batch AS
- * SIMULATED LEFT-TO-RIGHT, not of the pre-batch document.
+ * §5.2's name rules for every `renameObject` AND `createObject` in a batch,
+ * checked before staging — the same posture `findInvalidTableResizes` takes,
+ * and for the same reason (D-050): a name's availability is a function of
+ * the batch AS SIMULATED LEFT-TO-RIGHT, not of the pre-batch document.
  * `[rename a → b, rename c → a]` is legal because the first frees `a`;
  * `[rename a → z, rename c → z]` is not, and BOTH must be decided here
  * rather than by a post-fold check, because a duplicate name is not
  * detectable from the folded graph alone once it exists (nothing downstream
- * looks at names at all — `validateIntegrity` reads slots and edges).
+ * looks at names at all — `validateIntegrity` reads slots and edges). The
+ * same reasoning covers `createObject`: `[create name=x, create name=x]` in
+ * one batch must reject the SECOND, and only the simulation can tell them
+ * apart.
  *
  * The rule itself is `address.ts`'s `checkNameAvailable`, never re-spelled
  * here: it owns both halves (§5.2's grammar and case-insensitive uniqueness)
- * and its `excludeId` exists for exactly this call. Every offending
- * operation is named in one pass, matching every other check in this file.
+ * and its `excludeId` exists for exactly the rename call (a fresh
+ * `createObject` has no id to exclude — there is nothing yet for it to
+ * collide with itself). Every offending operation is named in one pass,
+ * matching every other check in this file.
  *
- * KNOWN GAP, disclosed not fixed: `createObject`'s OWN name goes
- * unchecked — this function only reads a created object's name to keep the
- * simulation honest for a LATER rename. A loader or a command handler can
- * therefore still commit a duplicate or ungrammatical name through
- * `createObject`, exactly as it could before this cycle;
- * `command/commands.ts` avoids it by minting names through
- * `generateDefaultName`. Closing it belongs to a cycle that can weigh what
- * it does to §5.11's load path, not to this one.
+ * **D-081, now built**: `createObject`'s own name passes this SAME gate a
+ * rename already did, extending this simulation rather than adding a fifth
+ * pre-staging check of its own (D-081 clause 2 — "it does not get a fifth
+ * pre-staging check of its own"). A refused creation is not applied to the
+ * simulation, mirroring the refused-rename branch below, so a later
+ * operation in the same batch sees the name as still free. This closes the
+ * gap §5.11's loader motivated: `deserializeDocument` builds one
+ * `createObject` per loaded object and folds them through this same `mutate`
+ * call, so a hand-edited file naming two objects identically — or naming one
+ * ungrammatically — is now rejected here, loudly, rather than committed.
  */
-function findInvalidRenames(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+function findInvalidNames(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
   // `AddressableObject` — the shape `checkNameAvailable` reads — is all this
   // simulation needs to track; no slot data is touched, exactly as the
@@ -2126,6 +2137,13 @@ function findInvalidRenames(operations: readonly Operation[], objects: readonly 
 
   operations.forEach((operation, index) => {
     if (operation.kind === "createObject") {
+      // D-081: the SAME gate a rename passes, with no `excludeId` — a freshly
+      // created object has no prior name of its own to be excused against.
+      const check = checkNameAvailable(operation.object.name, tracked);
+      if (!check.ok) {
+        problems.push(`operation ${index + 1} of ${operations.length} cannot create: ${check.message}`);
+        return; // Not applied to the simulation — a refused creation claims no name.
+      }
       tracked.push({ id: operation.object.id, name: operation.object.name, type: operation.object.type });
       return;
     }

@@ -11,7 +11,9 @@
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
 import {
+  exceedsMaxFormulaAstDepth,
   isReferenceNode,
+  MAX_FORMULA_AST_DEPTH,
   type BinaryOpNode,
   type ErrorNode,
   type FormulaAst,
@@ -164,6 +166,47 @@ describe("isReferenceNode", () => {
     ];
     const results = nodes.map(isReferenceNode);
     expect(results).toEqual([false, true, false, false, false, false, false]);
+  });
+});
+
+describe("exceedsMaxFormulaAstDepth — D-083 clause 4's load-boundary check", () => {
+  /** A left-deep `1 + 1 + ...` ladder — the same fixture shape `format.test.ts`'s depth-guard tests use. */
+  function ladder(levels: number): FormulaAst {
+    let ast: FormulaAst = { type: "literal", value: 1 };
+    for (let index = 0; index < levels; index += 1) {
+      ast = { type: "binaryOp", operator: "+", left: ast, right: { type: "literal", value: 1 } };
+    }
+    return ast;
+  }
+
+  it("is false for a single leaf node (depth 1)", () => {
+    expect(exceedsMaxFormulaAstDepth({ type: "literal", value: 1 })).toBe(false);
+  });
+
+  it("is false for an AST exactly at the limit", () => {
+    // MAX_FORMULA_AST_DEPTH - 1 binaryOp levels over one literal = depth 1000.
+    expect(exceedsMaxFormulaAstDepth(ladder(MAX_FORMULA_AST_DEPTH - 1))).toBe(false);
+  });
+
+  it("is true for an AST one level past the limit", () => {
+    expect(exceedsMaxFormulaAstDepth(ladder(MAX_FORMULA_AST_DEPTH))).toBe(true);
+  });
+
+  it("does not throw a RangeError for a 40,000-level AST — the size that broke this recursion's siblings before their own guards existed", () => {
+    expect(() => exceedsMaxFormulaAstDepth(ladder(40_000))).not.toThrow();
+    expect(exceedsMaxFormulaAstDepth(ladder(40_000))).toBe(true);
+  });
+
+  it("checks EVERY branch of a functionCall, not just the first argument", () => {
+    const shallow: FormulaAst = { type: "literal", value: 1 };
+    const tooDeep = ladder(MAX_FORMULA_AST_DEPTH);
+    const call: FormulaAst = { type: "functionCall", name: "SUM", args: [shallow, tooDeep] };
+    expect(exceedsMaxFormulaAstDepth(call)).toBe(true);
+  });
+
+  it("is false when every branch is within the limit, even nested through unaryOp and functionCall", () => {
+    const nested: FormulaAst = { type: "unaryOp", operator: "-", operand: { type: "functionCall", name: "SUM", args: [{ type: "literal", value: 1 }] } };
+    expect(exceedsMaxFormulaAstDepth(nested)).toBe(false);
   });
 });
 

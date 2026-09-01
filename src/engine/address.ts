@@ -163,10 +163,10 @@ export function isNameTaken(
  * (case-insensitively). `excludeId` allows checking a rename against everything except
  * the object being renamed, which is why a rename that only changes CASE is accepted.
  *
- * `mutation.ts`'s `renameObject` passes this gate. **`createObject` does not yet** — a
- * duplicate or ungrammatical name still commits through it, pinned by a test in
- * `mutation.test.ts` and owed to the cycle that builds §5.11's load path (**D-081**).
- * Do not read this function's existence as proof that no document holds a bad name.
+ * `mutation.ts`'s `renameObject` AND `createObject` both pass this gate (**D-081**,
+ * built at entry 0112) — `findInvalidNames` calls it for every operation of either
+ * kind in a batch, simulated left-to-right, `createObject` with no `excludeId` since
+ * a freshly created object has no prior name of its own to be excused against.
  */
 export function checkNameAvailable(
   name: string,

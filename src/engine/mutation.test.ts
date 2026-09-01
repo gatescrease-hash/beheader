@@ -3493,7 +3493,7 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
   });
 });
 
-describe("mutate — findInvalidRenames simulates the batch LEFT-TO-RIGHT, the same way findInvalidTableResizes does (D-050's reasoning)", () => {
+describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the same way findInvalidTableResizes does (D-050's reasoning)", () => {
   function pair(): readonly GraphObject[] {
     return [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
   }
@@ -3563,8 +3563,62 @@ describe("mutate — findInvalidRenames simulates the batch LEFT-TO-RIGHT, the s
     );
   });
 
-  it("KNOWN GAP, pinned not fixed: createObject's OWN name is NOT checked, so a duplicate name still commits through the loader path (findInvalidRenames' doc comment owns this)", () => {
+  it("D-081, now built: createObject's OWN name is checked, so a duplicate name is REJECTED rather than committed (this test used to pin the KNOWN GAP; it now pins the fix)", () => {
     const result = mutate(pair(), [{ kind: "createObject", object: valueObject("obj_3", "value_1", 3) }], []);
-    expect(result.ok && result.objects.map((object) => object.name)).toEqual(["value_1", "value_2", "value_1"]);
+    expect(result.ok === false && result.message).toBe('operation 1 of 1 cannot create: the name "value_1" is already in use');
+  });
+
+  it("D-081: rejects a createObject whose name fails §5.2's grammar", () => {
+    const result = mutate(pair(), [{ kind: "createObject", object: valueObject("obj_3", "3bad", 3) }], []);
+    expect(result.ok === false && result.message).toBe(
+      'operation 1 of 1 cannot create: "3bad" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*',
+    );
+  });
+
+  it("D-081/D-080: rejects a createObject whose name is a formula keyword, in any case", () => {
+    const result = mutate(pair(), [{ kind: "createObject", object: valueObject("obj_3", "true", 3) }], []);
+    expect(result.ok === false && (result.message.includes("reserved word") && result.message.includes('"true"'))).toBe(true);
+  });
+
+  it("D-081: two createObjects in ONE batch claiming the SAME name — the SECOND is rejected, the simulation catches what the pre-batch document could not", () => {
+    const result = mutate(
+      [],
+      [
+        { kind: "createObject", object: valueObject("obj_1", "twin", 1) },
+        { kind: "createObject", object: valueObject("obj_2", "TWIN", 2) },
+      ],
+      [],
+    );
+    expect(result.ok === false && result.message).toBe('operation 2 of 2 cannot create: the name "TWIN" is already in use');
+  });
+
+  it("D-081: ACCEPTS a createObject onto a name an EARLIER delete in the same batch just freed — symmetric with the rename case above", () => {
+    const result = mutate(
+      pair(),
+      [
+        { kind: "deleteObject", objectId: "obj_1" },
+        { kind: "createObject", object: valueObject("obj_3", "value_1", 3) },
+      ],
+      [],
+    );
+    expect(result.ok && result.objects.map((object) => object.name)).toEqual(["value_2", "value_1"]);
+  });
+
+  it("D-081: a REFUSED createObject claims no name for the simulation — a later operation still sees the name as taken", () => {
+    // Operation 1 is refused (duplicate), so `value_1` stays claimed by the
+    // ORIGINAL object — the simulation must not have half-applied the refused
+    // creation on its way to rejecting the whole batch.
+    const result = mutate(
+      pair(),
+      [
+        { kind: "createObject", object: valueObject("obj_3", "value_1", 3) },
+        { kind: "renameObject", objectId: "obj_2", name: "value_1" },
+      ],
+      [],
+    );
+    expect(result.ok === false && result.message).toBe(
+      'operation 1 of 2 cannot create: the name "value_1" is already in use; ' +
+        'operation 2 of 2 cannot rename: the name "value_1" is already in use',
+    );
   });
 });
