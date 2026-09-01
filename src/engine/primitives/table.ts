@@ -209,6 +209,13 @@ export function isInExtentTableCellAddress(address: Address, objects: readonly G
     return false;
   }
   const tableObject = objects.find((candidate) => candidate.id === address.objectId);
+  // The TYPE half decides nothing today and stays anyway (0119-REVIEW, answering
+  // entry 0118's question 1): `cellAddressToCoordinates` above already requires
+  // the `cells.` prefix, and `table` is the only type whose schema declares that
+  // family, so no reachable address gets this far on a non-table. It is what
+  // keeps the function's own contract — D-110 clause 1's "a cell of an EXISTING
+  // table" — true the day a second type declares a `cells.*` family, rather than
+  // silently widening D-110 to it.
   if (tableObject === undefined || tableObject.type !== TABLE_TYPE) {
     return false;
   }

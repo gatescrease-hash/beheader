@@ -665,6 +665,21 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       // table_1 is 4x4 (sandbox() above); B9's row is past it entirely.
       expect(refused("set table_1.A1 = table_1.B9", sandbox())).toContain("references a slot that does not exist");
     });
+
+    it("D-110 clause 5 AT THE COMMAND LINE: the cycle that only closes once the empty cell is populated is refused at THAT line, naming both cells (0119-REVIEW)", () => {
+      // The `mutate`-level pin lives in `mutation.test.ts` and is what D-111
+      // clause 3 asked for. This is the same claim one layer up, because the
+      // operator meets it here — D-110 was ruled from a live command-line
+      // session, and neither the acceptance nor the later refusal was reachable
+      // from a typed line before that ruling.
+      const acceptedWhileEmpty = committed("set table_1.A2 = table_1.A1", sandbox()); // A1 empty and in-extent.
+      expect(slotOf(acceptedWhileEmpty, "table_1", ["cells", "A2"])?.value).toBe(0);
+
+      const message = refused("set table_1.A1 = table_1.A2", acceptedWhileEmpty);
+      expect(message).toContain("cyclic dependency");
+      expect(message).toContain("table_1.A1");
+      expect(message).toContain("table_1.A2");
+    });
   });
 
   describe("D-038 — a formula that cannot be valid is refused when it is ENTERED, and its source is not discarded", () => {
@@ -901,6 +916,25 @@ describe("delete, refs, props and list — the object commands that need no new 
         "table_1.D4 → polygon_1.origin.x",
         "1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
       ]);
+    });
+
+    it("but `refs <object>` DOES report that same dependent, and agrees with the refused `delete` — the two forms answer different questions (D-112, 0119-REVIEW)", () => {
+      // The disclosed consequence above is narrower than it reads. `refs <cell>`
+      // reports the CURRENT edge set, where D-110 clause 4 left no edge.
+      // `refs <object>` derives edges over the document WITHOUT the target, so
+      // the reference stops being in-extent (its table is gone from that list)
+      // and becomes an ordinary dangling edge — the same mechanism that already
+      // kept an unwritten range honest (D-047 item 1, `refs`'s own header). That
+      // is what keeps §5.1.1's "see what points at something before deleting it"
+      // true under D-110, so no later cycle may harmonise the two forms.
+      const linkedToEmptyCell = committed("link polygon_1.origin.x table_1.D4", sandbox());
+
+      expect(lines("refs table_1.D4", linkedToEmptyCell)).toEqual(["nothing references table_1.D4"]);
+      expect(lines("refs table_1", linkedToEmptyCell)).toEqual([
+        "table_1.D4 → polygon_1.origin.x",
+        "1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
+      ]);
+      expect(refused("delete table_1", linkedToEmptyCell)).toContain("polygon_1.origin.x references a slot that does not exist");
     });
 
     it("names a dependent once even where the formula reads it twice, because the report is about which SLOTS read the target", () => {

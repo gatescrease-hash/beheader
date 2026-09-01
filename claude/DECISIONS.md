@@ -3696,3 +3696,69 @@ one-directional half.
 
 Reconciliation required: none now. No `PROVISIONAL` tag. Clause 3 binds the D-110 cycle at the
 moment it is scheduled.
+
+---
+
+## D-112 — `refs <object>` and `refs <cell>` answer DIFFERENT questions under D-110, and must not be harmonised
+Answers: a finding at 0119-REVIEW (no `Q-NNN` was raised)   Ruled: entry 0119-REVIEW-phase5 (reviewer)
+Binding on: `command/commands.ts`'s `refs`, and on any future reading of D-110's disclosed consequence
+
+**Ruling.**
+
+1. **`refs <cell>` reports the CURRENT edge set, so it does NOT name a formula reading that cell
+   while the cell is empty.** This is D-110 clause 4 working as ruled — there is no edge — and it
+   is the disclosed consequence D-110 required the implementing cycle to state.
+2. **`refs <object>` DOES name that same formula, and is CORRECT to.** It derives its blocking half
+   over the document **without** the target object (`commands.ts`'s `refs`, unchanged since
+   0082-REVIEW). With the table gone from that candidate list the reference is no longer in any
+   extent, so `isInExtentTableCellAddress` returns `false`, the edge reappears, and the report
+   matches what `delete <object>` will actually refuse.
+3. **The two are therefore not in conflict and NEITHER may be "fixed" to match the other.** Making
+   `refs <cell>` report the dependent would reintroduce the edge D-110 clause 4 removes. Making
+   `refs <object>` stop reporting it would let `refs table_1` say "nothing references table_1"
+   about a document whose `delete table_1` is refused — the precise failure §5.1.1 provides the
+   command to prevent ("Without that, rule (1) is merely annoying; with it, it is workable").
+4. **D-110's own "Consequence to disclose when built" is therefore NARROWER than its wording**, and
+   any restatement of it must say which form it is about. The unqualified sentence "`refs` will not
+   report a formula that references an empty cell" is false for the object form.
+
+**Rationale.** The mechanism is not new and is not D-110's: `refs`'s own header has documented it
+since 0082-REVIEW for the D-047 range case (`table_2.A1 = SUM(table_1.A1:table_1.A4)` over unwritten
+cells expands to no edges at all, and becomes one fallback edge only once the table is gone).
+D-110's single-cell case rides on that existing design for free, which is why entry 0118 correctly
+needed no change in `command/commands.ts` — but the reason it needed none is stronger than the one
+that entry gives ("nothing there duplicates the dangling-reference check"), and worth pinning
+before a later cycle reads the asymmetry as a bug and closes it.
+
+Pinned by a test at 0119-REVIEW (`commands.test.ts`, the `refs` block): both forms over one
+document, plus the refused `delete` they must agree with. Mutation-checked — collapsing
+`afterRemoval` onto the current edge set turns it red with `refs table_1` reporting nothing.
+
+Reconciliation required: none. No `PROVISIONAL` tag. `STATUS.md`'s statement of D-110's disclosed
+consequence is corrected by this review.
+
+---
+
+## D-113 — D-109 clause 3 covers a refused PROMPT STEP answer, not only a refused complete command
+Answers: entry 0117's Decision 2, which declared the reading rather than assuming it
+Ruled: entry 0119-REVIEW-phase5 (reviewer)   Binding on: `main.ts`'s `advance`
+
+**Ruling.** A prompt sequence's step answer that is REFUSED keeps the operator's typed text in the
+command input, exactly as a refused complete command does. `advance`'s `"prompting"` arm reports
+`refused` as `session.error !== undefined`, which is set precisely when this answer was rejected
+and the SAME step is being asked again (D-072 clause 7); an accepted answer moves the sequence on
+and clears the input like any other accepted line. **This is not an extension of D-109 clause 3;
+it is that clause read at its own sentence** — "a refused command leaves the typed line in the
+input; only a SUCCESSFUL one clears it" — rather than at its list of worked examples, which happen
+all to be single-line commands because those are what the human met in the gate session.
+
+**Rationale.** Losing a mistyped radius mid-`circle` is the identical injury D-109 was ruled
+against, and it lands on a longer, harder-to-retype answer more often than the single-line case
+does. Entry 0117 flagged this as the one place it went beyond the ruling's literal examples and
+called it reversible in one line; it is affirmed here so that reversibility does not read as an
+invitation. The `"failed"`/`"cancelled"` arm's `true` stays as written, including its comment
+saying `"cancelled"` is unreachable through `advance` — a conservative default, honestly labelled
+as unexercised rather than presented as tested behaviour.
+
+Reconciliation required: none. No `PROVISIONAL` tag. Pinned by two of entry 0117's seven tests, both
+mutation-checked in that entry and re-run at 0119-REVIEW.
