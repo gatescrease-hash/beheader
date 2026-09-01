@@ -103,8 +103,9 @@ export const BOUNDS_MAX_Y_PATH: readonly string[] = ["bounds", "maxY"];
 /**
  * §5.5: "the derived `vertices` slot yields a polygonal approximation" for a
  * circle. A fixed, untuned constant (Rule 5) — no adaptive/zoom-dependent
- * tessellation, which is a render-layer concern this file has no context to
- * make (Rule 1: no injected `EvalContext` reaches a derived-slot compute).
+ * tessellation, which is a render-layer concern. The `EvalContext` a compute now
+ * receives (§5.1) carries a `TextMeasurer` and nothing about the camera, so it
+ * would not help here even if this were the place to decide it.
  */
 export const CIRCLE_VERTEX_COUNT = 32;
 

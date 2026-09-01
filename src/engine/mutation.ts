@@ -155,6 +155,7 @@
  *     nothing replays it.
  */
 import { checkNameAvailable, formatAddress, isAddressError, type Address } from "./address.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
@@ -383,10 +384,17 @@ export type GraphEvaluationResult =
  * guarantee, not this one's; there is nothing here for a caller's prior state
  * to be corrupted by, because this function is never given write access to it.
  *
+ * `context` is §5.1's `EvalContext` (injected services — today a `TextMeasurer`
+ * for §5.6's `measuredHeight`); it is forwarded untouched to `evaluate` (step 7)
+ * and defaults to `NULL_EVAL_CONTEXT` for callers with no `text` object.
+ *
  * Never throws, matching every function it composes. Never mutates `objects`
  * — every step here is pure and returns new data.
  */
-export function deriveValidateAndEvaluate(objects: readonly GraphObject[]): GraphEvaluationResult {
+export function deriveValidateAndEvaluate(
+  objects: readonly GraphObject[],
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): GraphEvaluationResult {
   const edges = deriveEdges(objects);
 
   const integrity = validateIntegrity(objects, edges);
@@ -399,7 +407,7 @@ export function deriveValidateAndEvaluate(objects: readonly GraphObject[]): Grap
     return { ok: false, message: formatCycleRejection(cycleCheck.cycle, objects) };
   }
 
-  return { ok: true, objects: evaluate(objects, edges) };
+  return { ok: true, objects: evaluate(objects, edges, context) };
 }
 
 /**
@@ -1187,6 +1195,12 @@ export type MutationResult =
  * state provably unchanged" (§6, D-016) a structural guarantee of THIS
  * function's own shape, not an accident of every other file's discipline.
  *
+ * `context` is §5.1's `EvalContext` — the injected services (today a
+ * `TextMeasurer`, §5.6) that step 7's `evaluate` hands to every `derived`-slot
+ * compute function. It defaults to `NULL_EVAL_CONTEXT`; a caller that creates or
+ * evaluates a `text` object MUST pass a real one (`main.ts` does, via the
+ * Canvas2D-backed `render/measure.ts`). Forwarded untouched, never inspected here.
+ *
  * Never throws. Never mutates `objects` or `journal` — a rejection returns
  * without ever assigning either back to anything; both are exactly the
  * references the caller passed in.
@@ -1195,6 +1209,7 @@ export function mutate(
   objects: readonly GraphObject[],
   operations: readonly Operation[],
   journal: readonly MutationJournalEntry[],
+  context: EvalContext = NULL_EVAL_CONTEXT,
 ): MutationResult {
   if (operations.length === 0) {
     return { ok: false, message: "a mutation batch must contain at least one operation" };
@@ -1323,7 +1338,7 @@ export function mutate(
     { objects: staged, brokenSlots: [] },
   );
 
-  const result = deriveValidateAndEvaluate(folded.objects);
+  const result = deriveValidateAndEvaluate(folded.objects, context);
   if (!result.ok) {
     return result; // step 6: `objects`/`journal` were never touched.
   }

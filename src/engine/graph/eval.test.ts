@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "../eval-context.ts";
 import type { GraphObject, Slot } from "./node.ts";
 import { addressKey, type Edge } from "./edge.ts";
 import { evaluate } from "./eval.ts";
@@ -406,6 +407,45 @@ describe("evaluate — a range inside an aggregate call, expanded through the re
     expect(() => evaluate([sumFormula], [])).not.toThrow();
     const result = evaluate([sumFormula], []);
     expect(result[0]?.slots.value).toMatchObject({ value: { error: "#REF" } });
+  });
+});
+
+describe("evaluate — the injected EvalContext (§5.1)", () => {
+  // No current schema compute reads context.measurer, so the full "a derived
+  // slot measures text through the injected context" assertion lands with the
+  // cycle that builds `measuredHeight` (§5.6). This block pins that the
+  // parameter is accepted, forwarded, and defaulted, and that a pass over
+  // context-ignoring slots never touches the measurer.
+  const objects = [
+    valueObject("obj_1", "value_1", 10),
+    valueObject("obj_2", "value_2", 5),
+    addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+  ];
+  const edges = addObjectEdges("obj_3", addr("obj_1", "value"), addr("obj_2", "value"));
+
+  it("defaults to NULL_EVAL_CONTEXT when omitted — behaviour identical to passing it explicitly", () => {
+    const implicit = evaluate(objects, edges);
+    const explicit = evaluate(objects, edges, NULL_EVAL_CONTEXT);
+    expect(objectById(implicit, "obj_3").slots["out.result"]).toEqual(objectById(explicit, "obj_3").slots["out.result"]);
+  });
+
+  it("forwards a caller-supplied context untouched, and never touches its measurer for context-ignoring slots", () => {
+    let measureCalls = 0;
+    const spyContext: EvalContext = {
+      measurer: {
+        measure: (text) => {
+          measureCalls += 1;
+          return { width: text.length, height: 1 };
+        },
+      },
+    };
+
+    const result = evaluate(objects, edges, spyContext);
+
+    // The pass still produces the right answer (context is inert for `add`)...
+    expect(objectById(result, "obj_3").slots["out.result"]).toEqual({ kind: "derived", value: 15 });
+    // ...and nothing in this pass measured anything, because no slot here needs to.
+    expect(measureCalls).toBe(0);
   });
 });
 

@@ -16,6 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { formatAddress, type Address } from "./address.ts";
+import type { EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
@@ -644,6 +645,29 @@ describe("deriveValidateAndEvaluate — composing deriveEdges -> validateIntegri
     expect(() => deriveValidateAndEvaluate([])).not.toThrow();
     expect(deriveValidateAndEvaluate([])).toEqual({ ok: true, objects: [] });
   });
+
+  it("forwards a caller-supplied EvalContext (§5.1) to step 7 untouched, without changing a context-ignoring result", () => {
+    const objects = [
+      valueObject("obj_1", "value_1", 10),
+      valueObject("obj_2", "value_2", 5),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    let measureCalls = 0;
+    const spyContext: EvalContext = {
+      measurer: {
+        measure: (text) => {
+          measureCalls += 1;
+          return { width: text.length, height: 1 };
+        },
+      },
+    };
+
+    const withDefault = deriveValidateAndEvaluate(objects);
+    const withContext = deriveValidateAndEvaluate(objects, spyContext);
+
+    expect(withDefault).toEqual(withContext); // `add` ignores context — same result either way.
+    expect(measureCalls).toBe(0); // nothing here needs measuring, so the measurer is never touched.
+  });
 });
 
 describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, commit+journal)", () => {
@@ -667,6 +691,34 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
       expect(add1?.slots["out.result"]).toEqual({ kind: "derived", value: 104 }); // 100 + 4
       expect(result.journal).toEqual([{ operations: [operation] }]);
     }
+  });
+
+  it("accepts an optional EvalContext (§5.1) as its fourth argument and forwards it to evaluation", () => {
+    const initial = [
+      valueObject("obj_1", "value_1", 3),
+      valueObject("obj_2", "value_2", 4),
+      addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value")),
+    ];
+    const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 100 } };
+    let measureCalls = 0;
+    const spyContext: EvalContext = {
+      measurer: {
+        measure: (text) => {
+          measureCalls += 1;
+          return { width: text.length, height: 1 };
+        },
+      },
+    };
+
+    const withContext = mutate(initial, [operation], [], spyContext);
+    const withDefault = mutate(initial, [operation], []);
+
+    expect(withContext.ok).toBe(true);
+    // Same graph result as the default path — `add` never consults the measurer.
+    if (withContext.ok && withDefault.ok) {
+      expect(withContext.objects).toEqual(withDefault.objects);
+    }
+    expect(measureCalls).toBe(0);
   });
 
   it("rejects a mutation that would introduce a cycle, naming every slot in it (PROJECT_BRIEF §6)", () => {

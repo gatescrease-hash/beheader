@@ -1,7 +1,22 @@
-# STATUS — as of entry 0123-RULINGS
+# STATUS — as of entry 0124
 
-STATE: **GREEN.** Both configs compile, **1329/1329** tests pass, 0 skipped, 0 `.only`.
-**PHASE 5 IS OPEN AND ITS FIRST SLICE IS REVIEWED. Nothing is owed before the next slice.**
+STATE: **GREEN** (compiles, all tests pass) — but **REVIEW: REQUIRED before the next slice.**
+Both configs compile, **1337/1337** tests pass, 0 skipped, 0 `.only`.
+**PHASE 5 IS OPEN. Entry 0124 built the `EvalContext`/`TextMeasurer` seam** — §6.1 trigger 2
+fired (first file of a new subsystem, `src/engine/eval-context.ts`), so the next slice waits on
+0124's review. Batch: cycle 1/3 since 0121-REVIEW · diff 344 lines / 8 files (cap 800/10).
+
+**ENTRY 0124 — THE INJECTED-MEASURER TRAP IS SOLVED, PENDING REVIEW.** New leaf file
+`src/engine/eval-context.ts`: `EvalContext` (`{ measurer: TextMeasurer }`), `TextMeasurer`
+(Rule 1's interface — `measure(text, style)`), `TextStyle` (§5.6's size-relevant style subset:
+`font`/`fontSize`/`lineHeight`), and `NULL_EVAL_CONTEXT` (a deep-frozen null-object, zero
+measurement, the documented default for the many callers with no text). `DerivedSlotCompute`
+gains `context?: EvalContext` (optional ONLY for the isolated-unit-test path — `graph/eval.ts`
+always supplies it). `evaluate`, `deriveValidateAndEvaluate` and `mutate` each take
+`context = NULL_EVAL_CONTEXT` and forward it untouched down to every `derived`-slot compute.
+**No behavioural consumer yet** — `measuredHeight` is the next slice and IS the end-to-end
+threading test. `geometry.ts`'s "no `EvalContext` reaches a compute" comment was falsified and
+fixed (D-065).
 
 **BOTH TEXT-ERROR-DISPLAY QUESTIONS ARE NOW RULED — NEITHER IS BUILT.** Two related, DIFFERENT
 mechanisms, both marked with a `!` prefix and both owed by the same future Phase 5 wiring cycle:
@@ -32,10 +47,11 @@ eagerly and totally including untaken branches. §6.1 trigger 2 (first file of a
 0121-REVIEW made three edits (two defect fixes, one criterion pin) and issued **D-114**, **D-115**
 and **Q-019**.
 
-**WHAT IS STILL UNBUILT IN PHASE 5**, and it is most of it: no `text` OBJECT type, no schema entry,
-no `resolvedContent`/`measuredHeight` derived slots, no `TextMeasurer`/`EvalContext` threading into
-`graph/eval.ts`, no `text` command, no markdown-lite rendering, no layout. The block-tree engine is
-the pure half only.
+**WHAT IS STILL UNBUILT IN PHASE 5**, after 0124: no `text` OBJECT type, no schema entry, no
+`resolvedContent`/`measuredHeight` derived slots, no `text` command, no markdown-lite rendering, no
+layout, and D-116 clauses 1-4 / D-117 still unimplemented. `TextMeasurer`/`EvalContext` threading
+into `graph/eval.ts` is DONE (0124, pending review) — but nothing consumes the measurer yet, and no
+real (Canvas2D) measurer is wired into `main.ts` / `executeCommand`.
 
 **PHASE 4 IS PASSED AND ITS GATE IS CLOSED.** 0116-REVIEW closed the gate; 0119-REVIEW cleared
 entries 0117 and 0118. §6.2's block on starting a later phase was lifted there and has not been
@@ -56,13 +72,16 @@ the `mutate` level (last test in `mutation.test.ts`'s D-110 block) **and, since 
 command line too** (`commands.test.ts`'s `set` block). Two existing tests flipped from asserting
 refusal to asserting acceptance-and-`0`, exactly as D-110's own ruling text said they would.
 
-**Owed next: the Phase 5 WIRING slice**, and it inherits a decided direction rather than an open
-question. Wire `text.ts`'s three functions into `primitives/schema.ts` (a `text` schema entry,
-`resolvedContent` + `measuredHeight` derived slots), thread a `TextMeasurer` through an
-`EvalContext` into `graph/eval.ts` (Rule 1's injected-measurer trap — solve it FIRST, not last), and
-add the `text` command. **That slice is bound by D-114 in full**, including clause 3's non-obvious
-ordering, which it MUST pin with a test that fails if the two checks are swapped. It is a §6.1
-trigger of its own (`graph/eval.ts` and `primitives/schema.ts` are load-bearing, §6.2).
+**Owed next: the REST of the Phase 5 WIRING slice**, and it inherits a decided direction rather than
+an open question. Rule 1's injected-measurer trap is SOLVED (0124, pending review): `EvalContext`
+carries a `TextMeasurer` and is threaded through `evaluate`/`deriveValidateAndEvaluate`/`mutate` to
+every `derived` compute. What remains: wire `text.ts`'s three functions into `primitives/schema.ts`
+(a `text` schema entry, `resolvedContent` + `measuredHeight` derived slots — `measuredHeight` is the
+first thing to actually call `context.measurer`), add `render/measure.ts`'s Canvas2D `TextMeasurer`
+and thread a real context through `executeCommand`/`main.ts`/`loadDocument`, and add the `text`
+command. **That slice is bound by D-114 in full**, including clause 3's non-obvious ordering, which
+it MUST pin with a test that fails if the two checks are swapped. It is a §6.1 trigger of its own
+(`graph/eval.ts` and `primitives/schema.ts` are load-bearing, §6.2).
 **That slice also owes D-116 clauses 1-4 AND D-117, together** (the `!` prefix on a parse-broken
 span's own source; the `!` + error CODE on a runtime-broken evaluation; `evaluateBlockTree` no
 longer propagating either as `#PARSE`/an `ErrorValue` for the whole tree) — both are now RULED, so
@@ -179,16 +198,20 @@ is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and string
 
 ## Next slice (recommended)
 
-**Phase 5's wiring slice**, per 0121-REVIEW §10: the `text` schema entry, `resolvedContent` and
-`measuredHeight` as derived slots, `TextMeasurer` injected through an `EvalContext` into
-`graph/eval.ts`, and the `text` command. **Read D-114 before writing any of it** — it settles what
-`read`/`readRange` an embedded `{= }` gets (the same contract a cell formula's AST gets, D-110
-coercion included), where the widening goes (`evaluateDerivedSlot`, never a second path), and the
-order the D-110 coercion and D-013's membership check must run in (coercion first, for an in-extent
-empty cell only — they collide silently otherwise). Rule 1's injected-measurer trap is the other
-thing to design first rather than retrofit. It is a §6.1 trigger of its own (load-bearing files).
-Independently, **D-109 clauses 1–2** (cell decimals + clipping, `render/renderer.ts` only) and
-**Q-017**'s headers remain the smallest un-owed items if the human wants a render-only slice instead.
+**Wait for 0124's review, then the rest of Phase 5's wiring slice**: the `text` schema entry,
+`resolvedContent` + `measuredHeight` as derived slots (the FIRST consumer of 0124's
+`EvalContext` — its `measuredHeight` test must fail if the context is not threaded), the `text`
+command, D-116 clauses 1-4 + D-117 in `evaluateBlockTree`, `render/measure.ts`'s Canvas2D
+`TextMeasurer` and its wiring through `executeCommand`/`main.ts` and `loadDocument`. **Read
+D-114 before writing any of it** — it settles what `read`/`readRange` an embedded `{= }` gets
+(the same contract a cell formula's AST gets, D-110 coercion included), where the widening goes
+(`evaluateDerivedSlot`, never a second path), and the order the D-110 coercion and D-013's
+membership check must run in (coercion first, for an in-extent empty cell only — they collide
+silently otherwise). **Decide there whether a `measuredHeight` running against
+`NULL_EVAL_CONTEXT` for a real `text` object must return an `ErrorValue` rather than a silent
+height 0** — 0124 flagged this and left it to the consuming cycle. Independently, **D-109
+clauses 1–2** (cell decimals + clipping, `render/renderer.ts` only) and **Q-017**'s headers
+remain the smallest un-owed items if the human wants a render-only slice instead.
 
 ## Built and reviewed
 
@@ -221,7 +244,11 @@ entry 0123's D-117 (rulings entry; the human's Q-020 answer, still unbuilt, no s
 
 ## Built this batch, not yet reviewed
 
-Nothing. The tree is fully reviewed as of 0121-REVIEW.
+**Entry 0124** — `src/engine/eval-context.ts` (NEW: `EvalContext`, `TextMeasurer`, `TextStyle`,
+`NULL_EVAL_CONTEXT`); `DerivedSlotCompute` gains `context?`; `graph/eval.ts`'s `evaluate`,
+`mutation.ts`'s `deriveValidateAndEvaluate` + `mutate` gain `context = NULL_EVAL_CONTEXT`,
+forwarded to every `derived`-slot compute; `geometry.ts` one comment fixed (D-065). +344/−20,
+8 files. §6.1 trigger 2 fired — review required before the next slice.
 
 ## Not started
 
@@ -229,8 +256,9 @@ D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
 (drag-linking between two panels) · **D-109 clauses 1–2** · Phase 5's `text` object/schema/derived
-slots/`TextMeasurer`/command and its markdown-lite rendering (the block-tree engine itself is built
-and reviewed — entries 0120/0121) · Phases 6–7.
+slots/command, D-116 clauses 1-4 + D-117, and markdown-lite rendering (the block-tree engine is
+built and reviewed — 0120/0121; the `EvalContext`/`TextMeasurer` seam is built pending review —
+0124; `render/measure.ts` and the real measurer wiring are not started) · Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -410,6 +438,15 @@ site).
 
 ## Gotchas for the next model
 
+- **`NULL_EVAL_CONTEXT` measures every box as ZERO and never errors** (`eval-context.ts`, 0124). It
+  is the right inert answer for a document with no text, but a `measuredHeight` compute that runs
+  against it for a REAL `text` object would read height 0 silently. The consuming cycle must decide
+  whether that case returns an `ErrorValue` instead — flagged in 0124, not decided there.
+- **`DerivedSlotCompute`'s `context` parameter is typed `context?` but `graph/eval.ts` ALWAYS
+  passes it.** The optionality is only so an isolated unit test can call `compute(OBJECT, read)`.
+  Do not read `context` as "sometimes absent in the pipeline" — it never is.
+- **`context` reaches `derived` compute functions, NOT `formula`/`literal` slots.** The formula
+  language has nothing that measures text; `evaluateFormula` was deliberately left unthreaded.
 - **A safety argument that rests on what ANOTHER component currently does is only as durable as that
   component's current behaviour.** 0121-REVIEW justified keeping a broken conditional's branches
   inline with "rendering is unaffected, because the error block short-circuits evaluation first" —

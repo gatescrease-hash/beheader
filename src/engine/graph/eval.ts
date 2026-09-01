@@ -29,7 +29,12 @@
  *     address is an in-extent TABLE cell (**D-110**); anything else it cannot
  *     resolve is still `undefined`, which `formula/eval.ts` turns into `#REF`.
  *   - `derived` slots call their schema's compute function exactly once, INSIDE this
- *     same topological pass — never in a separate post-pass (§5.1, PROCESS_BRIEF §9).
+ *     same topological pass — never in a separate post-pass (§5.1, PROCESS_BRIEF §9) —
+ *     and are handed the `EvalContext` (§5.1's "Evaluation context"): today just a
+ *     `TextMeasurer` for §5.6's `measuredHeight`, injected by the caller so Rule 1
+ *     holds (the engine never reaches for a canvas). `evaluate`'s `context` argument
+ *     defaults to `NULL_EVAL_CONTEXT` for the many callers with no text to measure;
+ *     `main.ts` threads a real Canvas2D-backed one through `mutate`.
  *
  *   Topological order is a DFS postorder reversal — the standard DAG construction, and
  *   the same traversal FAMILY `graph/cycles.ts` uses (same direction), but simpler:
@@ -78,6 +83,7 @@
  *     does not decide what becomes the document's new current state.
  */
 import type { Address } from "../address.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "../eval-context.ts";
 import type { FormulaAst } from "../formula/ast.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
 import { enumerateRangeCellAddresses, isInExtentTableCellAddress, isRangeEnumerationError } from "../primitives/table.ts";
@@ -96,10 +102,19 @@ import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
  * (§5.1 step 5). This function does not re-derive edges and does not
  * re-check for cycles — see the file header's "Assumes ACYCLIC input" note.
  *
+ * `context` carries §5.1's injected services (currently just a `TextMeasurer`)
+ * to every `derived`-slot compute function. It defaults to `NULL_EVAL_CONTEXT`
+ * — a frozen null-object, not hidden state — because every current caller
+ * touches no `text` object; `mutation.ts` forwards a real one when given it.
+ *
  * Never throws (§5.1). Rule 6 is upheld by construction: the returned objects
  * have the exact same slot keys as their inputs — see `nextSlot` below.
  */
-export function evaluate(objects: readonly GraphObject[], edges: readonly Edge[]): readonly GraphObject[] {
+export function evaluate(
+  objects: readonly GraphObject[],
+  edges: readonly Edge[],
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): readonly GraphObject[] {
   // Every slot on every object is a node this pass must evaluate — Rule 6
   // means this is exactly the universe, regardless of whether a given slot
   // happens to appear in any edge (an isolated literal still needs a result).
@@ -189,7 +204,7 @@ export function evaluate(objects: readonly GraphObject[], edges: readonly Edge[]
       continue;
     }
 
-    const value = evaluateSlot(object, key, slot, objects, edges, evaluatedValues);
+    const value = evaluateSlot(object, key, slot, objects, edges, evaluatedValues, context);
     evaluatedValues.set(nodeKey, value);
     slotsFor(object.id)[key] = nextSlot(slot, value);
   }
@@ -211,6 +226,7 @@ function evaluateSlot(
   objects: readonly GraphObject[],
   edges: readonly Edge[],
   evaluatedValues: ReadonlyMap<string, Value>,
+  context: EvalContext,
 ): Value {
   switch (slot.kind) {
     case "literal":
@@ -218,7 +234,7 @@ function evaluateSlot(
     case "formula":
       return evaluateFormula(slot.ast, objects, evaluatedValues);
     case "derived":
-      return evaluateDerivedSlot(object, key, edges, evaluatedValues);
+      return evaluateDerivedSlot(object, key, edges, evaluatedValues, context);
   }
 }
 
@@ -346,6 +362,7 @@ function evaluateDerivedSlot(
   key: string,
   edges: readonly Edge[],
   evaluatedValues: ReadonlyMap<string, Value>,
+  context: EvalContext,
 ): Value {
   const schemaEntry = findDerivedSlotSchemaByKey(getObjectSchema(object.type)?.derivedSlots, key);
   if (schemaEntry === undefined) {
@@ -375,7 +392,7 @@ function evaluateDerivedSlot(
     return evaluatedValues.get(key);
   };
 
-  return schemaEntry.compute(object, read);
+  return schemaEntry.compute(object, read, context);
 }
 
 /**

@@ -51,8 +51,9 @@
  *     calling it mid-evaluation would let the dependency set drift while slots are
  *     being computed.
  *   - No `recompute()` phase is implied or supported. A `compute` function is a pure
- *     function of (object, resolved inputs) that `graph/eval.ts` calls ONCE per
- *     derived slot, inside the same topological pass as every other slot kind (§5.1:
+ *     function of (object, resolved inputs, injected `EvalContext` services) that
+ *     `graph/eval.ts` calls ONCE per derived slot, inside the same topological pass
+ *     as every other slot kind (§5.1:
  *     "derived slots are first-class graph nodes and are evaluated inside the
  *     topological pass, exactly like formula slots").
  *   - `compute` NEVER throws. `add`'s implementation demonstrates the required shape:
@@ -85,6 +86,7 @@
  *     5, 6).
  */
 import type { Address } from "../address.ts";
+import type { EvalContext } from "../eval-context.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 import {
   computeCircleVerticesSlot,
@@ -129,14 +131,23 @@ export type DerivedSlotDependencies =
   | { readonly kind: "dynamic"; readonly resolve: (object: GraphObject) => readonly Address[] };
 
 /**
- * A derived slot's compute function (§5.1). Called by `graph/eval.ts` (not yet
- * built) once per evaluation pass, with `read` able to resolve any `Address` —
- * including ones outside this object, for the `dynamic` dependency case — to
- * the VALUE that slot already holds from earlier in the same topological pass.
- * `read` returns `undefined` only for an address that could not be resolved at
- * all (see `graph/node.ts`'s `resolveSlot`); a compute function MUST turn that
- * into a typed `ErrorValue` rather than treating it as a JS `undefined` value,
- * because `undefined` is not a member of `Value` (§5.1).
+ * A derived slot's compute function (§5.1). Called by `graph/eval.ts` once per
+ * evaluation pass, with `read` able to resolve any `Address` — including ones
+ * outside this object, for the `dynamic` dependency case — to the VALUE that
+ * slot already holds from earlier in the same topological pass. `read` returns
+ * `undefined` only for an address that could not be resolved at all (see
+ * `graph/node.ts`'s `resolveSlot`); a compute function MUST turn that into a
+ * typed `ErrorValue` rather than treating it as a JS `undefined` value, because
+ * `undefined` is not a member of `Value` (§5.1).
+ *
+ * `context` carries §5.1's injected services — today just a `TextMeasurer`, for
+ * §5.6's `measuredHeight`. Rule 1's text-measurement trap: a compute needing to
+ * measure text calls `context.measurer`, and NEVER reaches for a canvas itself.
+ * `graph/eval.ts` ALWAYS supplies it (defaulting to `NULL_EVAL_CONTEXT`); it is
+ * typed optional ONLY so a unit test can call a compute that ignores it in
+ * isolation without threading a context — §5.1's "keeps tests trivial". A
+ * compute that reads `context` must handle its absence (treat it as
+ * `NULL_EVAL_CONTEXT`), though in the real pipeline it is never absent.
  *
  * MUST NOT throw. A broken input (an error value, a wrong-shaped value, a
  * missing one) is legitimate graph state (§5.1) and must come back as an
@@ -145,6 +156,7 @@ export type DerivedSlotDependencies =
 export type DerivedSlotCompute = (
   object: GraphObject,
   read: (address: Address) => Value | undefined,
+  context?: EvalContext,
 ) => Value;
 
 /**
