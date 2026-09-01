@@ -1,13 +1,21 @@
-# STATUS — as of entry 0119-REVIEW-phase5
+# STATUS — as of entry 0120-text-block-tree
 
-STATE: **GREEN.** Both configs compile, **1287/1287** tests pass, 0 skipped, 0 `.only`.
-**PHASE 5 IS OPEN AND MAY BE STARTED.** Nothing is owed before it.
+STATE: **GREEN, AWAITING REVIEW.** Both configs compile, **1322/1322** tests pass, 0 skipped, 0
+`.only`. **PHASE 5 HAS BEGUN.** Entry 0120 built the text primitive's block-tree engine
+(`src/engine/primitives/text.ts` — parse/evaluate/extract-dependencies over `{= }`/`{? }{:}{?}`),
+headless and fully unit-tested, and stopped there: it is the **first file of a new subsystem**
+(§6.1 trigger 2), which forces a review point regardless of size or the §6.3 batch cap. **This is
+unreviewed.** No `text` object, schema entry, derived slot, `TextMeasurer`/`EvalContext` threading,
+or command exists yet — see entry 0120's "Explicitly not in scope" and "Where I got stuck" for
+exactly what the next cycle (post-review) owes, including an open design question for the reviewer
+about D-110's interaction with `resolvedContent`'s future `read` closure.
 
 **PHASE 4 IS PASSED, ITS GATE IS CLOSED, AND THE PRE-PHASE-5 BATCH IS REVIEWED.** 0116-REVIEW
 closed the gate; **0119-REVIEW cleared entries 0117 and 0118 (ACCEPT WITH EDITS, three edits: two
 tests and one comment, no production behaviour changed)**. §6.2's block on starting a later phase is
 **LIFTED** — `mutation.ts`, `graph/eval.ts` and `primitives/table.ts` no longer carry unreviewed
-changes.
+changes. (This is unrelated to entry 0120's own, separate review point above — Phase 5's own first
+file needs its own review before Phase 5 continues.)
 
 **D-109 CLAUSE 3 IS BUILT (0117) AND REVIEWED (0119).** `main.ts`'s command-bar `keydown` listener
 clears `input.value` only when `submitLine`'s returned `AppTransition.refused` is `false`, computed
@@ -24,12 +32,15 @@ the `mutate` level (last test in `mutation.test.ts`'s D-110 block) **and, since 
 command line too** (`commands.test.ts`'s `set` block). Two existing tests flipped from asserting
 refusal to asserting acceptance-and-`0`, exactly as D-110's own ruling text said they would.
 
-**Owed next, in the order 0119-REVIEW recommends (routing advice, not a gate):** **D-109 clauses
-1–2** (cell decimals + clipping, `render/` only) · **Q-017** (table headers, open — F12 below
-strengthens the case) · then **Phase 5** (the text primitive). When Phase 5 lands, its dependency
-walker inherits D-110 whole: an embedded `{= table_x.A1 }` over an empty in-extent cell reads `0` and
-emits no edge, in taken and untaken branches alike. That is not new work, but it is worth a test in
-that cycle — it is the second consumer the whole ordering argument was about.
+**Owed next:** entry 0120's review point (§6.1 trigger 2, first file of `primitives/text.ts`) —
+Phase 5 may not continue until it clears. After that: wire `text.ts`'s three functions into
+`primitives/schema.ts` (a `text` schema entry, `resolvedContent`/`measuredHeight` derived slots),
+thread a `TextMeasurer` through an `EvalContext` into `graph/eval.ts` (Rule 1's injected-measurer
+trap), add the `text` command, and settle entry 0120's own open question — does `resolvedContent`'s
+`read` closure need D-110's empty-in-extent-cell treatment, given `graph/eval.ts`'s generic
+`evaluateDerivedSlot` `read` does not currently apply it (only `evaluateFormula`'s own `read` does).
+Still separately owed, unchanged: **D-109 clauses 1–2** (cell decimals + clipping, `render/` only) ·
+**Q-017** (table headers, open — F12 strengthens the case).
 
 Still unimplemented and unowned by the next cycle: **D-108** (loader AST shape validation, owed by
 §5.11's file-input load cycle) · **D-104** (table resize bounds, owed by §5.10's row/column commands).
@@ -125,13 +136,14 @@ is Phase 4(b) verbatim). Cell values DO render, numbers right-aligned and string
 
 ## Next slice (recommended)
 
-**D-109 clauses 1–2** — a cell's number drawn with a four-decimal bound and a cell's text clipped to
-its cell, both in `render/renderer.ts`'s `formatCellValue`/`drawCellText`, `render/` only. It is the
-smallest item left, it is the other half of what the human met in the Phase 4 gate session, and Rule
-5 governs the mechanism (a `save()`/`clip()`/`restore()` around the cell rect, or a measured
-truncation — not column auto-sizing, wrapping, or a tooltip). After that: **Q-017**'s headers if the
-human wants them, then **Phase 5**, the text primitive. Phase 5 is a §6.1 trigger of its own (first
-file of a new subsystem) and will need its own review point.
+**Review entry 0120 first** — it is a §6.1 trigger (first file of `primitives/text.ts`) and Phase 5
+may not continue past it unreviewed. After that clears: wire `text.ts` into `primitives/schema.ts`
+(schema entry, `resolvedContent`/`measuredHeight`), thread `TextMeasurer`/`EvalContext` into
+`graph/eval.ts`, add the `text` command — and settle 0120's own flagged question about D-110 and
+`resolvedContent`'s `read` closure before building it, not while building it. Independently,
+**D-109 clauses 1–2** (cell decimals + clipping, `render/renderer.ts` only, Rule 5's `save()`/
+`clip()`/`restore()` or measured truncation) and **Q-017**'s headers remain the smallest un-owed
+items on the board if the human wants a render-only slice instead.
 
 ## Built and reviewed
 
@@ -161,14 +173,21 @@ tests and one comment added by the reviewer; D-112, D-113).**
 
 ## Built this batch, not yet reviewed
 
-Nothing. The tree is fully reviewed as of 0119-REVIEW.
+**Entry 0120 — `src/engine/primitives/text.ts` + its tests.** §5.6's block-tree engine: parses
+`{= }`/`{? }{:}{?}` (nestable) out of a `content` string into a `Block[]` (widened by a fourth,
+non-brief `error` variant — see the entry), evaluates it with short-circuiting, and extracts its
+dependencies eagerly/totally including untaken branches. Headless; no `text` object, schema, derived
+slot, `TextMeasurer`, or command exists yet. This is the first file of a new subsystem (§6.1 trigger
+2) and needs its own review before Phase 5 continues.
 
 ## Not started
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots · point-in-polygon fill hit-testing
 (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102 clause 9
-(drag-linking between two panels) · **D-109 clauses 1–2** · Phases 5–7.
+(drag-linking between two panels) · **D-109 clauses 1–2** · Phase 5's `text` object/schema/derived
+slots/`TextMeasurer`/command (block-tree engine itself is entry 0120, above, awaiting review) ·
+Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
