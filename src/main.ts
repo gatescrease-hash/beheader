@@ -89,8 +89,12 @@
  *     that prunes `AppState.panels` down to the current selection, so every
  *     caller that replaces `interaction` goes through it rather than
  *     assigning the field directly.
- *   - Injecting a Canvas2D `TextMeasurer` (Rule 1). Nothing evaluates text yet —
- *     §5.6 is Phase 5 — so there is no `EvalContext` to inject one into.
+ *   - Injecting a Canvas2D `TextMeasurer` (Rule 1). `render/measure.ts`'s
+ *     measurer is built (entry 0131) and §5.6's `measuredHeight` consumes one,
+ *     but this file does not yet build an `EvalContext` around it or thread it
+ *     through `executeCommand` / the loader / the drag path — so `measuredHeight`
+ *     reports `#MEASURE` in the running app until it does (D-118). The next
+ *     Phase 5 slice.
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
  *     D-083 clause 4 are owed by a `document.ts` cycle, not by this one; see
  *     STATUS.md's known problems for what that leaves reachable from the Load

@@ -22,7 +22,7 @@ describe("NULL_EVAL_CONTEXT — the documented default for callers with no text"
     expect(NULL_EVAL_CONTEXT.measurer.measure("", STYLE)).toEqual({ width: 0, height: 0 });
   });
 
-  it("ignores the PROVISIONAL(Q-021) maxWidth argument — it never wraps, so it never needs one", () => {
+  it("ignores the D-120 maxWidth argument — it never wraps, so it never needs one", () => {
     expect(NULL_EVAL_CONTEXT.measurer.measure("anything", STYLE, 120)).toEqual({ width: 0, height: 0 });
   });
 

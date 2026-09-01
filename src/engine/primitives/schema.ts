@@ -567,9 +567,9 @@ const RECT_SCHEMA: ObjectSchema = {
  * `width`, and `style`"; `color`/`align` do not affect size). Its compute,
  * `computeMeasuredHeight`, calls `context.measurer` — and returns `#MEASURE`
  * (**D-118**) rather than a height off `NULL_EVAL_CONTEXT`'s zero-box measurer,
- * which is what every current `mutate` caller still passes. `PROVISIONAL(Q-021)`:
- * the `width` slot reaches `measure` as `maxWidth` and wrapping is the measurer
- * implementation's job.
+ * which is what every current `mutate` caller still passes. **D-120** (answering
+ * Q-021): the `width` slot reaches `measure` as `maxWidth` and wrapping is the
+ * measurer implementation's job (`render/measure.ts`).
  */
 const TEXT_SCHEMA: ObjectSchema = {
   type: "text",

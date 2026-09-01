@@ -598,7 +598,7 @@ describe("evaluate — a derived slot's compute evaluating an embedded formula A
   });
 });
 
-describe("evaluate — §5.6's measuredHeight derived slot (D-118, Q-021 — entry 0129)", () => {
+describe("evaluate — §5.6's measuredHeight derived slot (D-118, D-120 — entry 0129)", () => {
   /**
    * A well-formed `text` object: the five slots a derived slot reads, plus both
    * D-018 derived placeholders. `width` and `style.*` are literals here; §5.6
@@ -634,7 +634,7 @@ describe("evaluate — §5.6's measuredHeight derived slot (D-118, Q-021 — ent
     ];
   }
 
-  /** A fake measurer: height is 10 with no wrap boundary, 20 with one — so a test can prove BOTH that context was threaded and that the `width` slot reached `measure` as `maxWidth` (Q-021). */
+  /** A fake measurer: height is 10 with no wrap boundary, 20 with one — so a test can prove BOTH that context was threaded and that the `width` slot reached `measure` as `maxWidth` (D-120). */
   function fakeMeasurer(): EvalContext {
     return {
       measurer: {
@@ -663,7 +663,7 @@ describe("evaluate — §5.6's measuredHeight derived slot (D-118, Q-021 — ent
     expect(measuredHeightOf(textObject("obj_x", "text_1", "hello"), fakeMeasurer())).toBe(10);
   });
 
-  it("PROVISIONAL(Q-021): a numeric `width` slot reaches the measurer as maxWidth; \"auto\" does not", () => {
+  it("D-120: a numeric `width` slot reaches the measurer as maxWidth; \"auto\" does not", () => {
     expect(measuredHeightOf(textObject("obj_x", "text_1", "hello", 120), fakeMeasurer())).toBe(20); // maxWidth defined
     expect(measuredHeightOf(textObject("obj_x", "text_1", "hello", "auto"), fakeMeasurer())).toBe(10); // maxWidth undefined
   });

@@ -47,14 +47,15 @@
  *     plain boolean, not a `Value`.
  *
  * NOT DONE HERE
- *   - The real Canvas2D `TextMeasurer` (`render/measure.ts`) and its wiring into
- *     `mutate` (`main.ts`) — that is render-layer plus the cycle that threads a
- *     real context through `command/commands.ts`'s `executeCommand` and the other
- *     non-test `mutate` callers. `measuredHeight` (entry 0129) is BUILT and
- *     consumes `measurer`, but no caller supplies a non-null context yet, so it
- *     reports `#MEASURE` in the running app until that wiring lands (D-118).
+ *   - WIRING the real `TextMeasurer` into `mutate`. `render/measure.ts`'s
+ *     Canvas2D-backed measurer is BUILT (entry 0131); what is unbuilt is
+ *     `main.ts` threading it — as a real `EvalContext` — through
+ *     `command/commands.ts`'s `executeCommand`, `document.ts`'s loader, and the
+ *     drag path. `measuredHeight` (entry 0129) is BUILT and consumes `measurer`,
+ *     but no caller supplies a non-null context yet, so it reports `#MEASURE` in
+ *     the running app until that wiring lands (D-118).
  *   - Wrapping / line-breaking itself — that lives inside the `TextMeasurer`
- *     IMPLEMENTATION (`PROVISIONAL(Q-021)`: `measure`'s `maxWidth` parameter is
+ *     IMPLEMENTATION (D-120, answering Q-021: `measure`'s `maxWidth` parameter is
  *     the wrap boundary; the engine never breaks lines). `render/measure.ts` does
  *     it with `ctx.measureText`; the test fake fakes it.
  *   - `resolvedContent` (`primitives/text.ts`) — this file only defines the
@@ -97,14 +98,15 @@ export interface TextMeasurement {
  * (§5.1's never-throw discipline — a compute function calling this must be able
  * to trust the result the same way it trusts `read`).
  *
- * `maxWidth` is `PROVISIONAL(Q-021)`: the wrap boundary in the same length unit
- * as `TextStyle.fontSize`, from a `text` object's `width` slot when it holds a
- * number; `undefined` means no wrapping (§5.6: "Auto width + auto height means no
- * wrapping"). §5.6 makes `measuredHeight` depend on `width`, but Rule 1's
- * interface as written at entry 0124 had no width parameter — Q-021 is that
- * inconsistency, and the provisional call is that LINE-BREAKING lives in the
- * measurer implementation, not in `src/engine/`. An implementation that ignores
- * `maxWidth` (the null measurer, an early fake) just does not wrap.
+ * `maxWidth` is the wrap boundary (**D-120**, answering Q-021), in the same
+ * length unit as `TextStyle.fontSize`, from a `text` object's `width` slot when
+ * it holds a number; `undefined` means no wrapping (§5.6: "Auto width + auto
+ * height means no wrapping"). §5.6 makes `measuredHeight` depend on `width` while
+ * Rule 1's interface as written at entry 0124 had no width parameter — D-120
+ * resolves that inconsistency by widening the interface HERE and putting
+ * LINE-BREAKING in the measurer implementation (`render/measure.ts`), never in
+ * `src/engine/`. An implementation free to ignore `maxWidth` (the null measurer,
+ * an early fake) simply does not wrap.
  */
 export interface TextMeasurer {
   measure(text: string, style: TextStyle, maxWidth?: number): TextMeasurement;

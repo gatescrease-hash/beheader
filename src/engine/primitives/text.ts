@@ -99,7 +99,7 @@
  *     hands them to `context.measurer.measure`, returns `.height`. Returns
  *     `#MEASURE` when only the null measurer is wired (**D-118**), `#TYPE` for an
  *     unusable style, and propagates any upstream `ErrorValue`. Line-breaking is
- *     the measurer's job, not this function's (`PROVISIONAL(Q-021)`).
+ *     the measurer's job, not this function's (**D-120**).
  *
  * NOT DONE HERE
  *   - Markdown-lite parsing/rendering, layout, wrapping — `render/`, later. Deliberately
@@ -871,7 +871,8 @@ export function computeResolvedContent(
  * `resolvedContent`, `width`, and `style`, computed via the injected
  * `TextMeasurer`)"). A dumb pass-through: read the declared slots, hand them to
  * `context.measurer.measure`, return `.height`. No layout logic of its own —
- * line-breaking lives in the measurer implementation (`PROVISIONAL(Q-021)`).
+ * line-breaking lives in the measurer implementation (**D-120**, answering
+ * Q-021; `render/measure.ts`).
  *
  * Declared `static` dependencies (`primitives/schema.ts`): `resolvedContent`,
  * `width`, and `style.font`/`style.fontSize`/`style.lineHeight` — the fields a
@@ -901,10 +902,10 @@ export function computeResolvedContent(
  *      D-025 slot-value check runs BEFORE `evaluate` and never re-inspects a
  *      derived result — the same gap `add`'s compute guards its sum against.
  *
- * `PROVISIONAL(Q-021)`: a numeric `width` slot becomes `measure`'s `maxWidth`
- * (the wrap boundary); `"auto"` — or any non-number — means `undefined`, i.e. no
- * wrapping (§5.6 layout). The provisional call is that the measurer wraps, not
- * this function.
+ * **D-120** (answering Q-021): a numeric `width` slot becomes `measure`'s
+ * `maxWidth` (the wrap boundary); `"auto"` — or any non-number — means
+ * `undefined`, i.e. no wrapping (§5.6 layout). The measurer wraps, not this
+ * function; `render/measure.ts` is the real one.
  */
 export function computeMeasuredHeight(
   object: GraphObject,
@@ -947,7 +948,8 @@ export function computeMeasuredHeight(
   const style: TextStyle = { font, fontSize, lineHeight };
 
   const text = typeof resolved === "string" ? resolved : "";
-  // PROVISIONAL(Q-021): the `width` slot is the wrap boundary when numeric.
+  // D-120: the `width` slot is the wrap boundary when numeric; the measurer
+  // (`render/measure.ts`) does the line-breaking, this function does not.
   const maxWidth = typeof width === "number" ? width : undefined;
 
   // `measure` never throws (eval-context.ts's contract). It also PROMISES a

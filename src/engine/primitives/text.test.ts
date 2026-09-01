@@ -605,7 +605,7 @@ describe("computeResolvedContent — the resolvedContent compute (§5.6, D-114 c
   });
 });
 
-describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, Q-021 — entry 0129)", () => {
+describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, D-120 — entry 0129)", () => {
   const OBJECT: GraphObject = { id: "obj_x", name: "text_1", type: "text", slots: {} };
 
   /** A read over `resolvedContent` / `width` / the three size-relevant `style.*` fields — the compute's declared deps. */
@@ -619,7 +619,7 @@ describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, Q-
     });
   }
 
-  /** A fake: height is `lineHeight + (maxWidth ?? 0)`, so a test can read back BOTH that it ran and what `maxWidth` it got (Q-021). Records the last call. */
+  /** A fake: height is `lineHeight + (maxWidth ?? 0)`, so a test can read back BOTH that it ran and what `maxWidth` it got (D-120). Records the last call. */
   function fakeContext(): { context: EvalContext; lastCall: () => Parameters<TextMeasurer["measure"]> | undefined } {
     let last: Parameters<TextMeasurer["measure"]> | undefined;
     return {
@@ -650,7 +650,7 @@ describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, Q-
     expect(computeMeasuredHeight(OBJECT, styleRead({ lineHeight: 20 }), context, undefined)).toBe(20);
   });
 
-  it("PROVISIONAL(Q-021): a numeric `width` slot is passed to measure() as maxWidth; \"auto\" is not", () => {
+  it("D-120: a numeric `width` slot is passed to measure() as maxWidth; \"auto\" is not", () => {
     const withNumber = fakeContext();
     computeMeasuredHeight(OBJECT, styleRead({ width: 150 }), withNumber.context, undefined);
     expect(withNumber.lastCall()?.[2]).toBe(150);
