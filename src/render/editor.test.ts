@@ -230,6 +230,11 @@ describe("editorTextStyle — the overlay lays text out the way the canvas draws
     expect(editorTextStyle(TEXT_TARGET, text, CAMERA_IDENTITY, 1).fontFamily).toBe("sans-serif");
   });
 
+  it("treats a BLANK `style.font` as absent too — `cssFont` falls the canvas back to sans-serif for it, so the overlay must fall back identically or it inherits the page's monospace (0148-REVIEW)", () => {
+    const text = textObject(0, 0, 100, 40, { font: "   " });
+    expect(editorTextStyle(TEXT_TARGET, text, CAMERA_IDENTITY, 1).fontFamily).toBe("sans-serif");
+  });
+
   it("does NOT wrap an auto-width `text` object — §5.6's 'auto width means no wrapping', which is what the canvas draws", () => {
     const text = textObject(0, 0, 100, 40, { widthSlot: "auto" });
     expect(editorTextStyle(TEXT_TARGET, text, CAMERA_IDENTITY, 1).wraps).toBe(false);

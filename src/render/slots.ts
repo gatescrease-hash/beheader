@@ -1,6 +1,6 @@
 /**
- * slots.ts — Shared slot reads: narrowing a `Value` to a `number` or a
- * `Point[]`, and the table primitive's fixed cell size.
+ * slots.ts — Shared slot reads: narrowing a `Value` to a `number`, a non-empty
+ * `string` or a `Point[]`, and the table primitive's fixed cell size.
  *
  * IMPLEMENTS: the slot reads §5.4/§5.5/§5.9 need every render-layer consumer
  * to perform identically — no spec section of its own; this file exists for
@@ -10,13 +10,15 @@
  * render/* file. NEVER imported by engine/*.
  *
  * WHAT THIS IS
- *   `readNumber`/`asPointArray` narrow a slot's current value; `TABLE_CELL_
- *   WIDTH`/`TABLE_CELL_HEIGHT` are the table primitive's fixed cell size
- *   (§5.4). All four exist ONLY so `renderer.ts`, `hittest.ts` and
- *   `extent.ts` read the same slot paths the same way (D-010) — a table's
- *   click box, its drawn grid, and its drawn extent must never disagree
- *   about a cell's size, and a shape's hit test must never disagree with its
- *   drawn `vertices` about what counts as a point.
+ *   `readNumber`/`readText`/`asPointArray` narrow a slot's current value;
+ *   `TABLE_CELL_WIDTH`/`TABLE_CELL_HEIGHT` are the table primitive's fixed
+ *   cell size (§5.4). All five exist ONLY so `renderer.ts`, `hittest.ts`,
+ *   `extent.ts` and `editor.ts` read the same slot paths the same way
+ *   (D-010) — a table's click box, its drawn grid, and its drawn extent must
+ *   never disagree about a cell's size; a shape's hit test must never
+ *   disagree with its drawn `vertices` about what counts as a point; and the
+ *   in-place editor's overlay must never disagree with the drawn text about
+ *   which font it is in (entry 0147, which is why `readText` moved here).
  *
  *   This file is one half of D-093's split. `renderer.ts` used to define
  *   these four and `hittest.ts` imported them back out of it, while
@@ -61,6 +63,11 @@ export function readNumber(object: GraphObject, path: readonly string[]): number
  * `editor.ts`'s in-place overlay font resolve the SAME slot the SAME way and
  * cannot fall back differently (D-010) — a divergence there is directly
  * visible as the editor wrapping text the canvas draws on one line.
+ *
+ * Screens `""` only, NOT a blank `"   "` — a caller for whom whitespace is
+ * also unusable (a font family: `measure.ts`'s `cssFont`, `editor.ts`'s
+ * `editorTextStyle`) applies that second screen itself, and the two must
+ * apply it alike (0148-REVIEW).
  */
 export function readText(object: GraphObject, path: readonly string[]): string | undefined {
   const value = getSlot(object, path)?.value;

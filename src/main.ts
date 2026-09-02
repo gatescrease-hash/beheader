@@ -1501,11 +1501,16 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     input.focus();
     // D-125 clause 5 / D-128: a plain canvas press IS "a click outside" and
-    // commits an open in-place editor before the press selects anything. Made
-    // explicitly rather than left to the blur `input.focus()` just fired, because
-    // `commitInPlace` is re-entrant-safe but the ORDER matters: the commit must
-    // land before `pointerDownAt` changes the selection. A no-op when nothing is
-    // open.
+    // commits an open in-place editor before the press selects anything.
+    //
+    // TWO paths reach that commit and the order between them is the thing to
+    // hold on to (it is what entry 0146 got wrong): when the overlay holds the
+    // keyboard, `input.focus()` above blurs it and the `blur` handler commits
+    // SYNCHRONOUSLY, inside that call — so by the time this line runs the work
+    // is done and `commitInPlace` returns at its own re-entrancy guard. This
+    // call is the path for a press while the overlay is open but does NOT hold
+    // focus, where no blur is coming. Either way the commit lands before
+    // `pointerDownAt` moves the selection, which is the ordering that matters.
     if (inPlaceEditor !== undefined) {
       commitInPlace();
     }

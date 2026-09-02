@@ -36,11 +36,13 @@
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws; reads only, writes nothing (Rule 2).
- *   - The overlay's type style mirrors `renderer.ts`'s `resolveTextStyle` /
- *     `drawText` read-for-read (shared `readNumber`/`readText`, the same
- *     positive-number tests, the same `width`-slot wrap rule), so drawn and
- *     typed text lay out the same. `wraps` is `drawText`'s own `wrapWidth`
- *     condition, not a second reading of §5.6's layout rule.
+ *   - Every LAYOUT-affecting read here mirrors `renderer.ts`'s
+ *     `resolveTextStyle` / `drawText` / `measure.ts`'s `cssFont` read-for-read
+ *     (shared `readNumber`/`readText`, the same positive-number tests, the same
+ *     blank-family screen, the same `width`-slot wrap rule), so drawn and typed
+ *     text lay out the same. `wraps` is `drawText`'s own `wrapWidth` condition,
+ *     not a second reading of §5.6's layout rule. `style.color` is the one
+ *     `resolveTextStyle` read deliberately NOT mirrored — see NOT DONE HERE.
  *   - World<->screen is `camera.ts`'s own `worldToScreen`/`screenToWorld`,
  *     never a second hand-written copy (D-010).
  *   - A cell's rectangle is the SAME `origin` + `TABLE_CELL_*` reading
@@ -60,6 +62,10 @@
  *   - The cell editor's 4-world-unit text inset (`renderer.ts`'s
  *     `TABLE_CELL_TEXT_PADDING`) and a number cell's right-alignment: the
  *     editor holds the SOURCE being typed, which Excel left-aligns too.
+ *   - Matching `style.color` (**D-132**). The overlay keeps one high-contrast
+ *     ink, set in `index.html`. Colour cannot move a glyph, so unlike the four
+ *     slots above it can never make the typed text lay out differently from the
+ *     drawn text — which is the defect D-129 exists to close.
  */
 import type { CameraState } from "../engine/document.ts";
 import { formatCellReference, parseCellReference } from "../engine/address.ts";
@@ -233,6 +239,12 @@ export function editorPlacement(
  * receiver's own position, so its glyphs must scale with it or the two disagree
  * at every zoom but 1).
  *
+ * PROVISIONAL(Q-012): that a font size (and `TABLE_CELL_HEIGHT`) is a WORLD
+ * length at all is `renderer.ts`'s open reading, which this file FOLLOWS rather
+ * than answering a second time. Tagged so Q-012's reconciliation grep finds this
+ * site: if it lands on SCREEN pixels, `renderer.ts` stops scaling the drawn font
+ * with zoom and this function stops scaling the typed one, in the same cycle.
+ *
  * `wraps` is `drawText`'s own wrap condition, re-read rather than re-decided: a
  * positive numeric `width` slot is the wrap boundary, and `"auto"` means no
  * wrapping at all (§5.6). A `<textarea>` soft-wraps by default, which for an
@@ -262,9 +274,16 @@ export function editorTextStyle(
   const lineHeight = readNumber(object, TEXT_STYLE_LINE_HEIGHT_PATH);
   const align = readText(object, TEXT_STYLE_ALIGN_PATH);
   const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
+  // A BLANK family is a fallback too, not a typeface: `renderer.ts` draws
+  // through `measure.ts`'s `cssFont`, which screens `family.trim() === ""` on
+  // top of `readText`'s empty-string screen. Applying only half of that pair
+  // here sets an INVALID `font-family` on the overlay, which the CSSOM drops —
+  // leaving it on the page's inherited MONOSPACE, which is entry 0147's own
+  // defect one corner in (0148-REVIEW).
+  const family = readText(object, TEXT_STYLE_FONT_PATH);
   return {
     fontSize: (fontSize !== undefined && fontSize > 0 ? fontSize : TEXT_EDITOR_FALLBACK_FONT_SIZE) * scale,
-    fontFamily: readText(object, TEXT_STYLE_FONT_PATH) ?? TEXT_EDITOR_FALLBACK_FONT_FAMILY,
+    fontFamily: family === undefined || family.trim() === "" ? TEXT_EDITOR_FALLBACK_FONT_FAMILY : family,
     lineHeight: (lineHeight !== undefined && lineHeight > 0 ? lineHeight : TEXT_EDITOR_FALLBACK_LINE_HEIGHT) * scale,
     // The same three-way clamp `resolveTextStyle` makes: anything that is not
     // "center"/"right" draws left, so the overlay does too.

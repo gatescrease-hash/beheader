@@ -4610,3 +4610,91 @@ editor it always is (clause 1's "both or neither" keeps that guarantee).
 
 **Reversible.** Dropping the argument at the `editorSeed` call site restores the qualified display
 with no other change.
+
+---
+
+## D-132 — The in-place editor's overlay matches every LAYOUT-AFFECTING slot of the drawn text
+Answers: the human's second on-screen test (2026-09-02); entry 0147's request that the widening be recorded   Ruled: entry 0148-REVIEW-phase5 (reviewer)
+Binding on: `src/render/editor.ts`'s `editorTextStyle`, `src/main.ts`'s `updateEditor` /
+`buildInPlaceElement`, `index.html`'s `.text-editor`, and **D-124's open-editor-on-create**
+
+**Context.** D-129 clause 1 ruled that the overlay's font SIZE tracks the camera and said family,
+alignment and markdown "need not match" — the overlay was to be a rough WYSIWYG match, not a
+pixel-perfect one. Entry 0146 built exactly that and the human ran it: "Hello World!" drew as one
+line on the canvas and edited as two in the overlay, with a scrollbar. Three causes, none of them
+size: the overlay's `font: inherit` gave it the page's MONOSPACE against a `text` object's
+`sans-serif`, a `<textarea>` soft-wraps while an auto-width object never does (§5.6), and
+padding + border ate 6px of a box fitted to the exact measured text width. Entry 0147 fixed all
+three, exceeding clause 1 on the human's instruction, and asked for the widening to be recorded.
+It is recorded here. PROCESS §1: the operator's report outranks a reviewer's ruling.
+
+**Ruling.**
+
+1. **D-129 clause 1's "need not match" is WITHDRAWN for anything that can move a glyph.** The
+   overlay's font size, font FAMILY, line height, text ALIGNMENT and whether it WRAPS all come from
+   the receiver's own slots, read the way `renderer.ts` reads them for drawing, and every length is
+   scaled by the same `camera.zoom / ratio` the box is scaled by.
+2. **The test of scope is "does it move a glyph."** `style.color` and markdown-lite rendering do
+   not, and stay unmatched: the overlay keeps one high-contrast ink and shows RAW SOURCE. Anything
+   that changes where a character lands is in scope by default; anything that changes only how it
+   looks is not, and must be disclosed in `editor.ts`'s NOT DONE HERE rather than left silent.
+3. **`editorTextStyle`, `renderer.ts`'s `resolveTextStyle`/`drawText`, and `measure.ts`'s `cssFont`
+   are a hand-maintained PAIR with no compiler link**, with exactly D-119's standing: a cycle that
+   changes how the renderer resolves a `text` object's style changes `editorTextStyle` in the SAME
+   cycle, and its log entry names both. The blank-family divergence found at 0148-REVIEW (`readText`
+   screens `""`, `cssFont` also screens `"   "`; the overlay applied one half and silently inherited
+   the page's monospace) is what this clause exists to prevent recurring.
+4. **The type style is a SIBLING of the placement, not a field on it.** Two structs, one call each
+   per paint, sharing `usableRatio` so the box and its glyphs can never be scaled by different
+   factors. `EditorPlacement` stays `{left, top, width, height}`.
+5. **D-124 inherits all of it.** A freshly-created empty `text` object gets a positive, non-wrapping
+   type style from its own default slots — the case `editor.test.ts` already pins.
+
+**Rationale.** D-125 exists because the operator should be able to edit a thing where the thing is.
+An overlay that re-wraps the operator's text is not editing it where it is; it is showing a second,
+disagreeing layout on top of the first, which is worse than the qualified-address problem D-125 was
+raised to cure. Size alone was never the fix — family and soft-wrap each re-wrap a box on their own,
+and an auto-width box (the default) is fitted to the exact measured width, so it has no slack for
+any of the three.
+
+**Reversible.** Each matched property is one line in `editorTextStyle` and one in `updateEditor`.
+
+---
+
+## D-133 — A gesture that must not commit the in-place editor must not take FOCUS from it either
+Answers: the defect entry 0146 shipped against D-130 and entry 0147 fixed   Ruled: entry 0148-REVIEW-phase5 (reviewer)
+Binding on: `src/main.ts`'s canvas `pointerdown` handler and every future handler that can run while
+the in-place editor is open. **Amends D-130.**
+
+**Context.** D-130 ruled that a pan gesture does not commit the editor, and its ruling paragraph
+prescribed the fix: "Move the `commitInPlace()` call in the `pointerdown` handler below the
+`event.button === 1 || spaceHeld` branch." Entry 0146 did precisely that, and nothing changed — the
+overlay commits on `blur`, `commitInPlace` is registered as its `blur` handler four lines above, and
+the handler's unconditional `input.focus()` fires that blur synchronously, above the branch. Any
+middle-button press still committed, with or without a drag. The human found it on screen. The
+prescription was mine and it was wrong.
+
+**Ruling.**
+
+1. **While the in-place editor is open it OWNS the keyboard.** A canvas gesture ruled
+   non-committing (today: `event.button === 1 || spaceHeld`) must not move focus off the overlay —
+   not by calling `focus()` on another element, and not by allowing a default action that would.
+   §5.10's "the command input is always focused" already carves out "when the user is editing text
+   or a cell"; this is that carve-out enforced at the gesture.
+2. **D-130's "move the `commitInPlace()` call" prescription is WITHDRAWN as insufficient.** D-130's
+   rule — a pan does not commit — stands unchanged; only its implementation instruction is void.
+3. **A handler that focuses another element while a `blur`-registered commit is live IS a committing
+   handler**, whatever order its explicit calls sit in. Before moving, adding or removing a call in
+   this handler, grep every path that reaches the same function — the `blur` registration included.
+4. **General form, binding on how future rulings are read:** a ruling names the OUTCOME it wants.
+   Where a ruling also names a call site or a line to move, the OUTCOME governs; the named site is a
+   sketch, and an implementer who reaches the site without reaching the outcome has not discharged
+   the ruling. Say so in the entry and fix the outcome.
+
+**Rationale.** The failure was not a DOM subtlety anyone should have to know; it was accepting a
+ruling's prescription as the definition of done. That cost the human two on-screen sessions for one
+defect, and this project's scarcest resource is the human's eyes on a surface no test can reach.
+Clause 4 generalises it because I am the one who wrote the bad prescription, and the next reviewer
+will write another.
+
+**Reversible.** Clauses 1–3 are one conditional. Clause 4 is a reading rule and costs nothing.

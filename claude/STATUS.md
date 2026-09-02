@@ -1,19 +1,28 @@
-# STATUS — as of entry 0147-editor-polish-fixes
+# STATUS — as of entry 0148-REVIEW-phase5
 
-**READ THIS FIRST — THE EDITOR-POLISH WORK (D-129 + D-130 + D-131) IS BUILT ACROSS ENTRIES 0146 AND
-0147, NOT YET REVIEWED. `REVIEW: REQUIRED`. THE NEXT WORK IS D-124 — but the batch is at 9 files of
-§6.3's 10, so the next cycle should expect to stop for review first.**
+**READ THIS FIRST — THE EDITOR-POLISH WORK (D-129 + D-130 + D-131, entries 0146 + 0147) IS REVIEWED
+AND ACCEPTED (0148-REVIEW, ACCEPT WITH EDITS; D-132 + D-133 issued). THE BATCH IS CLOSED: D-124
+STARTS FRESH AT 0/3 CYCLES AND 0 FILES — the old "9 of 10 files, expect to stop" warning is spent.
+THE NEXT WORK IS D-124.**
+
+**BUT THE WHOLE EDITOR SURFACE IS OWED A LIVE LOOK BEFORE D-124 BUILDS ON IT.** Every DOM-half
+change in 0146 + 0147 is untested by construction, two of them were already wrong once, and
+0148-REVIEW added a finding it could not settle from a terminal — see **F28** below (a one-line
+overlay's `overflow: auto` scrollbar may eat the line it is scrolling). D-124 opens this editor on
+every newly-created `text` object, so it inherits all of it.
 
 **ENTRY 0146 SHIPPED TWO DEFECTS, BOTH FOUND BY THE HUMAN ON SCREEN AND BOTH FIXED AT 0147:**
 - **D-130 was implemented in the wrong place.** The overlay commits on `blur`, and the canvas
   `pointerdown`'s unconditional `input.focus()` IS a blur — fired before the pan branch. Moving
   `commitInPlace()` below that branch changed nothing; any middle-button press still committed,
-  with or without a drag. Fixed by guarding the FOCUS, not the commit.
+  with or without a drag. Fixed by guarding the FOCUS, not the commit. **D-130's own ruling text
+  prescribed the move that could not work; D-133 withdraws that prescription** and states the
+  general form: a ruling names the OUTCOME, and where it names a call site the outcome governs.
 - **The overlay laid text out differently from the canvas.** Three causes: `font: inherit` gave it
   the page's MONOSPACE against a `text` object's `sans-serif`; a `<textarea>` soft-wraps while an
   auto-width object (the default) never does; and padding+border ate 6px of a box fitted to the
   exact measured text width. Fixed by matching the type style from the object's own slots,
-  `wrap="off"` when the object does not wrap, and a zero-inset content box.
+  `wrap="off"` when the object does not wrap, and a zero-inset content box. **Recorded as D-132.**
 
 - **D-125 — in-place text entry. BUILT at entry 0143, REVIEWED AND ACCEPTED at 0144.** A DOM input is
   overlaid on the canvas by a DOUBLE-CLICK, over a `text` object's `content` (a `<textarea>`) or a
@@ -22,17 +31,17 @@
   deliberately NOT reused, D-125 clause 3's trap), a table cell Excel-style (`=` means formula). New
   file `render/editor.ts` (geometry: which receiver, where the overlay). **D-128 confirmed the
   clause-5 reading: Escape cancels, blur/click-outside commits, Enter commits only in a cell.**
-- **EDITOR-POLISH — D-129 + D-130 + D-131. BUILT at entries 0146 + 0147, NOT YET REVIEWED.** From
-  the human's on-screen tests of entries 0143 and 0146:
-  - **D-129, WIDENED at 0147 on the human's instruction.** The overlay's whole type style now comes
-    from the receiver's own slots, read the way `renderer.ts` reads them and scaled by the same
-    `camera.zoom / ratio` as the box: size, **family**, line height, **alignment**, and whether it
-    **wraps**. `.text-editor` is `overflow: auto` with no padding, no border (an `outline` is the
-    focus ring — it takes no layout) so the content box is exactly the placed box. The ruling said
-    family/alignment "need not match"; the human reported the mismatch AS the defect, so treat
-    clause 1 as widened — **the reviewer should record this.**
-  - **D-130 — the fix is on the FOCUS, not the commit.** `input.focus()` only runs in the pan
-    branch when no editor is open; an open editor keeps the keyboard across a pan. Moving
+- **EDITOR-POLISH — D-129 + D-130 + D-131. BUILT at entries 0146 + 0147, REVIEWED AND ACCEPTED at
+  0148 (ACCEPT WITH EDITS).** From the human's on-screen tests of entries 0143 and 0146:
+  - **D-129, WIDENED at 0147 on the human's instruction — now recorded as D-132.** The overlay's
+    whole type style comes from the receiver's own slots, read the way `renderer.ts` reads them and
+    scaled by the same `camera.zoom / ratio` as the box: size, **family**, line height,
+    **alignment**, and whether it **wraps**. `.text-editor` is `overflow: auto` with no padding, no
+    border (an `outline` is the focus ring — it takes no layout) so the content box is exactly the
+    placed box. **D-132 clause 2 draws the line: anything that MOVES A GLYPH is matched; `color` and
+    markdown are not, and must be disclosed rather than left silent.**
+  - **D-130 — the fix is on the FOCUS, not the commit (now D-133).** `input.focus()` only runs in
+    the pan branch when no editor is open; an open editor keeps the keyboard across a pan. Moving
     `commitInPlace()` (0146's attempt) was necessary but not sufficient — see the header.
   - **D-131** — `formatFormula(ast, objects, relativeToObjectId?)` — a same-table `reference` (or
     BOTH endpoints of a range) targeting a `cells.*` slot of that object prints bare (`A1`,
@@ -50,18 +59,23 @@ Order from here: **D-124**, then the **load-hardening cycle** (D-126 + D-127 + D
 
 ---
 
-## Where the code actually is — as of entry 0147-editor-polish-fixes
+## Where the code actually is — as of entry 0148-REVIEW-phase5
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1533/1533** tests pass,
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1535/1535** tests pass,
 0 skipped, 0 `.only`. **31 test files.** **PHASE 5 IS OPEN.**
 
-Last review point: **0144-REVIEW-phase5** (**ACCEPT** — entry 0143 / D-125; no source edits; D-128
-issued).
-Cycles since last review: **2/3**. Diff since last review: **301 source + 200 test lines / 9 files**
-(cap 800/10 — **the FILE count is 9 of 10; the next cycle should expect to stop**). Entries 0146 +
-0147 (editor-polish — D-129 + D-130 + D-131) are built and **awaiting review**: `REVIEW: REQUIRED`
-(§6.1 trigger 3 — three fresh rulings, a `formatFormula` parameter, and a widening of D-129
-clause 1 on the human's direct instruction).
+Last review point: **0148-REVIEW-phase5** (**ACCEPT WITH EDITS** — entries 0146 + 0147 /
+D-129 + D-130 + D-131; five reviewer edits, one of them a real behaviour fix; D-132 + D-133 issued).
+Cycles since last review: **0/3**. Diff since last review: **0 lines / 0 files** (cap 800/10).
+**The batch is closed — D-124 starts fresh.**
+
+The reviewer's own edits, all inside files this batch already touched (1533 → **1535** tests):
+`editor.ts` screens a BLANK `style.font` the way `cssFont` does (the only behaviour change — the
+overlay was returning `"   "`, which the CSSOM drops, leaving it on the page's monospace);
+`PROVISIONAL(Q-012)` tagged on `editorTextStyle`'s scaling; `slots.ts`'s header corrected for
+`readText`; `editor.ts`'s INVARIANTS narrowed and `style.color` disclosed; `main.ts`'s `pointerdown`
+commit comment corrected (it had the blur ordering backwards); one test each in `editor.test.ts` and
+`format.test.ts`.
 
 ## Read this first — what a cold reader needs
 
@@ -117,9 +131,9 @@ outside commits, Escape cancels, Enter commits in a cell (newline in a text box)
 NOT commit — and does not take FOCUS off it either, which is what actually decides it (D-130, 0147).
 The overlay is mounted in `#stage` (no delegated listeners), NOT `#panels`. Its type style —
 size, family, line height, alignment, wrap — comes from the receiver's own slots scaled by
-`camera.zoom / ratio`, and it does not clip (D-129 as widened, 0146 + 0147 — `editorTextStyle`,
+`camera.zoom / ratio`, and it does not clip (**D-132**, 0146 + 0147 — `editorTextStyle`,
 `.text-editor { overflow: auto }` with no font/padding/border). A cell formula's same-table refs
-show bare (D-131, 0146 — `formatFormula`'s `relativeToObjectId`). **0146 + 0147 await review.**
+show bare (D-131, 0146 — `formatFormula`'s `relativeToObjectId`). **Reviewed and accepted at 0148.**
 
 **1. PHASE 4'S GATE TEST IS `main.test.ts`'s `describe` "PHASE 4'S ACCEPTANCE CRITERION" (7 tests).**
 Do not weaken; do not fold.
@@ -226,27 +240,30 @@ D-121 + D-122 issued · **0137-REVIEW** entry 0136's `text` command; Q-022/Q-023
 entry 0138's text rendering; D-123 issued, Q-024 answered · **0142-REVIEW** entry 0141's
 `measuredWidth`; Q-024 CLOSED; D-126 + D-127 issued · **0144-REVIEW** entry 0143's in-place editor
 (D-125 — `render/editor.ts` + `main.ts` commit seam); D-128 issued; no source edits · **0145-RULINGS**
-the human's on-screen test of the editor; D-129 + D-130 + D-131 issued; no code.
+the human's on-screen test of the editor; D-129 + D-130 + D-131 issued; no code · **0148-REVIEW**
+entries 0146 + 0147's editor-polish work; ACCEPT WITH EDITS; D-132 + D-133 issued.
 
-## Built this batch, not yet reviewed
+## Built and reviewed this batch (0148-REVIEW — ACCEPT WITH EDITS)
 
 **Entries 0146 + 0147 — the editor-polish work (D-129 + D-130 + D-131).** 9 files, 301 source + 200
-test lines, 1533/1533. `REVIEW: REQUIRED`.
+test lines. Plus the reviewer's five edits at 0148. Now **1535/1535**.
 
 - `formatFormula` gained an optional `relativeToObjectId` (D-131); `editorSeed`'s cell branch passes
-  the host table id.
+  the host table id. All five other call sites pass two arguments and are pinned unaffected.
 - `render/editor.ts` gained `editorTextStyle` — a SIBLING of `editorPlacement` returning the
-  overlay's `fontSize`/`fontFamily`/`lineHeight`/`textAlign`/`wraps` (D-129, widened). Entry 0146's
+  overlay's `fontSize`/`fontFamily`/`lineHeight`/`textAlign`/`wraps` (**D-132**). Entry 0146's
   `fontSize` field on `EditorPlacement` is gone; that struct is back to its 0144-reviewed shape.
 - `render/slots.ts` gained `readText`, moved out of `renderer.ts`'s privates so the drawn font and
   the overlay font resolve one way (D-010). **`renderer.ts` was edited to import it — one file
-  outside the batch, deliberately, argued in entry 0147.**
-- `main.ts`: the pan branch no longer steals focus from an open editor (D-130's real fix);
+  outside the batch, deliberately, argued in entry 0147 and RATIFIED at 0148:** the alternative was
+  a second copy of a guard whose exact subtlety was the bug being fixed.
+- `main.ts`: the pan branch no longer steals focus from an open editor (**D-133**);
   `updateEditor` sets four inline type properties; `buildInPlaceElement` sets `textarea.wrap`.
 - `index.html`: `.text-editor` has no font, no padding, no border; `outline` is the focus ring.
 
-**Every DOM-half change here is untested by construction and TWO of them were already wrong once.
-A live look is owed before this is trusted.**
+**Every DOM-half change here is untested by construction, TWO of them were already wrong once, and
+0147's changes plus the reviewer's `main.ts` comment have STILL not been seen on screen. A live look
+is owed before D-124 builds on this — start with F28.**
 
 ## Not started
 
@@ -297,18 +314,28 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
     document carrying that object type. Owned by the load-hardening cycle.
 26. **F24 — RULED D-127, NOT BUILT.** D-108's deferral condition could never fire; the malformed-AST
     throw is operator-reachable and surfaces as a silent no-op. Same cycle as F23.
-27. **F25 — RULED D-129, BUILT (0146), WIDENED + FIXED (0147), NOT YET REVIEWED.** The overlay's
-    whole type style (size, family, line height, alignment, wrap) now comes from the receiver's
-    slots, scaled by `camera.zoom / ratio`; `.text-editor` has `overflow: auto` and a zero-inset
-    content box. 0146's size-only version still re-wrapped text, because the family was the page's
-    monospace — the human's second report. Untested (DOM half).
-28. **F26 — RULED D-130, MIS-BUILT (0146), FIXED (0147), NOT YET REVIEWED.** 0146 moved
-    `commitInPlace()` below the pan branch but left `input.focus()` above it — and the overlay
-    commits on `blur`, so every middle-button press still committed. The fix guards the FOCUS.
-    Untested (DOM half).
-29. **F27 — RULED D-131, BUILT (0146), NOT YET REVIEWED.** `formatFormula` gained an optional
+27. **F25 — RULED D-129, BUILT (0146), WIDENED + FIXED (0147), REVIEWED (0148) → D-132. CLOSED in
+    code.** The overlay's whole type style (size, family, line height, alignment, wrap) comes from
+    the receiver's slots, scaled by `camera.zoom / ratio`; `.text-editor` has `overflow: auto` and a
+    zero-inset content box. 0146's size-only version still re-wrapped text, because the family was
+    the page's monospace — the human's second report. Still unseen on screen (DOM half).
+28. **F26 — RULED D-130, MIS-BUILT (0146), FIXED (0147), REVIEWED (0148) → D-133. CLOSED in code.**
+    0146 moved `commitInPlace()` below the pan branch but left `input.focus()` above it — and the
+    overlay commits on `blur`, so every middle-button press still committed. The fix guards the
+    FOCUS. Still unseen on screen (DOM half).
+29. **F27 — RULED D-131, BUILT (0146), REVIEWED (0148). CLOSED.** `formatFormula` gained an optional
     `relativeToObjectId`; `editorSeed` passes the cell's host table id. Pinned in `format.test.ts`
-    and `main.test.ts`.
+    and `main.test.ts`, round-trip proven at both altitudes.
+30. **F28 — OPEN, NEEDS THE HUMAN'S EYES FIRST (0148-REVIEW finding 1).** `.text-editor`'s
+    `overflow: auto` may make a ONE-LINE overlay unusable: the normal `text` object is auto-width, so
+    its box is fitted to the exact measured text — ~20 world units tall. Type past the committed
+    width and a horizontal scrollbar appears INSIDE a ~20px content box (a classic Windows scrollbar
+    takes ~15px of it), which can force a vertical one, which takes width, which re-wraps a wrapping
+    box — the same class of defect D-129 was raised to close, arriving through D-129's own remedy.
+    **Not fixed by the reviewer deliberately:** it is CSS nobody has seen, and two cycles were
+    already lost to confident untested DOM reasoning. **If it reproduces:** `scrollbar-width: none`
+    plus the `::-webkit-scrollbar` twin keeps the scrolling and caret-tracking D-129 clause 2
+    requires while giving the scrollbar no layout — inside the ruling, no code change.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -319,8 +346,8 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   pre-fill, focus, Escape, Enter, cell commit, deletion-closes-it, panel-click-commits, no console
   errors — all confirmed. Three defects → D-129 (font/zoom + clip), D-130 (pan commits), D-131
   (qualified cell ref). **Built at 0146; the human re-tested and found TWO of the three still
-  broken; fixed at 0147. Awaiting review, and the 0147 DOM-half changes have NOT been seen on
-  screen either.**
+  broken; fixed at 0147; reviewed and accepted at 0148. The 0147 DOM-half changes have STILL NOT
+  been seen on screen — and F28 is a reviewer finding that only a live look can settle.**
 - **the in-place editor overlay does not render markdown** — it shows RAW SOURCE, which is also what
   `renderer.ts` draws today, so the two agree; the markdown-lite cycle will make them differ
   deliberately and owes a decision. Font family and alignment DO match now (0147, widening D-129).
@@ -328,7 +355,10 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   number cell** — deliberate (an editor holds the source being typed; Excel left-aligns that too).
   `editor.ts`'s NOT DONE HERE.
 - **vertical alignment inside the overlay's line box is approximate** — the canvas draws with
-  `textBaseline: "top"`; CSS centres glyphs in a `line-height` box. Sub-pixel at the default 16/20.
+  `textBaseline: "top"`; CSS centres glyphs in a `line-height` box. Sub-pixel at the default 16/20
+  **AT ZOOM 1** — the half-leading is a world length like everything else here, so it scales: ~4 CSS
+  px low at zoom 5 (0148-REVIEW's correction to entry 0147's "sub-pixel" full stop). Still not worth
+  a layout hack.
 - **the properties panel and the in-place editor can overlap** only when a small window forces them
   into the same space (0145 confirmed they stay clear at normal sizes). No remedy scheduled.
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** —
@@ -349,7 +379,9 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   `renderer.ts`'s `DEFAULT_TEXT_*` and `TABLE_CELL_FONT` **by value** (16 / 20 / "sans-serif" / 14)
   for the overlay's type style only, never the box. It shares `readNumber`/`readText` with
   `renderer.ts` but not the fallback constants; the ruling this entry has been waiting for should
-  now cover three files, not two.
+  now cover three files, not two. **D-132 clause 3 makes the pair's maintenance binding meanwhile**
+  — and 0148-REVIEW found the first drift already there: `readText` screens `""`, `cssFont` also
+  screens `"   "`, and `editorTextStyle` applied only the first half.
 - **`extent.ts`'s `text` box trusts the stored measurement; `renderer.ts` re-wraps with its own
   `ctx`.** 0139-REVIEW ruled this stays (D-123 clause 5): the box follows the text, never the reverse.
 - **An empty-`content` `text` object is invisible AND unselectable** — no ink, no extent, no hit box.
@@ -439,15 +471,22 @@ D-128** (Escape cancels, blur/click-outside commits, Enter commits only in a cel
 **D-128 — RULED (0144-REVIEW).** The coherent reading of D-125 clause 5, as built at entry 0143.
 Binds D-124's open-editor-on-create wiring. Reversible; the human may overrule.
 
-**D-129 / D-130 / D-131 — RULED (0145-RULINGS), BUILT (0146), FIXED + WIDENED (0147), NOT YET
-REVIEWED.** D-129: the overlay's whole type style (size, **family**, line height, **alignment**,
-**wrap**) comes from the receiver's slots, scaled by `camera.zoom / ratio`; no clip, no inset.
-**Clause 1 said family/alignment need not match — the human reported the mismatch AS the defect at
-0147, so treat it as WIDENED and record it.** D-130: the pan branch no longer steals FOCUS from an
-open editor (0146's move of `commitInPlace()` was necessary but not sufficient — `input.focus()`
-fires the committing blur). D-131: `formatFormula` gained an optional `relativeToObjectId`; the cell
-editor shows same-table refs bare (`=A1 * 2`). **Every DOM-half change is untested by construction
-and two were already wrong once — a live look is owed.**
+**D-129 / D-130 / D-131 — RULED (0145-RULINGS), BUILT (0146), FIXED + WIDENED (0147), REVIEWED AND
+ACCEPTED (0148).** D-129: the overlay's whole type style (size, **family**, line height,
+**alignment**, **wrap**) comes from the receiver's slots, scaled by `camera.zoom / ratio`; no clip,
+no inset. **Clause 1's widening is RECORDED AS D-132**, which also draws the line (glyph-moving
+properties are matched; `color` and markdown are not) and declares `editorTextStyle` /
+`resolveTextStyle` / `cssFont` a hand-maintained pair with D-119's standing. D-130: the pan branch no
+longer steals FOCUS from an open editor — **amended by D-133**, which withdraws D-130's own
+"move the `commitInPlace()` call" prescription as insufficient and states that a ruling names the
+OUTCOME. D-131: `formatFormula` gained an optional `relativeToObjectId`; the cell editor shows
+same-table refs bare (`=A1 * 2`). **Every DOM-half change is untested by construction and two were
+already wrong once — a live look is still owed (F28).**
+
+**D-132 / D-133 — RULED (0148-REVIEW).** D-132 records the D-129 widening and its boundary; D-133
+amends D-130 to the focus, and its clause 4 binds how every future ruling is read: **a ruling names
+the OUTCOME, and where it also names a call site or a line to move, the OUTCOME governs.** Reaching
+the named site without reaching the outcome does not discharge the ruling. Both bind D-124.
 
 **D-126 — RULED (0142-REVIEW), NOT BUILT.** The loader reconstructs a schema's declared derived
 slots and never trusts the file to list them. `formatVersion` is NOT bumped.
@@ -460,11 +499,10 @@ Owner is the load-hardening cycle, after D-124.
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-114/D-115/D-116/D-117 ·
 D-118 · D-120 · D-121 / D-122 + the `text` command · text rendering + the text bounding box · D-123 +
-`measuredWidth` · **D-125 + D-128** (in-place text entry — entry 0143, reviewed 0144). D-129/D-130/
-D-131 are BUILT (0146 + 0147) but NOT yet reviewed — see above.
+`measuredWidth` · **D-125 + D-128** (in-place text entry — entry 0143, reviewed 0144) ·
+**D-129 + D-130 + D-131 + D-132 + D-133** (editor-polish — entries 0146 + 0147, reviewed 0148).
 
-**BUILT, awaiting review:** **D-129 + D-130 + D-131** (editor-polish, entries 0146 + 0147; D-129
-clause 1 widened at 0147 on the human's instruction — the reviewer should record that).
+**BUILT, awaiting review:** nothing. The batch closed at 0148-REVIEW; D-124 opens a fresh one.
 
 **NOT implemented, each owned by a named future cycle:** **D-124** (`text` placed by pointing —
 NEXT) · **D-126** + **D-127** + **D-108** (one load-hardening cycle, after D-124) · **D-104**
@@ -473,7 +511,9 @@ NEXT) · **D-126** + **D-127** + **D-108** (one load-hardening cycle, after D-12
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — BUILT and REVIEWED (0128).
 **Q-021 → D-120** — BUILT + WIRED + REVIEWED (0133). **Q-022 → D-121**, **Q-023 → D-122** — CLOSED.
-**Q-024 → D-123 — CLOSED.** Next free: **Q-025**.
+**Q-024 → D-123 — CLOSED.** **Q-012 gained a FOURTH reconciliation site at 0148** (`editor.ts` —
+the overlay scales a font size by zoom because `renderer.ts` reads one as a world length; if Q-012
+lands on screen pixels, both stop scaling in the same cycle). Next free: **Q-025**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 `content` inherits the same posture.
@@ -486,20 +526,26 @@ named divergence).
 
 ## Live PROVISIONAL tags and open questions
 
-**`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** (×3) and **`src/render/slots.ts`** (×1): world
-units or screen pixels for stroke width / cell size / font? Provisional (a) world units. Due with the
-`style`-slots cycle.
+**`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** (×3), **`src/render/slots.ts`** (×1) and
+**`src/render/editor.ts`** (×1, added at 0148-REVIEW): world units or screen pixels for stroke width
+/ cell size / font? Provisional (a) world units. Due with the `style`-slots cycle.
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (×2, `-0`): open, deferred, blocking nothing.
 
-**No other `PROVISIONAL` tags exist.** Q-016/Q-017 have none. Entries 0143, 0146 and 0147 added
-none — D-129's zoom-scaled type style is a ruling, not a guess, and `editor.ts`'s five type-style
-constants MIRROR `renderer.ts`'s by value rather than choosing anything (fix-list item 8).
+**No other `PROVISIONAL` tags exist.** Q-016/Q-017 have none. **0148-REVIEW corrected the previous
+claim that entries 0146/0147 owed none:** D-132's zoom-scaled type style is indeed a ruling rather
+than a guess, but *that a font size is a world length at all* is Q-012's open reading, which
+`editor.ts` FOLLOWS — so it is a reconciliation site and Q-012's closing grep has to find it.
+`editor.ts`'s five type-style constants still only MIRROR `renderer.ts`'s by value (fix-list item 8),
+which is not a choice and needs no tag.
 
 ## Gotchas for the next model
 
-- **THE NEXT SLICE IS D-124** (`text` placed by pointing + open-editor-on-create) — but the batch is
-  **2/3 cycles and 9/10 files**, so the next cycle should expect §6.3 to force a stop first.
+- **THE NEXT SLICE IS D-124** (`text` placed by pointing + open-editor-on-create), and it starts a
+  **FRESH batch: 0/3 cycles, 0 files.** 0148-REVIEW closed the old one.
+- **A RULING NAMES THE OUTCOME, NOT THE LINE (D-133 clause 4).** Where a ruling also names a call
+  site or a line to move, the outcome governs — reaching the named site without reaching the outcome
+  does not discharge it. This is the general form of what cost entries 0146 and 0147 two cycles.
 - **MOVING A CALL IS NOT THE SAME AS ESTABLISHING IT IS THE ONLY CALLER.** Entry 0146 "fixed" D-130
   by moving `commitInPlace()` below the pan branch, while `commitInPlace` was ALSO registered as the
   overlay's `blur` handler four lines above — and `input.focus()` fires that blur. The fix did
@@ -508,13 +554,22 @@ constants MIRROR `renderer.ts`'s by value rather than choosing anything (fix-lis
 - **THE DOM-HALF CHANGES STILL HAVE NOT BEEN SEEN ON SCREEN.** Everything in `main.ts`'s `start` and
   `index.html` is untested by construction, and two of these changes were already wrong once. The
   pure halves (`editorTextStyle`, `editorPlacement`, `editorSeed`) are tested hard; "does the
-  overlay look like the text" is not a question any test here answers.
-- **THE OVERLAY'S TYPE STYLE MUST TRACK `renderer.ts`, SLOT FOR SLOT.** `editorTextStyle` and
-  `resolveTextStyle`/`drawText` are a hand-maintained PAIR with no compiler link — the same hazard
-  D-119 names for `resolveTextDependencyAddresses`/`deriveEdges`. They share `readNumber`/`readText`
-  and the fallback VALUES (16 / 20 / "sans-serif" / 14) but not one definition of them. Change how
-  the renderer resolves a `text` style → change `editorTextStyle` the same cycle, or the editor
-  starts re-wrapping text again.
+  overlay look like the text" is not a question any test here answers. **The live-look checklist,
+  shortest path first:** (1) **F28** — auto-width box, type past the committed width, does a
+  scrollbar eat the line? (2) middle-drag and space-drag with the editor open — does it stay open,
+  keep the caret, and track through the pan? (3) a wrapping object (`set text_1.width 200`) — do the
+  drawn and typed line breaks agree? (4) `set text_1.style.align center` — does the overlay centre
+  too? (5) a cell formula reopens as `=A2 * 2`, not `=table_1.A2 * 2`.
+- **THE OVERLAY'S TYPE STYLE MUST TRACK `renderer.ts`, SLOT FOR SLOT (D-132 clause 3).**
+  `editorTextStyle`, `resolveTextStyle`/`drawText` and `measure.ts`'s `cssFont` are a hand-maintained
+  PAIR with no compiler link — the same hazard D-119 names for
+  `resolveTextDependencyAddresses`/`deriveEdges`. They share `readNumber`/`readText` and the fallback
+  VALUES (16 / 20 / "sans-serif" / 14) but not one definition of them. Change how the renderer
+  resolves a `text` style → change `editorTextStyle` the same cycle, or the editor starts re-wrapping
+  text again. **This already drifted once and 0148-REVIEW caught it:** `readText` screens `""`,
+  `cssFont` ALSO screens `"   "`, and the overlay applied only the first half — a blank
+  `style.font` (operator-reachable: `set text_1.style.font "   "`) returned `"   "`, which the CSSOM
+  drops, leaving the overlay on the page's MONOSPACE. Fixed; pinned by a test.
 - **D-128 settled D-125 clause 5** — Escape cancels, blur/click-outside commits, Enter commits only
   in a cell. D-124's open-editor-on-create wiring inherits this.
 - **`formatFormula` now takes an optional third arg `relativeToObjectId` (D-131).** OPT-IN — every

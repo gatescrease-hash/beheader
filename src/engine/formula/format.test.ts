@@ -175,6 +175,11 @@ describe("relativeToObjectId — the in-place cell editor's bare Excel form (D-1
     expect(formatFormula(ast, DOCUMENT, "obj_1")).toBe("table_x.A1 * 2");
   });
 
+  it("keeps a NON-CELL slot of the relative object itself qualified — only a `cells.*` slot has a bare form that re-parses (0148-REVIEW)", () => {
+    const ast = parseOk("table_x.rows + A1", DOCUMENT, "obj_3");
+    expect(formatFormula(ast, DOCUMENT, "obj_3")).toBe("table_x.rows + A1");
+  });
+
   it("prints BOTH endpoints of a same-table range bare, never the mixed form", () => {
     const ast = parseOk("SUM(A1:B4)", DOCUMENT, "obj_3");
     expect(formatFormula(ast, DOCUMENT, "obj_3")).toBe("SUM(A1:B4)");
