@@ -1,38 +1,41 @@
-# STATUS — as of entry 0149-text-pointing
+# STATUS — as of entry 0150-REVIEW-phase5
 
 **READ THIS FIRST — D-124 (`text` placed by POINTING + the in-place editor opens on every
-newly-created `text` object) IS BUILT at entry 0149 and is AWAITING REVIEW. `REVIEW: REQUIRED`
-(§6.1 trigger 3 — the new-object-id seam, `reviewer's call` per D-124; plus a small deliberate
-`parser.ts` behaviour change). Batch: cycle 1/3, ~223 lines / 7 files. STATE GREEN — 1549/1549,
-0 skipped, 31 files.**
+newly-created `text` object) IS BUILT (entry 0149) and REVIEWED AND ACCEPTED (0150-REVIEW). New
+ruling **D-134** (a creation surfaces its new object's id on `CommandOutcome.createdObjectId`, not a
+`CommandEffect`). Batch RESET: 0/3, 0 files. STATE GREEN — 1549/1549, 0 skipped, 31 files.**
 
-**THE WHOLE EDITOR SURFACE IS STILL OWED A LIVE LOOK, AND D-124 MAKES THAT MORE URGENT.** The
-in-place editor now opens on EVERY `text` creation, not only a double-click — so F28 (a one-line
-overlay's `overflow: auto` scrollbar may eat its line), the family/wrap/zoom matching from
-0146/0147, and the pan-keeps-focus behaviour are all exercised the first time anyone types `text`
-and clicks. 0148-REVIEW's DOM-half changes plus entry 0149's new trigger have not been seen on
-screen. **Shortest live-look path:** (1) `text`, click, type past the box width — does a scrollbar
-appear inside the ~20px line (F28)? (2) `text`, click, then middle-drag — does the fresh editor keep
-focus and track? (3) `set text_1.width 200`, then edit — do drawn and typed line breaks agree?
-(4) `set text_1.style.align center` — does the overlay centre? (5) a cell formula reopens as
-`=A2 * 2`, not `=table_1.A2 * 2`.
+**THE WHOLE EDITOR SURFACE IS STILL OWED A LIVE LOOK, AND 0150-REVIEW MADE IT THE GATE BEFORE THE
+LOAD-HARDENING CYCLE STARTS.** The in-place editor now opens on EVERY `text` creation, not only a
+double-click — so F28 (a one-line overlay's `overflow: auto` scrollbar may eat its line), F29 (an
+abandoned fresh empty box is stranded), the family/wrap/zoom matching from 0146/0147, and the
+pan-keeps-focus behaviour are all exercised the first time anyone types `text` and clicks. Nothing
+in the 0146/0147/0148/0149 work has been seen on screen. **Live-look script — 0150-REVIEW "For the
+human to test":** (1) `text`, click — empty focused box at the click point? (2) type past the box
+width — scrollbar jitter (F28)? (3) `text`, click, Escape without typing — invisible stranded
+`text_1` (F29)? (4) `text`, click, middle-drag — editor keeps focus and tracks? (5) `text x=0 y=0
+"hello"` whole at the bar — editor pops open; do you want that (D-125 clause 4 / Decision 2)?
+(6) `set text_1.width 200` then edit — drawn and typed line breaks agree (D-132)?
 
-**ENTRY 0149 — D-124, awaiting review:**
+**ENTRY 0149 — D-124, REVIEWED AND ACCEPTED (0150):**
 - `parser.ts`: `text` gains a one-step `point` prompt (`{ name: "position", message: "specify text
   position", accepts: "point" }`) and `buildFromPrompts` → `{ kind: "text", x, y, content: "" }`.
   `PromptStep.accepts` NOT widened (D-124 clause 4). Both typed forms (`text "hi"`,
   `text x=0 y=0 "hi"`) route to `parseCommand` whole, unchanged. **`text 30,40` (unquoted comma)
   now reads as the point shorthand** — box at (30,40), empty content — like `circle 30,40`; a
-  literal `"30,40"` string needs quoting. Decision 3, flagged for review.
+  literal `"30,40"` string needs quoting. Decision 3 — accepted outright at 0150-REVIEW.
 - `commands.ts`: `CommandOutcome`'s success arm gains `createdObjectId?: string`, set by
   `createObjectFromCommand` for every creation (chosen over a new `CommandEffect` kind — a creation
-  changes document state, which `CommandEffect` is explicitly NOT for). Decision 1.
+  changes document state, which `CommandEffect` is explicitly NOT for). Decision 1 — **RATIFIED as
+  D-134** at 0150-REVIEW.
 - `main.ts`: `AppTransition` gains `openEditor?: EditorTarget`. `advance`'s complete+ok branch
   returns it for `session.command.kind === "text"` + a `createdObjectId`; `applyTransition` sets
   `inPlaceEditor` from it BEFORE `apply`, so the same paint builds and focuses the overlay.
-  **Every form of `text` opens the editor** (Decision 2 — typed forms too, per STATUS's "every
-  newly-created `text` object"; the reviewer may narrow it). **The new box opens its editor
-  UNSELECTED** (Decision 4 — the completion is a prompt answer, not a selection press).
+  **Every form of `text` opens the editor** (Decision 2 — typed forms too; 0150-REVIEW accepted it
+  as built but routed it to the human for an on-screen call, since D-125 clause 4's letter is
+  narrower — one-line reversal). **The new box opens its editor UNSELECTED** (Decision 4 — the
+  completion is a prompt answer, not a selection press; 0150-REVIEW accepted, flagged for the human).
+  Decision 3 (`text 30,40` = point shorthand) accepted outright.
 
 - **D-125 — in-place text entry. BUILT at entry 0143, REVIEWED AND ACCEPTED at 0144.** A DOM input is
   overlaid on the canvas over a `text` object's `content` (a `<textarea>`) or a table cell (an
@@ -44,25 +47,28 @@ focus and track? (3) `set text_1.width 200`, then edit — do drawn and typed li
   AND ACCEPTED at 0148 (ACCEPT WITH EDITS).** The overlay's whole type style (size, family, line
   height, alignment, wrap) comes from the receiver's own slots scaled by `camera.zoom / ratio`; it
   does not clip; a pan does not steal its focus; a cell formula's same-table refs show bare.
-- **D-124 — `text` placed by POINTING. BUILT at entry 0149, AWAITING REVIEW** (see the block above).
+- **D-124 — `text` placed by POINTING. BUILT (entry 0149), REVIEWED AND ACCEPTED (0150); D-134
+  issued** (see the block above).
 - **Standing:** the human's direct instruction outranks `PROJECT_BRIEF.md`. *"If the brief conflicts
   with what I say, ignore the brief. I wrote it."* Never "correct" a ruling back toward the brief.
 
-Order from here: **review 0149 (D-124)**, then the **load-hardening cycle** (D-126 + D-127 + D-108,
-one `document.ts` diff), then markdown-lite, then `overflow`, then the Phase 5 gate.
+Order from here: **the owed live look (0150-REVIEW's test script — F28 + F29 + the whole unseen
+editor surface)**, then the **load-hardening cycle** (D-126 + D-127 + D-108, one `document.ts`
+diff), then markdown-lite, then `overflow`, then the Phase 5 gate. 0150-REVIEW made the live look
+the gate before load-hardening starts (`document.ts` is where a regression is expensive).
 
 ---
 
-## Where the code actually is — as of entry 0149-text-pointing
+## Where the code actually is — as of entry 0150-REVIEW-phase5
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1549/1549** tests pass,
 0 skipped, 0 `.only`. **31 test files.** **PHASE 5 IS OPEN.**
 
-Last review point: **0148-REVIEW-phase5** (**ACCEPT WITH EDITS** — entries 0146 + 0147; D-132 + D-133
-issued). Cycles since last review: **1/3**. Diff since last review: **~223 lines / 7 files**
-(cap 800/10) — entry 0149's D-124 work, awaiting review.
+Last review point: **0150-REVIEW-phase5** (**ACCEPT** — entry 0149 / D-124; **D-134** issued, no
+reviewer edits). Cycles since last review: **0/3**. Diff since last review: **0 lines / 0 files**
+(cap 800/10) — batch reset.
 
-Entry 0149's diff: `parser.ts` (+the `text` prompt sequence), `commands.ts` (+`createdObjectId`),
+Entry 0149's diff (now reviewed): `parser.ts` (+the `text` prompt sequence), `commands.ts` (+`createdObjectId`),
 `main.ts` (+`AppTransition.openEditor`, `advance`/`applyTransition` wiring), `render/editor.ts` (one
 doc line), plus tests in `prompt.test.ts` / `commands.test.ts` / `main.test.ts`.
 
@@ -180,13 +186,20 @@ compares a `Command`'s discriminant, not an `ObjectType`.
 
 ## Next slice (recommended)
 
-**The LOAD-HARDENING CYCLE — one `document.ts` diff** discharging D-126 (loader reconstructs declared
-derived slots), D-127/D-108 (one `FormulaAst` shape validation at the load boundary + `openDocument`'s
-promise chain given a rejection path), and D-108 clause 1's owed doc corrections +
-`document.test.ts` extension. `document.ts` is §6.2 load-bearing — **`REVIEW: REQUIRED`.** Do NOT
-start it until 0149 (D-124) has been reviewed — `main.ts` and `commands.ts` are touched by 0149 and
-`document.ts` is not, so there is no load-bearing overlap, but the batch cap and review cadence want
-0149 closed first.
+**THE OWED LIVE LOOK FIRST — not a code cycle, the human's twenty seconds.** 0150-REVIEW made it the
+gate before load-hardening: run its "For the human to test" script (F28 scrollbar, F29 stranded
+empty box, pan-focus, Decision 2's editor-on-typed-line feel, D-132 wrap agreement). Six cycles of
+editor work have stacked on a surface no one has seen, and the next code cycle touches `document.ts`
+where a regression is expensive. Whatever the live look turns up is a small fix inside an existing
+ruling (F28: `scrollbar-width: none`; F29: a human ruling then an `AppTransition` returning a
+`delete`).
+
+**THEN the LOAD-HARDENING CYCLE — one `document.ts` diff** discharging D-126 (loader reconstructs
+declared derived slots), D-127/D-108 (one `FormulaAst` shape validation at the load boundary +
+`openDocument`'s promise chain given a rejection path), and D-108 clause 1's owed doc corrections +
+`document.test.ts` extension. `document.ts` is §6.2 load-bearing — **`REVIEW: REQUIRED`.** No
+load-bearing overlap with 0149 (it touched `main.ts`/`commands.ts`, not `document.ts`); batch is
+reset to 0/3.
 
 Then, in order: **markdown-lite rendering** (§5.6's exact list, in `renderer.ts`'s `drawText`, and
 `render/measure.ts` made markup-aware in the SAME cycle so drawn and measured agree). Then
@@ -224,25 +237,24 @@ entry 0138's text rendering; D-123 issued, Q-024 answered · **0142-REVIEW** ent
 `measuredWidth`; Q-024 CLOSED; D-126 + D-127 issued · **0144-REVIEW** entry 0143's in-place editor
 (D-125 — `render/editor.ts` + `main.ts` commit seam); D-128 issued · **0145-RULINGS** the human's
 on-screen test; D-129 + D-130 + D-131 issued · **0148-REVIEW** entries 0146 + 0147's editor-polish
-work; ACCEPT WITH EDITS; D-132 + D-133 issued.
+work; ACCEPT WITH EDITS; D-132 + D-133 issued · **0150-REVIEW** entry 0149's `text`-by-pointing
+(D-124); **ACCEPT**, no reviewer edits; **D-134** issued (creation surfaces its new id on
+`CommandOutcome.createdObjectId`); F29 logged; Decisions 2 + 4 accepted-as-built and routed to the
+human for an on-screen call.
 
 ## Built this batch, not yet reviewed
 
-**Entry 0149 — D-124 (`text` placed by pointing; the in-place editor opens on every new `text`
-object).** 4 source files (`parser.ts`, `commands.ts`, `main.ts` +11 lines pure / +1 DOM,
-`render/editor.ts` 1 doc line), ~110 source + ~113 test lines. `REVIEW: REQUIRED` (§6.1 trigger 3).
-Four flagged decisions in entry 0149: `createdObjectId` over a `CommandEffect` (1); every form of
-`text` opens the editor, not only the pointed one (2); `text 30,40` now the point shorthand (3); the
-new box opens its editor unselected (4).
+**Nothing.** Batch reset at 0150-REVIEW — 0/3 cycles, 0 files.
 
 ## Not started
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
-hit-testing (D-067) · §5.4's formula bar · **the load-hardening cycle (D-126 + D-127 + D-108) —
-NEXT** · D-088 clauses 2–4 · D-089 · D-102 clause 9 · **D-109 clauses 1–2** · markdown-lite text
+hit-testing (D-067) · §5.4's formula bar · **the owed live look (0150-REVIEW's script), then the
+load-hardening cycle (D-126 + D-127 + D-108) — NEXT** · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
+**D-109 clauses 1–2** · markdown-lite text
 rendering + a markup-aware measurer · `text` `overflow` clip/ellipsis · the Phase 5 gate test ·
-Phases 6–7. **D-124 is BUILT (0149), awaiting review — no longer "not started".**
+Phases 6–7. **D-124 is BUILT (0149) and REVIEWED (0150) — done, not "not started".**
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -295,6 +307,15 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
     and a freshly-pointed box is exactly the auto-width empty case F28 describes. **If it
     reproduces:** `scrollbar-width: none` plus the `::-webkit-scrollbar` twin — inside the ruling,
     no code change.
+31. **F29 — OPEN, NEEDS THE HUMAN'S RULING (0150-REVIEW finding 1).** `text` + click commits
+    `createText` BEFORE the editor opens (the id must exist for `openEditor` to name it). Hit Escape
+    without typing — the natural "no, not here" — and D-128 cancels the *edit*, leaving a `text`
+    object with `content: ""`: invisible, no extent, unselectable (D-066), removable only by typing
+    `delete text_1`. D-124 makes producing one a single mis-click. The pure half is correct; this is
+    a missing product decision — should Escape / an empty blur on a box *opened by `openEditor`* also
+    remove it? **The human's call** (D-125 clauses 4–5 are theirs). If "yes": a new `AppTransition`
+    the editor's cancel path returns when `content` is empty, carrying a `delete` through
+    `executeCommand` — no second write path.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -302,18 +323,23 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   commit, Enter = commit in a cell only. Confirmed as built on screen (0145). The human may still
   overrule clauses 4–5 on sight.
 - **THE IN-PLACE EDITOR'S DOM HALF HAS NOT BEEN SEEN ON SCREEN SINCE ENTRY 0145.** 0146/0147's
-  changes and 0148-REVIEW's edits are untested by construction; entry 0149 adds a new trigger
-  (opens on `text` creation) that is likewise unseen. A live look is owed — start with F28.
-- **A freshly-pointed `text` object opens its editor UNSELECTED** (entry 0149, Decision 4). The
-  dblclick path selects first; the D-124 completion path is a prompt answer, not a selection press.
-  Reversible — `advance` could return an interaction change. Flagged for review.
+  changes, 0148-REVIEW's edits and entry 0149's new trigger (opens on `text` creation) are all
+  untested by construction. 0150-REVIEW made the live look the gate before load-hardening — run its
+  "For the human to test" script, start with F28 + F29.
+- **A freshly-created `text` object opens its editor UNSELECTED** (entry 0149, Decision 4; accepted
+  0150-REVIEW). The dblclick path selects first; the D-124 completion path is a prompt answer, not a
+  selection press. Reversible — `advance` could return an interaction change. Human's call on sight.
 - **`text 30,40` (unquoted, comma) now places a box at (30,40) with empty content**, not a box at
-  the origin containing the string "30,40" (entry 0149, Decision 3). `text "30,40"` still gives the
-  literal string. Consistent with `circle 30,40`.
-- **Every form of `text` opens the in-place editor** (entry 0149, Decision 2), including
-  `text x=0 y=0 "hi"` typed at the bar — the editor opens seeded with "hi". Reversible if the
-  reviewer wants it narrowed to the pointed form (would mean plumbing the response kind into
-  `advance`).
+  the origin containing the string "30,40" (entry 0149, Decision 3; accepted outright 0150-REVIEW).
+  `text "30,40"` still gives the literal string. Consistent with `circle 30,40`.
+- **Every form of `text` opens the in-place editor** (entry 0149, Decision 2; accepted-as-built
+  0150-REVIEW), including `text x=0 y=0 "hi"` typed at the bar — the editor opens seeded with "hi".
+  D-125 clause 4's letter is narrower ("placed by D-124"); the human decides on sight whether a
+  fully-typed `text` line should pop a focus-stealing editor. Narrowing = plumb the response kind
+  into `advance`, one-liner.
+- **An abandoned fresh empty `text` box is stranded — F29** (0150-REVIEW finding 1). `text` + click
+  commits the creation before the editor opens; Escape without typing leaves an invisible,
+  unselectable `content: ""` object. The human's ruling is owed — see fix-list F29.
 - **the in-place editor overlay does not render markdown** — RAW SOURCE, which is also what
   `renderer.ts` draws today, so the two agree; the markdown-lite cycle will make them differ.
 - **the cell editor does not reproduce `TABLE_CELL_TEXT_PADDING`'s 4-unit inset, and left-aligns a
@@ -400,7 +426,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-133**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-134**) binds without restatement here.
 
 **D-114 / D-115 / D-116 / D-117 ARE BUILT IN FULL AND REVIEWED (0126/0127, cleared 0128).**
 
@@ -416,10 +442,16 @@ the slot KEY is WRONG — see D-126.
 **D-123 — RULED (0139-REVIEW), BUILT (0141), REVIEWED AND ACCEPTED (0142).** Clause 5 binds every
 render cycle: the box follows the text, the text NEVER follows the box.
 
-**D-124 — RULED BY THE HUMAN (0140-RULINGS). BUILT at entry 0149, AWAITING REVIEW.** `text` is placed
-by pointing (a one-step `point` prompt in `parser.ts`), and `main.ts` opens D-125's in-place editor
-on the new box. Clause 5 generalises it — EVERY creation command arrives with a `prompts` entry (only
-`text` so far; `polyline`/`image`/`script` when they land).
+**D-124 — RULED BY THE HUMAN (0140-RULINGS). BUILT (entry 0149), REVIEWED AND ACCEPTED (0150-REVIEW);
+D-134 issued.** `text` is placed by pointing (a one-step `point` prompt in `parser.ts`), and
+`main.ts` opens D-125's in-place editor on the new box. Clause 5 generalises it — EVERY creation
+command arrives with a `prompts` entry (only `text` so far; `polyline`/`image`/`script` when they
+land). Decisions 2 (every form opens the editor) + 4 (opens unselected) accepted-as-built, routed to
+the human for an on-screen call; both one-line reversals.
+
+**D-134 — RULED (0150-REVIEW).** A creation command surfaces its new object's id on
+`CommandOutcome`'s success arm (`createdObjectId`), set once in `createObjectFromCommand`, NOT via a
+`CommandEffect`. `command/` names what it minted; `main.ts` decides what to do with it. Reversible.
 
 **D-125 — RULED BY THE HUMAN (0140-RULINGS), ABSOLUTE PRIORITY. BUILT (0143), REVIEWED + ACCEPTED
 (0144); POLISHED (0146/0147), REVIEWED (0148).** Clause 3 is the trap (`content` literal ALWAYS; a
@@ -431,7 +463,8 @@ cell. **Binds D-124's open-editor-on-create wiring** (entry 0149 followed it). R
 **D-129 / D-130 / D-131 / D-132 / D-133 — RULED (0145-RULINGS / 0148-REVIEW), BUILT (0146/0147),
 REVIEWED (0148).** The overlay matches every layout-affecting slot; a pan does not commit or steal
 focus; the cell editor shows same-table refs bare. **Every DOM-half change is untested by
-construction — a live look is still owed (F28), and D-124 makes it more urgent.**
+construction — the live look is owed (F28 + F29), and 0150-REVIEW made it the gate before the
+load-hardening cycle starts.**
 
 **D-126 — RULED (0142-REVIEW), NOT BUILT.** The loader reconstructs a schema's declared derived
 slots and never trusts the file to list them. `formatVersion` is NOT bumped. **NEXT cycle.**
@@ -445,9 +478,10 @@ Owner is the load-hardening cycle. **NEXT.**
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-114/D-115/D-116/D-117 ·
 D-118 · D-120 · D-121 / D-122 + the `text` command · text rendering + the text bounding box · D-123 +
 `measuredWidth` · **D-125 + D-128** (in-place text entry) · **D-129 + D-130 + D-131 + D-132 + D-133**
-(editor-polish).
+(editor-polish) · **D-124 + D-134** (`text` placed by pointing + open-editor-on-create; entry 0149,
+reviewed 0150).
 
-**BUILT, awaiting review:** **D-124** (entry 0149 — `text` placed by pointing + open-editor-on-create).
+**BUILT, awaiting review:** nothing.
 
 **NOT implemented, each owned by a named future cycle:** **D-126** + **D-127** + **D-108** (one
 load-hardening cycle — NEXT) · **D-104** (§5.10's row/column commands) · **D-109 clauses 1–2** (cell
@@ -483,14 +517,15 @@ sequence is the ruling executed.
 
 ## Gotchas for the next model
 
-- **THE NEXT SLICE IS THE LOAD-HARDENING CYCLE** (D-126 + D-127 + D-108, one `document.ts` diff),
-  after 0149 (D-124) is reviewed. It is `REVIEW: REQUIRED` (§6.2 load-bearing). Fresh batch context:
-  0149 is cycle 1/3 of the current batch.
-- **D-124 IS BUILT AND AWAITING REVIEW (entry 0149).** Four flagged decisions — read entry 0149's
-  "Decisions I made". The reviewer may want any of them changed; each is a one-liner.
+- **THE NEXT STEP IS THE OWED LIVE LOOK**, then the LOAD-HARDENING CYCLE (D-126 + D-127 + D-108, one
+  `document.ts` diff, `REVIEW: REQUIRED`, §6.2 load-bearing). 0150-REVIEW made the live look the gate
+  before load-hardening starts. Fresh batch: 0/3, 0 files.
+- **D-124 IS REVIEWED AND ACCEPTED (0150).** `createdObjectId` ratified as **D-134**. Decisions 2
+  (every form of `text` opens the editor) + 4 (opens unselected) accepted-as-built but routed to the
+  human for an on-screen call — each a one-line reversal if the human wants it narrowed.
 - **A RULING NAMES THE OUTCOME, NOT THE LINE (D-133 clause 4).** D-124 said "a `CommandEffect`, or a
   widened `CommandOutcome`, reviewer's call" — entry 0149 took the widened `CommandOutcome`
-  (`createdObjectId`) and argued why in `CommandOutcome`'s doc and the entry.
+  (`createdObjectId`), 0150-REVIEW ratified it as **D-134**.
 - **THE IN-PLACE EDITOR NOW OPENS ON EVERY `text` CREATION**, not only a double-click. The trigger is
   `AppTransition.openEditor`, set in `advance` and acted on in `applyTransition`. The DOM half's one
   new line is `inPlaceEditor = next.openEditor`. Everything the editor's overlay does (F28, family,

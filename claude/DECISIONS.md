@@ -4698,3 +4698,36 @@ Clause 4 generalises it because I am the one who wrote the bad prescription, and
 will write another.
 
 **Reversible.** Clauses 1–3 are one conditional. Clause 4 is a reading rule and costs nothing.
+
+---
+
+## D-134 — A creation command surfaces its new object's id on the `CommandOutcome` success arm, not through a `CommandEffect`
+Answers: the "a `CommandEffect`, or a widened `CommandOutcome`, reviewer's call" D-124 left open
+Ruled: entry 0150-REVIEW-phase5 (reviewer)   Binding on: `src/command/commands.ts`
+(`CommandOutcome`, `createObjectFromCommand`), `src/main.ts` (`advance`), and every future creation
+command
+
+**Ruling.**
+
+1. **`CommandOutcome`'s success arm carries `readonly createdObjectId?: string`.** Every successful
+   creation (`circle`/`polygon`/`rect`/`text`/`table`) sets it to the id `mintObjectId` returned;
+   every other command — creation refused, or not a creation — leaves it `undefined`. It is set
+   once, in `createObjectFromCommand`, the path all five handlers already share.
+
+2. **It is NOT a new `CommandEffect` kind.** `CommandEffect`'s own contract is for commands that
+   change NO document state and reach the camera / selection / file — none of which `command/` may
+   touch (D-069, D-082 clause 4). A creation changes document state and returns a `Document`; naming
+   what it made on the same success arm is the smaller, more honest shape, and keeps
+   `performEffect`'s `never`-guarded switch about the five view/file effects only.
+
+3. **`command/` still resolves nothing for the application layer.** It names the id it minted;
+   `main.ts` decides what to do with it (today: `advance` opens D-125's in-place editor when
+   `session.command.kind === "text"` and `createdObjectId` is set). A future reader wanting the new
+   object selected, or scrolled to, reads the same field — no further widening.
+
+**Rationale.** D-124 clause 2 needs the new `text` box's id to hand it to the editor, and D-133
+clause 4 says a ruling names the outcome and leaves the seam to the implementer. Both candidate
+shapes were sound; the widened `CommandOutcome` is one optional field with one reader and the
+smaller diff (PROCESS_BRIEF §13), and it does not stretch `CommandEffect` past its stated purpose.
+
+**Reversible.** One optional field, one reader.
