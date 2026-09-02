@@ -4731,3 +4731,93 @@ shapes were sound; the widened `CommandOutcome` is one optional field with one r
 smaller diff (PROCESS_BRIEF §13), and it does not stretch `CommandEffect` past its stated purpose.
 
 **Reversible.** One optional field, one reader.
+
+---
+
+## D-135 — The in-place editor's scrollbars take no layout
+Answers: the human's on-screen test of entry 0149 (2026-09-02) — item 2, and the scrollbar half of
+item 6; closes fix-list **F28**   Ruled: entry 0151-RULINGS-phase5 (reviewer)
+Binding on: `index.html`'s `.text-editor`
+
+**The human's report.** Item 2: *"the scroll bar does appear if the text goes past the box width.
+However, the scroll bar overlaps with the text ... if I type zoomed out I can't see what I'm typing
+because the horizontal scroll bar blocks it."* Item 6: the overlay wraps a 2-line paragraph onto 3
+lines — a vertical scrollbar appears, steals width, and re-wraps.
+
+**Ruling.**
+
+1. **`.text-editor` gets `scrollbar-width: none` and the `::-webkit-scrollbar { display: none }`
+   twin.** `overflow: auto` STAYS (D-129 clause 2 — the overlay must never clip its own text, and it
+   still scrolls to keep the caret visible). The scrollbars simply get no layout box: they cannot
+   overlap the single drawn line, and they cannot steal width from a wrapping box and trigger the
+   re-wrap cascade in item 6.
+2. **This is the remedy 0148-REVIEW's finding 1 pre-authorised as F28**, verbatim ("`scrollbar-width:
+   none` plus the `::-webkit-scrollbar` twin — inside the ruling, no code change"). The human's
+   on-screen test is the confirmation it needed. F28 closes with this.
+3. **The human's sketch — "position the scroll bar beneath the lowest point of the text" — is not
+   taken.** Reserving a strip for a visible scrollbar means growing the overlay past the receiver's
+   drawn box, which is exactly the box/text-size disagreement D-129 exists to prevent. Clause 1
+   delivers the outcome the human asked for (they can always see what they type) without that cost.
+   Reversible if the human specifically wants a visible scrollbar on sight.
+
+**Rationale.** A scrollbar that takes layout inside a box fitted to the exact measured text is a
+width (or height) the canvas underneath does not have, so it always shows up as an overlap or a
+re-wrap. Zero-layout scrollbars are the only form that leaves the overlay the same size as the drawn
+box at every zoom.
+
+**Reversible.** Two CSS lines.
+
+---
+
+## D-136 — The in-place editor opens on creation ONLY when no content was given; abandoning a just-created empty box removes it
+Answers: the human's on-screen test of entry 0149 (2026-09-02) — items 3 and 5; **overrules entry
+0149's Decision 2** (accepted-as-built at 0150-REVIEW, now overruled by the operator on sight);
+closes fix-list **F29**   Ruled: entry 0151-RULINGS-phase5 (reviewer)
+Binding on: `src/main.ts` (`advance`'s open-editor-on-create branch; the in-place editor's cancel
+and commit paths in `start`)
+
+**The human's report.** Item 3: `text` + click, then Escape without typing, *"Creates an invisible
+and un-interactable text object, which is bad. Should just not create anything if the user escapes
+without putting text in so we don't end up with mystery text objects with no visual presence."*
+Item 5: `text x=0 y=0 "hello"` typed whole *"is broken. ... the text box does not get seeded with
+anything ... Running the text command from the command line with specified content should exit the
+editor and create that text box as specified. The editor should only be auto[-opened] if the user
+does not enter content from the command line."*
+
+**Ruling.**
+
+1. **The editor opens on creation ONLY when the created `content` is empty.** `advance`'s
+   open-editor-on-create branch fires when `session.command.kind === "text"`, `outcome.createdObjectId`
+   is set, **and `session.command.content === ""`**. That is exactly the pointing / prompt path
+   (`buildFromPrompts` always yields `content: ""`) plus an explicit `text ""`. `text "hello"`,
+   `text x=0 y=0 "hello"` and `text hello` create the box with the content given and leave the
+   command bar focused — the same ending `circle`/`rect`/`table` have. The discriminant is the
+   command's own `content` field; no "was this a pick" needs threading through `advance`.
+2. **A just-created empty box that is abandoned is removed.** When the editor was opened by clause
+   1's path and the operator ends the edit with the content still empty — Escape (the edit is
+   discarded, so `content` is still `""`), or a blur / click-outside with the field empty — the
+   object is deleted. Through `executeCommand` as a `delete` command (Rule 2, D-069 — no second
+   write path), echoed in the log like any other. A box that received text before the edit ended is
+   kept, unchanged.
+3. **A box kept by clause 2 is kept as-is; a box removed by clause 2 leaves state as if the creation
+   never ran.** The `delete` is the whole cleanup — no separate "undo the mint". `nextObjectId` does
+   not roll back (a spent id is not reused, same as a deleted object anywhere else).
+4. **Entry 0149's Decision 4 (the box opens UNSELECTED) is untouched** — the human's "auto[-open]"
+   language is about the editor appearing, not the object's selection state, and they did not report
+   a selection problem. It stays as accepted at 0150-REVIEW.
+
+**Rationale.** Placing-and-typing is one gesture (D-125 clause 4) only when there is typing to do;
+when the operator has already said what the text is at the command line, the box is finished and an
+editor popping open over the canvas is friction, not help — which is what the human reported. And a
+`text` object with empty `content` has no ink, no extent and no hit box (D-066): if the gesture that
+creates one is abandoned, the object is unreachable except by typing its name, so the only coherent
+outcome is that abandoning the gesture abandons the object. This is D-124's "placing and typing are
+one gesture" run in reverse.
+
+**Item 5's blank-seed defect** is expected to dissolve with clause 1 (a content-bearing typed `text`
+no longer opens the editor at all). The implementer MUST reproduce item 5 and confirm it is gone —
+not assume it. If a blank-seed bug survives on the double-click path (0148-REVIEW recorded that path
+as seeding correctly, so this is unlikely), root-cause it; do not paper over it.
+
+**Reversible.** Clause 1 is one added conjunct. Clause 2 is one flag in `start` and a `delete` on
+two existing paths.

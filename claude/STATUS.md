@@ -1,23 +1,34 @@
-# STATUS — as of entry 0150-REVIEW-phase5
+# STATUS — as of entry 0151-RULINGS-phase5
 
-**READ THIS FIRST — D-124 (`text` placed by POINTING + the in-place editor opens on every
-newly-created `text` object) IS BUILT (entry 0149) and REVIEWED AND ACCEPTED (0150-REVIEW). New
-ruling **D-134** (a creation surfaces its new object's id on `CommandOutcome.createdObjectId`, not a
-`CommandEffect`). Batch RESET: 0/3, 0 files. STATE GREEN — 1549/1549, 0 skipped, 31 files.**
+**READ THIS FIRST — the owed live look is DONE (human tested entry 0149 on screen, 2026-09-02). It
+found FOUR defects in the in-place editor surface. Two new rulings: **D-135** (the editor's
+scrollbars take no layout — closes F28) and **D-136** (the editor opens on creation ONLY when no
+content was given, and an abandoned empty box is removed — closes F29, **overrules entry 0149's
+Decision 2**). NEXT SLICE: one short EDITOR CYCLE discharging D-135 + D-136, `REVIEW: REQUIRED`,
+BEFORE the load-hardening cycle. D-124 itself stands (built 0149, reviewed 0150 ACCEPT, D-134).
+Batch: 0/3, 0 files. STATE GREEN — 1549/1549, 0 skipped, 31 files.**
 
-**THE WHOLE EDITOR SURFACE IS STILL OWED A LIVE LOOK, AND 0150-REVIEW MADE IT THE GATE BEFORE THE
-LOAD-HARDENING CYCLE STARTS.** The in-place editor now opens on EVERY `text` creation, not only a
-double-click — so F28 (a one-line overlay's `overflow: auto` scrollbar may eat its line), F29 (an
-abandoned fresh empty box is stranded), the family/wrap/zoom matching from 0146/0147, and the
-pan-keeps-focus behaviour are all exercised the first time anyone types `text` and clicks. Nothing
-in the 0146/0147/0148/0149 work has been seen on screen. **Live-look script — 0150-REVIEW "For the
-human to test":** (1) `text`, click — empty focused box at the click point? (2) type past the box
-width — scrollbar jitter (F28)? (3) `text`, click, Escape without typing — invisible stranded
-`text_1` (F29)? (4) `text`, click, middle-drag — editor keeps focus and tracks? (5) `text x=0 y=0
-"hello"` whole at the bar — editor pops open; do you want that (D-125 clause 4 / Decision 2)?
-(6) `set text_1.width 200` then edit — drawn and typed line breaks agree (D-132)?
+**WHAT THE LIVE LOOK FOUND (entry 0151-RULINGS has the full report):**
+1. `text`, click — empty focused box at the click point. ✅ Works.
+2. Type past the box width — the horizontal scrollbar renders *over the text*; zoomed out you can't
+   see what you're typing. ❌ → **D-135** (`scrollbar-width: none` + the webkit twin; F28's
+   pre-authorised remedy, now confirmed needed).
+3. `text`, click, Escape without typing — leaves an invisible, un-interactable `text` object. ❌ →
+   **D-136 clause 2** (abandoned empty box is deleted through `executeCommand`).
+4. `text`, click, middle-drag — editor keeps focus and tracks. ✅ Works (D-130 / D-133 hold on the
+   new trigger).
+5. `text x=0 y=0 "hello"` typed whole — editor opens but seeds BLANK, and Escape leaves a *visible*
+   empty `text_3` rectangle (a second zombie shape). ❌ → **D-136 clause 1** (a content-bearing typed
+   `text` must NOT open the editor at all; the blank-seed bug is expected to dissolve with it — the
+   implementer must confirm, not assume).
+6. `set text_1.width 200` then edit — canvas re-wraps correctly, but the overlay wraps 2 drawn lines
+   onto 3. ❌ Partial → **D-135** removes the scrollbar's width theft; any residual is a finer
+   `measureText`-vs-DOM issue, see 0151-RULINGS "Carried forward" — do NOT bodge the measurer.
 
-**ENTRY 0149 — D-124, REVIEWED AND ACCEPTED (0150):**
+**After the editor cycle the human re-tests items 2, 3, 5, 6 on screen. The load-hardening cycle
+does not start until the editor surface is clean on screen.**
+
+**ENTRY 0149 — D-124, BUILT + REVIEWED (0150 ACCEPT); Decision 2 later OVERRULED by D-136:**
 - `parser.ts`: `text` gains a one-step `point` prompt (`{ name: "position", message: "specify text
   position", accepts: "point" }`) and `buildFromPrompts` → `{ kind: "text", x, y, content: "" }`.
   `PromptStep.accepts` NOT widened (D-124 clause 4). Both typed forms (`text "hi"`,
@@ -31,11 +42,11 @@ width — scrollbar jitter (F28)? (3) `text`, click, Escape without typing — i
 - `main.ts`: `AppTransition` gains `openEditor?: EditorTarget`. `advance`'s complete+ok branch
   returns it for `session.command.kind === "text"` + a `createdObjectId`; `applyTransition` sets
   `inPlaceEditor` from it BEFORE `apply`, so the same paint builds and focuses the overlay.
-  **Every form of `text` opens the editor** (Decision 2 — typed forms too; 0150-REVIEW accepted it
-  as built but routed it to the human for an on-screen call, since D-125 clause 4's letter is
-  narrower — one-line reversal). **The new box opens its editor UNSELECTED** (Decision 4 — the
-  completion is a prompt answer, not a selection press; 0150-REVIEW accepted, flagged for the human).
-  Decision 3 (`text 30,40` = point shorthand) accepted outright.
+  **Decision 2 (every form of `text` opens the editor) is OVERRULED by D-136** — the editor cycle
+  narrows the branch to `session.command.content === ""` (the pointing path only), and adds
+  delete-on-abandon for an empty box. **The new box opens its editor UNSELECTED** (Decision 4 —
+  untouched by D-136; the human reported no selection problem). Decision 3 (`text 30,40` = point
+  shorthand) accepted outright.
 
 - **D-125 — in-place text entry. BUILT at entry 0143, REVIEWED AND ACCEPTED at 0144.** A DOM input is
   overlaid on the canvas over a `text` object's `content` (a `<textarea>`) or a table cell (an
@@ -48,25 +59,29 @@ width — scrollbar jitter (F28)? (3) `text`, click, Escape without typing — i
   height, alignment, wrap) comes from the receiver's own slots scaled by `camera.zoom / ratio`; it
   does not clip; a pan does not steal its focus; a cell formula's same-table refs show bare.
 - **D-124 — `text` placed by POINTING. BUILT (entry 0149), REVIEWED AND ACCEPTED (0150); D-134
-  issued** (see the block above).
+  issued** (see the block above). Live-look defects on top of it → **D-135 + D-136** (0151-RULINGS).
+- **D-135 / D-136 — RULED (0151-RULINGS), NOT BUILT. The NEXT slice.** D-135: `.text-editor` gets
+  `scrollbar-width: none` + the `::-webkit-scrollbar` twin (F28's remedy). D-136: `advance` opens
+  the editor on creation only when `session.command.content === ""`; an abandoned empty box is
+  deleted through `executeCommand`. Overrules entry 0149's Decision 2.
 - **Standing:** the human's direct instruction outranks `PROJECT_BRIEF.md`. *"If the brief conflicts
   with what I say, ignore the brief. I wrote it."* Never "correct" a ruling back toward the brief.
 
-Order from here: **the owed live look (0150-REVIEW's test script — F28 + F29 + the whole unseen
-editor surface)**, then the **load-hardening cycle** (D-126 + D-127 + D-108, one `document.ts`
-diff), then markdown-lite, then `overflow`, then the Phase 5 gate. 0150-REVIEW made the live look
-the gate before load-hardening starts (`document.ts` is where a regression is expensive).
+Order from here: **the EDITOR CYCLE (D-135 + D-136), `REVIEW: REQUIRED`** → the human re-tests items
+2/3/5/6 on screen → **load-hardening cycle** (D-126 + D-127 + D-108, one `document.ts` diff) →
+markdown-lite → `overflow` → the Phase 5 gate. The load-hardening cycle does NOT start until the
+editor surface is clean on screen (`document.ts` is where a regression is expensive).
 
 ---
 
-## Where the code actually is — as of entry 0150-REVIEW-phase5
+## Where the code actually is — as of entry 0151-RULINGS-phase5
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1549/1549** tests pass,
 0 skipped, 0 `.only`. **31 test files.** **PHASE 5 IS OPEN.**
 
-Last review point: **0150-REVIEW-phase5** (**ACCEPT** — entry 0149 / D-124; **D-134** issued, no
-reviewer edits). Cycles since last review: **0/3**. Diff since last review: **0 lines / 0 files**
-(cap 800/10) — batch reset.
+Last review point: **0150-REVIEW-phase5** (**ACCEPT** — entry 0149 / D-124; **D-134** issued).
+**0151-RULINGS** (this entry) wrote no code — two rulings (D-135 + D-136) from the human's on-screen
+test of entry 0149. Cycles since last review: **0/3**. Diff since last review: **0 lines / 0 files**.
 
 Entry 0149's diff (now reviewed): `parser.ts` (+the `text` prompt sequence), `commands.ts` (+`createdObjectId`),
 `main.ts` (+`AppTransition.openEditor`, `advance`/`applyTransition` wiring), `render/editor.ts` (one
@@ -186,13 +201,18 @@ compares a `Command`'s discriminant, not an `ObjectType`.
 
 ## Next slice (recommended)
 
-**THE OWED LIVE LOOK FIRST — not a code cycle, the human's twenty seconds.** 0150-REVIEW made it the
-gate before load-hardening: run its "For the human to test" script (F28 scrollbar, F29 stranded
-empty box, pan-focus, Decision 2's editor-on-typed-line feel, D-132 wrap agreement). Six cycles of
-editor work have stacked on a surface no one has seen, and the next code cycle touches `document.ts`
-where a regression is expensive. Whatever the live look turns up is a small fix inside an existing
-ruling (F28: `scrollbar-width: none`; F29: a human ruling then an `AppTransition` returning a
-`delete`).
+**THE EDITOR CYCLE — D-135 + D-136 (0151-RULINGS), `REVIEW: REQUIRED`.** The owed live look is done;
+it found four defects. **D-135:** `.text-editor` gains `scrollbar-width: none` + the
+`::-webkit-scrollbar { display: none }` twin, `overflow: auto` kept (`index.html`, two lines —
+closes F28). **D-136:** `advance`'s open-editor-on-create branch narrows to
+`session.command.content === ""` (so a content-bearing typed `text` no longer opens the editor —
+overrules Decision 2); and when the editor was opened by that path and the operator ends the edit
+with the field still empty (Escape, or empty blur), the object is deleted through `executeCommand`
+(a `delete`; closes F29). Put the delete-on-abandon decision in a pure helper `main.test.ts` can
+drive; carry a `start`-local "opened on create, still empty" flag. §6.1 trigger 3 (two fresh
+rulings, one overruling an accepted decision). **The implementer must reproduce live-look item 5 and
+confirm the blank-seed bug is gone — not assume it.** Then the human re-tests items 2/3/5/6 on
+screen before load-hardening.
 
 **THEN the LOAD-HARDENING CYCLE — one `document.ts` diff** discharging D-126 (loader reconstructs
 declared derived slots), D-127/D-108 (one `FormulaAst` shape validation at the load boundary +
@@ -239,8 +259,9 @@ entry 0138's text rendering; D-123 issued, Q-024 answered · **0142-REVIEW** ent
 on-screen test; D-129 + D-130 + D-131 issued · **0148-REVIEW** entries 0146 + 0147's editor-polish
 work; ACCEPT WITH EDITS; D-132 + D-133 issued · **0150-REVIEW** entry 0149's `text`-by-pointing
 (D-124); **ACCEPT**, no reviewer edits; **D-134** issued (creation surfaces its new id on
-`CommandOutcome.createdObjectId`); F29 logged; Decisions 2 + 4 accepted-as-built and routed to the
-human for an on-screen call.
+`CommandOutcome.createdObjectId`) · **0151-RULINGS** the human's on-screen test of entry 0149;
+**D-135** (editor scrollbars take no layout — F28) + **D-136** (editor opens on create only when
+`content === ""`, abandoned empty box deleted — F29; overrules Decision 2) issued; no code.
 
 ## Built this batch, not yet reviewed
 
@@ -250,8 +271,8 @@ human for an on-screen call.
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
-hit-testing (D-067) · §5.4's formula bar · **the owed live look (0150-REVIEW's script), then the
-load-hardening cycle (D-126 + D-127 + D-108) — NEXT** · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
+hit-testing (D-067) · §5.4's formula bar · **the editor cycle (D-135 + D-136) — NEXT — then the
+load-hardening cycle (D-126 + D-127 + D-108)** · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
 **D-109 clauses 1–2** · markdown-lite text
 rendering + a markup-aware measurer · `text` `overflow` clip/ellipsis · the Phase 5 gate test ·
 Phases 6–7. **D-124 is BUILT (0149) and REVIEWED (0150) — done, not "not started".**
@@ -298,54 +319,49 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 28. **F26 — RULED D-130, MIS-BUILT (0146), FIXED (0147), REVIEWED (0148) → D-133. CLOSED in code.**
     Still unseen on screen (DOM half).
 29. **F27 — RULED D-131, BUILT (0146), REVIEWED (0148). CLOSED.**
-30. **F28 — OPEN, NEEDS THE HUMAN'S EYES FIRST (0148-REVIEW finding 1).** `.text-editor`'s
-    `overflow: auto` may make a ONE-LINE overlay unusable: the normal `text` object is auto-width,
-    so its box is fitted to the exact measured text — ~20 world units tall. Type past the committed
-    width and a horizontal scrollbar appears INSIDE a ~20px content box, which can force a vertical
-    one, which takes width, which re-wraps a wrapping box. **Not fixed by the reviewer deliberately.**
-    **D-124 (entry 0149) makes this MORE urgent** — the editor now opens on every `text` creation,
-    and a freshly-pointed box is exactly the auto-width empty case F28 describes. **If it
-    reproduces:** `scrollbar-width: none` plus the `::-webkit-scrollbar` twin — inside the ruling,
-    no code change.
-31. **F29 — OPEN, NEEDS THE HUMAN'S RULING (0150-REVIEW finding 1).** `text` + click commits
-    `createText` BEFORE the editor opens (the id must exist for `openEditor` to name it). Hit Escape
-    without typing — the natural "no, not here" — and D-128 cancels the *edit*, leaving a `text`
-    object with `content: ""`: invisible, no extent, unselectable (D-066), removable only by typing
-    `delete text_1`. D-124 makes producing one a single mis-click. The pure half is correct; this is
-    a missing product decision — should Escape / an empty blur on a box *opened by `openEditor`* also
-    remove it? **The human's call** (D-125 clauses 4–5 are theirs). If "yes": a new `AppTransition`
-    the editor's cancel path returns when `content` is empty, carrying a `delete` through
-    `executeCommand` — no second write path.
+30. **F28 — RULED D-135 (0151-RULINGS), NOT BUILT. Reproduced on screen (2026-09-02):** the
+    horizontal scrollbar renders over the one-line overlay's text; zoomed out the operator can't see
+    what they type. Also the vertical scrollbar's width theft is the leading cause of live-look item
+    6 (2 drawn lines → 3 typed). **Fix (D-135):** `.text-editor { scrollbar-width: none }` + the
+    `::-webkit-scrollbar { display: none }` twin, `overflow: auto` kept. Editor cycle.
+31. **F29 — RULED D-136 (0151-RULINGS), NOT BUILT. Reproduced on screen:** `text` + click + Escape
+    leaves an invisible un-interactable `content: ""` object; `text x=0 y=0 "hello"` + Escape leaves
+    a *visible* empty rectangle (item 5's second zombie). **Fix (D-136):** the editor opens on
+    creation only when `session.command.content === ""`; when it was opened that way and the operator
+    ends the edit with the field empty, the object is deleted through `executeCommand`. Editor cycle.
 
 ## Known problems (detail lives where the pointer says)
 
 - **D-125 clause 5's contradiction is RESOLVED by D-128** — Escape = cancel, blur/click-outside =
   commit, Enter = commit in a cell only. Confirmed as built on screen (0145). The human may still
   overrule clauses 4–5 on sight.
-- **THE IN-PLACE EDITOR'S DOM HALF HAS NOT BEEN SEEN ON SCREEN SINCE ENTRY 0145.** 0146/0147's
-  changes, 0148-REVIEW's edits and entry 0149's new trigger (opens on `text` creation) are all
-  untested by construction. 0150-REVIEW made the live look the gate before load-hardening — run its
-  "For the human to test" script, start with F28 + F29.
+- **THE IN-PLACE EDITOR'S DOM HALF WAS SEEN ON SCREEN 2026-09-02** (human's test of entry 0149).
+  Items 1 + 4 (open-at-click, pan-keeps-focus) confirmed good. Items 2/3/5/6 found four defects →
+  D-135 + D-136 (0151-RULINGS) + item-6 residual. **Re-test owed after the editor cycle**; the
+  DOM half's other reaches (family match, cell editor, zoom tracking) still lightly seen.
 - **A freshly-created `text` object opens its editor UNSELECTED** (entry 0149, Decision 4; accepted
   0150-REVIEW). The dblclick path selects first; the D-124 completion path is a prompt answer, not a
   selection press. Reversible — `advance` could return an interaction change. Human's call on sight.
 - **`text 30,40` (unquoted, comma) now places a box at (30,40) with empty content**, not a box at
   the origin containing the string "30,40" (entry 0149, Decision 3; accepted outright 0150-REVIEW).
   `text "30,40"` still gives the literal string. Consistent with `circle 30,40`.
-- **Every form of `text` opens the in-place editor** (entry 0149, Decision 2; accepted-as-built
-  0150-REVIEW), including `text x=0 y=0 "hi"` typed at the bar — the editor opens seeded with "hi".
-  D-125 clause 4's letter is narrower ("placed by D-124"); the human decides on sight whether a
-  fully-typed `text` line should pop a focus-stealing editor. Narrowing = plumb the response kind
-  into `advance`, one-liner.
-- **An abandoned fresh empty `text` box is stranded — F29** (0150-REVIEW finding 1). `text` + click
-  commits the creation before the editor opens; Escape without typing leaves an invisible,
-  unselectable `content: ""` object. The human's ruling is owed — see fix-list F29.
+- **Entry 0149's Decision 2 (every form of `text` opens the editor) is OVERRULED by D-136** — the
+  on-screen test showed a content-bearing typed `text x=0 y=0 "hi"` popping a (blank-seeded)
+  focus-stealing editor. The editor cycle narrows `advance` to `session.command.content === ""`.
+  Until it lands, every form still opens the editor.
+- **An abandoned fresh empty `text` box is stranded — RULED D-136, NOT BUILT.** `text` + click
+  commits the creation before the editor opens; Escape without typing leaves a zero-presence
+  `content: ""` object. D-136 clause 2: an editor opened on-create that ends empty deletes the
+  object through `executeCommand`. Editor cycle.
 - **the in-place editor overlay does not render markdown** — RAW SOURCE, which is also what
   `renderer.ts` draws today, so the two agree; the markdown-lite cycle will make them differ.
 - **the cell editor does not reproduce `TABLE_CELL_TEXT_PADDING`'s 4-unit inset, and left-aligns a
   number cell** — deliberate. `editor.ts`'s NOT DONE HERE.
 - **vertical alignment inside the overlay's line box is approximate** — ~4 CSS px low at zoom 5
   (0148-REVIEW's correction). Not worth a layout hack.
+- **the overlay wraps a shade earlier than the canvas** — live-look item 6. D-135 removes the
+  scrollbar's width theft (the leading cause); any residual is `measureText`-vs-DOM and must NOT be
+  chased from the measurer's side (D-123 clause 5). Re-check after the editor cycle.
 - **the properties panel and the in-place editor can overlap** only when a small window forces them
   into the same space. No remedy scheduled.
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** —
@@ -426,7 +442,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-134**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-136**) binds without restatement here.
 
 **D-114 / D-115 / D-116 / D-117 ARE BUILT IN FULL AND REVIEWED (0126/0127, cleared 0128).**
 
@@ -453,6 +469,13 @@ the human for an on-screen call; both one-line reversals.
 `CommandOutcome`'s success arm (`createdObjectId`), set once in `createObjectFromCommand`, NOT via a
 `CommandEffect`. `command/` names what it minted; `main.ts` decides what to do with it. Reversible.
 
+**D-135 / D-136 — RULED (0151-RULINGS from the human's on-screen test), NOT BUILT. The editor
+cycle, NEXT.** D-135: `.text-editor` scrollbars take no layout (`scrollbar-width: none` + webkit
+twin, `overflow: auto` kept) — closes F28. D-136: `advance` opens the editor on creation only when
+`session.command.content === ""` (overrules entry 0149's Decision 2); an editor opened that way that
+ends with an empty field deletes the object through `executeCommand` — closes F29. The implementer
+must reproduce live-look item 5 (blank seed) and confirm D-136 clause 1 dissolves it.
+
 **D-125 — RULED BY THE HUMAN (0140-RULINGS), ABSOLUTE PRIORITY. BUILT (0143), REVIEWED + ACCEPTED
 (0144); POLISHED (0146/0147), REVIEWED (0148).** Clause 3 is the trap (`content` literal ALWAYS; a
 cell is Excel-style). Clause 5's contradiction is settled by D-128.
@@ -462,15 +485,17 @@ cell. **Binds D-124's open-editor-on-create wiring** (entry 0149 followed it). R
 
 **D-129 / D-130 / D-131 / D-132 / D-133 — RULED (0145-RULINGS / 0148-REVIEW), BUILT (0146/0147),
 REVIEWED (0148).** The overlay matches every layout-affecting slot; a pan does not commit or steal
-focus; the cell editor shows same-table refs bare. **Every DOM-half change is untested by
-construction — the live look is owed (F28 + F29), and 0150-REVIEW made it the gate before the
-load-hardening cycle starts.**
+focus; the cell editor shows same-table refs bare. **The human's 2026-09-02 on-screen test
+confirmed D-130/D-133 (pan keeps focus) and the zoom-scaled open-at-click; it also found the
+scrollbar and empty-box defects → D-135 + D-136. Item-6 wrap residual and the family match still
+want another on-screen pass after the editor cycle.**
 
 **D-126 — RULED (0142-REVIEW), NOT BUILT.** The loader reconstructs a schema's declared derived
-slots and never trusts the file to list them. `formatVersion` is NOT bumped. **NEXT cycle.**
+slots and never trusts the file to list them. `formatVersion` is NOT bumped. **Load-hardening
+cycle, AFTER the editor cycle.**
 
 **D-127 — RULED (0142-REVIEW), NOT BUILT.** D-108's deferral condition already fired at entry 0089.
-Owner is the load-hardening cycle. **NEXT.**
+Owner is the load-hardening cycle. **AFTER the editor cycle (D-135 + D-136).**
 
 **THE HUMAN'S DIRECT INSTRUCTION OUTRANKS `PROJECT_BRIEF.md` (0140).**
 
@@ -479,7 +504,10 @@ D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-
 D-118 · D-120 · D-121 / D-122 + the `text` command · text rendering + the text bounding box · D-123 +
 `measuredWidth` · **D-125 + D-128** (in-place text entry) · **D-129 + D-130 + D-131 + D-132 + D-133**
 (editor-polish) · **D-124 + D-134** (`text` placed by pointing + open-editor-on-create; entry 0149,
-reviewed 0150).
+reviewed 0150 — **Decision 2 later overruled by D-136**).
+
+**RULED, NOT BUILT — the editor cycle, NEXT:** **D-135** (editor scrollbars take no layout — F28) ·
+**D-136** (editor opens on create only when `content === ""`; abandoned empty box deleted — F29).
 
 **BUILT, awaiting review:** nothing.
 
@@ -517,19 +545,20 @@ sequence is the ruling executed.
 
 ## Gotchas for the next model
 
-- **THE NEXT STEP IS THE OWED LIVE LOOK**, then the LOAD-HARDENING CYCLE (D-126 + D-127 + D-108, one
-  `document.ts` diff, `REVIEW: REQUIRED`, §6.2 load-bearing). 0150-REVIEW made the live look the gate
-  before load-hardening starts. Fresh batch: 0/3, 0 files.
-- **D-124 IS REVIEWED AND ACCEPTED (0150).** `createdObjectId` ratified as **D-134**. Decisions 2
-  (every form of `text` opens the editor) + 4 (opens unselected) accepted-as-built but routed to the
-  human for an on-screen call — each a one-line reversal if the human wants it narrowed.
+- **THE NEXT SLICE IS THE EDITOR CYCLE (D-135 + D-136), `REVIEW: REQUIRED`.** From the human's
+  on-screen test of entry 0149. D-135 is `index.html` CSS; D-136 is `advance`'s open-on-create branch
+  (narrow to `content === ""`) + a delete-on-abandon on the editor's cancel/commit paths. Then the
+  human re-tests, THEN the load-hardening cycle (D-126 + D-127 + D-108). Fresh batch: 0/3, 0 files.
+- **D-124 IS BUILT + REVIEWED (0149 / 0150 ACCEPT); Decision 2 OVERRULED by D-136.** `createdObjectId`
+  ratified as **D-134**. Decision 4 (opens unselected) untouched. Decision 3 (`text 30,40` shorthand)
+  accepted outright.
 - **A RULING NAMES THE OUTCOME, NOT THE LINE (D-133 clause 4).** D-124 said "a `CommandEffect`, or a
   widened `CommandOutcome`, reviewer's call" — entry 0149 took the widened `CommandOutcome`
   (`createdObjectId`), 0150-REVIEW ratified it as **D-134**.
-- **THE IN-PLACE EDITOR NOW OPENS ON EVERY `text` CREATION**, not only a double-click. The trigger is
-  `AppTransition.openEditor`, set in `advance` and acted on in `applyTransition`. The DOM half's one
-  new line is `inPlaceEditor = next.openEditor`. Everything the editor's overlay does (F28, family,
-  wrap, pan-focus) is now exercised by the commonest gesture in the program and STILL UNSEEN.
+- **THE IN-PLACE EDITOR OPENS ON `text` CREATION** via `AppTransition.openEditor` (set in `advance`,
+  acted on in `applyTransition` — DOM half's one line is `inPlaceEditor = next.openEditor`). The
+  editor cycle narrows this to `session.command.content === ""` (D-136) — a typed `text "hi"` will
+  stop opening it.
 - **`text`'s prompt sequence is ONE `point` step, NO content step** (D-124 clause 2). The typed
   forms (`text "hi"`, `text x= y= "hi"`) still route to `parseCommand` whole via `beginCommand`'s
   `token.quoted` / `usesNamedForm` branches. `text 30,40` is now the point shorthand.
