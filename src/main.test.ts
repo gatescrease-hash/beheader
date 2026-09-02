@@ -302,9 +302,10 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
 
   it("says so, and moves nothing, when objects exist but none of them draws anything", () => {
     // Reachable only through a document this build did not create by command —
-    // there is no `text` command, and a slotless `text` object is not one
-    // `createObject` would build (entry 0127 gave `text` a schema; `initialAppState`
-    // does not re-validate). It is the other emptiness `documentExtent` reports,
+    // the `text` command (entry 0136) always supplies a full slot set, so a
+    // slotless `text` object is not one `createObject` would build (entry 0127
+    // gave `text` a schema; `initialAppState` does not re-validate). It is the
+    // other emptiness `documentExtent` reports,
     // and the branch exists because `commands.ts` cannot see it.
     const undrawable: Document = { ...createEmptyDocument(), objects: [{ id: "obj_1", name: "text_1", type: "text", slots: {} }] };
     const before = initialAppState(undrawable);
@@ -959,9 +960,10 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
 
 // The pure transitions gained a trailing `context` (§5.1's `EvalContext`) at
 // entry 0132 so `start` can thread `render/measure.ts`'s Canvas2D measurer
-// through to every `mutate`. No `text` command exists, so the fixture document
-// carries a hand-built `text` object; `measuredHeight` is `#MEASURE` (D-118)
-// on the default path and a real height once a measurer is passed.
+// through to every `mutate`. The fixture document carries a hand-built `text`
+// object (deliberately, not the entry-0136 `text` command — this keeps the test
+// about context threading); `measuredHeight` is `#MEASURE` (D-118) on the
+// default path and a real height once a measurer is passed.
 describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-118)", () => {
   function textObject(): GraphObject {
     return {
@@ -1000,7 +1002,8 @@ describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-
 
   it("pointerMoveTo threads the context to pointerMove — a drag keeps a co-resident text object's measuredHeight real", () => {
     // The rect is created through the real command path (correct schema slots);
-    // the text object was placed in the document directly (no `text` command).
+    // the text object was placed in the document directly (deliberately, not the
+    // entry-0136 `text` command — the test is about the drag, not creation).
     const withRect = submitLine(stateWithText(), "rect x=0 y=0 w=20 h=20", VIEWPORT).state;
     const corner = (getSlot(objectNamed(withRect, "rect_1"), ["vertices"])?.value as readonly { x: number; y: number }[])[0];
     if (corner === undefined) {

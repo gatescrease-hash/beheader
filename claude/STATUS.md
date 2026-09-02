@@ -1,13 +1,15 @@
-# STATUS — as of entry 0136
+# STATUS — as of entry 0137-REVIEW-phase5
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1443/1443** tests pass,
 0 skipped, 0 `.only`. **30 test files**. **PHASE 5 IS OPEN.**
 
-**REVIEW IS DUE — do not start the next slice.** Entry 0136 fired **§6.1 trigger 5** (a test's
-expectations changed — `schema.test.ts`'s `text` slot-path list, plus two other pinning counts) and
-touched load-bearing `primitives/schema.ts` + `graph/node.ts` (**§6.2**). Last review point:
-**0135-REVIEW-phase5** (verdict ACCEPT, D-121 + D-122 issued). Cycles since last review: **1/3**.
-Diff since last review: **~277 source lines / 8 files** (cap 800/10).
+**0136 IS REVIEWED — CLEAR TO PROCEED.** 0137-REVIEW-phase5: verdict **ACCEPT WITH EDITS**. The
+`text` command, D-121 (`origin.x`/`origin.y` on `TEXT_SCHEMA`), and D-122 (`content` `literal`-only
+guard) are all reconciled to the letter. Reviewer edits: 4 stale test comments ("no `text` command
+exists" → the present reason those fixtures stay hand-built) in `main.test.ts` (×3) and
+`interaction.test.ts` (×1) — comment-only, still 1443/1443. **Next slice: `render/renderer.ts`'s
+text-drawing pass.** Last review point: **0137-REVIEW-phase5** (ACCEPT WITH EDITS). Cycles since
+last review: **0/3**. Diff since last review: **0**.
 
 **THE `text` COMMAND IS BUILT (entry 0136).** `command/parser.ts` has a `text` registry entry
 (`text [x=<number>] [y=<number>] "<content>"` — positional `content`, `x`/`y` optional defaulting to
@@ -151,11 +153,13 @@ take it as a REQUIRED param; only the public entry points default it to `NULL_EV
 
 ## Next slice (recommended)
 
-**AFTER the 0136 review clears:** `render/renderer.ts`'s text-drawing pass — the last Phase 5 work.
-Draw a `text` object at its `origin`, render its `resolvedContent`, apply markdown-lite (§5.6's exact
-list, nothing more), lay it out per `width`/`height`/`overflow`, give it an extent
-(`render/extent.ts`, currently `undefined` for `text`) so it becomes hit-testable and draggable.
-Then the Phase 5 acceptance criterion (`main.test.ts`-style, over one document) and the phase gate.
+**Clear to start (0136 reviewed at 0137-REVIEW):** `render/renderer.ts`'s text-drawing pass — the
+last Phase 5 work. Draw a `text` object at its `origin`, render its `resolvedContent`, apply
+markdown-lite (§5.6's exact list, nothing more), lay it out per `width`/`height`/`overflow`, give it
+an extent (`render/extent.ts`, currently `undefined` for `text`) so it becomes hit-testable and
+draggable. Then the Phase 5 acceptance criterion (`main.test.ts`-style, over one document) and the
+phase gate. Cheap add while there: a direct `link text_1.origin.y <cell>` test (0137-REVIEW §honesty —
+0136 tested the equivalent path on `style.fontSize`).
 
 **The render-only alternative, still needs no ruling:** **D-109 clauses 1–2** (cell decimal
 precision + no cell-text clipping, `render/renderer.ts` only). **Q-017** headers remain the human's.
@@ -184,15 +188,13 @@ D-119) · `measuredHeight` + `#MEASURE` `ErrorCode` + `TextMeasurer.measure`'s `
 `hasRealMeasurer` (0130-REVIEW: ACCEPT WITH EDITS; F21 fixed; D-120 answers Q-021) ·
 `render/measure.ts` (the Canvas2D `TextMeasurer`) + a real `EvalContext` threaded from `main.ts`
 (0133-REVIEW: ACCEPT WITH EDITS; F22) · **0135-REVIEW: ACCEPT (no code)** — entry 0134's
-`text`-command escalation cleared; **D-121** (Q-022) and **D-122** (Q-023/F13) issued.
+`text`-command escalation cleared; **D-121** (Q-022) and **D-122** (Q-023/F13) issued ·
+**0137-REVIEW: ACCEPT WITH EDITS** — entry 0136's `text` command + D-121/D-122 reconciliation
+cleared; 4 stale test comments fixed; no new ruling. **Q-022 and Q-023 are now fully closed.**
 
 ## Built this batch, not yet reviewed
 
-- **Entry 0136 — the `text` command + D-121/D-122 reconciliation.** `command/parser.ts` `text`
-  registry entry; `command/commands.ts` `createText` handler + the D-122 `content` guard;
-  `primitives/schema.ts` `TEXT_SCHEMA` gains `origin.x`/`origin.y` (D-121); `graph/node.ts`
-  `TEXT_TYPE`; doc-only updates to `primitives/text.ts` (F13 gap closed by D-122). Tests: +16.
-  Load-bearing files touched: `primitives/schema.ts`, `graph/node.ts` (§6.2).
+- *(nothing — 0136 was reviewed at 0137-REVIEW-phase5.)*
 
 ## Not started
 
@@ -231,7 +233,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
     empty in-extent cell is REFUSED. Correct per D-110 clause 6.
 21. **F12 (0119-REVIEW) — open, DO NOT RE-LITIGATE.** `MIN(B1, B2)` vs `MIN(B1:B2)` on empty
     in-extent cells; compliant per D-110 clause 3.
-22. **F13 (0127) — RULED D-122 (0135-REVIEW), BUILT (0136). CLOSED.** `command/commands.ts`'s
+22. **F13 (0127) — RULED D-122 (0135-REVIEW), BUILT (0136), REVIEWED (0137). CLOSED.** `command/commands.ts`'s
     `buildSlot` refuses `link` / `set =` on a `text` object's `content` slot, citing D-122 (no
     `PROVISIONAL` tag). A MISSING `content` slot still REFUSES the object (F20/0128). A loaded
     document could still carry a `formula` `content` slot — its inner references go untracked, as a
@@ -258,10 +260,12 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   correct; §5.9's origin-drag path will work once the extent/draw code lands (the remaining Phase 5
   work).
 - **`x`/`y` are OPTIONAL for the `text` command (default `0`, per D-121 clause 3)** but REQUIRED for
-  `circle`/`polygon`/`rect`/`table`. A visible inconsistency across the creation commands, flagged
-  to the 0136 reviewer.
+  `circle`/`polygon`/`rect`/`table`. A visible inconsistency across the creation commands; **0137-REVIEW
+  confirmed it is intended** (D-121 clause 3's operative text; its "(matching `table`)" aside is
+  imprecise — `table` requires x/y — but immaterial). Do not revisit absent a human ruling.
 - **`DEFAULT_TEXT_*` style values (`command/commands.ts`) are the handler's provisional pick** — no
-  ruling, no `PROVISIONAL` tag (render config, `set`-changeable). Flagged to the 0136 reviewer.
+  ruling, no `PROVISIONAL` tag (render config, `set`-changeable). **0137-REVIEW confirmed no tag is
+  needed**; the render cycle will exercise these (the font default especially) directly.
 - **`resolveTextDependencyAddresses` and `deriveEdges` Source 1 are a hand-maintained PAIR (D-119).**
 - **`main.ts`'s `start` is untested code and keeps growing.** Verified live, not by assertion.
 - **The properties panel positions an off-screen selected object's panel clamped to a canvas edge.**
@@ -320,19 +324,18 @@ Source 1 pair; change one → change both; a third consumer forces extraction.
 **D-120 (0130-REVIEW) — RULED, answers Q-021. RECONCILED (0131), BUILT (0131), WIRED (0132), reviewed
 0133.**
 
-**D-121 (0135-REVIEW) — RULED, answers Q-022. RECONCILED + BUILT (0136), NOT YET REVIEWED.** A `text`
+**D-121 (0135-REVIEW) — RULED, answers Q-022. RECONCILED + BUILT (0136), REVIEWED (0137).** A `text`
 object's position is `origin.x` / `origin.y`, two `literal` slots on `TEXT_SCHEMA`, same spelling as
-the geometry presets. Not dependency-required.
+the geometry presets. Not dependency-required. Front-of-list placement confirmed at 0137-REVIEW.
 
-**D-122 (0135-REVIEW) — RULED, answers Q-023 / F13. BUILT (0136), NOT YET REVIEWED.** `content` is
-`literal`-only; `link` / `set =` refused in `command/commands.ts`'s `buildSlot`, à la D-046.
+**D-122 (0135-REVIEW) — RULED, answers Q-023 / F13. BUILT (0136), REVIEWED (0137).** `content` is
+`literal`-only; `link` / `set =` refused in `command/commands.ts`'s `buildSlot`, à la D-046. Guard
+placement (`buildSlot`'s `formula` arm) confirmed at 0137-REVIEW.
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-114/D-115/D-116/D-117 ·
-D-118 (guard + wiring) · D-120 (`render/measure.ts` + threading).
-
-**Implemented, NOT yet reviewed (entry 0136):** **D-121** (`origin.x`/`origin.y` on `TEXT_SCHEMA`) ·
-**D-122** (`content` `literal`-only guard) · the `text` command itself.
+D-118 (guard + wiring) · D-120 (`render/measure.ts` + threading) · **D-121 / D-122 + the `text`
+command (0137-REVIEW)**.
 
 **NOT implemented, each owned by a named future cycle:** **D-104** (§5.10's row/column commands) ·
 **D-108** (§5.11's load path; clause 3 binds every cycle before it) · **D-109 clauses 1–2** (cell
@@ -341,7 +344,7 @@ decimals + clipping, `render/` only).
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — BUILT and REVIEWED (0128).
 **Q-021 → D-120** — BUILT + WIRED + REVIEWED (0133). **Q-022 → D-121**, **Q-023 → D-122** — RULED
-(0135-REVIEW), BUILT (0136), review pending. Next free: **Q-024**.
+(0135-REVIEW), BUILT (0136), REVIEWED (0137) — CLOSED. Next free: **Q-024**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 `content` (0127/0122/0136) inherits the same posture.
@@ -365,8 +368,7 @@ built without a provisional site (0135-REVIEW §5 clause 4).
 
 ## Gotchas for the next model
 
-- **REVIEW IS DUE (entry 0136).** §6.1 trigger 5 + §6.2 load-bearing changes. Do not start the
-  render slice until the 0136 review clears.
+- **0136 is REVIEWED (0137-REVIEW-phase5: ACCEPT WITH EDITS).** The render slice is clear to start.
 - **The `text` command exists.** `text [x=<number>] [y=<number>] "<content>"`. `x`/`y` optional,
   default `0` (D-121 c3 — the geometry presets require theirs). `content` required, kept verbatim.
 - **`TEXT_SCHEMA` has ELEVEN non-derived slots** (was nine). `grep` for `ORIGIN_X_PATH` in

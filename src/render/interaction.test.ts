@@ -549,7 +549,7 @@ describe("pointerMove — failure paths", () => {
 // `measuredHeight` recomputed on every step: without a real measurer threaded it
 // is re-stamped `#MEASURE` (D-118); with one it stays a real height.
 describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)", () => {
-  /** The schema's five required non-derived `text` slots + both derived placeholders — hand-built, no `text` command exists. */
+  /** The schema's five required non-derived `text` slots + both derived placeholders — hand-built (the `text` command exists since entry 0136, but this keeps the test about context threading, not creation). */
   function textObject(): GraphObject {
     return {
       id: "obj_t",
