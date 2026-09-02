@@ -4104,3 +4104,90 @@ Reconciliation required: grep `PROVISIONAL(Q-021)` and resolve every site (`src/
 `src/engine/primitives/text.ts`) — replace the tag with a `(D-120)` citation; the surrounding prose
 explaining why `maxWidth` exists stays. Owed by the next cycle, which is the `render/measure.ts` /
 `text` command cycle — the first to build the real measurer against this.
+
+## D-121 — A `text` object's position is two ordinary `literal` slots, `origin.x` / `origin.y`, on `TEXT_SCHEMA` — same spelling as every other positioned object
+Answers: **Q-022**   Ruled: entry 0135-REVIEW-phase5 (reviewer)   Binding on:
+`src/engine/primitives/schema.ts` (`TEXT_SCHEMA`), `src/engine/primitives/text.ts` (the
+`TEXT_*_PATH` vocabulary), the `text` command handler in `src/command/commands.ts`, and
+`render/interaction.ts`'s drag path as it applies to a `text` object
+
+**Ruling — the implementer's recommendation (a), entry 0134, is confirmed.**
+
+1. **`TEXT_SCHEMA.nonDerivedSlotPaths` gains `origin.x` and `origin.y`**, reusing
+   `ORIGIN_X_PATH` / `ORIGIN_Y_PATH` from `primitives/geometry.ts` — the identical path spelling
+   `circle`, `polygon`, `rect`, and `table` already use. One spelling across the document; no new
+   constant.
+
+2. **Both are `literal`-kind and are NOT dependency-required.** An absent `origin.x` at the declared
+   path is tolerated exactly as it is for every other primitive (`findSchemaSlotKindMismatches`);
+   nothing derived reads them, so no `text` object is refused for lacking one. A `formula` may drive
+   either (Phase 7: `link text_1.origin.y intersection_a.centroid.y`), and a drag writes either as a
+   literal, both under §5.9's per-component rule — no `text`-specific interaction code.
+
+3. **The `text` command creates both**, `x=` / `y=` defaulting to `0` (matching `table`).
+
+4. **§5.6's `TextBox` block is illustrative of the content-and-layout slots, not an exhaustive slot
+   enumeration.** It also omits `resolvedContent` and `measuredHeight`, which are legitimately
+   present as derived slots. Reading it as exhaustive contradicts §5.10 (`text x=0 y=0`), §5.9 (the
+   drag rule assumes an `origin` slot or per-vertex slots), §5.7 (the neighbouring `image` primitive
+   lists `origin.x` / `origin.y` explicitly), and Phase 7 (a text box "positioned relative to their
+   intersection's center", needing the position to be a *slot*) — all at once.
+
+**Rationale.** The brief is internally inconsistent here, a §6.1 trigger 3, correctly raised rather
+than guessed (§7.3 — slot-set membership on a load-bearing schema is "shaping the data model"). (a)
+reconciles it with the smallest change and makes a `text` object consistent with every sibling
+primitive: one path spelling, one drag path, one `link` mechanism. (b) — a `position` field on
+`GraphObject` outside the slot system — cannot be formula-driven, so Phase 7 fails, and it is a
+much larger data-model change. (c) — text keeps no position — contradicts §5.10's own command
+grammar and leaves Phase 7 unreachable.
+
+**Ruled by the reviewer, not escalated to the human, for the same reason as D-120: there is no
+operator-visible behaviour to choose between.** `text x=0 y=0` is already in the brief; the only
+question is the storage mechanism, which Rule 6, §9's tie-breakers, and four in-tree precedents all
+answer the same way. **Reversible if the human overrules**: no command builds a `text` object yet,
+so no saved document can depend on the answer; `origin.x` / `origin.y` carry no derived value;
+reverting is deleting two schema entries.
+
+Reconciliation required: owed by the `text` command cycle, in one slice — (1) add the two paths to
+`TEXT_SCHEMA`; (2) move `schema.test.ts`'s `text` slot-path / slot-count expectations with it; (3)
+`STATUS.md`'s non-derived count goes 9 → 11 (the "effectively-required" set is unchanged — origin is
+not required); (4) no `PROVISIONAL` tag — cite `(D-121)` at the schema site.
+
+## D-122 — A `text` object's `content` slot is `literal`-only: `link` and `set =` targeting it are refused, à la D-046
+Answers: **Q-023** (formalising fix-list item 22 / F13)   Ruled: entry 0135-REVIEW-phase5 (reviewer)
+Binding on: `src/engine/mutation.ts` (or `resolveWritableSlot` — wherever the `text` command cycle
+places the guard), `src/engine/primitives/text.ts`, and any future consumer of `content`
+
+**Ruling — the implementer's recommendation (a), Q-023, is confirmed and issued as a binding
+ruling, not a provisional.**
+
+1. **A mutation that would make `text_1.content` a `formula` or `derived` slot is refused** — both
+   `link text_1.content <address>` and `set text_1.content = <formula source>`. The refusal message
+   says `content` is read as raw source only. `content` is permanently `literal`-kind, the way a
+   table dimension slot is (D-046).
+
+2. **A plain `set text_1.content "…"` (a literal write) is unaffected** — that is how `content` is
+   authored, exactly as a table cell's formula *source* is typed as a literal string and parsed by
+   the primitive, never by the command line.
+
+**Rationale.** `content` is read `literal`-only at edge-derivation time (§5.1 step 3), because a
+`formula` slot's value is not written until step 7 (evaluate) — D-046's exact timing obstacle,
+already documented in `primitives/text.ts`'s NOT DONE HERE. So option (b) — evaluate `content`
+first, then parse the resulting string for embedded `{= }` / `{? }` references — is not buildable:
+there is no second derive pass (Rule 5: no dirty tracking, one derive per mutation), and you cannot
+parse a string that does not exist yet. Option (c) — leave the gap — commits an object whose
+embedded references are silently untracked, so the box does not re-resolve when those cells change:
+silent broken reactivity, the failure D-116 / D-118 and §5.3's totality rule all exist to prevent.
+Option (a) is small (one guard plus its test), reversible, and consistent with D-046, which is the
+established precedent for "a slot whose kind must be constrained because step-3 edge derivation
+cannot see a step-7 value."
+
+**Issued as a ruling rather than a takeable provisional** (which the question offered) because the
+reasoning is identical to D-046's, there is no product-taste dimension (§5.6 already calls `content`
+"raw source including markup", and no operator can reach a `text` object today), and a ruling means
+the `text` command cycle writes the guard once with a `(D-122)` citation and needs no
+reconcile-and-untag step.
+
+Reconciliation required: owed by the `text` command cycle — add the guard citing `D-122`; update
+`primitives/text.ts`'s NOT DONE HERE note (the F13 gap is now closed by a refusal, not open); no
+`PROVISIONAL` tag.

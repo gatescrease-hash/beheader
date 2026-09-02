@@ -15,8 +15,11 @@ Next free ID: **Q-024**
 ## Q-023 — When a `text` object's `content` slot is a `formula`/`derived`, are its embedded `{= }`/`{? }` references tracked, or is that slot kind refused like a table dimension (D-046)?
 Raised: entry 0134-text-command (implementer), formalising fix-list item 22 / F13 (open since entry
 0127).   Brief section: §5.6, §5.1 (Rule 6), §5.3; precedent **D-046**.
-Status: **OPEN** — the `text` command cycle owes this ruling (0130-REVIEW / 0133-REVIEW). A
-reversible provisional exists (option (a)); nothing is built.
+Status: **ANSWERED → D-122** (entry 0135-REVIEW-phase5, reviewer). Option **(a)** confirmed and
+issued as a binding ruling (not a provisional): `content` is `literal`-only; `link text_1.content …`
+and `set text_1.content = …` are refused, à la D-046. Owed by the `text` command cycle: add the
+guard citing D-122, update `primitives/text.ts`'s NOT DONE HERE note. Reversible if the human
+overrules.
 
 Background: `content` is a `literal` slot by default (§5.6: "raw source including markup").
 `resolveTextDependencyAddresses` (`primitives/text.ts`) re-parses `content` at edge-derivation time
@@ -58,10 +61,13 @@ Raised: entry 0134-text-command (implementer).   Brief section: §5.6 (`TextBox`
 table_x.A1 }"`), §5.9 ("Objects with no `origin` slot … are dragged by applying the delta to every
 `vertex.N` slot"), §6 Phase 7 ("two text boxes … positioned relative to their intersection's
 center").
-Status: **OPEN — escalated, nothing built.** Not reversible (slot-set membership on a load-bearing
-schema — `primitives/schema.ts`, §6.2 — and a §5.6 deviation), so per PROCESS_BRIEF §7.3 the `text`
-command cycle stops here rather than guessing. This is the "A `text` object's POSITION" item STATUS
-has carried unbuilt since entry 0129, now raised as a formal question.
+Status: **ANSWERED → D-121** (entry 0135-REVIEW-phase5, reviewer). Option **(a)** confirmed: add
+`origin.x` / `origin.y` as two ordinary `literal` slots to `TEXT_SCHEMA`, same spelling as
+`circle`/`polygon`/`rect`/`table`. Ruled by the reviewer, not escalated — there is no
+operator-visible behaviour to choose (`text x=0 y=0` is already in the brief), only a storage
+mechanism, which Rule 6 / §9 / four in-tree precedents all answer the same way (the D-120 pattern).
+Reversible if the human overrules. Reconciliation owed by the `text` command cycle — see D-121.
+The implementer's stop was correct (§7.3).
 
 Ambiguity: §5.6 lists a `TextBox`'s slots and none is a position. Yet §5.10's `text` form is `text
 x=0 y=0 "…"`, so the command carries two coordinates with nowhere to put them; §5.9's drag rule and

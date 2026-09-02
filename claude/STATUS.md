@@ -1,19 +1,21 @@
-# STATUS — as of entry 0134-text-command-escalation
+# STATUS — as of entry 0135-REVIEW-phase5
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1427/1427** tests pass,
-0 skipped, 0 `.only`. **30 test files**. **PHASE 5 IS OPEN.** Last review point: **0133-REVIEW-phase5**,
-verdict **ACCEPT WITH EDITS**. Cycles since last review: **1/3** — but entry 0134 is itself
-**REVIEW: REQUIRED** (§6.1 trigger 3), so a review is due now, not at the cap. Diff since last
-review: **0 source lines** (0134 changed only `OPEN_QUESTIONS.md`, its entry, and this file).
+0 skipped, 0 `.only`. **30 test files**. **PHASE 5 IS OPEN.** Last review point: **0135-REVIEW-phase5**,
+verdict **ACCEPT** (no code — entry 0134's escalation was correct; two rulings issued). Cycles since
+last review: **0/3**. Diff since last review: **0 source lines**.
 
-**THE `text` COMMAND — THE RECOMMENDED NEXT SLICE — IS BLOCKED.** Entry 0134 declared it and
-escalated: **Q-022** (a `text` object has no position — §5.6's `TextBox` lists no `origin` slot, but
-§5.10's `text x= y=`, §5.9's drag rule, and Phase 7 all need one; NOT reversible → §7.3 stop) and
-**Q-023** (F13 — is a `formula`/`derived` `content` slot tracked or refused à la D-046; reversible,
-provisional (a) to be taken by the command cycle once Q-022 lands). Both were named in advance by
-0130-REVIEW §7 / 0133-REVIEW §7. No `src/` file changed. The command cannot create a `text` object
-until `TEXT_SCHEMA`'s slot set is settled (Q-022 recommendation (a): add `origin.x`/`origin.y`
-literal slots, same spelling as the geometry presets).
+**THE `text` COMMAND IS UNBLOCKED.** Entry 0134 escalated **Q-022** (a `text` object's position) and
+**Q-023** (F13). 0135-REVIEW ruled both:
+- **Q-022 → D-121** — position is `origin.x` / `origin.y`, two ordinary `literal` slots on
+  `TEXT_SCHEMA`, same spelling as `circle`/`polygon`/`rect`/`table`. `x=` / `y=` default to `0`.
+  Reversible if the human overrules. **Reconciliation owed by the `text` command cycle** (add the
+  two paths; move `schema.test.ts`'s expectations; non-derived count 9 → 11).
+- **Q-023 → D-122** — `content` is `literal`-only; `link text_1.content …` / `set text_1.content = …`
+  are refused, à la D-046. Issued as a ruling (no `PROVISIONAL` tag). The `text` command cycle adds
+  the guard citing D-122.
+
+The implementer's stop (§7.3) was affirmed as correct process, not over-caution.
 
 **ENTRIES 0131 + 0132 ARE NOW BUILT AND REVIEWED (0133-REVIEW).** The Canvas2D `TextMeasurer`
 (`render/measure.ts`) is built AND wired: `main.ts`'s `start` builds one `EvalContext` around
@@ -43,18 +45,13 @@ derived placeholders**, with defaults (F13/F20's neighbour).
 
 **STILL UNBUILT IN PHASE 5:**
 - **The `text` command.** `command/parser.ts` + `commands.ts` `text` handler (move `text` out of
-  `COMMANDS_SPECIFIED_BUT_NOT_BUILT`), creating a `text` object with all non-derived slots + both
-  derived placeholders and sensible `style` defaults (settles F20 + 0129's five-required
-  consequence). **BLOCKED on Q-022** (position — below) **and owes Q-023** (F13, the
-  `formula`-driven `content` ruling). Entry 0134 escalated both. Once Q-022 is ruled the rest is
-  routine (a registry entry modelled on `table`'s, `style` defaults chosen by the handler).
-- **A `text` object's POSITION — now Q-022 (raised entry 0134).** §5.6's `TextBox` has no `origin`
-  slot — `content`/`width`/`height`/`overflow`/`style.*` only — but §5.10's `text x=0 y=0`, §5.9's
-  drag rule, and Phase 7's "positioned relative to their intersection's center" all need one, and
-  Phase 7 needs it to be a *slot*. Recommendation (a): add `origin.x`/`origin.y` literal slots to
-  `TEXT_SCHEMA`, same `ORIGIN_*_PATH` spelling the geometry presets use. NOT reversible in §7's
-  sense (slot-set membership on a load-bearing schema + a §5.6 deviation) — the reviewer's or the
-  human's to rule.
+  `COMMANDS_SPECIFIED_BUT_NOT_BUILT`), creating a `text` object with all **11** non-derived slots +
+  both derived placeholders and sensible `style` defaults (settles F20 + 0129's five-required
+  consequence). **NOW UNBLOCKED** — Q-022 → D-121, Q-023 → D-122. The cycle: a registry entry
+  modelled on `table`'s (positional quoted `content` arg + `x=` / `y=`, `style` defaults chosen by
+  the handler); add `origin.x` / `origin.y` to `TEXT_SCHEMA` per D-121; add the D-122 guard
+  (refuse `link` / `set =` on `content`); `createObjectFromCommand` fills both derived placeholders
+  mechanically.
 - **`render/renderer.ts`'s text-drawing pass**, markdown-lite rendering, layout — all unbuilt. A
   `text` object draws as nothing today.
 
@@ -91,11 +88,15 @@ bad `maxWidth` → no wrap, blank family → `sans-serif` (determinism on a shar
 **0b. `TEXT_SCHEMA` HAS BOTH DERIVED SLOTS.** `resolvedContent` (0127) and `measuredHeight` (0129).
 `getObjectSchema("text").derivedSlots` has length 2.
 
-**0c. A WELL-FORMED `text` OBJECT HAS 9 NON-DERIVED + 2 DERIVED SLOTS.** `content` + `width` +
-`style.font`/`fontSize`/`lineHeight` are **required** (dangling-edge refusal if absent — 0129).
-`height`/`overflow`/`style.color`/`style.align` are optional. Both derived placeholders
-(`{ kind: "derived", value: null }`) are required by D-018. The minimal well-formed shape (5
-non-derived + 2 derived) is what `mutation.test.ts`/`eval.test.ts`/0132's new tests hand-build.
+**0c. A WELL-FORMED `text` OBJECT HAS 9 NON-DERIVED + 2 DERIVED SLOTS — BECOMING 11 + 2 once D-121
+lands.** `content` + `width` + `style.font`/`fontSize`/`lineHeight` are **required** (dangling-edge
+refusal if absent — 0129). `height`/`overflow`/`style.color`/`style.align` are optional. **D-121
+(0135-REVIEW) adds `origin.x` / `origin.y` as two more optional `literal` slots** — nothing derived
+reads them, so a `text` object is not refused for lacking one, but the `text` command always creates
+them. Both derived placeholders (`{ kind: "derived", value: null }`) are required by D-018. The
+minimal well-formed shape (5 non-derived + 2 derived) is what
+`mutation.test.ts`/`eval.test.ts`/0132's new tests hand-build. **D-121 is not yet in code** — the
+`text` command cycle owns the schema change + `schema.test.ts` reconciliation.
 
 **0d. `computeMeasuredHeight`'s failure order** — upstream `ErrorValue` → `#MEASURE` → `#TYPE`
 (unusable style) → `#TYPE` (non-finite height, F21) → the height. `hasRealMeasurer(context)`
@@ -159,16 +160,16 @@ to `NULL_EVAL_CONTEXT`.
 
 ## Next slice (recommended)
 
-**The `text` command is BLOCKED** on Q-022 (entry 0134 escalated it — see the top of this file).
-Until Q-022 is ruled, the un-owed slice that needs no ruling is the **render-only** one:
-**D-109 clauses 1–2** (cell decimal precision + no cell-text clipping, `render/renderer.ts` only)
-and **Q-017** headers (display-only A1 row/column markings, the human's call but low-risk). Both are
-additive work inside the already-reviewed renderer, testable the way every chrome element already is
-(`renderer.test.ts` pins `fillText` calls), and touch no engine file. 0133-REVIEW §7 named this as
-"the smallest un-owed item needing no ruling."
+**The `text` command — now unblocked (Q-022 → D-121, Q-023 → D-122).** Build `command/parser.ts`
+grammar + `commands.ts` handler, move `text` out of `COMMANDS_SPECIFIED_BUT_NOT_BUILT`. In the same
+slice: add `origin.x` / `origin.y` to `TEXT_SCHEMA` (D-121) with `schema.test.ts` reconciliation,
+and add the D-122 guard refusing `link` / `set =` on `content` (cite the ruling; no `PROVISIONAL`
+tag). Create all 11 non-derived slots + both derived placeholders; `style` defaults chosen by the
+handler (settles F20 + 0129's five-required consequence); `x=` / `y=` default to `0`.
 
-Once Q-022 lands: build the `text` command, taking Q-023's option (a) provisionally (refuse a
-`formula`/`derived` `content` slot, tag `PROVISIONAL(Q-023)`).
+**The render-only alternative, if preferred first, still needs no ruling:** **D-109 clauses 1–2**
+(cell decimal precision + no cell-text clipping, `render/renderer.ts` only). **Q-017** headers
+remain the human's call — do not fold into the D-109 slice without them.
 
 ## Built and reviewed
 
@@ -195,13 +196,14 @@ D-119) · `measuredHeight` (§5.6's second `text` derived slot) + `#MEASURE` `Er
 D-120 answers Q-021) · **`render/measure.ts` (the Canvas2D `TextMeasurer`) + a real `EvalContext`
 threaded from `main.ts` through `executeCommand`/`pointerMove`/`loadDocument`/`deserializeDocument`
 and `main.ts`'s six pure transitions; Q-021 → D-120 reconciled (0133-REVIEW: ACCEPT WITH EDITS; F22
-— one header trim)**.
+— one header trim)**. · **0135-REVIEW: ACCEPT (no code)** — entry 0134's `text`-command escalation
+cleared; **D-121** (Q-022: `text` position = `origin.x`/`origin.y` literal slots) and **D-122**
+(Q-023/F13: `content` is `literal`-only) issued; both owed to the `text` command cycle.
 
 ## Built this batch, not yet reviewed
 
-- **No code.** Entry 0134 declared the `text` command and escalated it (Q-022, Q-023) without
-  touching `src/` — REVIEW: REQUIRED, awaiting a ruling on Q-022. Entries 0131 + 0132 were
-  reviewed at 0133-REVIEW-phase5.
+- **Nothing.** Entry 0134 (escalation, no code) was reviewed at 0135-REVIEW — verdict ACCEPT, with
+  D-121 and D-122 issued. The tree is at a clean review boundary.
 
 ## Not started
 
@@ -241,12 +243,11 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unle
     empty in-extent cell is REFUSED. Correct per D-110 clause 6.
 21. **F12 (0119-REVIEW) — open, DO NOT RE-LITIGATE.** `MIN(B1, B2)` vs `MIN(B1:B2)` on empty
     in-extent cells; compliant per D-110 clause 3.
-22. **F13 (0127) — now Q-023 (raised entry 0134), open.** A `formula`-driven `content` slot's inner
-    references are untracked; the object commits anyway. Recommendation (a): refuse a
-    `formula`/`derived` `content` slot à la D-046 — reversible, to be taken provisionally by the
-    `text` command cycle once Q-022 unblocks it. A MISSING `content` slot REFUSES the object
-    (F20/0128). Since 0129 the same "must exist" binds `width`/`style.font`/`style.fontSize`/
-    `style.lineHeight` too. Not reachable today.
+22. **F13 (0127) — RULED D-122 (0135-REVIEW), not yet built.** A `formula`/`derived` `content` slot
+    is refused, à la D-046; `content` is `literal`-only. The `text` command cycle adds the guard
+    (cite D-122, no `PROVISIONAL` tag). A MISSING `content` slot still REFUSES the object (F20/0128);
+    since 0129 the same "must exist" binds `width`/`style.font`/`style.fontSize`/`style.lineHeight`.
+    Not reachable today.
 23. **F21 (0130-REVIEW) — CLOSED in the same review.** `computeMeasuredHeight`'s non-finite →
     `#TYPE` guard, mirroring `add`'s compute. +1 test.
 24. **F22 (0133-REVIEW) — CLOSED in the same review.** `render/measure.ts`'s `WHAT THIS IS` block
@@ -257,8 +258,8 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unle
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** —
   `primitives/table.ts`'s header.
 - **A `text` object must carry `content` + `width` + `style.font`/`fontSize`/`lineHeight` as slots,
-  or it is refused (0129); a `formula`/`derived` `content` commits with inner references untracked**
-  (fix-list item 22 / F13). Neither reachable today.
+  or it is refused (0129).** A `formula`/`derived` `content` slot is now **ruled refused** (D-122,
+  0135-REVIEW) — guard not yet built. Neither reachable today.
 - **`measuredHeight` is `#MEASURE` for every document a USER can make** — no `text` command, so the
   only `text` object reachable is a LOADED one, which now (0132) measures for real. D-118 working
   as ruled.
@@ -270,9 +271,10 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unle
   measured verbatim when `width` is `"auto"`. Latent — `computeMeasuredHeight` consumes only
   `.height`, and collapsing changes `lineCount` only at a wrap boundary. Noted at 0133-REVIEW §5 for
   whoever first consumes `measure`'s `width`.
-- **A `text` object has no position.** §5.6's `TextBox` shape omits `origin`; `TEXT_SCHEMA` follows
-  it. `render/interaction.ts`'s drag would find no origin slots and do nothing. The `text` command
-  cycle has to decide where `x=`/`y=` land.
+- **A `text` object has no position YET.** §5.6's `TextBox` shape omits `origin`; `TEXT_SCHEMA`
+  still follows it. **D-121 (0135-REVIEW) rules `origin.x` / `origin.y` onto `TEXT_SCHEMA`** as two
+  `literal` slots — not yet in code. The `text` command cycle adds them; `x=` / `y=` write them,
+  §5.9's origin-drag path then works unchanged.
 - **`resolveTextDependencyAddresses` and `deriveEdges` Source 1 are a hand-maintained PAIR (D-119).**
 - **`main.ts`'s `start` is untested code and keeps growing.** Verified live, not by assertion. Its
   `evalContext` construction and the offscreen-canvas `null` fallback are hand-checked; the pure-half
@@ -323,7 +325,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–22 unchanged and open unle
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-120**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-122**) binds without restatement here.
 
 **D-114 / D-115 / D-116 / D-117 ARE BUILT IN FULL AND REVIEWED (0126/0127, cleared 0128).**
 
@@ -350,12 +352,11 @@ decimals + clipping, `render/` only).
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — BUILT and REVIEWED (0128).
 **Q-021 → D-120 (0130-REVIEW), RECONCILED (0131), BUILT + WIRED + REVIEWED (0133).**
 
-**Q-022 and Q-023 raised at entry 0134, both OPEN, both blocking the `text` command.** Q-022 —
-a `text` object's position (§5.6 has no `origin` slot); recommendation (a): add `origin.x`/`origin.y`
-literal slots to `TEXT_SCHEMA`; NOT reversible (slot-set membership on a load-bearing schema), the
-reviewer's/human's to rule. Q-023 — F13, is a `formula`/`derived` `content` slot tracked or refused
-(à la D-046); recommendation (a): refuse it; reversible, provisional to be taken by the command
-cycle. Next free: **Q-024**.
+**Q-022 → D-121, Q-023 → D-122 (both ruled 0135-REVIEW).** D-121 — a `text` object's position is
+`origin.x` / `origin.y`, two `literal` slots on `TEXT_SCHEMA`, same spelling as the geometry
+presets; reviewer-ruled (no operator-visible choice), reversible if the human overrules. D-122 —
+`content` is `literal`-only, `link` / `set =` refused à la D-046. Both owed reconciliation by the
+`text` command cycle; neither is in code yet. Next free: **Q-024**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 `content` (0127) inherits the same posture.
@@ -380,9 +381,11 @@ or **Q-023** (raised 0134) — nothing is built against either, so there is no s
 
 ## Gotchas for the next model
 
-- **A review is DUE.** Entry 0134 is REVIEW: REQUIRED — it escalated the `text` command on Q-022
-  (position) and Q-023 (F13). Do NOT start the `text` command until Q-022 is ruled. If you need a
-  slice meanwhile, the render-only one (D-109 clauses 1–2 + Q-017 headers) needs no ruling.
+- **No review is due.** 0135-REVIEW cleared entry 0134 (ACCEPT) and ruled Q-022 → D-121, Q-023 →
+  D-122. The `text` command is unblocked. Its cycle owes: `TEXT_SCHEMA` gains `origin.x` /
+  `origin.y` (D-121, + `schema.test.ts`); a guard refusing `link` / `set =` on `content` (D-122);
+  then the parser grammar + handler. Neither D-121 nor D-122 is in code yet — both are the `text`
+  command cycle's to reconcile, in one slice.
 - **`EvalContext` is threaded PER CALL, not on `AppState`.** `executeCommand(cmd, doc, context?)`,
   `pointerMove(..., context?)`, `loadDocument(json, context?)`, `deserializeDocument(raw, context?)`,
   and `main.ts`'s `submitLine`/`respondToPrompt`/`pointerDownAt`/`pointerMoveTo`/`commitPanelEdit`/
