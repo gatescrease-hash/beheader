@@ -20,9 +20,11 @@
  * cell; a commit synthesises a `Command` and runs it through the same
  * `executeCommand` seam — `content` always a literal `set`, a cell
  * Excel-style; the commit logic is here in the pure half, not in `start`,
- * per clause 7), and **D-124** (`text` is placed by POINTING — a `parser.ts`
- * prompt step — and its new box opens D-125's editor on creation:
- * `advance` returns `AppTransition.openEditor`, `applyTransition` acts on it).
+ * per clause 7), and **D-124** / **D-136** (`text` is placed by POINTING — a
+ * `parser.ts` prompt step — and its new box opens D-125's editor on creation
+ * WHEN no content was given; `advance` returns `AppTransition.openEditor`,
+ * `applyTransition` acts on it, and an editor abandoned while still empty
+ * removes the box — D-136 clause 2).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -105,9 +107,10 @@
  *     evaluate for real rather than reporting `#MEASURE` (D-118).
  *   - Deciding WHICH receiver a double-click opens the editor on, and where the
  *     overlay floats — `render/editor.ts` (D-125 clause 1). This file opens the
- *     editor on a double-click AND, since **D-124**, on every newly-created
- *     `text` object (`advance` -> `AppTransition.openEditor` -> `applyTransition`);
- *     it never opens one on a `circle`/`rect`/`table`.
+ *     editor on a double-click AND, since **D-124**, on a newly-created `text`
+ *     object that was given no content (**D-136** clause 1 — a content-bearing
+ *     typed `text` leaves the command bar focused instead); it never opens one
+ *     on a `circle`/`rect`/`table`.
  *   - Matching the editor overlay's font FAMILY, markdown rendering or text
  *     alignment to the drawn text — the overlay's SIZE tracks
  *     `style.fontSize × camera.zoom` now (D-129), and it no longer clips, but a
@@ -128,7 +131,7 @@ import { formatFormula } from "./engine/formula/format.ts";
 import { getSlot, slotKey, type GraphObject } from "./engine/graph/node.ts";
 import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
-import { parseCommandNumber, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
+import { parseCommandNumber, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
@@ -213,8 +216,10 @@ export type FileRequest = "save" | "load";
  * (clause 2), the editor's open/closed state lives in `start`'s closure, not in
  * `AppState` (like the GREY paperclip — opening writes no document state), and
  * the pure half cannot touch a DOM element. `advance` sets it after a `text`
- * creation commits; `applyTransition` in `start` sets `inPlaceEditor` from it.
- * `undefined` for every other transition.
+ * creation commits, but only when the command carried no content (**D-136**
+ * clause 1 — a typed `text "hi"` places the box and stops); `applyTransition`
+ * in `start` sets `inPlaceEditor` from it. `undefined` for every other
+ * transition.
  */
 export interface AppTransition {
   readonly state: AppState;
@@ -396,13 +401,19 @@ function advance(state: AppState, session: CommandSession, viewport: Viewport, c
       if (outcome.effect !== undefined) {
         return performEffect(outcome.effect, executed, viewport);
       }
-      // D-124: a freshly-created `text` object hands straight to D-125's in-place
+      // D-124: a freshly-placed `text` object hands straight to D-125's in-place
       // editor — placing and typing are one gesture (D-125 clause 4). `createText`
       // is the only handler whose command `kind` is `"text"`, and every successful
       // creation carries `createdObjectId`; the pair names the new box without this
-      // file resolving anything (D-082 clause 4). Every form of the command lands
-      // here — the pointed one and both typed ones — so all of them open it.
-      if (session.command.kind === "text" && outcome.createdObjectId !== undefined) {
+      // file resolving anything (D-082 clause 4).
+      //
+      // **D-136 clause 1** (overrules entry 0149's Decision 2): the editor opens
+      // ONLY when no content was given — `session.command.content === ""`, which
+      // is exactly the pointing / prompt path (`buildFromPrompts` always yields
+      // `content: ""`) plus an explicit `text ""`. A content-bearing typed command
+      // (`text "hi"`, `text x=0 y=0 "hi"`, `text hi`) creates the box and leaves
+      // the command bar focused, the same ending `circle`/`rect`/`table` have.
+      if (session.command.kind === "text" && session.command.content === "" && outcome.createdObjectId !== undefined) {
         return { state: executed, fileRequest: undefined, refused: false, openEditor: { kind: "text", objectId: outcome.createdObjectId } };
       }
       return transition(executed);
@@ -771,8 +782,13 @@ function buildPanelSetCommand(target: string, raw: string): SetLiteralCommand | 
   return { kind: "set-formula", target, source: `=${expression}` };
 }
 
-/** One panel-synthesised `Command`, rendered the way the operator would have typed it — D-102 clause 7's "echo of the synthesised command itself". */
-function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand): string {
+/**
+ * One synthesised `Command`, rendered the way the operator would have typed it
+ * — D-102 clause 7's "echo of the synthesised command itself". `delete` is here
+ * for D-136 clause 2's abandon path only, and only ever with `force` false, so
+ * no ` force` suffix is emitted.
+ */
+function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | DeleteCommand): string {
   switch (command.kind) {
     case "set":
       return `set ${command.target} ${command.value}`;
@@ -780,6 +796,8 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
       return `set ${command.target} ${command.source}`;
     case "unlink":
       return `unlink ${command.target}`;
+    case "delete":
+      return `delete ${command.target}`;
     default: {
       const exhaustive: never = command;
       void exhaustive;
@@ -794,15 +812,17 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
  * the synthesised command first, then whatever `executeCommand` itself would
  * have echoed — its result lines, or its refusal message.
  *
- * A panel write is always `set`/`set-formula`/`unlink`, none of which ever
- * carries a `CommandEffect` (D-075 — those five belong to `select`/`zoom`/
- * `fit`/`save`/`load`), so there is no effect to perform here and none is
- * looked for; a future panel-built command that DID carry one would need this
- * function widened deliberately, not silently ignored.
+ * The synthesised command is always `set`/`set-formula`/`unlink` (a panel or
+ * in-place-editor write) or `delete` (D-136 clause 2's abandon of a
+ * just-created empty `text` box) — none of which ever carries a `CommandEffect`
+ * (D-075 — those five belong to `select`/`zoom`/`fit`/`save`/`load`), so there
+ * is no effect to perform here and none is looked for; a future synthesised
+ * command that DID carry one would need this function widened deliberately, not
+ * silently ignored.
  */
 function runPanelCommand(
   state: AppState,
-  command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand,
+  command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | DeleteCommand,
   context: EvalContext,
 ): AppState {
   const echoed = withLog(state, [`> ${describePanelCommand(command)}`]);
@@ -920,6 +940,37 @@ export function commitTextContent(
     return state;
   }
   return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, slotKey(TEXT_CONTENT_PATH)), value: raw }, context);
+}
+
+/**
+ * Removes a `text` object whose in-place editor was opened ON CREATION (D-136
+ * clause 1's `content === ""` path) and is now being abandoned with the box
+ * still empty — Escape, or a blur with an empty field (**D-136** clause 2).
+ *
+ * Why: an empty-`content` `text` object has no ink, no extent and no hit box
+ * (D-066), so one left behind by an abandoned placement gesture is unreachable
+ * except by typing its name. D-124 makes placing-and-typing one gesture;
+ * abandoning the gesture abandons the object.
+ *
+ * Through `executeCommand` as a `delete` (Rule 2, D-069 — no second write
+ * path), echoed in the log like any command. A box that received text before
+ * the edit ended is KEPT: a non-empty `content` slot makes this a no-op, so the
+ * caller need not re-check. A stale `objectId` is a no-op too (D-023's posture).
+ */
+export function abandonCreatedTextBox(
+  state: AppState,
+  objectId: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  const content = getSlot(object, TEXT_CONTENT_PATH)?.value;
+  if (typeof content === "string" && content !== "") {
+    return state; // Got text before the edit ended — keep it (D-136 clause 2).
+  }
+  return runPanelCommand(state, { kind: "delete", target: object.name, force: false }, context);
 }
 
 /**
@@ -1053,6 +1104,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   // and a DOM handle is not plain serializable state (D-101 clause 7's reason).
   let inPlaceEditor: EditorTarget | undefined;
   let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | undefined;
+  // **D-136** clause 2: `true` while the current editor was opened ON CREATION
+  // (`applyTransition`'s `openEditor` branch), so its cancel/commit paths know
+  // to remove the box if it is abandoned empty. Cleared whenever the editor
+  // closes, and never set by the double-click path.
+  let inPlaceEditorFromCreation = false;
   // Where the overlay is mounted: `#stage`, a sibling of `#panels` with no
   // delegated listeners, so a click in the editor never has to be carved out of
   // the panel plumbing. `panelsContainer` is the fallback only if the DOM shape
@@ -1308,9 +1364,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
   };
 
-  /** Closes the editor with no write — Escape (D-125 clause 5), or its receiver vanishing mid-edit. `inPlaceEditor` is cleared before the element goes, so the removal's `blur` is a no-op. */
+  /** Closes the editor with no write — Escape (D-125 clause 5), or its receiver vanishing mid-edit. `inPlaceEditor` is cleared before the element goes, so the removal's `blur` is a no-op. Also clears D-136's opened-on-creation flag; a caller acting on it captures it first. */
   const closeInPlaceEditor = (): void => {
     inPlaceEditor = undefined;
+    inPlaceEditorFromCreation = false;
     removeInPlaceElement();
   };
 
@@ -1321,6 +1378,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * through the pure half. Re-entrant-safe: `closeInPlaceEditor` nulls
    * `inPlaceEditor` before removing the focused element, so the `blur` that
    * removal fires re-enters here and returns at the guard below.
+   *
+   * **D-136** clause 2: a box that was opened on creation and blurred while
+   * still empty is removed instead of committed — abandoning the placement
+   * gesture abandons the object.
    */
   const commitInPlace = (): void => {
     const target = inPlaceEditor;
@@ -1329,8 +1390,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     const raw = element.value;
+    const fromCreation = inPlaceEditorFromCreation;
     closeInPlaceEditor();
     input.focus();
+    if (fromCreation && target.kind === "text" && raw === "") {
+      apply(abandonCreatedTextBox(state, target.objectId, evalContext));
+      return;
+    }
     apply(
       target.kind === "text"
         ? commitTextContent(state, target.objectId, raw, evalContext)
@@ -1338,13 +1404,24 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     );
   };
 
-  /** D-125 clause 5: Escape cancels and writes nothing — nothing was committed, so there is nothing to restore. */
+  /**
+   * D-125 clause 5: Escape cancels and writes nothing — nothing was committed,
+   * so there is nothing to restore. **D-136** clause 2: if the editor was
+   * opened on creation, Escape also removes the box (the edit was discarded, so
+   * `content` is still `""` — `abandonCreatedTextBox` confirms and deletes).
+   */
   const cancelInPlace = (): void => {
     if (inPlaceEditor === undefined) {
       return;
     }
+    const target = inPlaceEditor;
+    const fromCreation = inPlaceEditorFromCreation;
     closeInPlaceEditor();
     input.focus();
+    if (fromCreation && target.kind === "text") {
+      apply(abandonCreatedTextBox(state, target.objectId, evalContext));
+      return;
+    }
     paint();
   };
 
@@ -1446,14 +1523,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
 
   const applyTransition = (next: AppTransition): void => {
-    // D-124: a `text` creation asks for its in-place editor to open on the new
-    // box. Set BEFORE `apply` so the `paint` it triggers builds and focuses the
-    // overlay in the same frame — `updateEditor` finds the just-created object in
-    // `state.document.objects` and, for an empty `content`, uses D-125 clause 6's
+    // D-124: a contentless `text` creation asks for its in-place editor to open
+    // on the new box (D-136 clause 1 — `advance` only sets `openEditor` when no
+    // content was given). Set BEFORE `apply` so the `paint` it triggers builds
+    // and focuses the overlay in the same frame — `updateEditor` finds the
+    // just-created object in `state.document.objects` and uses D-125 clause 6's
     // fallback box. At most one editor document-wide, so this replaces any open
-    // one (the same "one editor" rule the dblclick path follows).
+    // one (the same "one editor" rule the dblclick path follows). The
+    // opened-on-creation flag arms D-136 clause 2's abandon-empty removal.
     if (next.openEditor !== undefined) {
       inPlaceEditor = next.openEditor;
+      inPlaceEditorFromCreation = true;
     }
     apply(next.state);
     if (next.fileRequest === "save") {
@@ -1563,6 +1643,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     inPlaceEditor = target;
+    inPlaceEditorFromCreation = false; // D-136: a double-click is not a creation — never abandon-deletes.
     paint();
   });
 

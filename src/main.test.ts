@@ -20,6 +20,7 @@ import { getSlot, type GraphObject } from "./engine/graph/node.ts";
 import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
 import {
+  abandonCreatedTextBox,
   buildPanelModel,
   commitPanelEdit,
   commitTableCell,
@@ -1190,10 +1191,17 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
     expect(editorSeed(outcome.state, outcome.openEditor!)).toBe("");
   });
 
-  it("the typed forms also open the editor on the new box (STATUS: every newly-created text object)", () => {
+  it("a content-bearing typed form does NOT open the editor (D-136 clause 1, overrules entry 0149 Decision 2)", () => {
     const outcome = submitLine(opened(), 'text x=5 y=6 "hi"', VIEWPORT);
     const created = objectNamed(outcome.state, "text_1");
     expect(getSlot(created, ["content"])).toEqual({ kind: "literal", value: "hi" });
+    expect(outcome.openEditor).toBeUndefined();
+  });
+
+  it("an explicit `text \"\"` (no content) DOES open the editor — same as the pointing path", () => {
+    const outcome = submitLine(opened(), 'text x=0 y=0 ""', VIEWPORT);
+    const created = objectNamed(outcome.state, "text_1");
+    expect(getSlot(created, ["content"])).toEqual({ kind: "literal", value: "" });
     expect(outcome.openEditor).toEqual({ kind: "text", objectId: created.id });
   });
 
@@ -1207,5 +1215,38 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
     const outcome = submitLine(opened(), "text x=0 y=0", VIEWPORT);
     expect(outcome.refused).toBe(true);
     expect(outcome.openEditor).toBeUndefined();
+  });
+});
+
+// **D-136** clause 2 — a `text` box whose editor was opened ON CREATION (the
+// pointing / prompt path) and then abandoned while still empty is removed:
+// abandoning the placement gesture abandons the object. `main.ts`'s `start`
+// arms this off `AppTransition.openEditor`; `abandonCreatedTextBox` is the pure
+// half its Escape / empty-blur paths call, and the only part a test can drive.
+describe("abandonCreatedTextBox — an abandoned just-created empty text box is removed (D-136 clause 2)", () => {
+  /** A state holding one empty `text_1` at (50, 50), as the pointing path leaves it. */
+  function withEmptyTextBox(): { state: AppState; id: string } {
+    const state = pointerDownAt(typed(opened(), "text"), { x: 50, y: 50 }, VIEWPORT).state;
+    return { state, id: objectNamed(state, "text_1").id };
+  }
+
+  it("deletes the box (it has no content) and echoes the delete like any command", () => {
+    const { state, id } = withEmptyTextBox();
+    const after = abandonCreatedTextBox(state, id);
+    expect(after.document.objects.find((object) => object.id === id)).toBeUndefined();
+    expect(newLines(state, after)).toEqual(["> delete text_1", "deleted text_1"]);
+  });
+
+  it("keeps a box that received text before the edit ended (non-empty content is a no-op)", () => {
+    const { state, id } = withEmptyTextBox();
+    const withText = commitTextContent(state, id, "hello");
+    const after = abandonCreatedTextBox(withText, id);
+    expect(after).toBe(withText);
+    expect(objectNamed(after, "text_1")).toBeDefined();
+  });
+
+  it("is a no-op for a stale object id", () => {
+    const { state } = withEmptyTextBox();
+    expect(abandonCreatedTextBox(state, "obj_404")).toBe(state);
   });
 });

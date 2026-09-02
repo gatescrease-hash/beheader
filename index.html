@@ -161,6 +161,14 @@
         `overflow: auto` (D-129 clause 2): the overlay never clips its own
         text — it scrolls once the typed content outgrows the committed box —
         so the caret is always visible whatever the zoom.
+
+        D-135: the scrollbars take NO layout (`scrollbar-width: none` plus the
+        `::-webkit-scrollbar` twin). The box is fitted to the receiver's exact
+        drawn extent, so a real ~15px scrollbar has nowhere to sit but on top
+        of the text (horizontal, on a one-line overlay) or stealing width from
+        a wrapping box and forcing a re-wrap the canvas underneath does not
+        have (vertical). `overflow: auto` STAYS — the caret still scrolls into
+        view, the bar just never shows.
       */
       .text-editor {
         position: absolute;
@@ -173,7 +181,12 @@
         resize: none;
         outline: 1px solid #1a56db;
         overflow: auto;
+        scrollbar-width: none; /* D-135: Firefox/standards — no scrollbar layout box. */
         z-index: 1;
+      }
+      /* D-135: WebKit/Blink twin of `scrollbar-width: none` — same effect. */
+      .text-editor::-webkit-scrollbar {
+        display: none;
       }
       #log {
         flex: 0 0 auto;
