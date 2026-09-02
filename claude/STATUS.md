@@ -1,64 +1,66 @@
-# STATUS — as of entry 0153-text-box-rework
+# STATUS — as of entry 0154-wrap-agreement
 
-**READ THIS FIRST — the TEXT-BOX REWORK is BUILT and UNSEEN ON SCREEN. The human directed it
-(2026-09-02, after testing entry 0152) and told this cycle to skip the review handoff and
-self-review with tests. STATE GREEN — 1632/1632, 0 skipped, 33 test files, both configs clean,
-`vite build` clean. NEXT: the human tests it on screen.**
+**READ THIS FIRST — entry 0153's TEXT-BOX REWORK was tested on screen and is GOOD** (*"OK, much
+better overall... Good how you've implemented it"*). **Entry 0154 fixes the two defects that test
+found, and is ITSELF UNSEEN.** STATE GREEN — 1641/1641, 0 skipped, 33 test files, both configs
+clean, `vite build` clean. NEXT: the human tests 0154 on screen.
 
-**Entry 0152 (D-135 + D-136) was tested and is GOOD** — the empty box auto-deletes, and a typed
-`text` with content creates the box without opening the editor. The rework is about what the human
-found *after* that: *"the input process for editing text directly is proving to be a bit of a
-beast. I think it may be worth a whole rework of the system."*
+**THE TWO THINGS ENTRY 0154 CHANGED (read `entries/0154-wrap-agreement.md` for the full account):**
 
-**THE FOUR THINGS ENTRY 0153 BUILT (read `entries/0153-text-box-rework.md` for the full account):**
+1. **`render/measure.ts` now breaks lines by CSS's rules, deliberately** — `white-space: pre-wrap` +
+   `overflow-wrap: break-word`, which is what the editor's `<textarea>` uses. Two visible defects,
+   one cause: it never broke inside a word (so an unbroken run of text drew straight out through the
+   side of its own box while the editor broke it neatly), and it collapsed runs of spaces (so `"a  b"`
+   measured narrower than it laid out — one extra line in the editor near a boundary, AND the canvas
+   drew `"a  b"` as `"a b"`). Now: spaces preserved, trailing spaces HANG, a too-wide word split
+   between code points. **This is not the slop 0151-RULINGS forbade — see the entry's own paragraph
+   on the distinction. The measurer adopted the browser's specified rule; it did not add a fudge.**
+2. **The `text` `overflow` slot is REMOVED** — the slot, not just 0153's drop-down. The human's
+   call, answering the question STATUS carried in their name: *"Remove overflow options — always
+   default to a standard overflow."* Nothing read it, `clip`/`ellipsis` were never built, and "a text
+   box never crops" leaves them nothing to mean. **A document saved with one still loads** (an extra
+   LITERAL slot is legal; it stops being enumerated). `TEXT_SCHEMA` is back to ELEVEN non-derived.
 
-1. **The overlay and the canvas now solve the SAME layout problem.** The overlay is sized and
-   fonted in WORLD units and magnified by ONE `transform: scale(camera.zoom / ratio)`. It used to be
-   pre-multiplied into CSS pixels, so the browser laid text out at a fractional font size while
-   `render/measure.ts` measured at the round world size — two different problems, breaking lines in
-   different places. That was live-look item 6's root cause. The overlay also matches
-   `style.color` now.
-2. **No scrollbars, because there is nothing to scroll.** `.text-editor` is `overflow: hidden`;
-   `editorTextBoxSize` re-measures the TYPED text on every keystroke and the box grows under the
-   caret. `renderDocument` takes `editingObjectId` and skips that object's text, selection outline
-   and grabbers — while the editor is open the overlay IS its text.
-3. **Eight resize grabbers on a selected text box** (`render/handles.ts` + `interaction.ts`'s new
-   `ResizeState`), and a new **`autoresize`** slot: the box always GROWS to fit its text (never
-   crops), and `autoresize` decides whether it shrinks BACK below a size the operator set.
-4. **The properties panel offers a drop-down** where a slot's values are a closed set —
-   `style.align`, `overflow`, `autoresize`. Declared on the SCHEMA (`ObjectSchema.slotOptions`).
+**WHAT TO TEST ON SCREEN (nothing in 0154 has been seen):**
+- In a box with a set width (`set text_1.width 200`), type a long unbroken run — `aaaaaaaa…` or a
+  URL. Does it now BREAK inside the word, and does the box stay at the width you dragged?
+- Type a double space mid-sentence. Does the canvas DRAW both spaces once the editor closes?
+- The X-vs-X+1 line disagreement: still there? **If yes, the one question that decides it — do the
+  misbehaving boxes contain `{= }` references?** The editor shows RAW SOURCE and the canvas draws
+  the RESOLVED value, so those two legitimately differ in length. If the remaining cases are plain text,
+  the cause is platform glyph quantization and 0154's "Where I got stuck" says why there is no
+  honest fix from the measurer's side.
+- The properties panel: `overflow` should have NO row at all now. `style.align` and `autoresize`
+  should still be drop-downs that commit on change.
+- Drag a width grabber narrower than the longest word. It should now go where you drag it (it used
+  to snap back to that word's width).
 
-**WHAT TO TEST ON SCREEN (nothing below has been seen):**
-- `text`, click, type past the box width — does the box GROW, with no scrollbar, ever?
-- Type a paragraph in a box with `set text_1.width 200` — do the drawn and typed wrap points agree
-  now? (If not, read 0151-RULINGS' "Carried forward" — do NOT fudge `render/measure.ts`.)
-- Select a text box — eight grabbers. Drag a corner, drag a side. Does the cursor change over one?
-- After dragging a height, does the box KEEP it? (It should: the drag writes `autoresize: false`.)
-- Set `autoresize` back to "shrink to fit text" in the panel — does the box hug its text again?
-- The panel's `style.align` / `overflow` / `autoresize` rows: are they drop-downs, and do they
-  commit on change?
-- Does the text look IDENTICAL editing vs not editing (size, family, colour, wrap)?
+**Still unconfirmed from 0153 (re-test if you have not):** eight grabbers and the resize cursor; a
+dragged height surviving; toggling `autoresize` back to shrink-to-fit; text looking identical
+editing vs not editing.
 
 ---
 
-## Where the code actually is — as of entry 0153
+## Where the code actually is — as of entry 0154
 
-STATE: **GREEN**. Both configs compile, **1632/1632** tests pass, 0 skipped, 0 `.only`.
+STATE: **GREEN**. Both configs compile, **1641/1641** tests pass, 0 skipped, 0 `.only`.
 **33 test files.** `npx vite build` clean. **PHASE 5 IS OPEN.**
 
 Last review point: **0150-REVIEW-phase5**. Entries since: **0151-RULINGS** (D-135 + D-136, no code),
 **0152** (the editor cycle — built, tested on screen, GOOD), **0153** (the text-box rework — the
-human's direct instruction, self-reviewed with tests, UNSEEN).
+human's direct instruction, self-reviewed with tests, **tested on screen, GOOD**), **0154** (wrap
+agreement + `overflow` removal — the two defects that test found, self-reviewed with tests, UNSEEN).
 
 **THE HUMAN'S DIRECT INSTRUCTION OUTRANKS `PROJECT_BRIEF.md` AND ANY PRIOR RULING (0140, restated
-2026-09-02).** Entry 0153 overrules several by their explicit leave — the list is in that entry's
-"Rulings and spec this overrules" section and is summarised under "Settled" below. **Never
-"correct" the code back toward an overruled ruling.**
+2026-09-02).** Entries 0153 and 0154 overrule several by their explicit leave — the lists are in
+those entries and are summarised under "Settled" below. **Never "correct" the code back toward an
+overruled ruling.**
 
 ## Read this first — what a cold reader needs
 
-**0. `TEXT_SCHEMA` HAS TWELVE NON-DERIVED + THREE DERIVED SLOTS.** Non-derived: `origin.x`/`origin.y`
-(D-121) + `content` + `width`/`height`/**`autoresize`**/`overflow` + five `style.*`. Derived:
+**0. `TEXT_SCHEMA` HAS ELEVEN NON-DERIVED + THREE DERIVED SLOTS.** Non-derived: `origin.x`/`origin.y`
+(D-121) + `content` + `width`/`height`/**`autoresize`** + five `style.*`. **NO `overflow`** — the slot
+was REMOVED at 0154 on the human's instruction; `autoresize` took its place in the count. Derived:
 `resolvedContent` (dynamic deps), `measuredHeight` and `measuredWidth` (static deps, **the SAME
 list** — one measurement answers both).
 
@@ -85,15 +87,21 @@ D-018 refuses a missing `measuredWidth: { kind: "derived", value: null }`. A fix
 through `evaluate`/`objectExtent` does not. `autoresize` may be omitted (it reads as `true`).
 
 **0e. `DEFAULT_TEXT_*` (`command/commands.ts`)** — `width`/`height` `"auto"`, **`autoresize` `true`**,
-`overflow` `"visible"`, font `"sans-serif"`, fontSize `16`, lineHeight `20`, color `"black"`, align
-`"left"`.
+font `"sans-serif"`, fontSize `16`, lineHeight `20`, color `"black"`, align `"left"`. No `overflow`
+default: 0154 removed the slot, so `createText` no longer writes one.
 
 **0f. THE MEASURER IS BUILT, WIRED, AND REVIEWED (0133).** `main.ts:start` builds `evalContext` from
 `createCanvas2dTextMeasurer` over a SECOND offscreen 2D context and threads it through
 `executeCommand` / `pointerMove` / `loadDocument` and the pure transitions. **The in-place editor now
 uses it directly too** (`editorTextBoxSize` on every keystroke).
 
-**0g. `render/measure.ts` — line-breaking lives HERE (D-120), never in `src/engine/`.**
+**0g. `render/measure.ts` — line-breaking lives HERE (D-120), never in `src/engine/`. AND IT
+IMPLEMENTS CSS'S RULES ON PURPOSE (0154):** `white-space: pre-wrap` + `overflow-wrap: break-word`,
+because that is what the editor's `<textarea>` uses and the two must not drift. Spaces are
+PRESERVED, not collapsed; trailing spaces HANG (trimmed off the emitted line — no width, no break);
+a word too wide for its own line is split between CODE POINTS (`break-word`, not `break-all` — it
+moves to a fresh line first and is only then broken). Not Rule-5 slop and not a fudge: the browser's
+rule adopted, so drawn and typed agree by construction (D-010).
 
 **0h. `content` IS `literal`-ONLY (D-122).** The guard is `isTextContentTarget` in
 `command/commands.ts`'s `buildSlot`.
@@ -134,7 +142,8 @@ SEPARATE field, never a variant of `drag`, so every existing reader of `drag` st
 meant. A hand-built `InteractionState` in a test needs all three.
 
 **0m. A SLOT WITH A CLOSED VALUE SET IS DECLARED ON THE SCHEMA** (`ObjectSchema.slotOptions`,
-`findSlotOptions`) — `text`'s `style.align`, `overflow`, `autoresize` are the only three today.
+`findSlotOptions`) — `text`'s `style.align` and `autoresize` are the only two today (`overflow` was
+a third for exactly one cycle; 0154 removed the slot).
 `SlotDescriptor.options` → `PanelRow.choices` → a `<select>` committing on `change`. The option's
 DOM value is its **INDEX**, never its label or a stringified value — an index resolves back to the
 exact `Value`, including a boolean, which no string round-trip does. **Only a `literal` row gets a
@@ -182,8 +191,10 @@ an equality check (D-009) — EXCEPT `advance`'s `session.command.kind === "text
 
 ## Next slice (recommended)
 
-**Blocked on the human's on-screen test of entry 0153** (the script is at the top of this file).
-Whatever that finds comes first.
+**Blocked on the human's on-screen test of entry 0154** (the script is at the top of this file).
+Whatever that finds comes first. 0153's test found two defects and 0154 is the answer to both; the
+open question 0154 could not settle without a screen is **whether the remaining X-vs-X+1 cases
+contain `{= }` references** — see its "Where I got stuck".
 
 Once the editor surface is clean on screen:
 
@@ -197,10 +208,6 @@ Then: **markdown-lite rendering** (§5.6's exact list, in `renderer.ts`'s `drawT
 in-place editor, which shows RAW source, will then differ from the canvas by design; decide
 deliberately what the overlay shows**). Then the **Phase 5 gate**: an executable test over one
 document proving the §6 criterion, `REVIEW: REQUIRED`.
-
-**`overflow: "clip"`/`"ellipsis"` is now questionable** — 0153 made "never crop" the rule, so those
-two options may be obsolete. The panel offers them as choices and they do nothing. Either build them
-or drop them from `slotOptions`. **The human's call.**
 
 Cheap adds: a direct `link text_1.origin.y <cell>` test (0137-REVIEW §honesty). **D-109 clauses 1–2**
 (cell decimal precision + no cell-text clipping, `render/renderer.ts` only) still need no ruling.
@@ -232,15 +239,16 @@ rendering; D-123, Q-024 answered · **0142-REVIEW** `measuredWidth`; Q-024 CLOSE
 **0144-REVIEW** the in-place editor (D-125); D-128 · **0145-RULINGS** D-129 + D-130 + D-131 ·
 **0148-REVIEW** editor-polish; D-132 + D-133 · **0150-REVIEW** `text`-by-pointing (D-124); D-134 ·
 **0151-RULINGS** D-135 + D-136 · **0152** the editor cycle (D-135 + D-136) — **confirmed GOOD on
-screen 2026-09-02**.
+screen 2026-09-02** · **0153** the text-box rework — **confirmed GOOD on screen 2026-09-02**, with
+two defects that entry 0154 fixes.
 
 ## Built this batch, not yet seen on screen
 
-- **Entry 0153 — the text-box rework.** New: `src/render/textbox.ts`, `src/render/handles.ts` (+
-  their tests). Modified: `index.html`, `command/commands.ts`, `command/props.ts`,
-  `engine/primitives/schema.ts`, `engine/primitives/text.ts`, `main.ts`, `render/editor.ts`,
-  `render/extent.ts`, `render/interaction.ts`, `render/renderer.ts`, `render/slots.ts`, plus tests.
-  Self-reviewed with tests at the human's instruction; **their on-screen test is the gate.**
+- **Entry 0154 — wrap agreement + the `overflow` removal.** No new files. Modified: `index.html`,
+  `render/measure.ts` (the whole cycle lives here), `render/renderer.ts` (comments),
+  `engine/primitives/text.ts`, `engine/primitives/schema.ts`, `command/commands.ts`, `main.ts`
+  (comment), plus five test files. Self-reviewed with tests at the human's standing instruction;
+  **their on-screen test is the gate.**
 
 ## Not started
 
@@ -248,8 +256,8 @@ D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar · **the load-hardening cycle (D-126 + D-127 + D-108) —
 NEXT** · D-088 clauses 2–4 · D-089 · D-102 clause 9 · **D-109 clauses 1–2** · markdown-lite rendering
-+ a markup-aware measurer · **`text` `overflow` clip/ellipsis (now questionable — see Next slice)** ·
-the Phase 5 gate test · Phases 6–7.
++ a markup-aware measurer · the Phase 5 gate test · Phases 6–7. (**`text` `overflow` clip/ellipsis is
+no longer on this list — 0154 removed the slot on the human's instruction.**)
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -298,24 +306,30 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
-- **THE WHOLE 0153 REWORK IS UNSEEN ON SCREEN.** The pure halves are tested; "does it feel like
-  Word" is not a question any test answers. The human's test is the gate.
-- **The drawn-vs-typed wrap residual may or may not be gone.** 0153 fixed the root cause (two
-  different layout problems) rather than fudging, but canvas `measureText` and DOM text layout are
-  still two engines. **If a residual survives, 0151-RULINGS' "Carried forward" still binds: do NOT
-  add slop to `render/measure.ts` or a compensating `letter-spacing` to the overlay.**
-- **`overflow`'s drop-down offers `clip` and `ellipsis`, which are unbuilt** — and "never crop" may
-  have made them obsolete. Build them or drop them from `slotOptions`. The human's call.
-- **A width grabber dragged narrower than the longest single word snaps back** to that word's width —
-  the box follows its ink. Correct per the rule, possibly surprising in use.
+- **ENTRY 0154 IS UNSEEN ON SCREEN.** 0153 was seen and is GOOD; 0154 is the fix for the two defects
+  that test found, and nothing in it has been looked at.
+- **The X-vs-X+1 wrap residual may not be fully closed.** 0154 fixed two real causes (mid-word
+  breaking, space collapsing) and proved both with tests. **Two candidates remain and the human's
+  answer to ONE question decides which: do the misbehaving boxes contain `{= }` references?** If yes
+  it is by design — the editor shows RAW SOURCE, the canvas draws `resolvedContent`, and those are
+  different strings. If no, it is platform glyph quantization (canvas `measureText` returns float
+  advances; Chrome on Windows can quantize DOM advances to whole pixels), which is cumulative over a
+  line and has **no honest fix from the measurer's side**. **0151-RULINGS' "Carried forward" still
+  binds for that case: do NOT add slop to `render/measure.ts` or a compensating `letter-spacing` to
+  the overlay.** 0154's own change is NOT slop — read its paragraph on the distinction before
+  assuming otherwise.
 - **A panel with a focused `<select>` stops updating its other rows** until it is blurred. The
   smaller injury versus tearing the control out mid-gesture; self-heals on blur.
 - **A freshly-created `text` object opens its editor UNSELECTED** (entry 0149 Decision 4; D-136
   clause 4 leaves it). Human's call on sight.
 - **`text 30,40` (unquoted, comma) places a box at (30,40) with empty content** (entry 0149).
-- **the in-place editor overlay does not render markdown** — RAW SOURCE, which is also what
-  `renderer.ts` draws today, so the two agree; the markdown-lite cycle will make them differ and
-  must decide deliberately what the overlay shows.
+- **THE EDITOR SHOWS RAW SOURCE; THE CANVAS DRAWS `resolvedContent`.** For plain text those are the
+  same string. For a box containing a `{= … }` block they are NOT — the source is usually longer, so
+  it legitimately wraps to more lines while being edited. Unavoidable (you cannot edit a reference
+  you cannot see) but it looks exactly like the wrap defect, which is why 0154 named it as a
+  candidate for the X-vs-X+1 residual. Markdown markup is likewise raw on both sides today, so it
+  agrees; the markdown-lite cycle will make THAT differ and must decide deliberately what the
+  overlay shows.
 - **the cell editor does not reproduce `TABLE_CELL_TEXT_PADDING`'s 4-unit inset, and left-aligns a
   number cell** — deliberate. `editor.ts`'s NOT DONE HERE.
 - **the properties panel and the in-place editor can overlap** at small window sizes. No remedy.
@@ -396,10 +410,16 @@ on the human's explicit instruction.** Those, in full:
 - **D-132's colour clause — REVERSED.** The overlay matches `style.color`.
 - **D-129's zoom-scaled type style — MOVED.** `editorTextStyle` reports WORLD lengths; the scaling
   is one CSS transform. This is what makes the layouts match.
-- **§5.6's `TextBox` slot list — DEVIATED.** `autoresize` is a twelfth non-derived slot, like
-  D-121's `origin.*` and D-123's `measuredWidth` before it.
+- **§5.6's `TextBox` slot list — DEVIATED, TWICE.** `autoresize` was ADDED (0153), like D-121's
+  `origin.*` and D-123's `measuredWidth` before it; **`overflow` was REMOVED (0154)** on the human's
+  instruction — the first time a brief-named slot has been deleted rather than extended. Net: still
+  eleven.
 - **D-102 clause 6's panel grammar — NARROWED.** A drop-down row writes a literal directly. Free-text
   rows are untouched, so **Q-016 stays OPEN** for them.
+- **D-120's "no mid-word breaking" — REVERSED (0154).** `layOutLines` now implements CSS's
+  `pre-wrap` + `break-word`, because the editor's `<textarea>` does and the two must agree. D-120's
+  actual ruling — that line-breaking lives in `render/measure.ts` and never in `src/engine/` —
+  STANDS untouched; only the parenthetical about how it breaks is superseded.
 
 Otherwise standing, unchanged: **D-114/D-115/D-116/D-117** (built, reviewed 0128) · **D-118** (built,
 wired, reviewed 0133) · **D-119** (reconciled) · **D-120** (built, reviewed 0133) · **D-121/D-122**
@@ -437,8 +457,10 @@ chrome, and `textbox.ts` deals only in world lengths handed to it.
 
 ## Gotchas for the next model
 
-- **THE 2026-09-02 TEXT-BOX REWORK (entry 0153) OVERRULED SIX PRIOR RULINGS ON THE HUMAN'S EXPLICIT
-  INSTRUCTION.** The list is under "Settled" above. **Never "correct" the code back toward one.**
+- **THE 2026-09-02 TEXT-BOX WORK (entries 0153 + 0154) OVERRULED EIGHT PRIOR RULINGS ON THE HUMAN'S
+  EXPLICIT INSTRUCTION.** The list is under "Settled" above. **Never "correct" the code back toward
+  one.** In particular: a text box never crops, the measurer breaks words, and there is no
+  `overflow` slot.
 - **`render/textbox.ts` IS THE ONE BOX-SIZING RULE.** Three readers. Do not add a fourth reading.
 - **THE OVERLAY IS LAID OUT IN WORLD UNITS AND SCALED BY ONE TRANSFORM.** Do not pre-multiply
   `camera.zoom / ratio` into its width or its font size again — that is exactly the bug the rework
@@ -455,8 +477,11 @@ chrome, and `textbox.ts` deals only in world lengths handed to it.
 - **`main.ts`'s `pointerDownAt` routes a canvas click to `respondToPrompt` when `state.pending` is
   set** — the path a `text` position pick takes; it does NOT select the new object.
 - **A `<textarea>` soft-wraps unless you set `wrap="off"`.** An auto-width `text` object never wraps.
-  Do NOT add `white-space` or `overflow-wrap` to `.text-editor`: `break-word` would break mid-word
-  where `measure.ts` deliberately does not.
+  **Do NOT add `white-space` to `.text-editor`** — an author rule overrides the `white-space: pre`
+  that `wrap="off"` relies on, and would re-break exactly the auto-width lines that must stay whole.
+  `overflow-wrap: break-word` IS set there as of 0154, deliberately, and `measure.ts` now implements
+  the same rule — that pair must be changed together or not at all. (This gotcha said the opposite
+  before 0154. The reason it did — that the measurer refused to break mid-word — is gone.)
 - **`.text-editor` may not set a font, a padding or a border** — `index.html`'s comment says why.
 - **`commitTextContent` NEVER sniffs for `=`** — the whole string is one literal `set`.
 - **The in-place editor is mounted in `#stage`**, not `#panels`.

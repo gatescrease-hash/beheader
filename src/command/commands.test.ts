@@ -195,7 +195,11 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(literalValue(object, ["content"])).toBe("Radius is {= table_x.A1 }");
     expect(literalValue(object, ["width"])).toBe("auto");
     expect(literalValue(object, ["height"])).toBe("auto");
-    expect(literalValue(object, ["overflow"])).toBe("visible");
+    expect(literalValue(object, ["autoresize"])).toBe(true);
+    // NOT `overflow`: the human's 2026-09-02 follow-up removed the slot, so
+    // creation no longer writes one. Asserted as absent rather than just left
+    // unmentioned — a stray default would come back as a dead panel row.
+    expect(getSlot(object, ["overflow"])).toBeUndefined();
     expect(literalValue(object, ["style", "font"])).toBe("sans-serif");
     expect(literalValue(object, ["style", "fontSize"])).toBe(16);
     expect(literalValue(object, ["style", "lineHeight"])).toBe(20);

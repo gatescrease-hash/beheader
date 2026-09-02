@@ -110,11 +110,14 @@
  *     `layOutLines` the measurer uses (`render/measure.ts`), honouring
  *     `style.font`/`fontSize`/`lineHeight`/`color`/`align`. Its chrome and
  *     selection highlight fall out of `extent.ts`'s new `text` extent.
- *   - Markdown-lite (`**bold**`, `# heading`, `- list`, …) and `overflow`
- *     `"clip"`/`"ellipsis"` — NOT this cycle. `resolvedContent`'s markup is
- *     drawn VERBATIM (exactly as `render/measure.ts` still measures it), and
- *     every `text` object draws with `overflow: "visible"` semantics. Both are
- *     the next Phase 5 slice, together with making the measurer markup-aware.
+ *   - Markdown-lite (`**bold**`, `# heading`, `- list`, …) — NOT this cycle.
+ *     `resolvedContent`'s markup is drawn VERBATIM (exactly as
+ *     `render/measure.ts` still measures it). The next Phase 5 slice, together
+ *     with making the measurer markup-aware.
+ *   - CROPPING, in any form. §5.6's `overflow` enum is gone (the human's
+ *     2026-09-02 ruling): a text box grows to hold its text — `render/
+ *     textbox.ts` is that rule — so there is never anything outside the box to
+ *     clip or ellipsise, and `drawText` consults no such slot.
  *   - Any bound on `rows`/`cols`/`sides` — a carried known problem; one fix
  *     covers drawing and evaluation together.
  */
@@ -593,8 +596,9 @@ function resolveTextStyle(object: GraphObject): ResolvedTextStyle {
  * `measure.ts`'s header. `resolvedContent` already carries any `!`-marked broken
  * span (D-116 and D-117, engine-side) — this function just draws the string.
  *
- * Markdown-lite markup is drawn verbatim and `overflow` is not consulted (both
- * the next slice — file header). Draws nothing for an unset, non-string, or
+ * Markdown-lite markup is drawn verbatim (the next slice — file header); there
+ * is no `overflow` slot to consult, and no cropping of any kind: the box grows
+ * to hold its text (`render/textbox.ts`). Draws nothing for an unset, non-string, or
  * empty `resolvedContent` (an empty text object takes no ink, matching
  * `measure.ts`'s zero box); a `style.*` slot that is missing or holds a
  * non-usable value falls back per `resolveTextStyle` rather than blanking the

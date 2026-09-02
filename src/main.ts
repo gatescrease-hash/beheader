@@ -722,7 +722,7 @@ export interface PanelRow {
    * The choices this row offers instead of a free text box (the human's
    * 2026-09-02 instruction: a slot with "only a small subset of valid inputs"
    * shows a drop-down). `undefined` for every free-text row, which is all of
-   * them but a `text` object's `style.align`, `overflow` and `autoresize`.
+   * them but a `text` object's `style.align` and `autoresize`.
    *
    * Only a `literal` row gets one. A `formula` row keeps its blue paperclip and
    * its `= source` text — it is DRIVEN, and offering a choice that would

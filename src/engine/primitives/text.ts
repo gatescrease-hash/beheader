@@ -732,11 +732,23 @@ export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, read
 // ---------------------------------------------------------------------------
 
 /**
- * The nine `text`-specific stored slot paths (§5.6's `TextBox` shape), all
+ * The eight `text`-specific stored slot paths (§5.6's `TextBox` shape), all
  * `static` — a `text` object's slot set never changes (Rule 6). Owned here (not
  * in `primitives/schema.ts`) because this file reads several of them (`content`
  * for parsing; `resolvedContent`/`width`/`style.*` in `computeMeasuredHeight`)
  * and one spelling must serve both; `TEXT_SCHEMA` imports the list.
+ *
+ * §5.6's `overflow` (`visible` / `clip` / `ellipsis`) is NOT among them, as of
+ * the human's 2026-09-02 ruling ("remove overflow options — always default to a
+ * standard overflow"). It was declared but never read: nothing ever implemented
+ * `clip` or `ellipsis`, and the rework before it settled the one behaviour a
+ * text box has — it GROWS to hold its text and never crops — which is the
+ * `visible` arm and leaves the other two with nothing to mean. A slot no reader
+ * consults and no value can change is a lie in the properties panel, so it is
+ * gone rather than kept as decoration. A document saved while it existed still
+ * loads: an undeclared literal slot is legal (`mutation.ts`'s
+ * `findSchemaSlotKindMismatches` restricts only DERIVED positions), it simply
+ * stops being enumerated.
  *
  * The other two non-derived paths — `origin.x`/`origin.y` (**D-121**) — are NOT
  * here: they reuse `primitives/geometry.ts`'s `ORIGIN_X_PATH`/`ORIGIN_Y_PATH`,
@@ -751,7 +763,6 @@ export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, read
 export const TEXT_CONTENT_PATH: readonly string[] = ["content"];
 export const TEXT_WIDTH_PATH: readonly string[] = ["width"];
 export const TEXT_HEIGHT_PATH: readonly string[] = ["height"];
-export const TEXT_OVERFLOW_PATH: readonly string[] = ["overflow"];
 /**
  * `autoresize` (the human's 2026-09-02 text-box rework) — whether the box
  * SHRINKS back to its text when the text gets smaller than the size the

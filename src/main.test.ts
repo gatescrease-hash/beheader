@@ -1281,8 +1281,15 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
     expect(row.choices?.selectedIndex).toBe(0); // DEFAULT_TEXT_STYLE_ALIGN
   });
 
-  it("gives `overflow` §5.6's three", () => {
-    expect(rowOf(withText(), "overflow").choices?.values).toEqual(["visible", "clip", "ellipsis"]);
+  // `overflow` had a drop-down here for exactly one cycle. The human's
+  // follow-up removed the SLOT ("remove overflow options — always default to a
+  // standard overflow"), so there is no row to offer choices on at all — which
+  // is the assertion, because a dead row that still renders is the defect.
+  it("has no `overflow` row left to offer choices on — the slot is gone, not just its drop-down", () => {
+    const object = objectNamed(withText(), "text_1");
+    const model = buildPanelModel(object, withText().document.objects);
+    expect(model.modifiable.map((row) => row.path)).not.toContain("overflow");
+    expect(model.derived.map((row) => row.path)).not.toContain("overflow");
   });
 
   it("gives `autoresize` a BOOLEAN pair with readable labels — `true`/`false` says nothing about what it does", () => {
@@ -1356,8 +1363,12 @@ describe("a text box's size follows its text (2026-09-02)", () => {
 // derived and nothing derived depends on it, which is what makes the difference
 // and is why the slot was declared that way. Pinned here rather than argued,
 // because "it should still load" is the whole claim.
+//
+// The same fixture now covers the OTHER direction too: it carries an `overflow`
+// slot, which the schema no longer declares at all. A document is not only saved
+// before a slot arrives — it can also outlive one.
 describe("a document saved before `autoresize` existed still loads (2026-09-02)", () => {
-  /** A `text` object as `createText` wrote one BEFORE the slot was added: every other declared path filled, `autoresize` simply absent. */
+  /** A `text` object as `createText` wrote one BEFORE the slot was added: every other declared path filled (`overflow` included — a slot since REMOVED), `autoresize` simply absent. */
   function preAutoresizeDocument(): unknown {
     return {
       formatVersion: 1,
@@ -1419,5 +1430,23 @@ describe("a document saved before `autoresize` existed still loads (2026-09-02)"
     }
     const state = typed(initialAppState(loaded.document), "set text_1.autoresize FALSE");
     expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: false });
+  });
+
+  // The REMOVAL's own migration risk (the human's 2026-09-02 follow-up: "remove
+  // overflow options"). An undeclared LITERAL slot is legal — `mutation.ts`'s
+  // integrity checks restrict only derived positions — so the old value rides
+  // along untouched instead of failing the load. It just stops being ENUMERATED,
+  // which is what keeps a dead row out of the properties panel.
+  it("still loads a document carrying the REMOVED `overflow` slot, keeps it inert, and shows no panel row for it", () => {
+    const loaded = deserializeDocument(preAutoresizeDocument());
+    if (!loaded.ok) {
+      throw new Error(`expected it to load, got: ${loaded.message}`);
+    }
+    const state = initialAppState(loaded.document);
+    const object = objectNamed(state, "text_1");
+    expect(getSlot(object, ["overflow"])).toEqual({ kind: "literal", value: "visible" });
+    const model = buildPanelModel(object, state.document.objects);
+    expect(model.modifiable.map((row) => row.path)).not.toContain("overflow");
+    expect(model.derived.map((row) => row.path)).not.toContain("overflow");
   });
 });

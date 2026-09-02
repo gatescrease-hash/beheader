@@ -407,6 +407,28 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     ]);
   });
 
+  // The human's 2026-09-02 report, at the layer they SAW it: a continuous run of
+  // text with no spaces used to be drawn as one long line straight out through
+  // the side of its own box, because `layOutLines` had no mid-word break. The
+  // measurer's fix reaches the canvas for free — `drawText` breaks lines through
+  // that same function (D-010), so this is the drawn half of the same rule.
+  it("breaks a long unbroken run of text between characters instead of drawing it out past the box edge", () => {
+    const { ctx, calls } = createFakeContext();
+    // 28px width / 7px characters = four per line.
+    renderDocument(ctx, 800, 600, [textObject("abcdefghij", 0, 0, { width: { kind: "literal", value: 28 } })], CAMERA_IDENTITY);
+    expect(bodyText(calls).map((call) => ({ text: call.text, y: call.y }))).toEqual([
+      { text: "abcd", y: 0 },
+      { text: "efgh", y: 20 },
+      { text: "ij", y: 40 },
+    ]);
+  });
+
+  it("draws a run of spaces as the operator typed it — collapsing it made the text change the moment the editor closed", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("a  b", 0, 0)], CAMERA_IDENTITY);
+    expect(bodyText(calls).map((call) => call.text)).toEqual(["a  b"]);
+  });
+
   it("does not wrap when width is \"auto\" — one line however long", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [textObject("a very long single line that would wrap at any real width", 0, 0)], CAMERA_IDENTITY);

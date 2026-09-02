@@ -42,9 +42,33 @@
  *
  *   LINE-BREAKING (**D-120**): split on the operator's own newlines first, then
  *   — ONLY when `maxWidth` is a positive finite number — greedily word-wrap each
- *   hard line, measuring candidates with `ctx.measureText`. A word wider than
- *   `maxWidth` sits alone and overflows: no mid-word breaking, no hyphenation
- *   (Rule 5; §5.6 asks for none). No `maxWidth` (`width` is `"auto"`) -> no wrap.
+ *   hard line, measuring candidates with `ctx.measureText`. No `maxWidth`
+ *   (`width` is `"auto"`) -> no wrap.
+ *
+ *   The rule this file breaks lines by is **CSS's**, deliberately and to the
+ *   letter — specifically `white-space: pre-wrap` plus `overflow-wrap:
+ *   break-word`, which is what the in-place editor's `<textarea>` uses (the
+ *   human's 2026-09-02 report). Two consequences, and neither is a style
+ *   preference:
+ *
+ *     - **A run of spaces is PRESERVED, not collapsed.** `pre-wrap` keeps every
+ *       space, so `"a  b"` is wider in the editor than a collapsed `"a b"` is on
+ *       the canvas — near a wrap boundary that is one extra line in the editor
+ *       and not on the canvas, which is exactly the "X lines rendered, X+1 lines
+ *       editing" the operator saw. Spaces at the END of a line HANG (CSS Text 3):
+ *       they are trimmed off the emitted line, so they neither widen the box nor
+ *       force a break.
+ *     - **A word wider than `maxWidth` is BROKEN between characters.** It used to
+ *       sit alone and overflow, which meant a long unbroken run of text — a URL,
+ *       a keyboard mash — punched straight out through the side of its own box on
+ *       the canvas while the editor broke it neatly. `overflow-wrap: break-word`
+ *       is the CSS rule reproduced: the word first moves to a line of its own,
+ *       and only if it STILL does not fit is it split.
+ *
+ *   Rule 5 still applies to everything CSS does beyond that: no hyphenation, no
+ *   dictionary, no grapheme-cluster or bidi handling, no tab stops (a tab is part
+ *   of a word here — only U+0020 is a break opportunity). Those are differences
+ *   between this measurer and a browser that no document reachable today can see.
  *
  * INVARIANTS UPHELD HERE
  *   - `measure` NEVER throws and ALWAYS returns two finite, non-negative
@@ -122,6 +146,24 @@ export function cssFont(fontSize: number, family: string): string {
   return `${fontSize}px ${family.trim() === "" ? "sans-serif" : family}`;
 }
 
+/** A line's trailing spaces, removed. CSS Text 3 HANGS them at a `pre-wrap` line's end — they take no width, cannot force a break, and are invisible — so an emitted line drops them and every measurement here is of a line that has already been through this. Only U+0020, matching the one character this file treats as a break opportunity. */
+function withoutHangingSpaces(line: string): string {
+  return line.replace(/ +$/, "");
+}
+
+/**
+ * One hard line, split at its soft-wrap opportunities: each chunk is one word
+ * plus the spaces that FOLLOW it, because CSS puts the break opportunity AFTER a
+ * space run, not before it. A leading space run (no word) is its own first
+ * chunk, and every chunk concatenated is the input back verbatim — which is what
+ * makes `layOutLines` preserve the operator's spacing instead of collapsing it.
+ *
+ * `"a  bb c"` -> `["a  ", "bb ", "c"]`; `"  x"` -> `["  ", "x"]`; `""` -> `[]`.
+ */
+function wrapChunks(hardLine: string): readonly string[] {
+  return hardLine.match(/[^ ]+ *| +/g) ?? [];
+}
+
 /**
  * Splits `text` into the lines it lays out as: on its own newlines first (the
  * operator's hard breaks), then — only when `wrapWidth` is set — greedily
@@ -130,8 +172,14 @@ export function cssFont(fontSize: number, family: string): string {
  *
  * Iterative, and appends one line at a time (see the file header's INVARIANTS):
  * the number of lines follows `content`'s length, which the operator controls.
- * A run of spaces is collapsed for wrap fitting (Rule 5 — D-120 leaves the
- * whitespace rule to this file); a blank hard line stays one blank line.
+ * A blank hard line stays one blank line.
+ *
+ * The whitespace and word-breaking rules are CSS's `pre-wrap` +
+ * `overflow-wrap: break-word`, on purpose — see the file header's LINE-BREAKING
+ * note. Spaces are preserved, trailing ones hang, and a word too wide for the
+ * line even by itself is split between characters rather than left to overflow.
+ * Iterating the word with `for..of` walks CODE POINTS, so a split never lands
+ * inside a surrogate pair and halves an emoji.
  *
  * Exported (entry 0138) so `renderer.ts` draws the SAME lines this file measures
  * — see the file header. `wrapWidth` is the `text` object's `width` slot when it
@@ -145,19 +193,35 @@ export function layOutLines(text: string, wrapWidth: number | undefined, measure
   const lines: string[] = [];
   for (const hardLine of hardLines) {
     let current = "";
-    for (const word of hardLine.split(" ")) {
-      if (word === "") {
-        continue; // a run of spaces — collapsed for wrap fitting
+    for (const chunk of wrapChunks(hardLine)) {
+      if (current !== "") {
+        if (measureWidth(withoutHangingSpaces(current + chunk)) <= wrapWidth) {
+          current += chunk;
+          continue;
+        }
+        // Does not fit after what is already on the line: break here, and let
+        // `current`'s own trailing spaces hang off the end of the pushed line.
+        lines.push(withoutHangingSpaces(current));
+        current = "";
       }
-      const candidate = current === "" ? word : `${current} ${word}`;
-      if (current !== "" && measureWidth(candidate) > wrapWidth) {
-        lines.push(current);
-        current = word; // a word wider than wrapWidth still goes on its own line and overflows
-      } else {
-        current = candidate;
+      if (measureWidth(withoutHangingSpaces(chunk)) <= wrapWidth) {
+        current = chunk; // fits on a line of its own — the ordinary case
+        continue;
+      }
+      // Too wide even alone. `overflow-wrap: break-word`'s last resort: split
+      // the word between characters. The `current !== ""` guard is what stops a
+      // single character wider than the whole line from looping forever — it
+      // goes on the line and overflows, which is what a browser does too.
+      for (const character of chunk) {
+        if (current !== "" && measureWidth(withoutHangingSpaces(current + character)) > wrapWidth) {
+          lines.push(withoutHangingSpaces(current));
+          current = character;
+        } else {
+          current += character;
+        }
       }
     }
-    lines.push(current);
+    lines.push(withoutHangingSpaces(current));
   }
   return lines;
 }

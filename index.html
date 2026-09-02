@@ -209,6 +209,23 @@
         resize: none;
         outline: 1px solid #1a56db;
         overflow: hidden;
+        /*
+          The wrap rule, stated rather than inherited from the UA stylesheet:
+          `render/measure.ts` reproduces `overflow-wrap: break-word` exactly (a
+          word too wide for the line is split between characters), so the two
+          must not be left to disagree because a browser defaults differently.
+          `word-break: normal` keeps that to a LAST resort — `break-all` would
+          split words that would have fitted on the next line, which the
+          measurer does not do.
+
+          `white-space` is deliberately NOT set here: the `wrap` attribute
+          (`main.ts` sets it from `editorTextStyle.wraps`) is what decides
+          whether this box wraps at all, and an author rule would override the
+          `white-space: pre` that `wrap="off"` relies on — re-breaking exactly
+          the auto-width lines that must stay whole.
+        */
+        overflow-wrap: break-word;
+        word-break: normal;
         z-index: 1;
       }
       #log {

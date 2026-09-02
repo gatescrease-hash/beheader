@@ -100,11 +100,34 @@ describe("createCanvas2dTextMeasurer — line-breaking lives here (D-120), and o
     expect(result.width).toBe("aaa bbb".length * CHAR);
   });
 
-  it("puts a word wider than maxWidth alone on its line and lets it overflow (no mid-word breaking)", () => {
+  // The human's 2026-09-02 report: "the text wrapping ... refuses to break up
+  // continuous streams of text without spaces, which also sort of breaks the box
+  // boundaries". A word too wide for its own line used to sit there and punch
+  // out through the side of the box, while the editor's `<textarea>` — which has
+  // `overflow-wrap: break-word` — broke it neatly. Now both break it.
+  it("BREAKS a word wider than maxWidth between characters rather than letting it overflow (CSS `overflow-wrap: break-word`)", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
+    // CHAR = 10, maxWidth 50 -> five characters per line. The 20-character word
+    // fills four of them, then "short" (exactly 50) follows on its own.
     const result = measurer.measure("supercalifragilistic short", STYLE, 50);
-    expect(result.height).toBe(2 * 20); // the long word, then "short"
-    expect(result.width).toBe("supercalifragilistic".length * CHAR); // overflows past 50
+    expect(result.height).toBe(5 * 20);
+    // The measured width no longer exceeds the wrap width — which is what stops
+    // the drawn text from escaping its own box.
+    expect(result.width).toBe(50);
+  });
+
+  it("moves the long word to a fresh line FIRST and only then breaks it — `break-word`, not `break-all`", () => {
+    const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
+    // "ab" (20px) is on line 1; the 8-char word does not fit after it, so it
+    // starts line 2 whole and is split from there — never "ab" + "abcd" on one.
+    expect(layOutLines("ab abcdefgh", 50, (line) => line.length * CHAR)).toEqual(["ab", "abcde", "fgh"]);
+  });
+
+  it("never loops forever when even ONE character is wider than the line — it goes on and overflows, as a browser does", () => {
+    const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
+    const result = measurer.measure("abc", STYLE, 4); // 4px wide box, 10px characters
+    expect(result.height).toBe(3 * 20); // one character per line
+    expect(result.width).toBe(CHAR);
   });
 
   it("wraps each hard line independently — a newline plus wrapping compound", () => {
@@ -113,9 +136,23 @@ describe("createCanvas2dTextMeasurer — line-breaking lives here (D-120), and o
     expect(measurer.measure("aaa bbb\nccc", STYLE, 35).height).toBe(3 * 20);
   });
 
-  it("collapses a run of spaces for wrap fitting", () => {
+  // Also the human's 2026-09-02 report ("some edge cases where the text shows as
+  // X lines in the rendered mode but pops to X+1 lines in the editor mode").
+  // `white-space: pre-wrap` — what a soft-wrapping `<textarea>` uses — PRESERVES
+  // a run of spaces, so collapsing it here made the canvas fit text on one line
+  // that the editor had already pushed onto two.
+  it("PRESERVES a run of spaces when fitting, so it can force the same break the editor's pre-wrap does", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    expect(measurer.measure("aaa    bbb", STYLE, 75).height).toBe(20); // one line — the double space does not force a break
+    // "aaa bbb" (70px) fits in 75; "aaa    bbb" (100px) does not.
+    expect(measurer.measure("aaa bbb", STYLE, 75).height).toBe(20);
+    expect(measurer.measure("aaa    bbb", STYLE, 75).height).toBe(2 * 20);
+  });
+
+  it("HANGS spaces at the end of a line (CSS Text 3): they neither force a break nor widen the box", () => {
+    const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
+    const result = measurer.measure("aaa     ", STYLE, 40); // 3 characters of text, 5 of trailing space
+    expect(result.height).toBe(20); // still one line
+    expect(result.width).toBe(3 * CHAR); // the spaces take no room in the box
   });
 
   it("does not wrap for a non-positive or non-finite maxWidth (same as 'auto')", () => {
@@ -177,6 +214,28 @@ describe("layOutLines / cssFont — exported for renderer.ts to draw the SAME li
     // CHAR = 10: "aaa" is 30px, "aaa bbb" is 70px; wrapWidth 40 -> one word per line.
     expect(layOutLines("aaa bbb ccc", 40, width)).toEqual(["aaa", "bbb", "ccc"]);
     expect(layOutLines("aaa bbb\nzzz", 100, width)).toEqual(["aaa bbb", "zzz"]);
+  });
+
+  // `renderer.ts` DRAWS these strings. Collapsing a double space here did not
+  // just move a wrap point — it drew "a  b" as "a b", so the text visibly
+  // changed the moment the editor closed. That is the exact thing the
+  // 2026-09-02 rework exists to make impossible.
+  it("emits the operator's spacing VERBATIM, so the drawn glyphs are the typed ones", () => {
+    expect(layOutLines("a  b", 200, width)).toEqual(["a  b"]);
+    expect(layOutLines("  indented", 200, width)).toEqual(["  indented"]);
+  });
+
+  it("drops only the trailing spaces of an emitted line — they hang, and drawing them could shift centred text", () => {
+    expect(layOutLines("aaa   bbb   ", 60, width)).toEqual(["aaa", "bbb"]);
+  });
+
+  it("splits a long word between CODE POINTS, so a break never halves an emoji into two lone surrogates", () => {
+    // Each astral character is one code point and (to the fake) two "characters"
+    // of width, since `.length` counts UTF-16 units. Four of them at wrapWidth
+    // 40 -> two per line, and every emitted piece must still be a valid string.
+    const lines = layOutLines("😀😀😀😀", 40, width);
+    expect(lines).toEqual(["😀😀", "😀😀"]);
+    expect(lines.join("")).toBe("😀😀😀😀");
   });
 
   it("cssFont builds `<size>px <family>` and falls back to sans-serif for a blank family", () => {

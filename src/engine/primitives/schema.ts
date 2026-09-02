@@ -117,7 +117,6 @@ import {
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
   TEXT_MEASURED_WIDTH_PATH,
-  TEXT_OVERFLOW_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_STYLE_ALIGN_PATH,
   TEXT_STYLE_COLOR_PATH,
@@ -585,12 +584,17 @@ const RECT_SCHEMA: ObjectSchema = {
 /**
  * `text` (PROJECT_BRIEF §5.6): "One text object type, not two." ELEVEN fixed
  * non-derived slots (`origin.x`/`origin.y` + `content` + `width`/`height`/
- * `overflow` + five `style.*`, all `static` — a `text` object's slot set never
+ * `autoresize` + five `style.*`, all `static` — a `text` object's slot set never
  * changes, Rule 6) and TWO derived slots, `resolvedContent` (entry 0127) and
- * `measuredHeight` (entry 0129). The `content`/`width`/`height`/`overflow`/
+ * `measuredHeight` (entry 0129). The `content`/`width`/`height`/`autoresize`/
  * `style.*` paths and both compute functions live in `primitives/text.ts` (the
  * pure-logic-here / registry-there split — `text.ts` reads several of the
  * paths, so one spelling must serve both); this entry only wires them.
+ *
+ * §5.6's `overflow` was one of these until the human's 2026-09-02 ruling removed
+ * it — see `TEXT_CONTENT_PATH`'s doc comment in `primitives/text.ts` for why a
+ * slot no reader consults is deleted rather than kept. `autoresize`, added the
+ * same day, took its place in the count.
  *
  * `origin.x`/`origin.y` (**D-121**, answering Q-022) reuse `primitives/
  * geometry.ts`'s `ORIGIN_X_PATH`/`ORIGIN_Y_PATH` — the identical spelling
@@ -649,7 +653,6 @@ const TEXT_SCHEMA: ObjectSchema = {
         // measured slot — see `TEXT_AUTORESIZE_PATH`'s own doc comment for why
         // that is what keeps previously-saved documents loading.
         TEXT_AUTORESIZE_PATH,
-        TEXT_OVERFLOW_PATH,
         TEXT_STYLE_FONT_PATH,
         TEXT_STYLE_FONT_SIZE_PATH,
         TEXT_STYLE_LINE_HEIGHT_PATH,
@@ -658,13 +661,13 @@ const TEXT_SCHEMA: ObjectSchema = {
       ],
     },
   ],
-  // The three `text` slots whose legal values are a closed set — the properties
+  // The two `text` slots whose legal values are a closed set — the properties
   // panel offers each as a drop-down instead of a free text box (the human's
   // 2026-09-02 instruction). `style.align`'s three are `renderer.ts`'s own
-  // `resolveTextStyle` clamp; `overflow`'s three are §5.6's list.
+  // `resolveTextStyle` clamp. `overflow` was a third until the same operator's
+  // follow-up removed the slot outright.
   slotOptions: [
     { path: TEXT_STYLE_ALIGN_PATH, values: ["left", "center", "right"] },
-    { path: TEXT_OVERFLOW_PATH, values: ["visible", "clip", "ellipsis"] },
     {
       path: TEXT_AUTORESIZE_PATH,
       values: [true, false],

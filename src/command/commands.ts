@@ -127,7 +127,6 @@ import {
   TEXT_AUTORESIZE_PATH,
   TEXT_CONTENT_PATH,
   TEXT_HEIGHT_PATH,
-  TEXT_OVERFLOW_PATH,
   TEXT_STYLE_ALIGN_PATH,
   TEXT_STYLE_COLOR_PATH,
   TEXT_STYLE_FONT_PATH,
@@ -246,13 +245,16 @@ const DEFAULT_POLYGON_ROTATION = 0;
 /**
  * §5.6 gives a `text` object eleven non-derived slots; §5.10's `text x=0 y=0
  * "<content>"` form supplies only `content` and (optionally) the position. This
- * handler fills the other eight — `width`/`height`/`overflow` and the five
+ * handler fills the other eight — `width`/`height`/`autoresize` and the five
  * `style.*` — with these defaults, the same way `createPolygon` supplies
  * `rotation`. They are the handler's provisional pick, not the brief's: §5.6
- * states the shape of `style` and the `overflow` enum but no default values, and
- * §5.10's grammar has no argument for any of them. `set text_1.<slot> …` changes
- * each afterward (D-046-style `content` aside — that one is `literal`-only per
- * D-122).
+ * states the shape of `style` but no default values, and §5.10's grammar has no
+ * argument for any of them. `set text_1.<slot> …` changes each afterward
+ * (D-046-style `content` aside — that one is `literal`-only per D-122).
+ *
+ * `overflow` is no longer among them: the human's 2026-09-02 ruling removed the
+ * slot (see `primitives/text.ts`). A box created before that still carries one;
+ * it is inert.
  *
  * `width`/`height` default to `"auto"` — §5.6's "Auto width + auto height means no
  * wrapping", the safe default for a command that cannot specify a width. `font`
@@ -271,7 +273,6 @@ const DEFAULT_TEXT_HEIGHT = "auto";
  * what it means.
  */
 const DEFAULT_TEXT_AUTORESIZE = true;
-const DEFAULT_TEXT_OVERFLOW = "visible";
 const DEFAULT_TEXT_STYLE_FONT = "sans-serif";
 const DEFAULT_TEXT_STYLE_FONT_SIZE = 16;
 const DEFAULT_TEXT_STYLE_LINE_HEIGHT = 20;
@@ -565,7 +566,6 @@ function createText(command: CreateTextCommand, document: Document, context: Eva
     { path: TEXT_WIDTH_PATH, value: DEFAULT_TEXT_WIDTH },
     { path: TEXT_HEIGHT_PATH, value: DEFAULT_TEXT_HEIGHT },
     { path: TEXT_AUTORESIZE_PATH, value: DEFAULT_TEXT_AUTORESIZE },
-    { path: TEXT_OVERFLOW_PATH, value: DEFAULT_TEXT_OVERFLOW },
     { path: TEXT_STYLE_FONT_PATH, value: DEFAULT_TEXT_STYLE_FONT },
     { path: TEXT_STYLE_FONT_SIZE_PATH, value: DEFAULT_TEXT_STYLE_FONT_SIZE },
     { path: TEXT_STYLE_LINE_HEIGHT_PATH, value: DEFAULT_TEXT_STYLE_LINE_HEIGHT },
