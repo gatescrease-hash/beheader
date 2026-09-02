@@ -18,6 +18,7 @@ import type { ErrorValue, Value } from "../graph/node.ts";
 import type { ReadRange, ReadSlot } from "../formula/eval.ts";
 import {
   computeMeasuredHeight,
+  computeMeasuredWidth,
   computeResolvedContent,
   evaluateBlockTree,
   extractTextDependencies,
@@ -703,5 +704,86 @@ describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, D-
     expect(computeMeasuredHeight(OBJECT, styleRead(), nanMeasurer, undefined)).toMatchObject({ error: "#TYPE" });
     const infMeasurer: EvalContext = { measurer: { measure: () => ({ width: 0, height: Infinity }) } };
     expect(computeMeasuredHeight(OBJECT, styleRead(), infMeasurer, undefined)).toMatchObject({ error: "#TYPE" });
+  });
+});
+
+describe("computeMeasuredWidth — the measuredWidth compute (D-123), the other half of ONE measurement", () => {
+  const OBJECT: GraphObject = { id: "obj_x", name: "text_1", type: "text", slots: {} };
+
+  /** The same read set `computeMeasuredHeight` declares — D-123 clause 1: one dependency list for both. */
+  function styleRead(over: Partial<Record<"resolvedContent" | "width" | "font" | "fontSize" | "lineHeight", Value>> = {}): ReadSlot {
+    return reader({
+      "obj_x::resolvedContent": over.resolvedContent ?? "some resolved text",
+      "obj_x::width": over.width ?? "auto",
+      "obj_x::style.font": over.font ?? "sans",
+      "obj_x::style.fontSize": over.fontSize ?? 12,
+      "obj_x::style.lineHeight": over.lineHeight ?? 16,
+    });
+  }
+
+  /** Width is the text's length, height its lineHeight — two distinguishable numbers, so a test can tell which component came back. */
+  function fakeContext(): { context: EvalContext; lastCall: () => Parameters<TextMeasurer["measure"]> | undefined } {
+    let last: Parameters<TextMeasurer["measure"]> | undefined;
+    return {
+      context: {
+        measurer: {
+          measure: (text, style, maxWidth) => {
+            last = [text, style, maxWidth];
+            return { width: text.length, height: style.lineHeight + (maxWidth ?? 0) };
+          },
+        },
+      },
+      lastCall: () => last,
+    };
+  }
+
+  it("returns measure(...).width — the widest laid-out line, not the height and not the width slot", () => {
+    const { context } = fakeContext();
+    expect(computeMeasuredWidth(OBJECT, styleRead({ resolvedContent: "12345" }), context, undefined)).toBe(5);
+  });
+
+  it("takes its width from the SAME measurement computeMeasuredHeight takes its height from (D-123 clause 2)", () => {
+    const { context } = fakeContext();
+    const read = styleRead({ resolvedContent: "abcd", lineHeight: 20 });
+    expect(computeMeasuredWidth(OBJECT, read, context, undefined)).toBe(4);
+    expect(computeMeasuredHeight(OBJECT, read, context, undefined)).toBe(20);
+  });
+
+  it("D-118: returns #MEASURE with only the null measurer, exactly as measuredHeight does — never a width it did not earn", () => {
+    expect(computeMeasuredWidth(OBJECT, styleRead(), NULL_EVAL_CONTEXT, undefined)).toMatchObject({ error: "#MEASURE" });
+    const isolated = computeMeasuredWidth(OBJECT, styleRead(), undefined, undefined);
+    expect(isolated).toMatchObject({ error: "#MEASURE" });
+    expect((isolated as ErrorValue).message).toContain("measuredWidth"); // the message names the slot that was read
+  });
+
+  it("D-120: a numeric `width` slot still reaches the measurer as maxWidth — the wrap boundary shapes the measured width too", () => {
+    const { context, lastCall } = fakeContext();
+    computeMeasuredWidth(OBJECT, styleRead({ width: 150 }), context, undefined);
+    expect(lastCall()?.[2]).toBe(150);
+  });
+
+  it("propagates an upstream ErrorValue and #TYPEs an unusable style, in measuredHeight's order (D-123 clause 2)", () => {
+    const { context } = fakeContext();
+    const err: ErrorValue = { error: "#REF", message: "style.fontSize reads a deleted cell" };
+    expect(computeMeasuredWidth(OBJECT, styleRead({ fontSize: err }), context, undefined)).toEqual(err);
+    expect(computeMeasuredWidth(OBJECT, styleRead({ width: err }), NULL_EVAL_CONTEXT, undefined)).toEqual(err); // upstream beats #MEASURE
+    expect(computeMeasuredWidth(OBJECT, styleRead({ font: 5 }), context, undefined)).toMatchObject({ error: "#TYPE" });
+    expect(computeMeasuredWidth(OBJECT, styleRead({ font: 5 }), NULL_EVAL_CONTEXT, undefined)).toMatchObject({ error: "#MEASURE" }); // #MEASURE beats #TYPE
+  });
+
+  it("D-123 clause 2: neither slot succeeds while the other fails — a non-finite width #TYPEs BOTH, and so does a non-finite height", () => {
+    const nanWidth: EvalContext = { measurer: { measure: () => ({ width: Number.NaN, height: 20 }) } };
+    expect(computeMeasuredWidth(OBJECT, styleRead(), nanWidth, undefined)).toMatchObject({ error: "#TYPE" });
+    expect(computeMeasuredHeight(OBJECT, styleRead(), nanWidth, undefined)).toMatchObject({ error: "#TYPE" });
+
+    const infHeight: EvalContext = { measurer: { measure: () => ({ width: 10, height: Infinity }) } };
+    expect(computeMeasuredWidth(OBJECT, styleRead(), infHeight, undefined)).toMatchObject({ error: "#TYPE" });
+    expect(computeMeasuredHeight(OBJECT, styleRead(), infHeight, undefined)).toMatchObject({ error: "#TYPE" });
+  });
+
+  it("never throws for a non-string resolvedContent — measures the empty string, as measuredHeight does", () => {
+    const { context, lastCall } = fakeContext();
+    expect(() => computeMeasuredWidth(OBJECT, styleRead({ resolvedContent: 7 }), context, undefined)).not.toThrow();
+    expect(lastCall()?.[0]).toBe("");
   });
 });

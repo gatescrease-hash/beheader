@@ -12,10 +12,11 @@
  *
  * WHAT THIS IS
  *   Three pure functions over `content`'s parsed shape, plus §5.6's `TextBox`
- *   slot-path constants and the wiring for BOTH `text` derived slots that
+ *   slot-path constants and the wiring for ALL THREE `text` derived slots that
  *   `primitives/schema.ts` registers — `resolveTextDependencyAddresses` +
- *   `computeResolvedContent` (entry 0127) and `computeMeasuredHeight` (entry
- *   0129) — see the section further down:
+ *   `computeResolvedContent`, and `computeMeasuredHeight` /
+ *   `computeMeasuredWidth`, the two halves of one measurement (**D-123**) — see
+ *   the section further down:
  *   - `parseTextContent(content, objects)` -> a `Block[]`. Never throws, and never
  *     rejects `content` — it is a LITERAL slot (§5.6), so any string is legal document
  *     state; a malformed `{= }`/`{? }` becomes an `error`-kind `Block` INSTEAD OF a
@@ -94,12 +95,15 @@
  *     with the `read`/`readRange` `graph/eval.ts`'s `evaluateDerivedSlot` built to a
  *     formula slot's contract (**D-114**: D-110 coercion, a real range reader,
  *     clause 3's ordering). No evaluation logic of its own (Rule 4).
- *   - `computeMeasuredHeight(object, read, context, deps)` — the `measuredHeight`
- *     compute (§5.6). A pass-through: reads `resolvedContent`/`width`/`style.*`,
- *     hands them to `context.measurer.measure`, returns `.height`. Returns
- *     `#MEASURE` when only the null measurer is wired (**D-118**), `#TYPE` for an
- *     unusable style, and propagates any upstream `ErrorValue`. Line-breaking is
- *     the measurer's job, not this function's (**D-120**).
+ *   - `computeMeasuredHeight` / `computeMeasuredWidth` — the `measuredHeight`
+ *     (§5.6) and `measuredWidth` (**D-123**) computes. Both are pass-throughs
+ *     over ONE shared helper, `measureTextBox`: it reads
+ *     `resolvedContent`/`width`/`style.*`, hands them to
+ *     `context.measurer.measure`, and each compute picks its own component off
+ *     the result. Returns `#MEASURE` when only the null measurer is wired
+ *     (**D-118**), `#TYPE` for an unusable style or a non-finite box, and
+ *     propagates any upstream `ErrorValue`. Line-breaking is the measurer's job,
+ *     not this file's (**D-120**).
  *
  * NOT DONE HERE
  *   - Markdown-lite parsing/rendering, layout, wrapping — `render/`, later. Deliberately
@@ -720,10 +724,10 @@ export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, read
 }
 
 // ---------------------------------------------------------------------------
-// The `text` schema entry's wiring halves (entries 0127, 0129) — the "pure
-// logic here, registry there" split `primitives/geometry.ts` uses. This file
-// owns §5.6's `TextBox` slot-path vocabulary AND the two derived-slot computes
-// (`resolvedContent`, `measuredHeight`); `primitives/schema.ts`'s `TEXT_SCHEMA`
+// The `text` schema entry's wiring halves — the "pure logic here, registry
+// there" split `primitives/geometry.ts` uses. This file owns §5.6's `TextBox`
+// slot-path vocabulary AND the three derived-slot computes (`resolvedContent`,
+// `measuredHeight`, `measuredWidth`); `primitives/schema.ts`'s `TEXT_SCHEMA`
 // imports the paths and wires the computes. See the file header.
 // ---------------------------------------------------------------------------
 
@@ -754,9 +758,16 @@ export const TEXT_STYLE_LINE_HEIGHT_PATH: readonly string[] = ["style", "lineHei
 export const TEXT_STYLE_COLOR_PATH: readonly string[] = ["style", "color"];
 export const TEXT_STYLE_ALIGN_PATH: readonly string[] = ["style", "align"];
 
-/** The two `derived` slot paths (§5.6). `resolvedContent` — entry 0127; `measuredHeight` — entry 0129. */
+/**
+ * The three `derived` slot paths. `resolvedContent` and `measuredHeight` are
+ * §5.6's own two; `measuredWidth` is **D-123**'s deliberate extension of that
+ * list, so §5.9's "bounding box for text" and D-066's one-extent rule can both
+ * hold for an auto-width `text` object (`render/extent.ts` has no `ctx` and
+ * cannot measure glyphs itself).
+ */
 export const TEXT_RESOLVED_CONTENT_PATH: readonly string[] = ["resolvedContent"];
 export const TEXT_MEASURED_HEIGHT_PATH: readonly string[] = ["measuredHeight"];
+export const TEXT_MEASURED_WIDTH_PATH: readonly string[] = ["measuredWidth"];
 
 /**
  * The `dynamic` dependency resolver for a `text` object's `resolvedContent`
@@ -878,17 +889,29 @@ export function computeResolvedContent(
   return evaluateBlockTree(blocks, read, deps?.readRange);
 }
 
+/** One usable measurement, or the `ErrorValue` the asking compute must return instead — `measureTextBox`'s two outcomes, kept apart so neither compute has to guess which it got. */
+type TextBoxMeasurement =
+  | { readonly ok: true; readonly width: number; readonly height: number }
+  | { readonly ok: false; readonly error: ErrorValue };
+
 /**
- * The `measuredHeight` derived-slot compute (§5.6: "measuredHeight (from
- * `resolvedContent`, `width`, and `style`, computed via the injected
- * `TextMeasurer`)"). A dumb pass-through: read the declared slots, hand them to
- * `context.measurer.measure`, return `.height`. No layout logic of its own —
- * line-breaking lives in the measurer implementation (**D-120**, answering
- * Q-021; `render/measure.ts`).
+ * The ONE measurement behind BOTH `measuredHeight` (§5.6) and `measuredWidth`
+ * (**D-123**): read the declared slots, hand them to `context.measurer.measure`,
+ * and give the caller either the whole box or the `ErrorValue` to report in its
+ * place. No layout logic of its own — line-breaking lives in the measurer
+ * implementation (**D-120**, answering Q-021; `render/measure.ts`).
  *
- * Declared `static` dependencies (`primitives/schema.ts`): `resolvedContent`,
- * `width`, and `style.font`/`style.fontSize`/`style.lineHeight` — the fields a
- * height computation actually depends on (`eval-context.ts`'s `TextStyle`).
+ * Shared rather than written twice because **D-123** clause 2 requires the pair's
+ * failure order to be identical and forbids one succeeding while the other fails
+ * — "they answer one question and are computed from one measurement." One helper
+ * makes that true by construction rather than by two lists staying in step.
+ * `slotLabel` names the derived slot the operator was reading, so a message
+ * points at what they asked for; nothing else differs between the two.
+ *
+ * Declared `static` dependencies (`primitives/schema.ts`, the SAME list for both
+ * slots): `resolvedContent`, `width`, and
+ * `style.font`/`style.fontSize`/`style.lineHeight` — the fields a size
+ * computation actually depends on (`eval-context.ts`'s `TextStyle`).
  * `style.color`/`style.align` and the `height` slot are NOT read: color/align
  * do not affect size, and `height` is the operator's fixed-height/overflow
  * choice, a different thing from "how tall would this be if it grew to fit."
@@ -899,32 +922,35 @@ export function computeResolvedContent(
  *      `formula`-driven, §5.6).
  *   2. No real measurer (`hasRealMeasurer` — only `NULL_EVAL_CONTEXT`'s zero-box
  *      stand-in, or `context === undefined` in an isolated unit test) → `#MEASURE`
- *      (**D-118**): a height measured against a zero-box measurer is a height not
+ *      (**D-118**): a size measured against a zero-box measurer is a size not
  *      earned, worse than an honest error. This fires BEFORE the shape check
  *      below, because with no measurer the shape does not matter — nothing can be
  *      measured either way.
  *   3. A wrong-shaped style (`font` not a string, `fontSize`/`lineHeight` not
  *      numbers — including a missing slot, `undefined`) → `#TYPE`. This is a
- *      fail-closed: the `text` command cycle owns creating objects with sensible
- *      style defaults; until then a bare `text` object measures as `#TYPE` rather
- *      than the compute inventing a font.
- *   4. A non-finite height back from `measure` → `#TYPE`. `eval-context.ts`'s
- *      contract promises finite/non-negative, but an injected measurer is exactly
- *      the component D-118 rules we cannot trust blindly, and `mutation.ts`'s
- *      D-025 slot-value check runs BEFORE `evaluate` and never re-inspects a
- *      derived result — the same gap `add`'s compute guards its sum against.
+ *      fail-closed: `command/commands.ts`'s `createText` supplies sensible style
+ *      defaults, so a bare hand-built or loaded `text` object measures as `#TYPE`
+ *      rather than the compute inventing a font.
+ *   4. A non-finite width OR height back from `measure` → `#TYPE`, for BOTH slots.
+ *      `eval-context.ts`'s contract promises finite/non-negative, but an injected
+ *      measurer is exactly the component D-118 rules we cannot trust blindly, and
+ *      `mutation.ts`'s D-025 slot-value check runs BEFORE `evaluate` and never
+ *      re-inspects a derived result — the same gap `add`'s compute guards its sum
+ *      against. Both components are checked even though a caller wants only one,
+ *      because D-123 clause 2 forbids reporting half of a broken box as a good
+ *      answer while the other half errors.
  *
  * **D-120** (answering Q-021): a numeric `width` slot becomes `measure`'s
  * `maxWidth` (the wrap boundary); `"auto"` — or any non-number — means
  * `undefined`, i.e. no wrapping (§5.6 layout). The measurer wraps, not this
  * function; `render/measure.ts` is the real one.
  */
-export function computeMeasuredHeight(
+function measureTextBox(
   object: GraphObject,
   read: ReadSlot,
   context: EvalContext | undefined,
-  _deps: DerivedSlotComputeDeps | undefined,
-): Value {
+  slotLabel: string,
+): TextBoxMeasurement {
   const resolved = read({ objectId: object.id, path: TEXT_RESOLVED_CONTENT_PATH });
   const width = read({ objectId: object.id, path: TEXT_WIDTH_PATH });
   const font = read({ objectId: object.id, path: TEXT_STYLE_FONT_PATH });
@@ -936,15 +962,18 @@ export function computeMeasuredHeight(
   //    regardless of evaluation timing — the same discipline `add`'s compute uses.
   for (const upstream of [resolved, width, font, fontSize, lineHeight]) {
     if (upstream !== undefined && isErrorValue(upstream)) {
-      return upstream;
+      return { ok: false, error: upstream };
     }
   }
 
-  // 2. D-118: no real measurer -> #MEASURE, never a height off the zero-box one.
+  // 2. D-118: no real measurer -> #MEASURE, never a size off the zero-box one.
   if (!hasRealMeasurer(context)) {
     return {
-      error: "#MEASURE",
-      message: `measuredHeight: ${object.name} has no real text measurer wired (only the null EvalContext) — cannot measure`,
+      ok: false,
+      error: {
+        error: "#MEASURE",
+        message: `${slotLabel}: ${object.name} has no real text measurer wired (only the null EvalContext) — cannot measure`,
+      },
     };
   }
 
@@ -953,8 +982,11 @@ export function computeMeasuredHeight(
   //    legal state; a measurement off it is not).
   if (typeof font !== "string" || typeof fontSize !== "number" || typeof lineHeight !== "number") {
     return {
-      error: "#TYPE",
-      message: `measuredHeight: ${object.name} needs style.font (string) and style.fontSize / style.lineHeight (numbers)`,
+      ok: false,
+      error: {
+        error: "#TYPE",
+        message: `${slotLabel}: ${object.name} needs style.font (string) and style.fontSize / style.lineHeight (numbers)`,
+      },
     };
   }
   const style: TextStyle = { font, fontSize, lineHeight };
@@ -965,18 +997,69 @@ export function computeMeasuredHeight(
   const maxWidth = typeof width === "number" ? width : undefined;
 
   // `measure` never throws (eval-context.ts's contract). It also PROMISES a
-  // finite, non-negative height — but 4. below does not take that on trust: an
+  // finite, non-negative box — but 4. below does not take that on trust: an
   // injected measurer is the component D-118 exists because we cannot trust
-  // blindly, and a non-finite value cached into `measuredHeight` here would
-  // commit uncaught (mutation.ts's D-025 check runs before `evaluate`), then
-  // propagate through any `= text_1.measuredHeight` binding. `add`'s compute
-  // guards its arithmetic result the same way and for the same reason.
-  const height = context.measurer.measure(text, style, maxWidth).height;
-  if (hasIllegalNumber(height)) {
+  // blindly, and a non-finite value cached into `measuredHeight`/`measuredWidth`
+  // here would commit uncaught (mutation.ts's D-025 check runs before
+  // `evaluate`), then propagate through any `= text_1.measuredHeight` binding.
+  // `add`'s compute guards its arithmetic result the same way and for the same
+  // reason. BOTH components are checked whichever slot asked (D-123 clause 2).
+  const measured = context.measurer.measure(text, style, maxWidth);
+  if (hasIllegalNumber(measured.width) || hasIllegalNumber(measured.height)) {
     return {
-      error: "#TYPE",
-      message: `measuredHeight: ${object.name}'s text measurer returned a non-finite height (${height})`,
+      ok: false,
+      error: {
+        error: "#TYPE",
+        message:
+          `${slotLabel}: ${object.name}'s text measurer returned a non-finite box ` +
+          `(width ${measured.width}, height ${measured.height})`,
+      },
     };
   }
-  return height;
+  return { ok: true, width: measured.width, height: measured.height };
+}
+
+/**
+ * The `measuredHeight` derived-slot compute (§5.6: "measuredHeight (from
+ * `resolvedContent`, `width`, and `style`, computed via the injected
+ * `TextMeasurer`)") — the `.height` half of `measureTextBox`'s one measurement.
+ * That function documents the read set, the failure order, and why the pair
+ * shares one measurement (**D-123** clause 2).
+ */
+export function computeMeasuredHeight(
+  object: GraphObject,
+  read: ReadSlot,
+  context: EvalContext | undefined,
+  _deps: DerivedSlotComputeDeps | undefined,
+): Value {
+  const measurement = measureTextBox(object, read, context, "measuredHeight");
+  return measurement.ok ? measurement.height : measurement.error;
+}
+
+/**
+ * The `measuredWidth` derived-slot compute (**D-123**) — the `.width` half of the
+ * SAME measurement `computeMeasuredHeight` takes its height from.
+ *
+ * Why the slot exists: `render/extent.ts` is pure and has no `ctx`, so for a
+ * `text` object whose `width` slot is `"auto"` — which is every object the `text`
+ * command creates, `DEFAULT_TEXT_WIDTH` being `"auto"` — it cannot otherwise know
+ * how wide the ink is, and §5.9's "bounding box for text" and D-066's
+ * one-extent rule cannot both hold. One wrong box is four wrong behaviours (hit
+ * test, selection highlight, chrome anchor, `fit`), which is why D-123 rules this
+ * a deliberate extension of §5.6's two-derived-slot list, on the same footing as
+ * D-121's extension of `TextBox`'s shape.
+ *
+ * The value is the widest laid-out LINE (`render/measure.ts`) — the ink's own
+ * width, never the `width` slot's wrap boundary read back. `extent.ts` prefers a
+ * numeric `width` slot when the operator set one and falls back to this
+ * otherwise (D-123 clause 3).
+ */
+export function computeMeasuredWidth(
+  object: GraphObject,
+  read: ReadSlot,
+  context: EvalContext | undefined,
+  _deps: DerivedSlotComputeDeps | undefined,
+): Value {
+  const measurement = measureTextBox(object, read, context, "measuredWidth");
+  return measurement.ok ? measurement.width : measurement.error;
 }

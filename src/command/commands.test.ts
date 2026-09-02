@@ -186,7 +186,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(getSlot(object, ["vertices"])?.value).toEqual({ error: "#TYPE", message: "circle.vertices: radius must not be negative" });
   });
 
-  it("creates a text object with all eleven non-derived slots (origin.x/y per D-121, content, and eight layout/style defaults) plus both derived placeholders (§5.6, entry 0136)", () => {
+  it("creates a text object with all eleven non-derived slots (origin.x/y per D-121, content, and eight layout/style defaults) plus all three derived placeholders (§5.6 + D-123, entry 0136)", () => {
     const object = onlyObject(committed('text x=10 y=20 "Radius is {= table_x.A1 }"', createEmptyDocument()));
     expect(object.type).toBe("text");
     expect(object.name).toBe("text_1");
@@ -203,6 +203,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(literalValue(object, ["style", "align"])).toBe("left");
     expect(getSlot(object, ["resolvedContent"])?.kind).toBe("derived");
     expect(getSlot(object, ["measuredHeight"])?.kind).toBe("derived");
+    expect(getSlot(object, ["measuredWidth"])?.kind).toBe("derived"); // D-123
   });
 
   it("defaults a text object's x and y to 0 when omitted (D-121 clause 3) — the geometry presets require theirs", () => {
@@ -224,6 +225,18 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
   it("leaves a fresh text object's measuredHeight as #MEASURE under the default null EvalContext (D-118) — legitimate state, not a refused creation", () => {
     const object = onlyObject(committed('text x=0 y=0 "hello"', createEmptyDocument()));
     expect(getSlot(object, ["measuredHeight"])?.value).toMatchObject({ error: "#MEASURE" });
+    expect(getSlot(object, ["measuredWidth"])?.value).toMatchObject({ error: "#MEASURE" }); // the pair fails together (D-123 clause 2)
+  });
+
+  it("D-123: a text object created with a real measurer threaded carries a measured WIDTH as well as a height — the default DEFAULT_TEXT_WIDTH is \"auto\", so this is the normal path", () => {
+    const measurer: EvalContext = { measurer: { measure: (text) => ({ width: text.length * 7, height: 20 }) } };
+    const outcome = executeCommand(parsed('text x=0 y=0 "hello"'), createEmptyDocument(), measurer);
+    if (isCommandFailure(outcome)) {
+      throw new Error(outcome.message);
+    }
+    const object = onlyObject(outcome.document);
+    expect(getSlot(object, ["measuredWidth"])?.value).toBe(35);
+    expect(getSlot(object, ["measuredHeight"])?.value).toBe(20);
   });
 
   it("names text objects from their own sequence — text_1, text_2 (§5.2)", () => {
@@ -1411,7 +1424,7 @@ describe("a formula too deep to walk is refused, not thrown (D-079)", () => {
 // default null context (D-118) and a real height once a real measurer is threaded
 // through the command seam.
 describe("executeCommand forwards §5.1's EvalContext to mutate's evaluation (entry 0132, D-118)", () => {
-  /** The schema's five required non-derived slots + both derived placeholders. `width: "auto"` — no wrap. */
+  /** The schema's five required non-derived slots + all three derived placeholders (`measuredWidth` — D-123). `width: "auto"` — no wrap. */
   function textObject(): GraphObject {
     return {
       id: "obj_t",
@@ -1425,6 +1438,7 @@ describe("executeCommand forwards §5.1's EvalContext to mutate's evaluation (en
         "style.lineHeight": { kind: "literal", value: 14 },
         resolvedContent: { kind: "derived", value: null },
         measuredHeight: { kind: "derived", value: null },
+        measuredWidth: { kind: "derived", value: null },
       },
     };
   }

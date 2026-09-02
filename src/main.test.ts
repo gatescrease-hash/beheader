@@ -978,6 +978,7 @@ describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-
         "style.lineHeight": { kind: "literal", value: 14 },
         resolvedContent: { kind: "derived", value: null },
         measuredHeight: { kind: "derived", value: null },
+        measuredWidth: { kind: "derived", value: null }, // D-123's third derived slot
       },
     };
   }

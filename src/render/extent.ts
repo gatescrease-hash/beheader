@@ -34,11 +34,11 @@
  *     `text` bounding-box test calls THIS function.
  *
  * NOT DONE HERE
- *   - Hit-testing (`hittest.ts`) and drawing (`renderer.ts`) themselves.
- *   - A `text` object's exact drawn width when `width` is `"auto"`. There is no
- *     `measuredWidth` slot (§5.6 declares only `measuredHeight`) and this file
- *     cannot measure glyphs (no `ctx`), so an auto-width / no-measurer box falls
- *     back to a fixed size — `PROVISIONAL(Q-024)`, see `textExtent`.
+ *   - MEASURING a `text` object. This file has no `ctx` and never will; the
+ *     measurement arrives as graph state, through the `measuredWidth` /
+ *     `measuredHeight` derived slots the topological pass already computed
+ *     (**D-123**). The fixed fallbacks below are reached only when there was no
+ *     real measurer to compute them (`#MEASURE`, D-118).
  */
 import { getSlot, type GraphObject } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
@@ -46,6 +46,7 @@ import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
+  TEXT_MEASURED_WIDTH_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
@@ -63,12 +64,14 @@ export interface WorldExtent {
 }
 
 /**
- * PROVISIONAL(Q-024): the fallback box a `text` object gets when its size is not
- * knowable from graph state here — `width: "auto"` (no `measuredWidth` slot
- * exists, §5.6), or `measuredHeight` still `#MEASURE` (null measurer). World
- * units, round and untuned (Rule 5), the same posture as every size constant in
- * `slots.ts`/`renderer.ts`. A `text` object with a numeric `width` slot and a
- * real `measuredHeight` never touches these.
+ * The fallback box a `text` object gets when its size is not knowable from graph
+ * state at all — i.e. both its `width` slot and its measurement are unusable,
+ * which since **D-123** means only the no-real-measurer case: `measuredWidth` /
+ * `measuredHeight` are `#MEASURE` (D-118) because nothing wired a `TextMeasurer`
+ * (a test, or `main.ts` failing to get an offscreen 2D context). World units,
+ * round and untuned (Rule 5), the same posture as every size constant in
+ * `slots.ts`/`renderer.ts`. Ordinary constants, NOT a provisional choice — Q-024
+ * was answered by D-123 and its tags came out with the `measuredWidth` slot.
  */
 const TEXT_AUTO_BOX_WIDTH = 240;
 const TEXT_AUTO_BOX_HEIGHT = 20;
@@ -150,20 +153,19 @@ function tableExtent(object: GraphObject): WorldExtent | undefined {
  * room, matching `render/measure.ts`'s `{ width: 0, height: 0 }` for an empty
  * string. Never throws.
  *
- * `width`  — the `width` slot when it holds a positive finite number; otherwise
- *            (`"auto"`, or missing) a fixed fallback. **PROVISIONAL(Q-024):**
- *            §5.6 gives a `text` object no `measuredWidth` derived slot and this
- *            file has no `ctx` to measure with, so an auto-width box's true
- *            drawn width is not knowable here. The fallback keeps the box
- *            hit-testable and lets its name label / properties panel appear;
- *            drawn text wider than it simply overflows the click box (§5.6's
- *            `overflow: "visible"` default) until Q-024 is ruled.
- * `height` — the `height` slot (positive finite number) if fixed; else the
- *            `measuredHeight` derived slot when it holds one (the running app
- *            threads a real measurer — 0132 — so a command-created `text`
- *            measures for real); else a fixed fallback (**PROVISIONAL(Q-024)** —
- *            reached only by a `text` object evaluated with the null measurer,
- *            e.g. in a test, where `measuredHeight` is `#MEASURE`).
+ * Both axes read the same three sources in the same order (**D-123** clause 3):
+ * the operator's own fixed slot, then the measurement, then a fixed fallback.
+ *
+ * `width`  — the `width` slot when it holds a positive finite number: that is
+ *            the box the operator SET, whatever the ink does inside it; else the
+ *            `measuredWidth` derived slot when it holds one; else the fallback.
+ * `height` — the `height` slot when it holds a positive finite number; else the
+ *            `measuredHeight` derived slot; else the fallback.
+ *
+ * A fallback is reached only with no real measurer wired (`#MEASURE`, D-118 —
+ * a test, or `main.ts` failing to get an offscreen context), where nothing
+ * better is knowable. The running app threads a real measurer (0132), so a
+ * command-created `text` object is bounded by its actual ink.
  */
 function textExtent(object: GraphObject): WorldExtent | undefined {
   const resolved = getSlot(object, TEXT_RESOLVED_CONTENT_PATH)?.value;
@@ -173,10 +175,16 @@ function textExtent(object: GraphObject): WorldExtent | undefined {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
 
+  // D-123 clause 3: set width, else measured width, else the fallback — the same
+  // three-source order the height below has always used.
   const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
-  // PROVISIONAL(Q-024): the auto-width fallback — a fixed box until §5.6 grows a
-  // `measuredWidth` slot or this file is handed a measurer.
-  const width = fixedWidth !== undefined && fixedWidth > 0 ? fixedWidth : TEXT_AUTO_BOX_WIDTH;
+  const measuredWidth = readNumber(object, TEXT_MEASURED_WIDTH_PATH);
+  const width =
+    fixedWidth !== undefined && fixedWidth > 0
+      ? fixedWidth
+      : measuredWidth !== undefined && measuredWidth > 0
+        ? measuredWidth
+        : TEXT_AUTO_BOX_WIDTH; // no real measurer wired (#MEASURE) — nothing better is knowable
 
   const fixedHeight = readNumber(object, TEXT_HEIGHT_PATH);
   const measuredHeight = readNumber(object, TEXT_MEASURED_HEIGHT_PATH);
@@ -185,8 +193,7 @@ function textExtent(object: GraphObject): WorldExtent | undefined {
       ? fixedHeight
       : measuredHeight !== undefined && measuredHeight > 0
         ? measuredHeight
-        : // PROVISIONAL(Q-024): reached only under the null measurer (#MEASURE).
-          TEXT_AUTO_BOX_HEIGHT;
+        : TEXT_AUTO_BOX_HEIGHT; // same no-measurer case
 
   return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
 }

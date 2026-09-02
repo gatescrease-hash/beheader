@@ -165,7 +165,7 @@ describe("hitTest — object types with no schema/visual definition yet never hi
 });
 
 describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent renderer.ts draws into", () => {
-  /** A `text` object with `resolvedContent` evaluated, positioned at (`originX`, `originY`). `width`/`height` default to `"auto"` — the fallback box (PROVISIONAL Q-024). */
+  /** A `text` object with `resolvedContent` evaluated, positioned at (`originX`, `originY`). `width` is `"auto"` and no measurement is present, so the default fixture lands on the fixed fallback box (the no-real-measurer case — D-123 clause 3). */
   function textObject(resolved: string | undefined, originX: number, originY: number, overrides: GraphObject["slots"] = {}): GraphObject {
     return {
       id: "obj_1",
@@ -198,10 +198,47 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
     expect(hitTest({ x: 40, y: 100 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("still hits an auto-width text object via the provisional fallback box (Q-024)", () => {
-    const text = textObject("label", 0, 0); // no width, no measuredHeight -> fallback 240 x 20.
+  it("falls back to a fixed box only when NOTHING measured the object — no measurer wired, so measuredWidth/Height are absent (D-123 clause 3)", () => {
+    const text = textObject("label", 0, 0); // no width, no measurement -> fallback 240 x 20.
     expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
     expect(hitTest({ x: 300, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("D-123: an auto-width text object's click box is its MEASURED width, not the fallback — a short label no longer swallows its neighbours' clicks", () => {
+    // measuredWidth 30, measuredHeight 20 -> box (0,0)-(30,20). Under the old
+    // fixed 240 fallback the point at x=100 was (wrongly) a hit.
+    const text = textObject("label", 0, 0, {
+      measuredWidth: { kind: "derived", value: 30 },
+      measuredHeight: { kind: "derived", value: 20 },
+    });
+    expect(hitTest({ x: 20, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
+    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("D-123: a measured width WIDER than the old fallback is clickable to its far edge — a long label is no longer unclickable past 240", () => {
+    const text = textObject("a very long label indeed", 0, 0, {
+      measuredWidth: { kind: "derived", value: 400 },
+      measuredHeight: { kind: "derived", value: 20 },
+    });
+    expect(hitTest({ x: 380, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
+    expect(hitTest({ x: 420, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("D-123 clause 3: the width slot the operator SET wins over measuredWidth — that is the box, whatever the ink does inside it", () => {
+    const text = textObject("label", 0, 0, {
+      width: { kind: "literal", value: 60 },
+      measuredWidth: { kind: "derived", value: 400 },
+      measuredHeight: { kind: "derived", value: 20 },
+    });
+    expect(hitTest({ x: 50, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
+    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("D-123: a #MEASURE measuredWidth (no measurer, D-118) is not a number, so the fallback still applies", () => {
+    const text = textObject("label", 0, 0, {
+      measuredWidth: { kind: "derived", value: { error: "#MEASURE", message: "no measurer" } },
+    });
+    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text); // 240-wide fallback
   });
 
   it("never hits a text object with no resolved content — nothing is drawn to click (D-066)", () => {
@@ -274,6 +311,23 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
       },
     };
     expect(documentExtent([text])).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 60 });
+  });
+
+  it("bounds an auto-width text object by measuredWidth + measuredHeight, so `fit` frames the text and not a fixed guess (D-123)", () => {
+    const text: GraphObject = {
+      id: "obj_1",
+      name: "text_1",
+      type: "text",
+      slots: {
+        "origin.x": { kind: "literal", value: 10 },
+        "origin.y": { kind: "literal", value: 20 },
+        width: { kind: "literal", value: "auto" },
+        measuredWidth: { kind: "derived", value: 75 },
+        measuredHeight: { kind: "derived", value: 40 },
+        resolvedContent: { kind: "derived", value: "hi" },
+      },
+    };
+    expect(documentExtent([text])).toEqual({ minX: 10, minY: 20, maxX: 85, maxY: 60 });
   });
 
   it("is undefined for a text object with no resolved content — matches the slotless-text case above", () => {

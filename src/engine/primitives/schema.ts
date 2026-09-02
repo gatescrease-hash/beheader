@@ -109,11 +109,13 @@ import {
 import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
 import {
   computeMeasuredHeight,
+  computeMeasuredWidth,
   computeResolvedContent,
   resolveTextDependencyAddresses,
   TEXT_CONTENT_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
+  TEXT_MEASURED_WIDTH_PATH,
   TEXT_OVERFLOW_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_STYLE_ALIGN_PATH,
@@ -575,14 +577,23 @@ const RECT_SCHEMA: ObjectSchema = {
  * coercion, a real range reader, clause 3's ordering) — never a second
  * evaluation path.
  *
- * `measuredHeight`'s dependencies are `static`: `resolvedContent` + `width` +
+ * `measuredHeight` (§5.6) and `measuredWidth` (**D-123**) share ONE `static`
+ * dependency list — `resolvedContent` + `width` +
  * `style.font`/`style.fontSize`/`style.lineHeight` (§5.6: "from `resolvedContent`,
- * `width`, and `style`"; `color`/`align` do not affect size). Its compute,
- * `computeMeasuredHeight`, calls `context.measurer` — and returns `#MEASURE`
- * (**D-118**) rather than a height off `NULL_EVAL_CONTEXT`'s zero-box measurer,
- * which is what every current `mutate` caller still passes. **D-120** (answering
- * Q-021): the `width` slot reaches `measure` as `maxWidth` and wrapping is the
- * measurer implementation's job (`render/measure.ts`).
+ * `width`, and `style`"; `color`/`align` do not affect size) — and ONE
+ * measurement: both computes call `primitives/text.ts`'s `measureTextBox` and
+ * take their own component off its result, which is how D-123 clause 2's "never
+ * one succeeding while the other fails" holds by construction. Both return
+ * `#MEASURE` (**D-118**) rather than a size off `NULL_EVAL_CONTEXT`'s zero-box
+ * measurer, which is what a `mutate` caller with no wired measurer passes.
+ * **D-120** (answering Q-021): the `width` slot reaches `measure` as `maxWidth`
+ * and wrapping is the measurer implementation's job (`render/measure.ts`).
+ *
+ * `measuredWidth` is the ONE derived slot here §5.6 does not name. D-123 rules it
+ * a deliberate extension of that list: `render/extent.ts` is pure, cannot measure
+ * glyphs, and `DEFAULT_TEXT_WIDTH` is `"auto"`, so without it §5.9's "bounding
+ * box for text" and D-066's one-extent rule cannot both hold for a
+ * command-created `text` object.
  */
 const TEXT_SCHEMA: ObjectSchema = {
   type: "text",
@@ -625,6 +636,22 @@ const TEXT_SCHEMA: ObjectSchema = {
         ],
       },
       compute: computeMeasuredHeight,
+    },
+    {
+      // D-123 clause 1: the same dependency list as `measuredHeight`, unchanged —
+      // one measurement answers both, so they must subscribe to the same inputs.
+      path: TEXT_MEASURED_WIDTH_PATH,
+      dependencies: {
+        kind: "static",
+        paths: [
+          TEXT_RESOLVED_CONTENT_PATH,
+          TEXT_WIDTH_PATH,
+          TEXT_STYLE_FONT_PATH,
+          TEXT_STYLE_FONT_SIZE_PATH,
+          TEXT_STYLE_LINE_HEIGHT_PATH,
+        ],
+      },
+      compute: computeMeasuredWidth,
     },
   ],
 };

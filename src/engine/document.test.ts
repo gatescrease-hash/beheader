@@ -515,7 +515,7 @@ describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth i
 // values are never serialized), so it turns on the context: `#MEASURE` (D-118)
 // under the default null one, a real height under `main.ts`'s Canvas2D measurer.
 describe("deserializeDocument / loadDocument forward §5.1's EvalContext to the load batch (entry 0132, D-118)", () => {
-  /** The schema's five required non-derived `text` slots + both derived placeholders. */
+  /** The schema's five required non-derived `text` slots + all three derived placeholders (`measuredWidth` — D-123). */
   function textObject(width: number | "auto" = "auto"): GraphObject {
     return {
       id: "obj_1",
@@ -529,6 +529,7 @@ describe("deserializeDocument / loadDocument forward §5.1's EvalContext to the 
         "style.lineHeight": { kind: "literal", value: 14 },
         resolvedContent: { kind: "derived", value: null },
         measuredHeight: { kind: "derived", value: null },
+        measuredWidth: { kind: "derived", value: null },
       },
     };
   }

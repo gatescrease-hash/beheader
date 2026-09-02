@@ -64,11 +64,12 @@ export interface Point {
  * `#DIV0`, `#PARSE`, `#SCRIPT`); `#MEASURE` is a SIXTH, added at entry 0129 under
  * **D-118** — the same move **D-028** made for `formula/ast.ts`'s `ErrorNode`
  * (not in §5.3's grammar either): the type system needs a case the brief's list
- * did not foresee. `#MEASURE` is what §5.6's `measuredHeight` compute returns
- * when it must measure a real `text` object but only the null `TextMeasurer` is
- * wired (`eval-context.ts`) — a height it did not earn is worse than an honest
- * error (D-118). It is only ever produced by a `derived` slot, whose value is
- * never serialized (§5.11), so no saved document can carry it.
+ * did not foresee. `#MEASURE` is what §5.6's `measuredHeight` and D-123's
+ * `measuredWidth` computes return when they must measure a real `text` object but
+ * only the null `TextMeasurer` is wired (`eval-context.ts`) — a size they did not
+ * earn is worse than an honest error (D-118). It is only ever produced by a
+ * `derived` slot, whose value is never serialized (§5.11), so no saved document
+ * can carry it.
  *
  * There is deliberately no `#CYCLE` — cycles are rejected at mutation time and
  * never enter the graph as state (§5.1, PROCESS_BRIEF §9's forbidden-moves list).

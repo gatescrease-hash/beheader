@@ -511,12 +511,14 @@ function createTable(command: CreateTableCommand, document: Document, context: E
  * Supplies all ELEVEN non-derived slots — `origin.x`/`origin.y` (**D-121**, the
  * same `ORIGIN_X_PATH`/`ORIGIN_Y_PATH` every positioned object uses), the
  * operator's `content` string, and the eight layout/style slots at their
- * `DEFAULT_TEXT_*` values above. `createObjectFromCommand` then fills both
- * derived placeholders (`resolvedContent`, `measuredHeight`) mechanically, and
- * `mutate`'s step 7 evaluates them: `resolvedContent` parses `content` into a
- * block tree and resolves it (D-114); `measuredHeight` is `#MEASURE` under the
- * default `NULL_EVAL_CONTEXT` and a real height once `main.ts` threads a
- * Canvas2D measurer through the `context` argument (**D-118**).
+ * `DEFAULT_TEXT_*` values above. `createObjectFromCommand` then fills all three
+ * derived placeholders (`resolvedContent`, `measuredHeight`, `measuredWidth` —
+ * the last per **D-123**) mechanically, and `mutate`'s step 7 evaluates them:
+ * `resolvedContent` parses `content` into a block tree and resolves it (D-114);
+ * the two measured slots are `#MEASURE` under the default `NULL_EVAL_CONTEXT` and
+ * real sizes once `main.ts` threads a Canvas2D measurer through the `context`
+ * argument (**D-118**). `DEFAULT_TEXT_WIDTH` is `"auto"`, so `measuredWidth` is
+ * what bounds a command-created `text` object on canvas (`render/extent.ts`).
  *
  * `content` is stored EXACTLY as typed — `{= }`/`{? }` markup and all — and is
  * never parsed here (§5.6: "raw source including markup"). A count-style refusal

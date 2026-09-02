@@ -23,6 +23,15 @@ gains a third derived slot, `measuredWidth`, from the same `TextMeasurer.measure
 stands as the interim and is REVERSED by that cycle, which MUST land before the Phase 5 gate is
 claimed; every `PROVISIONAL(Q-024)` tag comes out then.
 
+> Implementer note (entry 0141-measured-width): **that cycle has landed — reconciliation is
+> complete.** `TEXT_SCHEMA` has `measuredWidth` (computed with `measuredHeight` from one shared
+> `measureTextBox` helper, so D-123 clause 2 holds by construction rather than by two ladders staying
+> in step), `render/extent.ts`'s `textExtent` reads `width` slot → `measuredWidth` → fallback, and
+> **all three `PROVISIONAL(Q-024)` tags are removed** — `extent.ts` ×2 in code and `hittest.ts` ×1 in
+> its NOT DONE HERE header, which a grep of `extent.ts` alone would have missed.
+> `TEXT_AUTO_BOX_WIDTH`/`_HEIGHT` survive as ordinary documented constants for the no-real-measurer
+> (`#MEASURE`) case only, exactly as clause 3 permits. Awaiting review.
+
 **Correction to this question's own cost estimate, made in ruling it:** the recommendation below
 calls (a) "an edge-case affordance, not the common path" because "most `text` objects will carry a
 numeric `width`." That is false as the code stands — `command/commands.ts`'s `DEFAULT_TEXT_WIDTH` is

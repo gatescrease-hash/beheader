@@ -3853,11 +3853,12 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
   /**
    * A well-formed `text` object (§5.6): the five non-derived slots a derived slot
    * reads (`content` for `resolvedContent`; `width` + `style.font/fontSize/lineHeight`
-   * for `measuredHeight`, entry 0129) plus both D-018 derived placeholders. The
-   * four pure render-config slots (`height`/`overflow`/`style.color`/`style.align`)
-   * are omitted — nothing computes from them, so an absent one is D-047-legal.
-   * `width: "auto"` (no wrap). `measuredHeight` evaluates to `#MEASURE` here
-   * (`mutate` passes `NULL_EVAL_CONTEXT`) — legitimate state, not a refusal.
+   * for `measuredHeight`/`measuredWidth`) plus all THREE D-018 derived placeholders
+   * (`measuredWidth` — D-123). The four pure render-config slots
+   * (`height`/`overflow`/`style.color`/`style.align`) are omitted — nothing computes
+   * from them, so an absent one is D-047-legal. `width: "auto"` (no wrap). Both
+   * measured slots evaluate to `#MEASURE` here (`mutate` passes
+   * `NULL_EVAL_CONTEXT`) — legitimate state, not a refusal.
    */
   function textObject(id: string, name: string, content: string): GraphObject {
     return {
@@ -3872,6 +3873,7 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
         "style.lineHeight": { kind: "literal", value: 14 },
         resolvedContent: { kind: "derived", value: null },
         measuredHeight: { kind: "derived", value: null },
+        measuredWidth: { kind: "derived", value: null },
       },
     };
   }
@@ -3900,6 +3902,13 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
       { sourceSlot: addr("obj_x", "style", "font"), dependentSlot: addr("obj_x", "measuredHeight") },
       { sourceSlot: addr("obj_x", "style", "fontSize"), dependentSlot: addr("obj_x", "measuredHeight") },
       { sourceSlot: addr("obj_x", "style", "lineHeight"), dependentSlot: addr("obj_x", "measuredHeight") },
+      // measuredWidth (static, D-123): the SAME five sources — one measurement
+      // answers both, so both subscribe identically.
+      { sourceSlot: addr("obj_x", "resolvedContent"), dependentSlot: addr("obj_x", "measuredWidth") },
+      { sourceSlot: addr("obj_x", "width"), dependentSlot: addr("obj_x", "measuredWidth") },
+      { sourceSlot: addr("obj_x", "style", "font"), dependentSlot: addr("obj_x", "measuredWidth") },
+      { sourceSlot: addr("obj_x", "style", "fontSize"), dependentSlot: addr("obj_x", "measuredWidth") },
+      { sourceSlot: addr("obj_x", "style", "lineHeight"), dependentSlot: addr("obj_x", "measuredWidth") },
     ]);
   });
 
@@ -3970,6 +3979,7 @@ describe("text.measuredHeight end-to-end through mutate (§5.6, D-118 — entry 
     "style.lineHeight": { kind: "literal", value: 14 },
     resolvedContent: { kind: "derived", value: null },
     measuredHeight: { kind: "derived", value: null },
+    measuredWidth: { kind: "derived", value: null }, // D-123's third derived slot
   };
 
   /** A `text` object with the well-formed slot set minus whatever `omit` names (§5.6, entry 0129). */
@@ -4027,5 +4037,28 @@ describe("text.measuredHeight end-to-end through mutate (§5.6, D-118 — entry 
   it("a text object with NO measuredHeight derived-slot placeholder is REFUSED (D-018)", () => {
     const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["measuredHeight"]) }], []);
     expect(r.ok).toBe(false);
+  });
+
+  it("D-123: measuredWidth is #MEASURE under NULL_EVAL_CONTEXT too — the pair fails together, never one and not the other", () => {
+    const created = createAndGet(textObject("obj_x", "text_1"));
+    expect(created.slots.measuredWidth?.value).toMatchObject({ error: "#MEASURE" });
+    expect(created.slots.measuredHeight?.value).toMatchObject({ error: "#MEASURE" });
+  });
+
+  it("D-123 clause 1: measuredWidth subscribes to the SAME five sources measuredHeight does", () => {
+    const edges = deriveEdges([textObject("obj_x", "text_1")]);
+    const sourcesInto = (path: readonly string[]): readonly string[] =>
+      edges
+        .filter((e) => addressKey(e.dependentSlot) === addressKey({ objectId: "obj_x", path }))
+        .map((e) => addressKey(e.sourceSlot))
+        .sort();
+    expect(sourcesInto(["measuredWidth"])).toEqual(sourcesInto(["measuredHeight"]));
+    expect(sourcesInto(["measuredWidth"])).toHaveLength(5);
+  });
+
+  it("a text object with NO measuredWidth derived-slot placeholder is REFUSED (D-018, D-123)", () => {
+    const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["measuredWidth"]) }], []);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.message).toContain("measuredWidth");
   });
 });

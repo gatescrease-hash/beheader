@@ -57,8 +57,10 @@
  *     test — no schema or visual definition exists to read yet. `text` IS
  *     tested now (entry 0138): §5.9's "bounding box for text", read straight
  *     off `extent.ts`'s `objectExtent` so the click box is exactly the drawn
- *     box (D-066/D-010). An auto-width `text` object's box is a provisional
- *     fixed size — `PROVISIONAL(Q-024)`, `extent.ts`'s `textExtent`.
+ *     box (D-066/D-010). An auto-width `text` object's box comes from its
+ *     `measuredWidth`/`measuredHeight` derived slots (**D-123**); only a `text`
+ *     object nothing could measure (no `TextMeasurer` wired — `#MEASURE`, D-118)
+ *     falls back to `extent.ts`'s fixed size.
  *   - An object's or the document's drawn extent — `extent.ts` (D-093's
  *     split; see that file's header). This file used to define both; moved
  *     out because "where is everything" is a different question from "what

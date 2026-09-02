@@ -551,7 +551,7 @@ describe("pointerMove — failure paths", () => {
 describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)", () => {
   /**
    * The five effectively-required non-derived `text` slots + `origin.x`/`origin.y`
-   * (D-121) + both derived placeholders — hand-built (the `text` command exists
+   * (D-121) + all three derived placeholders (`measuredWidth` — D-123) — hand-built (the `text` command exists
    * since entry 0136, but this keeps the test about context threading, not
    * creation). Positioned at (500, 500), well clear of `rectObject(0, 0)`: since
    * entry 0138 a `text` object with resolved content has a hit box, so the drag
@@ -572,6 +572,7 @@ describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)
         "style.lineHeight": { kind: "literal", value: 14 },
         resolvedContent: { kind: "derived", value: null },
         measuredHeight: { kind: "derived", value: null },
+        measuredWidth: { kind: "derived", value: null },
       },
     };
   }
