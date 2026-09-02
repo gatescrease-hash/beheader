@@ -2,8 +2,8 @@
  * commands.ts — Command handlers: where a `Command` meets a `Document` (§5.10).
  *
  * IMPLEMENTS: PROJECT_BRIEF §4's "commands.ts — command handlers -> mutation API
- * calls", §5.10's handler half, §5.5's three geometry presets and §5.4's table.
- * Binding here: D-069, D-070, D-002.
+ * calls", §5.10's handler half, §5.5's three geometry presets, §5.4's table, and
+ * §5.6's `text`. Binding here: D-069, D-070, D-002, D-121, D-122.
  * LAYER: command. Touches no canvas, DOM, or window. May import: engine/*, own
  *        layer. NEVER imported by engine/*.
  *
@@ -56,6 +56,11 @@
  *   - A `derived` slot is refused by `set` and `link` alike (§5.1), and so is a path
  *     the target's schema does not declare — an undeclared LITERAL slot is legal
  *     document state, so `mutate` would accept one silently.
+ *   - D-122: `link` and `set =` are refused for a `text` object's `content` slot
+ *     too. It is `literal`-only — read as raw source at edge-derivation time, before
+ *     any formula value exists (à la D-046 for a table dimension) — so a
+ *     formula-driven `content`'s embedded references would go untracked. A plain
+ *     `set text_1.content "…"` (a literal write) is unaffected.
  *   - `refs`, `props` and `list` change nothing and say nothing a `mutate` could
  *     have said: they read `document.objects` (`props` via `command/props.ts`'s
  *     `buildSlotDescriptors`, never a second enumeration — D-094 clause 9) and
@@ -103,7 +108,7 @@ import { isReferenceNode } from "../engine/formula/ast.ts";
 import { formatFormula } from "../engine/formula/format.ts";
 import { isParseError, parseFormula } from "../engine/formula/parser.ts";
 import { addressKey, type Edge } from "../engine/graph/edge.ts";
-import { getSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
+import { getSlot, slotKey, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
 import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import {
@@ -118,6 +123,17 @@ import {
 } from "../engine/primitives/geometry.ts";
 import { findDerivedSlotSchema, getObjectSchema, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
 import { MAX_TABLE_LINES, MIN_TABLE_LINES, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
+import {
+  TEXT_CONTENT_PATH,
+  TEXT_HEIGHT_PATH,
+  TEXT_OVERFLOW_PATH,
+  TEXT_STYLE_ALIGN_PATH,
+  TEXT_STYLE_COLOR_PATH,
+  TEXT_STYLE_FONT_PATH,
+  TEXT_STYLE_FONT_SIZE_PATH,
+  TEXT_STYLE_LINE_HEIGHT_PATH,
+  TEXT_WIDTH_PATH,
+} from "../engine/primitives/text.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
   Command,
@@ -125,6 +141,7 @@ import type {
   CreatePolygonCommand,
   CreateRectCommand,
   CreateTableCommand,
+  CreateTextCommand,
   DeleteCommand,
   LinkCommand,
   PropsCommand,
@@ -214,6 +231,32 @@ export const MAX_POLYGON_SIDES = 1000;
 const DEFAULT_POLYGON_ROTATION = 0;
 
 /**
+ * §5.6 gives a `text` object eleven non-derived slots; §5.10's `text x=0 y=0
+ * "<content>"` form supplies only `content` and (optionally) the position. This
+ * handler fills the other eight — `width`/`height`/`overflow` and the five
+ * `style.*` — with these defaults, the same way `createPolygon` supplies
+ * `rotation`. They are the handler's provisional pick, not the brief's: §5.6
+ * states the shape of `style` and the `overflow` enum but no default values, and
+ * §5.10's grammar has no argument for any of them. `set text_1.<slot> …` changes
+ * each afterward (D-046-style `content` aside — that one is `literal`-only per
+ * D-122).
+ *
+ * `width`/`height` default to `"auto"` — §5.6's "Auto width + auto height means no
+ * wrapping", the safe default for a command that cannot specify a width. `font`
+ * is a family/stack string (`eval-context.ts`'s `TextStyle`); `fontSize` /
+ * `lineHeight` are world units (Q-012 provisional (a)), `lineHeight` an ABSOLUTE
+ * length, not a ratio (`render/measure.ts`).
+ */
+const DEFAULT_TEXT_WIDTH = "auto";
+const DEFAULT_TEXT_HEIGHT = "auto";
+const DEFAULT_TEXT_OVERFLOW = "visible";
+const DEFAULT_TEXT_STYLE_FONT = "sans-serif";
+const DEFAULT_TEXT_STYLE_FONT_SIZE = 16;
+const DEFAULT_TEXT_STYLE_LINE_HEIGHT = 20;
+const DEFAULT_TEXT_STYLE_COLOR = "black";
+const DEFAULT_TEXT_STYLE_ALIGN = "left";
+
+/**
  * D-070 clauses 3 and 4: the reason a count is refused, naming the argument and the
  * range, or `undefined` if it is in range.
  *
@@ -260,6 +303,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return createPolygon(command, document, context);
     case "rect":
       return createRect(command, document, context);
+    case "text":
+      return createText(command, document, context);
     case "table":
       return createTable(command, document, context);
     // `set` and `set-formula` are one command word at the input bar (D-071); the
@@ -317,6 +362,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "circle",
   "polygon",
   "rect",
+  "text",
   "table",
   "set",
   "link",
@@ -456,6 +502,41 @@ function createTable(command: CreateTableCommand, document: Document, context: E
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: TABLE_ROWS_PATH, value: command.rows },
     { path: TABLE_COLS_PATH, value: command.cols },
+  ], context);
+}
+
+/**
+ * `text x=0 y=0 "Hello {= table_x.A1 }"` (§5.10, §5.6).
+ *
+ * Supplies all ELEVEN non-derived slots — `origin.x`/`origin.y` (**D-121**, the
+ * same `ORIGIN_X_PATH`/`ORIGIN_Y_PATH` every positioned object uses), the
+ * operator's `content` string, and the eight layout/style slots at their
+ * `DEFAULT_TEXT_*` values above. `createObjectFromCommand` then fills both
+ * derived placeholders (`resolvedContent`, `measuredHeight`) mechanically, and
+ * `mutate`'s step 7 evaluates them: `resolvedContent` parses `content` into a
+ * block tree and resolves it (D-114); `measuredHeight` is `#MEASURE` under the
+ * default `NULL_EVAL_CONTEXT` and a real height once `main.ts` threads a
+ * Canvas2D measurer through the `context` argument (**D-118**).
+ *
+ * `content` is stored EXACTLY as typed — `{= }`/`{? }` markup and all — and is
+ * never parsed here (§5.6: "raw source including markup"). A count-style refusal
+ * has nothing to bound: `text` allocates a fixed eleven slots regardless of its
+ * arguments (Rule 6), so unlike `polygon`/`table` there is no unbounded slot
+ * allocation to guard against.
+ */
+function createText(command: CreateTextCommand, document: Document, context: EvalContext): CommandOutcome {
+  return createObjectFromCommand(document, "text", [
+    { path: ORIGIN_X_PATH, value: command.x },
+    { path: ORIGIN_Y_PATH, value: command.y },
+    { path: TEXT_CONTENT_PATH, value: command.content },
+    { path: TEXT_WIDTH_PATH, value: DEFAULT_TEXT_WIDTH },
+    { path: TEXT_HEIGHT_PATH, value: DEFAULT_TEXT_HEIGHT },
+    { path: TEXT_OVERFLOW_PATH, value: DEFAULT_TEXT_OVERFLOW },
+    { path: TEXT_STYLE_FONT_PATH, value: DEFAULT_TEXT_STYLE_FONT },
+    { path: TEXT_STYLE_FONT_SIZE_PATH, value: DEFAULT_TEXT_STYLE_FONT_SIZE },
+    { path: TEXT_STYLE_LINE_HEIGHT_PATH, value: DEFAULT_TEXT_STYLE_LINE_HEIGHT },
+    { path: TEXT_STYLE_COLOR_PATH, value: DEFAULT_TEXT_STYLE_COLOR },
+    { path: TEXT_STYLE_ALIGN_PATH, value: DEFAULT_TEXT_STYLE_ALIGN },
   ], context);
 }
 
@@ -611,6 +692,20 @@ function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Docum
     case "literal":
       return { ok: true, slot: { kind: "literal", value: write.value }, lines: [`${target.displayName} = ${describeSlotValue(write.value)}`] };
     case "formula": {
+      // D-122 (answers Q-023): a `text` object's `content` is `literal`-only.
+      // It is read as raw source at edge-derivation time (§5.1 step 3), before
+      // any formula value exists (step 7), so a `formula`-driven `content`'s
+      // embedded `{= }`/`{? }` references cannot be tracked — the same step-3
+      // -vs-step-7 obstacle D-046 guards for a table dimension slot. Both
+      // `link text_1.content …` and `set text_1.content = …` reach here; a plain
+      // `set text_1.content "…"` (the `"literal"` arm above) is how `content` is
+      // authored and is unaffected.
+      if (isTextContentTarget(target)) {
+        return {
+          ok: false,
+          message: `${target.displayName} is read as raw source only — a text object's content cannot be a formula or a link (D-122). Write it with: set ${target.displayName} "..."`,
+        };
+      }
       // §5.3's bare cell refs (`A1`) are legal ONLY inside a table cell's own formula,
       // so the table id goes in exactly when the TARGET is a cell — a formula written
       // at `polygon_1.origin.x` must not be able to name one.
@@ -654,6 +749,11 @@ function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Docum
       return { ok: false, message: "this slot write declares a kind no builder reads" };
     }
   }
+}
+
+/** Whether this write target is a `text` object's `content` slot — the one slot D-122 forbids `link`/`set =` from making a formula. Type + path, not path alone: `["content"]` is only a slot on `text`, but the pair says so unambiguously. */
+function isTextContentTarget(target: WritableSlotTarget): boolean {
+  return target.object.type === TEXT_TYPE && slotKey(target.address.path) === slotKey(TEXT_CONTENT_PATH);
 }
 
 /** The table whose cell this target is, or `undefined` for every other slot — §5.3's bare-cell-ref scope, decided once. */

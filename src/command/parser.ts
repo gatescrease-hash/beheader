@@ -61,10 +61,11 @@
  *     a typed `pan <dx> <dy>` would have to say whether those are world units or
  *     screen pixels — which is Q-012's open question, not this slice's to settle.
  *     Owner: the cycle that wires camera commands in `main.ts`.
- *   - `polyline`/`text`/`script`/`image` creation, `explode`, `addvertex`,
+ *   - `polyline`/`script`/`image` creation, `explode`, `addvertex`,
  *     `delvertex`. `COMMANDS_SPECIFIED_BUT_NOT_BUILT` names them, and each waits on a
  *     primitive schema or an `Operation` kind that does not exist yet. Owner: the
- *     cycle that builds one.
+ *     cycle that builds one. (`text` creation landed at entry 0136 — a normal
+ *     registry entry, `content` positional plus optional `x`/`y`.)
  *   - PARSING a formula. `set <address> = <source>` (D-071) captures the source as a
  *     raw substring and stops; `parseFormula` is never called here. Owner:
  *     `command/commands.ts`, where D-038's four conditions come due.
@@ -113,6 +114,24 @@ export interface CreateTableCommand {
   readonly y: number;
   readonly rows: number;
   readonly cols: number;
+}
+
+/**
+ * `text x=0 y=0 "Hello {= table_x.A1 }"` (§5.10, §5.6).
+ *
+ * `content` is the operator's raw source string, markup and `{= }`/`{? }` included —
+ * `primitives/text.ts` parses it into a block tree when `resolvedContent` is computed,
+ * never here and never at the command line (§5.6: "raw source including markup").
+ *
+ * `x`/`y` are OPTIONAL, defaulting to `0` (**D-121** clause 3) — unlike the geometry
+ * presets, whose position §5.10 always writes out. They land on the `origin.x`/
+ * `origin.y` literal slots D-121 puts on `TEXT_SCHEMA`.
+ */
+export interface CreateTextCommand {
+  readonly kind: "text";
+  readonly x: number;
+  readonly y: number;
+  readonly content: string;
 }
 
 /** `link polygon_1.origin.x table_x.A1` (§5.10) — `target` becomes a formula slot reading `source`, §5.1's degenerate formula. */
@@ -237,6 +256,7 @@ export type Command =
   | CreateCircleCommand
   | CreatePolygonCommand
   | CreateRectCommand
+  | CreateTextCommand
   | CreateTableCommand
   | LinkCommand
   | UnlinkCommand
@@ -474,6 +494,25 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     },
   },
   {
+    name: "text",
+    usage: 'text [x=<number>] [y=<number>] "<content>"',
+    // `content` is a positional `text` argument — passed through verbatim, quoted
+    // when it has spaces or markup (§5.10's own example). `x`/`y` are optional
+    // key=value numbers defaulting to 0 (D-121 clause 3), so `text "hi"` is a
+    // complete line. No `prompts`: a text step would need an `accepts` kind
+    // `PromptStep` does not have (`"point" | "distance" | "number"`), which is a
+    // separate mechanism, not this slice's — `text` is typed-form only for now.
+    positional: [text("content")],
+    named: [optionalNumber("x", 0), optionalNumber("y", 0)],
+    flags: [],
+    build: (args) => ({
+      kind: "text",
+      x: numberArgument(args, "x"),
+      y: numberArgument(args, "y"),
+      content: textArgument(args, "content"),
+    }),
+  },
+  {
     name: "table",
     usage: "table x=<number> y=<number> [rows=<number>] [cols=<number>]",
     positional: [],
@@ -623,16 +662,16 @@ export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec
 /**
  * §5.10 commands with no registry entry yet, so an operator who types one is told the
  * truth ("not built") instead of "unknown command", which would be false. Each waits
- * on something that does not exist: `polyline`/`text`/`script`/`image` have no schema,
+ * on something that does not exist: `polyline`/`script`/`image` have no schema,
  * `explode`/`addvertex`/`delvertex` have no `Operation` kind, and `pan` has no stated
- * argument grammar (see the file header).
+ * argument grammar (see the file header). `text` LEFT this list at entry 0136, when
+ * its schema (§5.6) and this file's `text` registry entry both landed.
  *
  * A name moving into the registry MUST leave this list in the same cycle; the two
  * being disjoint is pinned by a test rather than by anyone remembering.
  */
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
   "polyline",
-  "text",
   "script",
   "image",
   "explode",

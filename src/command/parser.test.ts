@@ -46,6 +46,10 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "circle x=100 y=100 r=20", command: { kind: "circle", x: 100, y: 100, radius: 20 } },
   { line: "polygon sides=5 x=0 y=0 r=50", command: { kind: "polygon", sides: 5, x: 0, y: 0, radius: 50 } },
   { line: "rect x=0 y=0 w=200 h=100", command: { kind: "rect", x: 0, y: 0, width: 200, height: 100 } },
+  {
+    line: 'text x=0 y=0 "Hello {= table_x.A1 }"',
+    command: { kind: "text", x: 0, y: 0, content: "Hello {= table_x.A1 }" },
+  },
   { line: "table x=0 y=0 rows=8 cols=8", command: { kind: "table", x: 0, y: 0, rows: 8, cols: 8 } },
   { line: "link polygon_1.origin.x table_x.A1", command: { kind: "link", target: "polygon_1.origin.x", source: "table_x.A1" } },
   { line: "unlink polygon_1.origin.x", command: { kind: "unlink", target: "polygon_1.origin.x" } },
@@ -231,6 +235,19 @@ describe("positional arguments", () => {
     expect(parsed("select Table_X")).toEqual({ kind: "select", target: "Table_X" });
     expect(parsed("rename polygon_1 Intersection_A")).toEqual({ kind: "rename", target: "polygon_1", newName: "Intersection_A" });
     expect(parsed("refs table_x.A1")).toEqual({ kind: "refs", target: "table_x.A1" });
+  });
+
+  it("makes text's x and y optional, defaulting to 0 (D-121 clause 3) — unlike the geometry presets", () => {
+    expect(parsed('text "hello"')).toEqual({ kind: "text", x: 0, y: 0, content: "hello" });
+    expect(parsed('text x=5 "hi"')).toEqual({ kind: "text", x: 5, y: 0, content: "hi" });
+  });
+
+  it("still requires text's content positional, naming it when missing", () => {
+    expect(rejected("text x=0 y=0").message).toContain("needs <content>");
+  });
+
+  it("keeps a text content argument's {= }/{? } markup verbatim — the parser resolves nothing (§5.6)", () => {
+    expect(parsed('text "{? a }x{:}y{?} { brace"')).toEqual({ kind: "text", x: 0, y: 0, content: "{? a }x{:}y{?} { brace" });
   });
 });
 

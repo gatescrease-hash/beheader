@@ -105,10 +105,14 @@ describe("getObjectSchema", () => {
   // primitives/text.ts owns the resolver/compute behaviour (its own test file);
   // this only confirms the §5.6 registry wiring — resolvedContent at entry 0127,
   // measuredHeight added at 0129.
-  it("returns a real entry for 'text' (§5.6), with nine static non-derived paths and two derived slots (resolvedContent, measuredHeight)", () => {
+  it("returns a real entry for 'text' (§5.6), with eleven static non-derived paths (origin.x/y at front per D-121) and two derived slots (resolvedContent, measuredHeight)", () => {
     const schema = getObjectSchema("text");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
+      // D-121 (Q-022): a text object's position is two ordinary literal slots,
+      // the same ORIGIN_X_PATH/ORIGIN_Y_PATH spelling every positioned object uses.
+      ["origin", "x"],
+      ["origin", "y"],
       ["content"],
       ["width"],
       ["height"],

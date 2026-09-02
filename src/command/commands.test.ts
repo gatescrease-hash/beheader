@@ -185,6 +185,89 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(literalValue(object, ["radius"])).toBe(-5);
     expect(getSlot(object, ["vertices"])?.value).toEqual({ error: "#TYPE", message: "circle.vertices: radius must not be negative" });
   });
+
+  it("creates a text object with all eleven non-derived slots (origin.x/y per D-121, content, and eight layout/style defaults) plus both derived placeholders (§5.6, entry 0136)", () => {
+    const object = onlyObject(committed('text x=10 y=20 "Radius is {= table_x.A1 }"', createEmptyDocument()));
+    expect(object.type).toBe("text");
+    expect(object.name).toBe("text_1");
+    expect(literalValue(object, ["origin", "x"])).toBe(10);
+    expect(literalValue(object, ["origin", "y"])).toBe(20);
+    expect(literalValue(object, ["content"])).toBe("Radius is {= table_x.A1 }");
+    expect(literalValue(object, ["width"])).toBe("auto");
+    expect(literalValue(object, ["height"])).toBe("auto");
+    expect(literalValue(object, ["overflow"])).toBe("visible");
+    expect(literalValue(object, ["style", "font"])).toBe("sans-serif");
+    expect(literalValue(object, ["style", "fontSize"])).toBe(16);
+    expect(literalValue(object, ["style", "lineHeight"])).toBe(20);
+    expect(literalValue(object, ["style", "color"])).toBe("black");
+    expect(literalValue(object, ["style", "align"])).toBe("left");
+    expect(getSlot(object, ["resolvedContent"])?.kind).toBe("derived");
+    expect(getSlot(object, ["measuredHeight"])?.kind).toBe("derived");
+  });
+
+  it("defaults a text object's x and y to 0 when omitted (D-121 clause 3) — the geometry presets require theirs", () => {
+    const object = onlyObject(committed('text "just text"', createEmptyDocument()));
+    expect(literalValue(object, ["origin", "x"])).toBe(0);
+    expect(literalValue(object, ["origin", "y"])).toBe(0);
+  });
+
+  it("stores a text object's content verbatim — markup and stray braces are not parsed at the command line (§5.6)", () => {
+    const object = onlyObject(committed('text x=0 y=0 "{? x }a{:}b{?} literal { brace"', createEmptyDocument()));
+    expect(literalValue(object, ["content"])).toBe("{? x }a{:}b{?} literal { brace");
+  });
+
+  it("evaluates a text object's resolvedContent inside the creating mutation — a plain string resolves to itself (D-114)", () => {
+    const object = onlyObject(committed('text x=0 y=0 "hello"', createEmptyDocument()));
+    expect(getSlot(object, ["resolvedContent"])?.value).toBe("hello");
+  });
+
+  it("leaves a fresh text object's measuredHeight as #MEASURE under the default null EvalContext (D-118) — legitimate state, not a refused creation", () => {
+    const object = onlyObject(committed('text x=0 y=0 "hello"', createEmptyDocument()));
+    expect(getSlot(object, ["measuredHeight"])?.value).toMatchObject({ error: "#MEASURE" });
+  });
+
+  it("names text objects from their own sequence — text_1, text_2 (§5.2)", () => {
+    const document = committed('text x=0 y=0 "b"', committed('text x=0 y=0 "a"', createEmptyDocument()));
+    expect(document.objects.map((object) => object.name)).toEqual(["text_1", "text_2"]);
+  });
+});
+
+describe("D-122 — a text object's `content` slot is literal-only (answers Q-023 / F13)", () => {
+  function docWithTextObject(): Document {
+    return committed('text x=0 y=0 "hello"', createEmptyDocument());
+  }
+
+  it("refuses `link text_1.content <address>` — content is read as raw source before any formula value exists, so its embedded references could not be tracked", () => {
+    const message = refused("link text_1.content some.slot", docWithTextObject());
+    expect(message).toContain("raw source only");
+    expect(message).toContain("D-122");
+  });
+
+  it("refuses `set text_1.content = <formula>` for the same reason (à la D-046 for a table dimension)", () => {
+    const message = refused("set text_1.content = 1 + 1", docWithTextObject());
+    expect(message).toContain("D-122");
+  });
+
+  it("the refusal fires before the formula is even parsed — an unresolvable source in the link still gets the D-122 message, not a #PARSE", () => {
+    expect(refused("link text_1.content nonexistent.slot", docWithTextObject())).toContain("D-122");
+  });
+
+  it("still accepts a plain literal `set text_1.content \"...\"` — that is how content is authored (§5.6)", () => {
+    const document = committed('set text_1.content "brand new"', docWithTextObject());
+    expect(literalValue(onlyNamed(document, "text_1"), ["content"])).toBe("brand new");
+  });
+
+  it("keeps a quoted string that merely looks like a formula as a literal — quoting decides type", () => {
+    const document = committed('set text_1.content "= not a formula"', docWithTextObject());
+    expect(literalValue(onlyNamed(document, "text_1"), ["content"])).toBe("= not a formula");
+  });
+
+  it("does not constrain a text object's other slots — style.fontSize can still be linked to a cell (§5.6)", () => {
+    const withTable = committed("table x=0 y=0 rows=1 cols=1", docWithTextObject());
+    const seeded = committed("set table_1.A1 18", withTable);
+    const linked = committed("link text_1.style.fontSize table_1.A1", seeded);
+    expect(getSlot(onlyNamed(linked, "text_1"), ["style", "fontSize"])?.kind).toBe("formula");
+  });
 });
 
 describe("identity — ids and names (D-002, §5.2)", () => {
@@ -341,6 +424,7 @@ describe("every registry command reaches a handler", () => {
     "circle x=0 y=0 r=1",
     "polygon sides=3 x=0 y=0 r=1",
     "rect x=0 y=0 w=1 h=1",
+    'text x=0 y=0 "hi"',
     "table x=0 y=0",
     "set polygon_1.radius 42",
     "set polygon_1.radius = 1 + 1",
@@ -1320,11 +1404,12 @@ describe("a formula too deep to walk is refused, not thrown (D-079)", () => {
 });
 
 // `executeCommand` gained a third argument at entry 0132 — §5.1's `EvalContext`,
-// forwarded to every `mutate` a handler calls. Nothing in this file can CREATE a
-// `text` object (no `text` command yet), so the fixture is a hand-built one, the
-// same well-formed shape `mutation.test.ts`/`eval.test.ts` use: `measuredHeight`
-// is `#MEASURE` under the default null context (D-118) and a real height once a
-// real measurer is threaded through the command seam.
+// forwarded to every `mutate` a handler calls. This block keeps a hand-built
+// `text` fixture (the minimal well-formed shape `mutation.test.ts`/`eval.test.ts`
+// use) rather than the `text` command that landed at entry 0136, so the claim
+// stays about context threading alone: `measuredHeight` is `#MEASURE` under the
+// default null context (D-118) and a real height once a real measurer is threaded
+// through the command seam.
 describe("executeCommand forwards §5.1's EvalContext to mutate's evaluation (entry 0132, D-118)", () => {
   /** The schema's five required non-derived slots + both derived placeholders. `width: "auto"` — no wrap. */
   function textObject(): GraphObject {

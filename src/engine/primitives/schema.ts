@@ -22,8 +22,8 @@
  *
  *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
  *   D-011), `table` (§5.4), the three PARAMETRIC geometry presets `circle`/
- *   `polygon`/`rect` (§5.5), and `text` (§5.6 — its nine non-derived slots and
- *   BOTH derived slots, `resolvedContent` and `measuredHeight`). Every
+ *   `polygon`/`rect` (§5.5), and `text` (§5.6 — its eleven non-derived slots
+ *   and BOTH derived slots, `resolvedContent` and `measuredHeight`). Every
  *   derived-slot's pure math lives in its own primitive file
  *   (`primitives/geometry.ts`, `primitives/text.ts`); this file only wires it
  *   into the registry, the same split `table`'s own entry already uses.
@@ -544,13 +544,26 @@ const RECT_SCHEMA: ObjectSchema = {
 };
 
 /**
- * `text` (PROJECT_BRIEF §5.6): "One text object type, not two." NINE fixed
- * non-derived slots (`content` + `width`/`height`/`overflow` + five `style.*`,
- * all `static` — a `text` object's slot set never changes, Rule 6) and TWO
- * derived slots, `resolvedContent` (entry 0127) and `measuredHeight` (entry
- * 0129). The slot PATHS and both compute functions live in `primitives/text.ts`
- * (the pure-logic-here / registry-there split — `text.ts` reads several of the
+ * `text` (PROJECT_BRIEF §5.6): "One text object type, not two." ELEVEN fixed
+ * non-derived slots (`origin.x`/`origin.y` + `content` + `width`/`height`/
+ * `overflow` + five `style.*`, all `static` — a `text` object's slot set never
+ * changes, Rule 6) and TWO derived slots, `resolvedContent` (entry 0127) and
+ * `measuredHeight` (entry 0129). The `content`/`width`/`height`/`overflow`/
+ * `style.*` paths and both compute functions live in `primitives/text.ts` (the
+ * pure-logic-here / registry-there split — `text.ts` reads several of the
  * paths, so one spelling must serve both); this entry only wires them.
+ *
+ * `origin.x`/`origin.y` (**D-121**, answering Q-022) reuse `primitives/
+ * geometry.ts`'s `ORIGIN_X_PATH`/`ORIGIN_Y_PATH` — the identical spelling
+ * `circle`/`polygon`/`rect`/`table` already use, so `render/interaction.ts`'s
+ * origin-drag path and a `link text_1.origin.y intersection_a.centroid.y`
+ * (Phase 7) both work with no `text`-specific code. §5.6's `TextBox` block omits
+ * a position, but so does §5.4's for `table`, and §5.10's own `text x=0 y=0`
+ * grammar, §5.7's `image`, and Phase 7 all need one — D-121 reconciles that. Both
+ * are ordinary `literal` slots and NOT dependency-required (nothing derived
+ * reads them): an absent one is tolerated exactly as every other primitive's
+ * origin is (`findSchemaSlotKindMismatches`); the `text` command always creates
+ * them, `x=`/`y=` defaulting to `0`.
  *
  * `resolvedContent`'s dependencies are `dynamic` (§5.1 names it as one of the two
  * cases that require the form): whatever `content`'s parsed block tree
@@ -577,6 +590,10 @@ const TEXT_SCHEMA: ObjectSchema = {
     {
       kind: "static",
       paths: [
+        // D-121: same spelling as every other positioned object, imported from
+        // `primitives/geometry.ts` rather than re-declared (Q-022 answered).
+        ORIGIN_X_PATH,
+        ORIGIN_Y_PATH,
         TEXT_CONTENT_PATH,
         TEXT_WIDTH_PATH,
         TEXT_HEIGHT_PATH,

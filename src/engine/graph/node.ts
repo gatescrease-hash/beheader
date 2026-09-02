@@ -209,6 +209,9 @@ export type ObjectType =
 /** The `table` member of `ObjectType`, exported so address.ts's D-005 mapping references this definition instead of its own string literal (D-009). */
 export const TABLE_TYPE: ObjectType = "table";
 
+/** The `text` member of `ObjectType`, exported so `command/commands.ts`'s D-122 guard tests `object.type` against this definition instead of a bare `"text"` literal (D-009). */
+export const TEXT_TYPE: ObjectType = "text";
+
 // ---------------------------------------------------------------------------
 // The three slot kinds (§5.1's table)
 // ---------------------------------------------------------------------------

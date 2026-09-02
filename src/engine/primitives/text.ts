@@ -108,10 +108,16 @@
  *     `text`-kind `Block` for `render/`'s eventual layout pass to interpret (Rule 1:
  *     glyph styling is not engine logic).
  *   - A `formula`/`derived`-kind `content` slot's OWN references. `content` is read
- *     `literal`-only for parsing (the Rule 6 guard `readTableDimension` applies to
- *     `rows`/`cols`), so a `link`ed `content` would not track what its formula names —
- *     a documented gap (STATUS.md), owed a ruling by the cycle that builds the `text`
- *     command, exactly as D-046 settled the dimension case.
+ *     `literal`-only for parsing (the same Rule 6 timing `readTableDimension` faces for
+ *     `rows`/`cols`): a formula slot's string value is written at evaluation (step 7),
+ *     after this file's edge derivation (step 3) has already run, so a `link`ed
+ *     `content`'s embedded `{= }`/`{? }` references cannot be tracked. **D-122**
+ *     (answering Q-023) closes that gap the way D-046 closed the dimension one — the
+ *     `text` command refuses `link text_1.content …` and `set text_1.content = …`
+ *     outright (`command/commands.ts`'s `buildSlot`), so `content` is permanently
+ *     `literal`-kind and no untracked-reference state is reachable. A plain
+ *     `set text_1.content "…"` (a literal write) is how `content` is authored and is
+ *     unaffected.
  *   - The `{= }`/`{? }` command-line or panel authoring surface — `content` is always
  *     written as a plain string (§5.10's `text` command's own literal argument), the
  *     same way a table cell's formula source is typed, and needs no new mechanism here.
@@ -722,12 +728,16 @@ export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, read
 // ---------------------------------------------------------------------------
 
 /**
- * The stored paths of a `text` object's slots (§5.6's `TextBox` shape). All nine
- * non-derived paths are `static` — a `text` object's slot set never changes
- * (Rule 6). Owned here (not in `primitives/schema.ts`) because this file reads
- * several of them (`content` for parsing; `resolvedContent`/`width`/`style.*` in
- * `computeMeasuredHeight`) and one spelling must serve both; `TEXT_SCHEMA`
- * imports the list.
+ * The nine `text`-specific stored slot paths (§5.6's `TextBox` shape), all
+ * `static` — a `text` object's slot set never changes (Rule 6). Owned here (not
+ * in `primitives/schema.ts`) because this file reads several of them (`content`
+ * for parsing; `resolvedContent`/`width`/`style.*` in `computeMeasuredHeight`)
+ * and one spelling must serve both; `TEXT_SCHEMA` imports the list.
+ *
+ * The other two non-derived paths — `origin.x`/`origin.y` (**D-121**) — are NOT
+ * here: they reuse `primitives/geometry.ts`'s `ORIGIN_X_PATH`/`ORIGIN_Y_PATH`,
+ * the shared spelling every positioned object uses, and `TEXT_SCHEMA` adds them
+ * directly. Nothing in this file reads a `text` object's position.
  *
  * `style.color`/`style.align` are declared (so a formula may drive them — §5.6,
  * D-017) but neither compute here reads them: they change how text is PAINTED,
@@ -771,15 +781,17 @@ export const TEXT_MEASURED_HEIGHT_PATH: readonly string[] = ["measuredHeight"];
  *     no edge, exactly as `deriveEdges`'s own bare-reference handling; the
  *     coercion to `0` happens at read time (`graph/eval.ts`), not here.
  *
- * `content` is read `literal`-only — the Rule 6 guard `primitives/table.ts`'s
- * `readTableDimension` applies to `rows`/`cols`, for the identical reason: a
- * `formula` slot's value is written at evaluation time, AFTER this runs. Both the
- * non-literal and the missing case yield `[content]` alone, but their outcomes
- * DIFFER: a `formula`/`derived` `content` slot EXISTS, so its self-edge is valid
- * and the object commits with its inner references untracked (the F13 gap, owed a
- * ruling by the `text` command cycle); a MISSING `content` slot makes that same
- * self-edge dangling, so `validateIntegrity` REFUSES the object — a `text` with no
- * `content` is malformed (§5.6). See the file header's NOT DONE HERE.
+ * `content` is read `literal`-only — the same Rule 6 timing `primitives/table.ts`'s
+ * `readTableDimension` faces for `rows`/`cols`: a `formula` slot's value is written
+ * at evaluation time, AFTER this runs. Both the non-literal and the missing case
+ * yield `[content]` alone, but their outcomes DIFFER: a MISSING `content` slot makes
+ * that self-edge dangling, so `validateIntegrity` REFUSES the object — a `text` with
+ * no `content` is malformed (§5.6). A `formula`/`derived` `content` slot cannot be
+ * reached through the `text` command at all — **D-122** refuses `link` / `set =` on
+ * it (`command/commands.ts`), closing the old F13 untracked-reference gap the way
+ * D-046 closed the dimension one. A loaded document could still carry one; its inner
+ * references go untracked, exactly as a loaded `formula` `rows` slot's do under
+ * D-046. See the file header's NOT DONE HERE.
  *
  * Never throws. This mirrors `deriveEdges` Source 1's own reference/range handling
  * rather than sharing it — `primitives/text.ts` cannot import `mutation.ts` (it
