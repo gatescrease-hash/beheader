@@ -50,6 +50,24 @@ export function readNumber(object: GraphObject, path: readonly string[]): number
 }
 
 /**
+ * A slot's current value, narrowed to a NON-EMPTY string — `undefined` for
+ * anything else (missing, wrong-typed, an `ErrorValue`, or `""`). Never
+ * throws. `readNumber`'s string sibling.
+ *
+ * Empty counts as absent because every caller pairs this with a `??` default
+ * for a font family or an alignment keyword, where `""` is not a usable value
+ * and the default is. Shared rather than kept local (it was `renderer.ts`'s
+ * private helper until entry 0147) so `renderer.ts`'s drawn font and
+ * `editor.ts`'s in-place overlay font resolve the SAME slot the SAME way and
+ * cannot fall back differently (D-010) — a divergence there is directly
+ * visible as the editor wrapping text the canvas draws on one line.
+ */
+export function readText(object: GraphObject, path: readonly string[]): string | undefined {
+  const value = getSlot(object, path)?.value;
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
  * Narrows a slot's current value to a `Point[]` — `undefined` for everything
  * else, an `ErrorValue` included. `readonly Point[]` is the ONLY array arm of
  * `Value` (§5.1, `graph/node.ts`), so `Array.isArray` alone excludes every

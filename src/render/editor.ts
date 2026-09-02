@@ -23,14 +23,24 @@
  *   overlay's top-left corner and size in CSS pixels, from the receiver's own
  *   world box — `extent.ts`'s `objectExtent` for a `text` object, the cell's
  *   world rectangle for a cell — through `camera.ts`'s `worldToScreen`, then
- *   divided by the canvas's backing/CSS ratio the way `panel.ts` does. It also
- *   returns the overlay's `fontSize` in CSS pixels (D-129): the drawn text's
- *   world size (`style.fontSize` for a `text` object, a fixed base for a cell)
- *   scaled by the same camera and ratio as the box, so the overlay is a rough
- *   size match to what is drawn beneath it.
+ *   divided by the canvas's backing/CSS ratio the way `panel.ts` does.
+ *
+ *   `editorTextStyle(target, object, camera, ratioBackingPerCss)` returns how
+ *   the overlay SETS that text (**D-129**, widened at entry 0147 on the
+ *   operator's report): size, family, line height, alignment and whether it
+ *   wraps. Every length is the drawn text's own world value scaled by the SAME
+ *   `camera.zoom / ratio` the box is, and every slot is read the way
+ *   `renderer.ts` reads it for drawing — because the overlay sits ON the drawn
+ *   text, so any disagreement about the font or the wrap width shows up as the
+ *   editor breaking a line the canvas keeps whole.
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws; reads only, writes nothing (Rule 2).
+ *   - The overlay's type style mirrors `renderer.ts`'s `resolveTextStyle` /
+ *     `drawText` read-for-read (shared `readNumber`/`readText`, the same
+ *     positive-number tests, the same `width`-slot wrap rule), so drawn and
+ *     typed text lay out the same. `wraps` is `drawText`'s own `wrapWidth`
+ *     condition, not a second reading of §5.6's layout rule.
  *   - World<->screen is `camera.ts`'s own `worldToScreen`/`screenToWorld`,
  *     never a second hand-written copy (D-010).
  *   - A cell's rectangle is the SAME `origin` + `TABLE_CELL_*` reading
@@ -44,17 +54,29 @@
  *   - Seeding the editor's text, building the commit `Command`, deciding
  *     literal-vs-formula, or any DOM — `main.ts` (D-125 clauses 2-3, 5, 7).
  *   - Opening the editor on a freshly-placed `text` object — D-124's wiring.
+ *   - Rendering markdown-lite in the overlay. An editor shows RAW SOURCE
+ *     (§5.6's `content`), which is also what `renderer.ts` draws today, so the
+ *     two agree; the markdown-lite cycle will make them differ deliberately.
+ *   - The cell editor's 4-world-unit text inset (`renderer.ts`'s
+ *     `TABLE_CELL_TEXT_PADDING`) and a number cell's right-alignment: the
+ *     editor holds the SOURCE being typed, which Excel left-aligns too.
  */
 import type { CameraState } from "../engine/document.ts";
 import { formatCellReference, parseCellReference } from "../engine/address.ts";
 import { TABLE_TYPE, TEXT_TYPE, type GraphObject } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
-import { TEXT_STYLE_FONT_SIZE_PATH } from "../engine/primitives/text.ts";
+import {
+  TEXT_STYLE_ALIGN_PATH,
+  TEXT_STYLE_FONT_PATH,
+  TEXT_STYLE_FONT_SIZE_PATH,
+  TEXT_STYLE_LINE_HEIGHT_PATH,
+  TEXT_WIDTH_PATH,
+} from "../engine/primitives/text.ts";
 import { screenToWorld, worldToScreen, type ScreenPoint } from "./camera.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { hitTest } from "./hittest.ts";
-import { readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 /**
  * What the in-place editor is open on (**D-125** clause 1). A `text` object is
@@ -67,19 +89,29 @@ export type EditorTarget =
   | { readonly kind: "text"; readonly objectId: string }
   | { readonly kind: "cell"; readonly objectId: string; readonly cell: string };
 
-/**
- * The editor overlay's box, in CSS pixels from the canvas's top-left — the same
- * space `panel.ts`'s `PanelPlacement` is measured in. `fontSize` is also CSS
- * pixels (D-129): the drawn text's world size scaled by the camera and the
- * backing/CSS ratio, so `main.ts` sets it as an inline `font-size` and the
- * overlay's glyphs roughly match the ones beneath it at any zoom.
- */
+/** The editor overlay's box, in CSS pixels from the canvas's top-left — the same space `panel.ts`'s `PanelPlacement` is measured in. */
 export interface EditorPlacement {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
+}
+
+/**
+ * How the overlay sets the text inside that box (**D-129**, widened at entry
+ * 0147). `fontSize` and `lineHeight` are CSS pixels — the drawn text's own
+ * world lengths scaled by `camera.zoom / ratio`, the same factor the box is
+ * scaled by. `wraps` is whether the overlay may break a line at all: FALSE for
+ * an auto-width `text` object, because §5.6's "auto width + auto height means
+ * no wrapping" is what `renderer.ts` draws, and a `<textarea>` that soft-wraps
+ * anyway is the defect the operator reported (one drawn line, two typed ones).
+ */
+export interface EditorTextStyle {
   readonly fontSize: number;
+  readonly fontFamily: string;
+  readonly lineHeight: number;
+  readonly textAlign: "left" | "center" | "right";
+  readonly wraps: boolean;
 }
 
 /**
@@ -93,21 +125,29 @@ const EMPTY_TEXT_EDITOR_WIDTH = 240;
 const EMPTY_TEXT_EDITOR_HEIGHT = 20;
 
 /**
- * The world-unit font size the overlay scales from (D-129 clause 1), before the
- * camera zoom and the backing/CSS ratio are applied:
+ * The world-unit type style the overlay scales from (**D-129**), before
+ * `camera.zoom / ratio` is applied. Two groups, and neither is invented here:
  *
- *   - a `text` object uses its own `style.fontSize` slot, read the same way
- *     `renderer.ts`/`measure.ts` read it; `TEXT_EDITOR_FALLBACK_FONT_SIZE` stands
- *     in when that slot is missing or unusable, matching `renderer.ts`'s own
- *     `DEFAULT_TEXT_FONT_SIZE`;
- *   - a table cell uses `CELL_EDITOR_FONT_SIZE`, mirroring `renderer.ts`'s
- *     `TABLE_CELL_FONT` ("14px ...") — a cell has no per-object style slot.
+ *   - `TEXT_EDITOR_FALLBACK_*` stand in when a `text` object's own `style.*`
+ *     slot is missing or unusable, and mirror `renderer.ts`'s `DEFAULT_TEXT_*`
+ *     **by value** (16 / 20 / "sans-serif") so a broken-style object's overlay
+ *     falls back exactly where its drawn text does. A real `text` object uses
+ *     its own slots and never reaches these.
+ *   - `CELL_EDITOR_*` mirror `renderer.ts`'s `TABLE_CELL_FONT` ("14px
+ *     sans-serif") — a cell has no per-object style slot, so the overlay
+ *     matches the one font `drawTable` uses.
  *
- * Round and untuned (Rule 5), like `EMPTY_TEXT_EDITOR_*` above and every other
- * screen-space constant this layer carries (open-fix item 8).
+ * Mirrored by value rather than imported because `renderer.ts` keeps its
+ * fallbacks private, and STATUS already carries the open question of which file
+ * OWNS one shared set (`measure.ts` and `renderer.ts` fall back differently
+ * today — 0139-REVIEW left it for a ruling). This file is a third reader of the
+ * same set; it deliberately does not invent a fourth answer.
  */
 const TEXT_EDITOR_FALLBACK_FONT_SIZE = 16;
+const TEXT_EDITOR_FALLBACK_LINE_HEIGHT = 20;
+const TEXT_EDITOR_FALLBACK_FONT_FAMILY = "sans-serif";
 const CELL_EDITOR_FONT_SIZE = 14;
+const CELL_EDITOR_FONT_FAMILY = "sans-serif";
 
 /**
  * The receiver a double-click at `screenPoint` opens the editor on, or
@@ -171,27 +211,71 @@ export function editorPlacement(
   camera: CameraState,
   ratioBackingPerCss: number,
 ): EditorPlacement {
-  const ratio = Number.isFinite(ratioBackingPerCss) && ratioBackingPerCss > 0 ? ratioBackingPerCss : 1;
+  const ratio = usableRatio(ratioBackingPerCss);
   const box = target.kind === "text" ? textEditorBox(object) : cellEditorBox(object, target.cell);
   const topLeft = worldToScreen(camera, { x: box.minX, y: box.minY });
   const bottomRight = worldToScreen(camera, { x: box.maxX, y: box.maxY });
-  // D-129 clause 1: the font tracks the camera exactly as the box does — one world
-  // length scaled by `camera.zoom` and then divided by the same `ratio`, so a glyph
-  // and the box around it stay in proportion at every zoom level.
-  const fontWorld = target.kind === "text" ? textEditorFontSize(object) : CELL_EDITOR_FONT_SIZE;
   return {
     left: topLeft.x / ratio,
     top: topLeft.y / ratio,
     width: (bottomRight.x - topLeft.x) / ratio,
     height: (bottomRight.y - topLeft.y) / ratio,
-    fontSize: (fontWorld * camera.zoom) / ratio,
   };
 }
 
-/** A `text` object's own `style.fontSize` in world units when it is a usable positive number, else `renderer.ts`'s matching default — the same read/fallback shape `resolveTextStyle` makes (D-010). */
-function textEditorFontSize(object: GraphObject): number {
-  const size = readNumber(object, TEXT_STYLE_FONT_SIZE_PATH);
-  return size !== undefined && size > 0 ? size : TEXT_EDITOR_FALLBACK_FONT_SIZE;
+/**
+ * How the overlay sets its text (**D-129**, widened at entry 0147): the size,
+ * family, line height and alignment `renderer.ts` would draw the same receiver
+ * with, and whether the text may wrap.
+ *
+ * Every length is a WORLD length scaled by `camera.zoom / ratio` — the identical
+ * factor `editorPlacement` scales the box by (clause 1: the overlay sits at the
+ * receiver's own position, so its glyphs must scale with it or the two disagree
+ * at every zoom but 1).
+ *
+ * `wraps` is `drawText`'s own wrap condition, re-read rather than re-decided: a
+ * positive numeric `width` slot is the wrap boundary, and `"auto"` means no
+ * wrapping at all (§5.6). A `<textarea>` soft-wraps by default, which for an
+ * auto-width object broke one drawn line into two typed ones — the operator's
+ * report at entry 0147.
+ */
+export function editorTextStyle(
+  target: EditorTarget,
+  object: GraphObject,
+  camera: CameraState,
+  ratioBackingPerCss: number,
+): EditorTextStyle {
+  const scale = camera.zoom / usableRatio(ratioBackingPerCss);
+  if (target.kind === "cell") {
+    // A cell has no per-object style slots — `drawTable` draws every cell in one
+    // font, and centres the line vertically in the cell (`textBaseline`
+    // "middle"), which a line box the full cell height reproduces.
+    return {
+      fontSize: CELL_EDITOR_FONT_SIZE * scale,
+      fontFamily: CELL_EDITOR_FONT_FAMILY,
+      lineHeight: TABLE_CELL_HEIGHT * scale,
+      textAlign: "left",
+      wraps: false,
+    };
+  }
+  const fontSize = readNumber(object, TEXT_STYLE_FONT_SIZE_PATH);
+  const lineHeight = readNumber(object, TEXT_STYLE_LINE_HEIGHT_PATH);
+  const align = readText(object, TEXT_STYLE_ALIGN_PATH);
+  const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
+  return {
+    fontSize: (fontSize !== undefined && fontSize > 0 ? fontSize : TEXT_EDITOR_FALLBACK_FONT_SIZE) * scale,
+    fontFamily: readText(object, TEXT_STYLE_FONT_PATH) ?? TEXT_EDITOR_FALLBACK_FONT_FAMILY,
+    lineHeight: (lineHeight !== undefined && lineHeight > 0 ? lineHeight : TEXT_EDITOR_FALLBACK_LINE_HEIGHT) * scale,
+    // The same three-way clamp `resolveTextStyle` makes: anything that is not
+    // "center"/"right" draws left, so the overlay does too.
+    textAlign: align === "center" || align === "right" ? align : "left",
+    wraps: fixedWidth !== undefined && fixedWidth > 0,
+  };
+}
+
+/** The backing/CSS ratio, guarded — a non-finite or non-positive one falls back to 1, the "a bad number does not move furniture" posture `panel.ts`/`camera.ts` take. Shared by both exported functions so the box and its text can never be scaled by different factors. */
+function usableRatio(ratioBackingPerCss: number): number {
+  return Number.isFinite(ratioBackingPerCss) && ratioBackingPerCss > 0 ? ratioBackingPerCss : 1;
 }
 
 /** A `text` object's world box: its drawn extent, or — for an empty one with no extent (D-125 clause 6) — the editor's own fallback box anchored at `origin`. */

@@ -143,28 +143,35 @@
         D-125's in-place editor: a real text input overlaid on the canvas at
         the receiver's own position (a `text` object's `content`, or a table
         cell). main.ts sizes and positions it every paint from
-        render/editor.ts — including its `font-size`, which tracks
-        `style.fontSize × camera.zoom` (D-129) and so is set inline, overriding
-        the `font: inherit` family here. It is mounted in #stage, a sibling of
-        #panels with no delegated listeners, so a click in it never has to be
-        carved out of the panel plumbing. One at a time, document-wide.
+        render/editor.ts, and sets `font-size`/`font-family`/`line-height`/
+        `text-align` inline from the receiver's OWN style slots (D-129, widened
+        at entry 0147) — so nothing here may set a font: the page's is
+        monospace and a `text` object's default is `sans-serif`, and that
+        mismatch alone re-wrapped the operator's text. It is mounted in #stage,
+        a sibling of #panels with no delegated listeners, so a click in it never
+        has to be carved out of the panel plumbing. One at a time, document-wide.
+
+        NO padding and NO border, deliberately: the box main.ts places IS the
+        receiver's drawn box, and for an auto-width object that box is fitted to
+        the exact width of the committed text — so any horizontal inset makes
+        the text no longer fit the box it was measured in, which is a wrap (or a
+        scrollbar) the canvas underneath does not have. The focus ring is an
+        `outline`, which is painted outside the box and takes no layout.
 
         `overflow: auto` (D-129 clause 2): the overlay never clips its own
-        text — a `<textarea>` scrolls when the typed content outgrows the
-        committed box, a cell `<input>` scrolls horizontally like Excel — so
-        the caret is always visible whatever the zoom.
+        text — it scrolls once the typed content outgrows the committed box —
+        so the caret is always visible whatever the zoom.
       */
       .text-editor {
         position: absolute;
         box-sizing: border-box;
         margin: 0;
-        border: 1px solid #1a56db;
-        padding: 0 2px;
-        font: inherit;
+        border: none;
+        padding: 0;
         color: #1a1a1a;
         background: #ffffff;
         resize: none;
-        outline: none;
+        outline: 1px solid #1a56db;
         overflow: auto;
         z-index: 1;
       }

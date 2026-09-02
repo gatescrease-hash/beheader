@@ -134,7 +134,7 @@ import { formatCellReference, TABLE_CELL_PATH_PREFIX } from "../engine/address.t
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
 import { cssFont, layOutLines } from "./measure.ts";
-import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 // D-066's one extent, reused as the chrome anchor (see `chromeAnchorPoint`).
 // `extent.ts` and `slots.ts` are D-093's split: neither this file nor
 // `hittest.ts` imports the other any more, so there is no cycle to flag here.
@@ -485,12 +485,6 @@ interface ResolvedTextStyle {
   readonly lineHeight: number;
   readonly color: string;
   readonly align: CanvasTextAlign;
-}
-
-/** A slot's value narrowed to a non-empty string, or `undefined` — `readNumber`'s string sibling, kept local because only `drawText` needs it. */
-function readText(object: GraphObject, path: readonly string[]): string | undefined {
-  const value = getSlot(object, path)?.value;
-  return typeof value === "string" && value !== "" ? value : undefined;
 }
 
 /**

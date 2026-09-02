@@ -128,7 +128,7 @@ import { parseCommandNumber, type SetFormulaCommand, type SetLiteralCommand, typ
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
-import { editorPlacement, editorTargetAt, type EditorTarget } from "./render/editor.ts";
+import { editorPlacement, editorTargetAt, editorTextStyle, type EditorTarget, type EditorTextStyle } from "./render/editor.ts";
 import { documentExtent, objectExtent, type WorldExtent } from "./render/extent.ts";
 import { deselect, pointerDown, pointerMove, pointerUp, INITIAL_INTERACTION_STATE, type InteractionState } from "./render/interaction.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
@@ -1331,7 +1331,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * "not editing text or a cell" carve-out, made real (the same move
    * `panelEditInput` makes for a panel row).
    */
-  const buildInPlaceElement = (target: EditorTarget): HTMLTextAreaElement | HTMLInputElement => {
+  const buildInPlaceElement = (target: EditorTarget, style: EditorTextStyle): HTMLTextAreaElement | HTMLInputElement => {
     // `stopPropagation` on every keydown keeps the whole gesture off the
     // always-focused command bar's window listeners. Escape cancels; Enter
     // commits ONLY in a cell — in a `<textarea>` it falls through and inserts a
@@ -1349,6 +1349,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (target.kind === "text") {
       const area = document.createElement("textarea");
       area.className = "text-editor";
+      // D-129, widened at entry 0147: a `<textarea>` soft-wraps by default, so an
+      // AUTO-width object — the normal case, `DEFAULT_TEXT_WIDTH` is `"auto"` —
+      // had its one drawn line broken into two typed ones (the operator's
+      // report). `wrap="off"` is the attribute that turns soft wrapping off; it
+      // is set once here rather than per paint because `editorTextStyle.wraps`
+      // reads the `width` slot, which no gesture can change while this element
+      // holds the keyboard.
+      area.wrap = style.wraps ? "soft" : "off";
       area.value = editorSeed(state, target);
       area.addEventListener("keydown", keydown);
       area.addEventListener("blur", commitInPlace);
@@ -1380,22 +1388,30 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       closeInPlaceEditor();
       return;
     }
+    const bounds = canvas.getBoundingClientRect();
+    const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
+    const style = editorTextStyle(inPlaceEditor, object, state.document.camera, ratio);
     if (inPlaceElement === undefined) {
-      inPlaceElement = buildInPlaceElement(inPlaceEditor);
+      inPlaceElement = buildInPlaceElement(inPlaceEditor, style);
       editorLayer.appendChild(inPlaceElement);
       inPlaceElement.focus();
       inPlaceElement.select();
     }
-    const bounds = canvas.getBoundingClientRect();
-    const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
     const placement = editorPlacement(inPlaceEditor, object, state.document.camera, ratio);
     inPlaceElement.style.left = `${placement.left}px`;
     inPlaceElement.style.top = `${placement.top}px`;
     inPlaceElement.style.width = `${placement.width}px`;
     inPlaceElement.style.height = `${placement.height}px`;
-    // D-129 clause 1: the glyphs scale with the camera like the box does, so the
-    // overlay is a rough size match to the drawn text at any zoom.
-    inPlaceElement.style.fontSize = `${placement.fontSize}px`;
+    // D-129, widened at entry 0147: the overlay's type style tracks the camera
+    // exactly as its box does, and is read from the same slots `renderer.ts`
+    // draws with — otherwise the editor lays the text out differently from the
+    // canvas underneath it (the operator's "Hello World! is one line drawn, two
+    // lines typed"). Family matters as much as size here: the page font is
+    // monospace and a `text` object's default is `sans-serif`.
+    inPlaceElement.style.fontSize = `${style.fontSize}px`;
+    inPlaceElement.style.fontFamily = style.fontFamily;
+    inPlaceElement.style.lineHeight = `${style.lineHeight}px`;
+    inPlaceElement.style.textAlign = style.textAlign;
   };
 
   const apply = (next: AppState): void => {
@@ -1457,30 +1473,39 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
-    // Both lines are about the command input keeping the keyboard (§5.10:
-    // "always focused when the user is not editing text or a cell"). A press on
-    // the canvas moves focus to the body as its DEFAULT action, which runs AFTER
-    // this listener — so `input.focus()` alone was undone a moment later, and
-    // every keystroke after a click went nowhere until the operator clicked the
-    // input (entry 0091). Refusing the default keeps the focus where it is, and
-    // the `focus()` call recovers it when something else already took it. It also
-    // suppresses the `blur` an open in-place editor would otherwise fire — so
-    // whether that editor commits is decided explicitly below, not by the press.
+    // A press on the canvas moves focus to the body as its DEFAULT action, which
+    // runs AFTER this listener — so `input.focus()` alone was undone a moment
+    // later, and every keystroke after a click went nowhere until the operator
+    // clicked the input (entry 0091). Refusing the default keeps focus where it
+    // is; the deliberate `focus()` calls below then place it (§5.10: the command
+    // input is "always focused when the user is not editing text or a cell").
     event.preventDefault();
-    input.focus();
     canvas.setPointerCapture(event.pointerId);
     const point = screenPointOf(event);
     if (event.button === 1 || spaceHeld) {
-      // D-130: a pan gesture is camera navigation, not "a click outside" — it
-      // leaves an open in-place editor untouched (the overlay re-places every
-      // paint, so it tracks its receiver through the pan). This branch sits
-      // ABOVE the commit below precisely so a pan never reaches it.
+      // **D-130**: a pan gesture is camera navigation, not "a click outside" — it
+      // leaves an open in-place editor alone, and the overlay tracks its receiver
+      // through the pan (it re-places every paint).
+      //
+      // The FOCUS is the load-bearing half, and entry 0146 missed it: the overlay
+      // commits on `blur`, and an unconditional `input.focus()` here IS a blur —
+      // so moving `commitInPlace()` below this branch changed nothing and any
+      // middle click still committed, with or without a drag (the operator's
+      // report at entry 0147). An open editor therefore KEEPS the keyboard
+      // across a pan; with nothing open, the command bar takes it as always.
+      if (inPlaceEditor === undefined) {
+        input.focus();
+      }
       pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
     }
+    input.focus();
     // D-125 clause 5 / D-128: a plain canvas press IS "a click outside" and
-    // commits an open in-place editor before the press selects anything. A no-op
-    // when nothing is open.
+    // commits an open in-place editor before the press selects anything. Made
+    // explicitly rather than left to the blur `input.focus()` just fired, because
+    // `commitInPlace` is re-entrant-safe but the ORDER matters: the commit must
+    // land before `pointerDownAt` changes the selection. A no-op when nothing is
+    // open.
     if (inPlaceEditor !== undefined) {
       commitInPlace();
     }
