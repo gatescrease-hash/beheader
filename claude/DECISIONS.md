@@ -4508,3 +4508,105 @@ sight" — this ruling settles the reading so D-124's cycle does not have to re-
 not remove the human's standing right to overrule.
 
 **Reversible; the human may overrule** either the whole clause-5 convention or this reading of it.
+
+---
+
+## D-129 — The in-place editor overlay scales with the camera and never clips its own text
+Answers: the human's visual test of entry 0143 (2026-09-02) — Defect 1   Ruled: entry 0145-RULINGS-phase5 (reviewer)
+Binding on: `src/render/editor.ts`, `src/main.ts`'s in-place editor DOM half, `index.html`'s `.text-editor`
+
+**Context.** Entry 0143 placed the overlay through `worldToScreen` — so its BOX grows and shrinks
+with zoom — but pinned the glyphs at a fixed 14px (`font: inherit`) and set `overflow: hidden`. The
+operator reports the editor is unusable at many zoom levels: zoomed in, the text is tiny in a large
+box; zoomed out, the text is large and the box (sized from the *committed* content's measured
+extent) clips it, with no way to see what is being typed. Entry 0143 called the mismatch "deliberate
+for v1" and 0144-REVIEW accepted that; the operator's report overrides both (PROCESS_BRIEF §1).
+
+**Ruling.**
+
+1. **The overlay's font size tracks the camera.** For a `text` object it is
+   `style.fontSize × camera.zoom` (read the `style.fontSize` slot through `render/slots.ts`, same as
+   `measure.ts`/`renderer.ts`); for a table cell it is a fixed base size × `camera.zoom`. The overlay
+   is a rough WYSIWYG match to the drawn text, not a pixel-perfect one — font family, markdown
+   rendering and alignment still need not match (that stays a noted refinement). Matching the SIZE is
+   what makes the box and its text agree.
+2. **The overlay never clips its own content.** `overflow: hidden` is wrong; a `text` `<textarea>`
+   shows content past the object's committed box — it may grow downward past that box, or scroll,
+   implementer's call, but the caret and the text being typed are always visible. A cell `<input>`
+   is one line and may scroll horizontally like Excel's.
+3. **The placed box still comes from the receiver's world extent** (D-125 clause 1) — this ruling
+   changes the font and the overflow behaviour, not where the box is anchored or how its initial
+   size is derived. An empty `text` object still gets `editor.ts`'s fallback box (D-125 clause 6).
+
+**Rationale.** D-125 clause 1 says the editor sits "at the receiver's own position" — a position
+that scales with zoom while its contents do not is only half of that. The clip is the worse half: it
+turns a cosmetic mismatch into "cannot edit a box whose committed text was short." Both are cheap to
+fix and local to the editor surface.
+
+**Reversible.** If the zoom-scaled font ever fights the layout, a fixed readable size with
+`overflow` visible is the fallback — but the clip must go regardless.
+
+---
+
+## D-130 — A pan gesture does not commit the in-place editor
+Answers: the human's visual test of entry 0143 (2026-09-02) — Defect 2   Ruled: entry 0145-RULINGS-phase5 (reviewer)
+Binding on: `src/main.ts`'s canvas `pointerdown` handler
+
+**Context.** Entry 0143's `pointerdown` handler calls `commitInPlace()` before it checks for the pan
+gesture, so a middle-drag or space-drag pan commits and closes the editor. Wheel-zoom (no
+`pointerdown`) correctly leaves it open. The two navigation gestures disagree, and — with D-129's
+clip in play — the operator cannot pan to bring a clipped box into view without losing the edit.
+
+**Ruling.** A pan gesture — `event.button === 1` or `spaceHeld` at `pointerdown` — does NOT commit
+the in-place editor. The editor stays open and its overlay tracks the receiver through the pan (it
+already re-places every paint). Only a plain press on the canvas (the gesture that would start a
+selection or a marquee) is "a click outside" for D-128's purposes and commits. Move the
+`commitInPlace()` call in the `pointerdown` handler below the `event.button === 1 || spaceHeld`
+branch.
+
+**Rationale.** D-128 clause 2 reads "a click outside the overlay" as a commit trigger; a pan is not
+a click on content, it is camera navigation, and Excel treats it the same way (scrolling does not
+end a cell edit). This also removes the trap where D-129's overflow fix and the pan-to-see-it
+workaround cancel each other out.
+
+**Reversible; trivially.** One conditional. If "any canvas interaction commits" is ever wanted back,
+it is the same one line.
+
+---
+
+## D-131 — The in-place cell editor shows a same-table reference in relative (Excel) form
+Answers: the human's visual test of entry 0143 (2026-09-02) — Defect 3, and the human's explicit preference   Ruled: entry 0145-RULINGS-phase5 (reviewer)
+Binding on: `src/engine/formula/format.ts` (a new context parameter), `src/main.ts`'s `editorSeed`
+
+**Context.** The operator typed `=A1 * 2` into a cell of `table_1`; reopening the editor showed
+`=table_1.A1 * 2`. The commit side already resolves bare cell refs against the host table
+(`commands.ts`'s `cellHostObjectId` → `parseFormula`'s third argument), so `=A1 * 2` committed
+correctly; only the DISPLAY side lagged, because `formatFormula` has no relative mode. The operator
+has asked for Excel-like same-table referencing in this editor.
+
+**Ruling.**
+
+1. **`formatFormula` gains an optional `relativeToObjectId` parameter.** When formatting a
+   `reference` (or a `range` endpoint) whose address targets a `cells.*` slot of that object, it
+   prints the bare cell form (`A1`, `A1:B4`) instead of `<name>.A1`. A range prints BOTH endpoints
+   relative or NEITHER — never the mixed `table_1.A1:B4` form, which does not re-parse.
+2. **`editorSeed`'s cell-formula branch passes the cell's host table id** as that argument, so what
+   the editor shows is exactly what `commitTableCell` → `parseFormula` will read back with the same
+   host context. The round-trip must be exact: seed → no edit → commit yields a bit-identical AST.
+3. **References to any OTHER object stay fully qualified** even in the cell editor — `=other_table.A1`
+   or `=circle_1.origin.x` print with their names, because there is no host context that would make
+   them bare re-parse.
+4. **Every other caller of `formatFormula` is unchanged.** D-040's replace report, `refs`, the
+   eventual §5.4 formula bar — all keep the fully-qualified default by passing no
+   `relativeToObjectId`. The parameter is opt-in and the cell editor is its only caller for now.
+
+**Rationale.** D-125 exists because qualified addressing is "horribly unintuitive to a human seeing
+it visually." A cell that shows `=table_1.A1 * 2` when the operator typed `=A1 * 2` inflicts that
+exact injury inside the feature meant to cure it, and it makes the editor misreport what is stored.
+The commit path already does the relative resolution; the display path must mirror it. `format.ts`'s
+header note that a range "must print both endpoints qualified" is about the mixed form with no host
+context — a fully-relative `A1:B4` re-parses cleanly when the host table is known, which in the cell
+editor it always is (clause 1's "both or neither" keeps that guarantee).
+
+**Reversible.** Dropping the argument at the `editorSeed` call site restores the qualified display
+with no other change.
