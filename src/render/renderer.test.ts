@@ -25,6 +25,7 @@ type RecordedCall =
   | { readonly op: "stroke" }
   | { readonly op: "arc"; readonly x: number; readonly y: number; readonly radius: number; readonly startAngle: number; readonly endAngle: number }
   | { readonly op: "strokeRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+  | { readonly op: "fillRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillText"; readonly text: string; readonly x: number; readonly y: number; readonly align: string };
 
 /** The fake measurer's per-character width — see `measureText` below. */
@@ -75,6 +76,11 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
     },
     strokeRect(x: number, y: number, w: number, h: number) {
       calls.push({ op: "strokeRect", x, y, w, h });
+    },
+    // The resize grabbers (the 2026-09-02 text-box rework) are the only
+    // `fillRect` in this file — a white square outlined in the selection colour.
+    fillRect(x: number, y: number, w: number, h: number) {
+      calls.push({ op: "fillRect", x, y, w, h });
     },
     fillText(text: string, x: number, y: number) {
       calls.push({ op: "fillText", text, x, y, align: ctx.textAlign });
@@ -868,5 +874,116 @@ describe("renderDocument — panelledObjectIds is a SEPARATE list from selectedO
     // 1 arc for the ordinary draw, 1 more for the highlight — panelledObjectIds
     // being empty does not touch the highlight pass, which reads selectedObjectIds.
     expect(calls.filter((call) => call.op === "arc")).toHaveLength(2);
+  });
+});
+
+// The human's 2026-09-02 text-box rework: grabbers on a selected text box, and
+// the object being edited stepping aside entirely so the overlay is the only
+// thing drawing its text.
+describe("renderDocument — resize grabbers and the object being edited (2026-09-02)", () => {
+  /** A `text` object whose committed box is (0,0)-(200,40). */
+  function sizedText(): GraphObject {
+    return {
+      id: "obj_text",
+      name: "text_1",
+      type: "text",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        width: { kind: "literal", value: "auto" },
+        "style.fontSize": { kind: "literal", value: 16 },
+        "style.lineHeight": { kind: "literal", value: 20 },
+        "style.font": { kind: "literal", value: "sans-serif" },
+        resolvedContent: { kind: "derived", value: "hi" },
+        measuredWidth: { kind: "derived", value: 200 },
+        measuredHeight: { kind: "derived", value: 40 },
+      },
+    };
+  }
+
+  it("draws eight grabbers on a selected text box", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, ["obj_text"]);
+    expect(calls.filter((call) => call.op === "fillRect")).toHaveLength(8);
+  });
+
+  it("draws none on an UNSELECTED text box — a grabber is part of the selection", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, []);
+    expect(calls.filter((call) => call.op === "fillRect")).toHaveLength(0);
+  });
+
+  it("centres them on the box's corners and edge midpoints, in SCREEN space", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, ["obj_text"]);
+    const centres = calls
+      .filter((call): call is Extract<RecordedCall, { op: "fillRect" }> => call.op === "fillRect")
+      .map((call) => ({ x: call.x + call.w / 2, y: call.y + call.h / 2 }));
+    expect(centres).toContainEqual({ x: 0, y: 0 }); // nw
+    expect(centres).toContainEqual({ x: 200, y: 40 }); // se
+    expect(centres).toContainEqual({ x: 100, y: 0 }); // n
+    expect(centres).toContainEqual({ x: 0, y: 20 }); // w
+  });
+
+  it("keeps them one SCREEN size at high zoom — they are chrome, drawn after the transform reset", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [sizedText()], { x: 0, y: 0, zoom: 10 }, ["obj_text"]);
+    const squares = calls.filter((call): call is Extract<RecordedCall, { op: "fillRect" }> => call.op === "fillRect");
+    expect(new Set(squares.map((call) => call.w))).toEqual(new Set([squares[0]?.w]));
+    // At zoom 10 the box's SE corner projects to (2000, 400) — the grabber
+    // moved with it but did not grow.
+    expect(squares.some((call) => call.x + call.w / 2 === 2000 && call.y + call.h / 2 === 400)).toBe(true);
+  });
+
+  it("draws none on a selected text box with no drawn extent — there is no box to hang them on (D-066)", () => {
+    const { ctx, calls } = createFakeContext();
+    const empty: GraphObject = { ...sizedText(), slots: { ...sizedText().slots, resolvedContent: { kind: "derived", value: null } } };
+    renderDocument(ctx, 800, 600, [empty], CAMERA_IDENTITY, ["obj_text"]);
+    expect(calls.filter((call) => call.op === "fillRect")).toHaveLength(0);
+  });
+
+  it("draws none on a selected CIRCLE — only a text box is resized by its box (handles.ts's `hasResizeHandles`)", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle: GraphObject = {
+      id: "obj_c",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: 10 },
+        vertices: { kind: "derived", value: [{ x: -10, y: -10 }, { x: 10, y: 10 }] },
+      },
+    };
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_c"]);
+    expect(calls.filter((call) => call.op === "fillRect")).toHaveLength(0);
+  });
+
+  /** Every string `fillText` drew, in order — body text and screen-space chrome (the name label) alike. */
+  function drawnStrings(calls: readonly RecordedCall[]): readonly string[] {
+    return calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
+  }
+
+  it("does not draw the CONTENT of the object being edited — the overlay IS its text while the editor is open", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, [], [], "obj_text");
+    expect(drawnStrings(calls)).not.toContain("hi");
+    // Its NAME label is chrome, not its text, and still says which box this is.
+    expect(drawnStrings(calls)).toContain("text_1");
+  });
+
+  it("still draws every OTHER object's content while one is being edited", () => {
+    const { ctx, calls } = createFakeContext();
+    const other: GraphObject = { ...sizedText(), id: "obj_other", name: "text_2" };
+    renderDocument(ctx, 800, 600, [sizedText(), other], CAMERA_IDENTITY, [], [], "obj_text");
+    // One "hi" — the other object's. The edited one's is left to the overlay.
+    expect(drawnStrings(calls).filter((text) => text === "hi")).toHaveLength(1);
+  });
+
+  it("draws neither its selection outline nor its grabbers while it is being edited — both would sit at the committed size the growing overlay has left behind", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, ["obj_text"], ["obj_text"], "obj_text");
+    expect(calls.filter((call) => call.op === "fillRect")).toHaveLength(0);
+    expect(calls.filter((call) => call.op === "strokeRect")).toHaveLength(0);
   });
 });

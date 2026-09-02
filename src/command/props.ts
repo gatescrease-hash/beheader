@@ -58,7 +58,7 @@
  */
 import { formatFormula } from "../engine/formula/format.ts";
 import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Slot, type Value } from "../engine/graph/node.ts";
-import { getObjectSchema } from "../engine/primitives/schema.ts";
+import { findSlotOptions, getObjectSchema, type SlotOptionSet } from "../engine/primitives/schema.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import { TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 
@@ -81,6 +81,18 @@ export interface SlotDescriptor {
   readonly value: Value;
   readonly formulaSource?: string;
   readonly synthetic?: true;
+  /**
+   * The closed value set this slot accepts, when its schema declares one
+   * (`primitives/schema.ts`'s `slotOptions`) — the human's 2026-09-02
+   * instruction that a slot with "only a small subset of valid inputs" should
+   * OFFER them rather than make the operator know them. Absent on every
+   * free-text slot, which is all of them but `text`'s three.
+   *
+   * Carried on the descriptor rather than looked up again by each reader, for
+   * D-094 clause 9's reason: `props` and the panel enumerate an object's slots
+   * ONCE, and what a slot accepts is part of describing it.
+   */
+  readonly options?: SlotOptionSet;
 }
 
 /**
@@ -115,7 +127,7 @@ export function buildSlotDescriptors(object: GraphObject, objects: readonly Grap
         // than an assumption so a future type cannot make this throw.
         continue;
       }
-      descriptors.push(describeNonDerivedSlot(path, slot, objects));
+      descriptors.push({ ...describeNonDerivedSlot(path, slot, objects), ...optionsFor(object, path) });
     }
   }
   for (const derived of schema.derivedSlots) {
@@ -125,6 +137,18 @@ export function buildSlotDescriptors(object: GraphObject, objects: readonly Grap
     descriptors.push({ path: derived.path, kind: "derived", value: slot?.value ?? null });
   }
   return descriptors;
+}
+
+/**
+ * `{ options }` when this slot's schema declares a closed value set, `{}`
+ * otherwise — spread onto the descriptor so the field is genuinely ABSENT for a
+ * free-text slot rather than present-and-`undefined`, which is what every other
+ * optional field on `SlotDescriptor` already does (`formulaSource`,
+ * `synthetic`) and what keeps a `toEqual` in a test readable.
+ */
+function optionsFor(object: GraphObject, path: readonly string[]): { options?: SlotOptionSet } {
+  const options = findSlotOptions(object.type, path);
+  return options === undefined ? {} : { options };
 }
 
 /** One non-derived slot, described. Exhaustive over the three slot kinds — see the `"derived"` arm's own comment for why that case is reachable here at all. */

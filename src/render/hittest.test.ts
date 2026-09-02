@@ -224,14 +224,27 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
     expect(hitTest({ x: 420, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("D-123 clause 3: the width slot the operator SET wins over measuredWidth — that is the box, whatever the ink does inside it", () => {
+  it("a set width holds when the text fits inside it — the box does not shrink to the ink (autoresize governs the HEIGHT only)", () => {
+    const text = textObject("label", 0, 0, {
+      width: { kind: "literal", value: 300 },
+      measuredWidth: { kind: "derived", value: 60 },
+      measuredHeight: { kind: "derived", value: 20 },
+    });
+    expect(hitTest({ x: 280, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
+    expect(hitTest({ x: 320, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("a set width GROWS to the measurement when the text cannot be wrapped into it — a text box never crops (the human, 2026-09-02)", () => {
+    // Reachable with one unbreakable word: `measure.ts` breaks between words
+    // only, so a 400-wide word in a 60-wide box measures 400 and the box must
+    // follow it. This inverts the pre-rework rule, deliberately.
     const text = textObject("label", 0, 0, {
       width: { kind: "literal", value: 60 },
       measuredWidth: { kind: "derived", value: 400 },
       measuredHeight: { kind: "derived", value: 20 },
     });
-    expect(hitTest({ x: 50, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
-    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
+    expect(hitTest({ x: 420, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
   it("D-123: a #MEASURE measuredWidth (no measurer, D-118) is not a number, so the fallback still applies", () => {

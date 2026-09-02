@@ -17,11 +17,13 @@ import { describe, expect, it } from "vitest";
 import { createEmptyDocument, deserializeDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
 import type { EvalContext } from "./engine/eval-context.ts";
 import { getSlot, type GraphObject } from "./engine/graph/node.ts";
+import { objectExtent } from "./render/extent.ts";
 import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
 import {
   abandonCreatedTextBox,
   buildPanelModel,
+  commitPanelChoice,
   commitPanelEdit,
   commitTableCell,
   commitTextContent,
@@ -41,6 +43,7 @@ import {
   unlinkPanelSlot,
   wheelZoomAt,
   type AppState,
+  type PanelRow,
   type Viewport,
 } from "./main.ts";
 
@@ -1248,5 +1251,173 @@ describe("abandonCreatedTextBox — an abandoned just-created empty text box is 
   it("is a no-op for a stale object id", () => {
     const { state } = withEmptyTextBox();
     expect(abandonCreatedTextBox(state, "obj_404")).toBe(state);
+  });
+});
+
+// The human's 2026-09-02 instruction: "if properties only have a small subset
+// of valid inputs ... instead, create a drop-down." The schema declares the
+// closed sets; `buildPanelModel` resolves them for display and
+// `commitPanelChoice` writes the chosen value as a LITERAL — never through the
+// free-text grammar, which would turn choosing `center` into `= center`.
+describe("panel drop-downs — a slot with a closed value set offers it (2026-09-02)", () => {
+  /** The one modifiable row at `path` on the freshly-created `text_1`. */
+  function rowOf(state: AppState, path: string, name = "text_1"): PanelRow {
+    const object = objectNamed(state, name);
+    const found = buildPanelModel(object, state.document.objects).modifiable.find((row) => row.path === path);
+    if (found === undefined) {
+      throw new Error(`expected a modifiable row at ${path} on ${name}`);
+    }
+    return found;
+  }
+
+  function withText(): AppState {
+    return typed(opened(), 'text x=0 y=0 "hello"');
+  }
+
+  it("gives `style.align` its three choices, with the current one selected", () => {
+    const row = rowOf(withText(), "style.align");
+    expect(row.choices?.values).toEqual(["left", "center", "right"]);
+    expect(row.choices?.labels).toEqual(["left", "center", "right"]);
+    expect(row.choices?.selectedIndex).toBe(0); // DEFAULT_TEXT_STYLE_ALIGN
+  });
+
+  it("gives `overflow` §5.6's three", () => {
+    expect(rowOf(withText(), "overflow").choices?.values).toEqual(["visible", "clip", "ellipsis"]);
+  });
+
+  it("gives `autoresize` a BOOLEAN pair with readable labels — `true`/`false` says nothing about what it does", () => {
+    const row = rowOf(withText(), "autoresize");
+    expect(row.choices?.values).toEqual([true, false]);
+    expect(row.choices?.labels).toEqual(["shrink to fit text", "keep the size I set"]);
+    expect(row.choices?.selectedIndex).toBe(0); // DEFAULT_TEXT_AUTORESIZE is true
+  });
+
+  it("leaves a free-text slot without choices, so the paperclip and its text box are unchanged for every row that had them", () => {
+    expect(rowOf(withText(), "content").choices).toBeUndefined();
+    expect(rowOf(withText(), "style.fontSize").choices).toBeUndefined();
+    expect(rowOf(typed(opened(), "circle x=0 y=0 r=5"), "radius", "circle_1").choices).toBeUndefined();
+  });
+
+  it("reports selectedIndex -1 when the slot holds something none of the choices names, rather than claiming the first is live", () => {
+    const state = typed(withText(), 'set text_1.style.align "sideways"');
+    expect(rowOf(state, "style.align").choices?.selectedIndex).toBe(-1);
+  });
+
+  it("offers NO drop-down on a FORMULA row — it is driven, and a choice that silently overwrote the formula is what D-040 forbids a gesture from doing", () => {
+    let state = typed(withText(), "table x=500 y=0");
+    state = typed(state, 'set table_1.A1 "center"');
+    state = typed(state, "link text_1.style.align table_1.A1");
+    const row = rowOf(state, "style.align");
+    expect(row.kind).toBe("formula");
+    expect(row.choices).toBeUndefined();
+  });
+
+  it("commitPanelChoice writes the chosen STRING as a literal, not as a formula", () => {
+    const state = withText();
+    const after = commitPanelChoice(state, objectNamed(state, "text_1").id, "style.align", "center");
+    expect(getSlot(objectNamed(after, "text_1"), ["style", "align"])).toEqual({ kind: "literal", value: "center" });
+  });
+
+  it("commitPanelChoice writes a BOOLEAN as a literal boolean — no string round-trip, which the free-text grammar could not do", () => {
+    const state = withText();
+    const after = commitPanelChoice(state, objectNamed(state, "text_1").id, "autoresize", false);
+    expect(getSlot(objectNamed(after, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: false });
+  });
+
+  it("echoes the write like any other panel command, through the same executeCommand seam", () => {
+    const state = withText();
+    const after = commitPanelChoice(state, objectNamed(state, "text_1").id, "style.align", "right");
+    expect(newLines(state, after)[0]).toBe("> set text_1.style.align right");
+  });
+
+  it("is a no-op for a stale object id", () => {
+    const state = withText();
+    expect(commitPanelChoice(state, "obj_404", "style.align", "right")).toBe(state);
+  });
+});
+
+// The text box's own sizing rule, end to end through the command line — the
+// half of the 2026-09-02 rework an operator can reach without a pointer.
+describe("a text box's size follows its text (2026-09-02)", () => {
+  it("`text` creates the box with autoresize ON, so a fresh box hugs its text", () => {
+    const state = typed(opened(), 'text x=0 y=0 "hello"');
+    expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: true });
+  });
+
+  it("`set text_1.autoresize FALSE` is an ordinary literal write — the slot is authorable from the command line too, in §5.3's own uppercase boolean spelling", () => {
+    let state = typed(opened(), 'text x=0 y=0 "hello"');
+    state = typed(state, "set text_1.autoresize FALSE");
+    expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: false });
+  });
+});
+
+// Adding `autoresize` to `TEXT_SCHEMA` is exactly the schema growth D-126 says
+// breaks a previously-saved document — for a DERIVED slot. This one is not
+// derived and nothing derived depends on it, which is what makes the difference
+// and is why the slot was declared that way. Pinned here rather than argued,
+// because "it should still load" is the whole claim.
+describe("a document saved before `autoresize` existed still loads (2026-09-02)", () => {
+  /** A `text` object as `createText` wrote one BEFORE the slot was added: every other declared path filled, `autoresize` simply absent. */
+  function preAutoresizeDocument(): unknown {
+    return {
+      formatVersion: 1,
+      nextObjectId: 2,
+      camera: { x: 0, y: 0, zoom: 1 },
+      journal: [],
+      objects: [
+        {
+          id: "obj_1",
+          name: "text_1",
+          type: "text",
+          slots: {
+            "origin.x": { kind: "literal", value: 10 },
+            "origin.y": { kind: "literal", value: 20 },
+            content: { kind: "literal", value: "hello" },
+            width: { kind: "literal", value: "auto" },
+            height: { kind: "literal", value: "auto" },
+            overflow: { kind: "literal", value: "visible" },
+            "style.font": { kind: "literal", value: "sans-serif" },
+            "style.fontSize": { kind: "literal", value: 16 },
+            "style.lineHeight": { kind: "literal", value: 20 },
+            "style.color": { kind: "literal", value: "black" },
+            "style.align": { kind: "literal", value: "left" },
+            resolvedContent: { kind: "derived" },
+            measuredHeight: { kind: "derived" },
+            measuredWidth: { kind: "derived" },
+          },
+        },
+      ],
+    };
+  }
+
+  it("loads, and the text object keeps its content", () => {
+    const loaded = deserializeDocument(preAutoresizeDocument());
+    if (!loaded.ok) {
+      throw new Error(`expected it to load, got: ${loaded.message}`);
+    }
+    const state = initialAppState(loaded.document);
+    expect(getSlot(objectNamed(state, "text_1"), ["content"])).toEqual({ kind: "literal", value: "hello" });
+  });
+
+  it("leaves the missing slot missing rather than inventing one, and the box behaves as autoresize ON — the default every reader applies", () => {
+    const loaded = deserializeDocument(preAutoresizeDocument());
+    if (!loaded.ok) {
+      throw new Error(`expected it to load, got: ${loaded.message}`);
+    }
+    const state = initialAppState(loaded.document);
+    expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toBeUndefined();
+    // The box still comes out positive — the missing slot reads as the default,
+    // never as `false` and never as an error.
+    const extent = objectExtent(objectNamed(state, "text_1"));
+    expect(extent === undefined || extent.maxY > extent.minY).toBe(true);
+  });
+
+  it("accepts a later `set text_1.autoresize FALSE`, which CREATES the slot — a setSlot replaces whatever is at the address, present or not", () => {
+    const loaded = deserializeDocument(preAutoresizeDocument());
+    if (!loaded.ok) {
+      throw new Error(`expected it to load, got: ${loaded.message}`);
+    }
+    const state = typed(initialAppState(loaded.document), "set text_1.autoresize FALSE");
+    expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: false });
   });
 });

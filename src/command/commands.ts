@@ -124,6 +124,7 @@ import {
 import { findDerivedSlotSchema, getObjectSchema, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
 import { MAX_TABLE_LINES, MIN_TABLE_LINES, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
 import {
+  TEXT_AUTORESIZE_PATH,
   TEXT_CONTENT_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_OVERFLOW_PATH,
@@ -261,6 +262,15 @@ const DEFAULT_POLYGON_ROTATION = 0;
  */
 const DEFAULT_TEXT_WIDTH = "auto";
 const DEFAULT_TEXT_HEIGHT = "auto";
+/**
+ * `autoresize` defaults ON (the human's 2026-09-02 text-box rework): a fresh
+ * box hugs its text and shrinks back when text is deleted, which is what
+ * `"auto"` width/height already did before the slot existed — so the default
+ * changes nothing about a new box and only gives the operator something to turn
+ * OFF once they have dragged a size they want kept. `render/textbox.ts` owns
+ * what it means.
+ */
+const DEFAULT_TEXT_AUTORESIZE = true;
 const DEFAULT_TEXT_OVERFLOW = "visible";
 const DEFAULT_TEXT_STYLE_FONT = "sans-serif";
 const DEFAULT_TEXT_STYLE_FONT_SIZE = 16;
@@ -554,6 +564,7 @@ function createText(command: CreateTextCommand, document: Document, context: Eva
     { path: TEXT_CONTENT_PATH, value: command.content },
     { path: TEXT_WIDTH_PATH, value: DEFAULT_TEXT_WIDTH },
     { path: TEXT_HEIGHT_PATH, value: DEFAULT_TEXT_HEIGHT },
+    { path: TEXT_AUTORESIZE_PATH, value: DEFAULT_TEXT_AUTORESIZE },
     { path: TEXT_OVERFLOW_PATH, value: DEFAULT_TEXT_OVERFLOW },
     { path: TEXT_STYLE_FONT_PATH, value: DEFAULT_TEXT_STYLE_FONT },
     { path: TEXT_STYLE_FONT_SIZE_PATH, value: DEFAULT_TEXT_STYLE_FONT_SIZE },

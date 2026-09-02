@@ -87,7 +87,7 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
 
 /** A drag already in progress on `objectId`, starting from world (0, 0) — for the cases `pointerDown` cannot set up because the object is not hittable. */
 function dragFromOrigin(objectId: string): InteractionState {
-  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] } };
+  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] }, resize: undefined };
 }
 
 describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", () => {
@@ -156,7 +156,7 @@ describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", 
 
   it("a shift-click on empty canvas with no drag running returns the prior state itself", () => {
     const { objects } = commit([rectObject(0, 0)]);
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
     expect(pointerDown(idle, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true)).toBe(idle);
   });
 
@@ -177,13 +177,13 @@ describe("pointerUp and deselect", () => {
   });
 
   it("pointerUp returns the same state untouched when no drag is running", () => {
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
     expect(pointerUp(idle)).toBe(idle);
   });
 
   it("pointerUp keeps a MULTI-object selection untouched, ending only the drag", () => {
-    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] } };
-    expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined });
+    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] }, resize: undefined };
+    expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined });
   });
 
   it("deselect clears the selection AND a drag in progress, so no gesture survives Escape (§5.9)", () => {
@@ -245,7 +245,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
 
   it("is a no-op with no drag in progress, so a caller may wire it to every pointer move", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
     const outcome = pointerMove(idle, { x: 99, y: 99 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.state).toBe(idle);
     expect(outcome.objects).toBe(objects);
@@ -590,5 +590,180 @@ describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)
     expect(withContext.rejection).toBeUndefined();
     expect(slotValue(withContext.objects, "obj_t", "measuredHeight")).toBe(33);
     expect(slotValue(withContext.objects, "obj_1", "origin.x")).toBe(3); // the drag itself still commits
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Resize grabbers — the human's 2026-09-02 text-box rework. Driven through the
+// real `mutate` like every drag test above, so the whole path is proved: the
+// grabber press, the absolute box each step asks for, and the slots it writes.
+// ---------------------------------------------------------------------------
+
+describe("resize — a text box's eight grabbers (2026-09-02)", () => {
+  /** A `text` object whose committed extent is exactly `measuring()`'s box at (0,0), so the grabbers sit where the test says. */
+  function sizedTextObject(extra: Record<string, GraphObject["slots"][string]> = {}): GraphObject {
+    return {
+      id: "obj_t",
+      name: "text_1",
+      type: "text",
+      slots: {
+        content: { kind: "literal", value: "label" },
+        width: { kind: "literal", value: "auto" },
+        height: { kind: "literal", value: "auto" },
+        autoresize: { kind: "literal", value: true },
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        "style.font": { kind: "literal", value: "sans" },
+        "style.fontSize": { kind: "literal", value: 12 },
+        "style.lineHeight": { kind: "literal", value: 14 },
+        resolvedContent: { kind: "derived", value: null },
+        measuredHeight: { kind: "derived", value: null },
+        measuredWidth: { kind: "derived", value: null },
+        ...extra,
+      },
+    };
+  }
+
+  /** A measurer reporting a fixed box, so the fixture's drawn extent is exactly known. */
+  function measuring(width: number, height: number): EvalContext {
+    return { measurer: { measure: () => ({ width, height }) } };
+  }
+
+  const MEASURER = measuring(200, 40);
+
+  /** A committed 200x40 text box at (0,0), already selected — grabbers exist only on a selected object. */
+  function selectedBox(): { state: InteractionState; objects: readonly GraphObject[]; journal: readonly MutationJournalEntry[] } {
+    const created = mutate([], [{ kind: "createObject", object: sizedTextObject() }], [], MEASURER);
+    if (!created.ok) {
+      throw new Error(`test setup: ${created.message}`);
+    }
+    return {
+      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined },
+      objects: created.objects,
+      journal: created.journal,
+    };
+  }
+
+  /** The same box with `origin.x` bound to a cell, so the per-component rule has something to skip. */
+  function boundBox(): { state: InteractionState; objects: readonly GraphObject[]; journal: readonly MutationJournalEntry[] } {
+    const bound = sizedTextObject({
+      "origin.x": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 0 },
+    });
+    const created = mutate(
+      [],
+      [
+        { kind: "createObject", object: tableObject(1, [0]) },
+        { kind: "createObject", object: bound },
+      ],
+      [],
+      MEASURER,
+    );
+    if (!created.ok) {
+      throw new Error(`test setup: ${created.message}`);
+    }
+    return {
+      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined },
+      objects: created.objects,
+      journal: created.journal,
+    };
+  }
+
+  it("a press on a grabber arms a resize, NOT a drag — a corner overhangs the body and must not move the box", () => {
+    const { state, objects } = selectedBox();
+    const pressed = pointerDown(state, { x: 200, y: 40 }, objects, CAMERA_IDENTITY);
+    expect(pressed.resize).toMatchObject({ objectId: "obj_t", handle: "se" });
+    expect(pressed.drag).toBeUndefined();
+  });
+
+  it("a press inside the box still selects and drags, so resizing never steals an ordinary gesture", () => {
+    const { state, objects } = selectedBox();
+    const pressed = pointerDown(state, { x: 100, y: 20 }, objects, CAMERA_IDENTITY);
+    expect(pressed.resize).toBeUndefined();
+    expect(pressed.drag).toMatchObject({ objectId: "obj_t" });
+  });
+
+  it("grabbers exist only on a SELECTED object, so a first click on an unselected box selects it instead of resizing", () => {
+    const { objects } = selectedBox();
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 200, y: 40 }, objects, CAMERA_IDENTITY);
+    expect(pressed.resize).toBeUndefined();
+    expect(pressed.selectedObjectIds).toEqual(["obj_t"]);
+  });
+
+  it("dragging the SE corner writes width and height, and turns autoresize OFF so the dragged height survives", () => {
+    const { state, objects, journal } = selectedBox();
+    const pressed = pointerDown(state, { x: 200, y: 40 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 260, y: 90 }, objects, journal, CAMERA_IDENTITY, MEASURER);
+    expect(moved.rejection).toBeUndefined();
+    expect(slotValue(moved.objects, "obj_t", "width")).toBe(260);
+    expect(slotValue(moved.objects, "obj_t", "height")).toBe(90);
+    // Without this the box snaps straight back to its text (textbox.ts's rule)
+    // and the grabber looks broken.
+    expect(slotValue(moved.objects, "obj_t", "autoresize")).toBe(false);
+  });
+
+  it("dragging the E edge writes ONLY the width, and leaves autoresize alone — a set width never shrinks anyway", () => {
+    const { state, objects, journal } = selectedBox();
+    const pressed = pointerDown(state, { x: 200, y: 20 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 300, y: 20 }, objects, journal, CAMERA_IDENTITY, MEASURER);
+    expect(slotValue(moved.objects, "obj_t", "width")).toBe(300);
+    expect(slotValue(moved.objects, "obj_t", "height")).toBe("auto");
+    expect(slotValue(moved.objects, "obj_t", "autoresize")).toBe(true);
+  });
+
+  it("dragging the NW corner moves the ORIGIN as well as the size — a left/top edge is the box's anchor", () => {
+    const { state, objects, journal } = selectedBox();
+    const pressed = pointerDown(state, { x: 0, y: 0 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: -30, y: -10 }, objects, journal, CAMERA_IDENTITY, MEASURER);
+    expect(slotValue(moved.objects, "obj_t", "origin.x")).toBe(-30);
+    expect(slotValue(moved.objects, "obj_t", "origin.y")).toBe(-10);
+    expect(slotValue(moved.objects, "obj_t", "width")).toBe(230);
+    expect(slotValue(moved.objects, "obj_t", "height")).toBe(50);
+  });
+
+  it("is ABSOLUTE, not incremental: a second step to the same point asks for the same box, so the gesture cannot run away from the pointer", () => {
+    const { state, objects, journal } = selectedBox();
+    const pressed = pointerDown(state, { x: 200, y: 40 }, objects, CAMERA_IDENTITY);
+    const first = pointerMove(pressed, { x: 400, y: 40 }, objects, journal, CAMERA_IDENTITY, MEASURER);
+    const second = pointerMove(first.state, { x: 400, y: 40 }, first.objects, first.journal, CAMERA_IDENTITY, MEASURER);
+    // An INCREMENTAL resize would read the committed 400 back in and ask for 600.
+    expect(slotValue(second.objects, "obj_t", "width")).toBe(400);
+  });
+
+  it("skips a component whose slot is driven and says what drives it — §5.9's per-component rule, unchanged", () => {
+    const { state, objects, journal } = boundBox();
+    const pressed = pointerDown(state, { x: 0, y: 0 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: -30, y: -10 }, objects, journal, CAMERA_IDENTITY, MEASURER);
+    expect(moved.notices.join(" ")).toContain("text_1.origin.x");
+    expect(slotValue(moved.objects, "obj_t", "origin.x")).toBe(0); // driven — did not move
+    expect(slotValue(moved.objects, "obj_t", "origin.y")).toBe(-10); // the rest still resized
+  });
+
+  it("says the same thing only once across a gesture, like a drag's notices (D-098)", () => {
+    const { state, objects, journal } = boundBox();
+    const pressed = pointerDown(state, { x: 0, y: 0 }, objects, CAMERA_IDENTITY);
+    const first = pointerMove(pressed, { x: -30, y: -10 }, objects, journal, CAMERA_IDENTITY, MEASURER);
+    const second = pointerMove(first.state, { x: -40, y: -20 }, first.objects, first.journal, CAMERA_IDENTITY, MEASURER);
+    expect(first.notices).toHaveLength(1);
+    expect(second.notices).toEqual([]);
+  });
+
+  it("ends the resize when its object is deleted mid-gesture, naming the id (there is no name left to resolve)", () => {
+    const { state, objects, journal } = selectedBox();
+    const pressed = pointerDown(state, { x: 200, y: 40 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 260, y: 90 }, [], journal, CAMERA_IDENTITY);
+    expect(moved.state.resize).toBeUndefined();
+    expect(moved.notices.join(" ")).toContain("obj_t");
+  });
+
+  it("pointerUp ends a resize and keeps the selection", () => {
+    const { state, objects } = selectedBox();
+    const pressed = pointerDown(state, { x: 200, y: 40 }, objects, CAMERA_IDENTITY);
+    const released = pointerUp(pressed);
+    expect(released.resize).toBeUndefined();
+    expect(released.selectedObjectIds).toEqual(["obj_t"]);
+  });
+
+  it("Escape clears a resize in progress, like every other gesture", () => {
+    expect(deselect().resize).toBeUndefined();
   });
 });

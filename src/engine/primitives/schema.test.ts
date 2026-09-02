@@ -105,7 +105,7 @@ describe("getObjectSchema", () => {
   // primitives/text.ts owns the resolver/compute behaviour (its own test file);
   // this only confirms the §5.6 registry wiring — resolvedContent at entry 0127,
   // measuredHeight at 0129, measuredWidth (D-123) at 0141.
-  it("returns a real entry for 'text' (§5.6 + D-123), with eleven static non-derived paths (origin.x/y at front per D-121) and three derived slots (resolvedContent, measuredHeight, measuredWidth)", () => {
+  it("returns a real entry for 'text' (§5.6 + D-123), with twelve static non-derived paths (origin.x/y at front per D-121, autoresize per the 2026-09-02 text-box rework) and three derived slots (resolvedContent, measuredHeight, measuredWidth)", () => {
     const schema = getObjectSchema("text");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -116,6 +116,10 @@ describe("getObjectSchema", () => {
       ["content"],
       ["width"],
       ["height"],
+      // The 2026-09-02 text-box rework. Deliberately NOT a dependency of either
+      // measured slot — it sizes the BOX, not the text — which is what lets a
+      // document saved before it existed still load.
+      ["autoresize"],
       ["overflow"],
       ["style", "font"],
       ["style", "fontSize"],

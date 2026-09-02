@@ -133,11 +133,27 @@ import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
 import { parseCommandNumber, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
-import { buildSlotDescriptors, describeSlotValue } from "./command/props.ts";
+import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
-import { editorPlacement, editorTargetAt, editorTextStyle, type EditorTarget, type EditorTextStyle } from "./render/editor.ts";
+import {
+  editorPlacement,
+  editorTargetAt,
+  editorTextBoxSize,
+  editorTextStyle,
+  type EditorTarget,
+  type EditorTextStyle,
+} from "./render/editor.ts";
 import { documentExtent, objectExtent, type WorldExtent } from "./render/extent.ts";
-import { deselect, pointerDown, pointerMove, pointerUp, INITIAL_INTERACTION_STATE, type InteractionState } from "./render/interaction.ts";
+import {
+  deselect,
+  pointerDown,
+  pointerMove,
+  pointerUp,
+  resizeHandleUnder,
+  INITIAL_INTERACTION_STATE,
+  type InteractionState,
+} from "./render/interaction.ts";
+import { resizeCursor } from "./render/handles.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { renderDocument } from "./render/renderer.ts";
 import { createCanvas2dTextMeasurer } from "./render/measure.ts";
@@ -498,7 +514,7 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
       // selection made from the input bar has no pointer holding it, and
       // `render/interaction.ts`'s `DragState` means "a pointer is dragging
       // this right now".
-      return transition(withInteraction(state, { selectedObjectIds: [effect.objectId], drag: undefined }));
+      return transition(withInteraction(state, { selectedObjectIds: [effect.objectId], drag: undefined, resize: undefined }));
     case "zoom":
       return transition(zoomBy(state, effect.factor, viewport));
     case "fit":
@@ -702,6 +718,39 @@ export interface PanelRow {
   readonly formulaSource: string | undefined;
   readonly kind: "literal" | "formula" | "derived";
   readonly synthetic: boolean;
+  /**
+   * The choices this row offers instead of a free text box (the human's
+   * 2026-09-02 instruction: a slot with "only a small subset of valid inputs"
+   * shows a drop-down). `undefined` for every free-text row, which is all of
+   * them but a `text` object's `style.align`, `overflow` and `autoresize`.
+   *
+   * Only a `literal` row gets one. A `formula` row keeps its blue paperclip and
+   * its `= source` text — it is DRIVEN, and offering a choice that would
+   * silently overwrite the formula is exactly what D-040 forbids a gesture from
+   * doing; unlink first, as with every other bound slot.
+   */
+  readonly choices: PanelRowChoices | undefined;
+}
+
+/**
+ * A row's drop-down, resolved for display (see `PanelRow.choices`).
+ *
+ * `values` are the raw `Value`s a choice writes and `labels` what the operator
+ * reads for each, positionally paired; `selectedIndex` is `-1` when the slot's
+ * current value is none of them, which a formula that has since been unlinked,
+ * or a hand-typed `set`, can genuinely produce — the drop-down then shows a
+ * blank rather than lying about which choice is live.
+ *
+ * An INDEX is what the DOM carries, never the rendered label: a label is text
+ * for a human and two of them could coincide, while the index resolves back to
+ * the exact `Value` — including a `boolean`, which no string round-trip does
+ * (`"false"` is a non-empty string, and D-102 clause 6's grammar would make it
+ * a formula).
+ */
+export interface PanelRowChoices {
+  readonly labels: readonly string[];
+  readonly values: readonly (number | string | boolean)[];
+  readonly selectedIndex: number;
 }
 
 /**
@@ -736,6 +785,7 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
       formulaSource: descriptor.formulaSource,
       kind: descriptor.kind,
       synthetic: descriptor.synthetic === true,
+      choices: resolveChoices(descriptor),
     },
     derived: descriptor.kind === "derived",
   }));
@@ -743,6 +793,27 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
     header: object.name,
     modifiable: grouped.filter((entry) => !entry.derived).map((entry) => entry.row),
     derived: grouped.filter((entry) => entry.derived).map((entry) => entry.row),
+  };
+}
+
+/**
+ * A row's drop-down, or `undefined` when it has none — see `PanelRow.choices`
+ * for why only a `literal` row gets one.
+ *
+ * `labels` defaults to the values rendered as text when the schema declares
+ * none, so a set like `style.align`'s three words needs no parallel label list
+ * to maintain; `autoresize` declares labels because `true`/`false` says nothing
+ * about what it does.
+ */
+function resolveChoices(descriptor: SlotDescriptor): PanelRowChoices | undefined {
+  if (descriptor.options === undefined || descriptor.kind !== "literal") {
+    return undefined;
+  }
+  const { values, labels } = descriptor.options;
+  return {
+    values,
+    labels: values.map((value, index) => labels?.[index] ?? String(value)),
+    selectedIndex: values.findIndex((value) => value === descriptor.value),
   };
 }
 
@@ -852,6 +923,33 @@ export function commitPanelEdit(
     return state;
   }
   return runPanelCommand(state, buildPanelSetCommand(panelSlotAddress(object.name, path), raw), context);
+}
+
+/**
+ * Writes a panel drop-down's chosen value (the human's 2026-09-02 instruction).
+ *
+ * A LITERAL `set` of the exact `Value` the schema declared — never routed
+ * through `buildPanelSetCommand`, whose D-102 clause 6 grammar reads any
+ * non-numeric string as a formula and would turn choosing `center` into
+ * `= center`. That grammar exists because a free-text row cannot tell a string
+ * from an expression; a drop-down can, because the schema already said what the
+ * choices are, so it does not need the guess.
+ *
+ * Same `runPanelCommand` -> `executeCommand` seam as every other panel write
+ * (Rule 2, D-102 clause 5) and the same stale-id no-op posture (D-023).
+ */
+export function commitPanelChoice(
+  state: AppState,
+  objectId: string,
+  path: string,
+  value: number | string | boolean,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, path), value }, context);
 }
 
 /** Unlinks one panel row (D-102 clause 4's BLUE paperclip) — `unlink <address>`, run the same way `commitPanelEdit` runs a `set`. Same stale-id no-op posture. */
@@ -1163,7 +1261,21 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // extent whose panel is not dismissed — because a dismissed panel's
     // object keeps its highlight but gets its canvas name label back.
     const panelledIds = panelledObjectIds();
-    renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectIds, panelledIds);
+    // The object whose text the overlay is currently holding, if any: the
+    // renderer skips drawing it, because while the editor is open the overlay
+    // IS that object's text (the 2026-09-02 rework). A cell editor names no
+    // such object — a table's other cells must keep drawing.
+    const editingObjectId = inPlaceEditor?.kind === "text" ? inPlaceEditor.objectId : undefined;
+    renderDocument(
+      context,
+      canvas.width,
+      canvas.height,
+      state.document.objects,
+      state.document.camera,
+      state.interaction.selectedObjectIds,
+      panelledIds,
+      editingObjectId,
+    );
     updatePanels(panelledIds);
     updateEditor();
   };
@@ -1238,7 +1350,19 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       // undefined` must never take the skip path, or a panel that is never
       // edited would freeze after its first paint.
       const alreadyShowingThisEditor = editing !== undefined && element.dataset.editingPath === editing.path;
-      if (!alreadyShowingThisEditor) {
+      // The same protection, for the drop-down rows the 2026-09-02 rework
+      // added: a `<select>` the operator is actually using must not be torn out
+      // from under them by a repaint, and `replaceChildren` would do exactly
+      // that — closing an open popup and discarding the choice. Keyed on FOCUS,
+      // which is the state a select holds throughout the gesture (popup open,
+      // or arrow keys). The cost is that this panel's other rows stop updating
+      // live until the select is blurred; that is the smaller injury, and it
+      // self-heals the moment focus leaves.
+      const holdsFocusedChoice =
+        document.activeElement !== null &&
+        element.contains(document.activeElement) &&
+        document.activeElement.classList.contains("panel-row__choice");
+      if (!alreadyShowingThisEditor && !holdsFocusedChoice) {
         writePanel(element, buildPanelModel(object, state.document.objects), editing);
         element.dataset.editingPath = editing?.path ?? "";
         if (editing !== undefined) {
@@ -1448,6 +1572,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         commitInPlace();
       }
     };
+    // The 2026-09-02 rework: every keystroke re-measures the typed text and
+    // re-sizes the overlay, so the box grows under the caret instead of
+    // scrolling. `paint` is what recomputes it (`updateEditor` is its last
+    // step); repainting the whole canvas per keystroke is Rule 5's accepted
+    // trade, the same one every pointer move already makes.
+    const grow = (): void => {
+      paint();
+    };
     if (target.kind === "text") {
       const area = document.createElement("textarea");
       area.className = "text-editor";
@@ -1461,6 +1593,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       area.wrap = style.wraps ? "soft" : "off";
       area.value = editorSeed(state, target);
       area.addEventListener("keydown", keydown);
+      area.addEventListener("input", grow);
       area.addEventListener("blur", commitInPlace);
       return area;
     }
@@ -1499,21 +1632,35 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       inPlaceElement.focus();
       inPlaceElement.select();
     }
-    const placement = editorPlacement(inPlaceEditor, object, state.document.camera, ratio);
+    // The 2026-09-02 rework: the box is measured from the text CURRENTLY IN THE
+    // EDITOR, not from the object's last-committed `resolvedContent`, so it
+    // grows under the caret. That is what removes the scrollbar rather than
+    // hiding it — there is never anything to scroll to. Only a `text` receiver
+    // grows; a table cell's box is the cell, which is fixed (§5.4).
+    const liveSize =
+      inPlaceEditor.kind === "text"
+        ? editorTextBoxSize(object, inPlaceElement.value, style, evalContext.measurer)
+        : undefined;
+    const placement = editorPlacement(inPlaceEditor, object, state.document.camera, ratio, liveSize);
     inPlaceElement.style.left = `${placement.left}px`;
     inPlaceElement.style.top = `${placement.top}px`;
+    // WORLD units for the box and the type, then ONE transform for the zoom.
+    // This is the whole reason the typed line breaks land where the drawn ones
+    // do: the browser is handed the same font size and the same wrap width
+    // `render/measure.ts` measures with, instead of both pre-multiplied into
+    // fractions (see `render/editor.ts`'s `EditorPlacement`). Family matters as
+    // much as size — the page font is monospace, a `text` object's is
+    // `sans-serif` — and colour now matches too, so clicking into a box does
+    // not change how its text looks.
     inPlaceElement.style.width = `${placement.width}px`;
     inPlaceElement.style.height = `${placement.height}px`;
-    // D-129, widened at entry 0147: the overlay's type style tracks the camera
-    // exactly as its box does, and is read from the same slots `renderer.ts`
-    // draws with — otherwise the editor lays the text out differently from the
-    // canvas underneath it (the operator's "Hello World! is one line drawn, two
-    // lines typed"). Family matters as much as size here: the page font is
-    // monospace and a `text` object's default is `sans-serif`.
     inPlaceElement.style.fontSize = `${style.fontSize}px`;
     inPlaceElement.style.fontFamily = style.fontFamily;
     inPlaceElement.style.lineHeight = `${style.lineHeight}px`;
     inPlaceElement.style.textAlign = style.textAlign;
+    inPlaceElement.style.color = style.color;
+    inPlaceElement.style.transformOrigin = "0 0";
+    inPlaceElement.style.transform = `scale(${placement.scale})`;
   };
 
   const apply = (next: AppState): void => {
@@ -1656,6 +1803,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
     }
+    // A grabber says which way it stretches BEFORE the press (the 2026-09-02
+    // text-box rework). Read from the same lookup `pointerDown` arms a resize
+    // from, so the cursor can never promise one the press would miss. Set
+    // straight on the element rather than through state: it is a hover hint,
+    // nothing in the document depends on it, and routing it through `apply`
+    // would repaint the canvas on every mouse move that changed nothing else.
+    const overHandle = resizeHandleUnder(state.interaction, point, state.document.objects, state.document.camera);
+    canvas.style.cursor = overHandle === undefined ? "" : resizeCursor(overHandle);
     apply(pointerMoveTo(state, point, evalContext));
   });
 
@@ -1700,7 +1855,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   // neither.
   panelsContainer.addEventListener("pointerdown", (event: PointerEvent) => {
     const target = event.target as HTMLElement;
-    const insideOpenEditor = target.closest(".panel-row__input") !== null;
+    // A drop-down joins the row input in this carve-out: `preventDefault` on a
+    // `<select>`'s press stops it OPENING, which would make the control the
+    // 2026-09-02 rework added inert. Like the input, it is a real form control
+    // that owns its own focus, so neither the default nor the command bar's
+    // `focus()` may be taken from it.
+    const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice") !== null;
     if (!insideOpenEditor) {
       event.preventDefault();
     }
@@ -1794,6 +1954,35 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     paint();
   });
 
+  // A drop-down row commits the moment it changes (the human's 2026-09-02
+  // instruction) — there is no edit mode and no Enter to press, because the
+  // schema already said what the choices are. Delegated for the same reason
+  // every other panel listener is: the `<select>` is rebuilt on every paint.
+  panelsContainer.addEventListener("change", (event: Event) => {
+    const select = (event.target as HTMLElement).closest(".panel-row__choice") as HTMLSelectElement | null;
+    if (select === null) {
+      return;
+    }
+    const rowElement = select.closest(".panel-row") as HTMLElement | null;
+    const objectId = (select.closest(".panel") as HTMLElement | null)?.dataset.objectId;
+    const path = rowElement?.dataset.path;
+    // The option's value is its INDEX into the row's declared choices; the
+    // model is rebuilt from the CURRENT document rather than trusting anything
+    // the DOM carried, so a panel rebuilt between the click and this event
+    // cannot write a value from a stale choice list.
+    const object = state.document.objects.find((candidate) => candidate.id === objectId);
+    if (objectId === undefined || path === undefined || object === undefined) {
+      return;
+    }
+    const model = buildPanelModel(object, state.document.objects);
+    const row = [...model.modifiable, ...model.derived].find((candidate) => candidate.path === path);
+    const chosen = row?.choices?.values[Number(select.value)];
+    if (chosen === undefined) {
+      return;
+    }
+    apply(commitPanelChoice(state, objectId, path, chosen, evalContext));
+  });
+
   apply(state);
   input.focus();
 }
@@ -1874,7 +2063,13 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
 
   const right = document.createElement("span");
   right.className = "panel-row__right";
-  if (editing !== undefined && editing.path === row.path) {
+  if (row.choices !== undefined) {
+    // A closed value set is a drop-down, always — not a paperclip that opens a
+    // text box the operator has to know the words for (the human, 2026-09-02).
+    // It commits on `change`, so there is no edit MODE for such a row and
+    // `editing` cannot name one.
+    right.append(panelChoiceSelect(row.choices));
+  } else if (editing !== undefined && editing.path === row.path) {
     // D-107 (F3): the SEED, not the rounded display `value` — see
     // `PanelRow.editSeed`'s own doc comment for why they must differ.
     right.append(panelEditInput(row.editSeed, editing.handlers));
@@ -1890,6 +2085,33 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
 
   element.append(path, right);
   return element;
+}
+
+/**
+ * A row's drop-down (the human's 2026-09-02 instruction). One `<option>` per
+ * declared choice, carrying its INDEX as the option value — never the rendered
+ * label, and never the value stringified, so a `boolean` choice survives the
+ * round trip (see `PanelRowChoices`).
+ *
+ * NO listener is bound here. The `change` is caught by the delegated listener in
+ * `start`, which finds the row by `dataset.path` — the same reason the paperclip
+ * and the header's drag handle are delegated: this element is rebuilt whole on
+ * every paint, and a listener bound to it would die mid-gesture.
+ */
+function panelChoiceSelect(choices: PanelRowChoices): HTMLSelectElement {
+  const select = document.createElement("select");
+  select.className = "panel-row__choice";
+  for (let index = 0; index < choices.labels.length; index += 1) {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = choices.labels[index] ?? "";
+    select.append(option);
+  }
+  // -1 — the slot holds something none of the choices names (a hand-typed
+  // `set`, or a formula since unlinked) — shows blank rather than claiming the
+  // first choice is live.
+  select.selectedIndex = choices.selectedIndex;
+  return select;
 }
 
 /**

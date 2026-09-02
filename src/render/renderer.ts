@@ -122,6 +122,10 @@ import { getSlot, isErrorValue, type GraphObject, type Point, type Value } from 
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
+  TEXT_AUTORESIZE_PATH,
+  TEXT_HEIGHT_PATH,
+  TEXT_MEASURED_HEIGHT_PATH,
+  TEXT_MEASURED_WIDTH_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_STYLE_ALIGN_PATH,
   TEXT_STYLE_COLOR_PATH,
@@ -133,8 +137,10 @@ import {
 import { formatCellReference, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
+import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";
 import { cssFont, layOutLines } from "./measure.ts";
-import { asPointArray, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { textBoxSize } from "./textbox.ts";
 // D-066's one extent, reused as the chrome anchor (see `chromeAnchorPoint`).
 // `extent.ts` and `slots.ts` are D-093's split: neither this file nor
 // `hittest.ts` imports the other any more, so there is no cycle to flag here.
@@ -184,6 +190,16 @@ const SELECTION_HIGHLIGHT_STYLE = "#2456c9";
 const SELECTION_HIGHLIGHT_WIDTH = DEFAULT_SHAPE_STROKE_WIDTH * 3;
 
 /**
+ * A resize grabber's paint (the human's 2026-09-02 text-box rework): a white
+ * square outlined in the selection colour, so it reads as part of the selection
+ * and stays visible over dark ink and light canvas alike. SCREEN pixels, like
+ * every other chrome constant — its SIZE lives in `handles.ts`, next to the hit
+ * test that must agree with it (D-010).
+ */
+const RESIZE_HANDLE_FILL_STYLE = "#ffffff";
+const RESIZE_HANDLE_STROKE_WIDTH_SCREEN = 1;
+
+/**
  * Screen-space chrome (D-092 clause 1, D-068's badge and indicator) — SCREEN
  * pixels, deliberately not PROVISIONAL(Q-012)'s world-unit reading: chrome
  * text must stay one legible size at any zoom, which is the whole reason
@@ -227,6 +243,7 @@ export function renderDocument(
   camera: CameraState,
   selectedObjectIds: readonly string[] = [],
   panelledObjectIds: readonly string[] = selectedObjectIds,
+  editingObjectId: string | undefined = undefined,
 ): void {
   clearScreen(ctx, viewportWidth, viewportHeight);
 
@@ -239,6 +256,15 @@ export function renderDocument(
   ctx.setTransform(camera.zoom, 0, 0, camera.zoom, screenOrigin.x, screenOrigin.y);
 
   for (const object of objects) {
+    // The in-place editor's overlay IS this object's text while it is open (the
+    // human's 2026-09-02 rework: "there is no difference between how the text
+    // looks when you're not editing it and how it looks when you are"). Drawing
+    // underneath it would double every glyph the moment the two disagree — and
+    // they disagree by design, because the overlay holds the RAW source being
+    // typed while this draws the RESOLVED content of the last commit.
+    if (object.id === editingObjectId) {
+      continue;
+    }
     drawObject(ctx, object);
   }
 
@@ -251,7 +277,12 @@ export function renderDocument(
   // above — so a highlight is never occluded by a later object in z-order
   // (file header).
   for (const object of objects) {
-    if (selectedIds.has(object.id)) {
+    // The object being edited is skipped here too, for the same reason its text
+    // is: its committed extent is not the box on screen right now — the overlay
+    // grows with what is being typed — so this outline would sit at the last
+    // commit's size while the operator watches the box move away from it. The
+    // overlay carries its own outline (`index.html`'s `.text-editor`).
+    if (selectedIds.has(object.id) && object.id !== editingObjectId) {
       drawSelectionHighlight(ctx, object);
     }
   }
@@ -269,6 +300,48 @@ export function renderDocument(
     // object is NOT in `panelledIds` and gets its name back. Its badge and
     // ticks are never suppressed either way.
     drawObjectChrome(ctx, camera, object, panelledIds.has(object.id));
+  }
+
+  // The resize grabbers, last of all and still at identity: they are the one
+  // piece of chrome an operator AIMS at, so nothing may cover them, and
+  // `handles.ts` hit-tests them in this same screen space (D-010).
+  //
+  // Not on the object being edited: they would sit at its committed size while
+  // the overlay shows a growing one, and there is no gesture that could reach
+  // them anyway — a press on the canvas commits the edit first. This is also
+  // what Word does: a box with the caret in it shows no sizing handles.
+  for (const object of objects) {
+    if (selectedIds.has(object.id) && object.id !== editingObjectId) {
+      drawResizeHandles(ctx, camera, object);
+    }
+  }
+}
+
+/**
+ * The eight grabbers on a selected text box (the human's 2026-09-02 rework),
+ * drawn in SCREEN space so they stay one comfortable size at every zoom — the
+ * same reasoning the name label and error badge are drawn this way, and the
+ * space `handles.ts`'s `resizeHandleAt` tests a press in.
+ *
+ * Nothing for an object type that has no grabbers, or one with no drawn extent
+ * to hang them on (an empty `text` box — D-066); never throws.
+ */
+function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject): void {
+  if (!hasResizeHandles(object)) {
+    return;
+  }
+  const extent = objectExtent(object);
+  if (extent === undefined) {
+    return;
+  }
+  const half = RESIZE_HANDLE_SIZE_SCREEN / 2;
+  ctx.fillStyle = RESIZE_HANDLE_FILL_STYLE;
+  ctx.strokeStyle = SELECTION_HIGHLIGHT_STYLE;
+  ctx.lineWidth = RESIZE_HANDLE_STROKE_WIDTH_SCREEN;
+  for (const handle of RESIZE_HANDLES) {
+    const centre = worldToScreen(camera, handlePoint(extent, handle));
+    ctx.fillRect(centre.x - half, centre.y - half, RESIZE_HANDLE_SIZE_SCREEN, RESIZE_HANDLE_SIZE_SCREEN);
+    ctx.strokeRect(centre.x - half, centre.y - half, RESIZE_HANDLE_SIZE_SCREEN, RESIZE_HANDLE_SIZE_SCREEN);
   }
 }
 
@@ -542,14 +615,17 @@ function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   const wrapWidth = fixedWidth !== undefined && fixedWidth > 0 ? fixedWidth : undefined;
   const lines = layOutLines(resolved, wrapWidth, (line) => ctx.measureText(line).width);
 
-  // Alignment needs a box width: the fixed `width` when set, else the widest
-  // laid-out line (auto width — the text is as wide as it draws).
-  let boxWidth = wrapWidth ?? 0;
-  if (wrapWidth === undefined) {
-    for (const line of lines) {
-      boxWidth = Math.max(boxWidth, ctx.measureText(line).width);
-    }
-  }
+  // Alignment needs the box's width, and it must be the SAME width
+  // `extent.ts` bounds this object with — otherwise centred text sits off its
+  // own selection outline. `textbox.ts` is that one rule (D-010); this call
+  // supplies it the same four slot reads `extent.ts` does.
+  const { width: boxWidth } = textBoxSize({
+    fixedWidth,
+    fixedHeight: readNumber(object, TEXT_HEIGHT_PATH),
+    autoresize: readBoolean(object, TEXT_AUTORESIZE_PATH) ?? true,
+    measuredWidth: readNumber(object, TEXT_MEASURED_WIDTH_PATH),
+    measuredHeight: readNumber(object, TEXT_MEASURED_HEIGHT_PATH),
+  });
 
   ctx.fillStyle = style.color;
   ctx.textBaseline = "top";

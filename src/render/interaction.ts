@@ -94,9 +94,13 @@ import { getSlot, type DerivedSlot, type FormulaSlot, type GraphObject } from ".
 import { mutate, type MutationJournalEntry, type Operation } from "../engine/mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
+import { TEXT_AUTORESIZE_PATH, TEXT_HEIGHT_PATH, TEXT_WIDTH_PATH } from "../engine/primitives/text.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
+import { objectExtent, type WorldExtent } from "./extent.ts";
+import { handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
 import { hitTest } from "./hittest.ts";
+import { readBoolean } from "./slots.ts";
 
 /**
  * A drag in progress. `lastWorldPoint` is where the pointer was at the last
@@ -121,6 +125,32 @@ export interface DragState {
 }
 
 /**
+ * A resize in progress — a drag that started on one of a selected text box's
+ * eight grabbers (`handles.ts`) rather than on its body (the human's 2026-09-02
+ * text-box rework: "text boxes need to be able to be expanded and shrunken with
+ * grabbers in the corners, like in word/powerpoint").
+ *
+ * The same shape and the same rules as `DragState`, plus which grabber is held:
+ * an ID never an object, `lastWorldPoint` advanced only by a step that
+ * committed, notices deduplicated across the gesture. It is a SEPARATE field on
+ * `InteractionState` rather than a variant of `drag` so that every existing
+ * reader of `drag` — `pointerMove`'s move path, `main.ts`, the tests — keeps
+ * meaning exactly what it meant, and a resize can never be mistaken for a move.
+ *
+ * `startExtent` is the box as it was when the grabber was pressed. The drag
+ * accumulates against THAT, not against the box's current size, because the
+ * committed box answers to `textbox.ts`'s rule (it grows to fit its text) and
+ * would otherwise feed its own growth back into the gesture.
+ */
+export interface ResizeState {
+  readonly objectId: string;
+  readonly handle: ResizeHandle;
+  readonly startExtent: WorldExtent;
+  readonly startWorldPoint: WorldPoint;
+  readonly emittedNotices: readonly string[];
+}
+
+/**
  * §5.9's whole interaction state: what is selected, and what a drag is moving.
  * Plain data — a caller may keep it anywhere.
  *
@@ -131,12 +161,15 @@ export interface DragState {
 export interface InteractionState {
   readonly selectedObjectIds: readonly string[];
   readonly drag: DragState | undefined;
+  /** A grabber-drag on a selected text box. Never set at the same time as `drag` — one press arms exactly one gesture. */
+  readonly resize: ResizeState | undefined;
 }
 
-/** Nothing selected, no drag running — where `main.ts` starts and where `deselect` returns to. */
+/** Nothing selected, no gesture running — where `main.ts` starts and where `deselect` returns to. */
 export const INITIAL_INTERACTION_STATE: InteractionState = {
   selectedObjectIds: [],
   drag: undefined,
+  resize: undefined,
 };
 
 /**
@@ -198,17 +231,29 @@ export function pointerDown(
   camera: CameraState,
   additive: boolean = false,
 ): InteractionState {
+  // A grabber wins over everything, INCLUDING the object under it: the corner
+  // handles of a text box overhang its own body, and a press there means
+  // "resize", never "select and move". Grabbers exist only on an already
+  // SELECTED object, so this can never steal a first click (the human's
+  // 2026-09-02 text-box rework).
+  const grabbed = resizeGestureAt(state, screenPoint, objects, camera);
+  if (grabbed !== undefined) {
+    return { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: grabbed };
+  }
+
   const object = hitTest(screenPoint, objects, camera);
   if (object === undefined) {
     if (!additive) {
       return INITIAL_INTERACTION_STATE;
     }
-    // Clause 3's "changes nothing" is about the SELECTION. A drag is not part
+    // Clause 3's "changes nothing" is about the SELECTION. A gesture is not part
     // of it: `main.ts` listens for `pointerup` on the CANVAS, so a release
-    // outside it leaves a drag armed, and a press must never inherit one —
+    // outside it leaves one armed, and a press must never inherit one —
     // otherwise the next `pointerMove` moves an object nobody is holding
     // (0105-REVIEW). The plain-click branch above already clears it.
-    return state.drag === undefined ? state : { selectedObjectIds: state.selectedObjectIds, drag: undefined };
+    return state.drag === undefined && state.resize === undefined
+      ? state
+      : { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined };
   }
   const selectedObjectIds = additive ? toggleSelection(state.selectedObjectIds, object.id) : [object.id];
   // The ID, never the object — see the file header's INVARIANTS. D-098: every
@@ -216,7 +261,63 @@ export function pointerDown(
   return {
     selectedObjectIds,
     drag: { objectId: object.id, lastWorldPoint: screenToWorld(camera, screenPoint), emittedNotices: [] },
+    resize: undefined,
   };
+}
+
+/**
+ * Which grabber is under `screenPoint`, for a caller that wants to know without
+ * pressing — `main.ts` sets the canvas cursor from it on every pointer move, so
+ * a grabber says which way it stretches before you commit to the gesture.
+ *
+ * Exactly the same lookup `pointerDown` arms a resize from (`resizeGestureAt`),
+ * so the cursor can never promise a grabber the press would miss (D-010).
+ */
+export function resizeHandleUnder(
+  state: InteractionState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  camera: CameraState,
+): ResizeHandle | undefined {
+  return resizeGestureAt(state, screenPoint, objects, camera)?.handle;
+}
+
+/**
+ * The resize gesture a press arms, or `undefined` when it landed on no grabber.
+ *
+ * Only a SELECTED object with `hasResizeHandles` is considered, and in reverse
+ * selection order so the most recently selected box's grabbers win where two
+ * overlap — the same "topmost thing the operator is working with" instinct
+ * `hitTest`'s z-order serves.
+ */
+function resizeGestureAt(
+  state: InteractionState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  camera: CameraState,
+): ResizeState | undefined {
+  for (let i = state.selectedObjectIds.length - 1; i >= 0; i -= 1) {
+    const objectId = state.selectedObjectIds[i];
+    const object = objects.find((candidate) => candidate.id === objectId);
+    if (object === undefined || !hasResizeHandles(object)) {
+      continue;
+    }
+    const extent = objectExtent(object);
+    if (extent === undefined) {
+      continue; // Nothing drawn — no box to put grabbers on.
+    }
+    const handle = resizeHandleAt(screenPoint, extent, camera);
+    if (handle !== undefined) {
+      return {
+        objectId: object.id,
+        handle,
+        startExtent: extent,
+        startWorldPoint: screenToWorld(camera, screenPoint),
+        emittedNotices: [],
+      };
+    }
+  }
+  return undefined;
 }
 
 /** D-100 clause 4's toggle, ruled final by the human at 0105-REVIEW (Q-015): adds `objectId` if absent, removes it if present. Preserves the rest of the list's click order either way. */
@@ -251,6 +352,10 @@ export function pointerMove(
   camera: CameraState,
   context: EvalContext = NULL_EVAL_CONTEXT,
 ): PointerMoveOutcome {
+  if (state.resize !== undefined) {
+    return resizeMove(state, state.resize, screenPoint, objects, journal, camera, context);
+  }
+
   const drag = state.drag;
   if (drag === undefined) {
     return { state, objects, journal, notices: [], rejection: undefined };
@@ -263,7 +368,7 @@ export function pointerMove(
     // nothing. D-023: the raw id is printed LABELLED as an id, because there is
     // no name left to resolve it to.
     return {
-      state: { selectedObjectIds: state.selectedObjectIds, drag: undefined },
+      state: { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined },
       objects,
       journal,
       notices: [`the object being dragged (id "${drag.objectId}") no longer exists — drag ended`],
@@ -287,6 +392,7 @@ export function pointerMove(
   const advanced: InteractionState = {
     selectedObjectIds: state.selectedObjectIds,
     drag: { objectId: drag.objectId, lastWorldPoint: worldPoint, emittedNotices: widenedEmittedNotices },
+    resize: undefined,
   };
 
   if (plan.operations.length === 0) {
@@ -314,10 +420,137 @@ export function pointerMove(
     const unmoved: InteractionState = {
       selectedObjectIds: state.selectedObjectIds,
       drag: { objectId: drag.objectId, lastWorldPoint: drag.lastWorldPoint, emittedNotices: widenedEmittedNotices },
+      resize: undefined,
     };
     return { state: unmoved, objects, journal, notices: freshNotices, rejection: result.message };
   }
   return { state: advanced, objects: result.objects, journal: result.journal, notices: freshNotices, rejection: undefined };
+}
+
+/**
+ * One step of a grabber-drag (the human's 2026-09-02 text-box rework).
+ *
+ * Differs from the move path in exactly one way, and it is the important one:
+ * a resize is ABSOLUTE, not incremental. Each step recomputes the box from the
+ * gesture's own `startExtent` plus the total pointer delta since the press, and
+ * writes that box, rather than nudging the current one by a per-step delta.
+ * Two reasons, both load-bearing:
+ *
+ *   - The committed box is not the box that was asked for. `textbox.ts`'s rule
+ *     grows it to fit its text, so an incremental resize would read its own
+ *     growth back in on the next step and run away from the pointer.
+ *   - A step `mutate` refuses simply does not happen; the next step asks for
+ *     the same box again from the same origin, so nothing accumulates and
+ *     nothing is lost. (The move path has to hold the delta back instead,
+ *     because there each step's ask depends on the previous one having landed.)
+ *
+ * A grabbed object that vanished mid-gesture ends the resize, the same as a
+ * drag; the notice names the id, since there is no name left to resolve.
+ */
+function resizeMove(
+  state: InteractionState,
+  resize: ResizeState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  journal: readonly MutationJournalEntry[],
+  camera: CameraState,
+  context: EvalContext,
+): PointerMoveOutcome {
+  const object = objects.find((candidate) => candidate.id === resize.objectId);
+  if (object === undefined) {
+    return {
+      state: { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined },
+      objects,
+      journal,
+      notices: [`the object being resized (id "${resize.objectId}") no longer exists — resize ended`],
+      rejection: undefined,
+    };
+  }
+
+  const worldPoint = screenToWorld(camera, screenPoint);
+  const plan = planResize(
+    object,
+    objects,
+    resize,
+    worldPoint.x - resize.startWorldPoint.x,
+    worldPoint.y - resize.startWorldPoint.y,
+  );
+  const fresh = plan.notices.filter((notice) => !resize.emittedNotices.includes(notice));
+  const advanced: InteractionState = {
+    selectedObjectIds: state.selectedObjectIds,
+    drag: undefined,
+    resize: { ...resize, emittedNotices: fresh.length === 0 ? resize.emittedNotices : [...resize.emittedNotices, ...fresh] },
+  };
+  if (plan.operations.length === 0) {
+    return { state: advanced, objects, journal, notices: fresh, rejection: undefined };
+  }
+  const result = mutate(objects, plan.operations, journal, context);
+  if (!result.ok) {
+    // Nothing to retry — the next step recomputes the same ask from
+    // `startExtent` (see this function's own doc comment), so the gesture
+    // advances even here.
+    return { state: advanced, objects, journal, notices: fresh, rejection: result.message };
+  }
+  return { state: advanced, objects: result.objects, journal: result.journal, notices: fresh, rejection: undefined };
+}
+
+/**
+ * What one resize step wants to write: the `width`/`height` the grabbed box
+ * should have, plus `origin` when a LEFT or TOP edge moved (moving those edges
+ * moves the box's anchor as well as its size), plus `autoresize: false` when a
+ * height was dragged.
+ *
+ * **Why a height drag also turns `autoresize` off.** `autoresize` on means the
+ * box shrinks back to its text (`textbox.ts`), so a dragged height would snap
+ * away the instant it was written — the grabber would look broken. Dragging a
+ * height IS the operator saying "keep this size", which is exactly what the
+ * flag stores, so the gesture writes it. This mirrors Word turning "resize
+ * shape to fit text" off when you size a box by hand. A WIDTH drag does not
+ * touch it: a set width never shrinks anyway (`textbox.ts`'s one asymmetry).
+ *
+ * §5.9's per-component rule applies unchanged: a slot that is not `literal` is
+ * skipped, with a notice naming what drives it, and the rest of the box still
+ * resizes. So a text box whose `origin.x` is bound to a cell resizes from its
+ * right edge and refuses to move its left one.
+ */
+function planResize(
+  object: GraphObject,
+  objects: readonly GraphObject[],
+  resize: ResizeState,
+  deltaX: number,
+  deltaY: number,
+): DragPlan {
+  const edges = handleEdges(resize.handle);
+  const box = resizeBox(resize.startExtent, resize.handle, deltaX, deltaY);
+  const operations: Operation[] = [];
+  const notices: string[] = [];
+
+  const write = (path: readonly string[], value: number | boolean): void => {
+    const address: Address = { objectId: object.id, path };
+    const slot = getSlot(object, path);
+    if (slot !== undefined && slot.kind !== "literal") {
+      notices.push(`${describeAddress(address, objects)} did not resize: ${describeSlotDriver(slot, objects)}`);
+      return;
+    }
+    operations.push({ kind: "setSlot", address, slot: { kind: "literal", value } });
+  };
+
+  if (edges.left || edges.right) {
+    write(TEXT_WIDTH_PATH, box.maxX - box.minX);
+    if (edges.left) {
+      write(ORIGIN_X_PATH, box.minX);
+    }
+  }
+  if (edges.top || edges.bottom) {
+    write(TEXT_HEIGHT_PATH, box.maxY - box.minY);
+    if (edges.top) {
+      write(ORIGIN_Y_PATH, box.minY);
+    }
+    if (readBoolean(object, TEXT_AUTORESIZE_PATH) !== false) {
+      write(TEXT_AUTORESIZE_PATH, false);
+    }
+  }
+  return { operations, notices };
 }
 
 /**
@@ -338,12 +571,12 @@ function widenEmittedNotices(
   return { fresh, widened: fresh.length === 0 ? drag.emittedNotices : [...drag.emittedNotices, ...fresh] };
 }
 
-/** Ends a drag, keeping the selection — §5.9 separates selecting from moving, and releasing the button does not deselect. */
+/** Ends a drag or a resize, keeping the selection — §5.9 separates selecting from moving, and releasing the button does not deselect. */
 export function pointerUp(state: InteractionState): InteractionState {
-  if (state.drag === undefined) {
+  if (state.drag === undefined && state.resize === undefined) {
     return state;
   }
-  return { selectedObjectIds: state.selectedObjectIds, drag: undefined };
+  return { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined };
 }
 
 /**

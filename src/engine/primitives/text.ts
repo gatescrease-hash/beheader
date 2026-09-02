@@ -752,6 +752,19 @@ export const TEXT_CONTENT_PATH: readonly string[] = ["content"];
 export const TEXT_WIDTH_PATH: readonly string[] = ["width"];
 export const TEXT_HEIGHT_PATH: readonly string[] = ["height"];
 export const TEXT_OVERFLOW_PATH: readonly string[] = ["overflow"];
+/**
+ * `autoresize` (the human's 2026-09-02 text-box rework) — whether the box
+ * SHRINKS back to its text when the text gets smaller than the size the
+ * operator set. Growing is unconditional either way: a text box never crops.
+ *
+ * Deliberately NOT a dependency of `measuredHeight`/`measuredWidth`: it decides
+ * how big the BOX is drawn, not how big the TEXT is, and the measurement is of
+ * the text. Two consequences, both wanted — toggling it never re-measures, and
+ * a document saved before this slot existed still loads (nothing derived
+ * depends on it, so no dangling edge; `render/textbox.ts`'s callers default it).
+ * `render/textbox.ts` owns the rule; nothing in `src/engine/` reads this slot.
+ */
+export const TEXT_AUTORESIZE_PATH: readonly string[] = ["autoresize"];
 export const TEXT_STYLE_FONT_PATH: readonly string[] = ["style", "font"];
 export const TEXT_STYLE_FONT_SIZE_PATH: readonly string[] = ["style", "fontSize"];
 export const TEXT_STYLE_LINE_HEIGHT_PATH: readonly string[] = ["style", "lineHeight"];

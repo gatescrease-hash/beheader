@@ -112,6 +112,7 @@ import {
   computeMeasuredWidth,
   computeResolvedContent,
   resolveTextDependencyAddresses,
+  TEXT_AUTORESIZE_PATH,
   TEXT_CONTENT_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
@@ -332,6 +333,42 @@ export interface ObjectSchema {
   readonly type: ObjectType;
   readonly nonDerivedSlotPaths: readonly NonDerivedSlotPathGroup[];
   readonly derivedSlots: readonly DerivedSlotSchema[];
+  /**
+   * The slots whose legal values are a small CLOSED SET, and what that set is
+   * (the human's 2026-09-02 instruction: "if properties only have a small
+   * subset of valid inputs, then when changing them from the properties
+   * window, it should show that somehow... instead, create a drop-down").
+   *
+   * Declared here, on the schema, rather than in the panel: the panel is one
+   * reader and `props` is another, and which values a slot accepts is a fact
+   * about the TYPE, not about a UI. Absent — every type but `text` today —
+   * means every slot takes free text, which is what the panel offered before
+   * this field existed.
+   *
+   * Advisory to the DISPLAY only. It is not a validator: nothing here refuses
+   * `set text_1.style.align sideways`, because a formula may legitimately drive
+   * such a slot to anything and `renderer.ts` already clamps what it reads
+   * (`resolveTextStyle`). What it changes is that the operator is OFFERED the
+   * real choices instead of having to know them.
+   */
+  readonly slotOptions?: readonly SlotOptionSet[];
+}
+
+/**
+ * One slot's closed value set. `values` are the raw `Value`s a choice writes —
+ * strings for `style.align`, booleans for `autoresize` — so the panel commits a
+ * LITERAL of the right type and never routes a chosen word through the formula
+ * grammar the way a free-text row must (D-102 clause 6).
+ *
+ * `labels` is optional and positional: when present, `labels[i]` is what the
+ * operator reads for `values[i]`. Used where the raw value is not the clearest
+ * word for it (`autoresize`'s `true` reads as "shrink to fit").
+ */
+export interface SlotOptionSet {
+  readonly path: readonly string[];
+  /** Narrowed to what a `set` command can actually write (`parser.ts`'s `SetLiteralCommand`), so a chooser needs no cast and no unrepresentable option can be declared. */
+  readonly values: readonly (number | string | boolean)[];
+  readonly labels?: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +645,10 @@ const TEXT_SCHEMA: ObjectSchema = {
         TEXT_CONTENT_PATH,
         TEXT_WIDTH_PATH,
         TEXT_HEIGHT_PATH,
+        // The human's 2026-09-02 text-box rework. NOT a dependency of either
+        // measured slot — see `TEXT_AUTORESIZE_PATH`'s own doc comment for why
+        // that is what keeps previously-saved documents loading.
+        TEXT_AUTORESIZE_PATH,
         TEXT_OVERFLOW_PATH,
         TEXT_STYLE_FONT_PATH,
         TEXT_STYLE_FONT_SIZE_PATH,
@@ -615,6 +656,19 @@ const TEXT_SCHEMA: ObjectSchema = {
         TEXT_STYLE_COLOR_PATH,
         TEXT_STYLE_ALIGN_PATH,
       ],
+    },
+  ],
+  // The three `text` slots whose legal values are a closed set — the properties
+  // panel offers each as a drop-down instead of a free text box (the human's
+  // 2026-09-02 instruction). `style.align`'s three are `renderer.ts`'s own
+  // `resolveTextStyle` clamp; `overflow`'s three are §5.6's list.
+  slotOptions: [
+    { path: TEXT_STYLE_ALIGN_PATH, values: ["left", "center", "right"] },
+    { path: TEXT_OVERFLOW_PATH, values: ["visible", "clip", "ellipsis"] },
+    {
+      path: TEXT_AUTORESIZE_PATH,
+      values: [true, false],
+      labels: ["shrink to fit text", "keep the size I set"],
     },
   ],
   derivedSlots: [
@@ -675,6 +729,22 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
 /** Looks up an object type's schema. Pure; never throws. `undefined` for a type with no entry yet (see file header). */
 export function getObjectSchema(type: ObjectType): ObjectSchema | undefined {
   return SCHEMAS[type];
+}
+
+/**
+ * The closed value set a slot accepts, or `undefined` when it takes free text
+ * (every slot of every type but `text` today — see `ObjectSchema.slotOptions`).
+ *
+ * Compared by `slotKey` (D-010), like `findDerivedSlotSchema`, so a freshly
+ * built path array still matches a declared one.
+ */
+export function findSlotOptions(type: ObjectType, path: readonly string[]): SlotOptionSet | undefined {
+  const schema = getObjectSchema(type);
+  if (schema?.slotOptions === undefined) {
+    return undefined;
+  }
+  const key = slotKey(path);
+  return schema.slotOptions.find((entry) => slotKey(entry.path) === key);
 }
 
 /**

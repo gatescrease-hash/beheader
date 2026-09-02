@@ -140,6 +140,20 @@
         box-sizing: border-box;
       }
       /*
+        A drop-down row (the human's 2026-09-02 instruction: a slot with only a
+        small set of valid inputs offers them rather than making the operator
+        know them). It REPLACES the value text and the grey paperclip for such a
+        row — there is no edit mode, it commits on `change`. Same width as the
+        text input it stands in for, so a panel's right-hand column does not
+        jump between row kinds.
+      */
+      .panel-row__choice {
+        font: inherit;
+        width: 10em;
+        box-sizing: border-box;
+        cursor: pointer;
+      }
+      /*
         D-125's in-place editor: a real text input overlaid on the canvas at
         the receiver's own position (a `text` object's `content`, or a table
         cell). main.ts sizes and positions it every paint from
@@ -158,17 +172,32 @@
         scrollbar) the canvas underneath does not have. The focus ring is an
         `outline`, which is painted outside the box and takes no layout.
 
-        `overflow: auto` (D-129 clause 2): the overlay never clips its own
-        text — it scrolls once the typed content outgrows the committed box —
-        so the caret is always visible whatever the zoom.
+        NO SCROLLING, EVER — `overflow: hidden` (the human, 2026-09-02: "no
+        goddamn scroll bars when editing text! either vertically or
+        horizontally!"). This is not a scrollbar being hidden; there is nothing
+        to scroll. `main.ts` re-measures the typed text on every keystroke and
+        re-sizes this element to fit it (`editorTextBoxSize` -> the same
+        `render/textbox.ts` rule the committed box uses), so the box grows under
+        the caret and the text always fits. `overflow: hidden` is the belt to
+        that braces: if a measurement is ever a pixel short, the overflow is
+        clipped invisibly rather than announced with a scrollbar that steals
+        width and re-wraps the paragraph.
 
-        D-135: the scrollbars take NO layout (`scrollbar-width: none` plus the
-        `::-webkit-scrollbar` twin). The box is fitted to the receiver's exact
-        drawn extent, so a real ~15px scrollbar has nowhere to sit but on top
-        of the text (horizontal, on a one-line overlay) or stealing width from
-        a wrapping box and forcing a re-wrap the canvas underneath does not
-        have (vertical). `overflow: auto` STAYS — the caret still scrolls into
-        view, the bar just never shows.
+        SIZED AND FONTED IN WORLD UNITS, then magnified by a `transform: scale()`
+        `main.ts` sets from `camera.zoom / ratio`. That is what makes the typed
+        line breaks land exactly where the drawn ones do: the browser lays the
+        text out at the same round font size and width `render/measure.ts`
+        measures with, and the transform only magnifies the finished layout.
+        Nothing here may set a font, a padding or a border — `main.ts` sets the
+        type inline from the receiver's OWN slots (size, family, line height,
+        alignment and colour), and any inset would make the text no longer fit
+        the box it was measured in.
+
+        The focus ring is an `outline`, painted outside the box and taking no
+        layout. `background: transparent` because the canvas underneath is NOT
+        drawing this object's text while the editor is open (`renderDocument`'s
+        `editingObjectId`) — so what shows through is the page, exactly as it
+        would around the drawn text.
       */
       .text-editor {
         position: absolute;
@@ -176,17 +205,11 @@
         margin: 0;
         border: none;
         padding: 0;
-        color: #1a1a1a;
-        background: #ffffff;
+        background: transparent;
         resize: none;
         outline: 1px solid #1a56db;
-        overflow: auto;
-        scrollbar-width: none; /* D-135: Firefox/standards — no scrollbar layout box. */
+        overflow: hidden;
         z-index: 1;
-      }
-      /* D-135: WebKit/Blink twin of `scrollbar-width: none` — same effect. */
-      .text-editor::-webkit-scrollbar {
-        display: none;
       }
       #log {
         flex: 0 0 auto;

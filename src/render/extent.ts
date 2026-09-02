@@ -37,20 +37,25 @@
  *   - MEASURING a `text` object. This file has no `ctx` and never will; the
  *     measurement arrives as graph state, through the `measuredWidth` /
  *     `measuredHeight` derived slots the topological pass already computed
- *     (**D-123**). The fixed fallbacks below are reached only when there was no
- *     real measurer to compute them (`#MEASURE`, D-118).
+ *     (**D-123**).
+ *   - DECIDING how a set size, a measurement and `autoresize` combine into a
+ *     box — `textbox.ts`'s `textBoxSize`, which `renderer.ts` and the in-place
+ *     editor read too. This file supplies that rule's four inputs and anchors
+ *     its answer at `origin`; it does not hold a second copy of it.
  */
 import { getSlot, type GraphObject } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
+  TEXT_AUTORESIZE_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
   TEXT_MEASURED_WIDTH_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
-import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readBoolean, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { textBoxSize } from "./textbox.ts";
 
 /**
  * The world-space box an object occupies — `minX <= maxX`, `minY <= maxY`
@@ -62,19 +67,6 @@ export interface WorldExtent {
   readonly maxX: number;
   readonly maxY: number;
 }
-
-/**
- * The fallback box a `text` object gets when its size is not knowable from graph
- * state at all — i.e. both its `width` slot and its measurement are unusable,
- * which since **D-123** means only the no-real-measurer case: `measuredWidth` /
- * `measuredHeight` are `#MEASURE` (D-118) because nothing wired a `TextMeasurer`
- * (a test, or `main.ts` failing to get an offscreen 2D context). World units,
- * round and untuned (Rule 5), the same posture as every size constant in
- * `slots.ts`/`renderer.ts`. Ordinary constants, NOT a provisional choice — Q-024
- * was answered by D-123 and its tags came out with the `measuredWidth` slot.
- */
-const TEXT_AUTO_BOX_WIDTH = 240;
-const TEXT_AUTO_BOX_HEIGHT = 20;
 
 /**
  * One object's drawn extent, or `undefined` for an object that draws nothing.
@@ -153,19 +145,17 @@ function tableExtent(object: GraphObject): WorldExtent | undefined {
  * room, matching `render/measure.ts`'s `{ width: 0, height: 0 }` for an empty
  * string. Never throws.
  *
- * Both axes read the same three sources in the same order (**D-123** clause 3):
- * the operator's own fixed slot, then the measurement, then a fixed fallback.
+ * The SIZE is `textbox.ts`'s `textBoxSize` — the one rule the renderer's
+ * alignment and the in-place editor's live growing box also read, so the drawn
+ * box, the click box and the box being typed into can never disagree (D-010).
+ * This function's whole job for a `text` object is to read the four slots that
+ * rule needs and anchor the result at `origin`.
  *
- * `width`  — the `width` slot when it holds a positive finite number: that is
- *            the box the operator SET, whatever the ink does inside it; else the
- *            `measuredWidth` derived slot when it holds one; else the fallback.
- * `height` — the `height` slot when it holds a positive finite number; else the
- *            `measuredHeight` derived slot; else the fallback.
- *
- * A fallback is reached only with no real measurer wired (`#MEASURE`, D-118 —
- * a test, or `main.ts` failing to get an offscreen context), where nothing
- * better is knowable. The running app threads a real measurer (0132), so a
- * command-created `text` object is bounded by its actual ink.
+ * The rule in one line: the box grows to fit its text ALWAYS (a text box never
+ * crops — the human, 2026-09-02), and shrinks back below a size the operator
+ * set only when `autoresize` says so. `autoresize` defaults to `true` when the
+ * slot is missing, which is what lets a document saved before that slot existed
+ * keep the hug-the-text behaviour it had.
  */
 function textExtent(object: GraphObject): WorldExtent | undefined {
   const resolved = getSlot(object, TEXT_RESOLVED_CONTENT_PATH)?.value;
@@ -174,27 +164,13 @@ function textExtent(object: GraphObject): WorldExtent | undefined {
   }
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-
-  // D-123 clause 3: set width, else measured width, else the fallback — the same
-  // three-source order the height below has always used.
-  const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
-  const measuredWidth = readNumber(object, TEXT_MEASURED_WIDTH_PATH);
-  const width =
-    fixedWidth !== undefined && fixedWidth > 0
-      ? fixedWidth
-      : measuredWidth !== undefined && measuredWidth > 0
-        ? measuredWidth
-        : TEXT_AUTO_BOX_WIDTH; // no real measurer wired (#MEASURE) — nothing better is knowable
-
-  const fixedHeight = readNumber(object, TEXT_HEIGHT_PATH);
-  const measuredHeight = readNumber(object, TEXT_MEASURED_HEIGHT_PATH);
-  const height =
-    fixedHeight !== undefined && fixedHeight > 0
-      ? fixedHeight
-      : measuredHeight !== undefined && measuredHeight > 0
-        ? measuredHeight
-        : TEXT_AUTO_BOX_HEIGHT; // same no-measurer case
-
+  const { width, height } = textBoxSize({
+    fixedWidth: readNumber(object, TEXT_WIDTH_PATH),
+    fixedHeight: readNumber(object, TEXT_HEIGHT_PATH),
+    autoresize: readBoolean(object, TEXT_AUTORESIZE_PATH) ?? true,
+    measuredWidth: readNumber(object, TEXT_MEASURED_WIDTH_PATH),
+    measuredHeight: readNumber(object, TEXT_MEASURED_HEIGHT_PATH),
+  });
   return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
 }
 

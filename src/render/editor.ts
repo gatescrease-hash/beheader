@@ -72,11 +72,15 @@
  */
 import type { CameraState } from "../engine/document.ts";
 import { formatCellReference, parseCellReference } from "../engine/address.ts";
+import type { TextMeasurer } from "../engine/eval-context.ts";
 import { TABLE_TYPE, TEXT_TYPE, type GraphObject } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
+  TEXT_AUTORESIZE_PATH,
+  TEXT_HEIGHT_PATH,
   TEXT_STYLE_ALIGN_PATH,
+  TEXT_STYLE_COLOR_PATH,
   TEXT_STYLE_FONT_PATH,
   TEXT_STYLE_FONT_SIZE_PATH,
   TEXT_STYLE_LINE_HEIGHT_PATH,
@@ -85,7 +89,8 @@ import {
 import { screenToWorld, worldToScreen, type ScreenPoint } from "./camera.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { hitTest } from "./hittest.ts";
-import { readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { textBoxSize, TEXT_FALLBACK_BOX_HEIGHT, TEXT_FALLBACK_BOX_WIDTH, type TextBoxSize } from "./textbox.ts";
 
 /**
  * What the in-place editor is open on (**D-125** clause 1). A `text` object is
@@ -98,40 +103,64 @@ export type EditorTarget =
   | { readonly kind: "text"; readonly objectId: string }
   | { readonly kind: "cell"; readonly objectId: string; readonly cell: string };
 
-/** The editor overlay's box, in CSS pixels from the canvas's top-left — the same space `panel.ts`'s `PanelPlacement` is measured in. */
+/**
+ * Where the overlay goes and how big it is — the SPLIT that makes the typed
+ * text lay out identically to the drawn text (the human's 2026-09-02 rework:
+ * "there is no difference between how the text looks when you're not editing it
+ * and how it looks when you are").
+ *
+ * `left`/`top` are CSS pixels from the canvas's top-left, like `panel.ts`'s
+ * `PanelPlacement`. `width`/`height` are **WORLD UNITS**, and `scale` is the
+ * `camera.zoom / ratio` factor a CSS `transform: scale()` then applies to the
+ * whole element.
+ *
+ * **Why world units and a transform, rather than pre-multiplied CSS pixels.**
+ * The overlay used to be sized and fonted in CSS pixels — `fontSize *
+ * camera.zoom / ratio` — which meant the browser laid text out at a fractional
+ * font size (`14.7px`) against a fractional width, while `render/measure.ts`
+ * measured the same text at the round WORLD size (`16px`) against the round
+ * world width. Two different layout problems, so they broke lines in different
+ * places, and the operator saw a two-line paragraph typed as three. Laying the
+ * element out at the world size and scaling it afterwards hands the browser the
+ * EXACT numbers the canvas measurer gets; the transform is a pure visual
+ * magnification applied after layout, so it cannot move a break.
+ */
 export interface EditorPlacement {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
+  readonly scale: number;
 }
 
 /**
  * How the overlay sets the text inside that box (**D-129**, widened at entry
- * 0147). `fontSize` and `lineHeight` are CSS pixels — the drawn text's own
- * world lengths scaled by `camera.zoom / ratio`, the same factor the box is
- * scaled by. `wraps` is whether the overlay may break a line at all: FALSE for
- * an auto-width `text` object, because §5.6's "auto width + auto height means
- * no wrapping" is what `renderer.ts` draws, and a `<textarea>` that soft-wraps
- * anyway is the defect the operator reported (one drawn line, two typed ones).
+ * 0147 and again by the 2026-09-02 rework).
+ *
+ * `fontSize` and `lineHeight` are **WORLD UNITS** — the drawn text's own values,
+ * NOT scaled: `EditorPlacement.scale` does that to the whole element at once
+ * (see its doc comment). They are therefore also exactly what a caller hands
+ * `TextMeasurer.measure` to size the live box.
+ *
+ * `color` is the receiver's own `style.color`. It used to be deliberately NOT
+ * matched (D-132's reasoning: colour cannot move a glyph, so it could not cause
+ * the wrap defect that ruling was about) — but the goal is now that the two are
+ * indistinguishable, and a text box that changes colour the moment you click
+ * into it fails that on sight.
+ *
+ * `wraps` is whether the overlay may break a line at all: FALSE for an
+ * auto-width `text` object, because §5.6's "auto width + auto height means no
+ * wrapping" is what `renderer.ts` draws, and a `<textarea>` that soft-wraps
+ * anyway is the defect the operator reported at entry 0147.
  */
 export interface EditorTextStyle {
   readonly fontSize: number;
   readonly fontFamily: string;
   readonly lineHeight: number;
   readonly textAlign: "left" | "center" | "right";
+  readonly color: string;
   readonly wraps: boolean;
 }
-
-/**
- * The box the editor draws for a `text` object whose `content` is empty, so it
- * has no `extent.ts` extent (D-066) — reached when D-124 hands a just-created
- * empty box straight to the editor. World units, round and untuned (Rule 5),
- * the same size `extent.ts`'s own no-measurer fallback uses; it is the EDITOR's
- * affordance and never enters graph state (D-125 clause 6).
- */
-const EMPTY_TEXT_EDITOR_WIDTH = 240;
-const EMPTY_TEXT_EDITOR_HEIGHT = 20;
 
 /**
  * The world-unit type style the overlay scales from (**D-129**), before
@@ -155,8 +184,13 @@ const EMPTY_TEXT_EDITOR_HEIGHT = 20;
 const TEXT_EDITOR_FALLBACK_FONT_SIZE = 16;
 const TEXT_EDITOR_FALLBACK_LINE_HEIGHT = 20;
 const TEXT_EDITOR_FALLBACK_FONT_FAMILY = "sans-serif";
+const TEXT_EDITOR_FALLBACK_COLOR = "#1a1a1a";
 const CELL_EDITOR_FONT_SIZE = 14;
 const CELL_EDITOR_FONT_FAMILY = "sans-serif";
+const CELL_EDITOR_COLOR = "#1a1a1a";
+
+/** Room for the caret at the end of a non-wrapping line, in world units — see `editorTextBoxSize`. Untuned (Rule 5); small enough that the overlay's outline reads as the same box the canvas draws. */
+const CARET_ALLOWANCE = 2;
 
 /**
  * The receiver a double-click at `screenPoint` opens the editor on, or
@@ -219,34 +253,89 @@ export function editorPlacement(
   object: GraphObject,
   camera: CameraState,
   ratioBackingPerCss: number,
+  liveSize?: TextBoxSize,
 ): EditorPlacement {
   const ratio = usableRatio(ratioBackingPerCss);
-  const box = target.kind === "text" ? textEditorBox(object) : cellEditorBox(object, target.cell);
+  const box = target.kind === "text" ? textEditorBox(object, liveSize) : cellEditorBox(object, target.cell);
   const topLeft = worldToScreen(camera, { x: box.minX, y: box.minY });
-  const bottomRight = worldToScreen(camera, { x: box.maxX, y: box.maxY });
   return {
     left: topLeft.x / ratio,
     top: topLeft.y / ratio,
-    width: (bottomRight.x - topLeft.x) / ratio,
-    height: (bottomRight.y - topLeft.y) / ratio,
+    // WORLD units — `scale` below is what turns them into CSS pixels, and doing
+    // it that way round is what keeps the browser's line breaks and the
+    // canvas measurer's identical. See `EditorPlacement`'s own doc comment.
+    width: box.maxX - box.minX,
+    height: box.maxY - box.minY,
+    scale: camera.zoom / ratio,
   };
 }
 
 /**
- * How the overlay sets its text (**D-129**, widened at entry 0147): the size,
- * family, line height and alignment `renderer.ts` would draw the same receiver
- * with, and whether the text may wrap.
+ * The box a `text` object's overlay should have for `typed` — the text as it
+ * stands in the editor RIGHT NOW, not the `resolvedContent` of the last commit
+ * (the human's 2026-09-02 rework: the box grows under the caret, it never
+ * scrolls and it never crops).
  *
- * Every length is a WORLD length scaled by `camera.zoom / ratio` — the identical
- * factor `editorPlacement` scales the box by (clause 1: the overlay sits at the
- * receiver's own position, so its glyphs must scale with it or the two disagree
- * at every zoom but 1).
+ * The same `textbox.ts` rule `extent.ts` applies to the committed object, with
+ * a live measurement swapped in for the two `measured*` slots — which is what
+ * makes the box the operator is typing into land exactly where the committed
+ * box will, instead of somewhere a scrollbar has to make up the difference.
+ *
+ * `measurer` is the caller's — `main.ts` passes the real Canvas2D one out of
+ * its `EvalContext` (Rule 1: this file measures nothing itself, it just decides
+ * what to ask). Never throws: `TextMeasurer.measure`'s own contract is two
+ * finite non-negative numbers, and `textBoxSize` screens them again.
+ */
+export function editorTextBoxSize(
+  object: GraphObject,
+  typed: string,
+  style: EditorTextStyle,
+  measurer: TextMeasurer,
+): TextBoxSize {
+  const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
+  const wrapWidth = fixedWidth !== undefined && fixedWidth > 0 ? fixedWidth : undefined;
+  const measurement = measurer.measure(
+    typed,
+    { font: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight },
+    wrapWidth,
+  );
+  const box = textBoxSize({
+    fixedWidth,
+    fixedHeight: readNumber(object, TEXT_HEIGHT_PATH),
+    autoresize: readBoolean(object, TEXT_AUTORESIZE_PATH) ?? true,
+    measuredWidth: measurement.width,
+    measuredHeight: measurement.height,
+  });
+  // The caret sits at the END of the text, which in a box fitted to the exact
+  // width of that text is the boundary — and the overlay is `overflow: hidden`
+  // (no scrolling, ever), so a caret exactly on the edge is a caret the
+  // operator cannot see. One character's worth of room fixes it.
+  //
+  // ONLY when the box does not wrap. A wrapping box's width is the operator's
+  // own dragged edge and is also `measure.ts`'s wrap boundary, so widening it
+  // would move a line break; there the caret wraps to the next line at the
+  // boundary instead of being clipped, so there is nothing to fix.
+  return wrapWidth === undefined ? { width: box.width + CARET_ALLOWANCE, height: box.height } : box;
+}
+
+/**
+ * How the overlay sets its text (**D-129**, widened at entry 0147 and again by
+ * the 2026-09-02 rework): the size, family, line height, alignment and COLOUR
+ * `renderer.ts` would draw the same receiver with, and whether it may wrap.
+ *
+ * Every length is a WORLD length, handed over UNSCALED — `EditorPlacement.scale`
+ * magnifies the laid-out element instead, which is what makes the browser solve
+ * the same layout problem `render/measure.ts` solves (see `EditorPlacement`).
+ * `camera` and `ratioBackingPerCss` are therefore no longer read here at all;
+ * they stay on the signature because a caller that has one always has the other
+ * and dropping them would make this the one placement function that does not
+ * take the camera.
  *
  * PROVISIONAL(Q-012): that a font size (and `TABLE_CELL_HEIGHT`) is a WORLD
  * length at all is `renderer.ts`'s open reading, which this file FOLLOWS rather
  * than answering a second time. Tagged so Q-012's reconciliation grep finds this
  * site: if it lands on SCREEN pixels, `renderer.ts` stops scaling the drawn font
- * with zoom and this function stops scaling the typed one, in the same cycle.
+ * with zoom and this file's `scale` stops applying to the type.
  *
  * `wraps` is `drawText`'s own wrap condition, re-read rather than re-decided: a
  * positive numeric `width` slot is the wrap boundary, and `"auto"` means no
@@ -257,19 +346,19 @@ export function editorPlacement(
 export function editorTextStyle(
   target: EditorTarget,
   object: GraphObject,
-  camera: CameraState,
-  ratioBackingPerCss: number,
+  _camera: CameraState,
+  _ratioBackingPerCss: number,
 ): EditorTextStyle {
-  const scale = camera.zoom / usableRatio(ratioBackingPerCss);
   if (target.kind === "cell") {
     // A cell has no per-object style slots — `drawTable` draws every cell in one
     // font, and centres the line vertically in the cell (`textBaseline`
     // "middle"), which a line box the full cell height reproduces.
     return {
-      fontSize: CELL_EDITOR_FONT_SIZE * scale,
+      fontSize: CELL_EDITOR_FONT_SIZE,
       fontFamily: CELL_EDITOR_FONT_FAMILY,
-      lineHeight: TABLE_CELL_HEIGHT * scale,
+      lineHeight: TABLE_CELL_HEIGHT,
       textAlign: "left",
+      color: CELL_EDITOR_COLOR,
       wraps: false,
     };
   }
@@ -285,12 +374,13 @@ export function editorTextStyle(
   // defect one corner in (0148-REVIEW).
   const family = readText(object, TEXT_STYLE_FONT_PATH);
   return {
-    fontSize: (fontSize !== undefined && fontSize > 0 ? fontSize : TEXT_EDITOR_FALLBACK_FONT_SIZE) * scale,
+    fontSize: fontSize !== undefined && fontSize > 0 ? fontSize : TEXT_EDITOR_FALLBACK_FONT_SIZE,
     fontFamily: family === undefined || family.trim() === "" ? TEXT_EDITOR_FALLBACK_FONT_FAMILY : family,
-    lineHeight: (lineHeight !== undefined && lineHeight > 0 ? lineHeight : TEXT_EDITOR_FALLBACK_LINE_HEIGHT) * scale,
+    lineHeight: lineHeight !== undefined && lineHeight > 0 ? lineHeight : TEXT_EDITOR_FALLBACK_LINE_HEIGHT,
     // The same three-way clamp `resolveTextStyle` makes: anything that is not
     // "center"/"right" draws left, so the overlay does too.
     textAlign: align === "center" || align === "right" ? align : "left",
+    color: readText(object, TEXT_STYLE_COLOR_PATH) ?? TEXT_EDITOR_FALLBACK_COLOR,
     wraps: fixedWidth !== undefined && fixedWidth > 0,
   };
 }
@@ -300,19 +390,31 @@ function usableRatio(ratioBackingPerCss: number): number {
   return Number.isFinite(ratioBackingPerCss) && ratioBackingPerCss > 0 ? ratioBackingPerCss : 1;
 }
 
-/** A `text` object's world box: its drawn extent, or — for an empty one with no extent (D-125 clause 6) — the editor's own fallback box anchored at `origin`. */
-function textEditorBox(object: GraphObject): WorldExtent {
+/**
+ * A `text` object's world box for the overlay.
+ *
+ * `liveSize` — the size measured from the text CURRENTLY IN THE EDITOR
+ * (`editorTextBoxSize`) — wins whenever the caller has it, which is what makes
+ * the box grow under the caret instead of scrolling. Without it, the committed
+ * extent; and for an empty box with no extent at all (D-066/D-125 clause 6),
+ * `textbox.ts`'s own fallback anchored at `origin`, which is the same size
+ * `extent.ts` falls back to and no longer a second pair of constants here.
+ */
+function textEditorBox(object: GraphObject, liveSize: TextBoxSize | undefined): WorldExtent {
+  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
+  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
+  if (liveSize !== undefined) {
+    return { minX: originX, minY: originY, maxX: originX + liveSize.width, maxY: originY + liveSize.height };
+  }
   const extent = objectExtent(object);
   if (extent !== undefined) {
     return extent;
   }
-  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
-  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
   return {
     minX: originX,
     minY: originY,
-    maxX: originX + EMPTY_TEXT_EDITOR_WIDTH,
-    maxY: originY + EMPTY_TEXT_EDITOR_HEIGHT,
+    maxX: originX + TEXT_FALLBACK_BOX_WIDTH,
+    maxY: originY + TEXT_FALLBACK_BOX_HEIGHT,
   };
 }
 

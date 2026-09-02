@@ -75,6 +75,22 @@ export function readText(object: GraphObject, path: readonly string[]): string |
 }
 
 /**
+ * A slot's current value, narrowed to `boolean` — `undefined` for anything else
+ * (missing, wrong-typed, an `ErrorValue`). Never throws. `readNumber`'s boolean
+ * sibling, added for `text`'s `autoresize` slot (the human's 2026-09-02
+ * text-box rework), which `extent.ts` and `main.ts`'s live editor box both read
+ * and must not narrow differently (D-010).
+ *
+ * A MISSING slot reads `undefined`, not `false`, so a caller supplies its own
+ * default — which is what lets a document saved before `autoresize` existed
+ * load and behave as the default rather than as "off".
+ */
+export function readBoolean(object: GraphObject, path: readonly string[]): boolean | undefined {
+  const value = getSlot(object, path)?.value;
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/**
  * Narrows a slot's current value to a `Point[]` — `undefined` for everything
  * else, an `ErrorValue` included. `readonly Point[]` is the ONLY array arm of
  * `Value` (§5.1, `graph/node.ts`), so `Array.isArray` alone excludes every
