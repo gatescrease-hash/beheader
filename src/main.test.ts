@@ -22,7 +22,10 @@ import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camer
 import {
   buildPanelModel,
   commitPanelEdit,
+  commitTableCell,
+  commitTextContent,
   dismissPanel,
+  editorSeed,
   escape,
   initialAppState,
   movePanel,
@@ -1018,5 +1021,118 @@ describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-
 
     expect(measuredHeightOf(dragged)).toBe(44);
     expect(numberAt(objectNamed(dragged, "rect_1"), ["origin", "x"])).toBeCloseTo(8, 9); // the drag committed
+  });
+});
+
+// **D-125** — in-place editing commits through the SAME `executeCommand` seam a
+// typed line uses (Rule 2, D-069). These cover the pure half: the `Command`
+// each receiver synthesises (clause 3, the trap) and the seed text. The
+// geometry is `render/editor.test.ts`; the DOM element lifecycle is in `start`,
+// untested by construction (D-001).
+describe("commitTextContent — a `text` object's content is ALWAYS a literal `set` (D-125 clause 3, D-122)", () => {
+  function withText(content: string): { state: AppState; id: string } {
+    const state = typed(opened(), `text x=0 y=0 "${content}"`);
+    return { state, id: objectNamed(state, "text_1").id };
+  }
+
+  it("writes a plain string as a literal", () => {
+    const { state, id } = withText("old");
+    const after = commitTextContent(state, id, "a whole new paragraph");
+    expect(getSlot(objectNamed(after, "text_1"), ["content"])).toEqual({ kind: "literal", value: "a whole new paragraph" });
+  });
+
+  it("does NOT sniff a leading `=` — `=Hello` commits as the literal string `=Hello`, never a formula (the trap)", () => {
+    const { state, id } = withText("old");
+    const after = commitTextContent(state, id, "=Hello world");
+    expect(getSlot(objectNamed(after, "text_1"), ["content"])).toEqual({ kind: "literal", value: "=Hello world" });
+  });
+
+  it("stores §5.6 markup verbatim, newlines included", () => {
+    const { state, id } = withText("old");
+    const raw = "# Title\n\n**bold** and {= table_x.A1 }";
+    const after = commitTextContent(state, id, raw);
+    expect(getSlot(objectNamed(after, "text_1"), ["content"])).toEqual({ kind: "literal", value: raw });
+  });
+
+  it("echoes the synthesised command into the log", () => {
+    const { state, id } = withText("old");
+    const after = commitTextContent(state, id, "new");
+    expect(newLines(state, after)).toContain("> set text_1.content new");
+  });
+
+  it("is a no-op for a stale object id", () => {
+    const { state } = withText("old");
+    expect(commitTextContent(state, "obj_404", "x")).toBe(state);
+  });
+});
+
+describe("commitTableCell — Excel-style: `=` is a formula, a number is a number, else a string (D-125 clause 3)", () => {
+  function withTable(): { state: AppState; id: string } {
+    const state = typed(opened(), "table x=0 y=0");
+    return { state, id: objectNamed(state, "table_1").id };
+  }
+
+  it("a leading `=` makes the cell a formula", () => {
+    const { state, id } = withTable();
+    const after = commitTableCell(state, id, "A1", "=1+2");
+    const slot = getSlot(objectNamed(after, "table_1"), ["cells", "A1"]);
+    expect(slot?.kind).toBe("formula");
+    expect(slot?.value).toBe(3);
+  });
+
+  it("a bare number is a literal number", () => {
+    const { state, id } = withTable();
+    const after = commitTableCell(state, id, "A2", "42");
+    expect(getSlot(objectNamed(after, "table_1"), ["cells", "A2"])).toEqual({ kind: "literal", value: 42 });
+  });
+
+  it("anything else is a literal string", () => {
+    const { state, id } = withTable();
+    const after = commitTableCell(state, id, "A3", "hello");
+    expect(getSlot(objectNamed(after, "table_1"), ["cells", "A3"])).toEqual({ kind: "literal", value: "hello" });
+  });
+
+  it("a refused commit (a broken formula) is echoed, not thrown, and the document is untouched", () => {
+    const { state, id } = withTable();
+    const after = commitTableCell(state, id, "A1", "=1 +");
+    expect(getSlot(objectNamed(after, "table_1"), ["cells", "A1"])).toBeUndefined();
+    expect(after.log.length).toBeGreaterThan(state.log.length);
+  });
+
+  it("is a no-op for a stale object id", () => {
+    const { state } = withTable();
+    expect(commitTableCell(state, "obj_404", "A1", "5")).toBe(state);
+  });
+});
+
+describe("editorSeed — the text the in-place editor opens showing (D-125)", () => {
+  it("a `text` object's raw content, verbatim", () => {
+    const state = typed(opened(), 'text x=0 y=0 "Radius is {= table_x.A1 }"');
+    const id = objectNamed(state, "text_1").id;
+    expect(editorSeed(state, { kind: "text", objectId: id })).toBe("Radius is {= table_x.A1 }");
+  });
+
+  it("a cell's literal value, as text", () => {
+    let state = typed(opened(), "table x=0 y=0");
+    const id = objectNamed(state, "table_1").id;
+    state = commitTableCell(state, id, "A1", "7");
+    expect(editorSeed(state, { kind: "cell", objectId: id, cell: "A1" })).toBe("7");
+  });
+
+  it("a cell's formula, Excel-style with a leading `=`", () => {
+    let state = typed(opened(), "table x=0 y=0");
+    const id = objectNamed(state, "table_1").id;
+    state = commitTableCell(state, id, "A1", "=1+2");
+    expect(editorSeed(state, { kind: "cell", objectId: id, cell: "A1" })).toBe("=1 + 2");
+  });
+
+  it("empty for a cell nobody has written", () => {
+    const state = typed(opened(), "table x=0 y=0");
+    const id = objectNamed(state, "table_1").id;
+    expect(editorSeed(state, { kind: "cell", objectId: id, cell: "H8" })).toBe("");
+  });
+
+  it("empty for a stale object id", () => {
+    expect(editorSeed(opened(), { kind: "text", objectId: "obj_404" })).toBe("");
   });
 });

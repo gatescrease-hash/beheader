@@ -139,6 +139,28 @@
         width: 10em;
         box-sizing: border-box;
       }
+      /*
+        D-125's in-place editor: a real text input overlaid on the canvas at
+        the receiver's own position (a `text` object's `content`, or a table
+        cell). main.ts sizes and positions it every paint from
+        render/editor.ts; it is mounted in #stage, a sibling of #panels with
+        no delegated listeners, so a click in it never has to be carved out of
+        the panel plumbing. One at a time, document-wide.
+      */
+      .text-editor {
+        position: absolute;
+        box-sizing: border-box;
+        margin: 0;
+        border: 1px solid #1a56db;
+        padding: 0 2px;
+        font: inherit;
+        color: #1a1a1a;
+        background: #ffffff;
+        resize: none;
+        outline: none;
+        overflow: hidden;
+        z-index: 1;
+      }
       #log {
         flex: 0 0 auto;
         max-height: 9em;

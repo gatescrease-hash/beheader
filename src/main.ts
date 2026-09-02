@@ -14,8 +14,13 @@
  * `executeCommand` — never `mutate`, never `writeSlot`), **D-107** (a
  * panel gesture never leaves the command bar's keyboard homeless, and a
  * handler bound to DOM a repaint can destroy acts only while it still owns
- * what it names), and **D-109** clause 3 (a refused line stays in the input;
- * only an accepted one clears it).
+ * what it names), **D-109** clause 3 (a refused line stays in the input;
+ * only an accepted one clears it), and **D-125** (in-place editing: a
+ * double-click opens a DOM input over a `text` object's `content` or a table
+ * cell; a commit synthesises a `Command` and runs it through the same
+ * `executeCommand` seam — `content` always a literal `set`, a cell
+ * Excel-style; the commit logic is here in the pure half, not in `start`,
+ * per clause 7).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -89,14 +94,20 @@
  *     that prunes `AppState.panels` down to the current selection, so every
  *     caller that replaces `interaction` goes through it rather than
  *     assigning the field directly.
- *   - Drawing a `text` object. `start` now builds an `EvalContext` around
- *     `render/measure.ts`'s Canvas2D `TextMeasurer` (Rule 1) — over its OWN
- *     offscreen 2D context, so setting `ctx.font` to measure never disturbs a
- *     draw — and threads it through `executeCommand`, `loadDocument`, and the
- *     drag path (`pointerMove`), so a `text` object's `measuredHeight` evaluates
- *     for real rather than reporting `#MEASURE` (D-118). What is still NOT here:
- *     a `text` COMMAND to create one, and `renderer.ts`'s text-drawing pass — so
- *     a `text` object can only arrive by `load` today, and nothing paints it.
+ *   - Drawing anything — `render/renderer.ts`'s (a `text` object included, since
+ *     entry 0138). `start` builds an `EvalContext` around `render/measure.ts`'s
+ *     Canvas2D `TextMeasurer` (Rule 1) — over its OWN offscreen 2D context, so
+ *     setting `ctx.font` to measure never disturbs a draw — and threads it
+ *     through `executeCommand`, `loadDocument`, and the drag path
+ *     (`pointerMove`), so a `text` object's `measuredHeight`/`measuredWidth`
+ *     evaluate for real rather than reporting `#MEASURE` (D-118).
+ *   - Placing a `text` object by POINTING, and opening its editor on creation
+ *     (**D-124**) — not built; `text` is typed-form only, and the in-place
+ *     editor opens on a DOUBLE-CLICK for now (D-125 clause 4).
+ *   - Matching the editor overlay's font to the object's `style` or the zoom,
+ *     and keeping it clear of an overlapping properties panel — the overlay is
+ *     a plain input at the receiver's box (D-125 clauses 4-5 are conventional
+ *     defaults).
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
  *     D-083 clause 4 are owed by a `document.ts` cycle, not by this one; see
  *     STATUS.md's known problems for what that leaves reachable from the Load
@@ -107,12 +118,15 @@
  */
 import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
-import { slotKey, type GraphObject } from "./engine/graph/node.ts";
+import { formatFormula } from "./engine/formula/format.ts";
+import { getSlot, slotKey, type GraphObject } from "./engine/graph/node.ts";
+import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
 import { parseCommandNumber, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
+import { editorPlacement, editorTargetAt, type EditorTarget } from "./render/editor.ts";
 import { documentExtent, objectExtent, type WorldExtent } from "./render/extent.ts";
 import { deselect, pointerDown, pointerMove, pointerUp, INITIAL_INTERACTION_STATE, type InteractionState } from "./render/interaction.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
@@ -808,6 +822,115 @@ export function unlinkPanelSlot(
 }
 
 // ---------------------------------------------------------------------------
+// In-place editing (**D-125**) — a DOM text input overlaid on the canvas at
+// the receiver's own position, for a `text` object's `content` and for a
+// table cell. Like every panel write, a commit synthesises a `Command` and
+// runs it through `runPanelCommand` -> `executeCommand` (Rule 2, D-069,
+// D-102 clause 5) — a NEW SURFACE over the existing seam, never a second
+// write path. The commit rule DIFFERS BY RECEIVER (D-125 clause 3, the trap):
+// `content` is ALWAYS a literal `set`, a cell is Excel-style. The geometry —
+// which receiver a double-click names, and where the overlay floats — is
+// `render/editor.ts`'s (clause 1); this half owns the seed text, the
+// `Command`, and (below, in `start`) every line of DOM (clauses 5, 7).
+// ---------------------------------------------------------------------------
+
+/** The stored path prefix a table cell slot lives under (`cells.A1`). `editorSeed` is the only reader in this file — `render/editor.ts` builds the reference half through `address.ts`'s formatter. */
+const TABLE_CELL_PREFIX = "cells";
+
+/**
+ * The text the in-place editor opens showing (**D-125**) — what the operator
+ * would type to reproduce the receiver, so committing an untouched editor is a
+ * no-op in intent (the same principle as `PanelRow.editSeed`, D-107).
+ *
+ * A `text` object's `content` is its raw literal source, verbatim (§5.6:
+ * "raw source including markup" — `{= }`/`{? }` and all). A table cell is
+ * shown Excel-style: a formula's reconstructed source with a leading `=`, or a
+ * literal rendered by `describeSlotValue` (the same formatter the properties
+ * panel and `props` use). Empty for a receiver that holds nothing, or a stale
+ * id (D-023's posture).
+ */
+export function editorSeed(state: AppState, target: EditorTarget): string {
+  const object = state.document.objects.find((candidate) => candidate.id === target.objectId);
+  if (object === undefined) {
+    return "";
+  }
+  if (target.kind === "text") {
+    const value = getSlot(object, TEXT_CONTENT_PATH)?.value;
+    return typeof value === "string" ? value : "";
+  }
+  const slot = getSlot(object, [TABLE_CELL_PREFIX, target.cell]);
+  if (slot === undefined) {
+    return "";
+  }
+  return slot.kind === "formula" ? `=${formatFormula(slot.ast, state.document.objects)}` : describeSlotValue(slot.value);
+}
+
+/**
+ * Commits the in-place editor over a `text` object's `content` (**D-125**
+ * clauses 2-3).
+ *
+ * ALWAYS a literal `set`, whatever was typed. `content` is permanently
+ * `literal`-kind (D-122) and §5.6's `{= }`/`{? }` are markup INSIDE the raw
+ * string, so the text is never sniffed for a leading `=` — `buildPanelSetCommand`
+ * (which routes every non-numeric string to `set-formula`) is deliberately NOT
+ * reused here (clause 3, the trap: `Hello world` must not become `=Hello world`).
+ * Runs through the same `executeCommand` seam a typed `set` uses. A stale
+ * `objectId` is a no-op (D-023's posture, as `commitPanelEdit` takes).
+ */
+export function commitTextContent(
+  state: AppState,
+  objectId: string,
+  raw: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, slotKey(TEXT_CONTENT_PATH)), value: raw }, context);
+}
+
+/**
+ * Commits the in-place editor over a table cell (**D-125** clauses 2-3) —
+ * Excel-style: a leading `=` is a formula, a bare number is a literal number,
+ * anything else a literal string. §5.4's own model. The address is built
+ * through `panelSlotAddress` from `render/editor.ts`'s already-formatted cell
+ * reference, never concatenated ad hoc. Same stale-id no-op posture.
+ */
+export function commitTableCell(
+  state: AppState,
+  objectId: string,
+  cell: string,
+  raw: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  return runPanelCommand(state, buildCellCommand(panelSlotAddress(object.name, cell), raw), context);
+}
+
+/**
+ * D-125 clause 3's Excel-style disambiguation for a table cell — distinct from
+ * `buildPanelSetCommand` (D-102 clause 6), which has no `=`-means-formula rule
+ * because a panel row edits a named slot and already shows a formula's own `=`.
+ * A leading `=` the operator typed is kept verbatim on the `source` (`setFormula`
+ * slices it back off — `SetFormulaCommand`'s own contract).
+ */
+function buildCellCommand(target: string, raw: string): SetLiteralCommand | SetFormulaCommand {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("=")) {
+    return { kind: "set-formula", target, source: trimmed };
+  }
+  const asNumber = parseCommandNumber(trimmed);
+  if (asNumber !== undefined) {
+    return { kind: "set", target, value: asNumber };
+  }
+  return { kind: "set", target, value: trimmed };
+}
+
+// ---------------------------------------------------------------------------
 // The DOM half — the only part of this file that knows a browser exists
 // ---------------------------------------------------------------------------
 //
@@ -891,6 +1014,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   // anywhere is being edited. `updatePanels` reads this to decide which panel
   // (if any) must NOT be rebuilt whole this paint (clause 8).
   let openEditor: { readonly objectId: string; readonly path: string } | undefined;
+  // **D-125**'s in-place editor: the receiver it is open on, and its one DOM
+  // element. `undefined`/`undefined` — the common case — means nothing is being
+  // typed into the canvas. At most one, document-wide (clause 1). Held here, not
+  // in `AppState`: opening writes no document state (like the GREY paperclip),
+  // and a DOM handle is not plain serializable state (D-101 clause 7's reason).
+  let inPlaceEditor: EditorTarget | undefined;
+  let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | undefined;
+  // Where the overlay is mounted: `#stage`, a sibling of `#panels` with no
+  // delegated listeners, so a click in the editor never has to be carved out of
+  // the panel plumbing. `panelsContainer` is the fallback only if the DOM shape
+  // ever changes out from under this.
+  const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
 
@@ -903,7 +1038,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * it sizes the backing store, and degrades to 1 for a canvas the layout has
    * given no width.
    */
-  const screenPointOf = (event: PointerEvent | WheelEvent): ScreenPoint => {
+  const screenPointOf = (event: MouseEvent): ScreenPoint => {
     const bounds = canvas.getBoundingClientRect();
     const ratioX = bounds.width > 0 ? canvas.width / bounds.width : 1;
     const ratioY = bounds.height > 0 ? canvas.height / bounds.height : 1;
@@ -942,6 +1077,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const panelledIds = panelledObjectIds();
     renderDocument(context, canvas.width, canvas.height, state.document.objects, state.document.camera, state.interaction.selectedObjectIds, panelledIds);
     updatePanels(panelledIds);
+    updateEditor();
   };
 
   /**
@@ -1123,6 +1259,135 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     element.style.top = `${placement.top}px`;
   };
 
+  // -------------------------------------------------------------------------
+  // **D-125**'s in-place editor — the DOM half. `render/editor.ts` says which
+  // receiver a double-click names and where the overlay goes; the pure half
+  // above (`commitTextContent`/`commitTableCell`/`editorSeed`) owns the seed
+  // and the `Command`. Everything here is listener wiring and element
+  // lifecycle, and — like `start` as a whole — untested by construction.
+  // -------------------------------------------------------------------------
+
+  /** Tears out the overlay element, nulling the handle FIRST so the `blur` its removal fires sees a closed editor and does not re-commit. */
+  const removeInPlaceElement = (): void => {
+    if (inPlaceElement !== undefined) {
+      const element = inPlaceElement;
+      inPlaceElement = undefined;
+      element.remove();
+    }
+  };
+
+  /** Closes the editor with no write — Escape (D-125 clause 5), or its receiver vanishing mid-edit. `inPlaceEditor` is cleared before the element goes, so the removal's `blur` is a no-op. */
+  const closeInPlaceEditor = (): void => {
+    inPlaceEditor = undefined;
+    removeInPlaceElement();
+  };
+
+  /**
+   * D-125 clause 5: commit is a click outside (which blurs the input) or, in a
+   * table cell, Enter. Reads the element's current text, closes the editor,
+   * returns the keyboard to the command bar, then runs the receiver's commit
+   * through the pure half. Re-entrant-safe: `closeInPlaceEditor` nulls
+   * `inPlaceEditor` before removing the focused element, so the `blur` that
+   * removal fires re-enters here and returns at the guard below.
+   */
+  const commitInPlace = (): void => {
+    const target = inPlaceEditor;
+    const element = inPlaceElement;
+    if (target === undefined || element === undefined) {
+      return;
+    }
+    const raw = element.value;
+    closeInPlaceEditor();
+    input.focus();
+    apply(
+      target.kind === "text"
+        ? commitTextContent(state, target.objectId, raw, evalContext)
+        : commitTableCell(state, target.objectId, target.cell, raw, evalContext),
+    );
+  };
+
+  /** D-125 clause 5: Escape cancels and writes nothing — nothing was committed, so there is nothing to restore. */
+  const cancelInPlace = (): void => {
+    if (inPlaceEditor === undefined) {
+      return;
+    }
+    closeInPlaceEditor();
+    input.focus();
+    paint();
+  };
+
+  /**
+   * The overlay element for `target`: a `<textarea>` for a `text` object (Enter
+   * inserts a newline — §5.6's hard breaks), a one-line `<input>` for a table
+   * cell (Enter commits, Excel-style). Every keydown `stopPropagation`s so none
+   * of it reaches the always-focused command bar's window listeners — §5.10's
+   * "not editing text or a cell" carve-out, made real (the same move
+   * `panelEditInput` makes for a panel row).
+   */
+  const buildInPlaceElement = (target: EditorTarget): HTMLTextAreaElement | HTMLInputElement => {
+    // `stopPropagation` on every keydown keeps the whole gesture off the
+    // always-focused command bar's window listeners. Escape cancels; Enter
+    // commits ONLY in a cell — in a `<textarea>` it falls through and inserts a
+    // newline (§5.6's hard breaks).
+    const keydown = (event: KeyboardEvent): void => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelInPlace();
+      } else if (event.key === "Enter" && target.kind === "cell") {
+        event.preventDefault();
+        commitInPlace();
+      }
+    };
+    if (target.kind === "text") {
+      const area = document.createElement("textarea");
+      area.className = "text-editor";
+      area.value = editorSeed(state, target);
+      area.addEventListener("keydown", keydown);
+      area.addEventListener("blur", commitInPlace);
+      return area;
+    }
+    const field = document.createElement("input");
+    field.type = "text";
+    field.className = "text-editor";
+    field.value = editorSeed(state, target);
+    field.addEventListener("keydown", keydown);
+    field.addEventListener("blur", commitInPlace);
+    return field;
+  };
+
+  /**
+   * Builds the overlay the first time it is shown and re-places it every paint
+   * (so it tracks its receiver through pan, zoom and a resize). NEVER rebuilds
+   * the element once open — that would drop focus, the caret and the typed
+   * text on the next pointer move, the same trap `updatePanels` navigates for a
+   * panel row. A receiver deleted mid-edit closes the editor (D-023's posture).
+   */
+  const updateEditor = (): void => {
+    if (inPlaceEditor === undefined) {
+      removeInPlaceElement();
+      return;
+    }
+    const object = state.document.objects.find((candidate) => candidate.id === inPlaceEditor?.objectId);
+    if (object === undefined) {
+      closeInPlaceEditor();
+      return;
+    }
+    if (inPlaceElement === undefined) {
+      inPlaceElement = buildInPlaceElement(inPlaceEditor);
+      editorLayer.appendChild(inPlaceElement);
+      inPlaceElement.focus();
+      inPlaceElement.select();
+    }
+    const bounds = canvas.getBoundingClientRect();
+    const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
+    const placement = editorPlacement(inPlaceEditor, object, state.document.camera, ratio);
+    inPlaceElement.style.left = `${placement.left}px`;
+    inPlaceElement.style.top = `${placement.top}px`;
+    inPlaceElement.style.width = `${placement.width}px`;
+    inPlaceElement.style.height = `${placement.height}px`;
+  };
+
   const apply = (next: AppState): void => {
     state = next;
     drawLog(logElement, state.log);
@@ -1182,6 +1447,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
+    // D-125 clause 5: a press on the canvas is "a click outside" — it commits
+    // an open in-place editor before doing anything else. `preventDefault`
+    // below suppresses the blur that would otherwise have committed it, so the
+    // commit is made explicitly here instead. A no-op when nothing is open.
+    if (inPlaceEditor !== undefined) {
+      commitInPlace();
+    }
     // Both lines are about the command input keeping the keyboard (§5.10:
     // "always focused when the user is not editing text or a cell"). A press on
     // the canvas moves focus to the body as its DEFAULT action, which runs AFTER
@@ -1199,6 +1471,20 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     // D-100 clauses 3-4: shift is the additive-selection modifier.
     applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey, evalContext));
+  });
+
+  // D-125 clause 4: double-click opens the in-place editor on the `text` object
+  // or table cell under the pointer; single-click still means select-and-drag,
+  // untouched. The two `pointerdown`s of the double-click land first — they
+  // select the object — then this fires and opens the editor on it. `paint`'s
+  // `updateEditor` step builds and focuses the element.
+  canvas.addEventListener("dblclick", (event: MouseEvent) => {
+    const target = editorTargetAt(screenPointOf(event), state.document.objects, state.document.camera);
+    if (target === undefined) {
+      return;
+    }
+    inPlaceEditor = target;
+    paint();
   });
 
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
