@@ -1,35 +1,36 @@
-# STATUS — as of entry 0143-in-place-editing
+# STATUS — as of entry 0144-REVIEW-phase5
 
-**READ THIS FIRST — THE HUMAN RULED TWICE AT ENTRY 0140. D-125 IS NOW BUILT (awaiting review);
-D-124 IS THE NEXT WORK.**
+**READ THIS FIRST — THE HUMAN RULED TWICE AT ENTRY 0140. D-125 IS NOW BUILT AND REVIEWED (ACCEPT,
+0144); D-124 IS THE NEXT WORK.**
 
-- **D-125 — in-place text entry. BUILT at entry 0143, NOT YET REVIEWED.** A DOM input is overlaid on
-  the canvas by a DOUBLE-CLICK, over a `text` object's `content` (a `<textarea>`) or a table cell (an
-  `<input>`). It commits through the EXISTING `runPanelCommand` → `executeCommand` seam (Rule 2) —
-  `content` as a LITERAL always (never sniffed for `=`; `buildPanelSetCommand` deliberately NOT
-  reused, D-125 clause 3's trap), a table cell Excel-style (`=` means formula). New file
-  `render/editor.ts` (geometry: which receiver, where the overlay). **§6.1 trigger 2 fired — REVIEW
-  REQUIRED.**
+- **D-125 — in-place text entry. BUILT at entry 0143, REVIEWED AND ACCEPTED at 0144.** A DOM input is
+  overlaid on the canvas by a DOUBLE-CLICK, over a `text` object's `content` (a `<textarea>`) or a
+  table cell (an `<input>`). It commits through the EXISTING `runPanelCommand` → `executeCommand`
+  seam (Rule 2) — `content` as a LITERAL always (never sniffed for `=`; `buildPanelSetCommand`
+  deliberately NOT reused, D-125 clause 3's trap), a table cell Excel-style (`=` means formula). New
+  file `render/editor.ts` (geometry: which receiver, where the overlay). **D-128 confirmed the
+  clause-5 reading: Escape cancels, blur/click-outside commits, Enter commits only in a cell.**
 - **D-124 — `text` is placed by POINTING**, like `circle`/`rect`/`table`: type `text`, then click.
   A one-step `point` prompt sequence, NO content step — the pick completes the command and D-125's
-  editor opens on the new box. **NOT BUILT — build it next.** Both typed forms keep working untouched.
+  editor opens on the new box. **NOT BUILT — build it next; the gate that held it (0143 review) has
+  cleared.** Both typed forms keep working untouched.
 - **Standing:** the human's direct instruction outranks `PROJECT_BRIEF.md`. *"If the brief conflicts
   with what I say, ignore the brief. I wrote it."* Never "correct" a ruling back toward the brief.
 
-Order from here: **D-125 REVIEW**, then **D-124**, then the **load-hardening cycle** (D-126 + D-127 +
+Order from here: **D-124**, then the **load-hardening cycle** (D-126 + D-127 +
 D-108, one `document.ts` diff), then markdown-lite, then `overflow`, then the Phase 5 gate.
 
 ---
 
-## Where the code actually is — as of entry 0143
+## Where the code actually is — as of entry 0144-REVIEW-phase5
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1510/1510** tests pass,
 0 skipped, 0 `.only`. **31 test files.** **PHASE 5 IS OPEN.**
 
-Last review point: **0142-REVIEW-phase5** (**ACCEPT**).
-Cycles since last review: **1/3**. Diff since last review: **~350 source + ~284 test lines / 5 files**
-(cap 800/10). **Entry 0143 (D-125) is in the batch and REQUIRES review — §6.1 trigger 2 (first file
-of a new subsystem, `render/editor.ts`).**
+Last review point: **0144-REVIEW-phase5** (**ACCEPT** — entry 0143 / D-125; no source edits; D-128
+issued).
+Cycles since last review: **0/3**. Diff since last review: **0 / 0 files** (cap 800/10). The batch
+is empty — D-124 starts a fresh one.
 
 ## Read this first — what a cold reader needs
 
@@ -75,7 +76,7 @@ authoritative → D-018 refuses a pre-extension document. Ruled D-126 (loader re
 slots from the schema). Until it lands, **any cycle adding a derived slot states the load
 consequence in its entry.** Entry 0143 added NO derived slot.
 
-**0i. NEW — D-125's IN-PLACE EDITOR IS AN AUTHORING SURFACE OVER THE EXISTING SEAM (entry 0143).**
+**0i. D-125's IN-PLACE EDITOR IS AN AUTHORING SURFACE OVER THE EXISTING SEAM (entry 0143, reviewed 0144).**
 `render/editor.ts` (pure geometry: `editorTargetAt` picks the receiver via `hitTest`,
 `editorPlacement` puts the overlay on its world box through `worldToScreen`). `main.ts`'s pure half:
 `commitTextContent` (ALWAYS a literal `set` — the D-125 clause 3 trap), `commitTableCell`
@@ -187,14 +188,15 @@ rendering + `text` schema entry, `resolvedContent` (0128-REVIEW; D-119) · `meas
 `render/measure.ts` + a real `EvalContext` threaded from `main.ts` (0133-REVIEW; F22) · **0135-REVIEW**
 D-121 + D-122 issued · **0137-REVIEW** entry 0136's `text` command; Q-022/Q-023 CLOSED · **0139-REVIEW**
 entry 0138's text rendering; D-123 issued, Q-024 answered · **0142-REVIEW** entry 0141's
-`measuredWidth`; Q-024 CLOSED; D-126 + D-127 issued.
+`measuredWidth`; Q-024 CLOSED; D-126 + D-127 issued · **0144-REVIEW** entry 0143's in-place editor
+(D-125 — `render/editor.ts` + `main.ts` commit seam); D-128 issued; no source edits.
 
 ## Built this batch, not yet reviewed
 
-**Entry 0143 — D-125 (in-place text entry).** `render/editor.ts` (NEW, first file of the in-place-
-editor subsystem) + `main.ts`'s `commitTextContent`/`commitTableCell`/`editorSeed` (pure) + `start`'s
-`dblclick`/overlay wiring + `index.html` `.text-editor` CSS. 1482 → 1510 tests (+28: editor.test 13,
-main.test 15). **REVIEW REQUIRED — §6.1 trigger 2.** No derived slot added (D-126 line: none).
+**Nothing.** Entry 0143 (D-125 — in-place text entry) was reviewed and ACCEPTED at 0144, no source
+edits, D-128 issued. `render/editor.ts` + `main.ts`'s `commitTextContent`/`commitTableCell`/
+`editorSeed` (pure) + `start`'s `dblclick`/overlay wiring + `index.html` `.text-editor` CSS. D-124
+starts the next batch.
 
 ## Not started
 
@@ -243,16 +245,18 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
-- **NEW — D-125 clause 5 is internally contradictory** ("Escape cancels, writes nothing" vs "commit
-  is Escape or a click outside"). Entry 0143 read it as: Escape = cancel, blur/click-outside =
-  commit, Enter = commit in a cell only. Clause 5 is marked overrulable-on-sight in D-125 — the
-  reviewer or human should confirm.
-- **NEW — the properties panel and the in-place editor can overlap** when a selected object is
+- **D-125 clause 5's contradiction is RESOLVED by D-128** — Escape = cancel, blur/click-outside =
+  commit, Enter = commit in a cell only (newline in a `text` box). Confirmed as built; the human may
+  still overrule clauses 4–5 on sight.
+- **the properties panel and the in-place editor can overlap** when a selected object is
   double-clicked (both anchor to its box). No remedy in entry 0143. Noted in `main.ts`'s header.
-- **NEW — the in-place editor overlay is a plain input** (`font: inherit`, 14px), not scaled to
-  `style.fontSize` or the camera zoom. Deliberate for v1; a font match is a noted refinement.
-- **NEW — nobody has seen the in-place editor on screen.** Every entry-0143 assertion is pure
-  geometry or the pure commit path. Worth a live double-click before D-124 hands it an empty box.
+- **the in-place editor overlay is a plain input** (`font: inherit`, 14px), not scaled to
+  `style.fontSize` or the camera zoom. Deliberate for v1; a font match is a noted refinement
+  (0144-REVIEW confirmed this is acceptable — the box is placed from the real extent, only the glyphs
+  differ).
+- **nobody has seen the in-place editor on screen.** Every entry-0143 assertion is pure
+  geometry or the pure commit path. 0144-REVIEW re-flagged this: worth a live double-click before
+  D-124 hands it an empty box.
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** —
   `primitives/table.ts`'s header.
 - **A saved document does not survive a derived-slot addition** — **D-126**, fix-list 25.
@@ -329,7 +333,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-127**) binds without restatement here.
+Every ruling in `DECISIONS.md` (D-001 through **D-128**) binds without restatement here.
 
 **D-114 / D-115 / D-116 / D-117 ARE BUILT IN FULL AND REVIEWED (0126/0127, cleared 0128).**
 
@@ -348,10 +352,13 @@ render cycle: the box follows the text, the text NEVER follows the box.
 **D-124 — RULED BY THE HUMAN (0140-RULINGS). NOT BUILT — NEXT.** `text` is placed by pointing.
 Clause 5 generalises it — EVERY creation command arrives with a `prompts` entry.
 
-**D-125 — RULED BY THE HUMAN (0140-RULINGS), ABSOLUTE PRIORITY. BUILT (0143), NOT YET REVIEWED.**
-Clause 3 is the trap (`content` literal ALWAYS; a cell is Excel-style). Clauses 4–5 are reviewer-
-chosen defaults the human may overrule on sight — **clause 5 is internally contradictory and entry
-0143 resolved it provisionally (see Known problems).**
+**D-125 — RULED BY THE HUMAN (0140-RULINGS), ABSOLUTE PRIORITY. BUILT (0143), REVIEWED + ACCEPTED
+(0144).** Clause 3 is the trap (`content` literal ALWAYS; a cell is Excel-style). Clauses 4–5 are
+reviewer-chosen defaults the human may overrule on sight — **clause 5's contradiction is settled by
+D-128** (Escape cancels, blur/click-outside commits, Enter commits only in a cell).
+
+**D-128 — RULED (0144-REVIEW).** The coherent reading of D-125 clause 5, as built at entry 0143.
+Binds D-124's open-editor-on-create wiring. Reversible; the human may overrule.
 
 **D-126 — RULED (0142-REVIEW), NOT BUILT.** The loader reconstructs a schema's declared derived
 slots and never trusts the file to list them. `formatVersion` is NOT bumped.
@@ -364,9 +371,7 @@ Owner is the load-hardening cycle, after D-125 and D-124.
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-114/D-115/D-116/D-117 ·
 D-118 · D-120 · D-121 / D-122 + the `text` command · text rendering + the text bounding box · D-123 +
-`measuredWidth`.
-
-**Implemented, awaiting review:** **D-125** (in-place text entry — entry 0143).
+`measuredWidth` · **D-125 + D-128** (in-place text entry — entry 0143, reviewed 0144).
 
 **NOT implemented, each owned by a named future cycle:** **D-124** (`text` placed by pointing — NEXT)
 · **D-126** + **D-127** + **D-108** (one load-hardening cycle, after D-124) · **D-104** (§5.10's
@@ -398,11 +403,11 @@ units or screen pixels for stroke width / cell size / font? Provisional (a) worl
 
 ## Gotchas for the next model
 
-- **THE HUMAN RULED AT ENTRY 0140.** D-125 is BUILT (entry 0143, awaiting review). **D-124 is NEXT**
-  and rides on the same double-click editor.
-- **THE BATCH IS NOT EMPTY.** Entry 0143 REQUIRES review (§6.1 trigger 2 — `render/editor.ts` is a
-  new subsystem). Do not start D-124 until 0143 clears, unless you are batching and the reviewer said
-  so — but a first-subsystem trigger means stop.
+- **THE HUMAN RULED AT ENTRY 0140.** D-125 is BUILT (entry 0143) and REVIEWED (0144, ACCEPT).
+  **D-124 is NEXT** and rides on the same double-click editor. The batch is empty — D-124 opens a
+  fresh one.
+- **D-128 settled D-125 clause 5** — Escape cancels, blur/click-outside commits, Enter commits only
+  in a cell. D-124's open-editor-on-create wiring inherits this.
 - **D-125's IN-PLACE EDITOR IS A SURFACE OVER THE EXISTING SEAM.** `commitTextContent` /
   `commitTableCell` build a `Command` and call `runPanelCommand` → `executeCommand`. There is NO
   second write path. Do not add one for D-124.

@@ -4481,3 +4481,30 @@ error was a reviewer's, not an implementer's — 0113-REVIEW reasoned about the 
 path without grepping for its caller, and every STATUS since has copied the conclusion forward. It
 is worth recording that it survived because it was asserted in a decision rather than measured;
 `grep` would have caught it at any point in twenty-nine entries.
+
+---
+
+## D-128 — The coherent reading of D-125 clause 5: Escape cancels, blur/click-outside commits, Enter commits only in a cell
+Answers: entry 0143's flagged contradiction in D-125 clause 5   Ruled: entry 0144-REVIEW-phase5 (reviewer)
+Binding on: `src/main.ts`'s in-place editor DOM half, and D-124's open-editor-on-create wiring
+
+**Ruling.** D-125 clause 5 says both "Escape cancels, and cancelling writes nothing" and "commit is
+Escape or a click outside" — it cannot be both. The binding reading, as built at entry 0143:
+
+1. **Escape cancels.** The editor closes, nothing is committed, and because nothing was committed
+   there is nothing to restore (clause 5's own "cancelling writes nothing" half).
+2. **A blur — a click outside the overlay, including a press on the canvas — commits.** For a canvas
+   press, `main.ts` commits explicitly in the `pointerdown` handler because its own `preventDefault`
+   would otherwise suppress the committing blur.
+3. **Enter commits only in a table cell** (Excel-style). In a `text` object's `<textarea>` Enter
+   falls through and inserts a newline — §5.6 has hard line breaks and the measurer already splits
+   on them.
+
+**Rationale.** Clause 5's second sentence is a transcription slip for "commit is Enter or a click
+outside"; the reading above is the only one that makes clause 5 internally consistent and matches
+its `<textarea>`-newline sentence. D-125 itself flags clauses 4–5 as "the conventional defaults,
+ruled so work can proceed, and the cheapest thing in this ruling for the human to overrule on
+sight" — this ruling settles the reading so D-124's cycle does not have to re-derive it, and does
+not remove the human's standing right to overrule.
+
+**Reversible; the human may overrule** either the whole clause-5 convention or this reading of it.
