@@ -1,8 +1,8 @@
-# STATUS — as of entry 0145-RULINGS-phase5
+# STATUS — as of entry 0146-editor-polish
 
-**READ THIS FIRST — D-125 IS BUILT (0143) AND REVIEWED (0144, ACCEPT). THE HUMAN THEN TESTED IT ON
-SCREEN (0145) → THREE RULINGS (D-129/D-130/D-131). THE NEXT WORK IS A SHORT EDITOR-POLISH CYCLE
-DISCHARGING THOSE THREE, *THEN* D-124.**
+**READ THIS FIRST — THE EDITOR-POLISH CYCLE (D-129 + D-130 + D-131) IS BUILT AT ENTRY 0146, NOT YET
+REVIEWED. `REVIEW: REQUIRED` (three fresh rulings + a `formatFormula` parameter). THE NEXT WORK IS
+D-124.**
 
 - **D-125 — in-place text entry. BUILT at entry 0143, REVIEWED AND ACCEPTED at 0144.** A DOM input is
   overlaid on the canvas by a DOUBLE-CLICK, over a `text` object's `content` (a `<textarea>`) or a
@@ -11,39 +11,41 @@ DISCHARGING THOSE THREE, *THEN* D-124.**
   deliberately NOT reused, D-125 clause 3's trap), a table cell Excel-style (`=` means formula). New
   file `render/editor.ts` (geometry: which receiver, where the overlay). **D-128 confirmed the
   clause-5 reading: Escape cancels, blur/click-outside commits, Enter commits only in a cell.**
-- **EDITOR-POLISH CYCLE — D-129 + D-130 + D-131. NOT BUILT — this is the NEXT slice.** From the
+- **EDITOR-POLISH CYCLE — D-129 + D-130 + D-131. BUILT at entry 0146, NOT YET REVIEWED.** From the
   human's on-screen test of entry 0143:
-  - **D-129** — the overlay must scale its font with `style.fontSize × camera.zoom` (a cell: fixed
-    base × zoom) and must NOT clip its own text (`overflow: hidden` → `auto`/grow). Today it is a
-    fixed 14px clipped box, unusable at many zoom levels. **The serious one.**
-  - **D-130** — a pan gesture (`event.button === 1 || spaceHeld`) must NOT commit the editor. Move
-    the `commitInPlace()` call below the pan branch in `pointerdown`. One conditional.
-  - **D-131** — the cell editor shows a same-table reference in relative Excel form (`=A1 * 2`, not
-    `=table_1.A1 * 2`). `formatFormula` gains an optional `relativeToObjectId`; `editorSeed` passes
-    the cell's host table id; both range endpoints relative or neither; every other caller unchanged.
+  - **D-129** — the overlay's font now tracks `style.fontSize × camera.zoom` (a cell: a fixed base
+    14 × zoom), scaled by the same backing/CSS ratio as the box; `.text-editor` is `overflow: auto`,
+    so a `<textarea>` scrolls rather than clips. `EditorPlacement` gained a `fontSize` field;
+    `updateEditor` sets it inline every paint. Box anchoring/initial size unchanged (clause 3).
+  - **D-130** — the canvas `pointerdown` handler's `commitInPlace()` moved BELOW the
+    `event.button === 1 || spaceHeld` pan branch. A pan press no longer commits; a plain press still
+    does. `event.preventDefault()` stays at the top and suppresses the blur for both.
+  - **D-131** — `formatFormula(ast, objects, relativeToObjectId?)` — a same-table `reference` (or
+    BOTH endpoints of a range) targeting a `cells.*` slot of that object prints bare (`A1`,
+    `A1:B4`); never mixed. `editorSeed`'s cell branch passes the host table id. Every other caller
+    passes nothing and is unaffected (pinned in `format.test.ts`).
 - **D-124 — `text` is placed by POINTING**, like `circle`/`rect`/`table`: type `text`, then click.
   A one-step `point` prompt sequence, NO content step — the pick completes the command and D-125's
-  editor opens on the new box. **NOT BUILT — build it AFTER the editor-polish cycle** (D-124 opens
-  this editor on creation, so it should ride a polished one).
+  editor opens on the new box. **NOT BUILT — this is the NEXT slice** (D-124 opens this editor on
+  creation, and it now rides a polished one).
 - **Standing:** the human's direct instruction outranks `PROJECT_BRIEF.md`. *"If the brief conflicts
   with what I say, ignore the brief. I wrote it."* Never "correct" a ruling back toward the brief.
 
-Order from here: **editor-polish (D-129 + D-130 + D-131)**, then **D-124**, then the **load-hardening
-cycle** (D-126 + D-127 + D-108, one `document.ts` diff), then markdown-lite, then `overflow`, then
-the Phase 5 gate.
+Order from here: **D-124**, then the **load-hardening cycle** (D-126 + D-127 + D-108, one
+`document.ts` diff), then markdown-lite, then `overflow`, then the Phase 5 gate.
 
 ---
 
-## Where the code actually is — as of entry 0145-RULINGS-phase5
+## Where the code actually is — as of entry 0146-editor-polish
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1510/1510** tests pass,
-0 skipped, 0 `.only`. **31 test files.** **PHASE 5 IS OPEN.** Entry 0145 wrote no code.
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1521/1521** tests pass,
+0 skipped, 0 `.only`. **31 test files.** **PHASE 5 IS OPEN.**
 
 Last review point: **0144-REVIEW-phase5** (**ACCEPT** — entry 0143 / D-125; no source edits; D-128
 issued).
-Cycles since last review: **0/3**. Diff since last review: **0 / 0 files** (cap 800/10). The batch
-is empty — the editor-polish cycle (D-129 + D-130 + D-131) starts a fresh one and will report
-`REVIEW: REQUIRED` (three fresh rulings + a `formatFormula` parameter).
+Cycles since last review: **1/3**. Diff since last review: **~122 source + ~113 test / 7 files**
+(cap 800/10). Entry 0146 (editor-polish — D-129 + D-130 + D-131) is built and **awaiting review**:
+`REVIEW: REQUIRED` (§6.1 trigger 3 — three fresh rulings + a `formatFormula` parameter).
 
 ## Read this first — what a cold reader needs
 
@@ -95,8 +97,11 @@ consequence in its entry.** Entry 0143 added NO derived slot.
 `commitTextContent` (ALWAYS a literal `set` — the D-125 clause 3 trap), `commitTableCell`
 (Excel-style via `buildCellCommand`), `editorSeed`. Both commits run through `runPanelCommand` →
 `executeCommand` — NO second write path (Rule 2). DOM half in `start`: `dblclick` opens, blur/click-
-outside commits, Escape cancels, Enter commits in a cell (newline in a text box). The overlay is
-mounted in `#stage` (no delegated listeners), NOT `#panels`.
+outside commits, Escape cancels, Enter commits in a cell (newline in a text box); a PAN press does
+NOT commit (D-130, 0146). The overlay is mounted in `#stage` (no delegated listeners), NOT
+`#panels`. Its font tracks `style.fontSize × camera.zoom` and it does not clip (D-129, 0146 —
+`EditorPlacement.fontSize`, `.text-editor { overflow: auto }`). A cell formula's same-table refs
+show bare (D-131, 0146 — `formatFormula`'s `relativeToObjectId`). **0146 is awaiting review.**
 
 **1. PHASE 4'S GATE TEST IS `main.test.ts`'s `describe` "PHASE 4'S ACCEPTANCE CRITERION" (7 tests).**
 Do not weaken; do not fold.
@@ -152,24 +157,7 @@ an equality check (D-009). `render/editor.ts` imports both.
 
 ## Next slice (recommended)
 
-**THE EDITOR-POLISH CYCLE — D-129 + D-130 + D-131, one cycle.** Files: `render/editor.ts` +
-`src/main.ts` (DOM half + `editorSeed`) + `index.html` (`.text-editor` CSS) + `src/engine/formula/
-format.ts` (the new optional `relativeToObjectId`) + tests.
-- **D-129** — `editor.ts` (or a sibling of `editorPlacement`) also returns a font size:
-  `readNumber(object, TEXT_STYLE_FONT_SIZE_PATH) × camera.zoom` for a `text` object, a fixed base ×
-  `camera.zoom` for a cell. `updateEditor` sets it as an inline style. `.text-editor` loses
-  `overflow: hidden` — a `<textarea>` grows/scrolls rather than clips, a cell `<input>` scrolls
-  horizontally. Box anchoring unchanged (D-125 clause 1).
-- **D-130** — in `main.ts`'s canvas `pointerdown`, move `commitInPlace()` below the
-  `event.button === 1 || spaceHeld` pan branch so a pan does not commit.
-- **D-131** — `formatFormula(ast, objects, relativeToObjectId?)`: a `reference`/`range`-endpoint
-  whose address is a `cells.*` slot of `relativeToObjectId` prints bare (`A1`), both range endpoints
-  or neither. `editorSeed`'s cell-formula branch passes the cell's host table id. Every other
-  `formatFormula` caller passes nothing and is unaffected — assert that in `format.test.ts`.
-- Round-trip test: seed a cell formula → commit unchanged → AST is bit-identical.
-- **`REVIEW: REQUIRED`** — three fresh rulings and a signature change to a core engine formatter.
-
-**Then D-124 — `text` placed by pointing.** A `prompts` entry on `parser.ts`'s `text` spec: one `point`
+**D-124 — `text` placed by pointing.** A `prompts` entry on `parser.ts`'s `text` spec: one `point`
 step (message "specify text position"), no content step; `buildFromPrompts` producing the same
 `TextCommand` with `content` `""`. Then wire `start` so D-125's editor opens on the new object
 immediately (D-125 clause 4: "placing and typing are one gesture"). `createText` /
@@ -224,16 +212,20 @@ the human's on-screen test of the editor; D-129 + D-130 + D-131 issued; no code.
 
 ## Built this batch, not yet reviewed
 
-**Nothing.** Entry 0143 (D-125 — in-place text entry) was reviewed and ACCEPTED at 0144 (no source
-edits, D-128 issued), then tested on screen by the human at 0145 (D-129/D-130/D-131 issued, no
-code). The editor-polish cycle starts the next batch.
+**Entry 0146 — the editor-polish cycle (D-129 + D-130 + D-131).** `formatFormula` gained an optional
+`relativeToObjectId` (D-131); `render/editor.ts`'s `EditorPlacement` gained a `fontSize` field that
+scales with `style.fontSize × camera.zoom` (D-129); `main.ts`'s canvas `pointerdown` moved the
+in-place commit below the pan branch (D-130) and `updateEditor` sets the overlay's inline
+`font-size`; `index.html`'s `.text-editor` is `overflow: auto`. 7 files, ~122 source + ~113 test
+lines, 1521/1521. `REVIEW: REQUIRED`. **The DOM-half changes (D-129 font/clip, D-130 pan) are
+untested by construction and want a live look.**
 
 ## Not started
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
-hit-testing (D-067) · §5.4's formula bar · **the editor-polish cycle (D-129 + D-130 + D-131) — NEXT**
-· **D-124's `text` prompt sequence + open-editor-on-create**
+hit-testing (D-067) · §5.4's formula bar · **D-124's `text` prompt sequence + open-editor-on-create
+— NEXT**
 · **the load-hardening cycle (D-126 + D-127 + D-108)** · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
 **D-109 clauses 1–2** · markdown-lite text rendering + a markup-aware measurer · `text` `overflow`
 clip/ellipsis · the Phase 5 gate test · Phases 6–7.
@@ -250,7 +242,8 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 6. **A middle-drag pan started outside the canvas is untested.** Owned by D-088's cycle.
 7. **`TABLE_GRID_STROKE_STYLE` has no comment** (D-091). Owned by the `style`-slots cycle.
 8. **The screen-space chrome constants + `PANEL_OBJECT_GAP_CSS` are untuned** (Rule 5). `editor.ts`'s
-   `EMPTY_TEXT_EDITOR_*` fallbacks join this list — untuned world constants.
+   `EMPTY_TEXT_EDITOR_*` and its two new font constants (`TEXT_EDITOR_FALLBACK_FONT_SIZE` 16,
+   `CELL_EDITOR_FONT_SIZE` 14, entry 0146) join this list — untuned world constants.
 9. **The chrome pass leaves `ctx.font`/`textAlign`/`textBaseline` set on return.** Harmless.
 10. **The formula-driven indicator's narrowness (`origin.x`/`origin.y` only) should be RE-DECIDED.**
 11. **A display-only panel's `overflow: auto` scroll resets on every paint.**
@@ -273,13 +266,14 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
     document carrying that object type. Owned by the load-hardening cycle.
 26. **F24 — RULED D-127, NOT BUILT.** D-108's deferral condition could never fire; the malformed-AST
     throw is operator-reachable and surfaces as a silent no-op. Same cycle as F23.
-27. **F25 — RULED D-129, NOT BUILT.** The in-place editor overlay does not scale its font with zoom
-    and clips its own text (`overflow: hidden`) — unusable at many zoom levels. Editor-polish cycle.
-28. **F26 — RULED D-130, NOT BUILT.** A pan gesture commits and closes the in-place editor; zoom
-    does not. Editor-polish cycle — one conditional in `pointerdown`.
-29. **F27 — RULED D-131, NOT BUILT.** The cell editor redisplays a same-table formula fully-qualified
-    (`=table_1.A1 * 2` for what was typed as `=A1 * 2`). Editor-polish cycle — a `formatFormula`
-    parameter.
+27. **F25 — RULED D-129, BUILT (0146), NOT YET REVIEWED.** The overlay's font now scales
+    `style.fontSize × camera.zoom` (cell: base 14 × zoom) and `.text-editor` is `overflow: auto`.
+    The DOM-half change is untested — wants a live look.
+28. **F26 — RULED D-130, BUILT (0146), NOT YET REVIEWED.** `commitInPlace()` moved below the pan
+    branch in the canvas `pointerdown`. Untested (DOM half) — wants a live look.
+29. **F27 — RULED D-131, BUILT (0146), NOT YET REVIEWED.** `formatFormula` gained an optional
+    `relativeToObjectId`; `editorSeed` passes the cell's host table id. Pinned in `format.test.ts`
+    and `main.test.ts`.
 
 ## Known problems (detail lives where the pointer says)
 
@@ -289,7 +283,8 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 - **THE IN-PLACE EDITOR HAS BEEN TESTED ON SCREEN (0145).** The clause-3 trap holds; opening,
   pre-fill, focus, Escape, Enter, cell commit, deletion-closes-it, panel-click-commits, no console
   errors — all confirmed. Three defects → D-129 (font/zoom + clip), D-130 (pan commits), D-131
-  (qualified cell ref). All owned by the editor-polish cycle, the next slice.
+  (qualified cell ref). **All three built at entry 0146, awaiting review — the D-129/D-130 DOM-half
+  changes have NOT been seen on screen; a live look is owed before D-124.**
 - **the in-place editor overlay does not match font family, markdown rendering, or text alignment** —
   a noted refinement, explicitly OUT of D-129's scope (D-129 fixes size + clip only).
 - **the properties panel and the in-place editor can overlap** only when a small window forces them
@@ -308,7 +303,8 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 - **`measure.ts` and `renderer.ts` fall back DIFFERENTLY for an unusable `style.*` slot, and that
   also moves the BOX's width.** Disclosed in both headers; unfixed — one shared set of fallbacks
   needs a ruling on which file owns them. **D-123 clause 5 forbids fixing it from the renderer's
-  side.**
+  side.** `render/editor.ts` (0146) adds a THIRD fallback for `style.fontSize` (16, matching
+  `renderer.ts`'s `DEFAULT_TEXT_FONT_SIZE`) — the overlay's font size only, never the box.
 - **`extent.ts`'s `text` box trusts the stored measurement; `renderer.ts` re-wraps with its own
   `ctx`.** 0139-REVIEW ruled this stays (D-123 clause 5): the box follows the text, never the reverse.
 - **An empty-`content` `text` object is invisible AND unselectable** — no ink, no extent, no hit box.
@@ -386,8 +382,9 @@ the slot KEY is WRONG — see D-126.
 **D-123 — RULED (0139-REVIEW), BUILT (0141), REVIEWED AND ACCEPTED (0142).** Clause 5 binds every
 render cycle: the box follows the text, the text NEVER follows the box.
 
-**D-124 — RULED BY THE HUMAN (0140-RULINGS). NOT BUILT — NEXT.** `text` is placed by pointing.
-Clause 5 generalises it — EVERY creation command arrives with a `prompts` entry.
+**D-124 — RULED BY THE HUMAN (0140-RULINGS). NOT BUILT — NEXT** (the editor-polish cycle it was
+waiting behind is built at 0146). `text` is placed by pointing. Clause 5 generalises it — EVERY
+creation command arrives with a `prompts` entry.
 
 **D-125 — RULED BY THE HUMAN (0140-RULINGS), ABSOLUTE PRIORITY. BUILT (0143), REVIEWED + ACCEPTED
 (0144).** Clause 3 is the trap (`content` literal ALWAYS; a cell is Excel-style). Clauses 4–5 are
@@ -397,29 +394,32 @@ D-128** (Escape cancels, blur/click-outside commits, Enter commits only in a cel
 **D-128 — RULED (0144-REVIEW).** The coherent reading of D-125 clause 5, as built at entry 0143.
 Binds D-124's open-editor-on-create wiring. Reversible; the human may overrule.
 
-**D-129 / D-130 / D-131 — RULED (0145-RULINGS), NOT BUILT.** From the human's on-screen test of the
-in-place editor. D-129: the overlay scales its font with zoom and does not clip. D-130: a pan
-gesture does not commit the editor. D-131: the cell editor shows a same-table reference in relative
-Excel form (`formatFormula` gains an optional `relativeToObjectId`). **All three are the
-editor-polish cycle — the NEXT slice, before D-124.**
+**D-129 / D-130 / D-131 — RULED (0145-RULINGS), BUILT (0146), NOT YET REVIEWED.** From the human's
+on-screen test of the in-place editor. D-129: the overlay's font tracks `style.fontSize × zoom`
+(cell: base 14 × zoom) and `.text-editor` is `overflow: auto`. D-130: `commitInPlace()` moved below
+the pan branch in the canvas `pointerdown`. D-131: `formatFormula` gained an optional
+`relativeToObjectId`; the cell editor shows same-table refs bare (`=A1 * 2`). **The D-129/D-130
+DOM-half changes are untested by construction — a live look is owed.**
 
 **D-126 — RULED (0142-REVIEW), NOT BUILT.** The loader reconstructs a schema's declared derived
 slots and never trusts the file to list them. `formatVersion` is NOT bumped.
 
 **D-127 — RULED (0142-REVIEW), NOT BUILT.** D-108's deferral condition already fired at entry 0089.
-Owner is the load-hardening cycle, after the editor-polish cycle and D-124.
+Owner is the load-hardening cycle, after D-124.
 
 **THE HUMAN'S DIRECT INSTRUCTION OUTRANKS `PROJECT_BRIEF.md` (0140).**
 
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-114/D-115/D-116/D-117 ·
 D-118 · D-120 · D-121 / D-122 + the `text` command · text rendering + the text bounding box · D-123 +
-`measuredWidth` · **D-125 + D-128** (in-place text entry — entry 0143, reviewed 0144).
+`measuredWidth` · **D-125 + D-128** (in-place text entry — entry 0143, reviewed 0144). D-129/D-130/
+D-131 are BUILT (0146) but NOT yet reviewed — see above.
 
-**NOT implemented, each owned by a named future cycle:** **D-129 + D-130 + D-131** (editor-polish —
-NEXT) · **D-124** (`text` placed by pointing — after editor-polish) · **D-126** + **D-127** +
-**D-108** (one load-hardening cycle, after D-124) · **D-104** (§5.10's row/column commands) ·
-**D-109 clauses 1–2** (cell decimals + clipping, `render/` only).
+**BUILT, awaiting review:** **D-129 + D-130 + D-131** (editor-polish, entry 0146).
+
+**NOT implemented, each owned by a named future cycle:** **D-124** (`text` placed by pointing —
+NEXT) · **D-126** + **D-127** + **D-108** (one load-hardening cycle, after D-124) · **D-104**
+(§5.10's row/column commands) · **D-109 clauses 1–2** (cell decimals + clipping, `render/` only).
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — BUILT and REVIEWED (0128).
@@ -443,21 +443,26 @@ units or screen pixels for stroke width / cell size / font? Provisional (a) worl
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (×2, `-0`): open, deferred, blocking nothing.
 
-**No other `PROVISIONAL` tags exist.** Q-016/Q-017 have none. Entry 0143 added none.
+**No other `PROVISIONAL` tags exist.** Q-016/Q-017 have none. Entries 0143 and 0146 added none —
+D-129's zoom-scaled font is a ruling, not a guess; `editor.ts`'s two new font constants (14 / 16)
+are untuned Rule 5 values on the open constant list (fix-list item 8), like `EMPTY_TEXT_EDITOR_*`.
 
 ## Gotchas for the next model
 
-- **THE NEXT SLICE IS THE EDITOR-POLISH CYCLE (D-129 + D-130 + D-131), NOT D-124.** D-125 is BUILT
-  (0143), REVIEWED (0144), and TESTED ON SCREEN (0145). The human's three defects come first because
-  D-124 opens this editor on creation and would inherit them. The batch is empty — polish opens a
-  fresh one, `REVIEW: REQUIRED`.
+- **THE NEXT SLICE IS D-124** (`text` placed by pointing + open-editor-on-create). The editor-polish
+  cycle (D-129 + D-130 + D-131) is BUILT at 0146 and awaiting review; D-124 rides the polished
+  editor. Batch is 1/3.
+- **THE 0146 DOM-HALF CHANGES HAVE NOT BEEN SEEN ON SCREEN.** D-129 (zoom-scaled font, `overflow:
+  auto`) and D-130 (pan does not commit) live in `main.ts`'s untested `start` and `index.html`.
+  Every 0146 assertion is on `editorPlacement`'s pure `fontSize` or `editorSeed`'s pure relative
+  form. A human panning/zooming a live editor is owed before D-124.
 - **D-128 settled D-125 clause 5** — Escape cancels, blur/click-outside commits, Enter commits only
   in a cell. D-124's open-editor-on-create wiring inherits this.
-- **D-129/D-130/D-131 are small and local** — `editor.ts` + `main.ts` DOM half + `.text-editor` CSS
-  + one optional `formatFormula` param. Do NOT let this cycle grow into D-124's work.
-- **D-131 touches `format.ts`, a core engine formatter.** The new `relativeToObjectId` is OPT-IN:
-  every existing caller passes nothing and must be unaffected — pin that with a `format.test.ts`
-  assertion. Ranges print both endpoints relative or neither (a mixed form does not re-parse).
+- **`formatFormula` now takes an optional third arg `relativeToObjectId` (D-131).** OPT-IN — every
+  caller but `editorSeed`'s cell branch passes nothing and is unaffected. A same-table `reference`
+  or BOTH range endpoints targeting a `cells.*` slot of that object print bare; never mixed.
+- **`EditorPlacement` now has a `fontSize` field (D-129).** `updateEditor` sets it inline every
+  paint. `render/editor.ts` imports `TEXT_STYLE_FONT_SIZE_PATH` from `primitives/text.ts`.
 - **D-125's IN-PLACE EDITOR IS A SURFACE OVER THE EXISTING SEAM.** `commitTextContent` /
   `commitTableCell` build a `Command` and call `runPanelCommand` → `executeCommand`. There is NO
   second write path. Do not add one for D-124.
@@ -485,5 +490,6 @@ units or screen pixels for stroke width / cell size / font? Provisional (a) worl
   `context` param like every other transition.
 - **`#MEASURE` is a real `ErrorCode`** (`graph/node.ts`), sixth after `#SCRIPT`.
 - **The operator cannot see what you can see.** Entry 0143's editor WAS put on screen by the human
-  at 0145 — that is how D-129/D-130/D-131 were found. The editor-polish cycle should ask for another
-  live look before it reports done.
+  at 0145 — that is how D-129/D-130/D-131 were found. Entry 0146 built all three but its DOM-half
+  changes (D-129 font/clip, D-130 pan) have NOT been seen on screen — the review, or the human,
+  should get a live look before D-124.

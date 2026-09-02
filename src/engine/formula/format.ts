@@ -27,6 +27,12 @@
  *   - An object name is never concatenated here: every reference goes through
  *     `address.ts`'s `formatAddress` (D-015), which also strips a table cell's stored
  *     `cells` prefix so `table_x.A1` prints the way it was typed.
+ *   - The optional `relativeToObjectId` (D-131) is opt-in and changes nothing for a
+ *     caller that omits it: a reference (or BOTH endpoints of a range) targeting a
+ *     `cells.*` slot of that object prints bare (`A1`, `A1:B4`), the form the in-place
+ *     cell editor's operator typed; every other reference stays fully qualified. A
+ *     range prints both endpoints relative or NEITHER — the mixed `table_1.A1:B4`
+ *     form does not re-parse.
  *   - Re-parsing this output yields an identical AST for every formula §5.3's grammar
  *     can express, with three disclosed exceptions, all of them limits of the LEXER
  *     rather than choices made here: a number outside `[0-9]+(\.[0-9]+)?` (`1e21`)
@@ -44,7 +50,7 @@
  *   - Text's `{= }` block tree (§5.6, Phase 5). Its embedded ASTs are this file's
  *     shape and reuse this function; the markup around them is not here.
  */
-import { formatAddress, isAddressError, type Address, type AddressableObject } from "../address.ts";
+import { formatAddress, isAddressError, isCellReferenceForm, TABLE_CELL_PATH_PREFIX, type Address, type AddressableObject } from "../address.ts";
 import { MAX_FORMULA_AST_DEPTH, type BinaryOperator, type FormulaAst } from "./ast.ts";
 
 /**
@@ -100,12 +106,41 @@ const ATOM_PRECEDENCE = 8;
  * authors a formula (D-071's `set <address> = <source>`), not to the formula, and a
  * caller that wants to echo the authoring form prefixes it.
  *
+ * `relativeToObjectId` (D-131) is opt-in: pass a table's id and any reference — or
+ * both endpoints of a range — targeting one of its `cells.*` slots prints in the bare
+ * Excel form (`A1`, `A1:B4`) rather than `<name>.A1`. This mirrors what
+ * `parseFormula`'s own third argument reads back inside a table cell, so the in-place
+ * cell editor's seed round-trips exactly. Omit it — as every other caller does — and
+ * every reference stays fully qualified, unchanged.
+ *
  * Never throws — not for an address whose object has been deleted, and not for an AST
  * nested past `MAX_FORMULA_AST_DEPTH`, which elides rather than recursing. See the file
  * header's invariants for both.
  */
-export function formatFormula(ast: FormulaAst, objects: readonly AddressableObject[]): string {
-  return formatNode(ast, objects, 0, 1);
+export function formatFormula(
+  ast: FormulaAst,
+  objects: readonly AddressableObject[],
+  relativeToObjectId?: string,
+): string {
+  return formatNode(ast, objects, 0, 1, relativeToObjectId);
+}
+
+/**
+ * The bare cell form (`A1`) a reference should print in, or `undefined` when it must
+ * stay fully qualified — D-131. Bare only when `relativeToObjectId` is set AND the
+ * address targets a `cells.<A1>` slot of exactly that object: a `cells.*` slot of
+ * another table, or a non-cell slot, has no host context that would make the bare
+ * form re-parse.
+ */
+function relativeCellReference(address: Address, relativeToObjectId: string | undefined): string | undefined {
+  if (relativeToObjectId === undefined || address.objectId !== relativeToObjectId) {
+    return undefined;
+  }
+  const [prefix, cell] = address.path;
+  if (address.path.length !== 2 || prefix !== TABLE_CELL_PATH_PREFIX || cell === undefined || !isCellReferenceForm(cell)) {
+    return undefined;
+  }
+  return cell;
 }
 
 /**
@@ -118,6 +153,7 @@ function formatNode(
   objects: readonly AddressableObject[],
   minimumPrecedence: number,
   depth: number,
+  relativeToObjectId: string | undefined,
 ): string {
   // This file's own guard on the same limit `parser.ts` refuses at, kept here rather
   // than assumed away: `document.ts` casts a loaded formula slot's `ast` unchecked, so
@@ -132,31 +168,39 @@ function formatNode(
     case "literal":
       return formatLiteralValue(ast.value);
     case "reference":
-      return formatOneAddress(ast.address, objects);
-    case "range":
+      return formatOneAddress(ast.address, objects, relativeToObjectId);
+    case "range": {
       // §5.3 stores a range as an endpoint PAIR and both endpoints name the same
-      // object (D-045), so both sides print fully qualified rather than one of them
-      // shortened — `table_x.A1:table_x.B4` re-parses; `table_x.A1:B4` would not.
-      return `${formatOneAddress(ast.start, objects)}:${formatOneAddress(ast.end, objects)}`;
+      // object (D-045). Both print the same way — fully qualified
+      // (`table_x.A1:table_x.B4`, which re-parses; `table_x.A1:B4` would not), OR,
+      // under D-131's `relativeToObjectId`, both bare (`A1:B4`, which re-parses when
+      // the host table is known — which in the cell editor it always is). Never mixed.
+      const start = relativeCellReference(ast.start, relativeToObjectId);
+      const end = relativeCellReference(ast.end, relativeToObjectId);
+      if (start !== undefined && end !== undefined) {
+        return `${start}:${end}`;
+      }
+      return `${formatOneAddress(ast.start, objects, undefined)}:${formatOneAddress(ast.end, objects, undefined)}`;
+    }
     case "binaryOp": {
       const precedence = BINARY_PRECEDENCE[ast.operator];
       // Every §5.3 binary operator is LEFT-associative, `^` included (D-030). So the
       // left child may sit at this same level unparenthesized and the right child may
       // not: `a - (b - c)` must keep its parenthesis or it re-parses as `(a - b) - c`.
-      const left = formatNode(ast.left, objects, precedence, depth + 1);
-      const right = formatNode(ast.right, objects, precedence + 1, depth + 1);
+      const left = formatNode(ast.left, objects, precedence, depth + 1, relativeToObjectId);
+      const right = formatNode(ast.right, objects, precedence + 1, depth + 1, relativeToObjectId);
       return parenthesizeIfLooser(`${left} ${ast.operator} ${right}`, precedence, minimumPrecedence);
     }
     case "unaryOp": {
       // `NOT` is a word and needs the space; `-` is punctuation and reads better
       // without one. The operand is parenthesized whenever it is not an atom, which
       // covers `-(a + b)` and keeps `- -x` from printing as `--x`.
-      const operand = formatNode(ast.operand, objects, ATOM_PRECEDENCE, depth + 1);
+      const operand = formatNode(ast.operand, objects, ATOM_PRECEDENCE, depth + 1, relativeToObjectId);
       const separator = ast.operator === "NOT" ? " " : "";
       return parenthesizeIfLooser(`${ast.operator}${separator}${operand}`, UNARY_PRECEDENCE, minimumPrecedence);
     }
     case "functionCall":
-      return `${ast.name}(${ast.args.map((argument) => formatNode(argument, objects, 0, depth + 1)).join(", ")})`;
+      return `${ast.name}(${ast.args.map((argument) => formatNode(argument, objects, 0, depth + 1, relativeToObjectId)).join(", ")})`;
     case "error":
       // D-028's repaired reference. Displayable, not re-parseable — see the header.
       return ast.error;
@@ -181,8 +225,20 @@ function parenthesizeIfLooser(text: string, precedence: number, minimumPrecedenc
  * survived, which §5.1.1 is supposed to make impossible; it prints the error's own
  * message rather than throwing, matching every other formatting call site in the
  * engine.
+ *
+ * `relativeToObjectId` (D-131): a same-table cell reference prints bare (`A1`) instead
+ * of `<name>.A1`. Checked first, so a deleted host table never reaches `formatAddress`
+ * for a reference that would have printed relative anyway.
  */
-function formatOneAddress(address: Address, objects: readonly AddressableObject[]): string {
+function formatOneAddress(
+  address: Address,
+  objects: readonly AddressableObject[],
+  relativeToObjectId: string | undefined,
+): string {
+  const relative = relativeCellReference(address, relativeToObjectId);
+  if (relative !== undefined) {
+    return relative;
+  }
   const formatted = formatAddress(address, objects);
   return isAddressError(formatted) ? formatted.message : formatted;
 }

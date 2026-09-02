@@ -154,6 +154,45 @@ describe("the one node that is displayable but was never typed", () => {
   });
 });
 
+describe("relativeToObjectId — the in-place cell editor's bare Excel form (D-131)", () => {
+  it("prints a same-table cell reference bare when its table is the relative object", () => {
+    const ast = parseOk("A1 * 2", DOCUMENT, "obj_3");
+    expect(formatFormula(ast, DOCUMENT, "obj_3")).toBe("A1 * 2");
+  });
+
+  it("leaves the reference fully qualified when NO relativeToObjectId is passed — every existing caller is unaffected", () => {
+    const ast = parseOk("A1 * 2", DOCUMENT, "obj_3");
+    expect(formatFormula(ast, DOCUMENT)).toBe("table_x.A1 * 2");
+  });
+
+  it("keeps a reference to a DIFFERENT object qualified even with a relative object set", () => {
+    const ast = parseOk("A1 + polygon_1.origin.x", DOCUMENT, "obj_3");
+    expect(formatFormula(ast, DOCUMENT, "obj_3")).toBe("A1 + polygon_1.origin.x");
+  });
+
+  it("keeps a same-table cell reference qualified when the relative object is some OTHER object", () => {
+    const ast = parseOk("A1 * 2", DOCUMENT, "obj_3");
+    expect(formatFormula(ast, DOCUMENT, "obj_1")).toBe("table_x.A1 * 2");
+  });
+
+  it("prints BOTH endpoints of a same-table range bare, never the mixed form", () => {
+    const ast = parseOk("SUM(A1:B4)", DOCUMENT, "obj_3");
+    expect(formatFormula(ast, DOCUMENT, "obj_3")).toBe("SUM(A1:B4)");
+  });
+
+  it("keeps both endpoints of a range qualified when its table is not the relative object", () => {
+    const ast = parseOk("SUM(A1:B4)", DOCUMENT, "obj_3");
+    expect(formatFormula(ast, DOCUMENT, "obj_1")).toBe("SUM(table_x.A1:table_x.B4)");
+  });
+
+  it("round-trips: seed a cell formula, format relative, re-parse with the same host table -> identical AST", () => {
+    const first = parseOk("B1 * 2 + SUM(A1:A4)", DOCUMENT, "obj_3");
+    const text = formatFormula(first, DOCUMENT, "obj_3");
+    expect(text).toBe("B1 * 2 + SUM(A1:A4)");
+    expect(parseOk(text, DOCUMENT, "obj_3")).toEqual(first);
+  });
+});
+
 describe("the depth guard — a saved AST deeper than any parse could build (D-079)", () => {
   /** A left-deep `1 + 1 + ...` ladder, built by hand: `parseFormula` refuses this shape past MAX_FORMULA_AST_DEPTH, so a document holding one arrived through §5.11's load path, not through typing. */
   function ladder(levels: number): FormulaAst {

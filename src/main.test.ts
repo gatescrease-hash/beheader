@@ -1126,6 +1126,34 @@ describe("editorSeed — the text the in-place editor opens showing (D-125)", ()
     expect(editorSeed(state, { kind: "cell", objectId: id, cell: "A1" })).toBe("=1 + 2");
   });
 
+  it("shows a same-table cell reference in bare Excel form, not fully qualified (D-131)", () => {
+    let state = typed(opened(), "table x=0 y=0");
+    const id = objectNamed(state, "table_1").id;
+    state = commitTableCell(state, id, "A2", "10");
+    state = commitTableCell(state, id, "A1", "=A2 * 2");
+    expect(editorSeed(state, { kind: "cell", objectId: id, cell: "A1" })).toBe("=A2 * 2");
+  });
+
+  it("round-trips a same-table cell formula: seed -> commit unchanged -> same stored AST (D-131)", () => {
+    let state = typed(opened(), "table x=0 y=0");
+    const id = objectNamed(state, "table_1").id;
+    state = commitTableCell(state, id, "A1", "=SUM(A2:A5) + B1");
+    const seed = editorSeed(state, { kind: "cell", objectId: id, cell: "A1" });
+    expect(seed).toBe("=SUM(A2:A5) + B1");
+    const before = getSlot(objectNamed(state, "table_1"), ["cells", "A1"]);
+    const after = commitTableCell(state, id, "A1", seed);
+    expect(getSlot(objectNamed(after, "table_1"), ["cells", "A1"])).toEqual(before);
+  });
+
+  it("keeps a cross-table reference fully qualified in the cell editor (D-131 clause 3)", () => {
+    let state = typed(opened(), "table x=0 y=0");
+    state = typed(state, "table x=500 y=0");
+    const id = objectNamed(state, "table_1").id;
+    state = commitTableCell(state, objectNamed(state, "table_2").id, "A1", "3");
+    state = commitTableCell(state, id, "A1", "=table_2.A1 + A2");
+    expect(editorSeed(state, { kind: "cell", objectId: id, cell: "A1" })).toBe("=table_2.A1 + A2");
+  });
+
   it("empty for a cell nobody has written", () => {
     const state = typed(opened(), "table x=0 y=0");
     const id = objectNamed(state, "table_1").id;

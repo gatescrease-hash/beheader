@@ -143,9 +143,16 @@
         D-125's in-place editor: a real text input overlaid on the canvas at
         the receiver's own position (a `text` object's `content`, or a table
         cell). main.ts sizes and positions it every paint from
-        render/editor.ts; it is mounted in #stage, a sibling of #panels with
-        no delegated listeners, so a click in it never has to be carved out of
-        the panel plumbing. One at a time, document-wide.
+        render/editor.ts — including its `font-size`, which tracks
+        `style.fontSize × camera.zoom` (D-129) and so is set inline, overriding
+        the `font: inherit` family here. It is mounted in #stage, a sibling of
+        #panels with no delegated listeners, so a click in it never has to be
+        carved out of the panel plumbing. One at a time, document-wide.
+
+        `overflow: auto` (D-129 clause 2): the overlay never clips its own
+        text — a `<textarea>` scrolls when the typed content outgrows the
+        committed box, a cell `<input>` scrolls horizontally like Excel — so
+        the caret is always visible whatever the zoom.
       */
       .text-editor {
         position: absolute;
@@ -158,7 +165,7 @@
         background: #ffffff;
         resize: none;
         outline: none;
-        overflow: hidden;
+        overflow: auto;
         z-index: 1;
       }
       #log {

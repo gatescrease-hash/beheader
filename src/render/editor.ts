@@ -23,7 +23,11 @@
  *   overlay's top-left corner and size in CSS pixels, from the receiver's own
  *   world box — `extent.ts`'s `objectExtent` for a `text` object, the cell's
  *   world rectangle for a cell — through `camera.ts`'s `worldToScreen`, then
- *   divided by the canvas's backing/CSS ratio the way `panel.ts` does.
+ *   divided by the canvas's backing/CSS ratio the way `panel.ts` does. It also
+ *   returns the overlay's `fontSize` in CSS pixels (D-129): the drawn text's
+ *   world size (`style.fontSize` for a `text` object, a fixed base for a cell)
+ *   scaled by the same camera and ratio as the box, so the overlay is a rough
+ *   size match to what is drawn beneath it.
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws; reads only, writes nothing (Rule 2).
@@ -46,6 +50,7 @@ import { formatCellReference, parseCellReference } from "../engine/address.ts";
 import { TABLE_TYPE, TEXT_TYPE, type GraphObject } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
+import { TEXT_STYLE_FONT_SIZE_PATH } from "../engine/primitives/text.ts";
 import { screenToWorld, worldToScreen, type ScreenPoint } from "./camera.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { hitTest } from "./hittest.ts";
@@ -62,12 +67,19 @@ export type EditorTarget =
   | { readonly kind: "text"; readonly objectId: string }
   | { readonly kind: "cell"; readonly objectId: string; readonly cell: string };
 
-/** The editor overlay's box, in CSS pixels from the canvas's top-left — the same space `panel.ts`'s `PanelPlacement` is measured in. */
+/**
+ * The editor overlay's box, in CSS pixels from the canvas's top-left — the same
+ * space `panel.ts`'s `PanelPlacement` is measured in. `fontSize` is also CSS
+ * pixels (D-129): the drawn text's world size scaled by the camera and the
+ * backing/CSS ratio, so `main.ts` sets it as an inline `font-size` and the
+ * overlay's glyphs roughly match the ones beneath it at any zoom.
+ */
 export interface EditorPlacement {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
+  readonly fontSize: number;
 }
 
 /**
@@ -79,6 +91,23 @@ export interface EditorPlacement {
  */
 const EMPTY_TEXT_EDITOR_WIDTH = 240;
 const EMPTY_TEXT_EDITOR_HEIGHT = 20;
+
+/**
+ * The world-unit font size the overlay scales from (D-129 clause 1), before the
+ * camera zoom and the backing/CSS ratio are applied:
+ *
+ *   - a `text` object uses its own `style.fontSize` slot, read the same way
+ *     `renderer.ts`/`measure.ts` read it; `TEXT_EDITOR_FALLBACK_FONT_SIZE` stands
+ *     in when that slot is missing or unusable, matching `renderer.ts`'s own
+ *     `DEFAULT_TEXT_FONT_SIZE`;
+ *   - a table cell uses `CELL_EDITOR_FONT_SIZE`, mirroring `renderer.ts`'s
+ *     `TABLE_CELL_FONT` ("14px ...") — a cell has no per-object style slot.
+ *
+ * Round and untuned (Rule 5), like `EMPTY_TEXT_EDITOR_*` above and every other
+ * screen-space constant this layer carries (open-fix item 8).
+ */
+const TEXT_EDITOR_FALLBACK_FONT_SIZE = 16;
+const CELL_EDITOR_FONT_SIZE = 14;
 
 /**
  * The receiver a double-click at `screenPoint` opens the editor on, or
@@ -146,12 +175,23 @@ export function editorPlacement(
   const box = target.kind === "text" ? textEditorBox(object) : cellEditorBox(object, target.cell);
   const topLeft = worldToScreen(camera, { x: box.minX, y: box.minY });
   const bottomRight = worldToScreen(camera, { x: box.maxX, y: box.maxY });
+  // D-129 clause 1: the font tracks the camera exactly as the box does — one world
+  // length scaled by `camera.zoom` and then divided by the same `ratio`, so a glyph
+  // and the box around it stay in proportion at every zoom level.
+  const fontWorld = target.kind === "text" ? textEditorFontSize(object) : CELL_EDITOR_FONT_SIZE;
   return {
     left: topLeft.x / ratio,
     top: topLeft.y / ratio,
     width: (bottomRight.x - topLeft.x) / ratio,
     height: (bottomRight.y - topLeft.y) / ratio,
+    fontSize: (fontWorld * camera.zoom) / ratio,
   };
+}
+
+/** A `text` object's own `style.fontSize` in world units when it is a usable positive number, else `renderer.ts`'s matching default — the same read/fallback shape `resolveTextStyle` makes (D-010). */
+function textEditorFontSize(object: GraphObject): number {
+  const size = readNumber(object, TEXT_STYLE_FONT_SIZE_PATH);
+  return size !== undefined && size > 0 ? size : TEXT_EDITOR_FALLBACK_FONT_SIZE;
 }
 
 /** A `text` object's world box: its drawn extent, or — for an empty one with no extent (D-125 clause 6) — the editor's own fallback box anchored at `origin`. */

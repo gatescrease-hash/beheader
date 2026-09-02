@@ -104,10 +104,12 @@
  *   - Placing a `text` object by POINTING, and opening its editor on creation
  *     (**D-124**) — not built; `text` is typed-form only, and the in-place
  *     editor opens on a DOUBLE-CLICK for now (D-125 clause 4).
- *   - Matching the editor overlay's font to the object's `style` or the zoom,
- *     and keeping it clear of an overlapping properties panel — the overlay is
- *     a plain input at the receiver's box (D-125 clauses 4-5 are conventional
- *     defaults).
+ *   - Matching the editor overlay's font FAMILY, markdown rendering or text
+ *     alignment to the drawn text — the overlay's SIZE tracks
+ *     `style.fontSize × camera.zoom` now (D-129), and it no longer clips, but a
+ *     full WYSIWYG match stays a noted refinement. Keeping the overlay clear of
+ *     an overlapping properties panel is also still unsolved (both anchor to the
+ *     object's box; they stay clear at normal window sizes).
  *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
  *     D-083 clause 4 are owed by a `document.ts` cycle, not by this one; see
  *     STATUS.md's known problems for what that leaves reachable from the Load
@@ -848,6 +850,11 @@ const TABLE_CELL_PREFIX = "cells";
  * literal rendered by `describeSlotValue` (the same formatter the properties
  * panel and `props` use). Empty for a receiver that holds nothing, or a stale
  * id (D-023's posture).
+ *
+ * A cell formula's same-table references are shown in bare Excel form (`=A1 * 2`,
+ * not `=table_1.A1 * 2`) — `formatFormula`'s `relativeToObjectId` (D-131), passed
+ * the cell's own host table id, which is exactly the context `commitTableCell` →
+ * `parseFormula` reads the seed back with, so an untouched commit is a no-op.
  */
 export function editorSeed(state: AppState, target: EditorTarget): string {
   const object = state.document.objects.find((candidate) => candidate.id === target.objectId);
@@ -862,7 +869,7 @@ export function editorSeed(state: AppState, target: EditorTarget): string {
   if (slot === undefined) {
     return "";
   }
-  return slot.kind === "formula" ? `=${formatFormula(slot.ast, state.document.objects)}` : describeSlotValue(slot.value);
+  return slot.kind === "formula" ? `=${formatFormula(slot.ast, state.document.objects, object.id)}` : describeSlotValue(slot.value);
 }
 
 /**
@@ -1386,6 +1393,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     inPlaceElement.style.top = `${placement.top}px`;
     inPlaceElement.style.width = `${placement.width}px`;
     inPlaceElement.style.height = `${placement.height}px`;
+    // D-129 clause 1: the glyphs scale with the camera like the box does, so the
+    // overlay is a rough size match to the drawn text at any zoom.
+    inPlaceElement.style.fontSize = `${placement.fontSize}px`;
   };
 
   const apply = (next: AppState): void => {
@@ -1447,27 +1457,32 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
-    // D-125 clause 5: a press on the canvas is "a click outside" — it commits
-    // an open in-place editor before doing anything else. `preventDefault`
-    // below suppresses the blur that would otherwise have committed it, so the
-    // commit is made explicitly here instead. A no-op when nothing is open.
-    if (inPlaceEditor !== undefined) {
-      commitInPlace();
-    }
     // Both lines are about the command input keeping the keyboard (§5.10:
     // "always focused when the user is not editing text or a cell"). A press on
     // the canvas moves focus to the body as its DEFAULT action, which runs AFTER
     // this listener — so `input.focus()` alone was undone a moment later, and
     // every keystroke after a click went nowhere until the operator clicked the
     // input (entry 0091). Refusing the default keeps the focus where it is, and
-    // the `focus()` call recovers it when something else already took it.
+    // the `focus()` call recovers it when something else already took it. It also
+    // suppresses the `blur` an open in-place editor would otherwise fire — so
+    // whether that editor commits is decided explicitly below, not by the press.
     event.preventDefault();
     input.focus();
     canvas.setPointerCapture(event.pointerId);
     const point = screenPointOf(event);
     if (event.button === 1 || spaceHeld) {
+      // D-130: a pan gesture is camera navigation, not "a click outside" — it
+      // leaves an open in-place editor untouched (the overlay re-places every
+      // paint, so it tracks its receiver through the pan). This branch sits
+      // ABOVE the commit below precisely so a pan never reaches it.
       pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
+    }
+    // D-125 clause 5 / D-128: a plain canvas press IS "a click outside" and
+    // commits an open in-place editor before the press selects anything. A no-op
+    // when nothing is open.
+    if (inPlaceEditor !== undefined) {
+      commitInPlace();
     }
     // D-100 clauses 3-4: shift is the additive-selection modifier.
     applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey, evalContext));
