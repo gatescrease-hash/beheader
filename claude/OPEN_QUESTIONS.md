@@ -17,7 +17,17 @@ Raised: entry 0138-text-render (implementer)   Brief section: §5.6 (`TextBox` �
 "**Derived slots:** `resolvedContent` … and `measuredHeight`" — a closed list, no `measuredWidth`;
 "Auto width + auto height means no wrapping"), §5.9 ("**bounding box for text**/tables/images/scripts"),
 Rule 1 (`render/extent.ts` is pure — no `ctx`), §9 clause 4.
-Status: **OPEN.** Reversible provisional choice **(a)** taken and tagged — see below.
+Status: **ANSWERED → D-123** (entry 0139-REVIEW-phase5, reviewer). Option **(b)** ruled: `TEXT_SCHEMA`
+gains a third derived slot, `measuredWidth`, from the same `TextMeasurer.measure` call
+`measuredHeight` already makes, and `extent.ts` reads it for the auto-width case. Provisional **(a)**
+stands as the interim and is REVERSED by that cycle, which MUST land before the Phase 5 gate is
+claimed; every `PROVISIONAL(Q-024)` tag comes out then.
+
+**Correction to this question's own cost estimate, made in ruling it:** the recommendation below
+calls (a) "an edge-case affordance, not the common path" because "most `text` objects will carry a
+numeric `width`." That is false as the code stands — `command/commands.ts`'s `DEFAULT_TEXT_WIDTH` is
+`"auto"`, so EVERY object the `text` command creates is auto-width and lands on the fallback box. The
+fallback is the default path, which is what tipped the ruling from (a) to (b). See D-123's rationale.
 
 Ambiguity: §5.9 says hit-testing uses a bounding box for `text`, and D-066 says the drawn extent
 and the clickable extent are ONE extent. `render/extent.ts`'s `objectExtent` is the single source

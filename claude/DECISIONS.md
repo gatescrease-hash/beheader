@@ -4191,3 +4191,61 @@ reconcile-and-untag step.
 Reconciliation required: owed by the `text` command cycle — add the guard citing `D-122`; update
 `primitives/text.ts`'s NOT DONE HERE note (the F13 gap is now closed by a refusal, not open); no
 `PROVISIONAL` tag.
+
+## D-123 — A `text` object's bounding box gets a real measured width: `TEXT_SCHEMA` grows a third derived slot, `measuredWidth`
+Answers: **Q-024**   Ruled: entry 0139-REVIEW-phase5 (reviewer)
+Binding on: `src/engine/primitives/schema.ts`, `src/engine/primitives/text.ts`,
+`src/render/extent.ts`, and any future reader of a `text` object's extent
+
+**Ruling — the implementer's option (b), Q-024, is issued as binding. Provisional (a) stands as the
+interim and is REVERSED when (b) lands, which MUST be before the Phase 5 gate is claimed.**
+
+1. **`TEXT_SCHEMA` gains a third derived slot, `measuredWidth`**, alongside `resolvedContent` and
+   `measuredHeight`. Its static dependency set is `measuredHeight`'s, unchanged (`resolvedContent`,
+   `width`, `style.*`), and it is computed from the SAME `TextMeasurer.measure` call — that call
+   already returns `{ width, height }` (`engine/eval-context.ts`) and today discards the width.
+
+2. **Its failure order MIRRORS `computeMeasuredHeight`'s exactly** — upstream `ErrorValue` →
+   `#MEASURE` (no real measurer, D-118) → `#TYPE` (unusable style) → `#TYPE` (non-finite) → the
+   width. Do not invent a second order, and do not let one of the pair succeed while the other
+   fails: they answer one question and are computed from one measurement.
+
+3. **`render/extent.ts`'s `textExtent` reads, in order:** the `width` slot when it holds a positive
+   finite number (the box the operator SET — that is the box, whatever the ink does inside it), else
+   `measuredWidth` when it holds one, else the fixed fallback. The fallback survives ONLY for the
+   `#MEASURE` / no-measurer case (a test, or `main.ts` failing to get an offscreen context), where
+   nothing better is knowable; at that point it is an ordinary documented constant, NOT a
+   `PROVISIONAL` — every `PROVISIONAL(Q-024)` tag comes out in the same cycle.
+
+4. **This is a deliberate extension of §5.6's derived-slot list, on the same footing as D-121's
+   extension of its `TextBox` shape.** §5.6 names two derived slots; §5.9 separately promises "a
+   bounding box for text", and D-066 rules that the drawn extent and the clickable extent are ONE
+   extent. Those three cannot all hold for an auto-width `text` object without a measured width. The
+   brief is silent, not contradicted — this fills the silence the same way D-121 filled §5.6's
+   missing position. A bonus that confirms the shape: `= text_1.measuredWidth` becomes legal and
+   correctly ordered in a formula, exactly as `measuredHeight` already is, which is what Phase 7's
+   relative label layout will want.
+
+5. **The box follows the text; the text NEVER follows the box.** `renderer.ts` draws every line
+   `layOutLines` produced. It MUST NOT clip, pad, or truncate its line count to match a stored
+   `measuredHeight`/`measuredWidth`, and no cycle may "fix" a drawn-vs-measured disagreement that
+   way. §5.6's `overflow: "clip"` / `"ellipsis"` is the ONE mechanism permitted to reduce what is
+   drawn, and it does so on the `overflow` slot's instruction, never to make a measurement true.
+   (Answers the implementer's question 2 at entry 0138 with a rule, so it stays answered.)
+
+**Rationale.** Provisional (a) — a fixed 240x20 fallback — was taken and tagged correctly under §7,
+but its cost was mis-estimated in both entry 0138 and Q-024, which call it an edge affordance on the
+grounds that "most `text` objects carry a numeric `width`." They do not: `command/commands.ts`'s
+`DEFAULT_TEXT_WIDTH` is `"auto"`, so EVERY object `text x=… y=… "…"` creates is auto-width and lands
+on the fallback. It is the default path, not the edge. The consequences are all operator-visible: a
+short label carries a 240-wide click box that swallows clicks meant for whatever is beside it and
+draws a selection highlight around empty canvas; a long one is unclickable past its first 240 units
+and draws outside its own highlight; and `fit` (§5.10, via `documentExtent`) frames a box that is
+not the text. Option (c) — threading a `MeasurementContext` into `objectExtent` — is rejected as the
+question recommends: it changes a pure function's signature and ripples to six call sites to answer
+a question a derived slot already almost answers.
+
+Reconciliation required: its own cycle, BEFORE the Phase 5 gate (§6.1 trigger 1 will review the gate
+anyway, but the gate must not be claimed over a knowingly-wrong bounding box). `primitives/schema.ts`
+is §6.2 load-bearing, so that cycle reports `REVIEW: REQUIRED`. Then `grep PROVISIONAL(Q-024)` and
+remove every tag; `schema.test.ts`'s `text` expectation moves from two derived slots to three.

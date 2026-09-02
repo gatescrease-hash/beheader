@@ -520,7 +520,10 @@ function resolveTextStyle(object: GraphObject): ResolvedTextStyle {
  *
  * Line-breaking goes through `render/measure.ts`'s `layOutLines` with THIS ctx's
  * `measureText`, so the drawn lines are exactly the ones `measuredHeight` was
- * measured from (D-010). `resolvedContent` already carries any `!`-marked broken
+ * measured from (D-010) — while the object's `style.*` slots are usable, which
+ * they are for every object `createText` builds. A broken style makes the two
+ * files fall back differently and their line counts can then disagree; see
+ * `measure.ts`'s header. `resolvedContent` already carries any `!`-marked broken
  * span (D-116 and D-117, engine-side) — this function just draws the string.
  *
  * Markdown-lite markup is drawn verbatim and `overflow` is not consulted (both

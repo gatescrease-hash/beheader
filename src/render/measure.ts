@@ -30,6 +30,16 @@
  *   `ctx.measureText` the same `cssFont` string and compare against the same
  *   world-unit `maxWidth`, so the line breaks land identically.
  *
+ *   That agreement holds WHILE both files read the same usable `style.*` slots —
+ *   true of every object `command/commands.ts`'s `createText` builds. When a
+ *   `style.*` slot is missing or unusable the two fall back DIFFERENTLY: here an
+ *   unusable `lineHeight` becomes `fontSize` and an unusable `fontSize` returns a
+ *   zero box, while `renderer.ts` substitutes its own `DEFAULT_TEXT_*` and draws
+ *   anyway (deliberately — it would rather show text than blank the box). So for
+ *   a hand-built or loaded `text` object with a broken style, drawn and measured
+ *   CAN disagree. Disclosed, not fixed: one shared set of fallbacks needs a
+ *   ruling on which file owns them (0139-REVIEW).
+ *
  *   LINE-BREAKING (**D-120**): split on the operator's own newlines first, then
  *   — ONLY when `maxWidth` is a positive finite number — greedily word-wrap each
  *   hard line, measuring candidates with `ctx.measureText`. A word wider than

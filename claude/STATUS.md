@@ -1,14 +1,20 @@
-# STATUS — as of entry 0138-text-render
+# STATUS — as of entry 0139-REVIEW-phase5
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1466/1466** tests pass,
 0 skipped, 0 `.only`. **30 test files**. **PHASE 5 IS OPEN.**
 
-**REVIEW IS DUE — do not start the next slice.** Entry 0138 fired **§6.1 trigger 5** (`hittest.test.ts`'s
-"never hits" type loop dropped `text`; `interaction.test.ts`'s `textObject()` fixture changed — both
-because `text` became hittable, no assertion weakened) and **trigger 3** (brief silent on the
-auto-width text bounding box → **Q-024**, taken as a reversible tagged provisional per §7, not a
-cycle stop). Last review point: **0137-REVIEW-phase5** (ACCEPT WITH EDITS). Cycles since last review:
-**1/3**. Diff since last review: **~330 source lines / 4 source files** (cap 800/10).
+**THE REVIEW HAS LANDED — 0139-REVIEW-phase5: ACCEPT WITH EDITS.** Entry 0138's text rendering is
+cleared. Last review point: **0139-REVIEW-phase5**. Cycles since last review: **0/3**. Diff since
+last review: **0 lines / 0 files** (cap 800/10). Reviewer edits: two header/doc qualifications only
+(`measure.ts`, `renderer.ts` — the unqualified "drawn ≡ measured" claim now states the condition it
+holds under). One new ruling: **D-123**, answering **Q-024**.
+
+**D-123 IS OWED BEFORE THE PHASE 5 GATE.** `TEXT_SCHEMA` gains a THIRD derived slot,
+`measuredWidth`, from the same `TextMeasurer.measure` call `measuredHeight` already makes;
+`extent.ts` reads it for the auto-width case. Reason: `DEFAULT_TEXT_WIDTH` is `"auto"`, so EVERY
+command-created `text` object lands on the `PROVISIONAL(Q-024)` 240×20 fallback box — entry 0138 and
+Q-024 both mis-sized it as an edge case. Touches `primitives/schema.ts` (§6.2 load-bearing) → that
+cycle reports `REVIEW: REQUIRED`.
 
 **TEXT DRAWS NOW (entry 0138).** `renderer.ts`'s `drawText` lays `resolvedContent` out from `origin`
 (top-left), wraps at a numeric `width` slot via the SAME `layOutLines` the measurer uses (exported
@@ -20,8 +26,8 @@ properties panel. **Markdown-lite rendering and `overflow` clip/ellipsis are NOT
 draws verbatim (as `measure.ts` still measures it), every box is `overflow: "visible"`. That plus
 the gate test are the remaining Phase 5 work.
 
-**Last review point: 0137-REVIEW-phase5** (ACCEPT WITH EDITS). The `text` command + D-121 + D-122
-are all reviewed and closed.
+**Text rendering is REVIEWED and closed (0139-REVIEW-phase5)**, as are the `text` command + D-121 +
+D-122 before it (0137-REVIEW).
 
 **THE `text` COMMAND IS BUILT (entry 0136).** `command/parser.ts` has a `text` registry entry
 (`text [x=<number>] [y=<number>] "<content>"` — positional `content`, `x`/`y` optional defaulting to
@@ -49,6 +55,11 @@ untracked-reference gap is now CLOSED by a refusal (a loaded document could stil
 `(D-122)`.
 
 **STILL UNBUILT IN PHASE 5:**
+- **`measuredWidth` (D-123)** — a third derived slot on `TEXT_SCHEMA`, computed from the SAME
+  `measure` call as `measuredHeight` (that call already returns `{ width, height }` and discards the
+  width). `extent.ts`'s `textExtent` then reads `width` slot → `measuredWidth` → fallback, and every
+  `PROVISIONAL(Q-024)` tag comes out. Failure order mirrors `computeMeasuredHeight`'s exactly.
+  **Must land before the gate.**
 - **Markdown-lite rendering** (`**bold**`, `*italic*`, `` `code` ``, `# heading` 1–3, `- list`,
   paragraph breaks) — §5.6's exact list. `resolvedContent`'s markup currently draws verbatim.
   `render/measure.ts` must become markup-aware in the same cycle so drawn ≡ measured.
@@ -168,21 +179,33 @@ take it as a REQUIRED param; only the public entry points default it to `NULL_EV
 **17. TEXT DRAWS AND IS HITTABLE (entry 0138).** `renderer.ts` `drawText` (verbatim markup, wrap at
 numeric `width`, `style.*`), `extent.ts` `textExtent`, `hittest.ts` bounding box. Drag/select/panel
 all fall out of the extent + `interaction.ts`'s existing `origin` path. `render/measure.ts` now
-exports `layOutLines`/`cssFont` — the renderer shares them so drawn ≡ measured (D-010). Markdown-lite
-formatting, `overflow` clip/ellipsis, and the gate are the remaining Phase 5 work. `PROVISIONAL(Q-024)`
-covers the auto-width bounding box.
+exports `layOutLines`/`cssFont` — the renderer shares them so drawn ≡ measured (D-010), **while the
+object's `style.*` slots are usable**; the two files' fallbacks differ, disclosed in both headers
+(0139-REVIEW). **REVIEWED at 0139-REVIEW.** `measuredWidth` (D-123), markdown-lite formatting,
+`overflow` clip/ellipsis, and the gate are the remaining Phase 5 work.
 
 ## Next slice (recommended)
 
-**AFTER the 0138 review clears:** **markdown-lite rendering** — §5.6's exact list (`**bold**`,
-`*italic*`, `` `code` ``, `# heading` 1–3, `- list item`, blank-line paragraph breaks), nothing
-more, in `renderer.ts`'s `drawText`. In the SAME cycle make `render/measure.ts` markup-aware (strip
-the markers before measuring) so the drawn text and `measuredHeight` agree — D-120's framing allows
-it. Then `overflow: "clip"`/`"ellipsis"` (small), then the **Phase 5 gate**: an executable test over
-one document proving the §6 criterion, reported `REVIEW: REQUIRED` (§6.1 trigger 1).
+**D-123's `measuredWidth` cycle** — small, and it closes a live provisional on the default path.
+`TEXT_SCHEMA` gains a third derived slot next to `measuredHeight`, same static deps, computed from
+the same `TextMeasurer.measure` call's `.width`; failure order MIRRORS `computeMeasuredHeight`'s
+(upstream `ErrorValue` → `#MEASURE` → `#TYPE` unusable style → `#TYPE` non-finite → the width).
+Then `render/extent.ts`'s `textExtent` reads `width` slot → `measuredWidth` → fallback, and BOTH
+`PROVISIONAL(Q-024)` tags come out (the fallback survives as an ordinary constant for the
+no-measurer case only). `schema.test.ts`'s `text` derived count moves 2 → 3. Touches
+`primitives/schema.ts` → **§6.2 load-bearing, report `REVIEW: REQUIRED`.**
+
+Then, in order: **markdown-lite rendering** — §5.6's exact list (`**bold**`, `*italic*`,
+`` `code` ``, `# heading` 1–3, `- list item`, blank-line paragraph breaks), nothing more, in
+`renderer.ts`'s `drawText`, and in the SAME cycle make `render/measure.ts` markup-aware (strip the
+markers before measuring) so drawn and measured agree — D-120's framing allows it. Then
+`overflow: "clip"`/`"ellipsis"` (small — and read **D-123 clause 5** first: it is the ONLY mechanism
+allowed to reduce what is drawn, and never to make a stored measurement true). Then the **Phase 5
+gate**: an executable test over one document proving the §6 criterion, `REVIEW: REQUIRED` (§6.1
+trigger 1). Only "D-123 before the gate" is binding; the rest is 0139-REVIEW's sequencing advice.
 
 Cheap adds while in there: a direct `link text_1.origin.y <cell>` test (0137-REVIEW §honesty — 0136
-tested the equivalent on `style.fontSize`); reconcile `PROVISIONAL(Q-024)` if the reviewer rules it.
+tested the equivalent on `style.fontSize`).
 
 **The render-only alternative, still needs no ruling:** **D-109 clauses 1–2** (cell decimal
 precision + no cell-text clipping, `render/renderer.ts` only). **Q-017** headers remain the human's.
@@ -213,16 +236,15 @@ D-119) · `measuredHeight` + `#MEASURE` `ErrorCode` + `TextMeasurer.measure`'s `
 (0133-REVIEW: ACCEPT WITH EDITS; F22) · **0135-REVIEW: ACCEPT (no code)** — entry 0134's
 `text`-command escalation cleared; **D-121** (Q-022) and **D-122** (Q-023/F13) issued ·
 **0137-REVIEW: ACCEPT WITH EDITS** — entry 0136's `text` command + D-121/D-122 reconciliation
-cleared; 4 stale test comments fixed; no new ruling. **Q-022 and Q-023 are now fully closed.**
+cleared; 4 stale test comments fixed; no new ruling. **Q-022 and Q-023 are now fully closed.** ·
+**0139-REVIEW: ACCEPT WITH EDITS** — entry 0138's text rendering (`renderer.ts` `drawText` + `text`
+cases in `drawObject`/`drawSelectionHighlight`; `extent.ts` `textExtent`; `hittest.ts`
+`hitTestBoundingBox`; `measure.ts` exporting `layOutLines`/`cssFont`) cleared; two header/doc
+qualifications edited in; **D-123** issued, answering **Q-024**.
 
 ## Built this batch, not yet reviewed
 
-- **Entry 0138 — text rendering.** `renderer.ts` `drawText` + `text` cases in `drawObject` /
-  `drawSelectionHighlight`; `extent.ts` `textExtent` (+ `PROVISIONAL(Q-024)` fallback box);
-  `hittest.ts` `hitTestBoundingBox` for `text`; `measure.ts` exports `layOutLines` / `cssFont`.
-  `interaction.ts` UNCHANGED (text drag falls out of the existing `origin` path). Tests +23. No
-  §6.2 load-bearing file touched. Markdown-lite / `overflow` clip+ellipsis / the gate are NOT in
-  this batch.
+Nothing — the batch is empty. 0139-REVIEW cleared entry 0138.
 
 ## Not started
 
@@ -286,10 +308,27 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   single-spaced too — drawn and measured stay consistent.
 - **`extent.ts`'s `text` box height trusts the stored `measuredHeight`; `renderer.ts` re-wraps with
   its own `ctx`.** If the two wrap loops ever diverge (same font, same browser — they should not),
-  `extent.maxY` lags the drawn line count by a line. Flagged to the 0138 reviewer (Q2).
-- **An auto-width `text` object's click box is a `PROVISIONAL(Q-024)` fixed fallback (240×20)** —
-  a line wider than that draws outside its own hit region. Most `text` objects carry a numeric
-  `width` (Phase 5's gate: "set width"), so this is an edge affordance. Q-024 will rule it.
+  `extent.maxY` lags the drawn line count by a line. **0139-REVIEW ruled this stays as it is**
+  (D-123 clause 5): the box follows the text, never the reverse — the renderer must NOT draw
+  `measuredHeight / lineHeight` lines to make the numbers agree.
+- **An auto-width `text` object's click box is a `PROVISIONAL(Q-024)` fixed fallback (240×20) — and
+  that is the DEFAULT path, not an edge case.** `DEFAULT_TEXT_WIDTH` is `"auto"`, so every
+  command-created `text` object gets it: a short label carries a 240-wide click box that swallows
+  clicks meant for its neighbours and highlights empty canvas; a long one is unclickable past 240
+  units and draws outside its own highlight; `fit` frames the wrong box. **Ruled D-123** (0139-REVIEW)
+  — fixed by the `measuredWidth` cycle, which must precede the gate. Entry 0138's and Q-024's own
+  "edge affordance" framing is CORRECTED there; do not repeat it.
+- **`measure.ts` and `renderer.ts` fall back DIFFERENTLY for an unusable `style.*` slot** — the
+  measurer takes an unusable `lineHeight` as `fontSize` and returns a zero box for an unusable
+  `fontSize`; `resolveTextStyle` substitutes `DEFAULT_TEXT_LINE_HEIGHT` (20) / `DEFAULT_TEXT_FONT_SIZE`
+  (16) and draws anyway. So for a LOADED document carrying a `#TYPE` style on a multi-line `text`
+  object, the box is one line tall and the ink is N lines tall. Disclosed in both headers
+  (0139-REVIEW edits); unfixed — one shared set of fallbacks needs a ruling on which file owns them.
+- **An empty-`content` `text` object is invisible AND unselectable** — no ink, no extent, so no hit
+  box, no chrome, no name label, no panel. `text 0 0 ""` and `set text_1.content ""` both reach it.
+  Correct per D-066 and consistent with `measure.ts`'s zero box, and recoverable by command
+  (`list`/`set`/`delete`) — but there is no mouse affordance to get it back. Noted at 0139-REVIEW;
+  no ruling unless it is hit in practice.
 - **`x`/`y` are OPTIONAL for the `text` command (default `0`, per D-121 clause 3)** but REQUIRED for
   `circle`/`polygon`/`rect`/`table`. A visible inconsistency across the creation commands; **0137-REVIEW
   confirmed it is intended** (D-121 clause 3's operative text; its "(matching `table`)" aside is
@@ -364,21 +403,30 @@ the geometry presets. Not dependency-required. Front-of-list placement confirmed
 `literal`-only; `link` / `set =` refused in `command/commands.ts`'s `buildSlot`, à la D-046. Guard
 placement (`buildSlot`'s `formula` arm) confirmed at 0137-REVIEW.
 
+**D-123 (0139-REVIEW) — RULED, answers Q-024. NOT BUILT — owed before the Phase 5 gate.**
+`TEXT_SCHEMA` gains a third derived slot `measuredWidth` from the same `measure` call as
+`measuredHeight` (clauses 1–2); `extent.ts` reads `width` slot → `measuredWidth` → fallback (clause
+3); it is a deliberate extension of §5.6's derived-slot list on D-121's footing (clause 4). **Clause
+5 binds every render cycle now:** the box follows the text, the text NEVER follows the box —
+`renderer.ts` may not clip, pad, or truncate its line count to match a stored measurement; only
+§5.6's `overflow` slot may reduce what is drawn.
+
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-114/D-115/D-116/D-117 ·
 D-118 (guard + wiring) · D-120 (`render/measure.ts` + threading) · **D-121 / D-122 + the `text`
-command (0137-REVIEW)**.
+command (0137-REVIEW)** · **text rendering + the text bounding box (0139-REVIEW)**.
 
-**NOT implemented, each owned by a named future cycle:** **D-104** (§5.10's row/column commands) ·
-**D-108** (§5.11's load path; clause 3 binds every cycle before it) · **D-109 clauses 1–2** (cell
-decimals + clipping, `render/` only).
+**NOT implemented, each owned by a named future cycle:** **D-123** (`measuredWidth`; the NEXT slice,
+binding before the Phase 5 gate — clause 5 binds every render cycle from now) · **D-104** (§5.10's
+row/column commands) · **D-108** (§5.11's load path; clause 3 binds every cycle before it) ·
+**D-109 clauses 1–2** (cell decimals + clipping, `render/` only).
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — BUILT and REVIEWED (0128).
 **Q-021 → D-120** — BUILT + WIRED + REVIEWED (0133). **Q-022 → D-121**, **Q-023 → D-122** — RULED
-(0135-REVIEW), BUILT (0136), REVIEWED (0137) — CLOSED. **Q-024** (entry 0138) — how is a `text`
-object's bounding box width computed when `width: "auto"`? OPEN; reversible provisional (a) taken
-and tagged in `render/extent.ts`; awaits the 0138 review. Next free: **Q-025**.
+(0135-REVIEW), BUILT (0136), REVIEWED (0137) — CLOSED. **Q-024 → D-123** (0139-REVIEW) — RULED
+option (b), a `measuredWidth` derived slot; provisional (a) stands as the interim, reconciliation
+owed BEFORE the gate. Next free: **Q-025**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 `content` (0127/0122/0136) inherits the same posture.
@@ -399,22 +447,27 @@ screen pixels for stroke width / cell size / font? Provisional (a) world units. 
 
 **`PROVISIONAL(Q-024)` → `src/render/extent.ts`** (`textExtent`, the `TEXT_AUTO_BOX_WIDTH` /
 `TEXT_AUTO_BOX_HEIGHT` fallbacks): an auto-width / no-measurer `text` object gets a fixed fallback
-bounding box. Reversible, render-only, no stored state. Due with the 0138 review / the markdown-lite
-cycle.
+bounding box. **RULED — D-123 (0139-REVIEW) reverses it.** The tags stay live until the
+`measuredWidth` cycle lands, which must be before the Phase 5 gate; that cycle removes BOTH and
+keeps the constant as an ordinary documented fallback for the `#MEASURE` / no-measurer case only.
 
 **No other `PROVISIONAL` tags exist.** Q-016/Q-017 have none; neither do Q-022/Q-023 — both ruled and
 built without a provisional site (0135-REVIEW §5 clause 4).
 
 ## Gotchas for the next model
 
-- **REVIEW IS DUE (entry 0138).** §6.1 trigger 5 (changed test expectations) + trigger 3 (Q-024).
-  Do not start markdown-lite / the gate until it clears.
+- **THE REVIEW HAS LANDED (0139-REVIEW: ACCEPT WITH EDITS).** Work may proceed. **D-123's
+  `measuredWidth` cycle is the recommended next slice and is BINDING before the gate.**
+- **D-123 clause 5 — the box follows the text; the text never follows the box.** Do not "fix" a
+  drawn-vs-measured disagreement by drawing fewer lines.
 - **TEXT DRAWS (entry 0138).** `renderer.ts` `drawText`; `extent.ts`/`hittest.ts` `text` cases;
   `measure.ts` now exports `layOutLines`/`cssFont` for the renderer to share (drawn ≡ measured,
   D-010). Markdown-lite + `overflow` clip/ellipsis are NOT built — markup draws verbatim.
-- **`extent.ts`'s `text` box:** origin + numeric `width` (else `PROVISIONAL(Q-024)` fallback 240) +
-  numeric `height`/`measuredHeight` (else fallback 20). `undefined` for a `text` object with no
-  `resolvedContent`. `hittest.ts` and the selection highlight read this same box.
+- **`extent.ts`'s `text` box:** origin + numeric `width` (else `PROVISIONAL(Q-024)` fallback 240 —
+  the D-123 cycle inserts `measuredWidth` between them) + numeric `height`/`measuredHeight` (else
+  fallback 20). `undefined` for a `text` object with no `resolvedContent`. `hittest.ts`, the
+  selection highlight, the chrome anchor and `fit` all read this ONE box (D-066/D-010) — which is
+  why one wrong box is four wrong behaviours, and why D-123 fixes one function.
 - **A `text` object drags via `interaction.ts`'s existing `origin` path — no `text`-specific code.**
   D-121's payoff, now reachable.
 - **A selected `text` object shows a D-094 properties panel** (it has an `objectExtent` now).
