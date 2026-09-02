@@ -166,9 +166,21 @@ import type {
  * Shaped as an `ok` result rather than an `error`-coded value for the same reason
  * `CommandParseResult` is: a refused command never becomes graph state, so it is not
  * an `ErrorValue` and must not be mistakable for one.
+ *
+ * `createdObjectId` is the id `mintObjectId` returned for a SUCCESSFUL creation
+ * (`circle`/`polygon`/`rect`/`text`/`table`), `undefined` for every other command.
+ * D-124's open-editor-on-create needs the new `text` box's id and this file resolves
+ * nothing for the application layer (D-069, D-082 clause 4) — so it names what it
+ * made, and `main.ts` decides what to do with it.
  */
 export type CommandOutcome =
-  | { readonly ok: true; readonly document: Document; readonly lines: readonly string[]; readonly effect?: CommandEffect }
+  | {
+      readonly ok: true;
+      readonly document: Document;
+      readonly lines: readonly string[];
+      readonly effect?: CommandEffect;
+      readonly createdObjectId?: string;
+    }
   | { readonly ok: false; readonly message: string };
 
 /**
@@ -401,6 +413,10 @@ interface LiteralSlotDeclaration {
  *
  * `nextObjectId` advances only on success: a refused creation took no id, which is
  * what keeps a rejected `polygon sides=2` from leaving a gap in the counter.
+ *
+ * The success arm carries `createdObjectId` (D-124): every creation goes through
+ * here, so naming the new object is done once rather than per handler, and
+ * `main.ts` reads it to open D-125's editor on a fresh `text` box.
  */
 function createObjectFromCommand(
   document: Document,
@@ -437,6 +453,7 @@ function createObjectFromCommand(
     ok: true,
     document: { ...document, nextObjectId: minted.nextObjectId, objects: result.objects, journal: result.journal },
     lines: [`created ${name}`],
+    createdObjectId: minted.id,
   };
 }
 
@@ -525,6 +542,10 @@ function createTable(command: CreateTableCommand, document: Document, context: E
  * has nothing to bound: `text` allocates a fixed eleven slots regardless of its
  * arguments (Rule 6), so unlike `polygon`/`table` there is no unbounded slot
  * allocation to guard against.
+ *
+ * **D-124**'s pointing path reaches this handler with `content` `""` (the prompt
+ * sequence has no content step); the outcome's `createdObjectId` is what
+ * `main.ts` opens D-125's in-place editor on.
  */
 function createText(command: CreateTextCommand, document: Document, context: EvalContext): CommandOutcome {
   return createObjectFromCommand(document, "text", [

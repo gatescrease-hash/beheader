@@ -55,7 +55,10 @@
  * NOT DONE HERE
  *   - Seeding the editor's text, building the commit `Command`, deciding
  *     literal-vs-formula, or any DOM — `main.ts` (D-125 clauses 2-3, 5, 7).
- *   - Opening the editor on a freshly-placed `text` object — D-124's wiring.
+ *   - Opening the editor on a freshly-placed `text` object — `main.ts`'s
+ *     `advance` -> `AppTransition.openEditor` -> `applyTransition` (D-124). This
+ *     file just places its overlay, via `textEditorBox`'s empty-`content`
+ *     fallback (D-125 clause 6).
  *   - Rendering markdown-lite in the overlay. An editor shows RAW SOURCE
  *     (§5.6's `content`), which is also what `renderer.ts` draws today, so the
  *     two agree; the markdown-lite cycle will make them differ deliberately.

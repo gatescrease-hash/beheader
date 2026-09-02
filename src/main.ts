@@ -20,7 +20,9 @@
  * cell; a commit synthesises a `Command` and runs it through the same
  * `executeCommand` seam — `content` always a literal `set`, a cell
  * Excel-style; the commit logic is here in the pure half, not in `start`,
- * per clause 7).
+ * per clause 7), and **D-124** (`text` is placed by POINTING — a `parser.ts`
+ * prompt step — and its new box opens D-125's editor on creation:
+ * `advance` returns `AppTransition.openEditor`, `applyTransition` acts on it).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -101,9 +103,11 @@
  *     through `executeCommand`, `loadDocument`, and the drag path
  *     (`pointerMove`), so a `text` object's `measuredHeight`/`measuredWidth`
  *     evaluate for real rather than reporting `#MEASURE` (D-118).
- *   - Placing a `text` object by POINTING, and opening its editor on creation
- *     (**D-124**) — not built; `text` is typed-form only, and the in-place
- *     editor opens on a DOUBLE-CLICK for now (D-125 clause 4).
+ *   - Deciding WHICH receiver a double-click opens the editor on, and where the
+ *     overlay floats — `render/editor.ts` (D-125 clause 1). This file opens the
+ *     editor on a double-click AND, since **D-124**, on every newly-created
+ *     `text` object (`advance` -> `AppTransition.openEditor` -> `applyTransition`);
+ *     it never opens one on a `circle`/`rect`/`table`.
  *   - Matching the editor overlay's font FAMILY, markdown rendering or text
  *     alignment to the drawn text — the overlay's SIZE tracks
  *     `style.fontSize × camera.zoom` now (D-129), and it no longer clips, but a
@@ -203,11 +207,20 @@ export type FileRequest = "save" | "load";
  * plain click and every branch of `performEffect` are reached only once a
  * command has already been ACCEPTED, so they carry `false` via `transition`'s
  * own default parameter and are never read for it.
+ *
+ * `openEditor` travels back out for the same reason `fileRequest` does: **D-124**
+ * says a newly-placed `text` object hands straight to D-125's in-place editor
+ * (clause 2), the editor's open/closed state lives in `start`'s closure, not in
+ * `AppState` (like the GREY paperclip — opening writes no document state), and
+ * the pure half cannot touch a DOM element. `advance` sets it after a `text`
+ * creation commits; `applyTransition` in `start` sets `inPlaceEditor` from it.
+ * `undefined` for every other transition.
  */
 export interface AppTransition {
   readonly state: AppState;
   readonly fileRequest: FileRequest | undefined;
   readonly refused: boolean;
+  readonly openEditor?: EditorTarget;
 }
 
 /**
@@ -380,7 +393,19 @@ function advance(state: AppState, session: CommandSession, viewport: Viewport, c
       }
       const executed = withLog({ ...cleared, document: outcome.document }, outcome.lines);
       // The document part is done; the rest is this file's (D-075 clause 3).
-      return outcome.effect === undefined ? transition(executed) : performEffect(outcome.effect, executed, viewport);
+      if (outcome.effect !== undefined) {
+        return performEffect(outcome.effect, executed, viewport);
+      }
+      // D-124: a freshly-created `text` object hands straight to D-125's in-place
+      // editor — placing and typing are one gesture (D-125 clause 4). `createText`
+      // is the only handler whose command `kind` is `"text"`, and every successful
+      // creation carries `createdObjectId`; the pair names the new box without this
+      // file resolving anything (D-082 clause 4). Every form of the command lands
+      // here — the pointed one and both typed ones — so all of them open it.
+      if (session.command.kind === "text" && outcome.createdObjectId !== undefined) {
+        return { state: executed, fileRequest: undefined, refused: false, openEditor: { kind: "text", objectId: outcome.createdObjectId } };
+      }
+      return transition(executed);
     }
     case "prompting":
       // D-109 clause 3, applied to one step of a live sequence: `session.error`
@@ -1421,6 +1446,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
 
   const applyTransition = (next: AppTransition): void => {
+    // D-124: a `text` creation asks for its in-place editor to open on the new
+    // box. Set BEFORE `apply` so the `paint` it triggers builds and focuses the
+    // overlay in the same frame — `updateEditor` finds the just-created object in
+    // `state.document.objects` and, for an empty `content`, uses D-125 clause 6's
+    // fallback box. At most one editor document-wide, so this replaces any open
+    // one (the same "one editor" rule the dblclick path follows).
+    if (next.openEditor !== undefined) {
+      inPlaceEditor = next.openEditor;
+    }
     apply(next.state);
     if (next.fileRequest === "save") {
       downloadDocument(state.document);

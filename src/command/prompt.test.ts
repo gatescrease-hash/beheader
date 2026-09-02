@@ -52,6 +52,10 @@ const EQUIVALENT_FORMS: readonly { readonly name: string; readonly typedLine: st
   { name: "polygon", typedLine: "polygon sides=5 x=0 y=0 r=50", responses: [typed("5"), picked(0, 0), picked(0, 50)] },
   { name: "rect", typedLine: "rect x=0 y=0 w=200 h=100", responses: [picked(0, 0), picked(200, 100)] },
   { name: "table", typedLine: "table x=0 y=0 rows=8 cols=8", responses: [picked(0, 0), typed(""), typed("")] },
+  // D-124: `text` has ONE step, a point, and NO content step — the pick completes
+  // the command with `content` `""`. The typed form that produces the identical
+  // Command is therefore `text x=0 y=0 ""`, not §5.10's own content-bearing example.
+  { name: "text", typedLine: 'text x=0 y=0 ""', responses: [picked(0, 0)] },
 ];
 
 describe("a command word alone starts a sequence (D-072: the AutoCAD gesture)", () => {
@@ -240,6 +244,31 @@ describe("polygon walks sides, then centre, then radius (AutoCAD's POLYGON order
     const radius = prompting(respond(center.pending, picked(10, 10)));
     expect(radius.message).toBe("specify radius:");
     expect(completed(respond(radius.pending, picked(10, 60)))).toEqual({ kind: "polygon", sides: 6, x: 10, y: 10, radius: 50 });
+  });
+});
+
+describe("text is placed by pointing — one step, no content step (D-124)", () => {
+  it("a bare `text` word prompts for a position instead of failing", () => {
+    expect(prompting(beginCommand("text")).message).toBe("specify text position:");
+  });
+
+  it("the pick completes the command with empty content — the box is filled in D-125's editor, not here", () => {
+    expect(completed(walk("text", picked(30, 40)))).toEqual({ kind: "text", x: 30, y: 40, content: "" });
+  });
+
+  it('still takes §5.10\'s quoted-content typed form, routed to parseCommand whole (D-124 clause 3)', () => {
+    expect(completed(beginCommand('text "hello world"'))).toEqual({ kind: "text", x: 0, y: 0, content: "hello world" });
+    expect(completed(beginCommand('text x=5 y=6 "hi"'))).toEqual({ kind: "text", x: 5, y: 6, content: "hi" });
+  });
+
+  it("an unquoted single word still falls through to parseCommand as content (D-124 clause 3)", () => {
+    expect(completed(beginCommand("text hello"))).toEqual({ kind: "text", x: 0, y: 0, content: "hello" });
+  });
+
+  it("an unquoted `x,y` reads as the point shorthand — box there, empty content — the same as `circle 30,40`", () => {
+    expect(completed(beginCommand("text 30,40"))).toEqual({ kind: "text", x: 30, y: 40, content: "" });
+    // A literal "30,40" string is still reachable by quoting it.
+    expect(completed(beginCommand('text "30,40"'))).toEqual({ kind: "text", x: 0, y: 0, content: "30,40" });
   });
 });
 

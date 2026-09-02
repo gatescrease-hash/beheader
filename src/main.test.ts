@@ -1164,3 +1164,48 @@ describe("editorSeed — the text the in-place editor opens showing (D-125)", ()
     expect(editorSeed(opened(), { kind: "text", objectId: "obj_404" })).toBe("");
   });
 });
+
+// **D-124** — `text` is placed by POINTING (a `parser.ts` prompt step), and the
+// new box hands straight to D-125's in-place editor: `advance` returns
+// `AppTransition.openEditor` naming it, which `start` (untested by construction)
+// reads to set `inPlaceEditor`. These cover the pure signal.
+describe("text placed by pointing opens the in-place editor on the new box (D-124)", () => {
+  it("a bare `text` word enters the position prompt, not a refusal", () => {
+    const before = opened();
+    const outcome = submitLine(before, "text", VIEWPORT);
+    expect(outcome.refused).toBe(false);
+    expect(outcome.state.pending?.commandName).toBe("text");
+    expect(newLines(before, outcome.state).join("\n")).toContain("specify text position");
+  });
+
+  it("the canvas pick that completes the sequence creates an empty box AND asks for its editor", () => {
+    const state = typed(opened(), "text");
+    const outcome = pointerDownAt(state, { x: 100, y: 100 }, VIEWPORT);
+    const created = objectNamed(outcome.state, "text_1");
+    expect(created.type).toBe("text");
+    expect(numberAt(created, ["origin", "x"])).toBe(100);
+    expect(getSlot(created, ["content"])).toEqual({ kind: "literal", value: "" });
+    expect(outcome.openEditor).toEqual({ kind: "text", objectId: created.id });
+    // The editor opens showing nothing — the operator types the content in place.
+    expect(editorSeed(outcome.state, outcome.openEditor!)).toBe("");
+  });
+
+  it("the typed forms also open the editor on the new box (STATUS: every newly-created text object)", () => {
+    const outcome = submitLine(opened(), 'text x=5 y=6 "hi"', VIEWPORT);
+    const created = objectNamed(outcome.state, "text_1");
+    expect(getSlot(created, ["content"])).toEqual({ kind: "literal", value: "hi" });
+    expect(outcome.openEditor).toEqual({ kind: "text", objectId: created.id });
+  });
+
+  it("a non-text creation never asks for an editor", () => {
+    expect(submitLine(opened(), "circle x=0 y=0 r=5", VIEWPORT).openEditor).toBeUndefined();
+    expect(submitLine(opened(), "table x=0 y=0", VIEWPORT).openEditor).toBeUndefined();
+  });
+
+  it("a refused text creation asks for no editor", () => {
+    // `text` needs content in the typed form; the bare positional is missing.
+    const outcome = submitLine(opened(), "text x=0 y=0", VIEWPORT);
+    expect(outcome.refused).toBe(true);
+    expect(outcome.openEditor).toBeUndefined();
+  });
+});

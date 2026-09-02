@@ -126,6 +126,12 @@ export interface CreateTableCommand {
  * `x`/`y` are OPTIONAL, defaulting to `0` (**D-121** clause 3) — unlike the geometry
  * presets, whose position §5.10 always writes out. They land on the `origin.x`/
  * `origin.y` literal slots D-121 puts on `TEXT_SCHEMA`.
+ *
+ * **D-124** makes POINTING the normal path: `text` typed alone walks a one-step
+ * prompt sequence (a `point`, no content step) and creates the box with
+ * `content` `""`, which `main.ts` then opens D-125's in-place editor on. The
+ * typed `x`/`y` form stays as the fallback and produces the identical `Command`
+ * shape.
  */
 export interface CreateTextCommand {
   readonly kind: "text";
@@ -499,9 +505,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     // `content` is a positional `text` argument — passed through verbatim, quoted
     // when it has spaces or markup (§5.10's own example). `x`/`y` are optional
     // key=value numbers defaulting to 0 (D-121 clause 3), so `text "hi"` is a
-    // complete line. No `prompts`: a text step would need an `accepts` kind
-    // `PromptStep` does not have (`"point" | "distance" | "number"`), which is a
-    // separate mechanism, not this slice's — `text` is typed-form only for now.
+    // complete typed line.
     positional: [text("content")],
     named: [optionalNumber("x", 0), optionalNumber("y", 0)],
     flags: [],
@@ -511,6 +515,24 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       y: numberArgument(args, "y"),
       content: textArgument(args, "content"),
     }),
+    // **D-124**: `text` is placed by POINTING, like every other creation command
+    // — type `text`, then click. ONE `point` step, NO content step: the pick
+    // completes the command with `content` `""` and `main.ts` hands the new box
+    // straight to D-125's in-place editor (D-124 clause 2). `accepts` stays
+    // `"point"`, an existing kind — D-124 clause 4 forbids widening
+    // `PromptStep.accepts`, and clause 2 (no content step) is what buys that.
+    //
+    // Both typed forms are untouched (D-124 clause 3): `text "hi"` hits
+    // `beginCommand`'s `token.quoted` branch, `text x=0 y=0 "hi"` hits
+    // `usesNamedForm`, and both defer to `parseCommand` whole. An UNQUOTED
+    // `text 30,40` now reads as the point shorthand (box at 30,40, empty
+    // content), exactly as `circle 30,40` does — a literal `"30,40"` string is
+    // still reachable by quoting it.
+    prompts: [{ name: "position", message: "specify text position", accepts: "point" }],
+    buildFromPrompts: (answers) => {
+      const position = pointAnswer(answers, "position");
+      return { kind: "text", x: position.x, y: position.y, content: "" };
+    },
   },
   {
     name: "table",

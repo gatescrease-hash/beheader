@@ -243,6 +243,45 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     const document = committed('text x=0 y=0 "b"', committed('text x=0 y=0 "a"', createEmptyDocument()));
     expect(document.objects.map((object) => object.name)).toEqual(["text_1", "text_2"]);
   });
+
+  it("D-124: a successful creation names the object it made in `createdObjectId`, so main.ts can open D-125's editor on a fresh text box without resolving anything", () => {
+    const outcome = executeCommand(parsed('text x=1 y=2 ""'), createEmptyDocument());
+    if (isCommandFailure(outcome)) {
+      throw new Error(outcome.message);
+    }
+    expect(outcome.createdObjectId).toBe(onlyObject(outcome.document).id);
+  });
+
+  it("D-124: the point-placed form (buildFromPrompts) creates the box with empty content, ready for the in-place editor", () => {
+    const started = beginCommand("text");
+    if (started.status !== "prompting") {
+      throw new Error(`expected a prompt, got ${started.status}`);
+    }
+    const finished = respond(started.pending, { kind: "picked", point: { x: 40, y: 55 } });
+    if (finished.status !== "complete") {
+      throw new Error(`expected completion, got ${finished.status}`);
+    }
+    const outcome = executeCommand(finished.command, createEmptyDocument());
+    if (isCommandFailure(outcome)) {
+      throw new Error(outcome.message);
+    }
+    const object = onlyObject(outcome.document);
+    expect(literalValue(object, ["origin", "x"])).toBe(40);
+    expect(literalValue(object, ["origin", "y"])).toBe(55);
+    expect(literalValue(object, ["content"])).toBe("");
+  });
+
+  it("carries `createdObjectId` for every creation command, undefined for a non-creation one", () => {
+    for (const line of ['circle x=0 y=0 r=1', 'rect x=0 y=0 w=1 h=1', 'table x=0 y=0', 'text x=0 y=0 ""']) {
+      const outcome = executeCommand(parsed(line), createEmptyDocument());
+      if (isCommandFailure(outcome)) {
+        throw new Error(`${line}: ${outcome.message}`);
+      }
+      expect(outcome.createdObjectId).toBe(onlyObject(outcome.document).id);
+    }
+    const listed = executeCommand(parsed("list"), createEmptyDocument());
+    expect(isCommandFailure(listed) ? undefined : listed.createdObjectId).toBeUndefined();
+  });
 });
 
 describe("D-122 — a text object's `content` slot is literal-only (answers Q-023 / F13)", () => {
