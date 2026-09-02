@@ -102,18 +102,38 @@
  *   - `style` slots (§5.5's `Path` shape) — `geometry.ts` declares none yet,
  *     so every shape draws with one disclosed default stroke, and the
  *     selection highlight and chrome text below are equally untuned (Rule 5).
- *   - Text/script/image objects (no schema — Phases 5/6) and `polyline`'s
- *     per-vertex shape (deferred with `explode`) draw no body AND no chrome —
- *     `chromeAnchorPoint` returns `undefined` for every type with no schema.
+ *   - `script`/`image` objects (no schema — Phase 6) and `polyline`'s per-vertex
+ *     shape (deferred with `explode`) draw no body AND no chrome —
+ *     `chromeAnchorPoint` returns `undefined` for every type with no extent.
+ *     `text` DOES draw now (entry 0138): `drawText` lays `resolvedContent` out
+ *     from `origin` (top-left), wrapping at a numeric `width` slot via the SAME
+ *     `layOutLines` the measurer uses (`render/measure.ts`), honouring
+ *     `style.font`/`fontSize`/`lineHeight`/`color`/`align`. Its chrome and
+ *     selection highlight fall out of `extent.ts`'s new `text` extent.
+ *   - Markdown-lite (`**bold**`, `# heading`, `- list`, …) and `overflow`
+ *     `"clip"`/`"ellipsis"` — NOT this cycle. `resolvedContent`'s markup is
+ *     drawn VERBATIM (exactly as `render/measure.ts` still measures it), and
+ *     every `text` object draws with `overflow: "visible"` semantics. Both are
+ *     the next Phase 5 slice, together with making the measurer markup-aware.
  *   - Any bound on `rows`/`cols`/`sides` — a carried known problem; one fix
  *     covers drawing and evaluation together.
  */
 import { getSlot, isErrorValue, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
+import {
+  TEXT_RESOLVED_CONTENT_PATH,
+  TEXT_STYLE_ALIGN_PATH,
+  TEXT_STYLE_COLOR_PATH,
+  TEXT_STYLE_FONT_PATH,
+  TEXT_STYLE_FONT_SIZE_PATH,
+  TEXT_STYLE_LINE_HEIGHT_PATH,
+  TEXT_WIDTH_PATH,
+} from "../engine/primitives/text.ts";
 import { formatCellReference, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
+import { cssFont, layOutLines } from "./measure.ts";
 import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 // D-066's one extent, reused as the chrome anchor (see `chromeAnchorPoint`).
 // `extent.ts` and `slots.ts` are D-093's split: neither this file nor
@@ -140,6 +160,19 @@ const TABLE_CELL_TEXT_PADDING = 4;
 const TABLE_GRID_STROKE_STYLE = "#999999";
 const TABLE_CELL_TEXT_STYLE = "#1a1a1a";
 const TABLE_CELL_FONT = "14px sans-serif";
+
+/**
+ * Fallbacks for a `text` object whose `style.*` slots are absent — reachable
+ * only from a hand-built test fixture, since `command/commands.ts`'s `createText`
+ * always supplies all five (its own `DEFAULT_TEXT_*`). They exist so `drawText`
+ * never feeds `ctx.font` a `NaN` size or `undefined` family; a real `text`
+ * object draws with its OWN slot values. World units (Q-012's provisional (a),
+ * like `TABLE_CELL_FONT`), round and untuned (Rule 5).
+ */
+const DEFAULT_TEXT_FILL_STYLE = "#1a1a1a";
+const DEFAULT_TEXT_FONT_FAMILY = "sans-serif";
+const DEFAULT_TEXT_FONT_SIZE = 16;
+const DEFAULT_TEXT_LINE_HEIGHT = 20;
 
 /**
  * §5.9's selection highlight (D-068): the SAME path/box `drawObject` built
@@ -252,8 +285,10 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject): void {
     case "table":
       drawTable(ctx, object);
       return;
-    case "polyline":
     case "text":
+      drawText(ctx, object);
+      return;
+    case "polyline":
     case "script":
     case "image":
     case "value":
@@ -438,6 +473,101 @@ function formatCellValue(value: Value): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Text (§5.6) — entry 0138. World space, under the camera transform like every
+// other object body: font size is in world units and scales with zoom (Q-012's
+// provisional (a), the same reading `drawTable`'s font takes).
+// ---------------------------------------------------------------------------
+
+/** One `text` object's paint-relevant style, every field defaulted so `drawText`'s arithmetic and `ctx.font` are always valid (see `DEFAULT_TEXT_*`). */
+interface ResolvedTextStyle {
+  readonly family: string;
+  readonly fontSize: number;
+  readonly lineHeight: number;
+  readonly color: string;
+  readonly align: CanvasTextAlign;
+}
+
+/** A slot's value narrowed to a non-empty string, or `undefined` — `readNumber`'s string sibling, kept local because only `drawText` needs it. */
+function readText(object: GraphObject, path: readonly string[]): string | undefined {
+  const value = getSlot(object, path)?.value;
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
+ * Reads `style.font`/`fontSize`/`lineHeight`/`color`/`align` off `object`,
+ * falling back per field. `align` is clamped to the three §5.6 values a
+ * `ctx.textAlign` can be here (`left`/`center`/`right`); anything else — an
+ * unknown string, a formula result — reads as `left`, the default.
+ */
+function resolveTextStyle(object: GraphObject): ResolvedTextStyle {
+  const fontSize = readNumber(object, TEXT_STYLE_FONT_SIZE_PATH);
+  const lineHeight = readNumber(object, TEXT_STYLE_LINE_HEIGHT_PATH);
+  const align = readText(object, TEXT_STYLE_ALIGN_PATH);
+  return {
+    family: readText(object, TEXT_STYLE_FONT_PATH) ?? DEFAULT_TEXT_FONT_FAMILY,
+    fontSize: fontSize !== undefined && fontSize > 0 ? fontSize : DEFAULT_TEXT_FONT_SIZE,
+    lineHeight: lineHeight !== undefined && lineHeight > 0 ? lineHeight : DEFAULT_TEXT_LINE_HEIGHT,
+    color: readText(object, TEXT_STYLE_COLOR_PATH) ?? DEFAULT_TEXT_FILL_STYLE,
+    align: align === "center" || align === "right" ? align : "left",
+  };
+}
+
+/**
+ * §5.6: draws a `text` object's `resolvedContent` from `origin` (its top-left,
+ * the same meaning `rect`/`table` give `origin`), wrapping at the `width` slot
+ * when it holds a positive number (§5.6's "fixed width + auto height (wrap, grow
+ * down) is the default"; `"auto"` — or any non-number — means no wrap).
+ *
+ * Line-breaking goes through `render/measure.ts`'s `layOutLines` with THIS ctx's
+ * `measureText`, so the drawn lines are exactly the ones `measuredHeight` was
+ * measured from (D-010). `resolvedContent` already carries any `!`-marked broken
+ * span (D-116 and D-117, engine-side) — this function just draws the string.
+ *
+ * Markdown-lite markup is drawn verbatim and `overflow` is not consulted (both
+ * the next slice — file header). Draws nothing for an unset, non-string, or
+ * empty `resolvedContent` (an empty text object takes no ink, matching
+ * `measure.ts`'s zero box); a `style.*` slot that is missing or holds a
+ * non-usable value falls back per `resolveTextStyle` rather than blanking the
+ * text. Never throws.
+ */
+function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+  const resolved = readText(object, TEXT_RESOLVED_CONTENT_PATH);
+  if (resolved === undefined) {
+    return;
+  }
+  const style = resolveTextStyle(object);
+  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
+  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
+
+  ctx.font = cssFont(style.fontSize, style.family);
+
+  const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
+  const wrapWidth = fixedWidth !== undefined && fixedWidth > 0 ? fixedWidth : undefined;
+  const lines = layOutLines(resolved, wrapWidth, (line) => ctx.measureText(line).width);
+
+  // Alignment needs a box width: the fixed `width` when set, else the widest
+  // laid-out line (auto width — the text is as wide as it draws).
+  let boxWidth = wrapWidth ?? 0;
+  if (wrapWidth === undefined) {
+    for (const line of lines) {
+      boxWidth = Math.max(boxWidth, ctx.measureText(line).width);
+    }
+  }
+
+  ctx.fillStyle = style.color;
+  ctx.textBaseline = "top";
+  ctx.textAlign = style.align;
+  const x = style.align === "center" ? originX + boxWidth / 2 : style.align === "right" ? originX + boxWidth : originX;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line === undefined) {
+      continue; // noUncheckedIndexedAccess artifact only — `i` is always in range.
+    }
+    ctx.fillText(line, x, originY + i * style.lineHeight);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Selection highlight (§5.9, D-068) — world space, drawn last (see caller)
 // ---------------------------------------------------------------------------
 
@@ -480,8 +610,19 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       ctx.strokeRect(originX, originY, width, height);
       return;
     }
+    case "text": {
+      // The SAME box `drawText` draws into and `hittest.ts` clicks against —
+      // `extent.ts`'s `objectExtent` (D-066/D-010), not a second reading.
+      const extent = objectExtent(object);
+      if (extent === undefined) {
+        return; // No resolved content — nothing drawn, nothing to highlight.
+      }
+      ctx.strokeStyle = SELECTION_HIGHLIGHT_STYLE;
+      ctx.lineWidth = SELECTION_HIGHLIGHT_WIDTH;
+      ctx.strokeRect(extent.minX, extent.minY, extent.maxX - extent.minX, extent.maxY - extent.minY);
+      return;
+    }
     case "polyline":
-    case "text":
     case "script":
     case "image":
     case "value":

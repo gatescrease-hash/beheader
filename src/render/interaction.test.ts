@@ -549,7 +549,14 @@ describe("pointerMove — failure paths", () => {
 // `measuredHeight` recomputed on every step: without a real measurer threaded it
 // is re-stamped `#MEASURE` (D-118); with one it stays a real height.
 describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)", () => {
-  /** The schema's five required non-derived `text` slots + both derived placeholders — hand-built (the `text` command exists since entry 0136, but this keeps the test about context threading, not creation). */
+  /**
+   * The five effectively-required non-derived `text` slots + `origin.x`/`origin.y`
+   * (D-121) + both derived placeholders — hand-built (the `text` command exists
+   * since entry 0136, but this keeps the test about context threading, not
+   * creation). Positioned at (500, 500), well clear of `rectObject(0, 0)`: since
+   * entry 0138 a `text` object with resolved content has a hit box, so the drag
+   * below must be able to land on the rect without the text intercepting it.
+   */
   function textObject(): GraphObject {
     return {
       id: "obj_t",
@@ -558,6 +565,8 @@ describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)
       slots: {
         content: { kind: "literal", value: "label" },
         width: { kind: "literal", value: "auto" },
+        "origin.x": { kind: "literal", value: 500 },
+        "origin.y": { kind: "literal", value: 500 },
         "style.font": { kind: "literal", value: "sans" },
         "style.fontSize": { kind: "literal", value: 12 },
         "style.lineHeight": { kind: "literal", value: 14 },

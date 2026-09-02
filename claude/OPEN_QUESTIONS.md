@@ -8,9 +8,61 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-024**
+Next free ID: **Q-025**
 
 ---
+
+## Q-024 — How is a `text` object's on-canvas bounding box computed when `width` is `"auto"`, given there is no `measuredWidth` slot and `render/extent.ts` cannot measure glyphs?
+Raised: entry 0138-text-render (implementer)   Brief section: §5.6 (`TextBox` — `width: number | "auto"`;
+"**Derived slots:** `resolvedContent` … and `measuredHeight`" — a closed list, no `measuredWidth`;
+"Auto width + auto height means no wrapping"), §5.9 ("**bounding box for text**/tables/images/scripts"),
+Rule 1 (`render/extent.ts` is pure — no `ctx`), §9 clause 4.
+Status: **OPEN.** Reversible provisional choice **(a)** taken and tagged — see below.
+
+Ambiguity: §5.9 says hit-testing uses a bounding box for `text`, and D-066 says the drawn extent
+and the clickable extent are ONE extent. `render/extent.ts`'s `objectExtent` is the single source
+of that box, and it is a PURE function — no canvas, so it cannot call `measureText`. A `text`
+object's height when `height: "auto"` is recoverable: the `measuredHeight` derived slot already
+holds it (the running app threads a real measurer — 0132). Its **width** when `width: "auto"` is
+not: §5.6 declares no `measuredWidth` slot, and the width the measurer computed for `measuredHeight`
+is discarded (only `.height` is stored). So `extent.ts` has no way to know how wide an auto-width
+`text` object actually draws.
+
+Options:
+
+(a) **A fixed fallback box for the auto case, in `extent.ts`.** `width` = the `width` slot when
+    numeric, else a constant (`TEXT_AUTO_BOX_WIDTH`); `height` = the `height` slot when numeric,
+    else `measuredHeight` when numeric, else a constant. The box stays hit-testable and its name
+    label / properties panel appear; drawn text wider than the fallback simply overflows the click
+    box (§5.6's `overflow: "visible"` default). Cheapest, render-only, fully reversible, and it is
+    what every other size constant in `render/` already is (Rule 5, untuned). Cost: for an
+    auto-width box the click region and the ink can disagree — a wide line is drawn outside its own
+    hit box until this is ruled.
+
+(b) **Add a `measuredWidth` derived slot to `TEXT_SCHEMA`** (§5.6), computed by the same measurer
+    call `measuredHeight` already makes — return `.width` instead of discarding it. `extent.ts`
+    then reads a real width for the auto case, exactly as it reads `measuredHeight` for the auto
+    height. Cost: a load-bearing schema change (a new slot on a Rule-6 schema, `§6.2`), a brief
+    deviation from §5.6's stated two-derived-slot list, and it must be escalated, not guessed —
+    which is why this cycle did not take it. It is the natural long-term answer if the disagreement
+    in (a) proves to matter.
+
+(c) **Thread a `MeasurementContext` into `objectExtent`.** `main.ts`'s `fit` and the panel code
+    have the real measurer; `render/interaction.ts` (which calls `hitTest` → `objectExtent`) would
+    need it too. Cost: `objectExtent`'s signature changes and ripples to every caller
+    (`hittest.ts`, `documentExtent`, `chromeAnchorPoint`, `main.ts` ×2), and it puts glyph
+    measurement behind a function whose whole design is "pure, no ctx." Largest diff; rejected here.
+
+Recommendation: **(a) for now** (taken), **(b)** as the end state if an operator ever notices an
+auto-width label's click box is the wrong size. Most real `text` objects will carry a numeric
+`width` (Phase 5's own gate says "wraps at its **set width**"; a Phase 7 label would set one for
+layout), so the fallback is an edge-case affordance, not the common path.
+
+Reversible? **Yes** — (a) is two constants and a branch in one pure render function; no stored
+state depends on it (an extent is recomputed every paint, never serialized). (b) and (c) are larger
+but also carry no migration.
+Provisional choice taken: **(a)**. Tagged at: `src/render/extent.ts` (`textExtent`, the
+`TEXT_AUTO_BOX_WIDTH` / `TEXT_AUTO_BOX_HEIGHT` fallbacks — `PROVISIONAL(Q-024)`).
 
 ## Q-023 — When a `text` object's `content` slot is a `formula`/`derived`, are its embedded `{= }`/`{? }` references tracked, or is that slot kind refused like a table dimension (D-046)?
 Raised: entry 0134-text-command (implementer), formalising fix-list item 22 / F13 (open since entry

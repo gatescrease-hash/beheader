@@ -156,11 +156,65 @@ describe("hitTest — topmost object wins (§5.9, array order = z-order per rend
 });
 
 describe("hitTest — object types with no schema/visual definition yet never hit (mirrors renderer.ts)", () => {
-  it("never hits a polyline/text/script/image/value/add object, regardless of point", () => {
-    for (const type of ["polyline", "text", "script", "image", "value", "add"] as const) {
+  it("never hits a polyline/script/image/value/add object, regardless of point", () => {
+    for (const type of ["polyline", "script", "image", "value", "add"] as const) {
       const object: GraphObject = { id: "obj_1", name: `${type}_1`, type, slots: {} };
       expect(hitTest({ x: 0, y: 0 }, [object], CAMERA_IDENTITY)).toBeUndefined();
     }
+  });
+});
+
+describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent renderer.ts draws into", () => {
+  /** A `text` object with `resolvedContent` evaluated, positioned at (`originX`, `originY`). `width`/`height` default to `"auto"` — the fallback box (PROVISIONAL Q-024). */
+  function textObject(resolved: string | undefined, originX: number, originY: number, overrides: GraphObject["slots"] = {}): GraphObject {
+    return {
+      id: "obj_1",
+      name: "text_1",
+      type: "text",
+      slots: {
+        "origin.x": { kind: "literal", value: originX },
+        "origin.y": { kind: "literal", value: originY },
+        width: { kind: "literal", value: "auto" },
+        "style.lineHeight": { kind: "literal", value: 20 },
+        resolvedContent: { kind: "derived", value: resolved ?? null },
+        ...overrides,
+      },
+    };
+  }
+
+  it("hits a point inside a fixed-width, measured-height box", () => {
+    // width 120, measuredHeight 30 -> box (10,20)-(130,50).
+    const text = textObject("hello", 10, 20, {
+      width: { kind: "literal", value: 120 },
+      measuredHeight: { kind: "derived", value: 30 },
+    });
+    expect(hitTest({ x: 40, y: 35 }, [text], CAMERA_IDENTITY)).toBe(text);
+    expect(hitTest({ x: 10, y: 20 }, [text], CAMERA_IDENTITY)).toBe(text); // inclusive top-left corner
+  });
+
+  it("does not hit a point outside the box", () => {
+    const text = textObject("hello", 10, 20, { width: { kind: "literal", value: 120 }, measuredHeight: { kind: "derived", value: 30 } });
+    expect(hitTest({ x: 200, y: 35 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 40, y: 100 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("still hits an auto-width text object via the provisional fallback box (Q-024)", () => {
+    const text = textObject("label", 0, 0); // no width, no measuredHeight -> fallback 240 x 20.
+    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
+    expect(hitTest({ x: 300, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("never hits a text object with no resolved content — nothing is drawn to click (D-066)", () => {
+    expect(hitTest({ x: 0, y: 0 }, [textObject(undefined, 0, 0)], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 0, y: 0 }, [textObject("", 0, 0)], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 0, y: 0 }, [{ id: "obj_1", name: "text_1", type: "text", slots: {} }], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("is topmost-wins against an overlapping shape, like every other type", () => {
+    const square = squareObject("obj_1", "rect_1", "rect");
+    const text = { ...textObject("x", 0, 0, { width: { kind: "literal" as const, value: 40 }, measuredHeight: { kind: "derived" as const, value: 40 } }), id: "obj_2", name: "text_1" };
+    // The text is LAST in array order, so it wins where both cover the point.
+    expect(hitTest({ x: 10, y: 10 }, [square, text], CAMERA_IDENTITY)).toBe(text);
   });
 });
 
@@ -204,6 +258,27 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
   it("bounds a table by the box it is drawn in, at the same cell size hitTestTable uses", () => {
     // 2 rows x 3 cols at the default cell size, offset to (100, 200).
     expect(documentExtent([tableFixture("obj_1", 100, 200)])).toEqual({ minX: 100, minY: 200, maxX: 340, maxY: 248 });
+  });
+
+  it("bounds a text object by its origin + fixed width + measuredHeight (entry 0138)", () => {
+    const text: GraphObject = {
+      id: "obj_1",
+      name: "text_1",
+      type: "text",
+      slots: {
+        "origin.x": { kind: "literal", value: 10 },
+        "origin.y": { kind: "literal", value: 20 },
+        width: { kind: "literal", value: 100 },
+        measuredHeight: { kind: "derived", value: 40 },
+        resolvedContent: { kind: "derived", value: "hi" },
+      },
+    };
+    expect(documentExtent([text])).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 60 });
+  });
+
+  it("is undefined for a text object with no resolved content — matches the slotless-text case above", () => {
+    const empty: GraphObject = { id: "obj_1", name: "text_1", type: "text", slots: { "origin.x": { kind: "literal", value: 5 }, width: { kind: "literal", value: 100 } } };
+    expect(documentExtent([empty])).toBeUndefined();
   });
 
   it("unions every object that draws something and skips every object that does not", () => {

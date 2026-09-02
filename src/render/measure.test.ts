@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { TextStyle } from "../engine/eval-context.ts";
-import { createCanvas2dTextMeasurer, type MeasurementContext } from "./measure.ts";
+import { createCanvas2dTextMeasurer, cssFont, layOutLines, type MeasurementContext } from "./measure.ts";
 
 /** Per-character width the fake reports — keeps every expected number exact and hand-checkable, the way `renderer.test.ts`'s `FAKE_CHAR_WIDTH` does. */
 const CHAR = 10;
@@ -158,5 +158,29 @@ describe("createCanvas2dTextMeasurer — the eval-context.ts contract: never thr
     expect(() => measurer.measure("", STYLE)).not.toThrow();
     expect(() => measurer.measure("x".repeat(5000), STYLE, 1)).not.toThrow();
     expect(() => measurer.measure("a\n".repeat(2000), { ...STYLE, lineHeight: 0 })).not.toThrow();
+  });
+});
+
+describe("layOutLines / cssFont — exported for renderer.ts to draw the SAME lines this file measures (entry 0138)", () => {
+  const width = (line: string): number => line.length * CHAR;
+
+  it("splits on hard newlines and does not wrap when wrapWidth is undefined", () => {
+    expect(layOutLines("a\nbb\nccc", undefined, width)).toEqual(["a", "bb", "ccc"]);
+    expect(layOutLines("one very long line", undefined, width)).toEqual(["one very long line"]);
+  });
+
+  it("treats \\r\\n as a hard break and keeps a blank line", () => {
+    expect(layOutLines("a\r\n\r\nb", undefined, width)).toEqual(["a", "", "b"]);
+  });
+
+  it("greedily word-wraps each hard line when wrapWidth is set", () => {
+    // CHAR = 10: "aaa" is 30px, "aaa bbb" is 70px; wrapWidth 40 -> one word per line.
+    expect(layOutLines("aaa bbb ccc", 40, width)).toEqual(["aaa", "bbb", "ccc"]);
+    expect(layOutLines("aaa bbb\nzzz", 100, width)).toEqual(["aaa bbb", "zzz"]);
+  });
+
+  it("cssFont builds `<size>px <family>` and falls back to sans-serif for a blank family", () => {
+    expect(cssFont(16, "Inter, sans-serif")).toBe("16px Inter, sans-serif");
+    expect(cssFont(24, "   ")).toBe("24px sans-serif");
   });
 });

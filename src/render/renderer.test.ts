@@ -31,15 +31,24 @@ type RecordedCall =
 const FAKE_CHAR_WIDTH = 7;
 
 /** A minimal recording fake — only the `CanvasRenderingContext2D` members `renderer.ts` calls. See file header. */
-function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly calls: readonly RecordedCall[] } {
+function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly calls: readonly RecordedCall[]; readonly fonts: readonly string[] } {
   const calls: RecordedCall[] = [];
+  // Every `ctx.font` assignment in order (entry 0138) — `drawText` sets it from
+  // the text object's own style before measuring/drawing, and the chrome pass
+  // resets it afterward, so a test asserts against `fonts`, not the final value.
+  const fonts: string[] = [];
   const ctx = {
     fillStyle: "",
     strokeStyle: "",
     lineWidth: 1,
     textAlign: "left",
     textBaseline: "alphabetic",
-    font: "",
+    set font(value: string) {
+      fonts.push(value);
+    },
+    get font() {
+      return fonts[fonts.length - 1] ?? "";
+    },
     setTransform(a: number, b: number, c: number, d: number, e: number, f: number) {
       calls.push({ op: "setTransform", a, b, c, d, e, f });
     },
@@ -81,7 +90,7 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
   // file's tests exercise — a real ctx has many more members renderer.ts
   // never calls, which is why this is a deliberate cast rather than a
   // structural fit (see file header).
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, calls, fonts };
 }
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
@@ -325,6 +334,169 @@ describe("renderDocument — object types with no schema/visual definition yet",
     renderDocument(ctx, 800, 600, [value], CAMERA_IDENTITY);
     const drawCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
     expect(drawCalls).toEqual([]);
+  });
+
+  it("draws nothing for a polyline/script/image fixture object (no schema/visual definition yet)", () => {
+    for (const type of ["polyline", "script", "image"] as const) {
+      const { ctx, calls } = createFakeContext();
+      renderDocument(ctx, 800, 600, [{ id: "obj_1", name: `${type}_1`, type, slots: {} }], CAMERA_IDENTITY);
+      const drawCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
+      expect(drawCalls).toEqual([]);
+    }
+  });
+});
+
+/**
+ * A `text` object with `resolvedContent` already evaluated to `resolved`, its
+ * position at (`originX`, `originY`), and the style slots `drawText` reads. A
+ * hand-built fixture (not the `text` command) so each test controls exactly the
+ * slots under test; `width` defaults to `"auto"` (no wrap).
+ */
+function textObject(resolved: string, originX: number, originY: number, overrides: Record<string, Slot> = {}): GraphObject {
+  return {
+    id: "obj_1",
+    name: "text_1",
+    type: "text",
+    slots: {
+      content: { kind: "literal", value: resolved },
+      "origin.x": { kind: "literal", value: originX },
+      "origin.y": { kind: "literal", value: originY },
+      width: { kind: "literal", value: "auto" },
+      "style.font": { kind: "literal", value: "sans-serif" },
+      "style.fontSize": { kind: "literal", value: 16 },
+      "style.lineHeight": { kind: "literal", value: 20 },
+      resolvedContent: { kind: "derived", value: resolved },
+      measuredHeight: { kind: "derived", value: 20 },
+      ...overrides,
+    },
+  };
+}
+
+/** Just the body `fillText` calls — drops D-092's name label, D-068's `!` badge and the `•x`/`•y` ticks (the chrome describe blocks cover those). */
+function bodyText(calls: readonly RecordedCall[]): readonly Extract<RecordedCall, { op: "fillText" }>[] {
+  return calls.filter(
+    (call): call is Extract<RecordedCall, { op: "fillText" }> =>
+      call.op === "fillText" && call.text !== "text_1" && call.text !== "!" && !call.text.includes("•"),
+  );
+}
+
+describe("renderDocument — text (§5.6, entry 0138)", () => {
+  it("draws each hard line of resolvedContent from origin, stepping down by lineHeight", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("first\nsecond", 10, 20)], CAMERA_IDENTITY);
+    expect(bodyText(calls)).toEqual([
+      { op: "fillText", text: "first", x: 10, y: 20, align: "left" },
+      { op: "fillText", text: "second", x: 10, y: 40, align: "left" },
+    ]);
+  });
+
+  it("word-wraps at a numeric width slot, using the same layOutLines the measurer uses", () => {
+    const { ctx, calls } = createFakeContext();
+    // FAKE_CHAR_WIDTH = 7: "aaa bbb" is 49px, past a 30px width, so each word lands on its own line.
+    renderDocument(ctx, 800, 600, [textObject("aaa bbb ccc", 0, 0, { width: { kind: "literal", value: 30 } })], CAMERA_IDENTITY);
+    expect(bodyText(calls).map((call) => ({ text: call.text, y: call.y }))).toEqual([
+      { text: "aaa", y: 0 },
+      { text: "bbb", y: 20 },
+      { text: "ccc", y: 40 },
+    ]);
+  });
+
+  it("does not wrap when width is \"auto\" — one line however long", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("a very long single line that would wrap at any real width", 0, 0)], CAMERA_IDENTITY);
+    expect(bodyText(calls)).toHaveLength(1);
+  });
+
+  it("centre-aligns about origin + boxWidth/2 and right-aligns about origin + boxWidth", () => {
+    const centred = createFakeContext();
+    renderDocument(centred.ctx, 800, 600, [textObject("ab", 10, 0, { width: { kind: "literal", value: 100 }, "style.align": { kind: "literal", value: "center" } })], CAMERA_IDENTITY);
+    expect(bodyText(centred.calls)[0]).toEqual({ op: "fillText", text: "ab", x: 60, y: 0, align: "center" });
+
+    const right = createFakeContext();
+    renderDocument(right.ctx, 800, 600, [textObject("ab", 10, 0, { width: { kind: "literal", value: 100 }, "style.align": { kind: "literal", value: "right" } })], CAMERA_IDENTITY);
+    expect(bodyText(right.calls)[0]).toEqual({ op: "fillText", text: "ab", x: 110, y: 0, align: "right" });
+  });
+
+  it("an unknown align value reads as left (the default)", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("ab", 5, 0, { "style.align": { kind: "literal", value: "justify" } })], CAMERA_IDENTITY);
+    expect(bodyText(calls)[0]).toEqual({ op: "fillText", text: "ab", x: 5, y: 0, align: "left" });
+  });
+
+  it("draws markdown-lite markup verbatim — the render markdown pass is a later slice", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("**bold** and `code`", 0, 0)], CAMERA_IDENTITY);
+    expect(bodyText(calls)[0]?.text).toBe("**bold** and `code`");
+  });
+
+  it("sets ctx.font from style.fontSize and style.font before drawing the text", () => {
+    const { ctx, fonts } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("x", 0, 0, { "style.fontSize": { kind: "literal", value: 24 }, "style.font": { kind: "literal", value: "Inter, sans-serif" } })], CAMERA_IDENTITY);
+    expect(fonts).toContain("24px Inter, sans-serif");
+  });
+
+  it("draws nothing for an unset, non-string, or empty resolvedContent", () => {
+    for (const value of [null, 42, "", { error: "#TYPE", message: "x" }] as const) {
+      const { ctx, calls } = createFakeContext();
+      const object = textObject("x", 0, 0);
+      const slots: Record<string, Slot> = { ...object.slots, resolvedContent: { kind: "derived", value } };
+      renderDocument(ctx, 800, 600, [{ ...object, slots }], CAMERA_IDENTITY);
+      expect(bodyText(calls)).toEqual([]);
+    }
+  });
+
+  it("falls back to a default size rather than blanking the text when style.fontSize is unusable", () => {
+    const { ctx, calls, fonts } = createFakeContext();
+    const object = textObject("x", 0, 0);
+    const slots: Record<string, Slot> = { ...object.slots, "style.fontSize": { kind: "derived", value: { error: "#TYPE", message: "bad" } } };
+    renderDocument(ctx, 800, 600, [{ ...object, slots }], CAMERA_IDENTITY);
+    expect(bodyText(calls)).toHaveLength(1);
+    expect(fonts).toContain("16px sans-serif"); // DEFAULT_TEXT_FONT_SIZE / DEFAULT_TEXT_FONT_FAMILY
+  });
+
+  it("strokes the text's extent box as its selection highlight (same box hittest.ts clicks against)", () => {
+    const { ctx, calls } = createFakeContext();
+    // Numeric width 120, measuredHeight 20 -> extent (10,20)-(130,40).
+    renderDocument(ctx, 800, 600, [textObject("hi", 10, 20, { width: { kind: "literal", value: 120 } })], CAMERA_IDENTITY, ["obj_1"]);
+    expect(calls).toContainEqual({ op: "strokeRect", x: 10, y: 20, w: 120, h: 20 });
+  });
+
+  it("draws a real text object's evaluated resolvedContent through the mutate pipeline, not a hand-fed fixture", () => {
+    const schema = getObjectSchema("text");
+    if (schema === undefined) {
+      throw new Error("test setup: expected a schema for text");
+    }
+    const placeholders: Record<string, Slot> = {};
+    for (const slot of schema.derivedSlots) {
+      placeholders[slot.path.join(".")] = derivedPlaceholder();
+    }
+    const text: GraphObject = {
+      id: "obj_1",
+      name: "text_1",
+      type: "text",
+      slots: {
+        "origin.x": { kind: "literal", value: 5 },
+        "origin.y": { kind: "literal", value: 8 },
+        content: { kind: "literal", value: "hello world" },
+        width: { kind: "literal", value: "auto" },
+        height: { kind: "literal", value: "auto" },
+        overflow: { kind: "literal", value: "visible" },
+        "style.font": { kind: "literal", value: "sans-serif" },
+        "style.fontSize": { kind: "literal", value: 16 },
+        "style.lineHeight": { kind: "literal", value: 20 },
+        "style.color": { kind: "literal", value: "black" },
+        "style.align": { kind: "literal", value: "left" },
+        ...placeholders,
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: text }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
+    }
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, created.objects, CAMERA_IDENTITY);
+    // `resolvedContent` was evaluated by `mutate` (D-114), not written by this test.
+    expect(bodyText(calls)).toEqual([{ op: "fillText", text: "hello world", x: 5, y: 8, align: "left" }]);
   });
 });
 

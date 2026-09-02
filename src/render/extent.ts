@@ -24,19 +24,31 @@
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws. An object with no extent (missing/wrong-typed/empty
- *     `vertices`, a non-finite vertex, or a table with zero rows or columns)
- *     returns `undefined` rather than a degenerate box (D-066).
+ *     `vertices`, a non-finite vertex, a table with zero rows or columns, or a
+ *     `text` object with no resolved content) returns `undefined` rather than a
+ *     degenerate box (D-066).
  *   - Reads only, writes nothing (Rule 2).
- *   - Built from the SAME reads `hittest.ts`'s tests and `renderer.ts`'s
- *     drawing use — via `slots.ts` — never a second, independently computed
- *     box (D-010).
+ *   - Built from the SAME reads `hittest.ts` and `renderer.ts`'s drawing use —
+ *     via `slots.ts` and (for `text`) the shared `TEXT_*_PATH` constants —
+ *     never a second, independently computed box (D-010). `hittest.ts`'s
+ *     `text` bounding-box test calls THIS function.
  *
  * NOT DONE HERE
  *   - Hit-testing (`hittest.ts`) and drawing (`renderer.ts`) themselves.
+ *   - A `text` object's exact drawn width when `width` is `"auto"`. There is no
+ *     `measuredWidth` slot (§5.6 declares only `measuredHeight`) and this file
+ *     cannot measure glyphs (no `ctx`), so an auto-width / no-measurer box falls
+ *     back to a fixed size — `PROVISIONAL(Q-024)`, see `textExtent`.
  */
 import { getSlot, type GraphObject } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
+import {
+  TEXT_HEIGHT_PATH,
+  TEXT_MEASURED_HEIGHT_PATH,
+  TEXT_RESOLVED_CONTENT_PATH,
+  TEXT_WIDTH_PATH,
+} from "../engine/primitives/text.ts";
 import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 /**
@@ -49,6 +61,17 @@ export interface WorldExtent {
   readonly maxX: number;
   readonly maxY: number;
 }
+
+/**
+ * PROVISIONAL(Q-024): the fallback box a `text` object gets when its size is not
+ * knowable from graph state here — `width: "auto"` (no `measuredWidth` slot
+ * exists, §5.6), or `measuredHeight` still `#MEASURE` (null measurer). World
+ * units, round and untuned (Rule 5), the same posture as every size constant in
+ * `slots.ts`/`renderer.ts`. A `text` object with a numeric `width` slot and a
+ * real `measuredHeight` never touches these.
+ */
+const TEXT_AUTO_BOX_WIDTH = 240;
+const TEXT_AUTO_BOX_HEIGHT = 20;
 
 /**
  * One object's drawn extent, or `undefined` for an object that draws nothing.
@@ -67,8 +90,9 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return verticesExtent(object);
     case "table":
       return tableExtent(object);
-    case "polyline":
     case "text":
+      return textExtent(object);
+    case "polyline":
     case "script":
     case "image":
     case "value":
@@ -114,6 +138,56 @@ function tableExtent(object: GraphObject): WorldExtent | undefined {
   if (width <= 0 || height <= 0) {
     return undefined;
   }
+  return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
+}
+
+/**
+ * A `text` object's drawn box (§5.6, §5.9's "bounding box for text"), positioned
+ * from `origin.x`/`origin.y` — the top-left corner, the same meaning `rect` and
+ * `table` give `origin` and the same point `renderer.ts`'s `drawText` starts the
+ * first line at. `undefined` for a `text` object with no resolved content
+ * (`resolvedContent` unset, non-string, or empty) — an empty text box takes no
+ * room, matching `render/measure.ts`'s `{ width: 0, height: 0 }` for an empty
+ * string. Never throws.
+ *
+ * `width`  — the `width` slot when it holds a positive finite number; otherwise
+ *            (`"auto"`, or missing) a fixed fallback. **PROVISIONAL(Q-024):**
+ *            §5.6 gives a `text` object no `measuredWidth` derived slot and this
+ *            file has no `ctx` to measure with, so an auto-width box's true
+ *            drawn width is not knowable here. The fallback keeps the box
+ *            hit-testable and lets its name label / properties panel appear;
+ *            drawn text wider than it simply overflows the click box (§5.6's
+ *            `overflow: "visible"` default) until Q-024 is ruled.
+ * `height` — the `height` slot (positive finite number) if fixed; else the
+ *            `measuredHeight` derived slot when it holds one (the running app
+ *            threads a real measurer — 0132 — so a command-created `text`
+ *            measures for real); else a fixed fallback (**PROVISIONAL(Q-024)** —
+ *            reached only by a `text` object evaluated with the null measurer,
+ *            e.g. in a test, where `measuredHeight` is `#MEASURE`).
+ */
+function textExtent(object: GraphObject): WorldExtent | undefined {
+  const resolved = getSlot(object, TEXT_RESOLVED_CONTENT_PATH)?.value;
+  if (typeof resolved !== "string" || resolved === "") {
+    return undefined;
+  }
+  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
+  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
+
+  const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
+  // PROVISIONAL(Q-024): the auto-width fallback — a fixed box until §5.6 grows a
+  // `measuredWidth` slot or this file is handed a measurer.
+  const width = fixedWidth !== undefined && fixedWidth > 0 ? fixedWidth : TEXT_AUTO_BOX_WIDTH;
+
+  const fixedHeight = readNumber(object, TEXT_HEIGHT_PATH);
+  const measuredHeight = readNumber(object, TEXT_MEASURED_HEIGHT_PATH);
+  const height =
+    fixedHeight !== undefined && fixedHeight > 0
+      ? fixedHeight
+      : measuredHeight !== undefined && measuredHeight > 0
+        ? measuredHeight
+        : // PROVISIONAL(Q-024): reached only under the null measurer (#MEASURE).
+          TEXT_AUTO_BOX_HEIGHT;
+
   return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
 }
 

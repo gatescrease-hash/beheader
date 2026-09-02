@@ -1,15 +1,27 @@
-# STATUS — as of entry 0137-REVIEW-phase5
+# STATUS — as of entry 0138-text-render
 
-STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1443/1443** tests pass,
+STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1466/1466** tests pass,
 0 skipped, 0 `.only`. **30 test files**. **PHASE 5 IS OPEN.**
 
-**0136 IS REVIEWED — CLEAR TO PROCEED.** 0137-REVIEW-phase5: verdict **ACCEPT WITH EDITS**. The
-`text` command, D-121 (`origin.x`/`origin.y` on `TEXT_SCHEMA`), and D-122 (`content` `literal`-only
-guard) are all reconciled to the letter. Reviewer edits: 4 stale test comments ("no `text` command
-exists" → the present reason those fixtures stay hand-built) in `main.test.ts` (×3) and
-`interaction.test.ts` (×1) — comment-only, still 1443/1443. **Next slice: `render/renderer.ts`'s
-text-drawing pass.** Last review point: **0137-REVIEW-phase5** (ACCEPT WITH EDITS). Cycles since
-last review: **0/3**. Diff since last review: **0**.
+**REVIEW IS DUE — do not start the next slice.** Entry 0138 fired **§6.1 trigger 5** (`hittest.test.ts`'s
+"never hits" type loop dropped `text`; `interaction.test.ts`'s `textObject()` fixture changed — both
+because `text` became hittable, no assertion weakened) and **trigger 3** (brief silent on the
+auto-width text bounding box → **Q-024**, taken as a reversible tagged provisional per §7, not a
+cycle stop). Last review point: **0137-REVIEW-phase5** (ACCEPT WITH EDITS). Cycles since last review:
+**1/3**. Diff since last review: **~330 source lines / 4 source files** (cap 800/10).
+
+**TEXT DRAWS NOW (entry 0138).** `renderer.ts`'s `drawText` lays `resolvedContent` out from `origin`
+(top-left), wraps at a numeric `width` slot via the SAME `layOutLines` the measurer uses (exported
+from `render/measure.ts`), and honours `style.font`/`fontSize`/`lineHeight`/`color`/`align`.
+`extent.ts`'s `objectExtent` has a `text` case (origin + width + `measuredHeight`); `hittest.ts`
+reads that box (§5.9's "bounding box for text"). A `text` object is now selectable, draggable (via
+`interaction.ts`'s existing per-component `origin` path — UNCHANGED), and shows its chrome / a D-094
+properties panel. **Markdown-lite rendering and `overflow` clip/ellipsis are NOT built** — markup
+draws verbatim (as `measure.ts` still measures it), every box is `overflow: "visible"`. That plus
+the gate test are the remaining Phase 5 work.
+
+**Last review point: 0137-REVIEW-phase5** (ACCEPT WITH EDITS). The `text` command + D-121 + D-122
+are all reviewed and closed.
 
 **THE `text` COMMAND IS BUILT (entry 0136).** `command/parser.ts` has a `text` registry entry
 (`text [x=<number>] [y=<number>] "<content>"` — positional `content`, `x`/`y` optional defaulting to
@@ -37,10 +49,12 @@ untracked-reference gap is now CLOSED by a refusal (a loaded document could stil
 `(D-122)`.
 
 **STILL UNBUILT IN PHASE 5:**
-- **`render/renderer.ts`'s text-drawing pass**, markdown-lite rendering, layout — all unbuilt. A
-  `text` object draws as nothing today (`render/extent.ts` returns `undefined` for `text`), so it is
-  also not hit-testable or draggable yet. This is the remaining Phase 5 work before the acceptance
-  criterion can be claimed.
+- **Markdown-lite rendering** (`**bold**`, `*italic*`, `` `code` ``, `# heading` 1–3, `- list`,
+  paragraph breaks) — §5.6's exact list. `resolvedContent`'s markup currently draws verbatim.
+  `render/measure.ts` must become markup-aware in the same cycle so drawn ≡ measured.
+- **`overflow: "clip"` / `"ellipsis"`** — every `text` box draws `visible` today.
+- **The Phase 5 acceptance criterion / gate test** — its own cycle (§6.1 trigger 1). Reactivity is
+  done engine-side; text draws and wraps; the gate needs markdown-lite + the executable test.
 
 **PHASE 4 IS PASSED AND ITS GATE IS CLOSED.** 0116-REVIEW closed the gate; 0119-REVIEW cleared
 0117/0118. §6.2's block on starting a later phase was lifted there and has not been re-armed.
@@ -151,15 +165,24 @@ take it as a REQUIRED param; only the public entry points default it to `NULL_EV
 **16. `TEXT_TYPE` (`graph/node.ts`) joins `TABLE_TYPE` (entry 0136).** Import it, never a bare
 `"text"` literal in an equality check (D-009). `commands.ts`'s D-122 guard is the first user.
 
+**17. TEXT DRAWS AND IS HITTABLE (entry 0138).** `renderer.ts` `drawText` (verbatim markup, wrap at
+numeric `width`, `style.*`), `extent.ts` `textExtent`, `hittest.ts` bounding box. Drag/select/panel
+all fall out of the extent + `interaction.ts`'s existing `origin` path. `render/measure.ts` now
+exports `layOutLines`/`cssFont` — the renderer shares them so drawn ≡ measured (D-010). Markdown-lite
+formatting, `overflow` clip/ellipsis, and the gate are the remaining Phase 5 work. `PROVISIONAL(Q-024)`
+covers the auto-width bounding box.
+
 ## Next slice (recommended)
 
-**Clear to start (0136 reviewed at 0137-REVIEW):** `render/renderer.ts`'s text-drawing pass — the
-last Phase 5 work. Draw a `text` object at its `origin`, render its `resolvedContent`, apply
-markdown-lite (§5.6's exact list, nothing more), lay it out per `width`/`height`/`overflow`, give it
-an extent (`render/extent.ts`, currently `undefined` for `text`) so it becomes hit-testable and
-draggable. Then the Phase 5 acceptance criterion (`main.test.ts`-style, over one document) and the
-phase gate. Cheap add while there: a direct `link text_1.origin.y <cell>` test (0137-REVIEW §honesty —
-0136 tested the equivalent path on `style.fontSize`).
+**AFTER the 0138 review clears:** **markdown-lite rendering** — §5.6's exact list (`**bold**`,
+`*italic*`, `` `code` ``, `# heading` 1–3, `- list item`, blank-line paragraph breaks), nothing
+more, in `renderer.ts`'s `drawText`. In the SAME cycle make `render/measure.ts` markup-aware (strip
+the markers before measuring) so the drawn text and `measuredHeight` agree — D-120's framing allows
+it. Then `overflow: "clip"`/`"ellipsis"` (small), then the **Phase 5 gate**: an executable test over
+one document proving the §6 criterion, reported `REVIEW: REQUIRED` (§6.1 trigger 1).
+
+Cheap adds while in there: a direct `link text_1.origin.y <cell>` test (0137-REVIEW §honesty — 0136
+tested the equivalent on `style.fontSize`); reconcile `PROVISIONAL(Q-024)` if the reviewer rules it.
 
 **The render-only alternative, still needs no ruling:** **D-109 clauses 1–2** (cell decimal
 precision + no cell-text clipping, `render/renderer.ts` only). **Q-017** headers remain the human's.
@@ -194,15 +217,20 @@ cleared; 4 stale test comments fixed; no new ruling. **Q-022 and Q-023 are now f
 
 ## Built this batch, not yet reviewed
 
-- *(nothing — 0136 was reviewed at 0137-REVIEW-phase5.)*
+- **Entry 0138 — text rendering.** `renderer.ts` `drawText` + `text` cases in `drawObject` /
+  `drawSelectionHighlight`; `extent.ts` `textExtent` (+ `PROVISIONAL(Q-024)` fallback box);
+  `hittest.ts` `hitTestBoundingBox` for `text`; `measure.ts` exports `layOutLines` / `cssFont`.
+  `interaction.ts` UNCHANGED (text drag falls out of the existing `origin` path). Tests +23. No
+  §6.2 load-bearing file touched. Markdown-lite / `overflow` clip+ellipsis / the gate are NOT in
+  this batch.
 
 ## Not started
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102
-clause 9 · **D-109 clauses 1–2** · `renderer.ts`'s text pass, markdown-lite rendering, `text` layout,
-`text` extent/hit-testing · Phases 6–7.
+clause 9 · **D-109 clauses 1–2** · markdown-lite text rendering + a markup-aware measurer · `text`
+`overflow` clip/ellipsis · the Phase 5 gate test · Phases 6–7.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
@@ -254,11 +282,14 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   Through the running app `main.ts` threads a real measurer (0132), so a command-created `text`
   measures for real. D-118 working as ruled.
 - **`render/measure.ts`'s wrap path reconstructs each output line with single spaces** — latent;
-  noted at 0133-REVIEW §5 for whoever first consumes `measure`'s `width`.
-- **A `text` object has no EXTENT yet** — `render/extent.ts` returns `undefined` for `text`, so it
-  is drawn as nothing and cannot be hit-tested or dragged. D-121's origin slots exist and are
-  correct; §5.9's origin-drag path will work once the extent/draw code lands (the remaining Phase 5
-  work).
+  `renderer.ts`'s `drawText` now shares that path (`layOutLines`), so a wrapped line draws
+  single-spaced too — drawn and measured stay consistent.
+- **`extent.ts`'s `text` box height trusts the stored `measuredHeight`; `renderer.ts` re-wraps with
+  its own `ctx`.** If the two wrap loops ever diverge (same font, same browser — they should not),
+  `extent.maxY` lags the drawn line count by a line. Flagged to the 0138 reviewer (Q2).
+- **An auto-width `text` object's click box is a `PROVISIONAL(Q-024)` fixed fallback (240×20)** —
+  a line wider than that draws outside its own hit region. Most `text` objects carry a numeric
+  `width` (Phase 5's gate: "set width"), so this is an edge affordance. Q-024 will rule it.
 - **`x`/`y` are OPTIONAL for the `text` command (default `0`, per D-121 clause 3)** but REQUIRED for
   `circle`/`polygon`/`rect`/`table`. A visible inconsistency across the creation commands; **0137-REVIEW
   confirmed it is intended** (D-121 clause 3's operative text; its "(matching `table`)" aside is
@@ -288,9 +319,10 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   reads `0`, gets no edge (**D-110**). Since 0127 the same coercion applies to an embedded `{= }` in
   a `text` object (D-114).
 - **`text.test.ts`'s `expectError` helper is unused** — kept deliberately.
-- **`render/measure.ts` measures markdown markup verbatim** (`**bold**`/`# heading` count toward the
-  string) — §5.6 says "from `resolvedContent`", which holds the markup; a markdown-aware measurer is
-  a later cycle's option (D-120's framing allows it). Flagged in `measure.ts`.
+- **`render/measure.ts` measures markdown markup verbatim AND `renderer.ts` now draws it verbatim**
+  (`**bold**`/`# heading` shown as typed) — deliberately consistent for now. The markdown-lite
+  cycle moves both: strip the markers before measuring, render them as formatting. §5.6's exact
+  list only. Flagged in `measure.ts` and `renderer.ts`.
 - **Seven §5.10 commands have no registry entry** — `polyline`/`script`/`image`/`explode`/
   `addvertex`/`delvertex` wait on a schema or an `Operation` kind; **`pan` waits on Q-012**. (`text`
   LEFT this list at entry 0136.)
@@ -344,7 +376,9 @@ decimals + clipping, `render/` only).
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117** — BUILT and REVIEWED (0128).
 **Q-021 → D-120** — BUILT + WIRED + REVIEWED (0133). **Q-022 → D-121**, **Q-023 → D-122** — RULED
-(0135-REVIEW), BUILT (0136), REVIEWED (0137) — CLOSED. Next free: **Q-024**.
+(0135-REVIEW), BUILT (0136), REVIEWED (0137) — CLOSED. **Q-024** (entry 0138) — how is a `text`
+object's bounding box width computed when `width: "auto"`? OPEN; reversible provisional (a) taken
+and tagged in `render/extent.ts`; awaits the 0138 review. Next free: **Q-025**.
 
 **D-046 STANDS AND DOES NOT MOVE.** A dimension slot is read `literal`-only and fails closed to `0`.
 `content` (0127/0122/0136) inherits the same posture.
@@ -363,12 +397,27 @@ screen pixels for stroke width / cell size / font? Provisional (a) world units. 
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (`-0`): open, deferred, blocking nothing.
 
+**`PROVISIONAL(Q-024)` → `src/render/extent.ts`** (`textExtent`, the `TEXT_AUTO_BOX_WIDTH` /
+`TEXT_AUTO_BOX_HEIGHT` fallbacks): an auto-width / no-measurer `text` object gets a fixed fallback
+bounding box. Reversible, render-only, no stored state. Due with the 0138 review / the markdown-lite
+cycle.
+
 **No other `PROVISIONAL` tags exist.** Q-016/Q-017 have none; neither do Q-022/Q-023 — both ruled and
 built without a provisional site (0135-REVIEW §5 clause 4).
 
 ## Gotchas for the next model
 
-- **0136 is REVIEWED (0137-REVIEW-phase5: ACCEPT WITH EDITS).** The render slice is clear to start.
+- **REVIEW IS DUE (entry 0138).** §6.1 trigger 5 (changed test expectations) + trigger 3 (Q-024).
+  Do not start markdown-lite / the gate until it clears.
+- **TEXT DRAWS (entry 0138).** `renderer.ts` `drawText`; `extent.ts`/`hittest.ts` `text` cases;
+  `measure.ts` now exports `layOutLines`/`cssFont` for the renderer to share (drawn ≡ measured,
+  D-010). Markdown-lite + `overflow` clip/ellipsis are NOT built — markup draws verbatim.
+- **`extent.ts`'s `text` box:** origin + numeric `width` (else `PROVISIONAL(Q-024)` fallback 240) +
+  numeric `height`/`measuredHeight` (else fallback 20). `undefined` for a `text` object with no
+  `resolvedContent`. `hittest.ts` and the selection highlight read this same box.
+- **A `text` object drags via `interaction.ts`'s existing `origin` path — no `text`-specific code.**
+  D-121's payoff, now reachable.
+- **A selected `text` object shows a D-094 properties panel** (it has an `objectExtent` now).
 - **The `text` command exists.** `text [x=<number>] [y=<number>] "<content>"`. `x`/`y` optional,
   default `0` (D-121 c3 — the geometry presets require theirs). `content` required, kept verbatim.
 - **`TEXT_SCHEMA` has ELEVEN non-derived slots** (was nine). `grep` for `ORIGIN_X_PATH` in

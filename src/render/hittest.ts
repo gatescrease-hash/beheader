@@ -53,8 +53,12 @@
  *   - Selection state and calling any mutation — `render/interaction.ts`'s
  *     job; DOM event handling is `main.ts`'s. This file only ANSWERS "what is
  *     under this point."
- *   - `text`/`script`/`image` bounding boxes, and `polyline`'s open-path
- *     distance test — no schema or visual definition exists to read yet.
+ *   - `script`/`image` bounding boxes, and `polyline`'s open-path distance
+ *     test — no schema or visual definition exists to read yet. `text` IS
+ *     tested now (entry 0138): §5.9's "bounding box for text", read straight
+ *     off `extent.ts`'s `objectExtent` so the click box is exactly the drawn
+ *     box (D-066/D-010). An auto-width `text` object's box is a provisional
+ *     fixed size — `PROVISIONAL(Q-024)`, `extent.ts`'s `textExtent`.
  *   - An object's or the document's drawn extent — `extent.ts` (D-093's
  *     split; see that file's header). This file used to define both; moved
  *     out because "where is everything" is a different question from "what
@@ -66,6 +70,7 @@ import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitive
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
+import { objectExtent } from "./extent.ts";
 import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 /**
@@ -161,6 +166,23 @@ function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
   return worldPoint.x >= originX && worldPoint.x <= originX + width && worldPoint.y >= originY && worldPoint.y <= originY + height;
 }
 
+/**
+ * §5.9's "bounding box for text" — an inclusive point-in-box test against the
+ * object's `extent.ts` extent, which is the exact box `renderer.ts` draws the
+ * text into (D-066: drawn extent and clickable extent are ONE extent; D-010:
+ * read once, not re-derived). `false` for a `text` object with no extent (no
+ * resolved content) — nothing is drawn to click on. Inclusive bounds, the same
+ * as `hitTestTable`; `textExtent` never returns a zero-area box (its fallbacks
+ * are positive), so no separate degenerate guard is needed here.
+ */
+function hitTestBoundingBox(object: GraphObject, worldPoint: WorldPoint): boolean {
+  const extent = objectExtent(object);
+  if (extent === undefined) {
+    return false;
+  }
+  return worldPoint.x >= extent.minX && worldPoint.x <= extent.maxX && worldPoint.y >= extent.minY && worldPoint.y <= extent.maxY;
+}
+
 /** Dispatches by `ObjectType` (mirrors `renderer.ts`'s `drawObject` switch exactly — same style, same exhaustiveness idiom). */
 function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeToleranceWorld: number): boolean {
   switch (object.type) {
@@ -170,8 +192,9 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
       return hitTestVerticesShape(object, worldPoint, strokeToleranceWorld);
     case "table":
       return hitTestTable(object, worldPoint);
-    case "polyline":
     case "text":
+      return hitTestBoundingBox(object, worldPoint);
+    case "polyline":
     case "script":
     case "image":
     case "value":

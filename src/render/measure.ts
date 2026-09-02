@@ -21,6 +21,15 @@
  *   an ABSOLUTE length in the document's own unit, not a ratio — inherited from
  *   `engine/eval-context.ts`'s `TextStyle` doc, not re-decided here.
  *
+ *   `layOutLines` and `cssFont` are also EXPORTED (entry 0138): `renderer.ts`'s
+ *   text-drawing pass breaks lines and builds its `ctx.font` string the SAME way
+ *   the measurement does, so the text it draws occupies exactly the box that was
+ *   measured (D-010 — one reading of "how does this text lay out", shared, never
+ *   two that can drift). `renderer.ts` draws in world space under the camera
+ *   transform; this file measures with the transform at identity; both feed
+ *   `ctx.measureText` the same `cssFont` string and compare against the same
+ *   world-unit `maxWidth`, so the line breaks land identically.
+ *
  *   LINE-BREAKING (**D-120**): split on the operator's own newlines first, then
  *   — ONLY when `maxWidth` is a positive finite number — greedily word-wrap each
  *   hard line, measuring candidates with `ctx.measureText`. A word wider than
@@ -56,7 +65,9 @@
  *     `renderer.ts`'s, unbuilt). A later cycle may make the measurer
  *     markdown-aware; D-120's "the measurer's job" framing allows it and it is
  *     not decided here.
- *   - Drawing the text — `renderer.ts`'s eventual text pass. This file measures.
+ *   - Drawing the text — `renderer.ts`'s text pass (entry 0138). It imports
+ *     `layOutLines`/`cssFont` from here but does its own `fillText` loop; this
+ *     file still only MEASURES.
  *   - `align` / `color` — they change how text is PAINTED, not its size, and are
  *     not in `TextStyle` (`engine/eval-context.ts`).
  */
@@ -97,7 +108,7 @@ function finiteOrZero(value: number): number {
  * (`render/camera.ts`'s `finiteOrFallback` posture — D-062 — applied to a font
  * string).
  */
-function cssFont(fontSize: number, family: string): string {
+export function cssFont(fontSize: number, family: string): string {
   return `${fontSize}px ${family.trim() === "" ? "sans-serif" : family}`;
 }
 
@@ -111,8 +122,12 @@ function cssFont(fontSize: number, family: string): string {
  * the number of lines follows `content`'s length, which the operator controls.
  * A run of spaces is collapsed for wrap fitting (Rule 5 — D-120 leaves the
  * whitespace rule to this file); a blank hard line stays one blank line.
+ *
+ * Exported (entry 0138) so `renderer.ts` draws the SAME lines this file measures
+ * — see the file header. `wrapWidth` is the `text` object's `width` slot when it
+ * holds a positive finite number, `undefined` for `"auto"` (no wrap).
  */
-function layOutLines(text: string, wrapWidth: number | undefined, measureWidth: (line: string) => number): readonly string[] {
+export function layOutLines(text: string, wrapWidth: number | undefined, measureWidth: (line: string) => number): readonly string[] {
   const hardLines = text.split(/\r?\n/);
   if (wrapWidth === undefined) {
     return hardLines;
