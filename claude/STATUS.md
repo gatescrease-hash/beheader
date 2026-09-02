@@ -1,4 +1,29 @@
-# STATUS — as of entry 0139-REVIEW-phase5
+# STATUS — as of entry 0140-RULINGS-phase5
+
+**READ THIS FIRST — THE HUMAN RULED TWICE AT ENTRY 0140, AND IT REORDERS THE WORK.**
+
+- **D-125 — in-place text entry. ABSOLUTE PRIORITY, the human's word.** Text is typed INTO its
+  receiver: a `text` object's `content` and a table cell, both edited by a DOM input overlaid on the
+  canvas. `set text_1.content "…"` is fine for a machine and unusable for a person. It commits
+  through the EXISTING `commitPanelEdit` → `runPanelCommand` → `executeCommand` seam — a new
+  surface, never a second write path (Rule 2). **The trap: `buildPanelSetCommand` MUST NOT be reused
+  for a `text` box** — it sends every non-numeric string to `set-formula`, which D-122 refuses.
+  `content` commits as a LITERAL always; a table cell commits Excel-style (`=` means formula).
+- **D-124 — `text` is placed by POINTING**, like `circle`/`rect`/`table`: type `text`, then click.
+  It gains a one-step `point` prompt sequence and NO content step — the pick completes the command
+  and D-125's editor opens on the new box. Both typed forms keep working untouched.
+- **Standing:** the human's direct instruction outranks `PROJECT_BRIEF.md`. *"If the brief conflicts
+  with what I say, ignore the brief. I wrote it."* Never "correct" a ruling back toward the brief.
+
+Recommended order (only D-123-before-the-gate is binding; the rest is 0140's reasoning, and the
+human may reorder at will): **D-123 `measuredWidth` first** — it is small, and D-125's overlay is
+positioned from `objectExtent`, which for an auto-width `text` object is currently the provisional
+240-wide box; building the editor on the wrong box means fixing both later. Then **D-125**, then
+**D-124** (small once the editor exists), then markdown-lite, then `overflow`, then the Phase 5 gate.
+
+---
+
+## Where the code actually is — as of entry 0139-REVIEW-phase5
 
 STATE: **GREEN** (compiles, all tests pass). Both configs compile, **1466/1466** tests pass,
 0 skipped, 0 `.only`. **30 test files**. **PHASE 5 IS OPEN.**
@@ -154,8 +179,10 @@ clause 4).** Re-parsed in TWO places every mutation — `resolveTextDependencyAd
 (edge-derivation) and `computeResolvedContent` (evaluation). A broken span becomes an `error`-kind
 `Block` (**D-115**); its parsed branches live in `orphaned`.
 
-**11. THE PAPERCLIP CANNOT REACH A TABLE CELL.** Cell values must be TYPED. §5.4's formula bar /
-in-place cell editing is NOT built.
+**11. THE PAPERCLIP CANNOT REACH A TABLE CELL.** Cell values must be TYPED today. **RULED D-125
+(entry 0140, the human, ABSOLUTE PRIORITY): in-place cell editing IS built next**, together with
+in-place editing of a `text` object's `content`. §5.4's formula bar stays unbuilt and is NOT part of
+D-125.
 
 **12. `evaluateDerivedSlot`'s `read` RUNS THE D-110 COERCION BEFORE THE D-013 MEMBERSHIP CHECK
 (D-114 clause 3).** Do not swap them. `isEmptyInExtentCell` and `buildRangeReader` (`graph/eval.ts`)
@@ -185,6 +212,26 @@ object's `style.*` slots are usable**; the two files' fallbacks differ, disclose
 `overflow` clip/ellipsis, and the gate are the remaining Phase 5 work.
 
 ## Next slice (recommended)
+
+**See the header block — the human's D-125 is ABSOLUTE PRIORITY and D-124 rides with it.** The
+order below is 0140-RULINGS' reasoning: D-123 first because it is small and D-125's overlay reads
+the box it fixes; then D-125, then D-124, then the rest. Only "D-123 before the gate" is binding.
+
+**D-125 — in-place text entry (the priority).** A DOM input overlaid on the canvas at the receiver's
+world position (`worldToScreen`, like the properties panel), for a `text` object's `content` and for
+a table cell. Commits by synthesising a `Command` and running `executeCommand` — copy
+`commitPanelEdit`/`runPanelCommand`, do not invent a write path (Rule 2, D-069, D-102 c5). **Do not
+reuse `buildPanelSetCommand` for a `text` box** (it would produce `=Hello world`, which D-122
+refuses): `content` is always a literal `set`; a table cell is Excel-style, `=` meaning formula.
+Commit logic goes in `main.ts`'s exported pure half, not in `start` (D-125 c7 — `start` is untested
+by construction). An empty text box must be visible and clickable while its editor is open, via the
+editor's OWN overlay — do not loosen `extent.ts` to fake it (c6). §6.1 trigger 2 (first file of a new
+subsystem) + trigger 3: report `REVIEW: REQUIRED`.
+
+**D-124 — `text` placed by pointing.** A `prompts` entry on `parser.ts`'s `text` spec: one `point`
+step, no content step, `buildFromPrompts` producing the same `TextCommand` with `content` `""`; then
+D-125's editor opens on the new object. `PromptStep.accepts` does NOT widen. Read `prompt.ts`'s
+`usesNamedForm` hazard note first — it is what keeps `text "hi"` and `text x=0 y=0 "hi"` working.
 
 **D-123's `measuredWidth` cycle** — small, and it closes a live provisional on the default path.
 `TEXT_SCHEMA` gains a third derived slot next to `measuredHeight`, same static deps, computed from
@@ -250,7 +297,8 @@ Nothing — the batch is empty. 0139-REVIEW cleared entry 0138.
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
-hit-testing (D-067) · §5.4's formula bar / in-place cell editing · D-088 clauses 2–4 · D-089 · D-102
+hit-testing (D-067) · §5.4's formula bar (in-place cell editing is now **D-125**, next) ·
+**D-125's in-place editor + D-124's `text` prompt sequence** · D-088 clauses 2–4 · D-089 · D-102
 clause 9 · **D-109 clauses 1–2** · markdown-lite text rendering + a markup-aware measurer · `text`
 `overflow` clip/ellipsis · the Phase 5 gate test · Phases 6–7.
 
@@ -326,9 +374,10 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
   (0139-REVIEW edits); unfixed — one shared set of fallbacks needs a ruling on which file owns them.
 - **An empty-`content` `text` object is invisible AND unselectable** — no ink, no extent, so no hit
   box, no chrome, no name label, no panel. `text 0 0 ""` and `set text_1.content ""` both reach it.
-  Correct per D-066 and consistent with `measure.ts`'s zero box, and recoverable by command
-  (`list`/`set`/`delete`) — but there is no mouse affordance to get it back. Noted at 0139-REVIEW;
-  no ruling unless it is hit in practice.
+  Correct per D-066 and consistent with `measure.ts`'s zero box. **This became load-bearing at entry
+  0140:** D-124 creates exactly this object and hands it to D-125's editor. **D-125 clause 6 rules
+  the fix — the EDITOR's own overlay draws the box and caret; `extent.ts` is NOT loosened to give
+  empty text a degenerate extent** (that is D-066's exact prohibition).
 - **`x`/`y` are OPTIONAL for the `text` command (default `0`, per D-121 clause 3)** but REQUIRED for
   `circle`/`polygon`/`rect`/`table`. A visible inconsistency across the creation commands; **0137-REVIEW
   confirmed it is intended** (D-121 clause 3's operative text; its "(matching `table`)" aside is
@@ -411,12 +460,28 @@ placement (`buildSlot`'s `formula` arm) confirmed at 0137-REVIEW.
 `renderer.ts` may not clip, pad, or truncate its line count to match a stored measurement; only
 §5.6's `overflow` slot may reduce what is drawn.
 
+**D-124 (0140-RULINGS) — RULED BY THE HUMAN. NOT BUILT.** `text` is placed by pointing: a one-step
+`point` prompt sequence on `parser.ts`'s `text` entry, no content step, `PromptStep.accepts`
+unwidened. Clause 5 generalises it — EVERY creation command arrives with a `prompts` entry.
+
+**D-125 (0140-RULINGS) — RULED BY THE HUMAN, ABSOLUTE PRIORITY. NOT BUILT.** In-place text entry
+for a `text` object's `content` and for a table cell, through the existing `commitPanelEdit` →
+`executeCommand` seam. Clause 3 is the trap (`content` literal ALWAYS, no `buildPanelSetCommand`
+reuse; a cell is Excel-style). Clause 6 (the editor's own overlay makes an empty box visible) and
+clause 7 (commit logic in the exported pure half) are the two a cycle is most likely to skip.
+Clauses 4–5 are reviewer-chosen defaults the human may overrule on sight.
+
+**THE HUMAN'S DIRECT INSTRUCTION OUTRANKS `PROJECT_BRIEF.md` (0140).** *"If the brief conflicts with
+what I say, ignore the brief. I wrote it."* No cycle may "correct" a ruling back toward the brief.
+
 **Implemented AND reviewed, do not re-build:** D-097/D-098/D-099 · D-100 · D-101/D-106/D-102 · D-107 ·
 D-081 + D-083 c4 · Phase 4's gate test · D-109 clause 3 · D-110 in full · D-114/D-115/D-116/D-117 ·
 D-118 (guard + wiring) · D-120 (`render/measure.ts` + threading) · **D-121 / D-122 + the `text`
 command (0137-REVIEW)** · **text rendering + the text bounding box (0139-REVIEW)**.
 
-**NOT implemented, each owned by a named future cycle:** **D-123** (`measuredWidth`; the NEXT slice,
+**NOT implemented, each owned by a named future cycle:** **D-125** (in-place text entry — the
+human's ABSOLUTE PRIORITY, entry 0140) · **D-124** (`text` placed by pointing, entry 0140) ·
+**D-123** (`measuredWidth`;
 binding before the Phase 5 gate — clause 5 binds every render cycle from now) · **D-104** (§5.10's
 row/column commands) · **D-108** (§5.11's load path; clause 3 binds every cycle before it) ·
 **D-109 clauses 1–2** (cell decimals + clipping, `render/` only).
@@ -456,8 +521,16 @@ built without a provisional site (0135-REVIEW §5 clause 4).
 
 ## Gotchas for the next model
 
+- **THE HUMAN RULED AT ENTRY 0140 — read the header block before anything else.** D-125 (in-place
+  text entry) is ABSOLUTE PRIORITY; D-124 (`text` placed by pointing) rides with it. Neither is
+  built.
 - **THE REVIEW HAS LANDED (0139-REVIEW: ACCEPT WITH EDITS).** Work may proceed. **D-123's
-  `measuredWidth` cycle is the recommended next slice and is BINDING before the gate.**
+  `measuredWidth` cycle is BINDING before the gate**, and is recommended first because D-125's
+  overlay is positioned from the box it fixes.
+- **`commitPanelEdit` / `runPanelCommand` (`main.ts`) is the seam D-125 copies** — a UI gesture
+  synthesises a `Command` and runs `executeCommand`. There is no second write path (Rule 2).
+- **`main.ts`'s `pointerDownAt` already routes a canvas click to `respondToPrompt` when
+  `state.pending` is set** — D-124 needs no new plumbing, only a registry entry.
 - **D-123 clause 5 — the box follows the text; the text never follows the box.** Do not "fix" a
   drawn-vs-measured disagreement by drawing fewer lines.
 - **TEXT DRAWS (entry 0138).** `renderer.ts` `drawText`; `extent.ts`/`hittest.ts` `text` cases;

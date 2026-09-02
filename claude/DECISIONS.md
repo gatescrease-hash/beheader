@@ -4249,3 +4249,116 @@ Reconciliation required: its own cycle, BEFORE the Phase 5 gate (§6.1 trigger 1
 anyway, but the gate must not be claimed over a knowingly-wrong bounding box). `primitives/schema.ts`
 is §6.2 load-bearing, so that cycle reports `REVIEW: REQUIRED`. Then `grep PROVISIONAL(Q-024)` and
 remove every tag; `schema.test.ts`'s `text` expectation moves from two derived slots to three.
+
+## D-124 — `text` is placed by POINTING, like every other creation command
+Ruled: entry 0140-RULINGS-phase5 — **the human, directly**   Binding on: `src/command/parser.ts`,
+`src/main.ts`, and every future creation command
+
+**The human's words:** *"text doesn't follow the same instant-place logic that circle, table etc.
+do. Remember that my primary way of placing things is using the mouse — I need to be able to type
+'text' and then click with my mouse to put the text box in a specific location."*
+
+1. **`text` gains a `prompts` sequence in its `parser.ts` registry entry**, exactly as `circle`,
+   `polygon`, `rect` and `table` have one (D-072). One step: a `point`, message `specify text
+   position`. Typing `text` and pressing Enter starts the sequence; the next canvas click places the
+   box. `main.ts` already routes a click to `respondToPrompt` whenever `state.pending` is set — that
+   path is built, reviewed, and needs no change.
+
+2. **The sequence has NO content step.** It completes on the point pick, creating the object with
+   `content` `""`, and hands straight to D-125's in-place editor so the operator types into the box
+   on the canvas. Asking for the content at the command line is the clunkiness the human is naming;
+   do not add a `text`-accepting `PromptStep` to satisfy this ruling.
+
+3. **Both existing typed forms keep working, unchanged and untouched.** This falls out of
+   `prompt.ts` as already written: `text "hi"` hits `beginCommand`'s `token.quoted` branch and
+   `text x=0 y=0 "hi"` hits `usesNamedForm`, and both defer to `parseCommand` whole. The hazard note
+   on `usesNamedForm` is what makes this safe — read it before touching either file.
+
+4. **`PromptValue` and `PromptStep.accepts` do NOT widen.** No string-accepting step is added, so
+   `prompt.ts`'s `ResponseRead` widening hazard stays dormant. Clause 2 is what buys this.
+
+5. **This generalises: every command that CREATES an object is placed by pointing.** `polyline`,
+   `image`, `script` each arrive with a `prompts` entry on the day they arrive. Placement is a mouse
+   gesture in this program; a creation command that can only be typed is an unfinished command.
+
+**Rationale.** Entry 0136 gave `text` optional `x`/`y` defaulting to `0` (D-121 clause 3) and no
+prompt sequence, on the reasoning recorded in its registry comment: a text prompt step would need an
+`accepts` kind that does not exist. That reasoning was sound for the sequence it imagined (point,
+then content) and wrong about the gesture the operator actually wants, which ends at the point. What
+shipped is a creation command that silently stacks every text object at the world origin unless the
+operator types coordinates — the one creation command that cannot be placed by pointing, in a
+program whose author places by pointing. D-121 clause 3's default of `0` survives as the fallback
+for the typed form; it stops being the normal path.
+
+## D-125 — Text is typed INTO its receiver: in-place editing for `text` objects and table cells
+Ruled: entry 0140-RULINGS-phase5 — **the human, directly. Declared ABSOLUTE PRIORITY.**
+Binding on: `src/main.ts` (pure half + DOM half), a new `render/` editor surface, §5.4, §5.6
+
+**The human's words:** *"I need to be able to edit text visually — that goes for text boxes as well
+as table cells. The pattern of `set text_1.content = "something"` is perfectly fine for an LLM to
+understand, but horribly unintuitive to a human seeing it visually. Likewise for tables. ABSOLUTE
+PRIORITY — INPUT OF TEXT DIRECTLY INTO TEXT BOX RECEIVERS. Otherwise the whole thing feels clunky."*
+
+1. **Two receivers, one mechanism.** A `text` object's `content` slot, and a table cell. Both are
+   edited by a real DOM text input overlaid on the canvas at the receiver's own position — world
+   position converted through `render/camera.ts`'s `worldToScreen`, the same way `main.ts` already
+   places a properties panel. One editor at a time, document-wide.
+
+2. **It commits through `executeCommand`, like every other authoring surface (Rule 2, D-069,
+   D-102 clause 5).** Build a `Command`, run it, echo it into the log exactly as a typed line. There
+   is no second write path, no "just this once" direct slot write, and no new mutation kind. The
+   seam to copy is `main.ts`'s `commitPanelEdit` / `runPanelCommand`, which is built and reviewed.
+
+3. **The commit rule DIFFERS BY RECEIVER, and this is the trap in this ruling.**
+   - **A `text` object's `content` commits as a LITERAL, ALWAYS.** It is never sniffed for a leading
+     `=`. §5.6's `{= }` / `{? }` are markup INSIDE a literal string, and D-122 makes `content`
+     permanently `literal`-kind. **`buildPanelSetCommand` MUST NOT be reused here** — it routes every
+     non-numeric string to `set-formula`, so `Hello world` would be committed as `=Hello world` and
+     refused. Typing a whole markdown-and-formula paragraph into the box must produce exactly one
+     literal `set`.
+   - **A table cell commits Excel-style:** a leading `=` makes it a formula (`set-formula`),
+     anything else is a literal — a number when it parses as one (`parseCommandNumber`), otherwise a
+     string. That is §5.4's own model and the one every operator already has in their fingers.
+   - The cell's address is built through `engine/address.ts`'s formatter, never string-concatenated
+     (`address.ts`'s standing invariant).
+
+4. **Opening it.** Double-click a `text` object, or double-click a table cell, opens the editor on
+   that receiver. A `text` object placed by D-124 opens its editor immediately on creation — placing
+   and typing are one gesture. Single-click keeps meaning select-and-drag, unchanged.
+
+5. **Escape cancels, and cancelling writes nothing.** Nothing is committed until commit, so a
+   cancelled edit leaves state bit-for-bit untouched for free — do not "restore" anything. In a
+   `text` box **Enter inserts a newline** (§5.6 has hard line breaks and the measurer already splits
+   on them); commit is Escape or a click outside. In a **table cell Enter commits**, Excel-style.
+   Clauses 4 and 5 are the conventional defaults, ruled so work can proceed, and are the cheapest
+   thing in this ruling for the human to overrule on sight.
+
+6. **An empty `text` object must be visible and clickable WHILE its editor is open.** Today an empty
+   `content` means no `resolvedContent`, so no extent — no ink, no hit box, no chrome (0139-REVIEW's
+   noted problem). D-124 creates exactly that object and hands it to this editor, so the editor's own
+   overlay is what makes it real on screen: it draws its own box and caret and does not depend on
+   `objectExtent` being defined. `extent.ts`'s rule is unchanged and must not be loosened to paper
+   over this.
+
+7. **The commit logic lives in `main.ts`'s EXPORTED PURE HALF, not inside `start`'s closure** —
+   `commitPanelEdit`'s shape, for `commitPanelEdit`'s reason: `start` is untested by construction
+   (D-001) and this is the highest-traffic authoring path in the program. A cycle that buries this
+   in a DOM listener has shipped it untested.
+
+8. **§5.4's formula bar remains unbuilt and is NOT part of this.** In-place is what was asked for.
+   D-094's properties panel and its paperclip editing are unchanged and remain the way every
+   non-`content` slot is edited by mouse; this adds a surface, it replaces none.
+
+**Rationale.** The human is the operator and reports the program feels clunky at exactly this point;
+under PROCESS_BRIEF §1 that is dispositive and needs no further argument. Worth recording anyway:
+§5.4 has always listed "in-place cell editing" as core scope, it has simply never been built, and
+Q-014's remaining half was always the human's alone to settle. The `text` half is newly reachable —
+before entry 0138 a text object could not be seen and before 0136 it could not be created, so there
+was nothing to click into. Nothing here contradicts the brief; it builds two things the brief
+already asked for and never scheduled.
+
+**Standing note on precedence, stated by the human at this entry:** *"If the brief conflicts with
+what I say, ignore the brief. I wrote it."* PROCESS_BRIEF §1 already makes the human the final
+arbiter on product questions; this is the operative form of it. A `DECISIONS.md` ruling that
+transcribes a direct human instruction outranks the brief's own text, and no future cycle may
+"correct" one back toward `PROJECT_BRIEF.md`.
