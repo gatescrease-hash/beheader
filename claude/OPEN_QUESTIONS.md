@@ -32,6 +32,14 @@ claimed; every `PROVISIONAL(Q-024)` tag comes out then.
 > `TEXT_AUTO_BOX_WIDTH`/`_HEIGHT` survive as ordinary documented constants for the no-real-measurer
 > (`#MEASURE`) case only, exactly as clause 3 permits. Awaiting review.
 
+> **Reviewer confirmation (entry 0142-REVIEW-phase5): CLOSED.** Reconciliation verified rather than
+> taken on the entry's word — `grep -rn "PROVISIONAL" src` returns only Q-008 and Q-012 sites, so all
+> three Q-024 tags are genuinely gone, `hittest.ts`'s header one included. D-123's five clauses are
+> each implemented and each pinned by a test. Nothing further is owed on this question. One
+> consequence of the schema growth that this question did NOT foresee is ruled separately as
+> **D-126**: adding a derived slot invalidates previously saved documents, because a `derived` slot's
+> KEY serializes even though its value does not.
+
 **Correction to this question's own cost estimate, made in ruling it:** the recommendation below
 calls (a) "an edge-case affordance, not the common path" because "most `text` objects will carry a
 numeric `width`." That is false as the code stands — `command/commands.ts`'s `DEFAULT_TEXT_WIDTH` is
