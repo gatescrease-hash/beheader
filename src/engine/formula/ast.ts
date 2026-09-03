@@ -94,8 +94,17 @@ export interface RangeNode {
   readonly end: Address;
 }
 
-/** §5.3's full infix-operator precedence chain, loosest to tightest, minus the two prefix operators (see `UnaryOperator`). */
-export type BinaryOperator = "OR" | "AND" | "=" | "<>" | "<" | ">" | "<=" | ">=" | "+" | "-" | "*" | "/" | "%" | "^";
+/**
+ * §5.3's full infix-operator precedence chain, loosest to tightest, minus the two
+ * prefix operators (see `UnaryOperator`).
+ *
+ * Declared as a runtime array with the TYPE derived from it, rather than the other
+ * way round, so `validateFormulaAstShape` can test a loaded operator against the
+ * real set (**D-108**) without a second hand-copied list that could drift from this
+ * one. The derived type is character-identical to the union it replaces.
+ */
+export const BINARY_OPERATORS = ["OR", "AND", "=", "<>", "<", ">", "<=", ">=", "+", "-", "*", "/", "%", "^"] as const;
+export type BinaryOperator = (typeof BINARY_OPERATORS)[number];
 
 /** A binary operation. One node, one `operator` field across the WHOLE precedence chain — see the file header for why. */
 export interface BinaryOpNode {
@@ -105,8 +114,9 @@ export interface BinaryOpNode {
   readonly right: FormulaAst;
 }
 
-/** §5.3's two prefix operators: numeric negation and boolean negation. */
-export type UnaryOperator = "-" | "NOT";
+/** §5.3's two prefix operators: numeric negation and boolean negation. Array-first for the same reason `BINARY_OPERATORS` is. */
+export const UNARY_OPERATORS = ["-", "NOT"] as const;
+export type UnaryOperator = (typeof UNARY_OPERATORS)[number];
 
 /** A unary (prefix) operation. */
 export interface UnaryOpNode {
@@ -214,6 +224,167 @@ export const MAX_FORMULA_AST_DEPTH = 1000;
  * "check first, recurse second" shape `format.ts`'s `formatNode` and `parser.ts`'s
  * `walkForRangePlacement` already use for the identical reason.
  */
+/**
+ * Either the well-formed `FormulaAst` `raw` turned out to be, or why it is not one.
+ * Carries the value back rather than being a type predicate so a caller narrows by
+ * USING the result — a predicate would let `raw` be used unchecked by mistake.
+ */
+export type FormulaAstShapeResult = { readonly ok: true; readonly ast: FormulaAst } | { readonly ok: false; readonly reason: string };
+
+/**
+ * **D-108 clause 2 / D-127**: validates that arbitrary loaded JSON really is a
+ * `FormulaAst`, ONCE, at the boundary — never a guard threaded through every
+ * downstream walk (clause 3, which explicitly forbids hardening
+ * `exceedsMaxFormulaAstDepth` or `collectIllegalAstLiterals` individually).
+ *
+ * Lives here rather than in `document.ts` because it is knowledge about
+ * `FormulaAst`'s OWN variants: a new node type must be added to this walk in the
+ * same edit that adds it to the union above, and putting them side by side is the
+ * only thing that makes that obvious. `exceedsMaxFormulaAstDepth` sits here for the
+ * same reason.
+ *
+ * **What it was:** `document.ts` cast `raw.ast as FormulaAst` unchecked, so a loaded
+ * `ast` of `null`, a `binaryOp` with absent or `null` children, or a `functionCall`
+ * whose `args` was not an array threw a `TypeError` out of `loadDocument` — and,
+ * because `main.ts`'s `openDocument` called it inside a `.then()`, that surfaced as
+ * an unhandled promise rejection: no message, no log line, the program simply did
+ * nothing (D-127 clause 2).
+ *
+ * **Stack safety, and why this can run before the depth check.** It descends at most
+ * `MAX_FORMULA_AST_DEPTH` levels and then stops, reporting `ok` for the subtree it
+ * did not look at. That is not a hole: `exceedsMaxFormulaAstDepth` runs immediately
+ * after and refuses any document nesting that deep, so nothing below the bound is
+ * ever reached by anything else. The alternative — an unbounded recursive validator —
+ * would trade a `TypeError` for a `RangeError`, which is the same defect wearing
+ * D-083's hat. The depth VERDICT stays that function's alone, so the operator gets
+ * D-083's own message rather than two rulings' messages for one condition.
+ */
+export function validateFormulaAstShape(raw: unknown, depth = 1): FormulaAstShapeResult {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return { ok: false, reason: `a formula node must be an object, not ${raw === null ? "null" : Array.isArray(raw) ? "an array" : typeof raw}` };
+  }
+  const node = raw as Record<string, unknown>;
+  if (depth > MAX_FORMULA_AST_DEPTH) {
+    // Below the bound this walk stops looking; the depth check that runs next is
+    // what refuses the document. See the doc comment above.
+    return { ok: true, ast: node as unknown as FormulaAst };
+  }
+  switch (node["type"]) {
+    case "literal": {
+      const value = node["value"];
+      if (typeof value !== "number" && typeof value !== "string" && typeof value !== "boolean") {
+        return { ok: false, reason: `a literal node's value must be a number, string, or boolean, not ${describeRaw(value)}` };
+      }
+      return { ok: true, ast: { type: "literal", value } };
+    }
+    case "reference": {
+      const address = readAddress(node["address"]);
+      return address === undefined
+        ? { ok: false, reason: "a reference node's address must be { objectId: string, path: string[] }" }
+        : { ok: true, ast: { type: "reference", address } };
+    }
+    case "range": {
+      const start = readAddress(node["start"]);
+      const end = readAddress(node["end"]);
+      return start === undefined || end === undefined
+        ? { ok: false, reason: "a range node's start and end must each be { objectId: string, path: string[] }" }
+        : { ok: true, ast: { type: "range", start, end } };
+    }
+    case "binaryOp": {
+      const operator = node["operator"];
+      if (!isBinaryOperator(operator)) {
+        return { ok: false, reason: `${describeRaw(operator)} is not one of §5.3's binary operators` };
+      }
+      const left = validateFormulaAstShape(node["left"], depth + 1);
+      if (!left.ok) {
+        return left;
+      }
+      const right = validateFormulaAstShape(node["right"], depth + 1);
+      if (!right.ok) {
+        return right;
+      }
+      return { ok: true, ast: { type: "binaryOp", operator, left: left.ast, right: right.ast } };
+    }
+    case "unaryOp": {
+      const operator = node["operator"];
+      if (!isUnaryOperator(operator)) {
+        return { ok: false, reason: `${describeRaw(operator)} is not one of §5.3's prefix operators` };
+      }
+      const operand = validateFormulaAstShape(node["operand"], depth + 1);
+      return operand.ok ? { ok: true, ast: { type: "unaryOp", operator, operand: operand.ast } } : operand;
+    }
+    case "functionCall": {
+      const name = node["name"];
+      const rawArgs = node["args"];
+      if (typeof name !== "string") {
+        return { ok: false, reason: `a function call's name must be a string, not ${describeRaw(name)}` };
+      }
+      if (!Array.isArray(rawArgs)) {
+        return { ok: false, reason: `${name}'s args must be an array, not ${describeRaw(rawArgs)}` };
+      }
+      // One at a time, never `map`+spread: `args` comes from a file and its length
+      // is not this program's to bound (D-077 clause 1's reasoning, applied to a
+      // loaded array instead of a generated one).
+      const args: FormulaAst[] = [];
+      for (const rawArg of rawArgs) {
+        const arg = validateFormulaAstShape(rawArg, depth + 1);
+        if (!arg.ok) {
+          return arg;
+        }
+        args.push(arg.ast);
+      }
+      return { ok: true, ast: { type: "functionCall", name, args } };
+    }
+    case "error": {
+      // D-028's stored `#REF`. The only `error` value the union admits, so a file
+      // naming another one is malformed rather than a new error code.
+      return node["error"] === "#REF"
+        ? { ok: true, ast: { type: "error", error: "#REF" } }
+        : { ok: false, reason: `an error node's error must be "#REF", not ${describeRaw(node["error"])}` };
+    }
+    default:
+      return { ok: false, reason: `${describeRaw(node["type"])} is not a formula node type` };
+  }
+}
+
+/** `{ objectId, path }` from raw JSON, or `undefined` if it is not one. `path` must be an array of STRINGS — `slotKey` joins it, and a number in there would key a slot no schema declares. */
+function readAddress(raw: unknown): Address | undefined {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return undefined;
+  }
+  const candidate = raw as Record<string, unknown>;
+  const objectId = candidate["objectId"];
+  const path = candidate["path"];
+  if (typeof objectId !== "string" || !Array.isArray(path) || !path.every((segment) => typeof segment === "string")) {
+    return undefined;
+  }
+  return { objectId, path: path as readonly string[] };
+}
+
+/** Whether `raw` is one of §5.3's binary operators — tested against `BINARY_OPERATORS`, the array the TYPE is derived from, so the two can never disagree. */
+function isBinaryOperator(raw: unknown): raw is BinaryOperator {
+  return typeof raw === "string" && (BINARY_OPERATORS as readonly string[]).includes(raw);
+}
+
+/** Whether `raw` is one of §5.3's prefix operators. Same shape as `isBinaryOperator`. */
+function isUnaryOperator(raw: unknown): raw is UnaryOperator {
+  return typeof raw === "string" && (UNARY_OPERATORS as readonly string[]).includes(raw);
+}
+
+/** A short description of an unexpected loaded value, for a refusal message. Quotes a string so `"+"` and `+` are distinguishable; never throws. */
+function describeRaw(raw: unknown): string {
+  if (raw === null) {
+    return "null";
+  }
+  if (typeof raw === "string") {
+    return JSON.stringify(raw);
+  }
+  if (Array.isArray(raw)) {
+    return "an array";
+  }
+  return typeof raw === "object" ? "an object" : String(raw);
+}
+
 export function exceedsMaxFormulaAstDepth(ast: FormulaAst, depth = 1): boolean {
   if (depth > MAX_FORMULA_AST_DEPTH) {
     return true;

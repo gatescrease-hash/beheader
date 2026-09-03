@@ -2300,6 +2300,17 @@ function downloadDocument(state: Document): void {
  * receives the message otherwise, so a caller cannot accidentally treat a
  * failure as a load.
  *
+ * **The promise chain has a rejection path (D-127 clause 5).** It did not, and
+ * that is what made D-108's defect invisible rather than merely wrong: a
+ * malformed AST threw a `TypeError` out of `loadDocument` INSIDE this `.then()`,
+ * so the operator got no message, no log line, and no sign the load had failed —
+ * the program simply did nothing. `loadDocument` no longer throws for those
+ * shapes, but the `catch` stays regardless: `file.text()` can reject on its own
+ * (an unreadable file, a revoked permission), and a boundary that turns an
+ * exception into silence is the defect, not the particular exception that
+ * exposed it. Anything that escapes now reaches `onRefused` like any other
+ * refusal.
+ *
  * `context` is passed straight to `loadDocument` so a loaded `text` object's
  * `measuredHeight` measures against the real `TextMeasurer` rather than
  * `#MEASURE` (D-118).
@@ -2317,14 +2328,22 @@ function openDocument(
     if (file === undefined) {
       return; // The picker was dismissed — not a refusal, and nothing to say.
     }
-    void file.text().then((text) => {
-      const result = loadDocument(text, context);
-      if (result.ok) {
-        onLoaded(result.document, `loaded ${file.name}`);
-        return;
-      }
-      onRefused(result.message);
-    });
+    void file
+      .text()
+      .then((text) => {
+        const result = loadDocument(text, context);
+        if (result.ok) {
+          onLoaded(result.document, `loaded ${file.name}`);
+          return;
+        }
+        onRefused(result.message);
+      })
+      .catch((error: unknown) => {
+        // D-127 clause 5. Names the file, because at this point nothing else
+        // will: there is no refusal message from the loader to quote.
+        const reason = error instanceof Error ? error.message : String(error);
+        onRefused(`could not read ${file.name}: ${reason}`);
+      });
   });
   picker.click();
 }

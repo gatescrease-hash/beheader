@@ -1,4 +1,15 @@
-# STATUS — as of entry 0155-table-cell-fixes
+# STATUS — as of entry 0156-load-hardening
+
+**ENTRY 0156 CLOSED THE LOAD-HARDENING CYCLE — D-126 + D-127 + D-108, one `document.ts` boundary.**
+A loaded formula AST's SHAPE is now validated once, at the load boundary
+(`formula/ast.ts`'s `validateFormulaAstShape`); the SCHEMA — not the file — says which derived slots
+an object has (`withSchemaDerivedSlots`); `openDocument`'s promise chain has a `.catch`. **Adding a
+derived slot to a schema is no longer a load-compatibility event.** Fix-list items 15/25/26 close.
+It reported **REVIEW: REQUIRED** per D-127 clause 4 and self-reviewed with tests instead, on the
+human's standing instruction — see the entry. STATE GREEN — **1709/1709**.
+
+---
+
 
 **READ THIS FIRST — entry 0154's WRAP WORK was tested on screen and is GOOD** (*"the render vs.
 editor text thing seems mostly sorted out now and the resulting text box object is good to work with
@@ -73,13 +84,20 @@ editing vs not editing.
 
 ## Where the code actually is — as of entry 0155
 
-STATE: **GREEN**. Both configs compile, **1686/1686** tests pass, 0 skipped, 0 `.only`.
+STATE: **GREEN**. Both configs compile, **1709/1709** tests pass, 0 skipped, 0 `.only`.
 **33 test files.** `npx vite build` clean. **PHASE 5 IS OPEN.**
 
 Last review point: **0150-REVIEW-phase5**. Entries since: **0151-RULINGS** (D-135 + D-136, no code),
 **0152** (the editor cycle — built, tested on screen, GOOD), **0153** (the text-box rework —
 **tested on screen, GOOD**), **0154** (wrap agreement + `overflow` removal — **tested on screen,
-GOOD**), **0155** (the table-cell fixes + A1 headers — self-reviewed with tests, UNSEEN).
+GOOD**), **0155** (the table-cell fixes + A1 headers — self-reviewed with tests, UNSEEN), **0156**
+(load hardening — D-126 + D-127 + D-108; **REVIEW: REQUIRED, not taken** on the human's standing
+instruction).
+
+**THREE REVIEW TRIGGERS HAVE FIRED AND BEEN WAIVED** (0153, 0155, 0156). The human's standing
+instruction for this session is explicit and repeated; the waivers are recorded in each entry rather
+than dropped, so a reviewer picking this up knows exactly what was not reviewed. **0156 is the one
+that most wants a second pair of eyes** — `document.ts` is §6.2 load-bearing.
 
 **THE HUMAN'S DIRECT INSTRUCTION OUTRANKS `PROJECT_BRIEF.md` AND ANY PRIOR RULING (0140, restated
 2026-09-02).** Entries 0153, 0154 and 0155 overrule several by their explicit leave — the lists are
@@ -98,6 +116,20 @@ list** — one measurement answers both).
 BOX, not the TEXT. Two consequences, both wanted: toggling it never re-measures, and **a document
 saved before it existed still loads** (nothing derived depends on it → no dangling edge; every
 reader defaults it to `true`). D-126's trap avoided by construction. There is a test.
+
+**0s. THE LOADER IS HARDENED (0156). TWO FACTS A COLD READER NEEDS.**
+- **A loaded formula AST's SHAPE is validated ONCE, at the boundary** —
+  `formula/ast.ts`'s `validateFormulaAstShape`, called from `document.ts`'s `reconstructSlot`
+  BEFORE the depth check (the depth check itself walks the AST). It descends at most
+  `MAX_FORMULA_AST_DEPTH` and stops; the depth check that runs next refuses anything deeper, so
+  nothing below the bound is reachable. **D-108 clause 3 still forbids hardening any individual
+  walker** — `exceedsMaxFormulaAstDepth`, `collectIllegalAstLiterals`, `deps.ts`, `eval.ts` all stay
+  guard-free, and this boundary is what makes that safe. `BinaryOperator`/`UnaryOperator` are now
+  DERIVED from `BINARY_OPERATORS`/`UNARY_OPERATORS` so the validator cannot drift from the type.
+- **The SCHEMA says which derived slots an object has, never the file** (`withSchemaDerivedSlots`,
+  D-126). Declared-but-absent → the placeholder; present-but-undeclared → dropped; a NON-derived slot
+  at a declared derived path is left alone so D-018 case 2 still refuses it. **Adding a derived slot
+  is no longer a load-compatibility event.**
 
 **0b. `render/textbox.ts` OWNS THE BOX-SIZING RULE. THREE READERS, NO SECOND COPY.**
 `extent.ts` (the committed box), `renderer.ts` (the alignment box), `editor.ts`/`main.ts` (the LIVE
@@ -227,9 +259,10 @@ listener. Every DECISION behind them is in an exported pure function that is tes
 **6. D-104 IS OWED BY A CYCLE THAT HAS NOT BEEN SCHEDULED.** `insertTableLine`/`deleteTableLine` not
 bounded by `MIN`/`MAX_TABLE_LINES`. Not command-reachable. Fix in `findInvalidTableResizes`.
 
-**7. D-108 HAS AN OWNER (D-127).** All four of D-108 clause 1's AST shapes throw a `TypeError` out of
-`loadDocument`, surfacing as an unhandled promise rejection from `openDocument`. **The
-load-hardening cycle owns it — the next cycle after the human's on-screen test.**
+**7. D-108 / D-126 / D-127 ARE BUILT (0156).** See "Read this first" 0s. **D-108 clause 3's
+prohibition on hardening any individual AST walker SURVIVES the fix** — the boundary check is what
+makes `deps.ts`/`eval.ts`/`exceedsMaxFormulaAstDepth`/`collectIllegalAstLiterals` safe to leave
+guard-free. Do not "helpfully" add a null check to one of them.
 
 **8. THE TEXT BLOCK TREE IS DERIVED STATE, RE-PARSED FROM `content` ON DEMAND, NEVER CACHED (D-114
 clause 4).** A broken span becomes an `error`-kind `Block` (D-115); its parsed branches live in
@@ -258,12 +291,9 @@ open: **do the remaining X-vs-X+1 cases contain `{= }` references?**
 
 Once the editor surface is clean on screen:
 
-**THE LOAD-HARDENING CYCLE — one `document.ts` diff** discharging D-126 (loader reconstructs declared
-derived slots), D-127/D-108 (one `FormulaAst` shape validation at the load boundary + `openDocument`
-given a rejection path), and D-108 clause 1's owed doc corrections + `document.test.ts` extension.
-`document.ts` is §6.2 load-bearing — **`REVIEW: REQUIRED`.** 0153 did not touch it.
+**~~THE LOAD-HARDENING CYCLE~~ — DONE at 0156.** D-126 + D-127 + D-108 all discharged.
 
-Then: **markdown-lite rendering** (§5.6's exact list, in `renderer.ts`'s `drawText`, with
+Next: **markdown-lite rendering** (§5.6's exact list, in `renderer.ts`'s `drawText`, with
 `render/measure.ts` made markup-aware in the SAME cycle so drawn and measured agree — **and the
 in-place editor, which shows RAW source, will then differ from the canvas by design; decide
 deliberately what the overlay shows**). Then the **Phase 5 gate**: an executable test over one
@@ -304,6 +334,10 @@ two defects that entry 0154 fixes.
 
 ## Built this batch, not yet seen on screen
 
+- **Entry 0156 — load hardening.** No new files. Modified: `engine/formula/ast.ts`
+  (`validateFormulaAstShape` + the operator arrays), `engine/document.ts` (the boundary call +
+  `withSchemaDerivedSlots` + the corrected claims), `main.ts` (`openDocument`'s `.catch`), plus
+  `document.test.ts`. **REVIEW: REQUIRED, waived** — the one cycle here that most wants a reviewer.
 - **Entry 0155 — the table-cell fixes + A1 headers.** No new files. Modified: `engine/mutation.ts`
   (the `clearSlot` operation + its precondition), `command/parser.ts` (`clear`,
   `parseCommandBoolean`), `command/commands.ts` (the `clear` handler), `main.ts` (`cellLiteralSeed`,
@@ -315,8 +349,8 @@ two defects that entry 0154 fixes.
 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
-hit-testing (D-067) · §5.4's formula bar · **the load-hardening cycle (D-126 + D-127 + D-108) —
-NEXT** · D-088 clauses 2–4 · D-089 · D-102 clause 9 · **D-109 clauses 1–2** · markdown-lite rendering
+hit-testing (D-067) · §5.4's formula bar · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
+**D-109 clauses 1–2** · markdown-lite rendering
 + a markup-aware measurer · the Phase 5 gate test · Phases 6–7. (**`text` `overflow` clip/ellipsis is
 no longer on this list — 0154 removed the slot on the human's instruction.**)
 
@@ -341,8 +375,9 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 12. **A right-flipped panel that hits the right clamp overlaps its own object.** Correct per D-094.
 13. **`insertTableLine`/`deleteTableLine` are not bounded by `MIN`/`MAX_TABLE_LINES`** — **D-104**.
 14. **0110-REVIEW's F1–F4 — BUILT (0111), REVIEWED (0113).** Closed. **Q-016** carries F3's tail.
-15. **F5 — `deserializeDocument`'s "never throws" is FALSE for a malformed loaded `ast`.** Ruled
-    **D-108**; re-owned by **D-127**. Clause 3 still forbids piecemeal hardening meanwhile.
+15. **F5 — CLOSED at 0156.** `validateFormulaAstShape` validates a loaded AST at the boundary; the
+    doc claims are corrected; 15 malformed shapes are pinned. **D-108 clause 3's prohibition on
+    piecemeal walker hardening SURVIVES** — no walker was touched, and none should be.
 16. **F6 — a panel row's text can no longer be mouse-selected.** D-095 governs.
 17. **F7/F8 — ruled D-109. F8 BUILT (0117), REVIEWED (0119); F7 (clauses 1–2) NOT BUILT.**
 18. **F9 — CLOSED in the same review.**
@@ -353,10 +388,12 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 22. **F13 — RULED D-122, BUILT (0136), REVIEWED (0137). CLOSED.**
 23. **F21 — CLOSED**, WIDENED at 0141 (D-123 clause 2).
 24. **F22 — CLOSED in the same review.**
-25. **F23 — RULED D-126, NOT BUILT.** Adding a DERIVED slot invalidates every previously saved
-    document carrying that object type. Owned by the load-hardening cycle (NEXT). **0153's
-    `autoresize` is NON-derived and does NOT hit this — proved by a test.**
-26. **F24 — RULED D-127, NOT BUILT.** Same cycle as F23.
+25. **F23 — CLOSED at 0156.** The loader rebuilds derived slots from the SCHEMA, so adding one no
+    longer invalidates saved documents. Round-trip tested.
+26. **F24 — CLOSED at 0156.** `openDocument`'s promise chain has a rejection path; the loader no
+    longer throws for a malformed AST. **D-127's lesson stands: a ruling deferred work to a trigger
+    that had already fired 24 entries earlier, and it survived nine STATUS rewrites because it was
+    ASSERTED rather than grepped.**
 27. **F25 — RULED D-129, BUILT (0146/0147), REVIEWED (0148) → D-132. CLOSED.** 0153 reworked the
     mechanism (world units + one transform) for a better reason than D-129's.
 28. **F26 — RULED D-130, FIXED (0147), REVIEWED (0148) → D-133. CLOSED**, confirmed on screen.
@@ -404,9 +441,12 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 - **the properties panel and the in-place editor can overlap** at small window sizes. No remedy.
 - **A raw `setSlot` LOWERING `rows`/`cols` still strands any now-out-of-bounds cell slot** —
   `primitives/table.ts`'s header.
-- **A saved document does not survive a DERIVED-slot addition** — **D-126**, fix-list 25.
-- **A malformed loaded `ast` throws out of `loadDocument`, swallowed by `openDocument`** — **D-108 +
-  D-127**, fix-list 26. NEXT cycle.
+- ~~A saved document does not survive a DERIVED-slot addition~~ — **FIXED at 0156.**
+- ~~A malformed loaded `ast` throws out of `loadDocument`~~ — **FIXED at 0156.**
+- **The JOURNAL's `Operation` payloads are still unvalidated beyond `Array.isArray` + a raw
+  illegal-number walk.** Deliberate and unchanged: nothing replays the journal, so inventing a
+  contract for a reader that does not exist would be the defect. Validate it the moment something
+  reads it. Named in `document.ts`'s own header.
 - **A loaded document can carry a `formula`/`derived` `content` slot on a `text` object** (D-122
   blocks the command path, not the loader).
 - **BOTH measured slots are `#MEASURE` for a `text` object created in a test** (default
@@ -500,7 +540,8 @@ wired, reviewed 0133) · **D-119** (reconciled) · **D-120** (built, reviewed 01
 in-place editor, built 0143, reviewed 0144) · **D-130/D-131/D-133** (built 0146/0147, reviewed 0148,
 D-130/D-133 confirmed on screen) · **D-136** (built 0152, confirmed on screen).
 
-**D-126 / D-127 / D-108 — RULED, NOT BUILT.** The load-hardening cycle, NEXT after the on-screen test.
+**D-126 / D-127 / D-108 — BUILT at 0156**, all clauses discharged, `REVIEW: REQUIRED` waived on the
+human's standing instruction and recorded in the entry.
 
 **D-046 STANDS.** A dimension slot is read `literal`-only and fails closed to `0`. `content`
 inherits the same posture.
@@ -546,7 +587,8 @@ chrome, and `textbox.ts` deals only in world lengths handed to it.
 - **A `formula` ROW NEVER GETS A DROP-DOWN** (D-040: a gesture may not overwrite a formula).
 - **`autoresize` IS NOT A MEASURED-SLOT DEPENDENCY**, which is what keeps old saved documents
   loading. If you ever make it one, you inherit D-126.
-- **ADDING A DERIVED SLOT STILL BREAKS SAVED DOCUMENTS UNTIL D-126 IS BUILT.** 0153 added none.
+- **ADDING A DERIVED SLOT IS SAFE FOR SAVED DOCUMENTS AS OF 0156** (D-126 built). D-126 clause 5's
+  "state the load consequence in your entry" still applies; the honest line is now "none".
 - **`main.ts`'s `pointerDownAt` routes a canvas click to `respondToPrompt` when `state.pending` is
   set** — the path a `text` position pick takes; it does NOT select the new object.
 - **A `<textarea>` soft-wraps unless you set `wrap="off"`.** An auto-width `text` object never wraps.

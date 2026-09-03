@@ -333,6 +333,213 @@ describe("deserializeDocument — malformed input, never throws", () => {
   });
 });
 
+// **D-108 clause 1 / D-127**, the reconciliation both rulings left owed. Until the
+// load-hardening cycle, `reconstructSlot` cast `raw.ast as FormulaAst` unchecked and
+// each of these four shapes threw a `TypeError` STRAIGHT OUT of `loadDocument` —
+// which `main.ts`'s `openDocument` turned into an unhandled promise rejection, so
+// the operator saw nothing happen at all. D-108's own note says this test "does not
+// currently cover a formula slot at all" and that extending it is the intended
+// visible diff; this is that diff.
+describe("deserializeDocument — a loaded formula AST's SHAPE is validated at the boundary (D-108 clause 2, owner D-127)", () => {
+  /** A one-object document whose single formula slot carries `ast` verbatim, however malformed. */
+  function documentWithRawAst(ast: unknown): unknown {
+    return {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 2,
+      camera: { x: 0, y: 0, zoom: 1 },
+      journal: [],
+      objects: [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast, value: null } } }],
+    };
+  }
+
+  /** D-108 clause 1's four shapes, by name, plus the ones the same cast let through. */
+  const MALFORMED_ASTS: readonly { readonly label: string; readonly ast: unknown }[] = [
+    { label: "a null ast", ast: null },
+    { label: "a binaryOp with null children", ast: { type: "binaryOp", operator: "+", left: null, right: null } },
+    { label: "a binaryOp with absent children", ast: { type: "binaryOp", operator: "+" } },
+    { label: "a functionCall whose args is not an array", ast: { type: "functionCall", name: "SUM", args: "nope" } },
+    { label: "an ast that is a bare string", ast: "1 + 1" },
+    { label: "an ast that is an array", ast: [{ type: "literal", value: 1 }] },
+    { label: "a node with an unrecognised type", ast: { type: "conditional", cond: null } },
+    { label: "a literal whose value is null", ast: { type: "literal", value: null } },
+    { label: "a binaryOp with an operator §5.3 does not have", ast: { type: "binaryOp", operator: "**", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } } },
+    { label: "a unaryOp with an operator §5.3 does not have", ast: { type: "unaryOp", operator: "~", operand: { type: "literal", value: 1 } } },
+    { label: "a reference whose address is missing objectId", ast: { type: "reference", address: { path: ["value"] } } },
+    { label: "a reference whose path holds a non-string", ast: { type: "reference", address: { objectId: "obj_1", path: [1] } } },
+    { label: "a range with one bad endpoint", ast: { type: "range", start: { objectId: "obj_1", path: ["cells", "A1"] }, end: null } },
+    { label: "an error node naming an error that is not #REF", ast: { type: "error", error: "#VALUE" } },
+    { label: "a malformed node nested INSIDE a well-formed one", ast: { type: "unaryOp", operator: "-", operand: { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: null } } },
+  ];
+
+  for (const { label, ast } of MALFORMED_ASTS) {
+    it(`refuses ${label} with a message, rather than throwing`, () => {
+      let result: ReturnType<typeof deserializeDocument> | undefined;
+      expect(() => {
+        result = deserializeDocument(documentWithRawAst(ast));
+      }).not.toThrow();
+      expect(result?.ok).toBe(false);
+      if (result !== undefined && !result.ok) {
+        // §5.10: a rejection names the slot involved. "value_1.value" is the
+        // whole point — "malformed document" would leave the operator hunting.
+        expect(result.message).toContain("value_1.value");
+      }
+    });
+  }
+
+  it("still ACCEPTS every well-formed node shape, so the guard did not cost the format anything", () => {
+    const wellFormed: readonly FormulaAst[] = [
+      { type: "literal", value: 1 },
+      { type: "literal", value: "text" },
+      { type: "literal", value: true },
+      { type: "reference", address: addr("obj_1", "value") },
+      { type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A3") },
+      { type: "binaryOp", operator: "+", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } },
+      { type: "unaryOp", operator: "NOT", operand: { type: "literal", value: true } },
+      { type: "functionCall", name: "SUM", args: [{ type: "literal", value: 1 }] },
+      { type: "functionCall", name: "NOW", args: [] },
+      { type: "error", error: "#REF" },
+    ];
+    for (const ast of wellFormed) {
+      const result = deserializeDocument(documentWithRawAst(ast));
+      // A `reference`/`range` to a slot on this same object may still be refused
+      // by mutate's graph checks — what must NOT happen is a SHAPE refusal.
+      if (!result.ok) {
+        expect(result.message).not.toContain("is not a formula node type");
+        expect(result.message).not.toContain("must be an object, not");
+      }
+    }
+  });
+
+  it("round-trips a document whose formula ASTs use every node shape, byte for byte", () => {
+    const table: GraphObject = {
+      id: "obj_1",
+      name: "table_1",
+      type: "table",
+      slots: {
+        rows: { kind: "literal", value: 3 },
+        cols: { kind: "literal", value: 3 },
+        "cells.A1": { kind: "literal", value: 2 },
+        "cells.B1": { kind: "formula", ast: { type: "unaryOp", operator: "-", operand: { type: "reference", address: addr("obj_1", "cells", "A1") } }, value: null },
+        "cells.C1": { kind: "formula", ast: { type: "functionCall", name: "SUM", args: [{ type: "range", start: addr("obj_1", "cells", "A1"), end: addr("obj_1", "cells", "A1") }] }, value: null },
+      },
+    };
+    const evaluated = deriveValidateAndEvaluate([table]);
+    expect(evaluated.ok).toBe(true);
+    if (!evaluated.ok) {
+      return;
+    }
+    const json = saveDocument({ ...createEmptyDocument(), nextObjectId: 2, objects: evaluated.objects });
+    const loaded = loadDocument(json);
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      expect(saveDocument(loaded.document)).toBe(json);
+    }
+  });
+});
+
+// **D-126**, the reconciliation that ruling left owed: "a document serialized under
+// a schema with N derived slots loads under a schema with N+1, and the new slot
+// arrives as its placeholder."
+//
+// The defect: `serializeSlot` drops a derived slot's VALUE but keeps its KEY, and
+// the loader took the file's key set as authoritative — so D-018's "every declared
+// derived path must be present" refused every document saved before a schema gained
+// a derived slot. A real document saved before entry 0141 was rejected with
+// `text_1.measuredWidth is missing`, which reads as a corrupt file.
+describe("deserializeDocument — the SCHEMA says which derived slots exist, not the file (D-126)", () => {
+  /** An `add` object as an OLDER build would have saved it: its formula inputs, but no `out.result` key at all — the shape a schema that later gained a derived slot produces. */
+  function documentMissingADerivedSlot(): unknown {
+    return {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 4,
+      camera: { x: 0, y: 0, zoom: 1 },
+      journal: [],
+      objects: [
+        { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 3 } } },
+        { id: "obj_2", name: "value_2", type: "value", slots: { value: { kind: "literal", value: 4 } } },
+        {
+          id: "obj_3",
+          name: "add_1",
+          type: "add",
+          slots: {
+            "in.a": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_1", path: ["value"] } }, value: null },
+            "in.b": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["value"] } }, value: null },
+            // No `out.result`. THIS is the whole test.
+          },
+        },
+      ],
+    };
+  }
+
+  it("LOADS a document missing a schema-declared derived slot, instead of refusing it as corrupt", () => {
+    const result = deserializeDocument(documentMissingADerivedSlot());
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected it to load, got: ${result.message}`);
+    }
+  });
+
+  it("rebuilds that slot as a real derived slot, and EVALUATES it — the value comes back from the compute, per §5.11", () => {
+    const result = deserializeDocument(documentMissingADerivedSlot());
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const added = result.document.objects.find((object) => object.name === "add_1");
+    expect(added?.slots["out.result"]?.kind).toBe("derived");
+    expect(added?.slots["out.result"]?.value).toBe(7); // 3 + 4, recomputed on load
+  });
+
+  it("DROPS a derived slot the file carries that this build's schema no longer declares (§5.1: `derived` is fixed by schema)", () => {
+    const stale = documentMissingADerivedSlot() as { objects: { slots: Record<string, unknown> }[] };
+    stale.objects[2]!.slots["out.legacyResult"] = { kind: "derived" };
+    const result = deserializeDocument(stale);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const added = result.document.objects.find((object) => object.name === "add_1");
+      expect(added?.slots["out.legacyResult"]).toBeUndefined();
+    }
+  });
+
+  it("does NOT overwrite a LITERAL sitting at a declared derived path — D-018 case 2 still refuses it (clause 3: that check is not weakened)", () => {
+    const wrongKind = documentMissingADerivedSlot() as { objects: { slots: Record<string, unknown> }[] };
+    wrongKind.objects[2]!.slots["out.result"] = { kind: "literal", value: 99 };
+    const result = deserializeDocument(wrongKind);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("out.result");
+    }
+  });
+
+  it("leaves an object whose type has NO schema exactly as the file had it — the same honest-undefined stance the type string itself gets", () => {
+    const unknownType = {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 2,
+      camera: { x: 0, y: 0, zoom: 1 },
+      journal: [],
+      objects: [{ id: "obj_1", name: "thing_1", type: "notAType", slots: { anything: { kind: "derived" } } }],
+    };
+    const result = deserializeDocument(unknownType);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // The slot SURVIVES rather than being dropped — that is the claim. Its
+      // VALUE is then whatever `evaluate` makes of a derived slot no schema has
+      // a compute for, which is an `ErrorValue` and is legitimate state (§5.1),
+      // not this function's business.
+      expect(result.document.objects[0]?.slots["anything"]?.kind).toBe("derived");
+    }
+  });
+
+  it("does not disturb a document that already has every declared derived slot — the round-trip is unchanged", () => {
+    const json = saveDocument({ ...createEmptyDocument(), nextObjectId: 4, objects: consistentFixture() });
+    const loaded = loadDocument(json);
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      expect(saveDocument(loaded.document)).toBe(json);
+    }
+  });
+});
+
 describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-REVIEW-phase0 finding 1, closed cycle 0026)", () => {
   it("rejects a document whose JOURNAL holds a raw non-finite number — probe I: the SAME 1e999 that is rejected in the object list must also be rejected here, not silently corrupted on the next save", () => {
     // 0025-REVIEW-phase0's sharpest probe: JSON.parse("1e999") is Infinity —
