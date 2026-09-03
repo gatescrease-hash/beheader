@@ -8,7 +8,44 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-025**
+Next free ID: **Q-026**
+
+---
+
+## Q-025 — When the canvas renders markdown-lite, what does the in-place editor's overlay show?
+Raised: entry 0158-RULINGS-phase5 (reviewer)   Brief section: §5.6 (the markdown-lite list;
+`content` is "raw source including markup"), against the human's 2026-09-02 goal for the text box.
+Status: **OPEN** — the human's call, and it should be answered before or during the markdown cycle,
+not after.
+
+Ambiguity: the stated goal of the whole text-box rework was *"in those editors, there is no
+difference between how the text looks when you're not editing it and how it looks when you are.
+That's the goal."* Everything built since serves it — world units plus one transform, matched
+colour, CSS's own wrap rules. **Markdown-lite breaks that goal by construction:** the canvas would
+draw `**bold**` as bold, while a `<textarea>` can only ever show the literal six characters. They
+are different strings of different widths, so they also wrap differently. §5.6 says `content` holds
+"raw source including markup" and says nothing about what an editor shows.
+
+Options:
+- **(a) The overlay shows RAW source and is MEASURED from the raw source.** Editing a box that uses
+  markup visibly differs from viewing it, and the box may change size on commit. No new machinery;
+  `measure.ts` keeps measuring the string it was handed. This is source mode in every plain-text
+  markdown editor.
+- **(b) The overlay shows RAW source but is measured from the RENDERED form**, so the box does not
+  resize on commit. The typed text then overflows or under-fills its own box while editing — which
+  is the defect the rework removed, reintroduced on purpose.
+- **(c) A rich `contenteditable` overlay that renders markup as you type.** Rule 5 forbids it; it is
+  a different project.
+
+Recommendation: **(a)**. It keeps `render/measure.ts` honest, keeps `render/textbox.ts`'s single
+sizing rule intact, and confines the WYSIWYG loss to exactly the boxes that use markup — where the
+operator has asked for two representations and knows it. (b) trades a visible, explainable
+difference for an invisible, confusing one; a box that silently mis-fits its own text is the
+complaint that started this whole line of work.
+
+Reversible? **Yes** — the choice lives in what `editorTextStyle` / `editorTextBoxSize` are handed,
+not in any stored shape. Provisional choice taken: **not yet**. The markdown cycle takes (a) unless
+the human rules otherwise, and tags every site `// PROVISIONAL(Q-025)`.
 
 ---
 

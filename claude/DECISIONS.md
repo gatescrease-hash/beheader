@@ -4893,3 +4893,59 @@ reason" (D-058's stance) is unchanged. This binds the header of a file the cycle
 and nothing else. No verbosity audit, no header pass, no scheduled sweep.
 
 **Reconciliation required.** None — 0157-REVIEW made all six edits.
+
+---
+
+## D-138 — The wrap residual is platform glyph quantization. It is accepted as-is, and NOTHING may compensate for it
+Answers: 0151-RULINGS' carried-forward item and 0154's "Where I got stuck" — both settled by the
+human's on-screen test, 2026-09-02   Ruled: entry 0158-RULINGS-phase5 (reviewer)
+Binding on: `render/measure.ts`, `index.html`'s `.text-editor`, `render/editor.ts` — and
+**specifically on the markdown-lite cycle**, which is about to open `layOutLines` for another reason.
+
+**The human's answer**, to 0154's one deciding question (*do the misbehaving boxes contain `{= }`
+references?*): *"misbehaving boxes just misbehaved regardless of if they had formula references, but
+it's been mostly fixed."*
+
+**That eliminates the benign candidate.** 0154 named two possible causes for the surviving
+"X lines drawn, X+1 lines typed" difference and said which question separated them. The answer is
+NO — it happens without `{= }` — so it is not the raw-source-vs-`resolvedContent` case, which was
+the one that would have been correct by design and needed nothing done about it. What remains is
+0154's other candidate: canvas `measureText` returns unrounded float advances while a browser can
+quantize DOM glyph advances to whole pixels, a difference that accumulates along a line.
+
+**Ruling.**
+
+1. **The residual is accepted.** It is a cosmetic difference between two text-layout engines, now
+   small enough that the operator's own word is "mostly fixed". It is a known, bounded property of
+   drawing text twice with two different engines — not a defect with an owner, not a fix-list item,
+   and not something the Phase 5 gate answers to.
+2. **0151-RULINGS' prohibition STANDS, and now stands UNCONDITIONALLY.** Its wording was conditional
+   — "do NOT add slop to `render/measure.ts` or a compensating `letter-spacing` to the overlay
+   **without the human seeing the residual first**." That condition is now satisfied, so a future
+   reader could reasonably take the gate as passed and the prohibition as spent. **It is not.** The
+   answer made compensation *more* tempting, not less, by removing the explanation that required no
+   action — which is exactly when a conditional prohibition needs re-issuing without its condition.
+3. **Concretely forbidden:** a tuned epsilon, fudge factor, or rounding step anywhere in
+   `layOutLines` or `measure`; `letter-spacing`, `word-spacing`, `font-kerning` or `text-rendering`
+   on `.text-editor`; and any per-platform, per-browser or per-font branch in either file. Each is a
+   guess at another engine's rounding, wrong wherever the guess is wrong, and each moves the CANVAS
+   to chase the DOM — which inverts **D-123 clause 5** (the box follows the text, never the reverse).
+4. **NOT forbidden, and the distinction is the whole of 0154:** adopting a further *specified* CSS
+   rule that the `<textarea>` follows and `layOutLines` does not. That is one reading shared rather
+   than a fudge, and it is why 0154's change was legitimate where a tuned constant would not have
+   been. Any such change MUST name the CSS rule it implements, in the code, at the site.
+5. **Reopen only on evidence the cause is NOT quantization.** A report that would do it: a
+   disagreement that does not grow with line length; one that moves a whole WORD rather than
+   accumulating sub-pixel; or one reproducible at zoom 1 with an integer font size, where there is
+   no fractional scale to round. Anything else is this ruling, again.
+
+**Rationale.** A sub-pixel error that accumulates over a line cannot be absorbed by any fixed
+epsilon — that is what "cumulative" means — so every candidate compensation is a platform guess
+wearing a constant's clothes. The project has already paid for this lesson twice: 0151 forbade the
+fudge before the diagnosis was in, and 0154 showed what the legitimate version looks like (adopt the
+specified rule, do not tune a number). This ruling exists so the third encounter, which will come
+from a cycle editing `layOutLines` for an unrelated reason, does not have to rediscover it.
+
+**"Mostly fixed" is the resting place.** Two real causes were found and proved with tests; the
+remainder has no honest fix from the measurer's side. Accepting a small, explainable, disclosed
+difference is the correct end state for this, not an admission of an unfinished job.

@@ -1,11 +1,19 @@
-# STATUS — as of entry 0157-REVIEW-phase5
+# STATUS — as of entry 0158-RULINGS-phase5
 
-**ENTRY 0157-REVIEW REVIEWED THE WHOLE FIVE-CYCLE BATCH (0152–0156): VERDICT `ACCEPT WITH EDITS`.**
-The code is right — rules, invariants and spec conformance all pass, and the honesty audit is the
-strongest part of the batch (1709/1709 re-run and real, every claimed test present under the name
-its entry gave it). **Every finding was documentation drift**, six sites, all fixed by the reviewer
-in that entry. One new ruling: **D-137** — a file's HEADER is part of the diff that changes its
-behaviour, and a doc comment is never separated from what it documents. **STATE GREEN — 1710/1710.**
+**NOTHING IS BLOCKED. THE NEXT SLICE IS MARKDOWN-LITE.**
+
+0157-REVIEW reviewed the whole five-cycle batch (0152–0156): **`ACCEPT WITH EDITS`**. The code is
+right — rules, invariants and spec conformance all pass, and the honesty audit was the strongest part
+of it. Every finding was documentation drift, six sites, all fixed in that entry, plus **D-137** (a
+file's HEADER is part of the diff that changes its behaviour).
+
+0158-RULINGS then closed the two things that review left owed. The human's answers:
+**the wrap residual happens WITHOUT `{= }` references and is "mostly fixed"** → **D-138**: it is
+platform glyph quantization, it is ACCEPTED, and **nothing may compensate for it** (0151's
+prohibition was conditional and its condition has now been met — D-138 re-issues it
+unconditionally). **Save/load is confirmed on screen** → 0156 fully closed.
+
+**STATE GREEN — 1710/1710.**
 
 ---
 
@@ -15,35 +23,19 @@ STATE: **GREEN**. Both configs compile, **1710/1710** tests pass, 0 skipped, 0 `
 **33 test files.** `npx vite build` clean. **PHASE 5 IS OPEN.**
 
 Last review point: **0157-REVIEW-phase5** (verdict ACCEPT WITH EDITS). **Batch reset: 0/3 cycles,
-0 files.** Nothing is unreviewed.
+0 files.** Nothing is unreviewed and nothing is waiting on the human.
 
-**THE TWO THINGS THAT ARE STILL OWED, AND THEY ARE BOTH THE HUMAN'S:**
+**Confirmed on screen:** 0152, 0153, 0154 (2026-09-02) and **0156** (save/load round-trips).
 
-1. **Entries 0155 and 0156 have never been seen on screen.** 0153 and 0154 were, and are GOOD.
-   The script is under "What to test on screen" below.
-2. **The wrap residual's deciding question is unanswered:** *do the misbehaving boxes contain
-   `{= }` references?* Nothing may move on that until it is answered — see "Known problems".
-
-## What to test on screen
-
-**0155 — the table fixes (unseen):**
-- Double-click an empty cell, type nothing, click out. `props table_1` — is there STILL no `A1`?
-  Repeat five times; no quotes should ever appear.
-- Type `hello` in a cell, click out, double-click back in, click out untouched. Still `hello`, not
-  `"hello"`.
-- Type something in a cell, delete it all, click out. Does the cell go genuinely EMPTY?
-- Double-click a cell that HAS a value — does the old value vanish while you type, or ghost under it?
-  The grid, including that cell's own border, must keep drawing.
-- Every table shows `A B C…` above and `1 2 3…` beside, always, including while its properties panel
-  is open. Do the letters line up with the columns they name?
-- Zoom out a long way: the headers should DISAPPEAR rather than smear.
-- **Is the grey right?** The headers are `#6b7280`, not the title's near-black. One constant.
-
-**0156 — load hardening (unseen, and its failure mode is invisible):**
-- **Save a document, then load it back.** If it comes back, D-126 works. That is the whole test.
+**ONE THING NOBODY HAS LOOKED AT, AND IT IS NOT BLOCKING:** **entry 0155** — the phantom `""`, the
+ghosted cell, the A1 headers. Reviewed and green, all three fixes in tested pure functions, but the
+human's answer named 0154 and 0156 and did not name this one, so the log does not claim it was seen
+(0158-RULINGS §3). Ten seconds of gestures if anyone wants them: double-click an empty cell and click
+out five times then `props table_1` (no `A1`, no quotes, ever); double-click a cell that HAS a value
+and watch for ghosting under the overlay; check the A1 headers line up and that the grey reads right.
 
 **Still unconfirmed from 0153:** eight grabbers and the resize cursor; a dragged height surviving;
-toggling `autoresize` back to shrink-to-fit; text looking identical editing vs not editing.
+toggling `autoresize` back to shrink-to-fit.
 
 ## Read this first — what a cold reader needs
 
@@ -231,21 +223,29 @@ draws your eye to it. And **NEVER insert a declaration between a doc comment and
 Six sites in 0152–0156; all fixed at 0157. Not a licence to sweep — it binds only files your cycle
 already touched.
 
-## Next slice (recommended)
+## Next slice — MARKDOWN-LITE. Read these three things before you start.
 
-**Nothing is blocked on review.** The batch is reset to 0/3 and 0157 cleared everything.
+**§5.6's exact markdown list, drawn in `renderer.ts`'s `drawText`, with `render/measure.ts` made
+markup-aware IN THE SAME CYCLE** so drawn and measured agree. Splitting those two across cycles puts
+the box and its ink back into disagreement, which is the defect the last four cycles existed to
+remove.
 
-**First: the human's on-screen test of 0155 and 0156** (script above). Whatever that finds comes
-first, as it has every cycle — and the operator's eye has been the deciding step in five cycles
-running.
+Three standing constraints this cycle inherits, all of which it walks into:
 
-Then: **markdown-lite rendering** (§5.6's exact list, in `renderer.ts`'s `drawText`, with
-`render/measure.ts` made markup-aware in the SAME cycle so drawn and measured agree — **and the
-in-place editor, which shows RAW source, will then differ from the canvas by design; decide
-deliberately what the overlay shows**). That cycle inherits D-137 on all three files.
+1. **D-138 — you are about to open `layOutLines` for another reason. Do not touch the wrap residual
+   while you are in there.** No epsilon, no fudge, no `letter-spacing`. Adopting a further
+   *specified* CSS rule is the one legitimate move, and it must name the rule at the site.
+2. **D-137 — the headers of `measure.ts`, `renderer.ts` AND `editor.ts` are part of your diff.** All
+   three currently state that markup is measured and drawn VERBATIM; all three stop being true the
+   moment this cycle lands. `NOT DONE HERE` is where the stale claim will be.
+3. **Q-025 — what does the overlay show once the canvas renders markup?** The rework's whole goal
+   was "no difference between how the text looks when you're editing it and when you're not", and
+   markdown breaks that by construction. Recommended: **(a)** the overlay shows RAW source and is
+   MEASURED from raw source. Reversible — take it provisionally and tag every site
+   `// PROVISIONAL(Q-025)`, or get the human's answer first.
 
-Then the **Phase 5 gate**: an executable test over one document proving the §6 criterion,
-`REVIEW: REQUIRED`.
+Then the **Phase 5 gate**: one executable test over one document proving the §6 criterion,
+`REVIEW: REQUIRED` (§6.1 trigger 1 — no batch absorbs a phase gate).
 
 Cheap adds: a direct `link text_1.origin.y <cell>` test (0137-REVIEW §honesty). **D-109 clauses 1–2**
 (cell decimal precision + no cell-text clipping, `render/renderer.ts` only) still need no ruling.
@@ -279,18 +279,18 @@ rendering; D-123, Q-024 answered · **0142-REVIEW** `measuredWidth`; Q-024 CLOSE
 **0151-RULINGS** D-135 + D-136 · **0157-REVIEW** the whole 0152–0156 batch — the editor cycle, the
 text-box rework, wrap agreement, the table-cell fixes and load hardening; **D-137**.
 
+· **0158-RULINGS** D-138 (the wrap residual, accepted); Q-025 raised.
+
 **Confirmed GOOD on screen 2026-09-02:** 0152 (D-135 + D-136), 0153 (the text-box rework), 0154
-(wrap agreement + `overflow` removal).
+(wrap agreement + `overflow` removal), **0156 (save/load round-trips — D-126's only observable
+test)**.
 
 ## Reviewed but NOT yet seen on screen
 
 - **Entry 0155 — the table-cell fixes + A1 headers.** `mutation.ts`'s `clearSlot` + precondition,
   `parser.ts`'s `clear`/`parseCommandBoolean`, `commands.ts`'s `clear` handler, `main.ts`'s
   `cellLiteralSeed` + `buildCellCommand`'s empty and boolean arms + the whole-`EditorTarget` render
-  call, `renderer.ts`'s cell-aware suppression + `drawTableHeaders`.
-- **Entry 0156 — load hardening.** `formula/ast.ts`'s `validateFormulaAstShape` + the operator
-  arrays, `document.ts`'s boundary call + `withSchemaDerivedSlots`, `main.ts`'s `openDocument`
-  `.catch`.
+  call, `renderer.ts`'s cell-aware suppression + `drawTableHeaders`. **The only unseen entry left.**
 
 ## Not started
 
@@ -346,15 +346,19 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
-- **ENTRIES 0155 AND 0156 ARE UNSEEN ON SCREEN.** Reviewed and green, but nobody has looked.
-- **The X-vs-X+1 wrap residual may not be fully closed.** 0154 fixed two real causes (mid-word
-  breaking, space collapsing) and proved both with tests. **Two candidates remain and the human's
-  answer to ONE question decides which: do the misbehaving boxes contain `{= }` references?** If yes
-  it is by design — the editor shows RAW SOURCE, the canvas draws `resolvedContent`. If no, it is
-  platform glyph quantization, which is cumulative over a line and has **no honest fix from the
-  measurer's side**. **0151-RULINGS' "Carried forward" still binds for that case: do NOT add slop to
-  `render/measure.ts` or a compensating `letter-spacing` to the overlay.** 0154's own change is NOT
-  slop — 0157-REVIEW §4 confirms the distinction.
+- **ENTRY 0155 IS UNSEEN ON SCREEN.** Reviewed and green; nobody has looked. Not blocking.
+- **THE X-vs-X+1 WRAP RESIDUAL IS CLOSED AS "ACCEPTED" — D-138. DO NOT TRY TO FIX IT.** The human's
+  answer (2026-09-02): it happens **regardless of `{= }` references**, and it is "mostly fixed". That
+  eliminates the by-design explanation and leaves platform glyph quantization — canvas `measureText`
+  returns unrounded float advances, a browser can quantize DOM advances to whole pixels, and the
+  error accumulates along a line, so **no fixed epsilon can absorb it**. **D-138 re-issues 0151's
+  prohibition UNCONDITIONALLY** (0151's wording was "not without the human seeing the residual
+  first", and that condition has now been met — do not read the gate as passed): no epsilon, no fudge
+  factor, no rounding step in `layOutLines`/`measure`, no `letter-spacing`/`word-spacing`/
+  `font-kerning` on `.text-editor`, no per-platform branch. Adopting a further **specified** CSS rule
+  is the one legitimate move (that is what 0154 did, and why it was not slop) and must name the rule
+  at the site. Reopen only on evidence the cause is NOT quantization — see D-138 clause 5 for what
+  that evidence would look like.
 - **THE A1 HEADERS ARE GREY (`#6b7280`), NOT THE TITLE'S NEAR-BLACK.** One constant to revert if it
   looks wrong on screen.
 - **THE HEADERS ARE NOT CLICKABLE.** Selecting a whole row/column is a design question nobody has
@@ -445,7 +449,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-137**) binds **except where entries 0153/0154/0155
+Every ruling in `DECISIONS.md` (D-001 through **D-138**) binds **except where entries 0153/0154/0155
 overruled one on the human's explicit instruction.** Those, in full:
 
 - **D-123 clause 3 — INVERTED.** A set `width`/`height` no longer crops the text; the box grows.
@@ -467,7 +471,8 @@ overruled one on the human's explicit instruction.** Those, in full:
 
 Otherwise standing, unchanged: **D-114–D-119** · **D-120** · **D-121/D-122** · **D-124 + D-134** ·
 **D-125 + D-128** · **D-130/D-131/D-133** · **D-136** · **D-126 / D-127 / D-108** (built 0156,
-reviewed 0157) · **NEW D-137** (0157).
+reviewed 0157) · **D-137** (0157) · **NEW D-138** (0158 — the wrap residual is accepted, and nothing
+may compensate for it).
 
 **D-046 STANDS.** A dimension slot is read `literal`-only and fails closed to `0`. `content`
 inherits the same posture.
@@ -479,7 +484,9 @@ inherits the same posture.
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117**, **Q-021 → D-120**, **Q-022 →
-D-121**, **Q-023 → D-122**, **Q-024 → D-123** — all CLOSED. Next free: **Q-025**.
+D-121**, **Q-023 → D-122**, **Q-024 → D-123** — all CLOSED. **Q-025 is NEW and OPEN** — what the
+overlay shows once the canvas renders markdown. The human's call; the markdown cycle takes
+recommendation (a) provisionally and tags it if unanswered. Next free: **Q-026**.
 
 ## Live PROVISIONAL tags and open questions
 
@@ -495,7 +502,11 @@ handed to it.
 
 ## Gotchas for the next model
 
-- **D-137 IS NEW AND IT IS ABOUT YOU.** When your cycle changes what a file does, its HEADER is part
+- **D-138 — THE WRAP RESIDUAL IS SETTLED AND ACCEPTED. DO NOT COMPENSATE FOR IT.** 0151's
+  prohibition was conditional on the human seeing it first; they have, so D-138 re-issues it with no
+  condition at all. If you are in `layOutLines` for another reason, that is exactly the moment this
+  ruling is aimed at.
+- **D-137 IS ABOUT YOU.** When your cycle changes what a file does, its HEADER is part
   of your diff. Check `NOT DONE HERE` hardest — it goes stale by the file getting better. And never
   insert a declaration between a doc comment and what it documents.
 - **THE 2026-09-02 TEXT-BOX WORK (0153 + 0154) OVERRULED EIGHT PRIOR RULINGS ON THE HUMAN'S EXPLICIT
