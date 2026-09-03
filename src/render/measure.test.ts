@@ -359,3 +359,59 @@ describe("createSourceTextMeasurer — the overlay's measurer (Q-025 (a), provis
     expect(() => source.measure("*".repeat(4000), STYLE, 1)).not.toThrow();
   });
 });
+
+describe("layOutText — a wrapped list item hangs its continuation lines under its text (entry 0161)", () => {
+  const width = (line: string): number => line.length * CHAR;
+
+  /** One markup layout at the shared `STYLE`. `CHAR` = 10, and the bullet `"• "` is two characters, so the indent is 20 wherever it applies. */
+  function listLayout(text: string, wrapWidth?: number) {
+    return layOutText({ text, style: STYLE, wrapWidth, markup: true, measureRun: (runText) => width(runText) });
+  }
+
+  it("starts the FIRST line at zero and every continuation at the bullet's width", () => {
+    // "• aaa bbb" is 9 characters = 90px; at 60px it wraps after "aaa".
+    const lines = listLayout("- aaa bbb", 60).lines;
+    expect(lines).toHaveLength(2);
+    expect(lines[0]?.runs[0]?.x).toBe(0);
+    expect(lines[1]?.runs[0]?.x).toBe(2 * CHAR); // the width of "• "
+  });
+
+  it("wraps the continuation at the NARROWER width, so the indent cannot push a word out of the box", () => {
+    // Indent 20 leaves 40px for continuations: "bbb ccc" (70px) cannot share one.
+    const lines = listLayout("- aaa bbb ccc", 60).lines;
+    expect(lines.map((line) => line.runs.map((run) => run.text).join(""))).toEqual(["• aaa", "bbb", "ccc"]);
+  });
+
+  it("counts the indent in the line's width, so measuredWidth is wide enough to hold the indented text", () => {
+    const layout = listLayout("- aaa bbb", 60);
+    expect(layout.lines[1]?.width).toBe(2 * CHAR + 3 * CHAR); // indent + "bbb"
+    expect(layout.width).toBe(50); // the first line, "• aaa"
+  });
+
+  it("indents NOTHING when the line does not wrap — there is no continuation to hang", () => {
+    expect(listLayout("- short", 200).lines[0]?.runs[0]?.x).toBe(0);
+    expect(listLayout("- short").lines).toHaveLength(1);
+  });
+
+  it("indents no other kind of line — a wrapped paragraph and a wrapped heading both start at zero", () => {
+    for (const text of ["aaa bbb ccc", "# aaa bbb ccc"]) {
+      const lines = listLayout(text, 60).lines;
+      expect(lines.length).toBeGreaterThan(1);
+      expect(lines[1]?.runs[0]?.x).toBe(0);
+    }
+  });
+
+  it("gives up the indent rather than the text when the bullet is as wide as the whole box", () => {
+    // A 15px box is narrower than the 20px bullet: indenting would leave a
+    // negative continuation width and put one character on every line.
+    const lines = listLayout("- aaa bbb", 15).lines;
+    for (const line of lines) {
+      expect(line.runs[0]?.x ?? 0).toBe(0);
+    }
+  });
+
+  it("indents by the BULLET's own width even when the item's text is a different font", () => {
+    // "`aaa` `bbb`" is code, but the bullet is not: the indent is still 2 chars.
+    expect(listLayout("- `aaa` `bbb`", 60).lines[1]?.runs[0]?.x).toBe(2 * CHAR);
+  });
+});

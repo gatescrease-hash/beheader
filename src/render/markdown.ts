@@ -46,9 +46,10 @@
  *     and `renderer.ts` paints them; both read the flags, neither re-parses.
  *   - Which font a flag maps to, and how much bigger a heading is — those are
  *     `measure.ts`'s, so drawn and measured cannot disagree (D-010).
- *   - Hanging indentation for a wrapped list item: a continuation line starts
- *     at the box's left edge, level with the bullet rather than with the text.
- *     §5.6 specifies no indentation and Rule 5 takes the dumber layout.
+ *   - How far a wrapped list item's continuation lines HANG in under its text.
+ *     They do (entry 0161, the human's request), but by the measured width of
+ *     `LIST_BULLET`, which only `measure.ts` can know — so the indent is
+ *     computed there and this file just names the bullet.
  *   - Leading whitespace before a marker (`"  - x"`, `"  # x"`) is NOT a
  *     marker — a prefix is recognised at position 0 only. §5.6's list is
  *     exact and indentation is what nested lists are made of, which it forbids.

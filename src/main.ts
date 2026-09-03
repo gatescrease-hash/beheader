@@ -107,8 +107,9 @@
  *     evaluate for real rather than reporting `#MEASURE` (D-118). `start` builds
  *     a SECOND measurer over the same offscreen context —
  *     `createSourceTextMeasurer`, which reads §5.6's markdown-lite VERBATIM —
- *     and only the in-place editor's live box uses it (**PROVISIONAL(Q-025)**:
- *     the overlay shows raw source, so it is measured as raw source).
+ *     and only the in-place editor's live box uses it (**Q-025**, answered by
+ *     the human on screen at entry 0161: the overlay shows raw source, so it is
+ *     measured as raw source, and the box changes size on commit).
  *   - Deciding WHICH receiver a double-click opens the editor on, and where the
  *     overlay floats — `render/editor.ts` (D-125 clause 1). This file opens the
  *     editor on a double-click AND, since **D-124**, on a newly-created `text`
@@ -1284,13 +1285,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const measureContext = document.createElement("canvas").getContext("2d");
   const evalContext: EvalContext =
     measureContext === null ? NULL_EVAL_CONTEXT : { measurer: createCanvas2dTextMeasurer(measureContext) };
-  // PROVISIONAL(Q-025): the SECOND measurer, and the only difference between the
-  // two is whether §5.6's markdown-lite is honoured. The engine's one is
-  // markup-aware because the canvas DRAWS markup; the in-place editor's overlay
-  // is a `<textarea>` that can only ever show RAW SOURCE, so its box is measured
-  // from raw source — Q-025's recommendation (a), taken provisionally per
-  // STATUS's instruction to this cycle. If the human rules (b), this constant
-  // goes and `editorTextBoxSize` is handed `evalContext.measurer` again.
+  // The SECOND measurer, and the only difference between the two is whether
+  // §5.6's markdown-lite is honoured. The engine's one is markup-aware because
+  // the canvas DRAWS markup; the in-place editor's overlay is a `<textarea>`
+  // that can only ever show RAW SOURCE, so its box is measured from raw source.
+  // That is **Q-025 option (a)**, answered by the human on screen at entry 0161
+  // — the box shrinking to the raw text as the editor opens is the behaviour
+  // they want, not a cost they accepted. Awaiting a `D-NNN` from the reviewer.
   // Sharing `measureContext` is safe: both set `ctx.font` before every read.
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 

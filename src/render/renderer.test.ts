@@ -509,6 +509,20 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     expect(calls.filter((call) => call.op === "fillText" && call.text === "• milk")).toHaveLength(1);
   });
 
+  // The human's request after seeing entry 0160 on screen: a wrapped item read
+  // better with its continuation under the text rather than under the bullet.
+  it("HANGS a wrapped list item's continuation under its text, indented by the bullet's width", () => {
+    const { ctx, calls } = createFakeContext();
+    // FAKE_CHAR_WIDTH = 7: "• aaa bbb" is 63 wide, past a 42-wide box, and the
+    // bullet "• " is 14 — so the continuation is drawn from x = 14, not x = 0.
+    renderDocument(ctx, 800, 600, [textObject("- aaa bbb", 0, 0, { width: { kind: "literal", value: 42 } })], CAMERA_IDENTITY);
+    const drawn = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText" && call.text !== "text_1");
+    expect(drawn).toEqual([
+      { op: "fillText", text: "• aaa", x: 0, y: 0, align: "left" },
+      { op: "fillText", text: "bbb", x: 14, y: 20, align: "left" },
+    ]);
+  });
+
   it("draws an UNMATCHED marker as itself, so a half-typed `**` is visible rather than silently restyling the rest", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [textObject("2 * 3 and **bold", 0, 0)], CAMERA_IDENTITY);

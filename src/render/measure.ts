@@ -16,67 +16,18 @@
  * WHAT THIS IS
  *   `layOutText(request)` -> a `TextLayout`: the lines a string occupies, each
  *   as positioned `LaidOutRun`s carrying the exact `ctx.font` they draw in.
- *   `renderer.ts` PAINTS that layout and this file MEASURES it (widest line,
- *   summed line heights), so the box and the ink come from one answer to "how
- *   does this text lay out" and cannot drift (D-010).
+ *   `renderer.ts` PAINTS that layout and this file MEASURES it, so the box and
+ *   the ink are one answer to "how does this text lay out" (D-010). The
+ *   line-breaking rules are documented on `layOutText` itself.
  *
- *   `request.markup` picks which reading of the string is laid out, and both
- *   are `markdown.ts`'s: TRUE parses §5.6's markdown-lite, so `**bold**` is
- *   four fewer characters in a bold font; FALSE takes every character at face
- *   value. The canvas measurer is markup-aware because the canvas DRAWS markup
- *   (`createCanvas2dTextMeasurer`, feeding `measuredWidth`/`measuredHeight`).
- *   The in-place editor's overlay shows RAW SOURCE, so it is measured raw
- *   (`createSourceTextMeasurer`) — **Q-025** (a), provisional.
+ *   `request.markup` picks which reading of the string is laid out, and both are
+ *   `markdown.ts`'s. The canvas measurer honours §5.6's markdown-lite because
+ *   the canvas DRAWS it (`createCanvas2dTextMeasurer`, feeding `measuredWidth`/
+ *   `measuredHeight`); the in-place editor's overlay shows RAW SOURCE, so it is
+ *   measured raw (`createSourceTextMeasurer`) — **Q-025** (a), provisional.
  *
- *   `cssFont` builds every `ctx.font` string in the project's text pipeline.
- *   Markdown flags reach the canvas ONLY through it: `code` swaps the family
- *   for `monospace`, a heading scales the size and line height by CSS's own
- *   `h1`/`h2`/`h3` `em` sizes, and bold/italic become the shorthand's prefix.
- *
- *   LINE-BREAKING (**D-120**): split on the operator's own newlines first, then
- *   — ONLY when `wrapWidth` is a positive finite number — greedily wrap each
- *   hard line, measuring candidates with `ctx.measureText`. No wrap width
- *   (`width` is `"auto"`) -> no wrap.
- *
- *   The rule this file breaks lines by is **CSS's**, deliberately and to the
- *   letter — specifically `white-space: pre-wrap` plus `overflow-wrap:
- *   break-word`, which is what the in-place editor's `<textarea>` uses (the
- *   human's 2026-09-02 report). Two consequences, and neither is a style
- *   preference:
- *
- *     - **A run of spaces is PRESERVED, not collapsed.** `pre-wrap` keeps every
- *       space, so `"a  b"` is wider in the editor than a collapsed `"a b"` is on
- *       the canvas — near a wrap boundary that is one extra line in the editor
- *       and not on the canvas, which is exactly the "X lines rendered, X+1 lines
- *       editing" the operator saw. Spaces at the END of a line HANG (CSS Text 3):
- *       they are trimmed off the emitted line, so they neither widen the box nor
- *       force a break.
- *     - **A word wider than the wrap width is BROKEN between characters.** It
- *       used to sit alone and overflow, which meant a long unbroken run of text —
- *       a URL, a keyboard mash — punched straight out through the side of its own
- *       box on the canvas while the editor broke it neatly. `overflow-wrap:
- *       break-word` is the CSS rule reproduced: the word first moves to a line of
- *       its own, and only if it STILL does not fit is it split.
- *
- *   A word may span two runs (`**bo**ld`), and it is NOT broken there: chunks
- *   are accumulated across runs and only a space opens a break opportunity,
- *   which is what CSS does too.
- *
- *   Rule 5 still applies to everything CSS does beyond that: no hyphenation, no
- *   dictionary, no grapheme-cluster or bidi handling, no tab stops (a tab is part
- *   of a word here — only U+0020 is a break opportunity). Those are differences
- *   between this measurer and a browser that no document reachable today can see.
- *
- *   That drawn/measured agreement holds WHILE both files read the same usable
- *   `style.*` slots — true of every object `command/commands.ts`'s `createText`
- *   builds. When a `style.*` slot is missing or unusable the two fall back
- *   DIFFERENTLY: here an unusable `lineHeight` becomes `fontSize` and an unusable
- *   `fontSize` returns an empty layout, while `renderer.ts` substitutes its own
- *   `DEFAULT_TEXT_*` and draws anyway (deliberately — it would rather show text
- *   than blank the box). So for a hand-built or loaded `text` object with a
- *   broken style, drawn and measured CAN disagree. Disclosed, not fixed: one
- *   shared set of fallbacks needs a ruling on which file owns them
- *   (0139-REVIEW).
+ *   `cssFont` builds every `ctx.font` string in this pipeline, and is the only
+ *   way a markdown flag reaches the canvas.
  *
  * INVARIANTS UPHELD HERE
  *   - `measure` NEVER throws and ALWAYS returns two finite, non-negative
@@ -89,9 +40,9 @@
  *     object with nothing in it takes no room (matching `NULL_TEXT_MEASURER`).
  *   - A line's measured width is the SUM OF THE SAME RUN MEASUREMENTS the
  *     renderer positions those runs by, so a line can never be measured wider or
- *     narrower than it draws.
+ *     narrower than it draws. A hanging indent is inside that number too.
  *   - No wrap loop, whitespace rule, or markdown handling leaks into
- *     `src/engine/` (D-120 clause 2): every bit of it is in this file and
+ *     `src/engine/` (D-120 clause 2): every bit of it is here and in
  *     `markdown.ts`.
  *   - Lines and runs are appended one at a time, never `push(...lines)` /
  *     `Math.max(...)`: the count is a function of `resolvedContent`, itself a
@@ -103,18 +54,27 @@
  *
  * NOT DONE HERE
  *   - PARSING the markup. `markdown.ts` decides what is a heading, a list item
- *     or an emphasised stretch; this file decides only what font that becomes.
+ *     or an emphasised stretch; this file decides only what font that becomes,
+ *     and how far a wrapped list item's continuation hangs in.
  *   - Drawing — `renderer.ts`'s text pass. It calls `layOutText` and paints the
  *     runs it gets back; this file still only MEASURES.
  *   - `align` / `color` — they change how a laid-out line is PAINTED, not its
  *     size, and are not in `TextStyle` (`engine/eval-context.ts`). Alignment
  *     needs the BOX width (`textbox.ts`), which is not this file's either.
+ *   - AGREEING with `renderer.ts` about a BROKEN `style.*` slot. While both read
+ *     the same usable slots — true of every object `createText` builds — drawn
+ *     and measured are identical. When one is missing or unusable they fall back
+ *     DIFFERENTLY: here an unusable `lineHeight` becomes `fontSize` and an
+ *     unusable `fontSize` returns an empty layout, while `renderer.ts`
+ *     substitutes its own `DEFAULT_TEXT_*` and draws anyway (it would rather
+ *     show text than blank the box). Disclosed, not fixed: one shared set of
+ *     fallbacks needs a ruling on which file owns them (0139-REVIEW).
  *   - Compensating for the residual disagreement between these line breaks and
  *     a `<textarea>`'s — **D-138** forbids it unconditionally. A further
  *     *specified* CSS rule may be adopted, and must be named at its site.
  */
 import type { TextMeasurement, TextMeasurer, TextStyle } from "../engine/eval-context.ts";
-import { parseMarkdownLite, verbatimLines, type MarkdownLine, type MarkdownRun } from "./markdown.ts";
+import { LIST_BULLET, parseMarkdownLite, verbatimLines, type MarkdownLine, type MarkdownRun } from "./markdown.ts";
 
 /**
  * The slice of `CanvasRenderingContext2D` this file uses. A real 2D context
@@ -273,6 +233,32 @@ function headingScale(line: MarkdownLine): number {
 }
 
 /**
+ * How far a WRAPPED line's continuations are pushed in — the width of the
+ * bullet run, so a list item's second line starts under its text rather than
+ * under its marker (entry 0161, the human's request after seeing it on screen).
+ *
+ * Zero for everything that is not a `list` line, and zero when the indent would
+ * be as wide as the box itself: a continuation limit of zero or less would put
+ * one character on every line, which is worse than no indent at all. Measured
+ * from the bullet run's OWN font rather than a recomputed one, so the indent is
+ * exactly the width of the glyphs the renderer will draw above it.
+ */
+function hangingIndent(
+  line: MarkdownLine,
+  family: string,
+  fontSize: number,
+  wrapWidth: number | undefined,
+  measureRun: (text: string, font: string) => number,
+): number {
+  const bullet = line.runs[0];
+  if (line.kind !== "list" || bullet === undefined || bullet.text !== LIST_BULLET) {
+    return 0;
+  }
+  const indent = finiteOrZero(measureRun(bullet.text, runFont(bullet, line, family, fontSize)));
+  return wrapWidth !== undefined && indent < wrapWidth ? indent : 0;
+}
+
+/**
  * The break units of one parsed line, in order, each a list of pieces.
  *
  * Chunks are accumulated ACROSS runs: `**bo**ld` is one word, and CSS gives it
@@ -351,15 +337,23 @@ function appendCharacter(pieces: readonly Piece[], font: string, character: stri
  * surrogates). The `current.length > 0` guard is what stops a single character
  * wider than the whole line from looping forever — it goes on the line and
  * overflows, which is what a browser does too.
+ *
+ * `hangingIndent` narrows every line AFTER the first, because those lines will
+ * be DRAWN that far in (a list item's continuation sits under its text, not
+ * under its bullet — entry 0161, the human's request). Wrapping to the full
+ * width and indenting afterwards would push the last word of each continuation
+ * line out through the side of the box, so the indent has to be known here, at
+ * the point the line is fitted, and not applied later.
  */
-function wrapLine(chunks: readonly Piece[][], wrapWidth: number, measureRun: (text: string, font: string) => number): Piece[][] {
+function wrapLine(chunks: readonly Piece[][], wrapWidth: number, hangingIndent: number, measureRun: (text: string, font: string) => number): Piece[][] {
   const width = (pieces: readonly Piece[]): number => mergeRuns(withoutHangingSpaces(pieces), measureRun).width;
   const lines: Piece[][] = [];
+  const limit = (): number => (lines.length === 0 ? wrapWidth : wrapWidth - hangingIndent);
   let current: Piece[] = [];
   for (const chunk of chunks) {
     if (current.length > 0) {
       const candidate = current.concat(chunk);
-      if (width(candidate) <= wrapWidth) {
+      if (width(candidate) <= limit()) {
         current = candidate;
         continue;
       }
@@ -368,7 +362,7 @@ function wrapLine(chunks: readonly Piece[][], wrapWidth: number, measureRun: (te
       lines.push(withoutHangingSpaces(current));
       current = [];
     }
-    if (width(chunk) <= wrapWidth) {
+    if (width(chunk) <= limit()) {
       current = chunk.slice(); // fits on a line of its own — the ordinary case
       continue;
     }
@@ -376,7 +370,7 @@ function wrapLine(chunks: readonly Piece[][], wrapWidth: number, measureRun: (te
     for (const piece of chunk) {
       for (const character of piece.text) {
         const candidate = appendCharacter(current, piece.font, character);
-        if (current.length > 0 && width(candidate) > wrapWidth) {
+        if (current.length > 0 && width(candidate) > limit()) {
           lines.push(withoutHangingSpaces(current));
           current = [{ text: character, font: piece.font }];
         } else {
@@ -398,6 +392,41 @@ function wrapLine(chunks: readonly Piece[][], wrapWidth: number, measureRun: (te
  * also why `markup` is a parameter rather than two functions — the wrap rules,
  * the hanging spaces and the code-point splitting are the same either way, and a
  * second copy of them is how the canvas and the overlay drifted apart before.
+ *
+ * LINE-BREAKING (**D-120**): the operator's own newlines first, then — ONLY when
+ * `wrapWidth` is a positive finite number — each hard line greedily wrapped,
+ * measuring candidates with `ctx.measureText`. No wrap width (`width` is
+ * `"auto"`) means no wrap at all (§5.6: "auto width + auto height means no
+ * wrapping").
+ *
+ * The rule those breaks follow is **CSS's**, deliberately and to the letter —
+ * `white-space: pre-wrap` plus `overflow-wrap: break-word`, which is what the
+ * in-place editor's `<textarea>` uses (the human's 2026-09-02 report). Two
+ * consequences, and neither is a style preference:
+ *
+ *   - **A run of spaces is PRESERVED, not collapsed.** `pre-wrap` keeps every
+ *     space, so `"a  b"` is wider in the editor than a collapsed `"a b"` is on
+ *     the canvas — near a wrap boundary that is one extra line in the editor and
+ *     not on the canvas, which is exactly the "X lines rendered, X+1 lines
+ *     editing" the operator saw. Spaces at the END of a line HANG (CSS Text 3):
+ *     they are trimmed off the emitted line, so they neither widen the box nor
+ *     force a break.
+ *   - **A word wider than the wrap width is BROKEN between characters.** It used
+ *     to sit alone and overflow, so a long unbroken run — a URL, a keyboard mash
+ *     — punched out through the side of its own box while the editor broke it
+ *     neatly. `break-word` is reproduced exactly: the word first moves to a line
+ *     of its own, and only if it STILL does not fit is it split.
+ *
+ * A word may span two runs (`**bo**ld`) and is NOT broken there: chunks
+ * accumulate across runs and only a space opens a break opportunity, as in CSS.
+ * A wrapped `- list item` hangs its continuations under its text
+ * (`hangingIndent`).
+ *
+ * Rule 5 still applies to everything CSS does beyond that: no hyphenation, no
+ * dictionary, no grapheme-cluster or bidi handling, no tab stops (a tab is part
+ * of a word here — only U+0020 is a break opportunity). Those are differences
+ * from a browser that no document reachable today can see, and **D-138** forbids
+ * closing the remainder with a tuned constant.
  *
  * Returns an EMPTY layout for an unusable `style.fontSize` — the caller decides
  * whether that is a zero box (`measure`) or a reason to substitute a default and
@@ -425,16 +454,28 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
     const scale = headingScale(sourceLine);
     const height = lineHeight * scale;
     const chunks = chunksOf(sourceLine, request.style.font, fontSize * scale);
+    const indent = hangingIndent(sourceLine, request.style.font, fontSize * scale, wrapWidth, request.measureRun);
     // No wrap width means the operator's own hard lines, untouched — trailing
-    // spaces included, since nothing here is deciding where a line ends.
-    const wrapped = wrapWidth === undefined ? [chunks.flat()] : wrapLine(chunks, wrapWidth, request.measureRun);
+    // spaces included, since nothing here is deciding where a line ends. A line
+    // that never wraps has no continuation to indent, either.
+    const wrapped = wrapWidth === undefined ? [chunks.flat()] : wrapLine(chunks, wrapWidth, indent, request.measureRun);
+    let continuation = false;
     for (const linePieces of wrapped) {
-      const { runs, width } = mergeRuns(linePieces, request.measureRun);
+      const merged = mergeRuns(linePieces, request.measureRun);
+      // The indent is folded into the runs' own offsets and into the line's
+      // width, rather than becoming a field on `LaidOutLine`. That way it is
+      // already inside the number `measuredWidth` reports and inside the number
+      // `renderer.ts` aligns by, so neither had to learn about list items at
+      // all — a right-aligned continuation still lands on the box's right edge.
+      const offset = continuation ? indent : 0;
+      const runs = offset === 0 ? merged.runs : merged.runs.map((run) => ({ ...run, x: run.x + offset }));
+      const width = merged.width + offset;
       lines.push({ runs, top, width, height });
       if (width > widest) {
         widest = width;
       }
       top += height;
+      continuation = true;
     }
   }
   return { lines, width: widest, height: top };
@@ -484,11 +525,12 @@ export function createCanvas2dTextMeasurer(ctx: MeasurementContext): TextMeasure
  * verbatim, because a `<textarea>` can only ever show the raw source and the
  * box has to hold what is actually being typed.
  *
- * PROVISIONAL(Q-025): the human has not yet ruled what the overlay shows once
- * the canvas renders markdown. This is recommendation (a) — raw source, measured
- * raw — taken provisionally per STATUS's instruction to the markdown cycle. If
- * (b) is ruled instead, this function goes and `main.ts` passes the markup-aware
- * measurer to `editorTextBoxSize`; nothing stored depends on the answer.
+ * **Q-025, answered by the human on screen (entry 0161): option (a).** Their
+ * words, on watching a markdown box shrink to its raw source as the editor
+ * opened: "which I actually think is ideal and works well as implemented". So
+ * the box legitimately changes size on commit, and that is the wanted
+ * behaviour, not a tolerated cost. The reviewer owes this a `D-NNN`; until it
+ * has one, this comment is where the ruling lives.
  */
 export function createSourceTextMeasurer(ctx: MeasurementContext): TextMeasurer {
   return createMeasurer(ctx, false);

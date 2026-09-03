@@ -15,8 +15,16 @@ Next free ID: **Q-026**
 ## Q-025 — When the canvas renders markdown-lite, what does the in-place editor's overlay show?
 Raised: entry 0158-RULINGS-phase5 (reviewer)   Brief section: §5.6 (the markdown-lite list;
 `content` is "raw source including markup"), against the human's 2026-09-02 goal for the text box.
-Status: **OPEN** — the human's call. **(a) is now TAKEN PROVISIONALLY and tagged in code** (entry
-0160); the question stands until they rule.
+Status: **ANSWERED BY THE HUMAN, ON SCREEN, 2026-09-03 (entry 0161): option (a).** Built at 0160,
+run by them at 0161, confirmed in their own words. **Every `PROVISIONAL(Q-025)` tag is removed and
+each site now cites the answer.** This question is closed on substance; what it still lacks is a
+`D-NNN` in `DECISIONS.md`, which is the reviewer's to write and NOT an implementer's (§2). Until it
+has one, the ruling lives in this entry and in the four cited sites.
+
+**The human's words**, on the resize-on-commit consequence (a) accepts and (b) would have removed:
+*"framing works well. The box fits the markdown ink, but when editing it 'shrinks' to fit the actual
+pre-rendered text, which I actually think is ideal and works well as implemented."* And on the
+overlay generally: *"Current behavior is good and works well."*
 
 Ambiguity: the stated goal of the whole text-box rework was *"in those editors, there is no
 difference between how the text looks when you're not editing it and how it looks when you are.
@@ -44,7 +52,7 @@ difference for an invisible, confusing one; a box that silently mis-fits its own
 complaint that started this whole line of work.
 
 Reversible? **Yes** — the choice lives in what `editorTextStyle` / `editorTextBoxSize` are handed,
-not in any stored shape. Provisional choice taken: **(a), at entry 0160-markdown-render**, per
+not in any stored shape. Provisional choice taken: **(a), at entry 0160-markdown-render, and CONFIRMED by the human at 0161**, per
 STATUS's standing instruction to that cycle. Tagged at: `src/render/measure.ts`
 (`createSourceTextMeasurer` — the verbatim measurer that exists only for this), `src/main.ts`
 (`sourceMeasurer`, the one identifier `editorTextBoxSize` is handed), `src/render/editor.ts`

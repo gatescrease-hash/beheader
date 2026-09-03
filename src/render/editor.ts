@@ -65,11 +65,11 @@
  *     characters, so an editor open on a box that uses markup shows RAW SOURCE
  *     (§5.6's `content`) and is MEASURED from raw source — `main.ts` hands
  *     `editorTextBoxSize` `measure.ts`'s `createSourceTextMeasurer`, not the
- *     markup-aware one the engine gets. **PROVISIONAL(Q-025)**: that is the
- *     question's recommendation (a), taken pending the human's ruling. The box
- *     may therefore change size on commit, which (a) accepts and (b) would not.
- *     Everything that can move a glyph in PLAIN text still matches exactly
- *     (D-132) — this narrows that promise to text with no markup in it.
+ *     markup-aware one the engine gets. **Q-025, answered by the human on screen
+ *     (entry 0161): option (a)** — the box changing size on commit is WANTED, in
+ *     their words "ideal and works well as implemented". Everything that can
+ *     move a glyph in PLAIN text still matches exactly (D-132); this narrows
+ *     that promise to text with no markup in it, deliberately.
  *   - The cell editor's 4-world-unit text inset (`renderer.ts`'s
  *     `TABLE_CELL_TEXT_PADDING`) and a number cell's right-alignment: the
  *     editor holds the SOURCE being typed, which Excel left-aligns too.

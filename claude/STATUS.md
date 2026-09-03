@@ -1,27 +1,37 @@
-# STATUS — as of entry 0160-markdown-render
+# STATUS — as of entry 0161-hanging-indent
 
-**NOTHING IS BLOCKED. MARKDOWN-LITE IS BUILT, DRAWN AND MEASURED. THE NEXT SLICE IS THE PHASE 5
-GATE — AND THIS BATCH MUST BE REVIEWED FIRST.**
+**NOTHING IS BLOCKED. MARKDOWN-LITE IS BUILT, DRAWN, MEASURED AND CONFIRMED ON SCREEN. THE NEXT
+SLICE IS THE PHASE 5 GATE — AND THIS BATCH MUST BE REVIEWED FIRST.**
 
-STATE: **GREEN**. Both configs compile, **1767/1767** tests pass, 0 skipped, 0 `.only`.
+STATE: **GREEN**. Both configs compile, **1775/1775** tests pass, 0 skipped, 0 `.only`.
 **34 test files.** `npx vite build` clean.
 
 Last review point: **0157-REVIEW-phase5** (ACCEPT WITH EDITS). Since then: 0158-RULINGS (no code),
-then **two implementer cycles, 0159 and 0160, which are UNREVIEWED**. Batch **2/3 cycles, ~1,390
-changed lines / 8 source files — OVER §6.3's 800/10 cap**, and §6.1 trigger 5 fired at 0160.
-**The next cycle may not start before this batch is reviewed.**
+then **three implementer cycles — 0159, 0160 and 0161 — all UNREVIEWED**. Batch **3/3 cycles,
+~1,600 changed lines / 8 source files: OVER §6.3's cap on BOTH counts**, and §6.1 trigger 5 fired
+at 0160. **The next cycle may not start before this batch is reviewed.**
 
-**Confirmed on screen:** 0152, 0153, 0154 (2026-09-02) and **0156** (save/load round-trips).
-**NOT seen on screen: 0155, 0159, 0160.**
+**Confirmed on screen:** 0152, 0153, 0154, 0156 (2026-09-02) and — new, 2026-09-03 — **0155, 0159
+and 0160**. The human ran markdown rendering, alignment, wrapping, framing, formula integration,
+save/load, zoom, the table-cell fixes and the resize grabbers. All good, in their words.
+**NOT seen on screen: 0161's hanging indent, and nothing else.**
+
+**THE REVIEWER OWES ONE RULING: Q-025 IS ANSWERED AND HAS NO `D-NNN`.** The human answered option
+(a) on screen — the overlay shows RAW SOURCE and is measured raw, so a markup box legitimately
+changes size on commit, which they called *"ideal and works well as implemented"*. Every
+`PROVISIONAL(Q-025)` tag is REMOVED and all four sites cite the answer, but `DECISIONS.md` is the
+reviewer's alone (§2), so it is closed in substance and unrecorded in form.
 
 ---
 
-## What the last two cycles did
+## What the last three cycles did
 
 **0159** added `src/render/markdown.ts` — §5.6's markdown-lite parser, pure, no consumers.
 **0160** wired it through the whole text pipeline in one cycle, which is what STATUS demanded:
 `measure.ts` rewritten around one `layOutText`, `renderer.ts`'s `drawText` painting its runs, and a
-SECOND verbatim measurer for the in-place editor's overlay (**Q-025 (a), provisional**).
+SECOND verbatim measurer for the in-place editor's overlay (**Q-025 (a)**).
+**0161** added hanging indents for wrapped list items — the human's request after running 0160 —
+and reconciled Q-025 against their answer.
 
 **No engine file changed in either cycle.** Nothing on §6.2's load-bearing list was touched — the
 markup-aware measurer IS the engine's `TextMeasurer`, so `measuredWidth`/`measuredHeight` became
@@ -75,6 +85,9 @@ was read.
 - **A `#### ` is NOT a heading** (§5.6 says levels 1–3), a prefix is read **at position 0 only**
   (no indentation — §5.6 forbids nested lists), and there is **no escaping** (`\*` is a backslash
   next to a marker).
+- **A WRAPPED list item hangs its continuations under its TEXT** (0161). The indent is the measured
+  width of `LIST_BULLET` in the bullet's own font, computed in `measure.ts` because only that file
+  can measure it — `markdown.ts` just names the bullet.
 
 **0v. `render/measure.ts` HAS ONE LAYOUT FUNCTION AND TWO MEASURERS.** `layOutText(request)` →
 `TextLayout` (`lines`, each with `top`/`width`/`height` and positioned `LaidOutRun`s carrying the
@@ -84,13 +97,19 @@ exact `ctx.font` they draw in). **`layOutLines` IS GONE.**
   exactly one implementation of the wrap rules (D-010).
 - **`createCanvas2dTextMeasurer` = markup-aware = the ENGINE's** (`main.ts`'s `EvalContext`), so
   `measuredWidth`/`measuredHeight` measure the RENDERED text. That is what keeps D-123 clause 5 true.
-- **`createSourceTextMeasurer` = verbatim = the OVERLAY's** (`PROVISIONAL(Q-025)`).
+- **`createSourceTextMeasurer` = verbatim = the OVERLAY's** (Q-025 (a), answered on screen 2026-09-03).
 - **A line's measured width is the SUM OF THE SAME RUN MEASUREMENTS the renderer positions those
   runs by**, so a line can never be measured wider or narrower than it draws. Adjacent same-font
   pieces are merged and measured as ONE string — which for a plain line is one `measureText` call on
   the whole line, bit-for-bit what the file did before markdown, and why all 29 pre-existing measure
   tests pass untouched.
 - **A word may span two runs (`**bo**ld`) and is NOT broken there** — chunks accumulate across runs.
+- **THE HANGING INDENT IS APPLIED WHERE THE LINE IS FITTED, NOT WHERE IT IS DRAWN.** `wrapLine`
+  narrows every line after the first by it. Wrapping to the full width and indenting afterwards
+  pushes the last word of each continuation out through the side of the box — the exact defect
+  0154's `break-word` removed. It is folded into each run's `x` and into the line's `width`, so
+  `measuredWidth` covers it and `renderer.ts` needed NO change. There is a test that fails if a
+  later cycle moves it back to the renderer.
 - **Heading scale is CSS 2.1's sample stylesheet** — `2em`/`1.5em`/`1.17em`, bold — adopted under
   D-138 clause 4 (a *specified* rule, named at its site) rather than tuned. The LINE HEIGHT scales
   by the same factor. `` `code` `` is the generic `monospace`.
@@ -263,12 +282,14 @@ rendering; D-123, Q-024 answered · **0142-REVIEW** `measuredWidth`; Q-024 CLOSE
   paints runs and aligns by arithmetic; `main.ts`'s `sourceMeasurer`; headers at five files.
   **Test expectations changed at two `renderer.test.ts` sites** (§6.1 trigger 5) — the alignment
   mechanism, and the "markup is drawn verbatim" test §5.6 required reversing.
+- **Entry 0161** — hanging indents for wrapped list items (`measure.ts` only: `hangingIndent`,
+  `wrapLine`'s narrowed limit, the offset folded into `layOutText`'s runs), Q-025 reconciled at
+  four sites, headers at `measure.ts` and `markdown.ts`. No test expectation changed.
 
 ## Reviewed but NOT yet seen on screen
 
-- **Entry 0155 — the table-cell fixes + A1 headers.** The phantom `""`, the ghosted cell, the A1
-  headers. Ten seconds of gestures: double-click an empty cell and click out five times then
-  `props table_1`; double-click a cell that HAS a value and watch for ghosting.
+- **Entry 0161's hanging indent only.** One wrapped bullet in a box with a set width is the whole
+  check: the second line should start under the item's text, not under its bullet.
 
 ## Not started
 
@@ -325,12 +346,16 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 - **ENTRIES 0155, 0159 AND 0160 ARE ALL UNSEEN ON SCREEN.** 0160 especially: whether real
   bold/italic/monospace faces at real metrics look right, and whether CSS's heading scale reads as a
   heading on this canvas, is not knowable from a fixed-width fake measurer.
-- **A TEXT BOX THAT USES MARKUP CHANGES SIZE WHEN THE EDITOR CLOSES** — the overlay is measured from
-  raw source, the canvas from the rendered text. `PROVISIONAL(Q-025)`, recommendation (a). A box
-  with NO markup is unaffected. This is the one place the 2026-09-02 "no difference between editing
-  and not editing" goal is deliberately given up, and §5.6 forced it.
-- **A WRAPPED LIST ITEM HAS NO HANGING INDENT** — continuation lines start level with the bullet.
-  §5.6 specifies no indentation; it will look wrong to anyone who expects markdown.
+- **A TEXT BOX THAT USES MARKUP CHANGES SIZE WHEN THE EDITOR CLOSES** — the overlay is measured
+  from raw source, the canvas from the rendered text. A box with NO markup is unaffected. This is
+  the one place the 2026-09-02 "no difference between editing and not editing" goal is deliberately
+  given up; §5.6 forced the question and **the human answered it on screen (Q-025 (a), 2026-09-03):
+  the shrink-on-open is WANTED — "ideal and works well as implemented".** Listed here as a
+  PROPERTY, not a problem. Do not try to remove it.
+- **A CENTRED OR RIGHT-ALIGNED LIST ITEM'S CONTINUATION IS ALIGNED *INCLUDING* ITS INDENT.** The
+  hanging indent (0161) lives inside the line's own width, which is what makes `measuredWidth`
+  cover it. Consistent and harmless; nobody has decided it is what a centred list should look
+  like, and §5.6 does not say.
 - **A CODE SPAN CAN SWALLOW AN EMPHASIS CLOSER** (`` *a `b* ` c* ``), leaving the rest of that ONE
   line italic. Bounded to a line; not chased.
 - **THE X-vs-X+1 WRAP RESIDUAL IS CLOSED AS "ACCEPTED" — D-138. DO NOT TRY TO FIX IT.** No epsilon,
@@ -338,6 +363,9 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
   `font-kerning` on `.text-editor`, no per-platform branch. **Adopting a further *specified* CSS rule
   is the one legitimate move** — that is what 0154 did, and what 0160's flanking rule and heading
   scale did — and it must name the rule at the site. Reopen only on D-138 clause 5's evidence.
+- **OBJECT NAME LABELS AND TABLE ROW/COLUMN HEADERS READ SMALL BESIDE RENDERED MARKDOWN.** The
+  human saw this on 2026-09-03 and **decided against changing it** — *"I wouldn't change that for
+  now. Keep as is."* A DECIDED NON-CHANGE, not an open defect: do not "fix" it.
 - **THE A1 HEADERS ARE GREY (`#6b7280`), NOT THE TITLE'S NEAR-BLACK.** One constant to revert.
 - **THE HEADERS ARE NOT CLICKABLE.** Deliberately not invented.
 - **A string cell holding `"42"` seeds `42` and commits back as the NUMBER 42.** Excel's own
@@ -425,7 +453,7 @@ overruled one on the human's explicit instruction.** Those, in full:
   `overflow: hidden` plus a box that grows.
 - **D-132's colour clause — REVERSED.** The overlay matches `style.color`. **D-132 clause 2's
   "markdown-lite does not move a glyph, so it stays unmatched" is now the LOAD-BEARING half** — it
-  is exactly what 0160 relies on, and Q-025 is the question of whether it survives.
+  is exactly what 0160 relies on, and Q-025 (a) confirmed it survives.
 - **D-129's zoom-scaled type style — MOVED.** `editorTextStyle` reports WORLD lengths; the scaling is
   one CSS transform.
 - **§5.6's `TextBox` slot list — DEVIATED, TWICE.** `autoresize` ADDED (0153); **`overflow` REMOVED
@@ -447,15 +475,16 @@ inherits the same posture.
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117**, **Q-021 → D-120**, **Q-022 →
-D-121**, **Q-023 → D-122**, **Q-024 → D-123** — all CLOSED. **Q-025 is OPEN and now TAGGED IN CODE**
-— (a) taken provisionally at 0160. Next free: **Q-026**.
+D-121**, **Q-023 → D-122**, **Q-024 → D-123** — all CLOSED. **Q-025 is ANSWERED (option (a), by the
+human on screen 2026-09-03), reconciled in code at 0161, and AWAITING ITS `D-NNN` from the
+reviewer.** Next free: **Q-026**.
 
 ## Live PROVISIONAL tags and open questions
 
-**`PROVISIONAL(Q-025)` → `src/render/measure.ts`** (`createSourceTextMeasurer`),
-**`src/main.ts`** (`sourceMeasurer`), **`src/render/editor.ts`** (NOT DONE HERE): what the in-place
-editor's overlay shows once the canvas renders markdown. Provisional (a) — raw source, measured raw.
-**The human's.** Reconciliation is three sites and one identifier either way.
+**Q-025 HAS NO TAGS LEFT.** Answered by the human on screen 2026-09-03 (option (a)) and reconciled
+at entry 0161: `src/render/measure.ts`, `src/render/editor.ts` and `src/main.ts` (×2) each cite the
+answer instead. `grep -rn "PROVISIONAL(Q-025)" src` returns nothing. **A `D-NNN` is still owed by
+the reviewer** — see the top of this file.
 
 **`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** (×3), **`src/render/slots.ts`** (×1) and
 **`src/render/editor.ts`** (×1): world units or screen pixels for stroke width / cell size / font?
