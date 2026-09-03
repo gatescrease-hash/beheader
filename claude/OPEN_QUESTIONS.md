@@ -15,8 +15,8 @@ Next free ID: **Q-026**
 ## Q-025 — When the canvas renders markdown-lite, what does the in-place editor's overlay show?
 Raised: entry 0158-RULINGS-phase5 (reviewer)   Brief section: §5.6 (the markdown-lite list;
 `content` is "raw source including markup"), against the human's 2026-09-02 goal for the text box.
-Status: **OPEN** — the human's call, and it should be answered before or during the markdown cycle,
-not after.
+Status: **OPEN** — the human's call. **(a) is now TAKEN PROVISIONALLY and tagged in code** (entry
+0160); the question stands until they rule.
 
 Ambiguity: the stated goal of the whole text-box rework was *"in those editors, there is no
 difference between how the text looks when you're not editing it and how it looks when you are.
@@ -44,8 +44,20 @@ difference for an invisible, confusing one; a box that silently mis-fits its own
 complaint that started this whole line of work.
 
 Reversible? **Yes** — the choice lives in what `editorTextStyle` / `editorTextBoxSize` are handed,
-not in any stored shape. Provisional choice taken: **not yet**. The markdown cycle takes (a) unless
-the human rules otherwise, and tags every site `// PROVISIONAL(Q-025)`.
+not in any stored shape. Provisional choice taken: **(a), at entry 0160-markdown-render**, per
+STATUS's standing instruction to that cycle. Tagged at: `src/render/measure.ts`
+(`createSourceTextMeasurer` — the verbatim measurer that exists only for this), `src/main.ts`
+(`sourceMeasurer`, the one identifier `editorTextBoxSize` is handed), `src/render/editor.ts`
+(NOT DONE HERE, which now states the difference is deliberate).
+
+> **Implementer note (entry 0160):** the cycle that made this visible is built, and the consequence
+> is now concrete rather than hypothetical. **A text box that uses markup changes size when the
+> editor closes** — the overlay is measured from raw source, the canvas from the rendered text. A box
+> with NO markup is unaffected, and everything that can move a glyph in plain text still matches
+> exactly (D-132). Reconciling to (b) is deleting `createSourceTextMeasurer` and changing one
+> identifier in `main.ts`; reconciling to (a) permanently is removing three tags. Nothing stored
+> depends on the answer either way, and no test asserts the choice beyond the three that pin the two
+> measurers apart.
 
 ---
 

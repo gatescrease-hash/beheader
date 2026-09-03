@@ -414,7 +414,7 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     ]);
   });
 
-  it("word-wraps at a numeric width slot, using the same layOutLines the measurer uses", () => {
+  it("word-wraps at a numeric width slot, using the same layOutText the measurer uses", () => {
     const { ctx, calls } = createFakeContext();
     // FAKE_CHAR_WIDTH = 7: "aaa bbb" is 49px, past a 30px width, so each word lands on its own line.
     renderDocument(ctx, 800, 600, [textObject("aaa bbb ccc", 0, 0, { width: { kind: "literal", value: 30 } })], CAMERA_IDENTITY);
@@ -453,14 +453,19 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     expect(bodyText(calls)).toHaveLength(1);
   });
 
-  it("centre-aligns about origin + boxWidth/2 and right-aligns about origin + boxWidth", () => {
+  // A line of two fonts has no single anchor `ctx.textAlign` could measure from,
+  // so entry 0160 moved §5.6's alignment into arithmetic on the line's own
+  // width. The drawn result is unchanged; the recorded call is not.
+  it("centres and right-aligns each LINE inside the box by its own width — every run is placed absolutely, so ctx.textAlign is always left", () => {
+    // FAKE_CHAR_WIDTH = 7, so "ab" is 14 wide in a 100-wide box: centred starts
+    // at 10 + (100 - 14) / 2, right-aligned at 10 + (100 - 14).
     const centred = createFakeContext();
     renderDocument(centred.ctx, 800, 600, [textObject("ab", 10, 0, { width: { kind: "literal", value: 100 }, "style.align": { kind: "literal", value: "center" } })], CAMERA_IDENTITY);
-    expect(bodyText(centred.calls)[0]).toEqual({ op: "fillText", text: "ab", x: 60, y: 0, align: "center" });
+    expect(bodyText(centred.calls)[0]).toEqual({ op: "fillText", text: "ab", x: 53, y: 0, align: "left" });
 
     const right = createFakeContext();
     renderDocument(right.ctx, 800, 600, [textObject("ab", 10, 0, { width: { kind: "literal", value: 100 }, "style.align": { kind: "literal", value: "right" } })], CAMERA_IDENTITY);
-    expect(bodyText(right.calls)[0]).toEqual({ op: "fillText", text: "ab", x: 110, y: 0, align: "right" });
+    expect(bodyText(right.calls)[0]).toEqual({ op: "fillText", text: "ab", x: 96, y: 0, align: "left" });
   });
 
   it("an unknown align value reads as left (the default)", () => {
@@ -469,10 +474,45 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     expect(bodyText(calls)[0]).toEqual({ op: "fillText", text: "ab", x: 5, y: 0, align: "left" });
   });
 
-  it("draws markdown-lite markup verbatim — the render markdown pass is a later slice", () => {
+  // REVERSES the "drawn verbatim" test entry 0138 wrote and 0139 reviewed: §5.6's
+  // markdown-lite is honoured from entry 0160, so the markers are gone from the
+  // ink and each run's font comes off the layout `measure.ts` produced.
+  it("draws markdown-lite with its markers REMOVED, one run per font", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [textObject("**bold** and `code`", 0, 0)], CAMERA_IDENTITY);
-    expect(bodyText(calls)[0]?.text).toBe("**bold** and `code`");
+    expect(bodyText(calls).map((call) => call.text)).toEqual(["bold", " and ", "code"]);
+  });
+
+  it("sets each run's own font before drawing it, and positions it after the runs before it", () => {
+    const { ctx, calls, fonts } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("ab**cd**", 0, 0)], CAMERA_IDENTITY);
+    expect(bodyText(calls)).toEqual([
+      { op: "fillText", text: "ab", x: 0, y: 0, align: "left" },
+      { op: "fillText", text: "cd", x: 14, y: 0, align: "left" },
+    ]);
+    expect(fonts).toContain("bold 16px sans-serif");
+  });
+
+  it("draws a heading bigger and bold, and starts the line after it below the heading's OWN height", () => {
+    const { ctx, calls, fonts } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("# Title\nafter", 0, 0)], CAMERA_IDENTITY);
+    expect(bodyText(calls)).toEqual([
+      { op: "fillText", text: "Title", x: 0, y: 0, align: "left" },
+      { op: "fillText", text: "after", x: 0, y: 40, align: "left" },
+    ]);
+    expect(fonts).toContain("bold 32px sans-serif"); // CSS's own h1: 2em, and bold
+  });
+
+  it("draws a list item with a bullet where its `- ` was", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("- milk", 0, 0)], CAMERA_IDENTITY);
+    expect(calls.filter((call) => call.op === "fillText" && call.text === "• milk")).toHaveLength(1);
+  });
+
+  it("draws an UNMATCHED marker as itself, so a half-typed `**` is visible rather than silently restyling the rest", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [textObject("2 * 3 and **bold", 0, 0)], CAMERA_IDENTITY);
+    expect(bodyText(calls).map((call) => call.text)).toEqual(["2 * 3 and **bold"]);
   });
 
   it("sets ctx.font from style.fontSize and style.font before drawing the text", () => {

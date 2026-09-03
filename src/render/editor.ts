@@ -38,9 +38,11 @@
  *     `resolveTextStyle` / `drawText` / `measure.ts`'s `cssFont` read-for-read
  *     (shared `readNumber`/`readText`, the same positive-number tests, the same
  *     blank-family screen, the same `width`-slot wrap rule), so drawn and typed
- *     text lay out the same. `wraps` is `drawText`'s own `wrapWidth` condition,
- *     not a second reading of §5.6's layout rule. `style.color` is mirrored too
- *     (entry 0153 reversed D-132's colour clause — see `EditorTextStyle`).
+ *     text lay out the same FOR TEXT WITH NO MARKUP IN IT — which since entry
+ *     0160 is the honest scope of that promise, and NOT DONE HERE says why.
+ *     `wraps` is `drawText`'s own `wrapWidth` condition, not a second reading of
+ *     §5.6's layout rule. `style.color` is mirrored too (entry 0153 reversed
+ *     D-132's colour clause — see `EditorTextStyle`).
  *   - World<->screen is `camera.ts`'s own `worldToScreen`/`screenToWorld`,
  *     never a second hand-written copy (D-010).
  *   - A cell's rectangle is the SAME `origin` + `TABLE_CELL_*` reading
@@ -57,9 +59,17 @@
  *     `advance` -> `AppTransition.openEditor` -> `applyTransition` (D-124). This
  *     file just places its overlay, via `textEditorBox`'s empty-`content`
  *     fallback (D-125 clause 6).
- *   - Rendering markdown-lite in the overlay. An editor shows RAW SOURCE
- *     (§5.6's `content`), which is also what `renderer.ts` draws today, so the
- *     two agree; the markdown-lite cycle will make them differ deliberately.
+ *   - Rendering markdown-lite in the overlay, and this is now a DELIBERATE
+ *     difference rather than a coincidence. The canvas draws `**bold**` as bold
+ *     (entry 0160); a `<textarea>` can only ever show the six literal
+ *     characters, so an editor open on a box that uses markup shows RAW SOURCE
+ *     (§5.6's `content`) and is MEASURED from raw source — `main.ts` hands
+ *     `editorTextBoxSize` `measure.ts`'s `createSourceTextMeasurer`, not the
+ *     markup-aware one the engine gets. **PROVISIONAL(Q-025)**: that is the
+ *     question's recommendation (a), taken pending the human's ruling. The box
+ *     may therefore change size on commit, which (a) accepts and (b) would not.
+ *     Everything that can move a glyph in PLAIN text still matches exactly
+ *     (D-132) — this narrows that promise to text with no markup in it.
  *   - The cell editor's 4-world-unit text inset (`renderer.ts`'s
  *     `TABLE_CELL_TEXT_PADDING`) and a number cell's right-alignment: the
  *     editor holds the SOURCE being typed, which Excel left-aligns too.

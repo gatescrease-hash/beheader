@@ -105,15 +105,16 @@
  *   - `script`/`image` objects (no schema — Phase 6) and `polyline`'s per-vertex
  *     shape (deferred with `explode`) draw no body AND no chrome —
  *     `chromeAnchorPoint` returns `undefined` for every type with no extent.
- *     `text` DOES draw now (entry 0138): `drawText` lays `resolvedContent` out
- *     from `origin` (top-left), wrapping at a numeric `width` slot via the SAME
- *     `layOutLines` the measurer uses (`render/measure.ts`), honouring
+ *     `text` DOES draw now (entry 0138): `drawText` paints the layout
+ *     `render/measure.ts`'s `layOutText` returns for `resolvedContent`, from
+ *     `origin` (top-left), wrapping at a numeric `width` slot and honouring
  *     `style.font`/`fontSize`/`lineHeight`/`color`/`align`. Its chrome and
- *     selection highlight fall out of `extent.ts`'s new `text` extent.
- *   - Markdown-lite (`**bold**`, `# heading`, `- list`, …) — NOT this cycle.
- *     `resolvedContent`'s markup is drawn VERBATIM (exactly as
- *     `render/measure.ts` still measures it). The next Phase 5 slice, together
- *     with making the measurer markup-aware.
+ *     selection highlight fall out of `extent.ts`'s `text` extent.
+ *   - CHOOSING the fonts markdown-lite draws in. §5.6's markup IS honoured
+ *     (entry 0160) — but which font a `**bold**` or a `# heading` becomes is
+ *     `measure.ts`'s, so the measured box and the drawn ink come from one
+ *     answer (D-010). This file sets `ctx.font` to the string each laid-out
+ *     run already carries, and decides nothing about it.
  *   - CROPPING, in any form. §5.6's `overflow` enum is gone (the human's
  *     2026-09-02 ruling): a text box grows to hold its text — `render/
  *     textbox.ts` is that rule — so there is never anything outside the box to
@@ -146,7 +147,7 @@ import { formatCellReference, indexToColumnLetters, TABLE_CELL_PATH_PREFIX } fro
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
 import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";
-import { cssFont, layOutLines } from "./measure.ts";
+import { layOutText } from "./measure.ts";
 import { asPointArray, readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 // D-066's one extent, reused as the chrome anchor (see `chromeAnchorPoint`).
@@ -626,7 +627,7 @@ interface ResolvedTextStyle {
   readonly fontSize: number;
   readonly lineHeight: number;
   readonly color: string;
-  readonly align: CanvasTextAlign;
+  readonly align: "left" | "center" | "right";
 }
 
 /**
@@ -648,27 +649,41 @@ function resolveTextStyle(object: GraphObject): ResolvedTextStyle {
   };
 }
 
+/** Where a line of `lineWidth` starts, measured from the box's left edge — §5.6's three alignments as arithmetic. Kept here rather than in `measure.ts` because it needs the BOX width, which is `textbox.ts`'s answer and not the layout's. */
+function alignmentOffset(align: "left" | "center" | "right", boxWidth: number, lineWidth: number): number {
+  if (align === "center") {
+    return (boxWidth - lineWidth) / 2;
+  }
+  if (align === "right") {
+    return boxWidth - lineWidth;
+  }
+  return 0;
+}
+
 /**
  * §5.6: draws a `text` object's `resolvedContent` from `origin` (its top-left,
  * the same meaning `rect`/`table` give `origin`), wrapping at the `width` slot
  * when it holds a positive number (§5.6's "fixed width + auto height (wrap, grow
- * down) is the default"; `"auto"` — or any non-number — means no wrap).
+ * down) is the default"; `"auto"` — or any non-number — means no wrap), with
+ * §5.6's markdown-lite honoured.
  *
- * Line-breaking goes through `render/measure.ts`'s `layOutLines` with THIS ctx's
- * `measureText`, so the drawn lines are exactly the ones `measuredHeight` was
- * measured from (D-010) — while the object's `style.*` slots are usable, which
- * they are for every object `createText` builds. A broken style makes the two
- * files fall back differently and their line counts can then disagree; see
- * `measure.ts`'s header. `resolvedContent` already carries any `!`-marked broken
- * span (D-116 and D-117, engine-side) — this function just draws the string.
+ * Layout goes through `render/measure.ts`'s `layOutText` with THIS ctx's
+ * `measureText`, so the drawn lines, their fonts and their widths are exactly
+ * the ones `measuredWidth`/`measuredHeight` were measured from (D-010) — while
+ * the object's `style.*` slots are usable, which they are for every object
+ * `createText` builds. A broken style makes the two files fall back differently
+ * and their line counts can then disagree; see `measure.ts`'s header.
+ * `resolvedContent` already carries any `!`-marked broken span (D-116 and D-117,
+ * engine-side) — this function just draws what it is given, markup and all.
  *
- * Markdown-lite markup is drawn verbatim (the next slice — file header); there
- * is no `overflow` slot to consult, and no cropping of any kind: the box grows
- * to hold its text (`render/textbox.ts`). Draws nothing for an unset, non-string, or
- * empty `resolvedContent` (an empty text object takes no ink, matching
- * `measure.ts`'s zero box); a `style.*` slot that is missing or holds a
- * non-usable value falls back per `resolveTextStyle` rather than blanking the
- * text. Never throws.
+ * Every run is placed at an absolute x, so `ctx.textAlign` is always `left` and
+ * §5.6's alignment is arithmetic: a line made of two fonts has no single anchor
+ * a canvas alignment could measure from. There is no `overflow` slot to consult
+ * and no cropping of any kind: the box grows to hold its text
+ * (`render/textbox.ts`). Draws nothing for an unset, non-string, or empty
+ * `resolvedContent` (an empty text object takes no ink, matching `measure.ts`'s
+ * zero box); a `style.*` slot that is missing or holds a non-usable value falls
+ * back per `resolveTextStyle` rather than blanking the text. Never throws.
  */
 function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   const resolved = readText(object, TEXT_RESOLVED_CONTENT_PATH);
@@ -679,11 +694,21 @@ function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
 
-  ctx.font = cssFont(style.fontSize, style.family);
-
   const fixedWidth = readNumber(object, TEXT_WIDTH_PATH);
   const wrapWidth = fixedWidth !== undefined && fixedWidth > 0 ? fixedWidth : undefined;
-  const lines = layOutLines(resolved, wrapWidth, (line) => ctx.measureText(line).width);
+  const layout = layOutText({
+    text: resolved,
+    style: { font: style.family, fontSize: style.fontSize, lineHeight: style.lineHeight },
+    wrapWidth,
+    // The canvas is the surface markup is FOR — the measurer that feeds
+    // `measuredWidth`/`measuredHeight` reads it the same way, which is what
+    // keeps the box around this ink (`createCanvas2dTextMeasurer`).
+    markup: true,
+    measureRun: (text, font) => {
+      ctx.font = font;
+      return ctx.measureText(text).width;
+    },
+  });
 
   // Alignment needs the box's width, and it must be the SAME width
   // `extent.ts` bounds this object with — otherwise centred text sits off its
@@ -699,14 +724,13 @@ function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
 
   ctx.fillStyle = style.color;
   ctx.textBaseline = "top";
-  ctx.textAlign = style.align;
-  const x = style.align === "center" ? originX + boxWidth / 2 : style.align === "right" ? originX + boxWidth : originX;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (line === undefined) {
-      continue; // noUncheckedIndexedAccess artifact only — `i` is always in range.
+  ctx.textAlign = "left";
+  for (const line of layout.lines) {
+    const lineLeft = originX + alignmentOffset(style.align, boxWidth, line.width);
+    for (const run of line.runs) {
+      ctx.font = run.font;
+      ctx.fillText(run.text, lineLeft + run.x, originY + line.top);
     }
-    ctx.fillText(line, x, originY + i * style.lineHeight);
   }
 }
 
