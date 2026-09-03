@@ -111,16 +111,18 @@
  * before `detectCycle` does, or a document whose only cycle runs through an undeclared
  * slot gets a false "no cycle" pass instead of the rejection those checks exist to give.
  *
- * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. SIX
- * operation kinds: `setSlot`, `deleteObject`, `createObject`, `insertTableLine`,
- * `deleteTableLine`, `renameObject`. SIX PRECONDITIONS run over the whole batch before
+ * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. SEVEN
+ * operation kinds: `setSlot`, **`clearSlot`**, `deleteObject`, `createObject`,
+ * `insertTableLine`, `deleteTableLine`, `renameObject`. SEVEN PRECONDITIONS run over the whole batch before
  * staging even starts — an empty batch, a target that does not resolve (D-021; simulated
  * LEFT-TO-RIGHT so a batch that creates or deletes objects mid-fold is checked against
  * each operation's own position, not pre-batch state alone), an illegal payload value
  * or stored AST literal (D-048), an invalid table resize (D-050/D-046/D-053), a `setSlot`
  * that would leave a dynamic-family sizing slot (`table`'s `rows`/`cols`) unreadable by
- * `readTableDimension` (**D-097**), and a rename to a name §5.2 does not allow (D-080).
- * The last three are simulated in that same left-to-right walk. Then: deep-clone once
+ * `readTableDimension` (**D-097**), a `clearSlot` at anything but a table cell
+ * (`findIllegalSlotClears` — D-047 settles only that one), and a rename to a name §5.2
+ * does not allow (D-080).
+ * The last four are simulated in that same left-to-right walk. Then: deep-clone once
  * (D-019 — a real recursive clone, not a JSON round-trip), fold every operation onto
  * that ONE clone, validate and evaluate ONCE, commit all-or-nothing with exactly one
  * journal entry holding the whole list (D-020).
@@ -160,7 +162,7 @@
  *   - Undo/redo (PROJECT_BRIEF §8) — this stores the journal data undo will need, and
  *     nothing replays it.
  */
-import { checkNameAvailable, formatAddress, isAddressError, type Address } from "./address.ts";
+import { checkNameAvailable, formatAddress, isAddressError, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
@@ -470,6 +472,35 @@ export interface SetSlotOperation {
 }
 
 /**
+ * REMOVES the slot at `address` entirely, rather than writing a new one there
+ * (the human's 2026-09-02 report: an in-place edit of an empty table cell that
+ * typed nothing left the cell holding `""` — *"although it looks empty
+ * visually, it's not anymore"*).
+ *
+ * Why a distinct operation and not `setSlot` with some empty value: there IS no
+ * empty `Value`. §5.1's `Value` union has no "absent" member, and D-047 already
+ * says an ABSENT cell slot is how a table cell is legally empty — `""` is a
+ * string, a `0` is a number, and both are content. Restoring a cell to empty is
+ * therefore a removal, and nothing in this file could express one.
+ *
+ * **Legal ONLY at a table cell path** (`findIllegalSlotClears`). Every other
+ * slot in the registry is schema-declared, and what an absent one MEANS is a
+ * question no ruling has settled: a missing `derived` slot is D-018's outright
+ * rejection, and a missing declared `literal` (a `radius`, an `origin.x`) is
+ * tolerated by `validateIntegrity` but silently changes what its object's
+ * computes read. D-047 settles exactly one case, so exactly one case is allowed.
+ *
+ * Clearing a cell that a formula elsewhere READS is legal and deliberate: an
+ * empty in-extent cell reads `0` and contributes no edge (**D-110** clause 4),
+ * so there is no dangling reference to create — the same reason `set`ting one
+ * has never had to check its dependents.
+ */
+export interface ClearSlotOperation {
+  readonly kind: "clearSlot";
+  readonly address: Address;
+}
+
+/**
  * Removes the whole object named by `objectId` — §5.1.1's `delete <object>`.
  * Carries no `Address`/slot path: deleting an object removes every slot it
  * has at once, so there is no single slot to name — see `applyOperation`'s
@@ -675,6 +706,7 @@ export interface RenameObjectOperation {
  */
 export type Operation =
   | SetSlotOperation
+  | ClearSlotOperation
   | DeleteObjectOperation
   | CreateObjectOperation
   | InsertTableLineOperation
@@ -907,6 +939,31 @@ function applyOperation(
       return repairObjectFormulaAddresses(resized, repairReference, repairRange);
     });
     return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
+  }
+  if (operation.kind === "clearSlot") {
+    // The whole of a clear: the key leaves the object's `slots` record. Rebuilt
+    // by omission rather than `delete`d out of a copy, so the committed object
+    // is a fresh literal and no caller's reference to the old record is touched
+    // (D-024's posture, the same one `setSlot` below takes by cloning).
+    // `brokenSlots` is empty: a cleared cell breaks no reference (D-110 clause
+    // 4 — see `ClearSlotOperation`), so there is nothing to report.
+    const key = slotKey(operation.address.path);
+    return {
+      objects: objects.map((object) => {
+        if (object.id !== operation.address.objectId) {
+          return object;
+        }
+        const slots: Record<string, Slot> = {};
+        for (const existing of Object.keys(object.slots)) {
+          const slot = object.slots[existing];
+          if (existing !== key && slot !== undefined) {
+            slots[existing] = slot;
+          }
+        }
+        return { ...object, slots };
+      }),
+      brokenSlots: [],
+    };
   }
   return {
     objects: objects.map((object) => {
@@ -1322,6 +1379,14 @@ export function mutate(
   // is bounded the same way `insertTableLine`/`deleteTableLine` already are,
   // simulated left-to-right for the same reason (D-050) — a `createObject`
   // earlier in the SAME batch can mint the table this `setSlot` then targets.
+  // The human's 2026-09-02 report, engine side: a slot may be REMOVED only
+  // where an absent one has a settled meaning — a table cell (D-047). See
+  // `findIllegalSlotClears` and `ClearSlotOperation`.
+  const illegalClearMessages = findIllegalSlotClears(operations, objects);
+  if (illegalClearMessages.length > 0) {
+    return { ok: false, message: illegalClearMessages.join("; ") };
+  }
+
   const invalidDimensionMessages = findInvalidDimensionWrites(operations, objects);
   if (invalidDimensionMessages.length > 0) {
     return { ok: false, message: invalidDimensionMessages.join("; ") };
@@ -2081,6 +2146,52 @@ function findInvalidDimensionWrites(operations: readonly Operation[], objects: r
     );
   });
 
+  return problems;
+}
+
+/**
+ * `ClearSlotOperation`'s one restriction: a slot may be REMOVED only where an
+ * absent slot has a settled meaning, which today is exactly a table cell
+ * (**D-047** — an absent cell is how a cell is legally empty).
+ *
+ * Everywhere else the answer is genuinely unknown and differs by slot: a
+ * missing schema-declared DERIVED slot is D-018's outright rejection, and a
+ * missing declared LITERAL one (`radius`, `origin.x`) passes validation but
+ * silently changes what its object's computes read. Refusing here rather than
+ * discovering it downstream keeps this operation from becoming a way to reach
+ * states no ruling covers.
+ *
+ * Same left-to-right posture as the checks around it (D-050): the type is
+ * resolved from pre-batch `objects` OR from a `createObject` earlier in the
+ * same batch. An id that resolves to neither is left alone — `mutate`'s own
+ * existence check (which runs first) rejects the batch for that operation
+ * separately, and reporting it twice would say the same thing in two voices.
+ */
+function findIllegalSlotClears(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  operations.forEach((operation, index) => {
+    if (operation.kind !== "clearSlot") {
+      return;
+    }
+    const fromObjects = objects.find((candidate) => candidate.id === operation.address.objectId);
+    const fromCreate = fromObjects === undefined
+      ? operations.find((candidate): candidate is CreateObjectOperation => candidate.kind === "createObject" && candidate.object.id === operation.address.objectId)?.object
+      : undefined;
+    const target = fromObjects ?? fromCreate;
+    if (target === undefined) {
+      return; // D-021's existence check owns this one — see the doc comment.
+    }
+    const path = operation.address.path;
+    const isCell = target.type === TABLE_TYPE && path.length === 2 && path[0] === TABLE_CELL_PATH_PREFIX;
+    if (isCell) {
+      return;
+    }
+    problems.push(
+      `operation ${index + 1} of ${operations.length}: ${target.name}.${slotKey(path)} cannot be cleared — ` +
+        `only a table cell may be emptied by removing its slot (D-047). Every other slot is schema-declared, ` +
+        `and what an absent one means is not settled; write a value there instead`,
+    );
+  });
   return problems;
 }
 

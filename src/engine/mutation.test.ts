@@ -2090,6 +2090,101 @@ describe("table dimensions are literal-only — Rule 6 (D-046)", () => {
 // the document is bit-for-bit unchanged (Rule 2's rejection invariant).
 // ---------------------------------------------------------------------------
 
+// The human's 2026-09-02 report: an in-place edit of an EMPTY table cell that
+// typed nothing left the cell holding `""` — "although it looks empty visually,
+// it's not anymore." There was no way to express "make this cell empty again":
+// D-047 makes an ABSENT slot the empty state, `setSlot` only ever writes one,
+// and every `Value` (`""` and `0` included) is content.
+describe("mutate — ClearSlotOperation: emptying a table cell by REMOVING its slot (2026-09-02)", () => {
+  it("removes the slot entirely rather than writing an empty value into it", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, { "cells.A1": { kind: "literal", value: "hello" } });
+    const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const cleared = result.objects.find((object) => object.id === "obj_1");
+      expect(cleared?.slots["cells.A1"]).toBeUndefined();
+      expect(Object.keys(cleared?.slots ?? {})).not.toContain("cells.A1");
+    }
+  });
+
+  it("leaves every other slot on the object untouched", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, {
+      "cells.A1": { kind: "literal", value: 1 },
+      "cells.B1": { kind: "literal", value: 2 },
+    });
+    const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const cleared = result.objects.find((object) => object.id === "obj_1");
+      expect(cleared?.slots["cells.B1"]).toEqual({ kind: "literal", value: 2 });
+      expect(cleared?.slots["rows"]).toEqual({ kind: "literal", value: 2 });
+    }
+  });
+
+  it("does not mutate the caller's own object (step 6 / D-024)", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, { "cells.A1": { kind: "literal", value: "hello" } });
+    const snapshotBefore = JSON.parse(JSON.stringify([table])) as unknown;
+    mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
+    expect([table]).toEqual(snapshotBefore);
+  });
+
+  it("journals the clear like any other operation (D-020: one entry holding the whole batch)", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, { "cells.A1": { kind: "literal", value: "hello" } });
+    const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.journal).toHaveLength(1);
+    }
+  });
+
+  it("clearing a cell a formula elsewhere READS is legal — an empty in-extent cell reads 0 and contributes no edge (D-110 clause 4), so nothing dangles", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, {
+      "cells.A1": { kind: "literal", value: 10 },
+      "cells.B1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: 10 },
+    });
+    const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // The dependent re-evaluates against the now-empty cell rather than breaking.
+      expect(result.objects.find((object) => object.id === "obj_1")?.slots["cells.B1"]?.value).toBe(0);
+    }
+  });
+
+  it("clearing an ALREADY-absent cell is legal and simply changes nothing", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, {});
+    const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
+    expect(result.ok).toBe(true);
+  });
+
+  it("REFUSES a clear at anything but a table cell — only D-047 settles what an absent slot means", () => {
+    const objects = [valueObject("obj_1", "value_a", 5)];
+    const result = mutate(objects, [{ kind: "clearSlot", address: addr("obj_1", "in", "value") }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("cannot be cleared");
+      expect(result.message).toContain("D-047");
+    }
+  });
+
+  it("REFUSES a clear of a table's own `rows` slot — a table cell means a cell, not any slot on a table", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, {});
+    const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "rows") }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("table_x.rows");
+    }
+  });
+
+  it("REFUSES a clear naming an object that does not exist, through the SAME existence check every other operation uses (D-021)", () => {
+    const table = tableObject("obj_1", "table_x", 2, 2, {});
+    const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_404", "cells", "A1") }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("D-021");
+    }
+  });
+});
+
 describe("mutate — findInvalidDimensionWrites (D-097): a setSlot bounding table rows/cols at write time", () => {
   const REJECTED_ROWS_WRITES: readonly { readonly label: string; readonly slot: Slot }[] = [
     { label: "a formula (evaluation could resize the table, Rule 6)", slot: { kind: "formula", ast: { type: "literal", value: 5 }, value: 5 } },

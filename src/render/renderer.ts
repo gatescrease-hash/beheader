@@ -121,7 +121,12 @@
  *   - Any bound on `rows`/`cols`/`sides` — a carried known problem; one fix
  *     covers drawing and evaluation together.
  */
-import { getSlot, isErrorValue, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
+import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
+// Type-only, and one direction: `editor.ts` says what the in-place editor is
+// open on, and this file is one of its readers (D-010 — never a second,
+// narrower spelling of "which cell is being edited"). `editor.ts` does not
+// import this file, so there is no cycle.
+import type { EditorTarget } from "./editor.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
@@ -137,7 +142,7 @@ import {
   TEXT_STYLE_LINE_HEIGHT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
-import { formatCellReference, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
+import { formatCellReference, indexToColumnLetters, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
 import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";
@@ -218,6 +223,37 @@ const CHROME_ERROR_BADGE_STYLE = "#c0392b";
 const CHROME_FORMULA_TICK_STYLE = "#2456c9";
 
 /**
+ * A table's A1 row/column headers (the human's 2026-09-02 request: *"we need to
+ * add table row/column references in a graphical way for table objects. Almost
+ * like in the same font and size as the object title, but centered over each row
+ * and column persistently"*).
+ *
+ * Screen-space, in `CHROME_FONT` — the operator asked for the title's font and
+ * size, and constant-size-at-any-zoom is what the chrome pass is for. The one
+ * deviation from "same as the title" is COLOUR: a muted grey, so the headers
+ * read as the sheet's furniture rather than as another object's name sitting on
+ * the canvas. Easy to revert to `CHROME_LABEL_STYLE` if that reads wrong on
+ * screen.
+ *
+ * `MIN_CELL_SCREEN` is the smallest a cell may appear before its header is
+ * skipped on that axis. Constant-size labels over a shrinking grid eventually
+ * overlap into a smear, and an unreadable smear is worse than nothing; each axis
+ * is tested separately, because zoom is uniform but cells are not square.
+ * Untuned, like every other constant here (Rule 5).
+ */
+const TABLE_HEADER_MARGIN_SCREEN = 4;
+const TABLE_HEADER_LABEL_STYLE = "#6b7280";
+const TABLE_HEADER_MIN_CELL_SCREEN = 14;
+
+/** How much room a type's headers take ABOVE its drawn top edge, so `drawObjectChrome` can lift the name label clear of them instead of printing one on top of the other. Zero for every type but `table`. */
+function chromeTopReservedScreen(object: GraphObject): number {
+  return object.type === TABLE_TYPE ? CHROME_FONT_SIZE_SCREEN + TABLE_HEADER_MARGIN_SCREEN : 0;
+}
+
+/** `CHROME_FONT`'s size in screen pixels, spelled once. Only `chromeTopReservedScreen` needs the number rather than the shorthand — a second literal `12` would be free to drift from the font string. */
+const CHROME_FONT_SIZE_SCREEN = 12;
+
+/**
  * Clears `viewportWidth` x `viewportHeight` in SCREEN space. MUST run with the
  * transform at identity — `ctx.clearRect` is itself subject to the current
  * transform (same as every other draw call), so clearing BEFORE the camera
@@ -246,9 +282,22 @@ export function renderDocument(
   camera: CameraState,
   selectedObjectIds: readonly string[] = [],
   panelledObjectIds: readonly string[] = selectedObjectIds,
-  editingObjectId: string | undefined = undefined,
+  editing: EditorTarget | undefined = undefined,
 ): void {
   clearScreen(ctx, viewportWidth, viewportHeight);
+
+  // WHAT the in-place editor is open on decides what this frame must NOT draw
+  // underneath it, and the two receivers differ (the human's 2026-09-02 report
+  // that a table cell ghosted while a `text` box did not):
+  //
+  //   - a `text` object is skipped WHOLE — body, highlight and grabbers — because
+  //     the overlay replaces all three and grows past the committed extent;
+  //   - a `table` keeps everything but the ONE cell's value. Its grid, its other
+  //     cells, its highlight and its chrome are not the overlay's job and must
+  //     stay on screen (D-125 clause 1: a cell editor covers one cell).
+  const editingTextId = editing?.kind === "text" ? editing.objectId : undefined;
+  const editingCellOn = (objectId: string): string | undefined =>
+    editing?.kind === "cell" && editing.objectId === objectId ? editing.cell : undefined;
 
   // The camera transform, built from camera.ts's OWN worldToScreen rather than
   // a second copy of `screen = (world - camera) * zoom` (D-010; see header).
@@ -265,10 +314,10 @@ export function renderDocument(
     // underneath it would double every glyph the moment the two disagree — and
     // they disagree by design, because the overlay holds the RAW source being
     // typed while this draws the RESOLVED content of the last commit.
-    if (object.id === editingObjectId) {
+    if (object.id === editingTextId) {
       continue;
     }
-    drawObject(ctx, object);
+    drawObject(ctx, object, editingCellOn(object.id));
   }
 
   // D-100 clause 8: every selected id, not just one. A `Set` so a duplicate
@@ -285,7 +334,7 @@ export function renderDocument(
     // grows with what is being typed — so this outline would sit at the last
     // commit's size while the operator watches the box move away from it. The
     // overlay carries its own outline (`index.html`'s `.text-editor`).
-    if (selectedIds.has(object.id) && object.id !== editingObjectId) {
+    if (selectedIds.has(object.id) && object.id !== editingTextId) {
       drawSelectionHighlight(ctx, object);
     }
   }
@@ -303,6 +352,10 @@ export function renderDocument(
     // object is NOT in `panelledIds` and gets its name back. Its badge and
     // ticks are never suppressed either way.
     drawObjectChrome(ctx, camera, object, panelledIds.has(object.id));
+    // A table's A1 headers, NEVER suppressed (2026-09-02) — unlike the name,
+    // which moves into the panel, nothing else on screen says which column is
+    // `C`. See `drawTableHeaders`.
+    drawTableHeaders(ctx, camera, object);
   }
 
   // The resize grabbers, last of all and still at identity: they are the one
@@ -314,7 +367,7 @@ export function renderDocument(
   // them anyway — a press on the canvas commits the edit first. This is also
   // what Word does: a box with the caret in it shows no sizing handles.
   for (const object of objects) {
-    if (selectedIds.has(object.id) && object.id !== editingObjectId) {
+    if (selectedIds.has(object.id) && object.id !== editingTextId) {
       drawResizeHandles(ctx, camera, object);
     }
   }
@@ -349,7 +402,7 @@ function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: CameraState, o
 }
 
 /** Dispatches by `ObjectType` (§5.1's own switch-not-dispatch-table style, PROCESS_BRIEF §5.5). Every unsupported type draws nothing — see file header. */
-function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingCell: string | undefined): void {
   switch (object.type) {
     case "circle":
       drawCircle(ctx, object);
@@ -359,7 +412,7 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject): void {
       drawVerticesShape(ctx, object);
       return;
     case "table":
-      drawTable(ctx, object);
+      drawTable(ctx, object, editingCell);
       return;
     case "text":
       drawText(ctx, object);
@@ -459,7 +512,7 @@ function drawVerticesShape(ctx: CanvasRenderingContext2D, object: GraphObject): 
  * missing coordinate is not a reason to hide a grid that has an extent.
  * Never throws.
  */
-function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject, editingCell: string | undefined): void {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
   const { rows, cols } = getTableDimensions(object);
@@ -474,7 +527,20 @@ function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject): void {
       ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
       ctx.strokeRect(cellLeft, cellTop, TABLE_CELL_WIDTH, TABLE_CELL_HEIGHT);
 
-      const cellPath = [TABLE_CELL_PATH_PREFIX, formatCellReference({ column, row })];
+      const reference = formatCellReference({ column, row });
+      // The in-place editor's overlay IS this cell's text while it is open (the
+      // human's 2026-09-02 report: *"the current value of the cell doesn't get
+      // hidden when the editor value is being displayed... ghosting of
+      // text/numbers on top of each other"*). The two disagree BY DESIGN — the
+      // overlay holds the raw SOURCE being typed while this draws the last
+      // commit's VALUE, so `=A1*2` sits on top of `84` — and a `text` object
+      // has been skipped for exactly this reason since the rework. The GRID
+      // still draws: unlike a text box, the cell's rectangle is not the
+      // overlay's job, and dropping it would leave a hole in the table.
+      if (reference === editingCell) {
+        continue;
+      }
+      const cellPath = [TABLE_CELL_PATH_PREFIX, reference];
       drawCellText(ctx, getSlot(object, cellPath)?.value, cellLeft, cellTop);
     }
   }
@@ -792,7 +858,11 @@ function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, ob
     return;
   }
   const screen = worldToScreen(camera, anchor);
-  const baseline = screen.y - CHROME_ANCHOR_MARGIN_SCREEN;
+  // A table's column headers occupy the band immediately above its top edge
+  // (2026-09-02), so the name label starts above THEM rather than on top of
+  // them. Zero for every other type, which is why this is a function of the
+  // object and not a second constant.
+  const baseline = screen.y - CHROME_ANCHOR_MARGIN_SCREEN - chromeTopReservedScreen(object);
 
   ctx.font = CHROME_FONT;
   ctx.textBaseline = "bottom";
@@ -822,6 +892,67 @@ function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, ob
     ctx.fillStyle = CHROME_FORMULA_TICK_STYLE;
     ctx.textAlign = "right";
     ctx.fillText(ticks, screen.x - halfName - CHROME_GAP_SCREEN, baseline);
+  }
+}
+
+/**
+ * A table's A1 row and column headers — `A B C …` centred over each column and
+ * `1 2 3 …` beside each row (the human's 2026-09-02 request).
+ *
+ * **Always drawn, for every table, and never suppressed.** That is the explicit
+ * ask (*"they should stay when the prop window comes up, not get hidden like the
+ * title does"*) and it is also the right rule: the name label moves INTO the
+ * properties panel when one opens, so suppressing it loses nothing, whereas
+ * nothing anywhere else tells the operator which column is `C`. They are what
+ * makes `set table_1.C4` a thing you can aim at rather than count out.
+ *
+ * The letters come from `address.ts`'s own `indexToColumnLetters` — the exact
+ * function `formatCellReference` uses to build the reference a click on that
+ * cell resolves to (D-010). A header that said `C` over a column whose cells
+ * were `cells.D*` would be worse than no header at all, and only sharing the
+ * function makes that impossible.
+ *
+ * Screen space, at identity, like the rest of the chrome pass: positions come
+ * from `worldToScreen` per label, so the text stays one legible size while the
+ * grid under it scales. Skipped per axis when the cells have shrunk below
+ * `TABLE_HEADER_MIN_CELL_SCREEN` — see that constant. Never throws; draws
+ * nothing for a table with no extent.
+ */
+function drawTableHeaders(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject): void {
+  if (object.type !== TABLE_TYPE) {
+    return;
+  }
+  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
+  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
+  const { rows, cols } = getTableDimensions(object);
+  const topLeft = worldToScreen(camera, { x: originX, y: originY });
+  // The screen size of ONE cell, measured as the distance between two world
+  // points rather than by multiplying by `camera.zoom` — the same "never a
+  // second copy of the mapping" rule the camera transform itself follows
+  // (D-010), and it stays correct if the camera ever gains a non-uniform scale.
+  const cellCorner = worldToScreen(camera, { x: originX + TABLE_CELL_WIDTH, y: originY + TABLE_CELL_HEIGHT });
+  const cellWidthScreen = cellCorner.x - topLeft.x;
+  const cellHeightScreen = cellCorner.y - topLeft.y;
+
+  ctx.font = CHROME_FONT;
+  ctx.fillStyle = TABLE_HEADER_LABEL_STYLE;
+
+  if (cellWidthScreen >= TABLE_HEADER_MIN_CELL_SCREEN) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    for (let column = 1; column <= cols; column += 1) {
+      const centreX = topLeft.x + (column - 0.5) * cellWidthScreen;
+      ctx.fillText(indexToColumnLetters(column), centreX, topLeft.y - TABLE_HEADER_MARGIN_SCREEN);
+    }
+  }
+
+  if (cellHeightScreen >= TABLE_HEADER_MIN_CELL_SCREEN) {
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let row = 1; row <= rows; row += 1) {
+      const centreY = topLeft.y + (row - 0.5) * cellHeightScreen;
+      ctx.fillText(String(row), topLeft.x - TABLE_HEADER_MARGIN_SCREEN, centreY);
+    }
   }
 }
 

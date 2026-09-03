@@ -128,10 +128,10 @@
 import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
 import { formatFormula } from "./engine/formula/format.ts";
-import { getSlot, slotKey, type GraphObject } from "./engine/graph/node.ts";
+import { getSlot, slotKey, type GraphObject, type Value } from "./engine/graph/node.ts";
 import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
-import { parseCommandNumber, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
+import { parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
@@ -859,7 +859,7 @@ function buildPanelSetCommand(target: string, raw: string): SetLiteralCommand | 
  * for D-136 clause 2's abandon path only, and only ever with `force` false, so
  * no ` force` suffix is emitted.
  */
-function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | DeleteCommand): string {
+function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | ClearCommand | DeleteCommand): string {
   switch (command.kind) {
     case "set":
       return `set ${command.target} ${command.value}`;
@@ -867,6 +867,8 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
       return `set ${command.target} ${command.source}`;
     case "unlink":
       return `unlink ${command.target}`;
+    case "clear":
+      return `clear ${command.target}`;
     case "delete":
       return `delete ${command.target}`;
     default: {
@@ -884,16 +886,16 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
  * have echoed — its result lines, or its refusal message.
  *
  * The synthesised command is always `set`/`set-formula`/`unlink` (a panel or
- * in-place-editor write) or `delete` (D-136 clause 2's abandon of a
- * just-created empty `text` box) — none of which ever carries a `CommandEffect`
- * (D-075 — those five belong to `select`/`zoom`/`fit`/`save`/`load`), so there
- * is no effect to perform here and none is looked for; a future synthesised
- * command that DID carry one would need this function widened deliberately, not
- * silently ignored.
+ * in-place-editor write), `clear` (a cell edit left empty — 2026-09-02) or
+ * `delete` (D-136 clause 2's abandon of a just-created empty `text` box) — none
+ * of which ever carries a `CommandEffect` (D-075 — those five belong to
+ * `select`/`zoom`/`fit`/`save`/`load`), so there is no effect to perform here
+ * and none is looked for; a future synthesised command that DID carry one would
+ * need this function widened deliberately, not silently ignored.
  */
 function runPanelCommand(
   state: AppState,
-  command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | DeleteCommand,
+  command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | ClearCommand | DeleteCommand,
   context: EvalContext,
 ): AppState {
   const echoed = withLog(state, [`> ${describePanelCommand(command)}`]);
@@ -990,9 +992,23 @@ const TABLE_CELL_PREFIX = "cells";
  * A `text` object's `content` is its raw literal source, verbatim (§5.6:
  * "raw source including markup" — `{= }`/`{? }` and all). A table cell is
  * shown Excel-style: a formula's reconstructed source with a leading `=`, or a
- * literal rendered by `describeSlotValue` (the same formatter the properties
- * panel and `props` use). Empty for a receiver that holds nothing, or a stale
- * id (D-023's posture).
+ * literal in the AUTHORING form (`cellLiteralSeed`) — the characters that,
+ * retyped, produce the value that is already there.
+ *
+ * **It used to render a literal with `describeSlotValue`, and that was a defect
+ * (the human's 2026-09-02 report).** That formatter is for DISPLAY, and it
+ * QUOTES a string: a cell holding `hello` seeded the editor with `"hello"`, so
+ * committing an untouched editor wrote the seven-character string `"hello"` —
+ * and the next open seeded `"""hello"""`. The operator found it on the worst
+ * case, an empty cell: `""` → `""""` → `""""""`, a pair of quotes added every
+ * time they opened and closed it. The seed's whole contract is that an
+ * untouched commit is a no-op (D-107's principle), and a formatter that adds
+ * syntax cannot satisfy it.
+ *
+ * The round-trip is EXACT for the values a cell edit can produce, because
+ * `cellLiteralSeed` is the inverse of `buildCellCommand` — see its own comment
+ * for the one asymmetry (a string that LOOKS like a number or a formula) and
+ * why that is Excel's behaviour rather than a bug to fix here.
  *
  * A cell formula's same-table references are shown in bare Excel form (`=A1 * 2`,
  * not `=table_1.A1 * 2`) — `formatFormula`'s `relativeToObjectId` (D-131), passed
@@ -1012,7 +1028,46 @@ export function editorSeed(state: AppState, target: EditorTarget): string {
   if (slot === undefined) {
     return "";
   }
-  return slot.kind === "formula" ? `=${formatFormula(slot.ast, state.document.objects, object.id)}` : describeSlotValue(slot.value);
+  return slot.kind === "formula" ? `=${formatFormula(slot.ast, state.document.objects, object.id)}` : cellLiteralSeed(slot.value);
+}
+
+/**
+ * One cell literal as the characters that would RE-AUTHOR it — the inverse of
+ * `buildCellCommand`, and the reason an untouched cell edit is a no-op.
+ *
+ * Not `describeSlotValue`: that one is for display and quotes strings, prints
+ * `"nothing"` for `null` and `"#TYPE: …"` for an error. None of those are
+ * things the operator could type back.
+ *
+ * - a string → itself, verbatim
+ * - a number → its plain form, which `parseCommandNumber` reads back identically
+ * - a boolean → `TRUE`/`FALSE`, `parser.ts` §5.3's exact-uppercase spelling
+ * - anything else (`null`, an `ErrorValue`, a `Point`) → empty. A literal cell
+ *   cannot hold one today — `buildCellCommand` writes only the three above —
+ *   and seeding the editor with a value that cannot be retyped would make the
+ *   commit rewrite the cell into something else. Empty means an untouched
+ *   commit CLEARS the cell, which is the honest outcome for a value with no
+ *   authoring form.
+ *
+ * ONE asymmetry, deliberate and Excel's own: a string cell holding `"42"` seeds
+ * `42`, which commits back as the NUMBER 42, and a string holding `"=x"` seeds
+ * `=x`, which commits back as a formula. Both are reachable only by `set
+ * table_1.A1 "42"` from the command line, never by editing, because editing
+ * `42` would have produced a number in the first place. D-125 clause 3 declares
+ * the Excel model for this editor; quoting to preserve the distinction is
+ * exactly what caused the defect above.
+ */
+function cellLiteralSeed(value: Value): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "TRUE" : "FALSE";
+  }
+  return "";
 }
 
 /**
@@ -1077,6 +1132,25 @@ export function abandonCreatedTextBox(
  * anything else a literal string. §5.4's own model. The address is built
  * through `panelSlotAddress` from `render/editor.ts`'s already-formatted cell
  * reference, never concatenated ad hoc. Same stale-id no-op posture.
+ *
+ * **An editor left EMPTY clears the cell rather than writing `""`** (the human's
+ * 2026-09-02 report: *"double clicking in an empty table cell but not typing
+ * anything, then exiting, sets that table cell's contents to `""` rather than
+ * just keeping it blank/empty... although it looks empty visually, it's not
+ * anymore"*).
+ *
+ * `""` is a STRING — content that happens to have no glyphs. D-047's empty cell
+ * is an ABSENT slot, so restoring one is a `clear`, and the whole reason that
+ * command exists (`command/commands.ts`) is that nothing could express this.
+ * Two paths, and the difference matters:
+ *
+ * - the cell was already empty (nothing typed, nothing there) → `clear`
+ *   succeeds having mutated nothing, so opening and closing an empty cell
+ *   leaves the document byte-identical and puts no entry in §5.11's journal;
+ * - the cell HELD something the operator deleted → `clear` removes the slot,
+ *   which is the gesture that was previously impossible: `set table_1.A1 ""`
+ *   left the phantom this report is about, and there was no other way to empty
+ *   a cell once written.
  */
 export function commitTableCell(
   state: AppState,
@@ -1098,15 +1172,33 @@ export function commitTableCell(
  * because a panel row edits a named slot and already shows a formula's own `=`.
  * A leading `=` the operator typed is kept verbatim on the `source` (`setFormula`
  * slices it back off — `SetFormulaCommand`'s own contract).
+ *
+ * The EMPTY arm is `clear`, not `set ""` — see `commitTableCell`. It is first
+ * because it is a test on the trimmed text, and a whitespace-only cell is empty
+ * for the same reason a blank one is: nothing was typed. (A string of spaces IS
+ * still reachable deliberately, from the command line: `set table_1.A1 "   "`.)
  */
-function buildCellCommand(target: string, raw: string): SetLiteralCommand | SetFormulaCommand {
+function buildCellCommand(target: string, raw: string): SetLiteralCommand | SetFormulaCommand | ClearCommand {
   const trimmed = raw.trim();
+  if (trimmed === "") {
+    return { kind: "clear", target };
+  }
   if (trimmed.startsWith("=")) {
     return { kind: "set-formula", target, source: trimmed };
   }
   const asNumber = parseCommandNumber(trimmed);
   if (asNumber !== undefined) {
     return { kind: "set", target, value: asNumber };
+  }
+  // `TRUE`/`FALSE` through `parser.ts`'s own reader, never a second spelling of
+  // §5.3's booleans (D-010). Added 2026-09-02 with the seed fix: `editorSeed`
+  // showed a boolean cell as `TRUE`, this had no boolean arm, so committing the
+  // editor untouched turned the boolean into the STRING "TRUE" — the same
+  // seed/commit asymmetry as the quoting defect, found by its own round-trip
+  // test rather than on screen.
+  const asBoolean = parseCommandBoolean(trimmed);
+  if (asBoolean !== undefined) {
+    return { kind: "set", target, value: asBoolean };
   }
   return { kind: "set", target, value: trimmed };
 }
@@ -1261,11 +1353,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // extent whose panel is not dismissed — because a dismissed panel's
     // object keeps its highlight but gets its canvas name label back.
     const panelledIds = panelledObjectIds();
-    // The object whose text the overlay is currently holding, if any: the
-    // renderer skips drawing it, because while the editor is open the overlay
-    // IS that object's text (the 2026-09-02 rework). A cell editor names no
-    // such object — a table's other cells must keep drawing.
-    const editingObjectId = inPlaceEditor?.kind === "text" ? inPlaceEditor.objectId : undefined;
+    // What the overlay is currently holding, if anything — the WHOLE target,
+    // not just its object id. The renderer needs the cell reference too: while
+    // a cell editor is open the overlay IS that cell's text, so drawing the
+    // committed value underneath double-prints it (the human's 2026-09-02
+    // report). This used to pass a `text`-only id and `undefined` for a cell,
+    // which is precisely why the table ghosted and the text box did not.
     renderDocument(
       context,
       canvas.width,
@@ -1274,7 +1367,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       state.document.camera,
       state.interaction.selectedObjectIds,
       panelledIds,
-      editingObjectId,
+      inPlaceEditor,
     );
     updatePanels(panelledIds);
     updateEditor();

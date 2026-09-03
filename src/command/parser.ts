@@ -154,6 +154,25 @@ export interface UnlinkCommand {
 }
 
 /**
+ * `clear table_1.A1` — empties a table cell by REMOVING its slot, not by
+ * writing something empty into it (`mutation.ts`'s `ClearSlotOperation`).
+ *
+ * NOT one of §5.10's command words. Added 2026-09-02 on the human's report that
+ * an in-place edit of an empty cell left it holding `""` — *"although it looks
+ * empty visually, it's not anymore"*. There was no way to express "make this
+ * cell empty again" at all: D-047 makes an ABSENT slot the empty state, `set`
+ * only ever writes one, and `""`/`0` are content. The brief's command list is
+ * extended rather than worked around, under the human's standing leave to
+ * overrule it where the app needs to work.
+ *
+ * The handler restricts it further than the grammar does — see `commands.ts`.
+ */
+export interface ClearCommand {
+  readonly kind: "clear";
+  readonly target: string;
+}
+
+/**
  * `set polygon_1.radius 42` (§5.10) — a `literal` slot's new value.
  *
  * Only three arms of `graph/node.ts`'s `Value` are reachable from a command line;
@@ -266,6 +285,7 @@ export type Command =
   | CreateTableCommand
   | LinkCommand
   | UnlinkCommand
+  | ClearCommand
   | SetLiteralCommand
   | SetFormulaCommand
   | RenameCommand
@@ -580,6 +600,14 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: (args) => ({ kind: "unlink", target: textArgument(args, "target") }),
+  },
+  {
+    name: "clear",
+    usage: "clear <address>",
+    positional: [text("target")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "clear", target: textArgument(args, "target") }),
   },
   {
     name: "set",
@@ -1129,6 +1157,25 @@ export function findCommandSpec(name: string): CommandSpec | undefined {
  */
 export function parseCommandNumber(text: string): number | undefined {
   return NUMBER_PATTERN.test(text) ? Number(text) : undefined;
+}
+
+/**
+ * The command line's boolean, or `undefined` if `text` is not one — EXACT
+ * uppercase `TRUE`/`FALSE`, matching `lexer.ts`'s own booleans (§5.3) and the
+ * `literal` argument reader above.
+ *
+ * Exported for the same reason `parseCommandNumber` is, and added for the same
+ * class of bug (2026-09-02): `main.ts`'s in-place cell editor does its own
+ * Excel-style disambiguation of what was typed, and it read numbers through
+ * this file while reading booleans not at all — so a cell holding `true` seeded
+ * the editor with `TRUE` and committed back the STRING `"TRUE"`. Two surfaces,
+ * one spelling, one reader.
+ */
+export function parseCommandBoolean(text: string): boolean | undefined {
+  if (text === "TRUE") {
+    return true;
+  }
+  return text === "FALSE" ? false : undefined;
 }
 
 /**

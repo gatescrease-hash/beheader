@@ -486,6 +486,7 @@ describe("every registry command reaches a handler", () => {
     "set polygon_1.radius = 1 + 1",
     "link polygon_1.origin.x table_x.A1",
     "unlink polygon_1.origin.x",
+    "clear table_x.A1",
     "rename intersection_a polygon_9",
     "delete intersection_a",
     "refs intersection_a",
@@ -933,6 +934,61 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(refused("unlink polygon_1.radius", sandbox())).toBe('polygon_1.radius is already a "literal" slot — "unlink" reverts a formula slot to a literal');
       expect(refused("unlink table_1.A1", sandbox())).toBe('table_1.A1 holds nothing — "unlink" reverts a formula slot to a literal');
       expect(refused("unlink polygon_1.area", sandbox())).toContain("is a derived slot");
+    });
+  });
+
+  // Added 2026-09-02 on the human's report that an in-place edit of an empty
+  // cell left it holding `""`. Not a §5.10 command: there was no way to express
+  // "make this cell empty again" at all, because D-047 makes an ABSENT slot the
+  // empty state and every `Value` is content.
+  describe("clear — empties a table cell by REMOVING its slot (D-047)", () => {
+    it("removes the slot and names what was there", () => {
+      const filled = committed("set table_1.A1 5", sandbox());
+      const outcome = run("clear table_1.A1", filled);
+      expect(outcome.ok && outcome.lines).toEqual(["cleared table_1.A1 — was 5"]);
+      expect(slotOf(committed("clear table_1.A1", filled), "table_1", ["cells", "A1"])).toBeUndefined();
+    });
+
+    it("names a removed FORMULA by its source, not by its last value — the same courtesy `unlink` gives (D-040's not-silent bound)", () => {
+      const bound = committed("set table_1.B1 = table_1.A1 * 2", committed("set table_1.A1 5", sandbox()));
+      const outcome = run("clear table_1.B1", bound);
+      expect(outcome.ok && outcome.lines).toEqual(["cleared table_1.B1 — was = table_1.A1 * 2"]);
+    });
+
+    it("SUCCEEDS on an already-empty cell and mutates nothing — asking for a state that already holds is not an error", () => {
+      const before = sandbox();
+      const outcome = run("clear table_1.A1", before);
+      expect(outcome.ok && outcome.lines).toEqual(["table_1.A1 is already empty"]);
+      expect(outcome.ok && outcome.document.journal).toHaveLength(before.journal.length);
+    });
+
+    it("refuses a slot that is not a table cell, and points at `set` instead", () => {
+      const message = refused("clear polygon_1.radius", sandbox());
+      expect(message).toContain("is not a table cell");
+      expect(message).toContain("set polygon_1.radius");
+    });
+
+    it("refuses a table's own `rows` slot — a cell means a cell", () => {
+      expect(refused("clear table_1.rows", sandbox())).toContain("is not a table cell");
+    });
+
+    it("refuses a derived slot with the derived-slot message, before the cell test is even reached", () => {
+      expect(refused("clear polygon_1.area", sandbox())).toContain("is a derived slot");
+    });
+
+    it("refuses an address that resolves to nothing, through the same identity checks `set`/`link`/`unlink` use", () => {
+      expect(refused("clear nosuch_1.A1", sandbox())).toBe('no object named "nosuch_1"');
+    });
+
+    it("a cell a formula READS can be cleared, and the dependent re-reads it as empty rather than breaking (D-110 clause 4)", () => {
+      const wired = committed("set table_1.B1 = table_1.A1 * 2", committed("set table_1.A1 5", sandbox()));
+      expect(slotOf(wired, "table_1", ["cells", "B1"])?.value).toBe(10);
+      expect(slotOf(committed("clear table_1.A1", wired), "table_1", ["cells", "B1"])?.value).toBe(0);
+    });
+
+    it("leaves the cell writable again afterwards — clearing is not a tombstone", () => {
+      const cleared = committed("clear table_1.A1", committed("set table_1.A1 5", sandbox()));
+      expect(slotOf(committed("set table_1.A1 9", cleared), "table_1", ["cells", "A1"])).toEqual({ kind: "literal", value: 9 });
     });
   });
 

@@ -1,9 +1,27 @@
-# STATUS — as of entry 0154-wrap-agreement
+# STATUS — as of entry 0155-table-cell-fixes
 
-**READ THIS FIRST — entry 0153's TEXT-BOX REWORK was tested on screen and is GOOD** (*"OK, much
-better overall... Good how you've implemented it"*). **Entry 0154 fixes the two defects that test
-found, and is ITSELF UNSEEN.** STATE GREEN — 1641/1641, 0 skipped, 33 test files, both configs
-clean, `vite build` clean. NEXT: the human tests 0154 on screen.
+**READ THIS FIRST — entry 0154's WRAP WORK was tested on screen and is GOOD** (*"the render vs.
+editor text thing seems mostly sorted out now and the resulting text box object is good to work with
+moving forward"*). **Entry 0155 fixes the two TABLE defects that test found and adds A1 headers, and
+is ITSELF UNSEEN.** STATE GREEN — 1686/1686, 0 skipped, 33 test files, both configs clean, `vite
+build` clean. NEXT: the human tests 0155 on screen; the load-hardening cycle follows.
+
+**THE THREE THINGS ENTRY 0155 DID (read `entries/0155-table-cell-fixes.md`):**
+
+1. **The phantom empty cell — TWO bugs, plus a third found by its own test.** (a) `editorSeed`
+   rendered a cell literal with `describeSlotValue`, the DISPLAY formatter, which QUOTES strings — so
+   an untouched commit wrote `"hello"` over `hello`, and an empty cell grew two quotes per open.
+   Fixed with `cellLiteralSeed`, the authoring form and the deliberate inverse of
+   `buildCellCommand`. (b) An empty editor wrote `""` into a cell that had NO slot; `""` is content,
+   and D-047's empty cell is an ABSENT slot. Fixed by making an empty commit a **`clear`**. (c) The
+   round-trip test found that `buildCellCommand` had no BOOLEAN arm, so `TRUE` committed back as the
+   string `"TRUE"` — fixed with `parseCommandBoolean`.
+2. **The ghosted cell.** `renderDocument` took an `editingObjectId: string`, which cannot describe a
+   CELL edit — so `main.ts` passed `undefined` for one and the committed value kept drawing under
+   the overlay. It now takes the whole **`EditorTarget`**.
+3. **A1 row/column headers on every table** (`drawTableHeaders`), never suppressed.
+
+**NEW: `clear <address>` AND `mutation.ts`'s SEVENTH OPERATION KIND.** See "Read this first" 0n.
 
 **THE TWO THINGS ENTRY 0154 CHANGED (read `entries/0154-wrap-agreement.md` for the full account):**
 
@@ -35,25 +53,37 @@ clean, `vite build` clean. NEXT: the human tests 0154 on screen.
 - Drag a width grabber narrower than the longest word. It should now go where you drag it (it used
   to snap back to that word's width).
 
+**WHAT TO TEST ON SCREEN FOR 0155:**
+- Double-click an empty cell, type nothing, click out. Then `props table_1` — is there STILL no
+  `A1`? Repeat five times; no quotes should ever appear.
+- Type `hello` in a cell, click out, double-click back in, click out untouched. Still `hello`, not
+  `"hello"`.
+- Type something in a cell, then delete it all and click out. Does the cell go genuinely EMPTY?
+- Double-click a cell that HAS a value — does the old value vanish while you type, or ghost under it?
+- Every table should show `A B C…` above and `1 2 3…` beside, always — including while its
+  properties panel is open. Do the letters line up with the columns they name?
+- Zoom out a long way: the headers should DISAPPEAR rather than smear into each other.
+- **Is the grey right?** The headers are `#6b7280`, not the title's near-black. One constant.
+
 **Still unconfirmed from 0153 (re-test if you have not):** eight grabbers and the resize cursor; a
 dragged height surviving; toggling `autoresize` back to shrink-to-fit; text looking identical
 editing vs not editing.
 
 ---
 
-## Where the code actually is — as of entry 0154
+## Where the code actually is — as of entry 0155
 
-STATE: **GREEN**. Both configs compile, **1641/1641** tests pass, 0 skipped, 0 `.only`.
+STATE: **GREEN**. Both configs compile, **1686/1686** tests pass, 0 skipped, 0 `.only`.
 **33 test files.** `npx vite build` clean. **PHASE 5 IS OPEN.**
 
 Last review point: **0150-REVIEW-phase5**. Entries since: **0151-RULINGS** (D-135 + D-136, no code),
-**0152** (the editor cycle — built, tested on screen, GOOD), **0153** (the text-box rework — the
-human's direct instruction, self-reviewed with tests, **tested on screen, GOOD**), **0154** (wrap
-agreement + `overflow` removal — the two defects that test found, self-reviewed with tests, UNSEEN).
+**0152** (the editor cycle — built, tested on screen, GOOD), **0153** (the text-box rework —
+**tested on screen, GOOD**), **0154** (wrap agreement + `overflow` removal — **tested on screen,
+GOOD**), **0155** (the table-cell fixes + A1 headers — self-reviewed with tests, UNSEEN).
 
 **THE HUMAN'S DIRECT INSTRUCTION OUTRANKS `PROJECT_BRIEF.md` AND ANY PRIOR RULING (0140, restated
-2026-09-02).** Entries 0153 and 0154 overrule several by their explicit leave — the lists are in
-those entries and are summarised under "Settled" below. **Never "correct" the code back toward an
+2026-09-02).** Entries 0153, 0154 and 0155 overrule several by their explicit leave — the lists are
+in those entries and are summarised under "Settled" below. **Never "correct" the code back toward an
 overruled ruling.**
 
 ## Read this first — what a cold reader needs
@@ -141,6 +171,37 @@ grabber looks broken (Word does the same).
 SEPARATE field, never a variant of `drag`, so every existing reader of `drag` still means what it
 meant. A hand-built `InteractionState` in a test needs all three.
 
+**0n. `mutation.ts` HAS SEVEN OPERATION KINDS — `clearSlot` JOINED AT 0155.** It REMOVES the slot at
+an address, because there is no empty `Value` to write: D-047 makes an ABSENT cell slot the empty
+cell, and `""`/`0` are content. **Legal ONLY at a table cell** (`findIllegalSlotClears`, a seventh
+precondition): D-047 settles that one case and nothing settles any other — a missing derived slot is
+D-018's rejection, a missing declared literal silently changes what its object's computes read.
+Clearing a cell a formula READS is fine (D-110 clause 4: empty in-extent reads `0`, no edge).
+
+**0o. `clear <address>` IS A COMMAND, AND IS NOT IN §5.10.** Added at 0155 under the human's standing
+leave, because "empty this cell" was inexpressible. It reuses `resolveWritableSlot` but NOT
+`writeSlot` (whose whole shape is "build a Slot, commit a setSlot"). **An already-empty cell
+SUCCEEDS and mutates nothing** — no journal entry for an event that did not happen. `main.ts`'s
+`buildCellCommand` emits it whenever the in-place editor is left blank.
+
+**0p. `editorSeed` USES THE AUTHORING FORM, NEVER `describeSlotValue`.** That formatter QUOTES
+strings and is for DISPLAY; using it made an untouched commit rewrite `hello` as `"hello"` and grow
+two quotes per open on an empty cell (the human's 2026-09-02 report). `cellLiteralSeed` is the
+deliberate INVERSE of `buildCellCommand`, and the two must be changed together — a boolean arm was
+missing from the commit side and only the round-trip test caught it.
+
+**0q. `renderDocument` TAKES THE WHOLE `EditorTarget`, NOT AN OBJECT ID.** A `text` receiver is
+skipped WHOLE (body, highlight, grabbers); a `table` keeps everything but the ONE edited cell's
+value — its grid, including that cell's border, still draws. An id alone could not express the
+second, which is exactly why the cell ghosted.
+
+**0r. A TABLE'S A1 HEADERS ARE NEVER SUPPRESSED** (`drawTableHeaders`, 0155). Unlike the name label,
+which moves into the properties panel, nothing else says which column is `C`. Letters come from
+`address.ts`'s `indexToColumnLetters` — the SAME function `formatCellReference` uses, so a header
+can never name a different column than the cell under it (D-010). Skipped per axis below
+`TABLE_HEADER_MIN_CELL_SCREEN`. A table's name label is lifted by `chromeTopReservedScreen` to clear
+them.
+
 **0m. A SLOT WITH A CLOSED VALUE SET IS DECLARED ON THE SCHEMA** (`ObjectSchema.slotOptions`,
 `findSlotOptions`) — `text`'s `style.align` and `autoresize` are the only two today (`overflow` was
 a third for exactly one cycle; 0154 removed the slot).
@@ -191,10 +252,9 @@ an equality check (D-009) — EXCEPT `advance`'s `session.command.kind === "text
 
 ## Next slice (recommended)
 
-**Blocked on the human's on-screen test of entry 0154** (the script is at the top of this file).
-Whatever that finds comes first. 0153's test found two defects and 0154 is the answer to both; the
-open question 0154 could not settle without a screen is **whether the remaining X-vs-X+1 cases
-contain `{= }` references** — see its "Where I got stuck".
+**Blocked on the human's on-screen test of entry 0155** (the script is at the top of this file).
+Whatever that finds comes first. The one question 0154 could not settle without a screen is still
+open: **do the remaining X-vs-X+1 cases contain `{= }` references?**
 
 Once the editor surface is clean on screen:
 
@@ -244,11 +304,12 @@ two defects that entry 0154 fixes.
 
 ## Built this batch, not yet seen on screen
 
-- **Entry 0154 — wrap agreement + the `overflow` removal.** No new files. Modified: `index.html`,
-  `render/measure.ts` (the whole cycle lives here), `render/renderer.ts` (comments),
-  `engine/primitives/text.ts`, `engine/primitives/schema.ts`, `command/commands.ts`, `main.ts`
-  (comment), plus five test files. Self-reviewed with tests at the human's standing instruction;
-  **their on-screen test is the gate.**
+- **Entry 0155 — the table-cell fixes + A1 headers.** No new files. Modified: `engine/mutation.ts`
+  (the `clearSlot` operation + its precondition), `command/parser.ts` (`clear`,
+  `parseCommandBoolean`), `command/commands.ts` (the `clear` handler), `main.ts` (`cellLiteralSeed`,
+  `buildCellCommand`'s empty and boolean arms, the whole-`EditorTarget` render call),
+  `render/renderer.ts` (cell-aware editing suppression, `drawTableHeaders`), plus five test files.
+  **Their on-screen test is the gate.**
 
 ## Not started
 
@@ -306,8 +367,16 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 15–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
-- **ENTRY 0154 IS UNSEEN ON SCREEN.** 0153 was seen and is GOOD; 0154 is the fix for the two defects
-  that test found, and nothing in it has been looked at.
+- **ENTRY 0155 IS UNSEEN ON SCREEN.** 0153 and 0154 were both seen and are GOOD; 0155 is the fix for
+  the two TABLE defects 0154's test found, plus the A1 headers, and nothing in it has been looked at.
+- **THE A1 HEADERS ARE GREY (`#6b7280`), NOT THE TITLE'S NEAR-BLACK.** The ask was "almost like the
+  same font and size as the object title"; grey reads as sheet furniture rather than another
+  object's name. One constant to revert if it looks wrong on screen.
+- **THE HEADERS ARE NOT CLICKABLE.** Selecting a whole row/column is a design question nobody has
+  asked (does it select cells? the table? what does a drag do?) — deliberately not invented.
+- **A string cell holding `"42"` seeds `42` and commits back as the NUMBER 42.** Reachable only from
+  the command line, never by editing; Excel's own behaviour under D-125 clause 3. Quoting to
+  preserve the distinction is what caused the 2026-09-02 defect.
 - **The X-vs-X+1 wrap residual may not be fully closed.** 0154 fixed two real causes (mid-word
   breaking, space collapsing) and proved both with tests. **Two candidates remain and the human's
   answer to ONE question decides which: do the misbehaving boxes contain `{= }` references?** If yes
@@ -420,6 +489,10 @@ on the human's explicit instruction.** Those, in full:
   `pre-wrap` + `break-word`, because the editor's `<textarea>` does and the two must agree. D-120's
   actual ruling — that line-breaking lives in `render/measure.ts` and never in `src/engine/` —
   STANDS untouched; only the parenthetical about how it breaks is superseded.
+- **§5.10's command list — EXTENDED (0155).** `clear <address>` is not one of its words. Added
+  because "make this cell empty again" was inexpressible: D-047 makes an absent slot the empty cell,
+  and `setSlot` had no inverse. **D-047 itself is RELIED ON, not changed** — 0155 makes the state it
+  describes reachable.
 
 Otherwise standing, unchanged: **D-114/D-115/D-116/D-117** (built, reviewed 0128) · **D-118** (built,
 wired, reviewed 0133) · **D-119** (reconciled) · **D-120** (built, reviewed 0133) · **D-121/D-122**

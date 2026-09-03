@@ -283,14 +283,20 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     });
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
-    // The trailing entry is D-092 clause 1's name label, centred over the grid
-    // (3 cols x 80 / 2 = 120) and above its top edge — see the label describe
-    // block for why the anchor is the extent rather than origin (entry 0094).
+    // After the three cell values: D-092 clause 1's name label, centred over the
+    // grid (3 cols x 80 / 2 = 120) — now at y -22 rather than -6, because the
+    // A1 headers (2026-09-02) reserve the band immediately above the top edge
+    // and the name is lifted clear of them. Then the headers themselves: `A B C`
+    // centred on each column at y -4, and `1` right-aligned beside the one row.
     expect(textCalls).toEqual([
       { op: "fillText", text: "42", x: 76, y: 12, align: "right" },
       { op: "fillText", text: "hello", x: 84, y: 12, align: "left" },
       { op: "fillText", text: "TRUE", x: 164, y: 12, align: "left" },
-      { op: "fillText", text: "table_1", x: 120, y: -6, align: "center" },
+      { op: "fillText", text: "table_1", x: 120, y: -22, align: "center" },
+      { op: "fillText", text: "A", x: 40, y: -4, align: "center" },
+      { op: "fillText", text: "B", x: 120, y: -4, align: "center" },
+      { op: "fillText", text: "C", x: 200, y: -4, align: "center" },
+      { op: "fillText", text: "1", x: -4, y: 12, align: "right" },
     ]);
   });
 
@@ -303,17 +309,29 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     // EVERY slot (file header), and cells.A1 here is one of them.
     expect(textCalls).toEqual([
       { op: "fillText", text: "#REF", x: 4, y: 12, align: "left" },
-      { op: "fillText", text: "table_1", x: 120, y: -6, align: "center" },
-      { op: "fillText", text: "!", x: 150.5, y: -6, align: "left" }, // 120 + 7 chars * 7px / 2 + 6px gap.
+      { op: "fillText", text: "table_1", x: 120, y: -22, align: "center" },
+      { op: "fillText", text: "!", x: 150.5, y: -22, align: "left" }, // 120 + 7 chars * 7px / 2 + 6px gap.
+      // The A1 headers (2026-09-02), drawn after the name and badge and never
+      // suppressed — see the describe block at the end of this file.
+      { op: "fillText", text: "A", x: 40, y: -4, align: "center" },
+      { op: "fillText", text: "B", x: 120, y: -4, align: "center" },
+      { op: "fillText", text: "C", x: 200, y: -4, align: "center" },
+      { op: "fillText", text: "1", x: -4, y: 12, align: "right" },
     ]);
   });
 
-  it("draws no CELL text for a null-valued or entirely unset cell — only the name label", () => {
+  it("draws no CELL text for a null-valued or entirely unset cell — only the name label and the A1 headers", () => {
     const { ctx, calls } = createFakeContext();
     const table = tableObject({ "cells.A1": { kind: "literal", value: null } }); // B1/C1 have no slot at all.
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call) => call.op === "fillText");
-    expect(textCalls).toEqual([{ op: "fillText", text: "table_1", x: 120, y: -6, align: "center" }]);
+    expect(textCalls).toEqual([
+      { op: "fillText", text: "table_1", x: 120, y: -22, align: "center" },
+      { op: "fillText", text: "A", x: 40, y: -4, align: "center" },
+      { op: "fillText", text: "B", x: 120, y: -4, align: "center" },
+      { op: "fillText", text: "C", x: 200, y: -4, align: "center" },
+      { op: "fillText", text: "1", x: -4, y: 12, align: "right" },
+    ]);
   });
 
   it("falls back to origin (0,0) when the table has no origin.x/origin.y slots", () => {
@@ -636,7 +654,13 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
     const label = calls.find((call) => call.op === "fillText");
     // Extent x spans 100..260 (2 cols x 80), so top-centre x is 180 — CENTRED
     // over the grid, where entry 0093 put it over the left corner.
-    expect(label).toEqual({ op: "fillText", text: "table_1", x: 180, y: 194, align: "center" });
+    //
+    // y is 200 - 6 - 16 = 178, not 194: the A1 column headers (2026-09-02) sit
+    // in the band immediately above the top edge, and the name is lifted clear
+    // of them by `chromeTopReservedScreen`. Every other type still gets the
+    // plain 6px margin — this is a table-only offset, which is why it is a
+    // function of the object rather than a change to the margin constant.
+    expect(label).toEqual({ op: "fillText", text: "table_1", x: 180, y: 178, align: "center" });
   });
 
   it("draws no label for a type with no schema/extent yet", () => {
@@ -988,7 +1012,7 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
 
   it("does not draw the CONTENT of the object being edited — the overlay IS its text while the editor is open", () => {
     const { ctx, calls } = createFakeContext();
-    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, [], [], "obj_text");
+    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, [], [], { kind: "text", objectId: "obj_text" });
     expect(drawnStrings(calls)).not.toContain("hi");
     // Its NAME label is chrome, not its text, and still says which box this is.
     expect(drawnStrings(calls)).toContain("text_1");
@@ -997,15 +1021,207 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
   it("still draws every OTHER object's content while one is being edited", () => {
     const { ctx, calls } = createFakeContext();
     const other: GraphObject = { ...sizedText(), id: "obj_other", name: "text_2" };
-    renderDocument(ctx, 800, 600, [sizedText(), other], CAMERA_IDENTITY, [], [], "obj_text");
+    renderDocument(ctx, 800, 600, [sizedText(), other], CAMERA_IDENTITY, [], [], { kind: "text", objectId: "obj_text" });
     // One "hi" — the other object's. The edited one's is left to the overlay.
     expect(drawnStrings(calls).filter((text) => text === "hi")).toHaveLength(1);
   });
 
   it("draws neither its selection outline nor its grabbers while it is being edited — both would sit at the committed size the growing overlay has left behind", () => {
     const { ctx, calls } = createFakeContext();
-    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, ["obj_text"], ["obj_text"], "obj_text");
+    renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, ["obj_text"], ["obj_text"], { kind: "text", objectId: "obj_text" });
     expect(calls.filter((call) => call.op === "fillRect")).toHaveLength(0);
     expect(calls.filter((call) => call.op === "strokeRect")).toHaveLength(0);
+  });
+
+  // The human's 2026-09-02 report: a table cell GHOSTED while a text box did
+  // not — the committed value kept drawing under the overlay, so `=A1*2` sat on
+  // top of `84`. The cause was that the renderer was only ever told which
+  // OBJECT was being edited, and `main.ts` (correctly) refused to name a whole
+  // table for a one-cell edit, so it named nothing. It now takes the whole
+  // `EditorTarget` and can suppress exactly one cell.
+  describe("a table cell being edited (2026-09-02)", () => {
+    /** A 1x3 table with a value in every cell, so a suppressed one is visible by its absence. */
+    function filledTable(): GraphObject {
+      return {
+        id: "obj_t",
+        name: "table_1",
+        type: "table",
+        slots: {
+          rows: { kind: "literal", value: 1 },
+          cols: { kind: "literal", value: 3 },
+          "cells.A1": { kind: "literal", value: "alpha" },
+          "cells.B1": { kind: "literal", value: "beta" },
+          "cells.C1": { kind: "literal", value: "gamma" },
+        },
+      };
+    }
+
+    it("does not draw the edited cell's value — the overlay is holding it", () => {
+      const { ctx, calls } = createFakeContext();
+      renderDocument(ctx, 800, 600, [filledTable()], CAMERA_IDENTITY, [], [], { kind: "cell", objectId: "obj_t", cell: "B1" });
+      expect(drawnStrings(calls)).not.toContain("beta");
+    });
+
+    it("still draws every OTHER cell in the same table", () => {
+      const { ctx, calls } = createFakeContext();
+      renderDocument(ctx, 800, 600, [filledTable()], CAMERA_IDENTITY, [], [], { kind: "cell", objectId: "obj_t", cell: "B1" });
+      expect(drawnStrings(calls)).toContain("alpha");
+      expect(drawnStrings(calls)).toContain("gamma");
+    });
+
+    it("still draws the whole GRID, including the edited cell's own border — unlike a text box, the overlay does not replace the rectangle", () => {
+      const { ctx, calls } = createFakeContext();
+      renderDocument(ctx, 800, 600, [filledTable()], CAMERA_IDENTITY, [], [], { kind: "cell", objectId: "obj_t", cell: "B1" });
+      expect(calls.filter((call) => call.op === "strokeRect")).toHaveLength(3);
+    });
+
+    it("suppresses the cell only on the table the editor is actually open on", () => {
+      const { ctx, calls } = createFakeContext();
+      const other: GraphObject = { ...filledTable(), id: "obj_u", name: "table_2" };
+      renderDocument(ctx, 800, 600, [filledTable(), other], CAMERA_IDENTITY, [], [], { kind: "cell", objectId: "obj_t", cell: "B1" });
+      // One "beta" survives — table_2's. Its own B1 is nobody's overlay.
+      expect(drawnStrings(calls).filter((text) => text === "beta")).toHaveLength(1);
+    });
+
+    it("keeps the table's selection highlight while a cell is edited — the table has not moved or grown, which is why a TEXT box loses its outline and this does not", () => {
+      const { ctx, calls } = createFakeContext();
+      renderDocument(ctx, 800, 600, [filledTable()], CAMERA_IDENTITY, ["obj_t"], ["obj_t"], { kind: "cell", objectId: "obj_t", cell: "B1" });
+      // A table's highlight is its whole drawn extent, one more strokeRect on
+      // top of the three cell borders.
+      expect(calls.filter((call) => call.op === "strokeRect")).toHaveLength(4);
+    });
+  });
+});
+
+// The human's 2026-09-02 request: "we need to add table row/column references in
+// a graphical way for table objects. Almost like in the same font and size as
+// the object title, but centered over each row and column persistently (they
+// should stay when the prop window comes up, not get hidden like the title
+// does)."
+describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () => {
+  /** A `rows` x `cols` table at the world origin, with no cell content — the headers are all this draws. */
+  function grid(rows: number, cols: number): GraphObject {
+    return {
+      id: "obj_1",
+      name: "table_1",
+      type: "table",
+      slots: { rows: { kind: "literal", value: rows }, cols: { kind: "literal", value: cols } },
+    };
+  }
+
+  function drawn(calls: readonly RecordedCall[]): readonly Extract<RecordedCall, { op: "fillText" }>[] {
+    return calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
+  }
+
+  it("letters the columns A, B, C… centred over each one, above the grid's top edge", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [grid(1, 3)], CAMERA_IDENTITY);
+    const headers = drawn(calls).filter((call) => call.align === "center" && call.text !== "table_1");
+    expect(headers).toEqual([
+      { op: "fillText", text: "A", x: 40, y: -4, align: "center" }, // 80-wide cells, so centres at 40/120/200
+      { op: "fillText", text: "B", x: 120, y: -4, align: "center" },
+      { op: "fillText", text: "C", x: 200, y: -4, align: "center" },
+    ]);
+  });
+
+  it("numbers the rows 1, 2, 3… beside each one, right-aligned outside the left edge", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [grid(3, 1)], CAMERA_IDENTITY);
+    const headers = drawn(calls).filter((call) => call.align === "right");
+    expect(headers).toEqual([
+      { op: "fillText", text: "1", x: -4, y: 12, align: "right" }, // 24-tall cells, so centres at 12/36/60
+      { op: "fillText", text: "2", x: -4, y: 36, align: "right" },
+      { op: "fillText", text: "3", x: -4, y: 60, align: "right" },
+    ]);
+  });
+
+  // A header reading `C` over a column whose cells are `cells.D*` would be worse
+  // than no header at all, which is why this shares `address.ts`'s own function
+  // rather than doing its own arithmetic on char codes (D-010).
+  it("uses address.ts's own bijective base-26 letters, so column 27 is AA and not Z+1 or A1", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [grid(1, 27)], CAMERA_IDENTITY);
+    const texts = drawn(calls).map((call) => call.text);
+    expect(texts).toContain("Z");
+    expect(texts).toContain("AA");
+    expect(texts).not.toContain("A1");
+  });
+
+  it("follows the table's origin rather than assuming (0,0)", () => {
+    const { ctx, calls } = createFakeContext();
+    const moved: GraphObject = { ...grid(1, 1), slots: { ...grid(1, 1).slots, "origin.x": { kind: "literal", value: 100 }, "origin.y": { kind: "literal", value: 200 } } };
+    renderDocument(ctx, 800, 600, [moved], CAMERA_IDENTITY);
+    expect(drawn(calls)).toContainEqual({ op: "fillText", text: "A", x: 140, y: 196, align: "center" });
+    expect(drawn(calls)).toContainEqual({ op: "fillText", text: "1", x: 96, y: 212, align: "right" });
+  });
+
+  it("tracks pan and zoom, staying over the columns it names", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [grid(1, 2)], { x: 10, y: 20, zoom: 2 });
+    // screen = (world - camera) * zoom: the grid's top-left is (-20, -40) and a
+    // cell is 160 screen px wide, so the two column centres are at 60 and 220.
+    const centres = drawn(calls).filter((call) => call.text === "A" || call.text === "B").map((call) => call.x);
+    expect(centres).toEqual([60, 220]);
+  });
+
+  // The explicit ask, and the reason it is right: a panelled object's NAME moves
+  // into the panel's header, so suppressing it loses nothing — but nothing
+  // anywhere else says which column is `C`.
+  it("is NOT suppressed when the object is panelled, unlike the name label", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [grid(1, 2)], CAMERA_IDENTITY, ["obj_1"], ["obj_1"]);
+    const texts = drawn(calls).map((call) => call.text);
+    expect(texts).not.toContain("table_1"); // the name IS suppressed (D-106 clause 5)
+    expect(texts).toEqual(expect.arrayContaining(["A", "B", "1"]));
+  });
+
+  it("draws headers for a table nobody has selected — they are the sheet's furniture, not a selection affordance", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [grid(1, 1)], CAMERA_IDENTITY);
+    expect(drawn(calls).map((call) => call.text)).toContain("A");
+  });
+
+  it("skips them per axis once the cells shrink past legibility, rather than drawing an overlapping smear", () => {
+    const { ctx, calls } = createFakeContext();
+    // zoom 0.1: an 80-wide cell is 8 screen px and a 24-tall one is 2.4 — both
+    // under the 14px floor, so neither axis draws.
+    renderDocument(ctx, 800, 600, [grid(2, 2)], { x: 0, y: 0, zoom: 0.1 });
+    const texts = drawn(calls).map((call) => call.text);
+    expect(texts).not.toContain("A");
+    expect(texts).not.toContain("1");
+  });
+
+  it("keeps the COLUMN letters while dropping the row numbers when only the rows have shrunk past the floor", () => {
+    const { ctx, calls } = createFakeContext();
+    // zoom 0.25: a column is 20 screen px (over the floor), a row is 6 (under).
+    renderDocument(ctx, 800, 600, [grid(2, 2)], { x: 0, y: 0, zoom: 0.25 });
+    const texts = drawn(calls).map((call) => call.text);
+    expect(texts).toContain("A");
+    expect(texts).not.toContain("1");
+  });
+
+  it("draws none for a non-table object", () => {
+    const { ctx, calls } = createFakeContext();
+    const circle: GraphObject = {
+      id: "obj_c",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: 10 },
+        // Needed for an EXTENT, without which the object gets no chrome at all
+        // (`chromeAnchorPoint`) and this would pass for the wrong reason.
+        vertices: { kind: "derived", value: [{ x: -10, y: -10 }, { x: 10, y: 10 }] },
+      },
+    };
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(drawn(calls).map((call) => call.text)).toEqual(["circle_1"]);
+  });
+
+  it("still draws them while one of the table's own cells is being edited", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [grid(1, 2)], CAMERA_IDENTITY, [], [], { kind: "cell", objectId: "obj_1", cell: "A1" });
+    expect(drawn(calls).map((call) => call.text)).toEqual(expect.arrayContaining(["A", "B", "1"]));
   });
 });

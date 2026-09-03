@@ -1107,6 +1107,103 @@ describe("commitTableCell — Excel-style: `=` is a formula, a number is a numbe
     const { state } = withTable();
     expect(commitTableCell(state, "obj_404", "A1", "5")).toBe(state);
   });
+
+  // The human's 2026-09-02 report, half one: "double clicking in an empty table
+  // cell but not typing anything, then exiting, sets that table cell's contents
+  // to `""` rather than just keeping it blank/empty ... although it looks empty
+  // visually, it's not anymore."
+  describe("an empty editor CLEARS the cell rather than writing `\"\"` (2026-09-02)", () => {
+    it("leaves an already-empty cell with NO slot at all, not one holding an empty string", () => {
+      const { state, id } = withTable();
+      const after = commitTableCell(state, id, "A1", "");
+      expect(getSlot(objectNamed(after, "table_1"), ["cells", "A1"])).toBeUndefined();
+    });
+
+    it("does not journal anything for that no-op — nothing happened, so §5.11's history says nothing happened", () => {
+      const { state, id } = withTable();
+      const after = commitTableCell(state, id, "A1", "");
+      expect(after.document.journal.length).toBe(state.document.journal.length);
+    });
+
+    it("REMOVES a cell that held something, which is the gesture that was impossible before — `set A1 \"\"` left a phantom", () => {
+      const { state, id } = withTable();
+      const filled = commitTableCell(state, id, "A1", "hello");
+      expect(getSlot(objectNamed(filled, "table_1"), ["cells", "A1"])).toEqual({ kind: "literal", value: "hello" });
+      const emptied = commitTableCell(filled, id, "A1", "");
+      expect(getSlot(objectNamed(emptied, "table_1"), ["cells", "A1"])).toBeUndefined();
+    });
+
+    it("treats a whitespace-only editor as empty too — nothing was typed", () => {
+      const { state, id } = withTable();
+      const after = commitTableCell(commitTableCell(state, id, "A1", "hello"), id, "A1", "   ");
+      expect(getSlot(objectNamed(after, "table_1"), ["cells", "A1"])).toBeUndefined();
+    });
+
+    it("clears a cell that held a FORMULA, not just a literal", () => {
+      const { state, id } = withTable();
+      const after = commitTableCell(commitTableCell(state, id, "A1", "=1+2"), id, "A1", "");
+      expect(getSlot(objectNamed(after, "table_1"), ["cells", "A1"])).toBeUndefined();
+    });
+  });
+});
+
+// The human's 2026-09-02 report, half two: re-opening the cell "auto selects in
+// the editor as showing `\"\"`. If I then click back out again without editing,
+// it re-adds quotes to either side, so the cell's value is now `\"\"\"\"`...
+// This repeats so each cancelled commit adds additional quotes."
+//
+// The cause was `editorSeed` rendering a literal with `describeSlotValue`, the
+// DISPLAY formatter, which quotes strings. The seed's contract is that an
+// untouched commit is a no-op, and a formatter that adds syntax cannot meet it.
+describe("editorSeed round-trips a cell exactly — an untouched commit changes nothing (2026-09-02)", () => {
+  function withTable(): { state: AppState; id: string } {
+    const state = typed(opened(), "table x=0 y=0");
+    return { state, id: objectNamed(state, "table_1").id };
+  }
+
+  /** Opens the editor on `cell` and commits what it showed, untouched — the exact gesture the report describes. */
+  function reopenAndCommit(state: AppState, id: string, cell: string): AppState {
+    return commitTableCell(state, id, cell, editorSeed(state, { kind: "cell", objectId: id, cell }));
+  }
+
+  it("seeds a string cell with the string itself — NOT wrapped in quotes", () => {
+    const { state, id } = withTable();
+    const after = commitTableCell(state, id, "A1", "hello");
+    expect(editorSeed(after, { kind: "cell", objectId: id, cell: "A1" })).toBe("hello");
+  });
+
+  it("does not accumulate quotes over repeated open-and-close, which is the defect as reported", () => {
+    const { state, id } = withTable();
+    let current = commitTableCell(state, id, "A1", "hello");
+    for (let round = 0; round < 5; round += 1) {
+      current = reopenAndCommit(current, id, "A1");
+    }
+    expect(getSlot(objectNamed(current, "table_1"), ["cells", "A1"])).toEqual({ kind: "literal", value: "hello" });
+  });
+
+  it("an EMPTY cell opened and closed five times still has no slot — the case the operator actually hit", () => {
+    const { state, id } = withTable();
+    let current = state;
+    for (let round = 0; round < 5; round += 1) {
+      current = reopenAndCommit(current, id, "A1");
+    }
+    expect(getSlot(objectNamed(current, "table_1"), ["cells", "A1"])).toBeUndefined();
+  });
+
+  it("round-trips a number and a boolean unchanged, in their own types", () => {
+    const { state, id } = withTable();
+    let current = commitTableCell(state, id, "A1", "42");
+    current = typed(current, "set table_1.B1 TRUE");
+    current = reopenAndCommit(reopenAndCommit(current, id, "A1"), id, "B1");
+    expect(getSlot(objectNamed(current, "table_1"), ["cells", "A1"])).toEqual({ kind: "literal", value: 42 });
+    expect(getSlot(objectNamed(current, "table_1"), ["cells", "B1"])).toEqual({ kind: "literal", value: true });
+  });
+
+  it("seeds a boolean as parser.ts's exact-uppercase TRUE/FALSE, the only spelling that reads back", () => {
+    const { state, id } = withTable();
+    const after = typed(state, "set table_1.A1 FALSE");
+    expect(editorSeed(after, { kind: "cell", objectId: id, cell: "A1" })).toBe("FALSE");
+  });
 });
 
 describe("editorSeed — the text the in-place editor opens showing (D-125)", () => {

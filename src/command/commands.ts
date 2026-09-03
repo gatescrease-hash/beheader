@@ -136,6 +136,7 @@ import {
 } from "../engine/primitives/text.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
+  ClearCommand,
   Command,
   CreateCircleCommand,
   CreatePolygonCommand,
@@ -341,6 +342,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return link(command, document, context);
     case "unlink":
       return unlink(command, document, context);
+    case "clear":
+      return clearSlotCommand(command, document, context);
     case "rename":
       return renameObject(command, document, context);
     case "delete":
@@ -390,6 +393,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "set",
   "link",
   "unlink",
+  "clear",
   "rename",
   "delete",
   "refs",
@@ -816,6 +820,56 @@ function link(command: LinkCommand, document: Document, context: EvalContext): C
 /** `unlink polygon_1.origin.x` (§5.10) — back to a literal holding whatever was last displayed (D-041). */
 function unlink(command: UnlinkCommand, document: Document, context: EvalContext): CommandOutcome {
   return writeSlot({ kind: "unlink" }, command.target, document, context);
+}
+
+/**
+ * `clear table_1.A1` — empties a table cell by REMOVING its slot (the human's
+ * 2026-09-02 report; `mutation.ts`'s `ClearSlotOperation`).
+ *
+ * Deliberately NOT routed through `writeSlot`: that function's whole shape is
+ * "build a `Slot`, commit one `setSlot`", and the point here is that there is
+ * no slot to build — D-047 makes an ABSENT cell the empty state, and every
+ * `Value` (`""` and `0` included) is content. It does reuse
+ * `resolveWritableSlot`, because the IDENTITY questions are identical (does the
+ * address parse, does the object exist, is it derived, does the type declare
+ * it) and D-069 puts those in this file exactly once.
+ *
+ * Restricted to a table cell here as well as in `mutate`, and that duplication
+ * is on purpose: the engine's refusal is the INVARIANT (a slot may only be
+ * removed where an absent one has a settled meaning) while this one is the
+ * OPERATOR'S message, which can name the command they typed and suggest `set`
+ * instead. The engine check is not a backstop for this one — it holds for any
+ * caller, including a test building operations directly.
+ *
+ * An ALREADY-EMPTY cell succeeds and mutates nothing. It is not an error to ask
+ * for a state that already holds, and journalling a removal that removes
+ * nothing would put an entry in §5.11's history for an event that did not
+ * happen. This is the arm the in-place editor takes every time an empty cell is
+ * opened and closed untouched — the exact gesture that used to write `""`.
+ */
+function clearSlotCommand(command: ClearCommand, document: Document, context: EvalContext): CommandOutcome {
+  const resolved = resolveWritableSlot(command.target, document);
+  if (!resolved.ok) {
+    return { ok: false, message: resolved.message };
+  }
+  const { address, existing, displayName } = resolved.target;
+  if (cellHostObjectId(resolved.target) === undefined) {
+    return {
+      ok: false,
+      message: `${displayName} is not a table cell — "clear" empties a cell by removing it (D-047), and only a cell has an empty state. Use "set ${displayName} <value>" instead`,
+    };
+  }
+  if (existing === undefined) {
+    return { ok: true, document, lines: [`${displayName} is already empty`] };
+  }
+  const was = existing.kind === "formula"
+    ? `= ${formatFormula(existing.ast, document.objects)}`
+    : describeSlotValue(existing.value);
+  const result = mutate(document.objects, [{ kind: "clearSlot", address }], document.journal, context);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines: [`cleared ${displayName} — was ${was}`] };
 }
 
 // ---------------------------------------------------------------------------

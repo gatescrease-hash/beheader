@@ -53,6 +53,10 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "table x=0 y=0 rows=8 cols=8", command: { kind: "table", x: 0, y: 0, rows: 8, cols: 8 } },
   { line: "link polygon_1.origin.x table_x.A1", command: { kind: "link", target: "polygon_1.origin.x", source: "table_x.A1" } },
   { line: "unlink polygon_1.origin.x", command: { kind: "unlink", target: "polygon_1.origin.x" } },
+  // NOT a §5.10 command word — added 2026-09-02 so a table cell can be emptied
+  // at all (`mutation.ts`'s `ClearSlotOperation`). Same one-address grammar as
+  // `unlink`; the handler is where it narrows to cells.
+  { line: "clear table_x.A1", command: { kind: "clear", target: "table_x.A1" } },
   { line: "set polygon_1.radius 42", command: { kind: "set", target: "polygon_1.radius", value: 42 } },
   { line: "rename polygon_1 intersection_a", command: { kind: "rename", target: "polygon_1", newName: "intersection_a" } },
   { line: "delete intersection_a", command: { kind: "delete", target: "intersection_a", force: false } },
