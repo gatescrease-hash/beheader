@@ -1,7 +1,7 @@
 # STATUS — as of entry 0162-REVIEW-phase5
 
-**NOTHING IS BLOCKED. MARKDOWN-LITE IS BUILT, DRAWN, MEASURED, REVIEWED, AND — BAR ONE ITEM —
-CONFIRMED ON SCREEN. THE NEXT SLICE IS THE PHASE 5 GATE.**
+**NOTHING IS BLOCKED. MARKDOWN-LITE IS BUILT, DRAWN, MEASURED, REVIEWED AND CONFIRMED ON SCREEN, IN
+FULL. THE NEXT SLICE IS THE PHASE 5 GATE.**
 
 STATE: **GREEN**. Both configs compile, **1775/1775** tests pass, 0 skipped, 0 `.only`.
 **34 test files.** `npx vite build` clean.
@@ -12,11 +12,10 @@ diff `3ace76c..c0e05ec`, 1,312 added / 235 removed across 8 source files. **Batc
 not a code edit: 0161's own entry miscounts `renderer.test.ts`'s tally by one at both ends (actually
 93→94, not the entry's claimed 94→95); the file itself is exactly right. See 0162-REVIEW §1.
 
-**Confirmed on screen:** 0152, 0153, 0154, 0156 (2026-09-02) and 0155, 0159 and 0160 (2026-09-03).
-The human ran markdown rendering, alignment, wrapping, framing, formula integration, save/load,
-zoom, the table-cell fixes and the resize grabbers. All good, in their words.
-**STILL NOT seen on screen: 0161's hanging indent.** The one thing owed before or during the Phase 5
-gate cycle; it does not block starting that cycle.
+**Confirmed on screen:** 0152, 0153, 0154, 0156 (2026-09-02) and 0155, 0159, 0160 and — now —
+**0161** (2026-09-03). The human ran markdown rendering, alignment, wrapping, framing, formula
+integration, save/load, zoom, the table-cell fixes, the resize grabbers, and the wrapped list
+item's hanging indent. All good, in their words. **Nothing built through this batch is unseen.**
 
 **Q-025 IS FULLY CLOSED — D-139.** The overlay shows RAW SOURCE and is measured raw, so a markup box
 legitimately changes size on commit, which the human called *"ideal and works well as implemented"*.
@@ -279,8 +278,7 @@ rendering; D-123, Q-024 answered · **0142-REVIEW** `measuredWidth`; Q-024 CLOSE
 
 ## Reviewed but NOT yet seen on screen
 
-- **Entry 0161's hanging indent only.** One wrapped bullet in a box with a set width is the whole
-  check: the second line should start under the item's text, not under its bullet.
+Nothing. Entry 0161's hanging indent — the last unseen item — was confirmed on screen 2026-09-03.
 
 ## Not started
 
@@ -531,5 +529,5 @@ cycle settles for `fontSize`.
 - **DO NOT TRUST A RULING'S CLAIM ABOUT REACHABILITY — GREP FOR THE CALLER** (D-127's lesson).
 - **`#MEASURE` is a real `ErrorCode`** (`graph/node.ts`), sixth after `#SCRIPT`.
 - **The operator cannot see what you can see.** Ask for a live look before treating an authoring
-  surface as done — this was the deciding step in five cycles running, and three entries are now
-  queued unseen.
+  surface as done — this was the deciding step in six cycles running (0152–0161). Nothing is queued
+  unseen as of 2026-09-03; keep it that way rather than letting a backlog build again.
