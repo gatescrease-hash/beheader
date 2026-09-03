@@ -24,7 +24,7 @@
  *   `markdown.ts`'s. The canvas measurer honours §5.6's markdown-lite because
  *   the canvas DRAWS it (`createCanvas2dTextMeasurer`, feeding `measuredWidth`/
  *   `measuredHeight`); the in-place editor's overlay shows RAW SOURCE, so it is
- *   measured raw (`createSourceTextMeasurer`) — **Q-025** (a), provisional.
+ *   measured raw (`createSourceTextMeasurer`) — **Q-025** (a), **D-139**.
  *
  *   `cssFont` builds every `ctx.font` string in this pipeline, and is the only
  *   way a markdown flag reaches the canvas.
@@ -525,12 +525,11 @@ export function createCanvas2dTextMeasurer(ctx: MeasurementContext): TextMeasure
  * verbatim, because a `<textarea>` can only ever show the raw source and the
  * box has to hold what is actually being typed.
  *
- * **Q-025, answered by the human on screen (entry 0161): option (a).** Their
- * words, on watching a markdown box shrink to its raw source as the editor
- * opened: "which I actually think is ideal and works well as implemented". So
- * the box legitimately changes size on commit, and that is the wanted
- * behaviour, not a tolerated cost. The reviewer owes this a `D-NNN`; until it
- * has one, this comment is where the ruling lives.
+ * **Q-025, answered by the human on screen (entry 0161): option (a). Ruled
+ * binding at D-139.** Their words, on watching a markdown box shrink to its
+ * raw source as the editor opened: "which I actually think is ideal and works
+ * well as implemented". So the box legitimately changes size on commit, and
+ * that is the wanted behaviour, not a tolerated cost.
  */
 export function createSourceTextMeasurer(ctx: MeasurementContext): TextMeasurer {
   return createMeasurer(ctx, false);

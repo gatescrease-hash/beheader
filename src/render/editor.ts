@@ -66,8 +66,9 @@
  *     (§5.6's `content`) and is MEASURED from raw source — `main.ts` hands
  *     `editorTextBoxSize` `measure.ts`'s `createSourceTextMeasurer`, not the
  *     markup-aware one the engine gets. **Q-025, answered by the human on screen
- *     (entry 0161): option (a)** — the box changing size on commit is WANTED, in
- *     their words "ideal and works well as implemented". Everything that can
+ *     (entry 0161): option (a), ruled binding at D-139** — the box changing
+ *     size on commit is WANTED, in their words "ideal and works well as
+ *     implemented". Everything that can
  *     move a glyph in PLAIN text still matches exactly (D-132); this narrows
  *     that promise to text with no markup in it, deliberately.
  *   - The cell editor's 4-world-unit text inset (`renderer.ts`'s

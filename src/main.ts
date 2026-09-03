@@ -1290,8 +1290,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   // the canvas DRAWS markup; the in-place editor's overlay is a `<textarea>`
   // that can only ever show RAW SOURCE, so its box is measured from raw source.
   // That is **Q-025 option (a)**, answered by the human on screen at entry 0161
-  // — the box shrinking to the raw text as the editor opens is the behaviour
-  // they want, not a cost they accepted. Awaiting a `D-NNN` from the reviewer.
+  // and ruled binding at **D-139** — the box shrinking to the raw text as the
+  // editor opens is the behaviour they want, not a cost they accepted.
   // Sharing `measureContext` is safe: both set `ctx.font` before every read.
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 

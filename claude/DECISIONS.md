@@ -4949,3 +4949,50 @@ from a cycle editing `layOutLines` for an unrelated reason, does not have to red
 **"Mostly fixed" is the resting place.** Two real causes were found and proved with tests; the
 remainder has no honest fix from the measurer's side. Accepting a small, explainable, disclosed
 difference is the correct end state for this, not an admission of an unfinished job.
+
+---
+
+## D-139 — The in-place editor's overlay is measured from RAW SOURCE, verbatim, never from rendered markdown — a text box using markup legitimately changes size on commit
+Answers: Q-025   Ruled: entry 0162-REVIEW-phase5 (reviewer), formalising the human's own answer given
+on screen, 2026-09-03, and taken provisionally at entry 0160, reconciled at entry 0161
+Binding on: `render/measure.ts` (`createSourceTextMeasurer`), `src/main.ts` (`sourceMeasurer`),
+`render/editor.ts`
+
+**The human's words**, on the resize-on-commit consequence: *"framing works well. The box fits the
+markdown ink, but when editing it 'shrinks' to fit the actual pre-rendered text, which I actually
+think is ideal and works well as implemented."* And on the overlay generally: *"Current behavior is
+good and works well."*
+
+**Ruling.**
+
+1. **Option (a) is adopted, permanently.** The in-place editor's overlay shows §5.6's `content` as
+   raw source, markers and all, and is measured from that raw source (`createSourceTextMeasurer`) —
+   never from the markup-aware measurer that feeds `measuredWidth`/`measuredHeight` to the engine.
+2. **A text box that uses markdown-lite markup changes size when the editor opens, and again when it
+   commits.** The overlay fits the literal characters being typed (`**bold**` is eight characters to
+   a `<textarea>`); the canvas fits the rendered glyphs (`**bold**` draws as four bold ones). This is
+   not a defect and nothing should "fix" it — it is now a **property** of a markup box, on the
+   human's explicit word.
+3. **A text box with NO markup in it is unaffected.** Every glyph-moving thing in plain text still
+   matches between the overlay and the canvas exactly (D-132), so the divergence this clause
+   describes is confined to boxes that actually use `**`/`*`/`` ` ``/`#`/`- `.
+4. **Option (b) (measure the overlay from the rendered form, so the box never resizes) is rejected.**
+   It was rejected before this ruling, provisionally, at entry 0160-markdown-render — this clause
+   makes that permanent. (b) would make the typed text visibly overflow or under-fill its own box
+   while editing, which is the exact defect the 2026-09-02 text-box rework existed to remove; trading
+   a visible, explained difference (this ruling) for an invisible, confusing one is a worse trade,
+   not a neutral one.
+
+**Rationale.** §5.6 says `content` holds "raw source including markup" and says nothing about what an
+editor shows — an editor is chrome, not spec. The 2026-09-02 goal ("no difference between how the
+text looks when you're not editing it and how it looks when you are") is broken by construction the
+moment markup renders differently than it is typed: a `<textarea>` cannot draw `**bold**` bold, so
+some divergence is unavoidable for a box that uses markup, and the only real choice is which
+divergence — a resized box (source-accurate, chosen here) or a mis-fitted one (rendered-accurate,
+rejected). The human tested the built consequence on screen before answering, which is exactly the
+standard D-042 sets for a product-taste call.
+
+**Reconciliation required.** None. Entry 0161 already reconciled all four `PROVISIONAL(Q-025)` sites
+(`measure.ts`, `editor.ts`, `main.ts` ×2) before this ruling landed, and `grep -rn
+"PROVISIONAL(Q-025)" src` returns nothing — this ruling only makes binding what was already built and
+cited by name.

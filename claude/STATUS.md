@@ -1,26 +1,26 @@
-# STATUS — as of entry 0161-hanging-indent
+# STATUS — as of entry 0162-REVIEW-phase5
 
-**NOTHING IS BLOCKED. MARKDOWN-LITE IS BUILT, DRAWN, MEASURED AND CONFIRMED ON SCREEN. THE NEXT
-SLICE IS THE PHASE 5 GATE — AND THIS BATCH MUST BE REVIEWED FIRST.**
+**NOTHING IS BLOCKED. MARKDOWN-LITE IS BUILT, DRAWN, MEASURED, REVIEWED, AND — BAR ONE ITEM —
+CONFIRMED ON SCREEN. THE NEXT SLICE IS THE PHASE 5 GATE.**
 
 STATE: **GREEN**. Both configs compile, **1775/1775** tests pass, 0 skipped, 0 `.only`.
 **34 test files.** `npx vite build` clean.
 
-Last review point: **0157-REVIEW-phase5** (ACCEPT WITH EDITS). Since then: 0158-RULINGS (no code),
-then **three implementer cycles — 0159, 0160 and 0161 — all UNREVIEWED**. Batch **3/3 cycles,
-~1,600 changed lines / 8 source files: OVER §6.3's cap on BOTH counts**, and §6.1 trigger 5 fired
-at 0160. **The next cycle may not start before this batch is reviewed.**
+Last review point: **0162-REVIEW-phase5** (ACCEPT WITH EDITS), covering 0159, 0160 and 0161 — the
+diff `3ace76c..c0e05ec`, 1,312 added / 235 removed across 8 source files. **Batch reset: 0/3 cycles,
+0 lines since last review.** One `D-NNN` issued, closing Q-025: **D-139**. One honesty-audit note,
+not a code edit: 0161's own entry miscounts `renderer.test.ts`'s tally by one at both ends (actually
+93→94, not the entry's claimed 94→95); the file itself is exactly right. See 0162-REVIEW §1.
 
-**Confirmed on screen:** 0152, 0153, 0154, 0156 (2026-09-02) and — new, 2026-09-03 — **0155, 0159
-and 0160**. The human ran markdown rendering, alignment, wrapping, framing, formula integration,
-save/load, zoom, the table-cell fixes and the resize grabbers. All good, in their words.
-**NOT seen on screen: 0161's hanging indent, and nothing else.**
+**Confirmed on screen:** 0152, 0153, 0154, 0156 (2026-09-02) and 0155, 0159 and 0160 (2026-09-03).
+The human ran markdown rendering, alignment, wrapping, framing, formula integration, save/load,
+zoom, the table-cell fixes and the resize grabbers. All good, in their words.
+**STILL NOT seen on screen: 0161's hanging indent.** The one thing owed before or during the Phase 5
+gate cycle; it does not block starting that cycle.
 
-**THE REVIEWER OWES ONE RULING: Q-025 IS ANSWERED AND HAS NO `D-NNN`.** The human answered option
-(a) on screen — the overlay shows RAW SOURCE and is measured raw, so a markup box legitimately
-changes size on commit, which they called *"ideal and works well as implemented"*. Every
-`PROVISIONAL(Q-025)` tag is REMOVED and all four sites cite the answer, but `DECISIONS.md` is the
-reviewer's alone (§2), so it is closed in substance and unrecorded in form.
+**Q-025 IS FULLY CLOSED — D-139.** The overlay shows RAW SOURCE and is measured raw, so a markup box
+legitimately changes size on commit, which the human called *"ideal and works well as implemented"*.
+D-139 makes option (a) binding rather than provisional. No implementer action needed.
 
 ---
 
@@ -227,10 +227,10 @@ the likeliest to be wrong — it goes stale by the file getting BETTER. **NEVER 
 between a doc comment and what it documents.** 0160 obeyed it at five files, two of them
 (`editor.ts` ×2 sites) only because the rule made me look.
 
-## Next slice — THE PHASE 5 GATE. But this batch is reviewed first.
+## Next slice — THE PHASE 5 GATE
 
-**§6.3's cap is exceeded and §6.1 trigger 5 fired**, so 0159+0160 go to review before anything else
-starts. When they clear:
+0159–0161 are reviewed (**0162-REVIEW**, ACCEPT WITH EDITS; D-139). Nothing blocks starting this
+slice now.
 
 **The Phase 5 gate**, §6 verbatim: *"a text box reading `Radius: {= table_x.A1 }{? table_x.A1 > 50 }
 — **LARGE**{:} — small{?}` updates both its number and its branch as the cell changes, wraps at its
@@ -271,20 +271,11 @@ rendering; D-123, Q-024 answered · **0142-REVIEW** `measuredWidth`; Q-024 CLOSE
 **0144-REVIEW** the in-place editor (D-125); D-128 · **0145-RULINGS** D-129 + D-130 + D-131 ·
 **0148-REVIEW** editor-polish; D-132 + D-133 · **0150-REVIEW** `text`-by-pointing (D-124); D-134 ·
 **0151-RULINGS** D-135 + D-136 · **0157-REVIEW** the whole 0152–0156 batch; **D-137** ·
-**0158-RULINGS** D-138 (the wrap residual, accepted); Q-025 raised.
-
-## Built this batch, NOT yet reviewed
-
-- **Entry 0159** — `src/render/markdown.ts` + 30 tests. §5.6's markdown-lite parser, inert on
-  arrival.
-- **Entry 0160** — the wiring. `markdown.ts` gained `verbatimLines` and the flanking rule;
-  `measure.ts` rewritten around `layOutText` (`layOutLines` deleted); `renderer.ts`'s `drawText`
-  paints runs and aligns by arithmetic; `main.ts`'s `sourceMeasurer`; headers at five files.
-  **Test expectations changed at two `renderer.test.ts` sites** (§6.1 trigger 5) — the alignment
-  mechanism, and the "markup is drawn verbatim" test §5.6 required reversing.
-- **Entry 0161** — hanging indents for wrapped list items (`measure.ts` only: `hangingIndent`,
-  `wrapLine`'s narrowed limit, the offset folded into `layOutText`'s runs), Q-025 reconciled at
-  four sites, headers at `measure.ts` and `markdown.ts`. No test expectation changed.
+**0158-RULINGS** D-138 (the wrap residual, accepted); Q-025 raised · `src/render/markdown.ts`, the
+§5.6 markdown-lite parser (0159) · the wiring — `layOutText` replacing `layOutLines`,
+`renderer.ts`'s `drawText` painting runs and aligning by arithmetic, `main.ts`'s `sourceMeasurer`
+(0160) · hanging indents for wrapped list items (0161) · **0162-REVIEW** the 0159–0161 batch;
+**D-139** (Q-025 closed).
 
 ## Reviewed but NOT yet seen on screen
 
@@ -475,16 +466,14 @@ inherits the same posture.
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117**, **Q-021 → D-120**, **Q-022 →
-D-121**, **Q-023 → D-122**, **Q-024 → D-123** — all CLOSED. **Q-025 is ANSWERED (option (a), by the
-human on screen 2026-09-03), reconciled in code at 0161, and AWAITING ITS `D-NNN` from the
-reviewer.** Next free: **Q-026**.
+D-121**, **Q-023 → D-122**, **Q-024 → D-123**, **Q-025 → D-139** — all CLOSED. Next free: **Q-026**.
 
 ## Live PROVISIONAL tags and open questions
 
-**Q-025 HAS NO TAGS LEFT.** Answered by the human on screen 2026-09-03 (option (a)) and reconciled
-at entry 0161: `src/render/measure.ts`, `src/render/editor.ts` and `src/main.ts` (×2) each cite the
-answer instead. `grep -rn "PROVISIONAL(Q-025)" src` returns nothing. **A `D-NNN` is still owed by
-the reviewer** — see the top of this file.
+**Q-025 HAS NO TAGS LEFT AND NO OPEN BUSINESS.** Answered by the human on screen 2026-09-03
+(option (a)), reconciled in code at entry 0161 (`src/render/measure.ts`, `src/render/editor.ts` and
+`src/main.ts` ×2 each cite the answer), and made binding at 0162-REVIEW as **D-139**. `grep -rn
+"PROVISIONAL(Q-025)" src` returns nothing.
 
 **`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** (×3), **`src/render/slots.ts`** (×1) and
 **`src/render/editor.ts`** (×1): world units or screen pixels for stroke width / cell size / font?

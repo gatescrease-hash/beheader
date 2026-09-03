@@ -15,11 +15,10 @@ Next free ID: **Q-026**
 ## Q-025 — When the canvas renders markdown-lite, what does the in-place editor's overlay show?
 Raised: entry 0158-RULINGS-phase5 (reviewer)   Brief section: §5.6 (the markdown-lite list;
 `content` is "raw source including markup"), against the human's 2026-09-02 goal for the text box.
-Status: **ANSWERED BY THE HUMAN, ON SCREEN, 2026-09-03 (entry 0161): option (a).** Built at 0160,
-run by them at 0161, confirmed in their own words. **Every `PROVISIONAL(Q-025)` tag is removed and
-each site now cites the answer.** This question is closed on substance; what it still lacks is a
-`D-NNN` in `DECISIONS.md`, which is the reviewer's to write and NOT an implementer's (§2). Until it
-has one, the ruling lives in this entry and in the four cited sites.
+Status: **CLOSED → D-139** (entry 0162-REVIEW-phase5, reviewer). The human answered option (a) on
+screen, 2026-09-03 (entry 0161); the reviewer's ruling makes it permanent and binding rather than
+provisional. **Every `PROVISIONAL(Q-025)` tag is removed and each site now cites the answer.**
+Nothing further is owed on this question.
 
 **The human's words**, on the resize-on-commit consequence (a) accepts and (b) would have removed:
 *"framing works well. The box fits the markdown ink, but when editing it 'shrinks' to fit the actual
