@@ -18,6 +18,7 @@ import { createEmptyDocument, deserializeDocument, saveDocument, type CameraStat
 import type { EvalContext } from "./engine/eval-context.ts";
 import { getSlot, type GraphObject } from "./engine/graph/node.ts";
 import { objectExtent } from "./render/extent.ts";
+import { createCanvas2dTextMeasurer, type MeasurementContext } from "./render/measure.ts";
 import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
 import {
@@ -1555,5 +1556,116 @@ describe("a document saved before `autoresize` existed still loads (2026-09-02)"
     const model = buildPanelModel(object, state.document.objects);
     expect(model.modifiable.map((row) => row.path)).not.toContain("overflow");
     expect(model.derived.map((row) => row.path)).not.toContain("overflow");
+  });
+});
+
+describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with a REAL measurer", () => {
+  /**
+   * The brief's §6 Phase 5 gate, verbatim: "a text box reading `Radius: {=
+   * table_x.A1 }{? table_x.A1 > 50 } — **LARGE**{:} — small{?}` updates both its
+   * number and its branch as the cell changes, wraps at its set width, and
+   * re-renders when a value referenced only inside the currently non-taken
+   * branch changes." §12.1 requires this be one executable test proving the
+   * criterion, not a description; `STATUS.md`'s own next-slice note additionally
+   * insists on ONE document, through `mutate`, with a real measurer — not four
+   * tests over four fixtures. The `it`s below share `gateDocument()` for that
+   * reason: they are one criterion examined from five angles, not five
+   * unrelated fixtures.
+   *
+   * The brief's own content string has no reference inside EITHER branch, so it
+   * cannot exercise the "non-taken branch" clause as written — extended here
+   * with one embedded reference per branch (`table_1.B1` in the TRUE branch,
+   * `table_1.C1` in the FALSE branch) while keeping the brief's exact
+   * number/condition/markup structure otherwise untouched. See this cycle's log
+   * entry, "Decisions I made", for the reasoning.
+   */
+  const GATE_CONTENT =
+    "Radius: {= table_1.A1 }{? table_1.A1 > 50 } — **LARGE** (max {= table_1.B1 }){:} — small (min {= table_1.C1 }){?}";
+
+  /**
+   * `measureText` is `CHAR` px per character — `render/measure.test.ts`'s own
+   * fake shape — wired through the PRODUCTION `createCanvas2dTextMeasurer`
+   * (`render/measure.ts`), never a hand-rolled height stub. "Wraps at its set
+   * width" has to be proved against the real word-wrap algorithm (D-120) or it
+   * proves nothing.
+   */
+  const CHAR = 10;
+  function realMeasurerContext(): EvalContext {
+    const ctx: MeasurementContext = { font: "", measureText: (text: string) => ({ width: text.length * CHAR }) };
+    return { measurer: createCanvas2dTextMeasurer(ctx) };
+  }
+
+  /** `typed`, widened with a trailing `EvalContext` — every step of this gate needs the real measurer threaded, not just the wrap step. */
+  function typedWith(state: AppState, line: string, context: EvalContext): AppState {
+    return submitLine(state, line, VIEWPORT, context).state;
+  }
+
+  function resolvedContentOf(state: AppState): unknown {
+    return getSlot(objectNamed(state, "text_1"), ["resolvedContent"])?.value;
+  }
+
+  function measuredHeightOf(state: AppState): unknown {
+    return getSlot(objectNamed(state, "text_1"), ["measuredHeight"])?.value;
+  }
+
+  /** `table_1.A1`/`B1`/`C1` are populated BEFORE `text_1` is created, so all three edges exist from the creating mutation on (D-110 clause 4: a reference to an empty in-extent cell gets no edge at all). `A1` starts at 30 — the FALSE branch ("small") is the one taken at creation. */
+  function gateDocument(): AppState {
+    const context = realMeasurerContext();
+    let state = typedWith(opened(), "table x=0 y=0 rows=1 cols=3", context);
+    state = typedWith(state, "set table_1.A1 30", context);
+    state = typedWith(state, "set table_1.B1 999", context); // read only by the untaken TRUE branch.
+    state = typedWith(state, "set table_1.C1 5", context); // read by the taken FALSE branch.
+    state = typedWith(state, `text x=0 y=0 "${GATE_CONTENT}"`, context);
+    return state;
+  }
+
+  it("resolves the number and the currently-taken FALSE branch inside the creating mutation (D-114)", () => {
+    expect(resolvedContentOf(gateDocument())).toBe("Radius: 30 — small (min 5)");
+  });
+
+  it("updates both the number and the branch as the cell changes — the criterion's own wording", () => {
+    const raised = typedWith(gateDocument(), "set table_1.A1 80", realMeasurerContext());
+    expect(resolvedContentOf(raised)).toBe("Radius: 80 — **LARGE** (max 999)");
+  });
+
+  it("a value referenced ONLY inside the currently non-taken branch is still a real, discoverable dependency (§5.3's eager/total extraction, proved end to end via `refs`)", () => {
+    // table_1.B1 sits only in the untaken TRUE branch (A1 is 30, so the FALSE
+    // branch is the one currently rendered) — §5.3 demands the edge exist
+    // anyway, and `refs` is the end-to-end, render-independent way to observe
+    // an edge without reaching into engine internals from a `main.ts` test.
+    const before = gateDocument();
+    const after = typedWith(before, "refs table_1.B1", realMeasurerContext());
+    expect(newLines(before, after)).toContain("table_1.B1 → text_1.resolvedContent");
+  });
+
+  it("a value changed while its branch is untaken is not stale once that branch is later taken — the observable half of 're-renders'", () => {
+    let state = gateDocument();
+    // Change B1 while its branch (TRUE) is still untaken (A1 = 30, unchanged).
+    state = typedWith(state, "set table_1.B1 777", realMeasurerContext());
+    expect(resolvedContentOf(state)).toBe("Radius: 30 — small (min 5)"); // unaffected — correct, that branch is not active.
+    // NOW take the TRUE branch. If the untaken reference above had not become
+    // a real edge, this would still happen to read correctly (evaluation
+    // re-walks the block tree fresh every time `content` changes) — so this
+    // test's actual claim is the PREVIOUS one; this one guards against a
+    // regression the reviewer asked to see disclosed rather than silently
+    // dropped.
+    state = typedWith(state, "set table_1.A1 80", realMeasurerContext());
+    expect(resolvedContentOf(state)).toBe("Radius: 80 — **LARGE** (max 777)"); // the FRESH value, not 999 (the value at creation).
+  });
+
+  it("wraps at its set width — measuredHeight comes from the real word-wrap algorithm, not a fixed-size fake", () => {
+    let state = gateDocument();
+    state = typedWith(state, "set table_1.A1 80", realMeasurerContext()); // take the LARGE branch — the longer of the two.
+    state = typedWith(state, "set text_1.width 100", realMeasurerContext());
+    // B1 is untouched on this path (still 999 from gateDocument()), so
+    // resolvedContent is "Radius: 80 — **LARGE** (max 999)". At CHAR=10/char,
+    // greedy word-wrap (D-120) fills wrapWidth 100 as "Radius: 80" / "— LARGE"
+    // / "(max 999)" — three lines.
+    expect(measuredHeightOf(state)).toBe(60); // 3 lines * the default lineHeight (20).
+  });
+
+  it("no false cycle — the criterion's own document builds and updates without ever refusing", () => {
+    const state = typedWith(gateDocument(), "set table_1.A1 80", realMeasurerContext());
+    expect(state.log.join("\n")).not.toContain("cyclic");
   });
 });

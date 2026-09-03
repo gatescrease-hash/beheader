@@ -1,21 +1,26 @@
-# STATUS — as of entry 0162-REVIEW-phase5
+# STATUS — as of entry 0163-phase5-gate
 
-**NOTHING IS BLOCKED. MARKDOWN-LITE IS BUILT, DRAWN, MEASURED, REVIEWED AND CONFIRMED ON SCREEN, IN
-FULL. THE NEXT SLICE IS THE PHASE 5 GATE.**
+**NOTHING IS BLOCKED. THE PHASE 5 GATE IS BUILT AND CLAIMED PASSING (entry 0163). REVIEW: REQUIRED
+BEFORE PHASE 6 STARTS — §6.1 TRIGGER 1, NO BATCH ABSORBS A PHASE GATE.**
 
-STATE: **GREEN**. Both configs compile, **1775/1775** tests pass, 0 skipped, 0 `.only`.
+STATE: **GREEN**. Both configs compile, **1781/1781** tests pass, 0 skipped, 0 `.only`.
 **34 test files.** `npx vite build` clean.
 
-Last review point: **0162-REVIEW-phase5** (ACCEPT WITH EDITS), covering 0159, 0160 and 0161 — the
-diff `3ace76c..c0e05ec`, 1,312 added / 235 removed across 8 source files. **Batch reset: 0/3 cycles,
-0 lines since last review.** One `D-NNN` issued, closing Q-025: **D-139**. One honesty-audit note,
-not a code edit: 0161's own entry miscounts `renderer.test.ts`'s tally by one at both ends (actually
-93→94, not the entry's claimed 94→95); the file itself is exactly right. See 0162-REVIEW §1.
+Last review point: **0162-REVIEW-phase5** (ACCEPT WITH EDITS), covering 0159, 0160 and 0161. One
+`D-NNN` issued there, closing Q-025: **D-139**. **Batch since that review: 1/3 cycles, 112 lines / 1
+file (entry 0163) — irrelevant to whether review is needed, because trigger 1 already fired.**
 
-**Confirmed on screen:** 0152, 0153, 0154, 0156 (2026-09-02) and 0155, 0159, 0160 and — now —
-**0161** (2026-09-03). The human ran markdown rendering, alignment, wrapping, framing, formula
-integration, save/load, zoom, the table-cell fixes, the resize grabbers, and the wrapped list
-item's hanging indent. All good, in their words. **Nothing built through this batch is unseen.**
+**0163 (this entry) is UNREVIEWED.** It touches exactly one file — `src/main.test.ts` — and no
+engine or render source, but it is still a mandatory stop: it claims the Phase 5 acceptance
+criterion passes. Do not start Phase 6 before this is reviewed (§6.2/§12).
+
+**Confirmed on screen:** 0152, 0153, 0154, 0156 (2026-09-02) and 0155, 0159, 0160 and 0161
+(2026-09-03). The human ran markdown rendering, alignment, wrapping, framing, formula integration,
+save/load, zoom, the table-cell fixes, the resize grabbers, and the wrapped list item's hanging
+indent. All good, in their words. **0163 (the Phase 5 gate) is a test-only entry with nothing new
+to look at on screen** — every ingredient it exercises (markdown, wrapping, formula/conditional
+text) was already confirmed at 0159–0161; it is unseen the way a unit test is, not the way a
+rendering feature is.
 
 **Q-025 IS FULLY CLOSED — D-139.** The overlay shows RAW SOURCE and is measured raw, so a markup box
 legitimately changes size on commit, which the human called *"ideal and works well as implemented"*.
@@ -23,18 +28,23 @@ D-139 makes option (a) binding rather than provisional. No implementer action ne
 
 ---
 
-## What the last three cycles did
+## What the last cycle did
 
-**0159** added `src/render/markdown.ts` — §5.6's markdown-lite parser, pure, no consumers.
-**0160** wired it through the whole text pipeline in one cycle, which is what STATUS demanded:
-`measure.ts` rewritten around one `layOutText`, `renderer.ts`'s `drawText` painting its runs, and a
-SECOND verbatim measurer for the in-place editor's overlay (**Q-025 (a)**).
-**0161** added hanging indents for wrapped list items — the human's request after running 0160 —
-and reconciled Q-025 against their answer.
+**0163** (unreviewed) is the Phase 5 gate: one `describe` block in `src/main.test.ts`, six `it`s
+sharing one `gateDocument()`, proving §6's criterion end to end — through `submitLine` (not a bare
+`mutate` call), with a REAL `EvalContext` (`createCanvas2dTextMeasurer` over a fake
+10px/character `MeasurementContext`, never a fixed-height stub). It extends the criterion's own
+content string with one embedded reference per `{? }` branch (`table_1.B1` in the TRUE branch,
+`table_1.C1` in the FALSE branch) because the brief's literal string has no reference in EITHER
+branch and cannot otherwise exercise "re-renders when a value referenced only inside the currently
+non-taken branch changes" — see 0163's "Decisions I made" for the reasoning and the disclosed
+limits of that choice. **No production file changed** — `git diff --stat` since 0162-REVIEW shows
+one file, `src/main.test.ts`. §6.2's load-bearing list is untouched.
 
-**No engine file changed in either cycle.** Nothing on §6.2's load-bearing list was touched — the
-markup-aware measurer IS the engine's `TextMeasurer`, so `measuredWidth`/`measuredHeight` became
-markup-aware with no change to `primitives/text.ts` or `schema.ts`.
+**0159–0161** (reviewed at 0162-REVIEW, ACCEPT WITH EDITS): `src/render/markdown.ts` — §5.6's
+markdown-lite parser — then wired through the whole text pipeline (`measure.ts`'s `layOutText`,
+`renderer.ts`'s `drawText`, a second verbatim measurer for the editor overlay, Q-025 (a)), then
+hanging indents for wrapped list items. No engine file changed in that batch either.
 
 ## Read this first — what a cold reader needs
 
@@ -226,23 +236,28 @@ the likeliest to be wrong — it goes stale by the file getting BETTER. **NEVER 
 between a doc comment and what it documents.** 0160 obeyed it at five files, two of them
 (`editor.ts` ×2 sites) only because the rule made me look.
 
-## Next slice — THE PHASE 5 GATE
+## Next slice — AWAITING REVIEW OF 0163 (the Phase 5 gate), THEN PHASE 6
 
-0159–0161 are reviewed (**0162-REVIEW**, ACCEPT WITH EDITS; D-139). Nothing blocks starting this
-slice now.
+**0163 is built and claims the Phase 5 criterion PASSING — `REVIEW: REQUIRED`, unreviewed.** §6.1
+trigger 1 fired (a phase acceptance criterion is claimed complete); no later phase may begin until
+this is reviewed (§6.2/§12). Nothing else is blocked or owed on Phase 5 — do not start a second gate
+test or touch the text pipeline again before this comes back from review.
 
-**The Phase 5 gate**, §6 verbatim: *"a text box reading `Radius: {= table_x.A1 }{? table_x.A1 > 50 }
-— **LARGE**{:} — small{?}` updates both its number and its branch as the cell changes, wraps at its
-set width, and re-renders when a value referenced only inside the currently non-taken branch
-changes."* One executable test over ONE document, through `mutate` with a real measurer — not four
-tests over four fixtures. §12 requires the criterion be executable before it is claimed.
-`REVIEW: REQUIRED` (§6.1 trigger 1 — no batch absorbs a phase gate).
+The reviewer should look first at 0163's "Decisions I made" item 1: the criterion's own content
+string — `Radius: {= table_x.A1 }{? table_x.A1 > 50 } — **LARGE**{:} — small{?}` — has no reference
+inside either `{? }` branch, so the test extends it with one embedded reference per branch to
+exercise the criterion's own closing clause ("re-renders when a value referenced only inside the
+currently non-taken branch changes"). That is a disclosed test-fixture choice, not an engine
+deviation; the reviewer may accept it, or ask for the literal string in one test and the
+untaken-branch proof kept separate.
 
-Note the criterion's own string contains `**LARGE**`, which is why markdown had to land first.
+Once 0163 clears review, next slice is **Phase 6 — script stub + image** (§6): `script_1.in.factor`
+bound to a cell, `polygon_1.radius` bound to `script_1.out.result`, changing the placeholder output
+moves the polygon, with no script-specific code in `eval.ts`.
 
-Cheap adds: a direct `link text_1.origin.y <cell>` test (0137-REVIEW §honesty). **D-109 clauses 1–2**
-(cell decimal precision + no cell-text clipping, `render/renderer.ts` only) still need no ruling.
-**Q-017** headers remain the human's.
+Cheap adds, still owed, not blocking: a direct `link text_1.origin.y <cell>` test (0137-REVIEW
+§honesty). **D-109 clauses 1–2** (cell decimal precision + no cell-text clipping,
+`render/renderer.ts` only) still need no ruling. **Q-017** headers remain the human's.
 
 ## Built and reviewed
 
@@ -285,7 +300,10 @@ Nothing. Entry 0161's hanging indent — the last unseen item — was confirmed 
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
-**D-109 clauses 1–2** · **the Phase 5 gate test** · Phases 6–7.
+**D-109 clauses 1–2** · Phases 6–7.
+
+**The Phase 5 gate test is BUILT (0163), not "not started"** — moved out of this list. It is
+unreviewed, not unbuilt; see "Next slice" above.
 
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
