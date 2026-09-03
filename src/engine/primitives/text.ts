@@ -732,7 +732,7 @@ export function evaluateBlockTree(blocks: readonly Block[], read: ReadSlot, read
 // ---------------------------------------------------------------------------
 
 /**
- * The eight `text`-specific stored slot paths (§5.6's `TextBox` shape), all
+ * The nine `text`-specific stored slot paths (§5.6's `TextBox` shape), all
  * `static` — a `text` object's slot set never changes (Rule 6). Owned here (not
  * in `primitives/schema.ts`) because this file reads several of them (`content`
  * for parsing; `resolvedContent`/`width`/`style.*` in `computeMeasuredHeight`)

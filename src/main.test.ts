@@ -1434,6 +1434,16 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
     expect(newLines(state, after)[0]).toBe("> set text_1.style.align right");
   });
 
+  it("echoes a BOOLEAN choice in §5.3's uppercase spelling, so the echoed line retypes to the same boolean (0157-REVIEW)", () => {
+    const state = withText();
+    const after = commitPanelChoice(state, objectNamed(state, "text_1").id, "autoresize", false);
+    expect(newLines(state, after)[0]).toBe("> set text_1.autoresize FALSE");
+    // The echo is not decoration: typed back verbatim it must reproduce the
+    // same LITERAL BOOLEAN, not the string "false" a lowercase echo would give.
+    const retyped = typed(withText(), "set text_1.autoresize FALSE");
+    expect(getSlot(objectNamed(retyped, "text_1"), ["autoresize"])).toEqual(getSlot(objectNamed(after, "text_1"), ["autoresize"]));
+  });
+
   it("is a no-op for a stale object id", () => {
     const state = withText();
     expect(commitPanelChoice(state, "obj_404", "style.align", "right")).toBe(state);

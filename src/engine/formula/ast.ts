@@ -204,27 +204,6 @@ export function isReferenceNode(ast: FormulaAst): ast is ReferenceNode {
 export const MAX_FORMULA_AST_DEPTH = 1000;
 
 /**
- * Whether `ast` nests deeper than `MAX_FORMULA_AST_DEPTH` — **D-083 clause 4**'s
- * load-boundary check. `document.ts`'s loader is the ONE caller: depth is checked
- * ONCE, at the moment a `FormulaAst` first enters the program from outside a parse,
- * never by a guard threaded through every walk downstream. `formula/deps.ts` and
- * `formula/eval.ts` do NOT carry a depth parameter of their own (D-083 clause 3 — "a
- * recursion's limit lives at the recursion, not at its callers"); this function is
- * what makes that safe, by refusing the document before either ever sees the AST.
- *
- * Counts the SAME way `parser.ts`'s own post-parse walk and `format.ts`'s own display
- * guard do — the root is depth 1, each child one deeper — so a `FormulaAst` this
- * function accepts is exactly one `parser.ts` could have built, and one this function
- * refuses can only have arrived through a hand-edited or foreign saved file (nothing
- * typed through `parser.ts` can produce one, since it refuses first).
- *
- * Never throws for a legal `FormulaAst`, however deep: the depth check runs BEFORE
- * this function recurses into a node's children, so the call stack never grows past
- * `MAX_FORMULA_AST_DEPTH` frames even for an adversarially deep input — the same
- * "check first, recurse second" shape `format.ts`'s `formatNode` and `parser.ts`'s
- * `walkForRangePlacement` already use for the identical reason.
- */
-/**
  * Either the well-formed `FormulaAst` `raw` turned out to be, or why it is not one.
  * Carries the value back rather than being a type predicate so a caller narrows by
  * USING the result — a predicate would let `raw` be used unchecked by mistake.
@@ -385,6 +364,32 @@ function describeRaw(raw: unknown): string {
   return typeof raw === "object" ? "an object" : String(raw);
 }
 
+/**
+ * Whether `ast` nests deeper than `MAX_FORMULA_AST_DEPTH` — **D-083 clause 4**'s
+ * load-boundary check. `document.ts`'s loader is the ONE caller: depth is checked
+ * ONCE, at the moment a `FormulaAst` first enters the program from outside a parse,
+ * never by a guard threaded through every walk downstream. `formula/deps.ts` and
+ * `formula/eval.ts` do NOT carry a depth parameter of their own (D-083 clause 3 — "a
+ * recursion's limit lives at the recursion, not at its callers"); this function is
+ * what makes that safe, by refusing the document before either ever sees the AST.
+ *
+ * Runs immediately AFTER `validateFormulaAstShape` on the same loaded AST, and that
+ * order is load-bearing in both directions: this walk reads `ast.type` and a node's
+ * children, so it needs the shape settled first — and it is what refuses everything
+ * below the bound that the shape walk deliberately stopped looking at.
+ *
+ * Counts the SAME way `parser.ts`'s own post-parse walk and `format.ts`'s own display
+ * guard do — the root is depth 1, each child one deeper — so a `FormulaAst` this
+ * function accepts is exactly one `parser.ts` could have built, and one this function
+ * refuses can only have arrived through a hand-edited or foreign saved file (nothing
+ * typed through `parser.ts` can produce one, since it refuses first).
+ *
+ * Never throws for a legal `FormulaAst`, however deep: the depth check runs BEFORE
+ * this function recurses into a node's children, so the call stack never grows past
+ * `MAX_FORMULA_AST_DEPTH` frames even for an adversarially deep input — the same
+ * "check first, recurse second" shape `format.ts`'s `formatNode` and `parser.ts`'s
+ * `walkForRangePlacement` already use for the identical reason.
+ */
 export function exceedsMaxFormulaAstDepth(ast: FormulaAst, depth = 1): boolean {
   if (depth > MAX_FORMULA_AST_DEPTH) {
     return true;

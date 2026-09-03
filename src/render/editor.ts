@@ -13,26 +13,24 @@
  * command/*, the DOM, or a canvas; NEVER imported by engine/*.
  *
  * WHAT THIS IS
- *   `editorTargetAt(screenPoint, objects, camera)` walks the SAME `hitTest`
- *   z-order a plain click uses and, when the topmost object under the point is
- *   editable in place, names it: a `text` object as a whole, or a `table`
- *   resolved to the one cell the point falls in. `undefined` for everything
- *   else (a shape, empty canvas, a `text` object with no drawn extent).
+ *   `editorTargetAt` walks the SAME `hitTest` z-order a plain click uses and,
+ *   when the topmost object under the point is editable in place, names it: a
+ *   `text` object whole, or a `table` resolved to the one cell the point falls
+ *   in. `undefined` for everything else.
  *
- *   `editorPlacement(target, object, camera, ratioBackingPerCss)` returns the
- *   overlay's top-left corner and size in CSS pixels, from the receiver's own
- *   world box — `extent.ts`'s `objectExtent` for a `text` object, the cell's
- *   world rectangle for a cell — through `camera.ts`'s `worldToScreen`, then
- *   divided by the canvas's backing/CSS ratio the way `panel.ts` does.
+ *   `editorPlacement` returns `left`/`top` in CSS pixels, `width`/`height` in
+ *   **WORLD UNITS**, and the `scale` a caller applies as one CSS transform —
+ *   see `EditorPlacement` for why that split is what makes the browser break
+ *   lines where the canvas does.
  *
- *   `editorTextStyle(target, object, camera, ratioBackingPerCss)` returns how
- *   the overlay SETS that text (**D-129**, widened at entry 0147 on the
- *   operator's report): size, family, line height, alignment and whether it
- *   wraps. Every length is the drawn text's own world value scaled by the SAME
- *   `camera.zoom / ratio` the box is, and every slot is read the way
- *   `renderer.ts` reads it for drawing — because the overlay sits ON the drawn
- *   text, so any disagreement about the font or the wrap width shows up as the
- *   editor breaking a line the canvas keeps whole.
+ *   `editorTextBoxSize` is the LIVE box for the text currently in the editor,
+ *   through `textbox.ts`'s one sizing rule, so the overlay grows under the
+ *   caret rather than scrolling.
+ *
+ *   `editorTextStyle` returns how the overlay SETS that text: WORLD-unit size
+ *   and line height (unscaled — `scale` handles the camera), family, alignment
+ *   and colour, and whether it wraps. Every slot is read the way `renderer.ts`
+ *   reads it for drawing, because the overlay sits ON the drawn text.
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws; reads only, writes nothing (Rule 2).
@@ -41,8 +39,8 @@
  *     (shared `readNumber`/`readText`, the same positive-number tests, the same
  *     blank-family screen, the same `width`-slot wrap rule), so drawn and typed
  *     text lay out the same. `wraps` is `drawText`'s own `wrapWidth` condition,
- *     not a second reading of §5.6's layout rule. `style.color` is the one
- *     `resolveTextStyle` read deliberately NOT mirrored — see NOT DONE HERE.
+ *     not a second reading of §5.6's layout rule. `style.color` is mirrored too
+ *     (entry 0153 reversed D-132's colour clause — see `EditorTextStyle`).
  *   - World<->screen is `camera.ts`'s own `worldToScreen`/`screenToWorld`,
  *     never a second hand-written copy (D-010).
  *   - A cell's rectangle is the SAME `origin` + `TABLE_CELL_*` reading
@@ -65,10 +63,8 @@
  *   - The cell editor's 4-world-unit text inset (`renderer.ts`'s
  *     `TABLE_CELL_TEXT_PADDING`) and a number cell's right-alignment: the
  *     editor holds the SOURCE being typed, which Excel left-aligns too.
- *   - Matching `style.color` (**D-132**). The overlay keeps one high-contrast
- *     ink, set in `index.html`. Colour cannot move a glyph, so unlike the four
- *     slots above it can never make the typed text lay out differently from the
- *     drawn text — which is the defect D-129 exists to close.
+ *   - MEASURING. `editorTextBoxSize` decides what to ask; the caller's injected
+ *     `TextMeasurer` answers it (Rule 1 — no canvas is reached for here).
  */
 import type { CameraState } from "../engine/document.ts";
 import { formatCellReference, parseCellReference } from "../engine/address.ts";

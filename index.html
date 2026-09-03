@@ -195,9 +195,10 @@
 
         The focus ring is an `outline`, painted outside the box and taking no
         layout. `background: transparent` because the canvas underneath is NOT
-        drawing this object's text while the editor is open (`renderDocument`'s
-        `editingObjectId`) — so what shows through is the page, exactly as it
-        would around the drawn text.
+        drawing this receiver's text while the editor is open (`renderDocument`
+        takes the whole `EditorTarget` — a `text` box is skipped entire, a table
+        keeps everything but the one edited cell's value) — so what shows
+        through is the page, exactly as it would around the drawn text.
       */
       .text-editor {
         position: absolute;

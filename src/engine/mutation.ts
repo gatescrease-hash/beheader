@@ -1374,19 +1374,20 @@ export function mutate(
     return { ok: false, message: invalidResizeMessages.join("; ") };
   }
 
-  // D-097 (0100-REVIEW-phase4, the human's "vanishing table"): a `setSlot`
-  // writing directly to a dynamic-family SIZING slot (`table`'s `rows`/`cols`)
-  // is bounded the same way `insertTableLine`/`deleteTableLine` already are,
-  // simulated left-to-right for the same reason (D-050) — a `createObject`
-  // earlier in the SAME batch can mint the table this `setSlot` then targets.
   // The human's 2026-09-02 report, engine side: a slot may be REMOVED only
-  // where an absent one has a settled meaning — a table cell (D-047). See
+  // where an absent one has a settled meaning — a table cell (D-047). Same
+  // left-to-right simulation as the checks around it (D-050). See
   // `findIllegalSlotClears` and `ClearSlotOperation`.
   const illegalClearMessages = findIllegalSlotClears(operations, objects);
   if (illegalClearMessages.length > 0) {
     return { ok: false, message: illegalClearMessages.join("; ") };
   }
 
+  // D-097 (0100-REVIEW-phase4, the human's "vanishing table"): a `setSlot`
+  // writing directly to a dynamic-family SIZING slot (`table`'s `rows`/`cols`)
+  // is bounded the same way `insertTableLine`/`deleteTableLine` already are,
+  // simulated left-to-right for the same reason (D-050) — a `createObject`
+  // earlier in the SAME batch can mint the table this `setSlot` then targets.
   const invalidDimensionMessages = findInvalidDimensionWrites(operations, objects);
   if (invalidDimensionMessages.length > 0) {
     return { ok: false, message: invalidDimensionMessages.join("; ") };

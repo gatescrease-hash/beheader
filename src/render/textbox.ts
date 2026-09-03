@@ -98,8 +98,11 @@ export function textBoxSize(inputs: TextBoxInputs): TextBoxSize {
   const measuredHeight = usable(inputs.measuredHeight);
 
   // Width: a set width is also the wrap width, so it is a FLOOR, never a
-  // ceiling. It grows only for text that could not be wrapped into it — a
-  // single word longer than the box (`measure.ts` breaks between words only).
+  // ceiling. Since entry 0154 gave `measure.ts` CSS's `overflow-wrap:
+  // break-word`, a too-long word is broken rather than left to overflow, so the
+  // floor is reached only by a box narrower than one glyph — but the rule stays
+  // a floor, because a measurement that exceeded the wrap width would otherwise
+  // draw text outside its own box.
   const width =
     fixedWidth !== undefined
       ? Math.max(fixedWidth, measuredWidth ?? 0)

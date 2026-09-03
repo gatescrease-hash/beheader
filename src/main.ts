@@ -111,16 +111,19 @@
  *     object that was given no content (**D-136** clause 1 — a content-bearing
  *     typed `text` leaves the command bar focused instead); it never opens one
  *     on a `circle`/`rect`/`table`.
- *   - Matching the editor overlay's font FAMILY, markdown rendering or text
- *     alignment to the drawn text — the overlay's SIZE tracks
- *     `style.fontSize × camera.zoom` now (D-129), and it no longer clips, but a
- *     full WYSIWYG match stays a noted refinement. Keeping the overlay clear of
- *     an overlapping properties panel is also still unsolved (both anchor to the
- *     object's box; they stay clear at normal window sizes).
- *   - Validating a LOADED document beyond what `loadDocument` checks. D-081 and
- *     D-083 clause 4 are owed by a `document.ts` cycle, not by this one; see
- *     STATUS.md's known problems for what that leaves reachable from the Load
- *     button.
+ *   - Rendering MARKDOWN-lite in the overlay. Size, family, line height,
+ *     alignment and colour all match the drawn text as of entry 0153, and the
+ *     overlay is laid out in WORLD units with ONE `transform: scale()` — never
+ *     pre-multiplied into CSS pixels, which is the bug that rework removed.
+ *     Markup is the one remaining difference, and it is raw on both sides
+ *     today. Keeping the overlay clear of an overlapping properties panel is
+ *     also still unsolved (both anchor to the object's box; they stay clear at
+ *     normal window sizes).
+ *   - Validating a LOADED document beyond what `loadDocument` checks — that
+ *     file owns its own boundary, and entry 0156 closed it (D-108 shape
+ *     validation, D-126's schema-driven derived slots, D-083 clause 4's depth
+ *     check). What `openDocument` adds here is the `.catch` that turns anything
+ *     escaping the promise chain into a refusal instead of silence (D-127).
  *   - Throttling drag mutations to animation frames (§5.9's perf note). One
  *     `mutate` per pointer move, as specified — a fix MUST throttle and MUST NOT
  *     write outside the mutation API.
@@ -858,11 +861,17 @@ function buildPanelSetCommand(target: string, raw: string): SetLiteralCommand | 
  * — D-102 clause 7's "echo of the synthesised command itself". `delete` is here
  * for D-136 clause 2's abandon path only, and only ever with `force` false, so
  * no ` force` suffix is emitted.
+ *
+ * A BOOLEAN value echoes as `TRUE`/`FALSE`, §5.3's exact-uppercase spelling and
+ * the only one `parser.ts` reads back as a boolean (0157-REVIEW). A template
+ * literal would print `false`, which retyped writes the STRING "false" — an
+ * echo the operator cannot type back is not the echo clause 7 asks for. Same
+ * convention `cellLiteralSeed` uses one screen away, for the same reason.
  */
 function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | ClearCommand | DeleteCommand): string {
   switch (command.kind) {
     case "set":
-      return `set ${command.target} ${command.value}`;
+      return `set ${command.target} ${typeof command.value === "boolean" ? (command.value ? "TRUE" : "FALSE") : command.value}`;
     case "set-formula":
       return `set ${command.target} ${command.source}`;
     case "unlink":

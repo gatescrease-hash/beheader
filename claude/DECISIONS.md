@@ -4821,3 +4821,75 @@ as seeding correctly, so this is unlikely), root-cause it; do not paper over it.
 
 **Reversible.** Clause 1 is one added conjunct. Clause 2 is one flag in `start` and a `delete` on
 two existing paths.
+
+---
+
+## D-137 — A file's HEADER is part of the diff that changes its behaviour, and a doc comment is never separated from what it documents
+Answers: 0157-REVIEW-phase5's legibility audit — six sites across five self-reviewed cycles (0152–
+0156), every one of them a header or a comment left describing the design the same cycle replaced
+Ruled: entry 0157-REVIEW-phase5 (reviewer)   Binding on: all future cycles
+
+**What was found.** Entries 0152–0156 changed behaviour in twenty-one files and, in every case,
+updated the doc comment *nearest* the change while leaving the file HEADER — and in two cases the
+comment one declaration away — telling the old story. Six sites, all mechanically checkable:
+
+- `render/editor.ts`'s header still said the overlay's box was "in CSS pixels" and its type style
+  "scaled by the SAME `camera.zoom / ratio` the box is", and listed matching `style.color` under
+  NOT DONE HERE. Entry 0153 reversed all three, and said so in `EditorPlacement`'s and
+  `EditorTextStyle`'s own doc comments — 250 lines below the header that contradicted them.
+- `main.ts`'s header listed font family, alignment and load validation under NOT DONE HERE. All
+  three are done (0147, 0153, 0156).
+- `formula/ast.ts`: `validateFormulaAstShape` was inserted BETWEEN `exceedsMaxFormulaAstDepth`'s
+  doc comment and the function. The comment then documented a type declaration; the function had
+  none.
+- `mutation.ts`: `findIllegalSlotClears` was inserted the same way, under D-097's "vanishing table"
+  comment, leaving `findInvalidDimensionWrites` undocumented.
+- `primitives/text.ts` said "the eight `text`-specific stored slot paths"; there are nine (0154
+  decremented for `overflow`'s removal without accounting for `autoresize` having replaced it).
+- `render/textbox.ts` still explained the width rule by "`measure.ts` breaks between words only",
+  the exact sentence entry 0154 reversed — and 0154's own entry names that sentence as now false,
+  so the correction was written into the log and not into the code.
+
+**Ruling.**
+
+1. **When a cycle changes what a file DOES, that file's header is part of the cycle's diff.** Not a
+   later tidy-up, not the next reader's problem. §5.2's present-tense rule (D-060) already binds the
+   header's CONTENT; this makes the header's REVIEW a step, not an intention.
+2. **Before ending a cycle, re-read the header of every source file the cycle touched**, and check
+   each of `WHAT THIS IS`, `INVARIANTS UPHELD HERE` and `NOT DONE HERE` against what the file now
+   does. `NOT DONE HERE` is the highest-yield of the three and the likeliest to be wrong: it is the
+   only section that goes stale by the file getting BETTER, so nothing about the change draws the
+   eye to it.
+3. **NEVER insert a declaration between a doc comment and the declaration it documents.** A new
+   function goes ABOVE the block comment or BELOW the function that comment belongs to — never
+   between them. This costs nothing to obey and produces two defects at once when broken: an
+   orphaned comment attached to the wrong thing, and a real function with no doc comment at all
+   (§5.3 requires one).
+4. **A COUNT in a comment is a claim, and a claim gets checked.** "the nine paths", "SEVEN
+   operation kinds", "eleven non-derived slots" — when a cycle adds or removes a member, count the
+   members, do not adjust the number by the direction of the change. 0154 removed one slot and
+   decremented, correctly for that edit and wrong for the file, because 0153 had already added one.
+5. **A correction written into a log entry is not a correction.** Entry 0154 identified the stale
+   `textbox.ts` sentence by name and recorded it as "superseded here rather than edited there: the
+   log is append-only continuity". The log being append-only is a rule about ENTRIES, never a reason
+   to leave a false statement standing in source. Fix the source; the entry records that you did.
+
+**Rationale.** §5's whole goal is that a reader who opens ONE file understands it without reading
+anything else, and the header is the first thing they read. A header that is wrong is worse than one
+that is missing, because it stops the reader probing — D-108 clause 1 already ruled exactly this for
+`document.ts`'s "never throws", and this is the same failure in a different file. The pattern is
+specifically a SELF-REVIEW failure mode: the implementer holds the new design in mind, so the header
+reads correctly to them and only to them. Every one of the six sites is a one-line check that no
+amount of care about the CODE will surface, which is why it becomes a step rather than an
+exhortation.
+
+Two of the six were actively dangerous rather than merely stale: `editor.ts`'s and `main.ts`'s
+headers both described the pre-multiplied `fontSize × camera.zoom` overlay that entry 0153 removed —
+the one thing STATUS's own gotcha list says never to reintroduce. A future implementer trusting the
+header over the code would have reintroduced the bug the rework existed to fix.
+
+**Not a licence to sweep.** §5.2's "leave a header alone until a cycle opens that file for another
+reason" (D-058's stance) is unchanged. This binds the header of a file the cycle ALREADY touched,
+and nothing else. No verbosity audit, no header pass, no scheduled sweep.
+
+**Reconciliation required.** None — 0157-REVIEW made all six edits.
