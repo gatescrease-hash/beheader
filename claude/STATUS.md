@@ -1,26 +1,38 @@
-# STATUS — as of entry 0170-REVIEW-phase6
+# STATUS — as of entry 0171-phase6-gate
 
-**PHASE 6: D-141 clause 7's WHOLE SLICE IS NOW BUILT AND REVIEWED — data model (0167, ACCEPTED WITH
-EDITS at 0168-REVIEW) AND `engine/script/stub.ts` + `SCRIPT_SCHEMA` + §5.10's `script` command (0169,
-ACCEPTED at 0170-REVIEW, no edits).** `engine/script/`'s first file fired its own §6.1 trigger 2
-review point, now cleared. **THE GATE REOPENS** — `engine/script/`, `SCRIPT_SCHEMA`, and the `script`
-command may be built on further. Phase 6's acceptance criterion is DEMONSTRATED at the
-mutation/command layer by an integration test (`command/commands.test.ts`, re-verified by
-0170-REVIEW including a hand-run neutralisation) but **STILL NOT CLAIMED** — that is a phase-gate
-entry's own job (§12), and it has not been written yet.
+**PHASE 6 IS GATED (entry 0171, `REVIEW: REQUIRED` — awaiting review).** D-141 clause 7's whole
+slice (data model at 0167/0168-REVIEW, `engine/script/stub.ts` + `SCRIPT_SCHEMA` + §5.10's `script`
+command at 0169/0170-REVIEW) was already built and reviewed. Entry 0171 is the phase-gate claim
+itself (§12, always a §6.1 trigger 1, never absorbed into a batch): Phase 6's ✅ criterion is
+**PASSING**, backed by a D-016 mutation check run fresh in that entry (not merely cited from
+0169/0170-REVIEW's own runs). **This gate has NOT yet cleared review** — the next phase (7) may not
+begin until a reviewer confirms it (§12 clause 4).
+
+**Entry 0171 also settled a scope question STATUS previously left open**, as an implementation-level
+call, not a Q-NNN (it decides gate wording/timing, not data model/addressing/mutation sequence):
+Phase 6's build-order PROSE TITLE ("script stub + image") is descriptive, not part of the ✅
+contract — PROCESS_BRIEF §12 and PROJECT_BRIEF §6 both say the ✅ line IS the contract, and that line
+names only `script`/`polygon`. **`image` rendering is therefore NOT a precondition of this gate** and
+stays exactly as open as it already was (see "Not started" below). **A reviewer may overturn this
+reading** — if so, un-claim the gate with one more entry; no code or stored state depends on it
+either way.
 
 STATE: **GREEN**. Both configs compile, **1844/1844** tests pass, 0 skipped, 0 `.only`.
 **35 test files.** `npx vite build` clean.
 
-Current phase: 6 — script stub + image
+Current phase: 6 — script stub + image (**GATED, entry 0171 — awaiting review**)
 Phase 6 acceptance criterion: *"`script_1.in.factor` is bound to a cell, `polygon_1.radius` is bound
 to `script_1.out.result`, and changing the placeholder output value moves the polygon — with no
-script-specific code in `eval.ts`"* — **DEMONSTRATED, NOT YET GATED.** See 0169's entry, "Acceptance
-criteria status", for the exact honest line between the two; 0170-REVIEW independently re-confirmed
-the "no script-specific code in `eval.ts`" clause by grep and the demonstration by hand-run
-neutralisation.
-Last review point: **0170-REVIEW-phase6** (ACCEPT — entry 0169 accepted with no edits).
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files**
+script-specific code in `eval.ts`"* — **CLAIMED PASSING at entry 0171**, its own fresh D-016
+mutation check pasted in that entry (removed the `placeholder.<port>` dependency line in
+`engine/script/stub.ts`, re-ran the named test, it failed with the predicted D-013 `#REF`, restored,
+full suite re-confirmed green). The "no script-specific code in `eval.ts`" clause reconfirmed by
+grep, third time running (0169, 0170-REVIEW, 0171 all independently).
+Last review point: **0170-REVIEW-phase6** (ACCEPT — entry 0169 accepted with no edits). Entry 0171
+(the gate claim) has not yet been reviewed.
+Cycles since last review: **1/3** · diff since last review: **0 lines / 0 files** (0171 neutralised
+and fully restored one line for its own verification; the tracked diff is empty — but §6.1 trigger 1
+fires regardless of batch state, per §12, so this does not change when review is required)
 
 **0168-REVIEW's finding (settled, kept for history):** the ORIGINAL `isLegalPortName`
 (`graph/node.ts`) only checked non-empty/no-dot, LOOSER than `address.ts`'s `PATH_SEGMENT_PATTERN`
@@ -133,6 +145,15 @@ neutralisation, not just re-reading the entry's own), and how D-141 clause 3's p
 reconciliation is actually satisfied (traced to the interaction of `deriveEdges`'s schema-driven edge
 generation and the generic dangling-reference check, not a special-cased one). Both held. No new
 ruling — D-141 stands exactly as written.
+
+**0171** (`REVIEW: REQUIRED` — **awaiting review**) claims Phase 6's gate: the ✅ criterion is
+PASSING, backed by its own fresh D-016 mutation check (not merely a citation of 0169's/0170-REVIEW's
+prior runs — see that entry's "Verification"). Also answered, as an implementation-level call rather
+than a Q-NNN, the scope question STATUS had left open: the phase's build-order PROSE TITLE ("script
+stub + image") is descriptive, not part of the ✅ contract, so `image` rendering is NOT a
+precondition of this gate. No source changed net (a neutralise-and-restore for the mutation check).
+**The reviewer should confirm or overturn both the criterion claim and the scope-call reading before
+Phase 7 may begin (§12 clause 4).**
 
 ---
 
@@ -393,24 +414,25 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 
 ## Next slice (recommended)
 
-**D-141 clause 7 IS FULLY BUILT AND REVIEWED (0167→0168-REVIEW, 0169→0170-REVIEW). THE GATE IS
-OPEN.** Two independent items remain, neither blocking the other:
+**PHASE 6'S GATE IS CLAIMED (entry 0171) BUT NOT YET REVIEWED.** Per §12 clause 4, "the next phase
+does not begin before the gate clears" — so **the human/reviewer should review entry 0171 next**,
+either confirming the gate (Phase 7 becomes startable) or overturning its scope call (see STATUS's
+top section) and sending it back. This is a `REVIEW: REQUIRED` stop, not a slice an implementer
+should build past.
 
-1. **A Phase 6 gate entry.** The acceptance criterion is DEMONSTRATED (0169's integration test in
-   `command/commands.test.ts`, real output pasted in that entry, independently re-verified including
-   a hand-run neutralisation at 0170-REVIEW) but not yet claimed as a phase gate (§12: a phase gate is
-   its own `REVIEW: REQUIRED` entry, always trigger 1, never absorbed into a batch). **Read D-016
-   before writing it** — 0163 omitted its mutation check; 0164-REVIEW paid it instead and said
-   plainly this will not be extended a second time. Whoever writes this entry should also decide, and
-   state plainly, whether Phase 6's OWN listed scope ("script stub + image," §6's build-order title)
-   requires `image` rendering too before the phase itself is called done, even though the acceptance
-   CRITERION text names only `script`/`polygon` — that reading is not yet settled by any ruling.
-2. **`image` rendering + §5.7's file picker**, needs no ruling and can proceed independently: a
-   `renderer.ts` arm, an `extent.ts` arm and a `hittest.ts` arm (all three TOGETHER — D-066 makes
-   drawn extent and clickable extent one extent, so shipping the extent without the drawing is
-   forbidden), a decoded-`HTMLImageElement` cache with a repaint on load, and a `CommandEffect` for
-   the picker. **The cache and the async repaint are the real design question there** — where live
-   render state lives and what re-triggers a paint — and it deserves its own scope statement.
+Independent of the gate outcome, and startable regardless (Phase 7 needs neither, and the gate's
+scope call explicitly does not make either a precondition):
+
+1. **`image` rendering + §5.7's file picker.** A `renderer.ts` arm, an `extent.ts` arm and a
+   `hittest.ts` arm (all three TOGETHER — D-066 makes drawn extent and clickable extent one extent,
+   so shipping the extent without the drawing is forbidden), a decoded-`HTMLImageElement` cache with
+   a repaint on load, and a `CommandEffect` for the picker. **The cache and the async repaint are the
+   real design question there** — where live render state lives and what re-triggers a paint — and
+   it deserves its own scope statement.
+2. **`script` rendering** (a labelled box with ports) — its own unscoped future slice, same posture
+   `image`'s pre-render state had. Needs a real `addport`/`removeport` UI mechanism too, or ports
+   stay reachable only via raw `mutation.ts` operations (§5.10 names no grammar for either command;
+   do not invent one under §8's last bullet without a real need naming it).
 
 Also open, smaller: `script` rendering (a labelled box with ports) is its OWN unscoped future
 slice — nothing in 0169 touches `render/`. `command/props.ts`'s D-077 walk does not summarise
@@ -467,8 +489,11 @@ to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-Nothing. Entry 0169 was the whole of the batch since 0168-REVIEW and cleared review at 0170-REVIEW
-with no edits — 0/3 cycles, 0 lines/files since the last review point.
+**Entry 0171 — the Phase 6 gate claim itself.** No source file changed (net); the entry is the
+`REVIEW: REQUIRED` claim that Phase 6's ✅ criterion passes, backed by a fresh D-016 mutation check,
+plus the scope-call answer (see STATUS's top section) for whether `image` rendering is a
+precondition. 1/3 cycles, 0 lines/files since 0170-REVIEW — irrelevant to whether review is
+required, since §6.1 trigger 1 (a phase gate) always forces it regardless of batch state.
 
 ## Reviewed but NOT yet seen on screen
 
