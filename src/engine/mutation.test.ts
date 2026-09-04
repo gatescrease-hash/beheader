@@ -3842,6 +3842,15 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
     expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "a.b" }], []).ok).toBe(false);
   });
 
+  it("rejects a port name outside address.ts's path-segment grammar even with no dot — REVIEWER EDIT, 0168-REVIEW", () => {
+    // A name like "my-port" is dot-free but would forge an address
+    // (`script_1.in.my-port`) that parseAddress can never accept — a gap
+    // 0167's original `isLegalPortName` let through.
+    const objects = [scriptObject("obj_1", "script_1")];
+    expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "my-port" }], []).ok).toBe(false);
+    expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "my port" }], []).ok).toBe(false);
+  });
+
   it("rejects adding a name that already exists in the SAME family", () => {
     const objects = [scriptObject("obj_1", "script_1", { in: ["factor"], out: [] })];
     const result = mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "factor" }], []);

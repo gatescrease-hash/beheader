@@ -611,6 +611,11 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
     expect(deserializeDocument(documentWithPorts({ in: ["a.b"], out: [] })).ok).toBe(false);
   });
 
+  it("rejects a dot-free port name outside address.ts's path-segment grammar — REVIEWER EDIT, 0168-REVIEW", () => {
+    expect(deserializeDocument(documentWithPorts({ in: ["my-port"], out: [] })).ok).toBe(false);
+    expect(deserializeDocument(documentWithPorts({ in: ["my port"], out: [] })).ok).toBe(false);
+  });
+
   it("rejects a duplicate name WITHIN the same family", () => {
     expect(deserializeDocument(documentWithPorts({ in: ["factor", "factor"], out: [] })).ok).toBe(false);
   });

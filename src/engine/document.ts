@@ -514,7 +514,8 @@ type PortsReconstructionResult = { readonly ok: true; readonly ports: GraphObjec
  * already takes for a document saved before a derived slot existed. Present
  * means well-FORMED (structural validation only, mirroring
  * `reconstructObject`'s own stance): each of `in`/`out` an array of legal port
- * names (`isLegalPortName` — non-empty, no `.`), unique WITHIN each family.
+ * names (`isLegalPortName` — the same grammar as an address path segment),
+ * unique WITHIN each family.
  * Nothing here checks a `script` object's `out.*` against `placeholders`
  * (D-141 clause 3) — that reconciliation is `mutate`'s job, over the fully
  * reconstructed graph, exactly like every other cross-slot check this file
@@ -535,7 +536,7 @@ function reconstructPorts(raw: unknown, objectName: string): PortsReconstruction
     const seen = new Set<string>();
     for (const name of names) {
       if (typeof name !== "string" || !isLegalPortName(name)) {
-        return { ok: false, message: `${objectName}.ports.${family} holds an illegal port name (must be non-empty and contain no ".")` };
+        return { ok: false, message: `${objectName}.ports.${family} holds an illegal port name (must contain only letters, digits, and underscore)` };
       }
       if (seen.has(name)) {
         return { ok: false, message: `${objectName}.ports.${family} names "${name}" more than once` };

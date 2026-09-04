@@ -277,9 +277,9 @@ export type Slot = LiteralSlot | FormulaSlot | DerivedSlot;
  * `in` is the in-port name order; `out` is the out-port name order and is the
  * SINGLE authority for the out-port NAME set — §5.8's `placeholders` holds
  * VALUES only and is reconciled against this two-way (D-141 clause 3).
- * Legality of an individual name (non-empty, no `.`) is `isLegalPortName`
- * below; uniqueness within a family and the reject-on-referenced-removal rule
- * are `mutation.ts`'s job (D-141 clause 6) — this file only shapes the data.
+ * Legality of an individual name is `isLegalPortName` below; uniqueness
+ * within a family and the reject-on-referenced-removal rule are
+ * `mutation.ts`'s job (D-141 clause 6) — this file only shapes the data.
  *
  * Optional on `GraphObject` because only `script` carries it today; every
  * other type's `ports` is simply absent, not an empty pair — see
@@ -292,17 +292,25 @@ export interface GraphObjectPorts {
 }
 
 /**
- * Whether `name` is a legal port name (D-141 clause 2): non-empty, and
- * containing no `.` — a dot would forge a slot key
- * (`in.<name>`/`out.<name>`, dot-joined by `slotKey`) that no schema path
- * segment is allowed to contain (`address.ts`'s `PATH_SEGMENT_PATTERN`),
- * giving the port an address nothing could ever address correctly. Declared
+ * Whether `name` is a legal port name (D-141 clause 2) — REVIEWER EDIT,
+ * 0168-REVIEW: matches `address.ts`'s (private) `PATH_SEGMENT_PATTERN`,
+ * `/^[a-zA-Z0-9_]+$/`, exactly, not merely "non-empty and dot-free" as the
+ * original cycle had it. A port name becomes a path segment
+ * (`in.<name>`/`out.<name>`, dot-joined by `slotKey`), and `parseAddress`
+ * rejects any segment outside that pattern — the ORIGINAL check let through
+ * a name like `"my-port"` or `"my port"`, which `addPort` would accept and
+ * which no address could then ever name, exactly the "address nothing could
+ * ever address correctly" outcome this function exists to prevent. `node.ts`
+ * cannot import `address.ts` to share the one pattern (`address.ts` already
+ * imports `node.ts` for `ObjectType`/`TABLE_TYPE` — importing back would
+ * cycle), so this is a hand-maintained duplicate of that pattern, the same
+ * posture D-119 already accepts for `resolveTextDependencyAddresses`/
+ * `deriveEdges`'s Source 1: change one, change both, same cycle. Declared
  * here, beside `GraphObjectPorts`, so `mutation.ts`'s port operations and any
- * future caller share one predicate rather than each re-typing the same two
- * conditions.
+ * future caller share one predicate rather than each re-typing it.
  */
 export function isLegalPortName(name: string): boolean {
-  return name.length > 0 && !name.includes(".");
+  return /^[a-zA-Z0-9_]+$/.test(name);
 }
 
 /**

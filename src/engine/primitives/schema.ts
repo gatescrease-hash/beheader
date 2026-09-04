@@ -257,8 +257,11 @@ export interface DerivedSlotSchema {
  *   Resolved against the OBJECT (its `ports.out`, once a `script` schema
  *   exists), NEVER against `Object.keys(object.slots)` — D-010's no-inverse
  *   rule binds this resolver exactly as it binds `NonDerivedSlotPathGroup`'s.
- *   MUST be resolved only during edge derivation (Rule 6) — same rule as
- *   every other `dynamic` resolver in this file.
+ *   MUST be resolved FRESH at every call, never cached across mutations
+ *   (Rule 6) — unlike `NonDerivedSlotPathGroup`'s `dynamic` case, which
+ *   `resolveNonDerivedSlotPaths` names three callers for, this one is
+ *   deliberately resolved from more sites than edge derivation alone —
+ *   `resolveDerivedSlots`'s own doc comment names all of them.
  */
 export type DerivedSlotGroup =
   | { readonly kind: "static"; readonly slots: readonly DerivedSlotSchema[] }

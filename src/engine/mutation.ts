@@ -712,10 +712,10 @@ export interface RenameObjectOperation {
  * PRECONDITIONS, enforced by `mutate` before this is ever folded (mirroring
  * every other variant's own precondition doc comment, `findInvalidPortOperations`):
  * `objectId` names an existing object; `name` is a legal port name
- * (`graph/node.ts`'s `isLegalPortName` — non-empty, no `.`); `name` is not
- * already present in that family, AS OF THIS OPERATION'S OWN POSITION in the
- * batch (simulated left-to-right, the same D-050 posture every other
- * batch-order-sensitive check takes).
+ * (`graph/node.ts`'s `isLegalPortName` — the same grammar as an address path
+ * segment); `name` is not already present in that family, AS OF THIS
+ * OPERATION'S OWN POSITION in the batch (simulated left-to-right, the same
+ * D-050 posture every other batch-order-sensitive check takes).
  *
  * Carries no slot VALUE: adding an `in` port declares the NAME only — the
  * slot itself (a `literal`/`formula` at `in.<name>`) is written by a
@@ -2509,7 +2509,7 @@ function findInvalidPortOperations(operations: readonly Operation[], objects: re
     const family = ports[operation.family];
     if (operation.kind === "addPort") {
       if (!isLegalPortName(operation.name)) {
-        problems.push(`${prefix} attempts to add a port named "${operation.name}", which is not a legal port name (D-141: non-empty, no ".")`);
+        problems.push(`${prefix} attempts to add a port named "${operation.name}", which is not a legal port name (D-141: letters, digits, underscore only)`);
         return;
       }
       if (family.has(operation.name)) {

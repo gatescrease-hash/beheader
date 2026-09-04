@@ -318,6 +318,15 @@ describe("isLegalPortName (D-141 clause 2)", () => {
     expect(isLegalPortName("a.b")).toBe(false);
     expect(isLegalPortName(".")).toBe(false);
   });
+
+  it("rejects a name legal address.ts's PATH_SEGMENT_PATTERN would still reject — REVIEWER EDIT, 0168-REVIEW", () => {
+    // A dot-free name is not enough: parseAddress rejects any path segment
+    // outside `[a-zA-Z0-9_]+`, so a name like "my-port" would be accepted by
+    // a looser check yet be permanently unaddressable as `script_1.in.my-port`.
+    expect(isLegalPortName("my-port")).toBe(false);
+    expect(isLegalPortName("my port")).toBe(false);
+    expect(isLegalPortName("café")).toBe(false);
+  });
 });
 
 describe("GraphObject.ports (D-141)", () => {
