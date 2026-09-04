@@ -61,12 +61,13 @@
  *     a typed `pan <dx> <dy>` would have to say whether those are world units or
  *     screen pixels — which is Q-012's open question, not this slice's to settle.
  *     Owner: the cycle that wires camera commands in `main.ts`.
- *   - `polyline`/`script` creation, `explode`, `addvertex`,
+ *   - `polyline` creation, `explode`, `addvertex`,
  *     `delvertex`. `COMMANDS_SPECIFIED_BUT_NOT_BUILT` names them, and each waits on a
  *     primitive schema or an `Operation` kind that does not exist yet. Owner: the
  *     cycle that builds one. (`text` creation landed at entry 0136 — a normal
  *     registry entry, `content` positional plus optional `x`/`y`; `image` at entry
- *     0165, §5.10's `x`/`y` form with no other argument.)
+ *     0165, §5.10's `x`/`y` form with no other argument; `script` at entry 0169,
+ *     the identical `x`/`y` form, D-141's data model having unblocked it.)
  *   - PARSING a formula. `set <address> = <source>` (D-071) captures the source as a
  *     raw substring and stops; `parseFormula` is never called here. Owner:
  *     `command/commands.ts`, where D-038's four conditions come due.
@@ -118,6 +119,22 @@ export interface CreateRectCommand {
  */
 export interface CreateImageCommand {
   readonly kind: "image";
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * `script x=0 y=0` (§5.10, §5.8).
+ *
+ * Two coordinates and nothing else, the identical shape `image`'s form takes: §5.10
+ * writes this form out in full with no other argument, and a script node's other
+ * state — `language`/`source` and its `in.*`/`out.*` ports — has no place in a
+ * creation line. `language`/`source` come from the handler's defaults (`"python"`/
+ * `""`); ports are declared by explicit `addPort`/`removePort` mutations (D-141
+ * clause 6), not by this command, which creates a portless node.
+ */
+export interface CreateScriptCommand {
+  readonly kind: "script";
   readonly x: number;
   readonly y: number;
 }
@@ -299,6 +316,7 @@ export type Command =
   | CreateTextCommand
   | CreateTableCommand
   | CreateImageCommand
+  | CreateScriptCommand
   | LinkCommand
   | UnlinkCommand
   | ClearCommand
@@ -624,6 +642,25 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     },
   },
   {
+    name: "script",
+    usage: "script x=<number> y=<number>",
+    // §5.10's own form, verbatim: two required coordinates and nothing else. A
+    // script node's `language`/`source` are the handler's defaults, and its
+    // `in.*`/`out.*` ports do not exist until an explicit `addPort` mutation
+    // declares one (D-141 clause 6) — there is no argument here for either.
+    positional: [],
+    named: [requiredNumber("x"), requiredNumber("y")],
+    flags: [],
+    build: (args) => ({ kind: "script", x: numberArgument(args, "x"), y: numberArgument(args, "y") }),
+    // D-072, the same one `image`'s sequence takes: typing `script` alone points
+    // the box instead of typing its corner.
+    prompts: [{ name: "origin", message: "specify script position", accepts: "point" }],
+    buildFromPrompts: (answers) => {
+      const origin = pointAnswer(answers, "origin");
+      return { kind: "script", x: origin.x, y: origin.y };
+    },
+  },
+  {
     name: "link",
     usage: "link <address> <address>",
     positional: [text("target"), text("source")],
@@ -750,17 +787,17 @@ export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec
 /**
  * §5.10 commands with no registry entry yet, so an operator who types one is told the
  * truth ("not built") instead of "unknown command", which would be false. Each waits
- * on something that does not exist: `polyline`/`script` have no schema,
+ * on something that does not exist: `polyline` has no schema,
  * `explode`/`addvertex`/`delvertex` have no `Operation` kind, and `pan` has no stated
- * argument grammar (see the file header). `text` LEFT this list at entry 0136 and
- * `image` at entry 0165, each when its schema and its registry entry landed together.
+ * argument grammar (see the file header). `text` LEFT this list at entry 0136,
+ * `image` at entry 0165, and `script` at entry 0169, each when its schema and its
+ * registry entry landed together.
  *
  * A name moving into the registry MUST leave this list in the same cycle; the two
  * being disjoint is pinned by a test rather than by anyone remembering.
  */
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
   "polyline",
-  "script",
   "explode",
   "addvertex",
   "delvertex",

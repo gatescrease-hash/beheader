@@ -24,9 +24,12 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
   });
 
   it("returns an empty list for a type with no schema entry, never throwing (`primitives/schema.ts`'s registry)", () => {
-    // `script` still has no schema entry (§6's build order — Phase 6). `text`
-    // used to be the example here; entry 0127 gave it one.
-    const object: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {} };
+    // `polyline` is the one remaining type with no schema entry. `text` used to
+    // be the example here (entry 0127 gave it one), then `script` (entry 0169
+    // gave IT one too — `SCRIPT_SCHEMA`'s two dynamic non-derived families are
+    // silently skipped by this file's own D-077 walk, a known gap named in its
+    // header, not exercised by this particular test either way).
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {} };
     expect(buildSlotDescriptors(object, [object])).toEqual([]);
   });
 

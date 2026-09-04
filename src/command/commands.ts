@@ -3,7 +3,8 @@
  *
  * IMPLEMENTS: PROJECT_BRIEF §4's "commands.ts — command handlers -> mutation API
  * calls", §5.10's handler half, §5.5's three geometry presets, §5.4's table,
- * §5.6's `text` and §5.7's `image`. Binding here: D-069, D-070, D-002, D-121, D-122.
+ * §5.6's `text`, §5.7's `image`, and §5.8's `script` (creation only — D-141
+ * clause 7). Binding here: D-069, D-070, D-002, D-121, D-122.
  * LAYER: command. Touches no canvas, DOM, or window. May import: engine/*, own
  *        layer. NEVER imported by engine/*.
  *
@@ -135,6 +136,7 @@ import {
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
+import { SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH } from "../engine/script/stub.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
   ClearCommand,
@@ -143,6 +145,7 @@ import type {
   CreateImageCommand,
   CreatePolygonCommand,
   CreateRectCommand,
+  CreateScriptCommand,
   CreateTableCommand,
   CreateTextCommand,
   DeleteCommand,
@@ -304,6 +307,16 @@ const DEFAULT_IMAGE_OPACITY = 1;
 const DEFAULT_IMAGE_SOURCE = "";
 
 /**
+ * §5.8 fixes `language` to `"python"` and gives no creation-time default for
+ * `source` at all — a fresh script node's code is empty until the operator
+ * writes some, the same "nothing yet" posture `DEFAULT_IMAGE_SOURCE` takes for
+ * a picture. `createScript` supplies both; §5.10's `script x= y=` form carries
+ * no argument for either.
+ */
+const DEFAULT_SCRIPT_LANGUAGE = "python";
+const DEFAULT_SCRIPT_SOURCE = "";
+
+/**
  * D-070 clauses 3 and 4: the reason a count is refused, naming the argument and the
  * range, or `undefined` if it is in range.
  *
@@ -356,6 +369,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return createTable(command, document, context);
     case "image":
       return createImage(command, document, context);
+    case "script":
+      return createScript(command, document, context);
     // `set` and `set-formula` are one command word at the input bar (D-071); the
     // parser splits them by whether the value position began with `=`, and both
     // reach the same slot-writing path below.
@@ -416,6 +431,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "text",
   "table",
   "image",
+  "script",
   "set",
   "link",
   "unlink",
@@ -634,6 +650,32 @@ function createImage(command: CreateImageCommand, document: Document, context: E
     { path: IMAGE_HEIGHT_PATH, value: DEFAULT_IMAGE_HEIGHT },
     { path: IMAGE_OPACITY_PATH, value: DEFAULT_IMAGE_OPACITY },
     { path: IMAGE_SOURCE_PATH, value: DEFAULT_IMAGE_SOURCE },
+  ], context);
+}
+
+/**
+ * `script x=0 y=0` (§5.10, §5.8).
+ *
+ * Supplies the four STATIC non-derived slots `SCRIPT_SCHEMA` declares —
+ * `origin.x`/`origin.y` from the command, `language`/`source` from the
+ * `DEFAULT_SCRIPT_*` values above. `SCRIPT_SCHEMA`'s two dynamic non-derived
+ * families (`in.*`/`placeholder.*`) and its one dynamic derived family
+ * (`out.*`) all resolve against `ports`, which a freshly created object has
+ * none of — `createObjectFromCommand` therefore fills no derived slot here
+ * either, exactly as it fills none for `image`. A script node's ports are
+ * declared afterward by explicit `addPort` mutations (D-141 clause 6); §5.10
+ * names no command word for that, so none is invented here (§8's last bullet).
+ *
+ * No count-style refusal, and none is owed: a script node allocates a fixed
+ * four slots whatever its arguments say (Rule 6) until a port is added, so
+ * there is no unbounded slot allocation for D-070 to bound.
+ */
+function createScript(command: CreateScriptCommand, document: Document, context: EvalContext): CommandOutcome {
+  return createObjectFromCommand(document, "script", [
+    { path: ORIGIN_X_PATH, value: command.x },
+    { path: ORIGIN_Y_PATH, value: command.y },
+    { path: SCRIPT_LANGUAGE_PATH, value: DEFAULT_SCRIPT_LANGUAGE },
+    { path: SCRIPT_SOURCE_PATH, value: DEFAULT_SCRIPT_SOURCE },
   ], context);
 }
 

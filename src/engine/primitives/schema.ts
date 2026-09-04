@@ -30,13 +30,16 @@
  *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
  *   D-011), `table` (§5.4), the three PARAMETRIC geometry presets `circle`/
  *   `polygon`/`rect` (§5.5), `text` (§5.6 — its eleven non-derived slots and its
- *   three derived ones) and `image` (§5.7 — six non-derived slots and no derived
- *   slot at all). Every derived-slot's pure math lives in its own primitive file
- *   (`primitives/geometry.ts`, `primitives/text.ts`); this file only wires it
- *   into the registry, the same split `table`'s own entry already uses.
- *   `polyline` and `script` have no entry; `getObjectSchema` returns
- *   `undefined` for them, honestly, rather than a placeholder. Their schemas
- *   belong to the phases/cycles that introduce them — building them now would be
+ *   three derived ones), `image` (§5.7 — six non-derived slots and no derived
+ *   slot at all) and `script` (§5.8 — D-141 clause 7's next slice: two static
+ *   non-derived paths plus `language`/`source`, two DYNAMIC non-derived families
+ *   and one dynamic derived family, all sized by the object's structural `ports`
+ *   field). Every derived-slot's pure math lives in its own primitive file
+ *   (`primitives/geometry.ts`, `primitives/text.ts`, `engine/script/stub.ts`);
+ *   this file only wires it into the registry, the same split `table`'s own
+ *   entry already uses. `polyline` has no entry; `getObjectSchema` returns
+ *   `undefined` for it, honestly, rather than a placeholder. Its schema
+ *   belongs to the phase/cycle that introduces it — building it now would be
  *   building ahead of the brief's §6 build order.
  *
  * INVARIANTS UPHELD HERE
@@ -93,11 +96,10 @@
  *     rather than carrying its own.
  *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
  *     which consumes this file), cycle detection, or topological evaluation.
- *   - `polyline` and `script` schema entries. `derivedSlots` widened to
- *     `static`/`dynamic` groups (**D-141**, answering Q-026) so a script node's
- *     per-OBJECT `out.*` set CAN be expressed — `script`'s own entry, its
- *     `SCRIPT_SCHEMA`, and `engine/script/stub.ts` are D-141 clause 7's own
- *     separate slice, still not built here.
+ *   - `polyline`'s schema entry — a phase/cycle of its own.
+ *   - Any of `script`'s path constants, enumerators, or compute functions —
+ *     `engine/script/stub.ts` owns all of those; `SCRIPT_SCHEMA` here only wires
+ *     them in, the same split `table`'s entry has with `primitives/table.ts`.
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";
@@ -118,6 +120,13 @@ import {
   verticesDerivedSlots,
 } from "./geometry.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./image.ts";
+import {
+  enumerateScriptInPaths,
+  enumerateScriptOutDerivedSlots,
+  enumerateScriptPlaceholderPaths,
+  SCRIPT_LANGUAGE_PATH,
+  SCRIPT_SOURCE_PATH,
+} from "../script/stub.ts";
 import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
 import {
   computeMeasuredHeight,
@@ -819,6 +828,32 @@ const IMAGE_SCHEMA: ObjectSchema = {
 };
 
 /**
+ * `script` (PROJECT_BRIEF §5.8): D-141 clause 7's own next slice, built on top of
+ * that ruling's already-reviewed data model. Two STATIC non-derived paths
+ * (`origin.x`/`origin.y`, the same imported identity every positioned object
+ * uses) plus `language`/`source`; TWO DYNAMIC non-derived families (`in.*`,
+ * `placeholder.*`) and ONE dynamic derived family (`out.*`), all three sized by
+ * the object's structural `ports` field rather than any evaluated value —
+ * `engine/script/stub.ts` owns every path constant, enumerator, and compute
+ * function; this entry only wires them into the registry, the same split
+ * `table`/`text`/`image`'s own entries already use.
+ *
+ * `slotOptions` closes `language` to its one legal value (§5.8: "language:
+ * 'python' // fixed for now") — the same drop-down mechanism `TEXT_SCHEMA`
+ * already uses for a closed set, applied here to a set of size one.
+ */
+const SCRIPT_SCHEMA: ObjectSchema = {
+  type: "script",
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH] },
+    { kind: "dynamic", enumerate: enumerateScriptInPaths },
+    { kind: "dynamic", enumerate: enumerateScriptPlaceholderPaths },
+  ],
+  derivedSlots: [{ kind: "dynamic", enumerate: enumerateScriptOutDerivedSlots }],
+  slotOptions: [{ path: SCRIPT_LANGUAGE_PATH, values: ["python"] }],
+};
+
+/**
  * The full registry. `Partial` because most `ObjectType`s have no schema entry
  * yet (see file header) — those genuinely have none, and `getObjectSchema`
  * reports that honestly via `undefined` rather than a stand-in entry that
@@ -833,6 +868,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   rect: RECT_SCHEMA,
   text: TEXT_SCHEMA,
   image: IMAGE_SCHEMA,
+  script: SCRIPT_SCHEMA,
 };
 
 /** Looks up an object type's schema. Pure; never throws. `undefined` for a type with no entry yet (see file header). */

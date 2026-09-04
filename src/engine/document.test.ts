@@ -569,17 +569,25 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
 });
 
 // D-141: a `script` node's structural port names round-trip through save/load
-// like any other plain data. No `script` schema exists yet (D-141 clause 7's
-// own scope note), so these tests build the `ports`-carrying object by hand,
-// the same posture the D-126 block above takes for `add`/`value`.
+// like any other plain data. `SCRIPT_SCHEMA` now exists (entry 0169), so a
+// document whose `ports.out` is non-empty must ALSO carry that out port's
+// `placeholder.<name>`/`out.<name>` slots and, for every name in `ports.in`,
+// an `in.<name>` slot — `out.<name>`'s dependencies are real addresses
+// (`in.*` plus the port's own placeholder), and `validateIntegrity`'s
+// dangling-reference check requires every dependency address to resolve to a
+// slot that actually exists (§5.1.1) — an absent NON-derived slot is tolerated
+// on its OWN account (D-018's second check) but not as another slot's
+// dependency. `documentWithPorts`'s optional `slots` parameter supplies
+// exactly what each test's own `ports` value requires; every test below that
+// keeps `out: []` needs none of this, unaffected.
 describe("deserializeDocument — ports (D-141), structural validation only", () => {
-  function documentWithPorts(ports: unknown): unknown {
+  function documentWithPorts(ports: unknown, slots: Record<string, unknown> = {}): unknown {
     return {
       formatVersion: FORMAT_VERSION,
       nextObjectId: 2,
       camera: { x: 0, y: 0, zoom: 1 },
       journal: [],
-      objects: [{ id: "obj_1", name: "script_1", type: "script", slots: {}, ports }],
+      objects: [{ id: "obj_1", name: "script_1", type: "script", slots, ports }],
     };
   }
 
@@ -593,7 +601,19 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
   });
 
   it("round-trips a well-formed ports field unchanged", () => {
-    const result = deserializeDocument(documentWithPorts({ in: ["factor", "speed"], out: ["result"] }));
+    const result = deserializeDocument(
+      documentWithPorts(
+        { in: ["factor", "speed"], out: ["result"] },
+        {
+          "in.factor": { kind: "literal", value: 1 },
+          "in.speed": { kind: "literal", value: 2 },
+          "placeholder.result": { kind: "literal", value: 0 },
+          // "out.result" is deliberately OMITTED — `withSchemaDerivedSlots`
+          // (D-126) synthesizes it, the same mechanical fill a load already
+          // gives every other declared derived path.
+        },
+      ),
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.document.objects[0]?.ports).toEqual({ in: ["factor", "speed"], out: ["result"] });
@@ -621,15 +641,33 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
   });
 
   it("ALLOWS the same name across DIFFERENT families — 'in' and 'out' are independent namespaces", () => {
-    expect(deserializeDocument(documentWithPorts({ in: ["result"], out: ["result"] })).ok).toBe(true);
+    const withPorts = documentWithPorts(
+      { in: ["result"], out: ["result"] },
+      { "in.result": { kind: "literal", value: 1 }, "placeholder.result": { kind: "literal", value: 0 } },
+    );
+    expect(deserializeDocument(withPorts).ok).toBe(true);
   });
 
   it("round-trips through save/load unchanged (saveDocument(loadDocument(json)) === json)", () => {
-    const json = JSON.stringify(documentWithPorts({ in: ["factor"], out: ["result"] }));
+    const json = JSON.stringify(
+      documentWithPorts(
+        { in: ["factor"], out: ["result"] },
+        { "in.factor": { kind: "literal", value: 1 }, "placeholder.result": { kind: "literal", value: 0 } },
+      ),
+    );
     const loaded = loadDocument(json);
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
-      expect(JSON.parse(saveDocument(loaded.document)) as unknown).toEqual(JSON.parse(json));
+      // `out.result` was synthesized by `withSchemaDerivedSlots` on load — the
+      // committed document carries it even though `json` never did, so this
+      // asserts against `json` PLUS that one mechanically-added slot rather
+      // than a bare re-parse of `json` itself.
+      const expected = JSON.parse(json) as { objects: { slots: Record<string, unknown> }[] };
+      const expectedSlots = expected.objects[0]?.slots;
+      if (expectedSlots !== undefined) {
+        expectedSlots["out.result"] = { kind: "derived" };
+      }
+      expect(JSON.parse(saveDocument(loaded.document)) as unknown).toEqual(expected);
     }
   });
 });

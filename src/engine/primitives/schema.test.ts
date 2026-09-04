@@ -66,13 +66,12 @@ describe("getObjectSchema", () => {
   // D-008's lesson: test the unspecified cases, not just the brief's examples.
   // A not-yet-built ObjectType must be an honest `undefined`, not a placeholder
   // that would silently pass a future validation check. `table`/`circle`/
-  // `polygon`/`rect`/`text`/`image` have real entries (their own describe blocks
-  // below); `polyline`/`script` are the remaining unregistered types. Narrowed at
-  // entry 0059, `text` added at 0127, `image` at 0165 — PROCESS_BRIEF §6.1 trigger 5
-  // each time.
+  // `polygon`/`rect`/`text`/`image`/`script` have real entries (their own
+  // describe blocks below); `polyline` is the one remaining unregistered type.
+  // Narrowed at entry 0059, `text` added at 0127, `image` at 0165, `script` at
+  // 0169 — PROCESS_BRIEF §6.1 trigger 5 each time.
   it("returns undefined for an ObjectType with no schema entry yet", () => {
     expect(getObjectSchema("polyline")).toBeUndefined();
-    expect(getObjectSchema("script")).toBeUndefined();
   });
 
   it("returns a real entry for 'table' (D-017's dynamic-slot-family mechanism), with no derived slots", () => {
@@ -171,6 +170,48 @@ describe("getObjectSchema", () => {
     // Every group is `static`: an image's slot set never changes (Rule 6), so there
     // is no sizing slot for D-046/D-097 to bind and no `dynamic` group to resolve.
     expect(schema?.nonDerivedSlotPaths.every((group) => group.kind === "static")).toBe(true);
+  });
+
+  // D-141 clause 7's own next slice, on top of that ruling's already-reviewed
+  // data model. `engine/script/stub.ts` owns every path constant, enumerator,
+  // and compute function — its own test file (`script/stub.test.ts`) exercises
+  // those directly; this only confirms the §5.8 registry wiring, the same
+  // split every other multi-file primitive's own describe block above takes.
+  it("returns a real entry for 'script' (§5.8), with two static + two dynamic non-derived groups and one dynamic derived group", () => {
+    const schema = getObjectSchema("script");
+    expect(schema).toBeDefined();
+    // A portless script node (ports absent, as a freshly created one is):
+    // origin + language + source only, and no derived slots at all.
+    const portless: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {} };
+    expect(resolveNonDerivedSlotPaths(portless, schema?.nonDerivedSlotPaths ?? [])).toEqual([
+      ["origin", "x"],
+      ["origin", "y"],
+      ["language"],
+      ["source"],
+    ]);
+    expect(resolveDerivedSlots(portless, schema?.derivedSlots ?? [])).toEqual([]);
+
+    // A script node with declared ports: in.*/placeholder.* join the static four,
+    // and out.* appears as a derived slot — all sized by `ports`, never by a slot
+    // value (Rule 6; D-141's rationale extended to `placeholder.*` by this entry).
+    const wired: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {}, ports: { in: ["factor"], out: ["result"] } };
+    expect(resolveNonDerivedSlotPaths(wired, schema?.nonDerivedSlotPaths ?? [])).toEqual([
+      ["origin", "x"],
+      ["origin", "y"],
+      ["language"],
+      ["source"],
+      ["in", "factor"],
+      ["placeholder", "result"],
+    ]);
+    const derivedSlots = resolveDerivedSlots(wired, schema?.derivedSlots ?? []);
+    expect(derivedSlots.map((slot) => slot.path)).toEqual([["out", "result"]]);
+    // out.*'s dependencies are dynamic (all currently-declared in.* addresses
+    // PLUS this port's own placeholder — see `script/stub.ts`'s own doc comment
+    // for why the latter is required, not merely descriptive).
+    expect(derivedSlots[0]?.dependencies.kind).toBe("dynamic");
+
+    // `language` is closed to its one legal value (§5.8: fixed for now).
+    expect(schema?.slotOptions).toEqual([{ path: ["language"], values: ["python"] }]);
   });
 });
 

@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { createEmptyDocument, type Document } from "../engine/document.ts";
 import type { EvalContext } from "../engine/eval-context.ts";
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
-import { mutate } from "../engine/mutation.ts";
+import { mutate, type Operation } from "../engine/mutation.ts";
 import { MAX_TABLE_LINES } from "../engine/primitives/table.ts";
 import { hitTest } from "../render/hittest.ts";
 import { INITIAL_INTERACTION_STATE, pointerDown, pointerMove } from "../render/interaction.ts";
@@ -47,6 +47,15 @@ function committed(line: string, document: Document): Document {
     throw new Error(`expected "${line}" to succeed, got: ${outcome.message}`);
   }
   return outcome.document;
+}
+
+/** The document a raw `mutate` batch produced, or a thrown test failure naming `mutate`'s own message — the `mutate`-layer mirror of `committed`, for the port operations §5.10 has no command word for yet (D-141 clause 6). */
+function mutateOrThrow(document: Document, operations: readonly Operation[]): Document {
+  const result = mutate(document.objects, operations, document.journal);
+  if (!result.ok) {
+    throw new Error(`test setup: expected the batch to succeed, got: ${result.message}`);
+  }
+  return { ...document, objects: result.objects, journal: result.journal };
 }
 
 /** The refusal message, or a thrown test failure — the mirror of `committed`. */
@@ -276,7 +285,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
   });
 
   it("carries `createdObjectId` for every creation command, undefined for a non-creation one", () => {
-    for (const line of ['circle x=0 y=0 r=1', 'rect x=0 y=0 w=1 h=1', 'table x=0 y=0', 'text x=0 y=0 ""', 'image x=0 y=0']) {
+    for (const line of ['circle x=0 y=0 r=1', 'rect x=0 y=0 w=1 h=1', 'table x=0 y=0', 'text x=0 y=0 ""', 'image x=0 y=0', 'script x=0 y=0']) {
       const outcome = executeCommand(parsed(line), createEmptyDocument());
       if (isCommandFailure(outcome)) {
         throw new Error(`${line}: ${outcome.message}`);
@@ -321,6 +330,105 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
   it("takes no size arguments — §5.10's form is `image x= y=` and nothing else, so a stray w= is a parse failure rather than a silent default", () => {
     const result = parseCommand("image x=0 y=0 w=50");
     expect(isCommandParseFailure(result) && result.message).toContain('"w"');
+  });
+
+  it("creates a script with its four static slots and no ports — D-141 clause 7's own next slice", () => {
+    const object = onlyObject(committed("script x=30 y=40", createEmptyDocument()));
+    expect(object.type).toBe("script");
+    expect(object.name).toBe("script_1");
+    expect(literalValue(object, ["origin", "x"])).toBe(30);
+    expect(literalValue(object, ["origin", "y"])).toBe(40);
+    expect(literalValue(object, ["language"])).toBe("python");
+    expect(literalValue(object, ["source"])).toBe("");
+    expect(object.ports).toBeUndefined();
+    expect(Object.keys(object.slots).sort()).toEqual(["language", "origin.x", "origin.y", "source"]);
+  });
+
+  it("gives a script the SAME origin paths every positioned object uses, so `link script_1.origin.x <cell>` commits (D-017, D-121's reasoning)", () => {
+    const withTable = committed("table x=0 y=0 rows=1 cols=1", createEmptyDocument());
+    const seeded = committed("set table_1.A1 42", withTable);
+    const withScript = committed("script x=0 y=0", seeded);
+    const linked = committed("link script_1.origin.x table_1.A1", withScript);
+    const script = linked.objects.find((object) => object.name === "script_1");
+    expect(script === undefined ? undefined : getSlot(script, ["origin", "x"])?.kind).toBe("formula");
+    expect(script === undefined ? undefined : getSlot(script, ["origin", "x"])?.value).toBe(42);
+  });
+
+  it("takes no other arguments — §5.10's form is `script x= y=` and nothing else", () => {
+    const result = parseCommand("script x=0 y=0 language=python");
+    expect(isCommandParseFailure(result) && result.message).toContain('"language"');
+  });
+
+  it("declares an in/out port through the existing addPort mutation, then reads/writes it exactly like any other declared slot — the phase's own acceptance shape, at the mutation layer (§6's Phase 6 criterion)", () => {
+    const withScript = committed("script x=0 y=0", createEmptyDocument());
+    const script = onlyNamed(withScript, "script_1");
+
+    // Declares the IN port first, paired with its value in the same batch —
+    // `out.result` does not exist yet, so nothing depends on `in.factor` at
+    // this moment and there is nothing else to wire alongside it.
+    const withIn = mutateOrThrow(withScript, [
+      { kind: "addPort", objectId: script.id, family: "in", name: "factor" },
+      { kind: "setSlot", address: { objectId: script.id, path: ["in", "factor"] }, slot: { kind: "literal", value: 7 } },
+    ]);
+    // `in.factor` is an ordinary declared slot the moment the port exists —
+    // ordinary `set`/`link` reach it with no script-specific command.
+    expect(literalValue(onlyNamed(withIn, "script_1"), ["in", "factor"])).toBe(7);
+
+    // Declares the OUT port second: `out.result` depends on EVERY current
+    // `in.*` address (already real, from the step above) plus its own
+    // placeholder, so this batch supplies the placeholder AND the derived
+    // slot `addPort` itself never creates (its own doc comment; D-018).
+    const withOut = mutateOrThrow(withIn, [
+      { kind: "addPort", objectId: script.id, family: "out", name: "result" },
+      { kind: "setSlot", address: { objectId: script.id, path: ["placeholder", "result"] }, slot: { kind: "literal", value: 0 } },
+      { kind: "setSlot", address: { objectId: script.id, path: ["out", "result"] }, slot: { kind: "derived", value: null } },
+    ]);
+
+    // `out.result` reads the placeholder — set THAT through the ordinary
+    // command layer and the derived slot follows, exactly the phase's
+    // acceptance criterion's shape (changing the placeholder moves whatever
+    // is bound to out.result), with no script-specific code in eval.ts:
+    // `set`/derived evaluation are the same mechanism every other primitive
+    // already uses.
+    const withPlaceholder = committed("set script_1.placeholder.result 99", withOut);
+    expect(getSlot(onlyNamed(withPlaceholder, "script_1"), ["out", "result"])?.value).toBe(99);
+  });
+
+  it("Phase 6's acceptance criterion, its exact shape: a table cell drives script_1.in.factor, another object's slot is bound to script_1.out.result, and moving the placeholder moves that object — with no script-specific code in eval.ts", () => {
+    const withTable = committed("table x=0 y=0 rows=1 cols=1", createEmptyDocument());
+    const seeded = committed("set table_1.A1 3", withTable);
+    const withScript = committed("script x=0 y=0", seeded);
+    const script = onlyNamed(withScript, "script_1");
+
+    // `script_1.in.factor` bound to `table_1.A1` — an ordinary `link`, once the
+    // port exists, exactly like binding any other declared slot.
+    const withIn = mutateOrThrow(withScript, [{ kind: "addPort", objectId: script.id, family: "in", name: "factor" }]);
+    const linkedIn = committed("link script_1.in.factor table_1.A1", withIn);
+    expect(literalValue(onlyNamed(linkedIn, "script_1"), ["in", "factor"])).toBeUndefined(); // it is a FORMULA now, not a literal
+    expect(getSlot(onlyNamed(linkedIn, "script_1"), ["in", "factor"])?.value).toBe(3);
+
+    // `polygon_1.radius` bound to `script_1.out.result` — the derived slot
+    // reads the placeholder, and the polygon's own `radius` is an ordinary
+    // formula slot pointing at it.
+    const withOut = mutateOrThrow(linkedIn, [
+      { kind: "addPort", objectId: script.id, family: "out", name: "result" },
+      { kind: "setSlot", address: { objectId: script.id, path: ["placeholder", "result"] }, slot: { kind: "literal", value: 10 } },
+      { kind: "setSlot", address: { objectId: script.id, path: ["out", "result"] }, slot: { kind: "derived", value: null } },
+    ]);
+    const withPolygon = committed("polygon sides=5 x=0 y=0 r=1", withOut);
+    const linkedOut = committed("link polygon_1.radius script_1.out.result", withPolygon);
+    expect(getSlot(onlyNamed(linkedOut, "polygon_1"), ["radius"])?.value).toBe(10);
+
+    // Changing the placeholder MOVES the polygon (its bound radius changes) —
+    // Phase 6's own criterion, verbatim.
+    const moved = committed("set script_1.placeholder.result 25", linkedOut);
+    expect(getSlot(onlyNamed(moved, "polygon_1"), ["radius"])?.value).toBe(25);
+    expect(getSlot(onlyNamed(moved, "script_1"), ["out", "result"])?.value).toBe(25);
+
+    // And `table_1.A1` still drives `script_1.in.factor` — the binding chain
+    // holds at both ends simultaneously, not just the one under test.
+    const cellChanged = committed("set table_1.A1 7", moved);
+    expect(getSlot(onlyNamed(cellChanged, "script_1"), ["in", "factor"])?.value).toBe(7);
   });
 });
 
@@ -519,6 +627,7 @@ describe("every registry command reaches a handler", () => {
     'text x=0 y=0 "hi"',
     "table x=0 y=0",
     "image x=0 y=0",
+    "script x=0 y=0",
     "set polygon_1.radius 42",
     "set polygon_1.radius = 1 + 1",
     "link polygon_1.origin.x table_x.A1",

@@ -3815,10 +3815,24 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
 });
 
 // AddPortOperation/RemovePortOperation (D-141 clause 6) — the ONLY way a
-// GraphObject's structural `ports` field changes. No `script` schema exists
-// yet (D-141 clause 7's own scope note), so these tests build bare `script`
-// GraphObjects by hand, exactly as node.ts's own D-007 tests do for a type
-// with no built primitive yet.
+// GraphObject's structural `ports` field changes. `SCRIPT_SCHEMA` now exists
+// (entry 0169), so these hand-built `script` GraphObjects must stay consistent
+// with it wherever the fixture's `ports.out` is non-empty:
+//   - D-018 requires a `derived`-kind slot at every declared derived path —
+//     `SCRIPT_SCHEMA` declares one `out.<name>` per name in `ports.out`.
+//   - `out.<name>`'s DEPENDENCIES (`engine/script/stub.ts`'s
+//     `scriptOutDependencies`) are every current `in.*` address plus the
+//     port's own `placeholder.<name>` — and `validateIntegrity`'s
+//     dangling-reference check (§5.1.1) requires every dependency address to
+//     resolve to a REAL slot, not merely a declared-but-tolerated-absent one.
+//     So whenever a fixture's `ports.out` is non-empty, its `in.*`/
+//     `placeholder.*` slots for every currently-declared port must exist too.
+// `addPort`/`removePort` themselves still only ever touch the port NAME list
+// (see each operation's own doc comment) — a test whose OWN batch adds a port
+// that an existing out port would depend on must pair it with a `setSlot`
+// creating the slot, the same layering `command/commands.ts`'s doc comments
+// describe. A fixture whose `ports.out` is EMPTY needs none of this — most of
+// the tests below still build the bare `scriptObject` they always did.
 describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () => {
   function scriptObject(id: string, name: string, ports?: { readonly in: readonly string[]; readonly out: readonly string[] }): GraphObject {
     return ports === undefined ? { id, name, type: "script", slots: {} } : { id, name, type: "script", slots: {}, ports };
@@ -3831,8 +3845,36 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
   });
 
   it("addPort appends to the END of the named family's existing list, leaving the other family untouched", () => {
-    const objects = [scriptObject("obj_1", "script_1", { in: ["factor"], out: ["result"] })];
-    const result = mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "speed" }], []);
+    // `ports.out` already names "result", so `out.result` depends on EVERY
+    // current `in.*` address plus its own placeholder — all three (`in.factor`,
+    // `placeholder.result`, `out.result` itself) must be real slots for the
+    // fixture to be edge-valid BEFORE this batch runs. The batch adds "speed"
+    // to `in`, which immediately becomes a FOURTH thing `out.result` depends
+    // on (`scriptOutDependencies` is dynamic over the object's current
+    // `ports.in`), so it is paired with the `setSlot` that gives it a value —
+    // the realistic "declare, then wire" pattern `command/commands.ts`'s doc
+    // comments describe.
+    const objects: readonly GraphObject[] = [
+      {
+        id: "obj_1",
+        name: "script_1",
+        type: "script",
+        slots: {
+          "in.factor": { kind: "literal", value: 1 },
+          "placeholder.result": { kind: "literal", value: 0 },
+          "out.result": { kind: "derived", value: null },
+        },
+        ports: { in: ["factor"], out: ["result"] },
+      },
+    ];
+    const result = mutate(
+      objects,
+      [
+        { kind: "addPort", objectId: "obj_1", family: "in", name: "speed" },
+        { kind: "setSlot", address: { objectId: "obj_1", path: ["in", "speed"] }, slot: { kind: "literal", value: 2 } },
+      ],
+      [],
+    );
     expect(result.ok && result.objects[0]?.ports).toEqual({ in: ["factor", "speed"], out: ["result"] });
   });
 
@@ -3858,8 +3900,27 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
   });
 
   it("ALLOWS the same name in the OTHER family — 'in' and 'out' are independent namespaces", () => {
-    const objects = [scriptObject("obj_1", "script_1", { in: ["result"], out: [] })];
-    const result = mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "out", name: "result" }], []);
+    // `in.result` is pre-seeded: `ports.in` already names it, and it becomes a
+    // dependency of `out.result` the moment the batch below declares that
+    // out port — see the describe block's own header for why. `ports.out`
+    // starts empty, so nothing requires it to exist YET.
+    const objects: readonly GraphObject[] = [
+      { id: "obj_1", name: "script_1", type: "script", slots: { "in.result": { kind: "literal", value: 1 } }, ports: { in: ["result"], out: [] } },
+    ];
+    // Adding an OUT port declares the name only (`AddPortOperation`'s own doc
+    // comment) — `SCRIPT_SCHEMA` (entry 0169) then requires both its own
+    // derived slot AND its placeholder dependency, so the batch pairs all
+    // three, the same layering `command/commands.ts` describes for a real
+    // script command.
+    const result = mutate(
+      objects,
+      [
+        { kind: "addPort", objectId: "obj_1", family: "out", name: "result" },
+        { kind: "setSlot", address: { objectId: "obj_1", path: ["placeholder", "result"] }, slot: { kind: "literal", value: 0 } },
+        { kind: "setSlot", address: { objectId: "obj_1", path: ["out", "result"] }, slot: { kind: "derived", value: null } },
+      ],
+      [],
+    );
     expect(result.ok).toBe(true);
     expect(result.ok && result.objects[0]?.ports).toEqual({ in: ["result"], out: ["result"] });
   });
@@ -3898,12 +3959,28 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
   });
 
   it("a batch that removes then re-adds the same name in one call is legal — simulated left-to-right (D-050's reasoning)", () => {
-    const objects = [scriptObject("obj_1", "script_1", { in: [], out: ["result"] })];
+    // Starts WITH both the derived slot AND its placeholder dependency
+    // (`ports.in` is empty, so `out.result` depends on nothing but its own
+    // placeholder). `removePort` drops the `out.result` SLOT along with the
+    // name — `removePort`'s own key is exactly `family.name`, so `placeholder.
+    // result` is untouched and survives the round trip — but the re-`addPort`
+    // restores only the NAME, so the re-add must be paired with a `setSlot`
+    // recreating `out.result` itself (`AddPortOperation`'s own doc comment).
+    const objects: readonly GraphObject[] = [
+      {
+        id: "obj_1",
+        name: "script_1",
+        type: "script",
+        slots: { "placeholder.result": { kind: "literal", value: 0 }, "out.result": { kind: "derived", value: null } },
+        ports: { in: [], out: ["result"] },
+      },
+    ];
     const result = mutate(
       objects,
       [
         { kind: "removePort", objectId: "obj_1", family: "out", name: "result" },
         { kind: "addPort", objectId: "obj_1", family: "out", name: "result" },
+        { kind: "setSlot", address: { objectId: "obj_1", path: ["out", "result"] }, slot: { kind: "derived", value: null } },
       ],
       [],
     );

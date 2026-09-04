@@ -41,9 +41,16 @@
  *     tens to hundreds of thousands for a large table (0078-REVIEW) — so this
  *     file walks `schema.nonDerivedSlotPaths` itself instead of calling that
  *     function, and a `dynamic` group becomes ONE summary descriptor rather
- *     than one per path. `TABLE_SCHEMA` is the only `dynamic` group in the
- *     registry today (`primitives/schema.ts`); a future one needs a summary
- *     of its own here, or it is silently dropped rather than spread.
+ *     than one per path. `TABLE_SCHEMA` is the only `dynamic` group this file
+ *     SUMMARISES. **`SCRIPT_SCHEMA` (entry 0169) added TWO more — `in.*` and
+ *     `placeholder.*` — and this file does not summarise those either: its
+ *     `dynamic` branch below only special-cases `TABLE_TYPE`, so a script
+ *     object's `in.*`/`placeholder.*` slots are silently ABSENT from
+ *     `props`/the panel today, known and undisclosed-elsewhere until now.**
+ *     `out.*` is unaffected — it is a DERIVED family, walked correctly by the
+ *     `resolveDerivedSlots` loop below, which has no such gap. Giving `script`
+ *     its own summary row is the next reader of this file's job, not this
+ *     entry's (out of its declared scope).
  *   - A slot's PATH is never hand-built: every descriptor's `path` is a path
  *     array taken directly from the schema (or, for the table summary row,
  *     `address.ts`'s own `TABLE_CELL_PATH_PREFIX`) — D-010. A caller joins it

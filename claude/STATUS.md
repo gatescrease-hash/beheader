@@ -1,42 +1,52 @@
-# STATUS — as of entry 0168-REVIEW-phase6 (ACCEPT WITH EDITS)
+# STATUS — as of entry 0169-script-schema-and-command (REVIEW: REQUIRED, not yet reviewed)
 
-**PHASE 6 IS OPEN. §5.7's `image` is BUILT (headless) and ACCEPTED (D-140). D-141 clause 7's
-DATA-MODEL SLICE for the script node is BUILT AND REVIEWED (entry 0167, ACCEPTED WITH EDITS at
-0168-REVIEW) — `GraphObject.ports`, `derivedSlots` widened to `static`/`dynamic` groups,
-`AddPortOperation`/`RemovePortOperation`, `ports` serialize/deserialize. **THE GATE IS OPEN**:
-`engine/script/stub.ts`, `SCRIPT_SCHEMA`, and §5.10's `script` command — D-141 clause 7's own next
-slice — may start. Its first file is its own §6.1 trigger 2 review point; do not fuse it with
-anything else.**
+**PHASE 6: D-141 clause 7's WHOLE SLICE IS NOW BUILT — data model (0167/0168) AND
+`engine/script/stub.ts` + `SCRIPT_SCHEMA` + §5.10's `script` command (0169). NONE OF ENTRY 0169 IS
+REVIEWED YET.** `engine/script/`'s first file is its own §6.1 trigger 2 review point (fired); three
+pre-existing test fixtures in `mutation.test.ts`/`document.test.ts` also needed updating to stay
+schema-consistent (§6.1 trigger 5 — see 0169's own entry for exactly what and why; no assertion was
+weakened). Phase 6's acceptance criterion is DEMONSTRATED at the mutation/command layer by a new
+integration test (`command/commands.test.ts`) but **NOT CLAIMED** — that is a phase-gate entry's own
+job (§12), not this cycle's, and it has not been written.
 
-STATE: **GREEN**. Both configs compile, **1818/1818** tests pass, 0 skipped, 0 `.only`.
-**34 test files.** `npx vite build` clean.
+STATE: **GREEN**. Both configs compile, **1844/1844** tests pass, 0 skipped, 0 `.only`.
+**35 test files.** `npx vite build` clean.
 
 Current phase: 6 — script stub + image
 Phase 6 acceptance criterion: *"`script_1.in.factor` is bound to a cell, `polygon_1.radius` is bound
 to `script_1.out.result`, and changing the placeholder output value moves the polygon — with no
-script-specific code in `eval.ts`"* — **NOT STARTED.** D-141's data model is built AND reviewed;
-`engine/script/stub.ts`, `SCRIPT_SCHEMA`, and §5.10's `script` command are D-141 clause 7's own
-NEXT slice, and may now start.
+script-specific code in `eval.ts`"* — **DEMONSTRATED, NOT YET GATED.** See 0169's entry, "Acceptance
+criteria status", for the exact honest line between the two.
 Last review point: **0168-REVIEW-phase6** (ACCEPT WITH EDITS — entry 0167 accepted, three files
-edited)
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10)
+edited). **Entry 0169 is awaiting review — nothing in it has been reviewed.**
+Cycles since last review: **1/3** · diff since last review: **~893 lines / 13 files** (already over
+the 800/10 cap on its own — moot, since §6.1 trigger 2 already forces a stop here regardless)
 
-**0168-REVIEW's finding, worth knowing before writing `SCRIPT_SCHEMA`:** the ORIGINAL
-`isLegalPortName` (`graph/node.ts`) only checked non-empty/no-dot, which is LOOSER than
-`address.ts`'s `PATH_SEGMENT_PATTERN` (`/^[a-zA-Z0-9_]+$/`) — a name like `"my-port"` would have
-been accepted by `addPort` yet been permanently unaddressable (`parseAddress` rejects any path
-segment outside that pattern). Fixed at 0168-REVIEW to match the pattern exactly. **If
-`SCRIPT_SCHEMA`'s own port-creation UI/command adds a SECOND naming check anywhere, it must use the
-same grammar — `isLegalPortName` is the one predicate, don't re-derive it.** 0168-REVIEW also
-flagged, as a note for that same cycle and not a defect to fix now: `RemovePortOperation`'s
-"removing an IN port needs no dangling-reference check" reasoning assumes nothing outside a script
-node's own formulas can read its `in.*` — true today only because no `in.*` slot can exist yet
-(no `SCRIPT_SCHEMA`), not because the engine enforces it. Check whether that assumption still holds
-before relying on it.
+**0168-REVIEW's finding (settled, kept for history):** the ORIGINAL `isLegalPortName`
+(`graph/node.ts`) only checked non-empty/no-dot, LOOSER than `address.ts`'s `PATH_SEGMENT_PATTERN`
+(`/^[a-zA-Z0-9_]+$/`) — fixed at 0168-REVIEW to match exactly. `SCRIPT_SCHEMA` (0169) adds no second
+naming check anywhere — `addPort`/`removePort` (via `mutation.ts`'s `findInvalidPortOperations`)
+stay the ONLY gate a port name passes through; nothing in `engine/script/stub.ts` re-derives or
+duplicates it. 0168-REVIEW's OTHER flag — whether `in.*` is genuinely unreadable from outside a
+script node's own formulas — is now MOOT rather than answered: nothing in `SCRIPT_SCHEMA` restricts
+`in.<port>`'s KIND at all (no D-122-style guard), so an ordinary formula elsewhere CAN name
+`script_1.in.factor` as a read address today, exactly as 0168-REVIEW worried. Not treated as a
+defect — §5.8 never says this must be prevented, only that `in.<port>` is "written into by a
+binding" as the NORMAL usage — but it is a real, live capability now, not a hypothetical one.
+
+**NEW FINDING FROM ENTRY 0169, worth knowing before touching `SCRIPT_SCHEMA` or its port
+mechanics again:** `out.<port>`'s dependencies are literal `Address`es (every current `in.*` plus
+the port's own `placeholder.<port>`), not a range — so unlike a table's `cells.*` (D-047's
+empty-in-range exception), `validateIntegrity`'s dangling-reference check (§5.1.1) requires EVERY
+one of those addresses to be a REAL slot the instant any `out.*` port exists. **Declaring a port's
+NAME (`addPort`) and giving it a VALUE (`setSlot`) is not merely a documented convention — it is now
+load-bearing**: a batch that adds a port without pairing it with the matching `setSlot` in the SAME
+batch (or an earlier one) will be rejected the moment anything depends on it. See entry 0169's
+"Decisions I made" #3–#4 for the neutralisation that proved this and the fixture fallout it caused.
 
 ---
 
-## THE ONE THING TO READ FIRST — D-141'S DATA MODEL IS BUILT AND REVIEWED (0167/0168)
+## THE ONE THING TO READ FIRST — D-141 clause 7 IS FULLY BUILT; NONE OF ENTRY 0169 IS REVIEWED
 
 §5.8 makes `script.in.*` and `script.out.*` per-OBJECT slot families whose members are named by the
 operator. **This codebase has nowhere to store that list of names**, and the gap is structural, not
@@ -69,35 +79,23 @@ and (d) are rejected on the record — do not re-litigate them.
 **D-141 clause 7's data-model slice IS BUILT AND REVIEWED — entry 0167, ACCEPTED WITH EDITS at
 0168-REVIEW** (`graph/node.ts`'s `ports` field, `document.ts`'s serialize/deserialize,
 `mutation.ts`'s two new operation kinds, `primitives/schema.ts`'s `static`/`dynamic` widening,
-every existing `derivedSlots` read site migrated and green). **§6.2's gate is OPEN.**
-`engine/script/stub.ts`, `SCRIPT_SCHEMA` and §5.10's `script` command — D-141 clause 7's own next
-slice — may start now, and `engine/script/`'s first file is a §6.1 trigger 2 review point of its
-own. **Do not fuse the two**, and do not rebuild what 0167 already shipped. Before writing
-`SCRIPT_SCHEMA`, read 0168-REVIEW's two notes above (the `isLegalPortName` fix, and the unenforced
-"`in.*` is read-only from outside" assumption).
+every existing `derivedSlots` read site migrated and green).
+
+**D-141 clause 7's OWN NEXT SLICE — `engine/script/stub.ts`, `SCRIPT_SCHEMA`, §5.10's `script`
+command — IS NOW BUILT TOO, at entry 0169, BUT NOT YET REVIEWED.** `engine/script/`'s first file
+already fired its own §6.1 trigger 2 review point, so nothing may build further on top of `script/`
+or `SCRIPT_SCHEMA` until 0169 clears review. §6.2's gate reopens the moment it does. Read entry
+0169's own log for the full account, especially "Decisions I made" (the `placeholder.<port>` family
+and why `out.<port>`'s dependencies had to include it) and the new finding above (the
+in.*/placeholder.* real-slot requirement).
 
 ## What the last two cycles did
 
-**0167** built D-141 clause 7's data-model slice. `graph/node.ts` gained
-`GraphObjectPorts`/`isLegalPortName`/`GraphObject.ports?`. `primitives/schema.ts`'s `derivedSlots`
-widened from a bare array to `readonly DerivedSlotGroup[]` (`static`/`dynamic`, mirroring
-`nonDerivedSlotPaths`), with `resolveDerivedSlots(object, groups)` as the one resolver every
-consumer now calls — `findDerivedSlotSchema` takes the whole object, not a bare type. Every one of
-the eight `schema.derivedSlots` read sites across `mutation.ts` (×3), `document.ts` (×2),
-`graph/eval.ts`, `command/commands.ts`, `command/props.ts` migrated in the same cycle.
-`mutation.ts` gained `AddPortOperation`/`RemovePortOperation` (nine operation kinds now) and
-`findInvalidPortOperations` (an eighth pre-staging check, simulated left-to-right like
-`findInvalidNames`); `removePort` needs no separate "referenced" rejection — dropping the port's
-own slot is what makes the EXISTING dangling-reference check catch it, proven by neutralisation.
-`document.ts` serializes/deserializes an optional `ports` field (structural validation only;
-absent is the legal case for every pre-D-141 document). 26 new tests across four test files; every
-pre-existing test still passes unmodified in assertion, only re-plumbed through the new resolver
-signature. **Still no `script` schema, stub, or command — that is D-141 clause 7's own next slice.**
-
-**0168-REVIEW** accepted 0167 with edits, all re-verified green (1818/1818, both configs clean,
-`vite build` clean). One real gap fixed: `isLegalPortName` (`graph/node.ts`) checked only
-non-empty/no-dot, LOOSER than `address.ts`'s `PATH_SEGMENT_PATTERN`
-(`/^[a-zA-Z0-9_]+$/`) — a name like `"my-port"` would have been accepted by `addPort` yet been
+**0168-REVIEW** accepted entry 0167 (the data-model slice) with edits, all re-verified green
+(1818/1818, both configs clean, `vite build` clean). One real gap fixed: `isLegalPortName`
+(`graph/node.ts`) checked only non-empty/no-dot, LOOSER than `address.ts`'s
+`PATH_SEGMENT_PATTERN` (`/^[a-zA-Z0-9_]+$/`) — a name like `"my-port"` would have been accepted by
+`addPort` yet been
 permanently unaddressable. Tightened to match the pattern exactly, with matching doc-comment and
 message updates in `mutation.ts` and `document.ts`, plus a `schema.ts` comment correction (a false
 "resolved only during edge derivation" claim `DerivedSlotGroup`'s doc comment had copied from
@@ -105,9 +103,58 @@ message updates in `mutation.ts` and `document.ts`, plus a `schema.ts` comment c
 eight sites, not three). Three regression tests added. No new ruling — the fix follows directly
 from D-141 clause 2's own stated intent.
 
+**0169** (awaiting review) built D-141 clause 7's own next slice. `engine/script/stub.ts` (new
+subsystem, §6.1 trigger 2): `ScriptNode`/`evaluateScriptOutput` (§5.8's seam, one disclosed
+implementation deviation in `ScriptNode.in`/`.out`'s type — see the entry's own "Decisions I made"
+#1), path constants, two dynamic `NonDerivedSlotPathGroup` enumerators (`in.*`, `placeholder.*`, the
+LATTER a new family this entry introduces — see "0script" below), one dynamic `DerivedSlotGroup`
+enumerator (`out.*`) whose dependency resolver includes each port's own placeholder address (load
+bearing — proven by neutralisation). `SCRIPT_SCHEMA` wired into `primitives/schema.ts`'s registry.
+§5.10's `script x= y=` command (parser + handler), the identical shape `image`'s takes. A new
+integration test in `command/commands.test.ts` reproduces Phase 6's acceptance criterion's EXACT
+shape end to end and passes — demonstrated, not gated (see "Acceptance criteria status" in the
+entry). Three pre-existing hand-built `script` test fixtures (two in `mutation.test.ts`, three in
+`document.test.ts`) needed updating to stay schema-consistent now that `SCRIPT_SCHEMA` exists — every
+assertion is unchanged; only the FIXTURES gained the slots the new schema now requires. 1844/1844,
+both configs clean, `vite build` clean.
+
 ---
 
 ## Read this first — what a cold reader needs
+
+**0script. A `script` NODE HAS FOUR FIXED SLOTS PLUS THREE DYNAMIC FAMILIES, ALL BUILT AND UNREVIEWED
+(entry 0169).** `origin.x`/`origin.y` (imported, same identity every positioned object uses),
+`language` (literal, closed to `"python"`), `source` (literal, stored, NEVER a dependency of
+anything). Three families, each sized by the STRUCTURAL `ports` field (never a slot value — Rule 6
+holds by construction, D-141's own rationale): `in.<port>` (non-derived, `literal`-by-default,
+`link`-able like any other slot, unrestricted kind), `placeholder.<port>` (non-derived, literal,
+"user-editable" per §5.8 — THIS IS WHERE §5.8's `placeholders` VALUE lives, deliberately a
+SEPARATE family from `out.*` because `out.*` is `derived` and can never be user-set), `out.<port>`
+(derived, computed by `engine/script/stub.ts`'s `evaluateScriptOutput` via a small adapter).
+- **`out.<port>`'s DEPENDENCIES ARE EVERY CURRENT `in.*` ADDRESS PLUS ITS OWN `placeholder.<port>`
+  ADDRESS.** The placeholder half is not in §5.1's one-sentence description of the dependency but is
+  REQUIRED by D-013 (`graph/eval.ts` refuses a compute's `read` of anything outside its declared
+  deps) — without it, editing the placeholder would never re-trigger `out.<port>`. Proven by
+  neutralisation at entry 0169; do not remove it "for tidiness."
+- **THESE ARE LITERAL ADDRESSES, NOT A RANGE** — D-047's "an empty cell in a range is fine" does NOT
+  apply. The moment ANY `out.<port>` exists, EVERY name in `ports.in` and that port's own
+  `placeholder.<port>` MUST be a real slot, or `validateIntegrity`'s dangling-reference check
+  rejects the whole mutation. **Declaring a port's NAME (`addPort`) and giving it a VALUE (`setSlot`)
+  MUST happen in the same batch (or an earlier one) once anything depends on it** — this is not a
+  style preference, it is load-bearing as of entry 0169. See that entry's fixtures for the pattern.
+- **NO `addport`/`removeport` COMMAND EXISTS.** §5.10 names no grammar for one. Every port in entry
+  0169's own tests is declared through raw `mutation.ts` `addPort`/`removePort` operations. Inventing
+  a command for this is §8's last-bullet gold-plating until a real need names the grammar — not this
+  cycle's call to make.
+- **A CREATED `script` NODE IS PORTLESS, INVISIBLE, AND UNSELECTABLE**, the identical posture `image`
+  had before its own rendering cycle. `render/`, `extent.ts`, `hittest.ts` all have ZERO
+  `script`-specific code — D-066 forbids giving it an extent before a drawing pass earns one, and
+  none exists yet.
+- **`command/props.ts` DOES NOT SUMMARISE `script`'s TWO DYNAMIC NON-DERIVED FAMILIES.** `props
+  script_1` (once reachable) would show `origin.*`/`language`/`source`/`out.*` correctly but SILENTLY
+  OMIT `in.*`/`placeholder.*` — that file's own D-077 walk only special-cases `TABLE_TYPE`'s dynamic
+  group. Disclosed in `props.ts`'s own header now; not fixed. Whoever gives `script` a summary row
+  should read that header first.
 
 **0img. AN `image` OBJECT HAS SIX SLOTS AND DRAWS NOTHING.** `origin.x`/`origin.y` (imported from
 `primitives/geometry.ts`, NOT re-declared — the same identity D-121 gave `text`, which is what makes
@@ -330,29 +377,37 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 
 ## Next slice (recommended)
 
-**0167 IS BUILT AND REVIEWED (0168-REVIEW, ACCEPT WITH EDITS) — THE GATE IS OPEN.** Both items
-below may proceed now:
+**ENTRY 0169 IS AWAITING REVIEW. Nothing may build further on `engine/script/`, `SCRIPT_SCHEMA`, or
+the `script` command until it clears (§6.2's gate, plus the trigger-2 review point that its own first
+file fired).** The reviewer's own next action is entry 0169 itself, not a new slice.
 
-1. **`engine/script/stub.ts`, `SCRIPT_SCHEMA`, and §5.10's `script` command**, built ON TOP of
-   0167's data model. This is the phase's whole acceptance criterion and nothing else in Phase 6
-   unblocks it. `engine/script/`'s first file is its own §6.1 trigger 2 review point (D-141 clause 7)
-   — do not fuse it with anything else either. Read 0168-REVIEW's two notes (the `isLegalPortName`
-   fix; the unenforced `in.*`-is-read-only assumption) before starting.
-2. **`image` rendering + §5.7's file picker**, needs no ruling and can proceed in parallel: a
+Once 0169 clears review, two independent items remain, neither blocking the other:
+
+1. **A Phase 6 gate entry.** The acceptance criterion is DEMONSTRATED (0169's new integration test
+   in `command/commands.test.ts`, real output pasted in that entry) but not yet claimed as a phase
+   gate (§12: a phase gate is its own `REVIEW: REQUIRED` entry, always trigger 1, never absorbed into
+   a batch). **Read D-016 before writing it** — 0163 omitted its mutation check; 0164-REVIEW paid it
+   instead and said plainly this will not be extended a second time. Whoever writes this entry should
+   also decide, and state plainly, whether Phase 6's OWN listed scope ("script stub + image," §6's
+   build-order title) requires `image` rendering too before the phase itself is called done, even
+   though the acceptance CRITERION text names only `script`/`polygon` — that reading is not yet
+   settled by any ruling.
+2. **`image` rendering + §5.7's file picker**, needs no ruling and can proceed independently: a
    `renderer.ts` arm, an `extent.ts` arm and a `hittest.ts` arm (all three TOGETHER — D-066 makes
    drawn extent and clickable extent one extent, so shipping the extent without the drawing is
    forbidden), a decoded-`HTMLImageElement` cache with a repaint on load, and a `CommandEffect` for
    the picker. **The cache and the async repaint are the real design question there** — where live
    render state lives and what re-triggers a paint — and it deserves its own scope statement.
 
+Also open, smaller: `script` rendering (a labelled box with ports) is its OWN unscoped future
+slice — nothing in 0169 touches `render/`. `command/props.ts`'s D-077 walk does not summarise
+`script`'s two dynamic non-derived families (`in.*`/`placeholder.*`) — disclosed in that file's
+header, not fixed. No `addport`/`removeport` COMMAND exists (§5.10 names no grammar for one; do not
+invent one under §8's last bullet without a real need naming it).
+
 Cheap adds, still owed, not blocking: a direct `link text_1.origin.y <cell>` test (0137-REVIEW
 §honesty). **D-109 clauses 1–2** (cell decimal precision + no cell-text clipping,
 `render/renderer.ts` only) still need no ruling. **Q-017** headers remain the human's.
-
-**Read D-016 before writing Phase 6's gate entry.** 0163 omitted its mutation check; 0164-REVIEW paid
-it instead and said plainly this will not be extended a second time. Any `REVIEW: REQUIRED`
-phase-gate entry from here on carries its own neutralise/re-run/red-test table beside the claim, or
-it comes back `REVISE`. (0165 carries one voluntarily, for a cycle that claims no criterion at all.)
 
 ## Built and reviewed
 
@@ -396,18 +451,27 @@ to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-Nothing — 0167 is reviewed (0168-REVIEW, ACCEPT WITH EDITS). The gate is open.
+**Entry 0169 — D-141 clause 7's own next slice, in full.** `engine/script/stub.ts` (new subsystem —
+`ScriptNode`, `evaluateScriptOutput`, path constants, `in.*`/`placeholder.*`/`out.*` dynamic-group
+enumerators, `out.<port>`'s compute), `SCRIPT_SCHEMA` wired into the registry, §5.10's `script x= y=`
+command (parser + handler), plus fixture updates in three pre-existing test files
+(`mutation.test.ts`, `document.test.ts`, `command/props.test.ts`) to stay schema-consistent. See
+"0script" above for the cold-reader summary and entry 0169 itself for the full account. **NOT
+REVIEWED.**
 
 ## Reviewed but NOT yet seen on screen
 
-Nothing — and nothing in 0167/0168 is SEEABLE either: pure data model, no render file touched, and
-`image` still draws no pixels, by design. Entry 0161's hanging indent, the last visual item, was
-confirmed on screen 2026-09-03.
+Nothing REVIEWED is unseen. Entry 0169 (unreviewed) is also unseeable by construction — pure engine
+work, no render file touched, a `script` object draws nothing (same posture `image` had before its
+own rendering cycle). Entry 0161's hanging indent, the last visual item, was confirmed on screen
+2026-09-03.
 
 ## Not started
 
-§5.8's script node's SCHEMA/STUB/COMMAND (D-141's data model is BUILT AND REVIEWED as of 0167/0168 —
-`engine/script/stub.ts`, `SCRIPT_SCHEMA`, §5.10's `script` command are the next slice, unblocked) ·
+§5.8's script node's RENDERING (a labelled box with input ports left, output ports right — §5.8's own
+words). The schema/stub/command are BUILT as of entry 0169 (awaiting review) — this item is
+specifically the `render/`/`extent.ts`/`hittest.ts` work, plus a real `addport`/`removeport` UI
+mechanism (§5.10 names no command-line grammar for one, so this may not be "just add a command"). ·
 `image`
 rendering, hit-testing and the §5.7 file picker ·
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
@@ -465,6 +529,17 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
   `props`-able, `link`-able, `delete`-able — and it draws nothing. Deliberate and disclosed (0165);
   the render arm, the extent and the picker are one cycle, not three footnotes. **Do not add the
   extent alone** (D-066).
+- **A `script` OBJECT IS INVISIBLE, UNSELECTABLE, AND UNREACHABLE FROM THE COMMAND LINE FOR PORTS.**
+  `script x= y=` creates a real, schema-conformant, correctly-evaluating node (entry 0169, awaiting
+  review) — but `render/`/`extent.ts`/`hittest.ts` have zero `script`-specific code (same posture
+  `image` had pre-0165), and no command declares a port; every test that wires one does so through
+  raw `mutation.ts` operations. `command/props.ts` also does not summarise its two dynamic
+  non-derived families (`in.*`/`placeholder.*`) — see that file's own header.
+- **A `script` PORT'S NAME AND ITS VALUE MUST BE ESTABLISHED IN THE SAME (OR AN EARLIER) BATCH ONCE
+  ANYTHING DEPENDS ON IT.** `out.<port>`'s dependencies are literal addresses over `in.*` plus its
+  own `placeholder.<port>` — D-047's range exception does not apply — so `addPort` alone (name only)
+  leaves a dangling reference the instant an `out` port exists. Not a defect; `mutation.ts`'s own
+  doc comments already said the pairing was required. Entry 0169 is what made it load-bearing.
 - **A TEXT BOX THAT USES MARKUP CHANGES SIZE WHEN THE EDITOR CLOSES** — the overlay is measured
   from raw source, the canvas from the rendered text. A box with NO markup is unaffected. **The
   human answered this on screen (Q-025 (a), 2026-09-03): the shrink-on-open is WANTED — "ideal and
@@ -618,19 +693,31 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
 
 ## Gotchas for the next model
 
+- **ENTRY 0169 IS UNREVIEWED. Do not build on `engine/script/`, `SCRIPT_SCHEMA`, or the `script`
+  command until it clears review** — its first file already fired its own §6.1 trigger 2, and §6.2's
+  gate stays shut on the whole subsystem until then, exactly as it did for the data model between
+  0167 and 0168-REVIEW.
 - **D-141's DATA MODEL IS BUILT AND REVIEWED (entry 0167, ACCEPT WITH EDITS at 0168-REVIEW) — DO
   NOT REBUILD `GraphObject.ports`, `DerivedSlotGroup`, `resolveDerivedSlots`, or
-  `AddPortOperation`/`RemovePortOperation`.** The next slice is `engine/script/stub.ts` +
-  `SCRIPT_SCHEMA` + §5.10's `script` command, built ON TOP of what 0167 shipped — not a second
-  data-model attempt. Options (b) (a two-level slot family) and (c) (a `string[]` arm on `Value`)
-  stay REJECTED — reaching for either is re-litigating a closed question. `isLegalPortName` was
-  tightened at 0168-REVIEW to match `address.ts`'s `PATH_SEGMENT_PATTERN` exactly — use it as-is,
-  do not loosen it back.
-- **`ObjectSchema.derivedSlots` IS NOW PER OBJECT, LIKE `nonDerivedSlotPaths`** (entry 0167, D-141
-  clause 4) — resolve it with `resolveDerivedSlots(object, schema.derivedSlots)`, never read
-  `schema.derivedSlots` raw. Every schema in today's registry declares only a `static` group; a
-  `dynamic` one (a script node's `out.*`, resolved against `object.ports.out`) is `SCRIPT_SCHEMA`'s
-  own job, not yet written.
+  `AddPortOperation`/`RemovePortOperation`.** Options (b) (a two-level slot family) and (c) (a
+  `string[]` arm on `Value`) stay REJECTED — reaching for either is re-litigating a closed question.
+  `isLegalPortName` was tightened at 0168-REVIEW to match `address.ts`'s `PATH_SEGMENT_PATTERN`
+  exactly — use it as-is, do not loosen it back.
+- **`SCRIPT_SCHEMA` IS BUILT (entry 0169, unreviewed) — DO NOT REBUILD `engine/script/stub.ts`,
+  `enumerateScriptInPaths`/`enumerateScriptPlaceholderPaths`/`enumerateScriptOutDerivedSlots`, or the
+  `script` command.** If review sends it back, fix it in place per the reviewer's own edit list — do
+  not re-derive the whole slice from scratch.
+- **`ObjectSchema.derivedSlots` IS PER OBJECT, LIKE `nonDerivedSlotPaths`** (entry 0167, D-141 clause
+  4) — resolve it with `resolveDerivedSlots(object, schema.derivedSlots)`, never read
+  `schema.derivedSlots` raw. `SCRIPT_SCHEMA`'s `out.*` (entry 0169) is now the registry's first REAL
+  `dynamic` derived group, resolved against `object.ports.out`.
+- **A `DerivedSlotGroup`/`NonDerivedSlotPathGroup` DYNAMIC ENUMERATOR SIZED BY A STRUCTURAL FIELD
+  STILL NEEDS ITS DEPENDENCY ADDRESSES TO BE REAL SLOTS.** D-047's "empty cell in a range is fine"
+  is a RANGE-only exception; a `dynamic` `DerivedSlotDependencies.resolve` returning a literal
+  `Address` (as `SCRIPT_SCHEMA`'s `out.<port>` does, over `in.*` plus its own `placeholder.<port>`)
+  gets the ORDINARY reference treatment — `validateIntegrity`'s dangling-reference check requires it
+  to resolve, full stop. Learned the hard way at entry 0169: three pre-existing `mutation.test.ts`
+  fixtures needed a `setSlot` paired with every `addPort` the moment `ports.out` was non-empty.
 - **AN INERT MODULE'S TESTS AGREE WITH ITS AUTHOR.** 0159's parser passed everything and was wrong.
   0165's `image` is inert BY DESIGN, which is why it carries mutation checks it did not owe — if you
   add to it, wire it to a consumer in the same cycle.
