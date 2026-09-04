@@ -187,6 +187,34 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
     expect(reloadedAdd1?.slots["in.a"]).toMatchObject({ value: 3 }); // recomputed from value_1, not the tampered 999
     expect(reloadedAdd1?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
   });
+
+  it("round-trips an `image` object — six literal slots, no derived ones, and now a SCHEMA to be reconciled against (§5.7, entry 0165)", () => {
+    // Before `image` had a schema entry, `validateIntegrity` skipped the whole
+    // object (D-017's one permitted exception). It no longer does, so a loaded
+    // image must satisfy D-018's two-way check like every other type — which is
+    // what this pins, not the JSON encoding of six plain values.
+    const image: GraphObject = {
+      id: "obj_1",
+      name: "image_1",
+      type: "image",
+      slots: {
+        "origin.x": { kind: "literal", value: 30 },
+        "origin.y": { kind: "literal", value: 40 },
+        width: { kind: "literal", value: 100 },
+        height: { kind: "literal", value: 100 },
+        opacity: { kind: "literal", value: 1 },
+        source: { kind: "literal", value: "data:image/png;base64,iVBORw0KGgo=" },
+      },
+    };
+    const document: Document = { ...createEmptyDocument(), nextObjectId: 2, objects: [image] };
+
+    const result = loadDocument(saveDocument(document));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document).toEqual(document);
+    }
+  });
 });
 
 describe("deserializeDocument — malformed input, never throws", () => {

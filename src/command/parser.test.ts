@@ -51,6 +51,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
     command: { kind: "text", x: 0, y: 0, content: "Hello {= table_x.A1 }" },
   },
   { line: "table x=0 y=0 rows=8 cols=8", command: { kind: "table", x: 0, y: 0, rows: 8, cols: 8 } },
+  { line: "image x=0 y=0", command: { kind: "image", x: 0, y: 0 } },
   { line: "link polygon_1.origin.x table_x.A1", command: { kind: "link", target: "polygon_1.origin.x", source: "table_x.A1" } },
   { line: "unlink polygon_1.origin.x", command: { kind: "unlink", target: "polygon_1.origin.x" } },
   // NOT a §5.10 command word — added 2026-09-02 so a table cell can be emptied

@@ -52,6 +52,9 @@ const EQUIVALENT_FORMS: readonly { readonly name: string; readonly typedLine: st
   { name: "polygon", typedLine: "polygon sides=5 x=0 y=0 r=50", responses: [typed("5"), picked(0, 0), picked(0, 50)] },
   { name: "rect", typedLine: "rect x=0 y=0 w=200 h=100", responses: [picked(0, 0), picked(200, 100)] },
   { name: "table", typedLine: "table x=0 y=0 rows=8 cols=8", responses: [picked(0, 0), typed(""), typed("")] },
+  // §5.10's `image x=0 y=0` gives the command nothing but a position, so its
+  // sequence is ONE point step — the same shape `text`'s is, for the same reason.
+  { name: "image", typedLine: "image x=0 y=0", responses: [picked(0, 0)] },
   // D-124: `text` has ONE step, a point, and NO content step — the pick completes
   // the command with `content` `""`. The typed form that produces the identical
   // Command is therefore `text x=0 y=0 ""`, not §5.10's own content-bearing example.

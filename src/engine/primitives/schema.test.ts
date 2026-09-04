@@ -59,13 +59,13 @@ describe("getObjectSchema", () => {
   // D-008's lesson: test the unspecified cases, not just the brief's examples.
   // A not-yet-built ObjectType must be an honest `undefined`, not a placeholder
   // that would silently pass a future validation check. `table`/`circle`/
-  // `polygon`/`rect`/`text` have real entries (their own describe blocks below);
-  // `polyline`/`script`/`image` are the remaining unregistered types. Narrowed
-  // at entry 0059, `text` added at 0127 — PROCESS_BRIEF §6.1 trigger 5.
+  // `polygon`/`rect`/`text`/`image` have real entries (their own describe blocks
+  // below); `polyline`/`script` are the remaining unregistered types. Narrowed at
+  // entry 0059, `text` added at 0127, `image` at 0165 — PROCESS_BRIEF §6.1 trigger 5
+  // each time.
   it("returns undefined for an ObjectType with no schema entry yet", () => {
     expect(getObjectSchema("polyline")).toBeUndefined();
     expect(getObjectSchema("script")).toBeUndefined();
-    expect(getObjectSchema("image")).toBeUndefined();
   });
 
   it("returns a real entry for 'table' (D-017's dynamic-slot-family mechanism), with no derived slots", () => {
@@ -140,6 +140,28 @@ describe("getObjectSchema", () => {
       paths: [["resolvedContent"], ["width"], ["style", "font"], ["style", "fontSize"], ["style", "lineHeight"]],
     });
     expect(schema?.derivedSlots[2]?.dependencies).toEqual(schema?.derivedSlots[1]?.dependencies);
+  });
+
+  // §5.7's own five-name slot list plus `source`, the sixth the data URL needs and
+  // §5.7 does not name (entry 0165's disclosed deviation). `origin.x`/`origin.y` come
+  // FIRST and are `primitives/geometry.ts`'s constants, not image-specific ones —
+  // that identity is what makes an image draggable by the same per-component rule
+  // every other positioned object uses.
+  it("returns a real entry for 'image' (§5.7), with six static non-derived paths and NO derived slots", () => {
+    const schema = getObjectSchema("image");
+    expect(schema).toBeDefined();
+    expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "image_1", type: "image", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
+      ["origin", "x"],
+      ["origin", "y"],
+      ["width"],
+      ["height"],
+      ["opacity"],
+      ["source"],
+    ]);
+    expect(schema?.derivedSlots).toEqual([]);
+    // Every group is `static`: an image's slot set never changes (Rule 6), so there
+    // is no sizing slot for D-046/D-097 to bind and no `dynamic` group to resolve.
+    expect(schema?.nonDerivedSlotPaths.every((group) => group.kind === "static")).toBe(true);
   });
 });
 

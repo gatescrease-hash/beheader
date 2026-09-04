@@ -2,8 +2,8 @@
  * commands.ts — Command handlers: where a `Command` meets a `Document` (§5.10).
  *
  * IMPLEMENTS: PROJECT_BRIEF §4's "commands.ts — command handlers -> mutation API
- * calls", §5.10's handler half, §5.5's three geometry presets, §5.4's table, and
- * §5.6's `text`. Binding here: D-069, D-070, D-002, D-121, D-122.
+ * calls", §5.10's handler half, §5.5's three geometry presets, §5.4's table,
+ * §5.6's `text` and §5.7's `image`. Binding here: D-069, D-070, D-002, D-121, D-122.
  * LAYER: command. Touches no canvas, DOM, or window. May import: engine/*, own
  *        layer. NEVER imported by engine/*.
  *
@@ -134,11 +134,13 @@ import {
   TEXT_STYLE_LINE_HEIGHT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
   ClearCommand,
   Command,
   CreateCircleCommand,
+  CreateImageCommand,
   CreatePolygonCommand,
   CreateRectCommand,
   CreateTableCommand,
@@ -281,6 +283,27 @@ const DEFAULT_TEXT_STYLE_COLOR = "black";
 const DEFAULT_TEXT_STYLE_ALIGN = "left";
 
 /**
+ * §5.7 gives an `image` object five slots and §5.10's `image x=0 y=0` form supplies
+ * only the position, so the handler fills `width`/`height`/`opacity` and the
+ * `source` slot `primitives/image.ts` adds — the same split `DEFAULT_TEXT_*` above
+ * already uses. They are the handler's provisional pick, not the brief's: §5.7
+ * states no default size and §5.10's grammar has no argument for one.
+ *
+ * A plain number rather than `text`'s `"auto"`: §5.7's "preserve aspect ratio by
+ * default" wants the decoded bitmap's NATURAL size, which no engine slot can see,
+ * so a box the operator can immediately move with `set image_1.width` is the
+ * dumbest correct answer (Rule 5). §5.7's file-picker cycle is free to write the
+ * natural size over these at the moment a picture is chosen.
+ *
+ * `source` starts EMPTY — §5.10's creation form carries no picture, and §5.7 gets one
+ * from a file picker that does not exist yet.
+ */
+const DEFAULT_IMAGE_WIDTH = 100;
+const DEFAULT_IMAGE_HEIGHT = 100;
+const DEFAULT_IMAGE_OPACITY = 1;
+const DEFAULT_IMAGE_SOURCE = "";
+
+/**
  * D-070 clauses 3 and 4: the reason a count is refused, naming the argument and the
  * range, or `undefined` if it is in range.
  *
@@ -331,6 +354,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return createText(command, document, context);
     case "table":
       return createTable(command, document, context);
+    case "image":
+      return createImage(command, document, context);
     // `set` and `set-formula` are one command word at the input bar (D-071); the
     // parser splits them by whether the value position began with `=`, and both
     // reach the same slot-writing path below.
@@ -390,6 +415,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "rect",
   "text",
   "table",
+  "image",
   "set",
   "link",
   "unlink",
@@ -417,7 +443,7 @@ interface LiteralSlotDeclaration {
 }
 
 /**
- * The one creation path all four handlers share: mint an id and a default name,
+ * The one creation path every creation handler shares: mint an id and a default name,
  * build the object's slots, and commit it through `mutate`.
  *
  * The derived slots are filled in from the schema rather than listed per type,
@@ -441,7 +467,7 @@ function createObjectFromCommand(
 ): CommandOutcome {
   const schema = getObjectSchema(type);
   if (schema === undefined) {
-    // Unreachable for the four types below, all of which have entries — kept as a
+    // Unreachable for the six types below, all of which have entries — kept as a
     // returned failure rather than an assumption, because a type losing its schema
     // must not become an exception thrown out of the command line.
     return { ok: false, message: `object type "${type}" has no schema, so nothing can create one` };
@@ -575,6 +601,35 @@ function createText(command: CreateTextCommand, document: Document, context: Eva
     { path: TEXT_STYLE_LINE_HEIGHT_PATH, value: DEFAULT_TEXT_STYLE_LINE_HEIGHT },
     { path: TEXT_STYLE_COLOR_PATH, value: DEFAULT_TEXT_STYLE_COLOR },
     { path: TEXT_STYLE_ALIGN_PATH, value: DEFAULT_TEXT_STYLE_ALIGN },
+  ], context);
+}
+
+/**
+ * `image x=0 y=0` (§5.10, §5.7).
+ *
+ * Supplies all SIX non-derived slots: `origin.x`/`origin.y` from the command, and
+ * `width`/`height`/`opacity`/`source` from the `DEFAULT_IMAGE_*` values above,
+ * exactly as `createText` supplies its eight layout/style defaults. `IMAGE_SCHEMA`
+ * declares no derived slot, so `createObjectFromCommand` fills none.
+ *
+ * No count-style refusal, and none is owed: an `image` object allocates a fixed six
+ * slots whatever its arguments say (Rule 6), so unlike `polygon`/`table` there is no
+ * unbounded slot allocation for D-070 to bound. `opacity` is a VALUE, not a count,
+ * and is deliberately unbounded here — see `primitives/image.ts`.
+ *
+ * A freshly created image is INVISIBLE and unselectable: `source` is empty, nothing
+ * in `render/` draws an `image` yet, and D-066 makes an object that draws nothing
+ * unhittable. That is the state entry 0165 shipped, disclosed rather than papered
+ * over — §5.7's file picker and the drawing pass are the next cycle's.
+ */
+function createImage(command: CreateImageCommand, document: Document, context: EvalContext): CommandOutcome {
+  return createObjectFromCommand(document, "image", [
+    { path: ORIGIN_X_PATH, value: command.x },
+    { path: ORIGIN_Y_PATH, value: command.y },
+    { path: IMAGE_WIDTH_PATH, value: DEFAULT_IMAGE_WIDTH },
+    { path: IMAGE_HEIGHT_PATH, value: DEFAULT_IMAGE_HEIGHT },
+    { path: IMAGE_OPACITY_PATH, value: DEFAULT_IMAGE_OPACITY },
+    { path: IMAGE_SOURCE_PATH, value: DEFAULT_IMAGE_SOURCE },
   ], context);
 }
 

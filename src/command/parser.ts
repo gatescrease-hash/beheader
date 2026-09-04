@@ -61,11 +61,12 @@
  *     a typed `pan <dx> <dy>` would have to say whether those are world units or
  *     screen pixels — which is Q-012's open question, not this slice's to settle.
  *     Owner: the cycle that wires camera commands in `main.ts`.
- *   - `polyline`/`script`/`image` creation, `explode`, `addvertex`,
+ *   - `polyline`/`script` creation, `explode`, `addvertex`,
  *     `delvertex`. `COMMANDS_SPECIFIED_BUT_NOT_BUILT` names them, and each waits on a
  *     primitive schema or an `Operation` kind that does not exist yet. Owner: the
  *     cycle that builds one. (`text` creation landed at entry 0136 — a normal
- *     registry entry, `content` positional plus optional `x`/`y`.)
+ *     registry entry, `content` positional plus optional `x`/`y`; `image` at entry
+ *     0165, §5.10's `x`/`y` form with no other argument.)
  *   - PARSING a formula. `set <address> = <source>` (D-071) captures the source as a
  *     raw substring and stops; `parseFormula` is never called here. Owner:
  *     `command/commands.ts`, where D-038's four conditions come due.
@@ -105,6 +106,20 @@ export interface CreateRectCommand {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+}
+
+/**
+ * `image x=0 y=0` (§5.10, §5.7).
+ *
+ * Two coordinates and nothing else — §5.10 writes this form out in full and gives it
+ * no other argument. §5.7's `width`/`height`/`opacity` and the data URL itself come
+ * from the handler's defaults and are changed by `set` afterwards, because a picture
+ * is chosen from a file (§5.7) rather than typed.
+ */
+export interface CreateImageCommand {
+  readonly kind: "image";
+  readonly x: number;
+  readonly y: number;
 }
 
 /** `table x=0 y=0 rows=8 cols=8` (§5.10). `rows`/`cols` default to §5.4's 8x8, read from `primitives/table.ts` rather than re-spelled here. */
@@ -283,6 +298,7 @@ export type Command =
   | CreateRectCommand
   | CreateTextCommand
   | CreateTableCommand
+  | CreateImageCommand
   | LinkCommand
   | UnlinkCommand
   | ClearCommand
@@ -586,6 +602,28 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     },
   },
   {
+    name: "image",
+    usage: "image x=<number> y=<number>",
+    // §5.10's own form, verbatim: two required coordinates and nothing else. The
+    // other four slots (`width`/`height`/`opacity`/`source`) are the handler's
+    // `DEFAULT_IMAGE_*` and are changed afterwards with `set image_1.width 200` —
+    // adding `w=`/`h=` arguments §5.10 does not write would be the command-language
+    // gold-plating §8's last bullet forbids.
+    positional: [],
+    named: [requiredNumber("x"), requiredNumber("y")],
+    flags: [],
+    build: (args) => ({ kind: "image", x: numberArgument(args, "x"), y: numberArgument(args, "y") }),
+    // D-072 binds every command added from here: typing `image` alone points the
+    // box instead of typing its corner. ONE `point` step, the same shape `text`'s
+    // sequence takes — there is nothing else to ask for, because a picture is
+    // chosen from a file and not from the command line.
+    prompts: [{ name: "origin", message: "specify image position", accepts: "point" }],
+    buildFromPrompts: (answers) => {
+      const origin = pointAnswer(answers, "origin");
+      return { kind: "image", x: origin.x, y: origin.y };
+    },
+  },
+  {
     name: "link",
     usage: "link <address> <address>",
     positional: [text("target"), text("source")],
@@ -712,10 +750,10 @@ export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec
 /**
  * §5.10 commands with no registry entry yet, so an operator who types one is told the
  * truth ("not built") instead of "unknown command", which would be false. Each waits
- * on something that does not exist: `polyline`/`script`/`image` have no schema,
+ * on something that does not exist: `polyline`/`script` have no schema,
  * `explode`/`addvertex`/`delvertex` have no `Operation` kind, and `pan` has no stated
- * argument grammar (see the file header). `text` LEFT this list at entry 0136, when
- * its schema (§5.6) and this file's `text` registry entry both landed.
+ * argument grammar (see the file header). `text` LEFT this list at entry 0136 and
+ * `image` at entry 0165, each when its schema and its registry entry landed together.
  *
  * A name moving into the registry MUST leave this list in the same cycle; the two
  * being disjoint is pinned by a test rather than by anyone remembering.
@@ -723,7 +761,6 @@ export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
   "polyline",
   "script",
-  "image",
   "explode",
   "addvertex",
   "delvertex",

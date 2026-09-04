@@ -8,7 +8,83 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-026**
+Next free ID: **Q-027**
+
+---
+
+## Q-026 — Where does a script node's PORT LIST live, given `Value` cannot hold a list of names and a slot key has no sanctioned inverse?
+Raised: entry 0165-image-primitive (implementer)   Brief section: §5.8 (`ScriptNode`'s `in`/`out`/
+`placeholders`), against §5.1's `Value` union, Rule 6, D-010, D-017, D-018 and D-046.
+Status: **OPEN — BLOCKING Phase 6's script half.** No provisional choice taken: every option below
+changes either the data model or `primitives/schema.ts`'s central shape, which PROCESS_BRIEF §7
+clause 3 makes not-reversible and therefore an escalation rather than a tagged guess.
+
+Ambiguity: §5.8 says `in.<port>` slots are "created and removed by explicit mutations" and that
+`out.<port>`'s schema "declares its inputs as *all* of the node's `in.*` slots". Both families are
+therefore per-OBJECT and variable — a `dynamic` slot family, the shape D-046 already anticipated
+("tomorrow whatever sizes `script.in.*`"). **The brief never says where the list of port NAMES is
+stored, and this codebase currently has nowhere to put it:**
+
+1. **It cannot be a slot VALUE.** §5.1's `Value` union is `number | string | boolean | Point |
+   Point[] | null | ErrorValue`. There is no list-of-strings member, so no `literal` slot can hold
+   `["factor", "speed"]` the way `table`'s `rows` holds `8`.
+2. **It cannot be recovered from the slots the object already has.** `graph/node.ts`'s header states
+   the rule D-010 implies: "There is no sanctioned inverse — never `key.split('.')`", and
+   `mutation.ts`'s header repeats it ("Re-derive the key you need; never invert the one you have").
+   So a `dynamic` `enumerate(object)` may not read `Object.keys(object.slots)` looking for `in.*`.
+3. **A count plus positional names does not answer it either.** Phase 6's own acceptance criterion
+   names `script_1.in.factor`, so the port's NAME is operator data, not an index.
+
+There is a SECOND, independent gap in the same area, and it must be answered by the same ruling
+because option (a) below solves both at once while (b) and (c) solve only the first:
+
+4. **`ObjectSchema.derivedSlots` is a fixed list per TYPE.** `out.*` is per OBJECT. Seven non-test
+   sites read `schema.derivedSlots` directly (`mutation.ts` ×3, `document.ts` ×2, `graph/eval.ts`,
+   `command/commands.ts`, `command/props.ts`), and D-018 requires every declared derived path to
+   carry a `derived`-kind slot on the object — so a per-object `out.*` set cannot be expressed
+   today at all, in either direction.
+
+Options:
+- **(a) A structural field on `GraphObject`** — e.g. `readonly ports?: { in: readonly string[]; out:
+  readonly string[] }`, or the whole of §5.8's `placeholders: Record<string, Value>` (whose KEYS are
+  already exactly the out-port set the brief wants). Plain, serializable, ID-free, no closures —
+  everything PROJECT_BRIEF §2 demands of graph state. Rule 6 holds by construction: only a mutation
+  can change it, and no evaluated value can. **D-046's own scope note leaves this door open**: "A
+  future `GraphObject`-structural home would preserve Rule 6 by construction and remains open."
+  Costs: `graph/node.ts`, `document.ts` (serialize + validate), `mutation.ts` (clone fidelity per
+  D-019, new `addPort`/`removePort` operation kinds, the existence simulation per D-026), and
+  `derivedSlots` widened to the same `static`/`dynamic` group shape `nonDerivedSlotPaths` already
+  has.
+- **(b) A two-level slot family.** A literal `inPortCount` number slot sizes a `portName.<i>` family
+  of literal STRING slots, whose VALUES then size `in.*`. Uses only mechanisms that exist, and stays
+  D-046-legal if every read is `literal`-only. But it makes the slot set depend on the *values* of
+  other slots two levels deep, it needs its own D-097 write-time gate, and it leaves gap 4 (the
+  per-object `out.*` set) completely unsolved.
+- **(c) Widen `Value` with a `string[]` arm.** Reaches the formula engine, the serializer, every
+  compute function and every value-legality check, for one type's benefit. Cheapest to describe and
+  by far the most expensive to live with.
+- **(d) Fix the port sets: exactly one `out.result`, and a fixed number of named `in` ports.** Phase
+  6's criterion passes (it names only `in.factor` and `out.result`), Rule 6 holds trivially, and no
+  new mechanism is built. But it contradicts §5.8's `Record<string, Slot>` for both families and its
+  "declared manually in the UI", and it is the option a later phase would have to undo.
+
+Recommendation: **(a)**, with `placeholders` as the out-port declaration so §5.8's own field carries
+its own meaning, and `derivedSlots` widened to `static | dynamic` groups exactly as
+`nonDerivedSlotPaths` already is — one shape for both halves of the schema, not two. It is the only
+option that answers gap 4, it is the one D-046 already pointed at, and the widening it asks of
+`primitives/schema.ts` is a shape that file has carried on its other half since 0041-REVIEW.
+
+Reversible? **No.** It shapes the data model (`GraphObject`), the mutation sequence (new operation
+kinds and what the clone must preserve) and the schema registry that `mutation.ts`, `graph/eval.ts`
+and `document.ts` all read. PROCESS_BRIEF §7 clause 3 therefore forbids a provisional choice.
+Provisional choice taken: **no**. Tagged at: **nowhere** — no `PROVISIONAL(Q-026)` tag exists, and
+none should be added until this is ruled. `primitives/schema.ts`'s NOT DONE HERE and
+`command/parser.ts`'s `COMMANDS_SPECIFIED_BUT_NOT_BUILT` both name the question instead.
+
+> **Implementer note (entry 0165):** nothing is blocked but the script half of Phase 6. §5.7's
+> `image` needed none of this — its slot set is fixed at six — and is built and green. §5.10's
+> `script` command stays in `COMMANDS_SPECIFIED_BUT_NOT_BUILT`, which is now the honest state rather
+> than a stale one.
 
 ---
 

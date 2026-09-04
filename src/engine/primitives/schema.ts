@@ -22,12 +22,12 @@
  *
  *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
  *   D-011), `table` (§5.4), the three PARAMETRIC geometry presets `circle`/
- *   `polygon`/`rect` (§5.5), and `text` (§5.6 — its eleven non-derived slots
- *   and BOTH derived slots, `resolvedContent` and `measuredHeight`). Every
- *   derived-slot's pure math lives in its own primitive file
+ *   `polygon`/`rect` (§5.5), `text` (§5.6 — its eleven non-derived slots and its
+ *   three derived ones) and `image` (§5.7 — six non-derived slots and no derived
+ *   slot at all). Every derived-slot's pure math lives in its own primitive file
  *   (`primitives/geometry.ts`, `primitives/text.ts`); this file only wires it
  *   into the registry, the same split `table`'s own entry already uses.
- *   `polyline`, `script`, and `image` have no entry; `getObjectSchema` returns
+ *   `polyline` and `script` have no entry; `getObjectSchema` returns
  *   `undefined` for them, honestly, rather than a placeholder. Their schemas
  *   belong to the phases/cycles that introduce them — building them now would be
  *   building ahead of the brief's §6 build order.
@@ -86,7 +86,9 @@
  *     rather than carrying its own.
  *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
  *     which consumes this file), cycle detection, or topological evaluation.
- *   - `polyline`/`script`/`image` schema entries (later Phase 3 cycle, Phase 6).
+ *   - `polyline` and `script` schema entries. `script`'s (§5.8) waits on the answer
+ *     to **Q-026**: `derivedSlots` is a fixed list per TYPE, while a script node's
+ *     `out.*` set is per OBJECT, so this file cannot express one yet.
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";
@@ -106,6 +108,7 @@ import {
   VERTICES_PATH,
   verticesDerivedSlots,
 } from "./geometry.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./image.ts";
 import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
 import {
   computeMeasuredHeight,
@@ -714,6 +717,34 @@ const TEXT_SCHEMA: ObjectSchema = {
 };
 
 /**
+ * `image` (PROJECT_BRIEF §5.7): the smallest primitive in the brief. SIX fixed
+ * non-derived slots — `origin.x`/`origin.y` (`primitives/geometry.ts`'s own
+ * constants, the identical spelling every positioned object uses, so
+ * `render/interaction.ts`'s per-component origin drag reaches an image with no
+ * image-specific code), `width`/`height`, `opacity`, and `source` — and NO derived
+ * slots. §5.7 asks for no computed value: an image is drawn from the data URL it
+ * holds at the box it names, and preserving aspect ratio needs the decoded
+ * bitmap's natural size, which lives in `render/` and is not graph state.
+ *
+ * `source` is a SIXTH slot §5.7's own list does not name. It is where §5.7's "store
+ * as a data URL in the document" has to land: a `GraphObject` is `{ id, name,
+ * type, slots }`, so "in the document" means "in a slot", and §5.1's `Value` union
+ * admits `string` — the same shape §5.6's `content` already takes. Disclosed as a
+ * deviation at entry 0165; see `primitives/image.ts` for the full reasoning.
+ *
+ * All six are `static`. An image's slot set never changes (Rule 6), so unlike
+ * `table` there is no `dynamic` group here and no sizing slot for D-046/D-097 to
+ * bind — the correct declaration, not merely the convenient one.
+ */
+const IMAGE_SCHEMA: ObjectSchema = {
+  type: "image",
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, IMAGE_WIDTH_PATH, IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH] },
+  ],
+  derivedSlots: [],
+};
+
+/**
  * The full registry. `Partial` because most `ObjectType`s have no schema entry
  * yet (see file header) — those genuinely have none, and `getObjectSchema`
  * reports that honestly via `undefined` rather than a stand-in entry that
@@ -727,6 +758,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   polygon: POLYGON_SCHEMA,
   rect: RECT_SCHEMA,
   text: TEXT_SCHEMA,
+  image: IMAGE_SCHEMA,
 };
 
 /** Looks up an object type's schema. Pure; never throws. `undefined` for a type with no entry yet (see file header). */

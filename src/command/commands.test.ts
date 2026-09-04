@@ -276,7 +276,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
   });
 
   it("carries `createdObjectId` for every creation command, undefined for a non-creation one", () => {
-    for (const line of ['circle x=0 y=0 r=1', 'rect x=0 y=0 w=1 h=1', 'table x=0 y=0', 'text x=0 y=0 ""']) {
+    for (const line of ['circle x=0 y=0 r=1', 'rect x=0 y=0 w=1 h=1', 'table x=0 y=0', 'text x=0 y=0 ""', 'image x=0 y=0']) {
       const outcome = executeCommand(parsed(line), createEmptyDocument());
       if (isCommandFailure(outcome)) {
         throw new Error(`${line}: ${outcome.message}`);
@@ -285,6 +285,42 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     }
     const listed = executeCommand(parsed("list"), createEmptyDocument());
     expect(isCommandFailure(listed) ? undefined : listed.createdObjectId).toBeUndefined();
+  });
+
+  it("creates an image with all six non-derived slots — §5.7's five plus the `source` the data URL needs — and no derived ones (entry 0165)", () => {
+    const object = onlyObject(committed("image x=30 y=40", createEmptyDocument()));
+    expect(object.type).toBe("image");
+    expect(object.name).toBe("image_1");
+    expect(literalValue(object, ["origin", "x"])).toBe(30);
+    expect(literalValue(object, ["origin", "y"])).toBe(40);
+    expect(literalValue(object, ["width"])).toBe(100);
+    expect(literalValue(object, ["height"])).toBe(100);
+    expect(literalValue(object, ["opacity"])).toBe(1);
+    // §5.10's creation form carries no picture; §5.7's file picker does not exist yet.
+    expect(literalValue(object, ["source"])).toBe("");
+    expect(Object.keys(object.slots).sort()).toEqual(["height", "opacity", "origin.x", "origin.y", "source", "width"]);
+  });
+
+  it("gives an image the SAME origin paths every positioned object uses, so `link image_1.origin.x <cell>` commits (D-017, D-121's reasoning)", () => {
+    const withTable = committed("table x=0 y=0 rows=1 cols=1", createEmptyDocument());
+    const seeded = committed("set table_1.A1 42", withTable);
+    const withImage = committed("image x=0 y=0", seeded);
+    // Only a SCHEMA-DECLARED path may hold a formula slot (D-017), so this line is
+    // the schema entry's proof, not the `link` handler's.
+    const linked = committed("link image_1.origin.x table_1.A1", withImage);
+    const image = linked.objects.find((object) => object.name === "image_1");
+    expect(image === undefined ? undefined : getSlot(image, ["origin", "x"])?.kind).toBe("formula");
+    expect(image === undefined ? undefined : getSlot(image, ["origin", "x"])?.value).toBe(42);
+  });
+
+  it("accepts an opacity outside 0..1 — it sizes no slot family, so D-070's count bound does not reach it and the renderer clamps what it paints", () => {
+    const document = committed("set image_1.opacity 4", committed("image x=0 y=0", createEmptyDocument()));
+    expect(literalValue(onlyObject(document), ["opacity"])).toBe(4);
+  });
+
+  it("takes no size arguments — §5.10's form is `image x= y=` and nothing else, so a stray w= is a parse failure rather than a silent default", () => {
+    const result = parseCommand("image x=0 y=0 w=50");
+    expect(isCommandParseFailure(result) && result.message).toContain('"w"');
   });
 });
 
@@ -482,6 +518,7 @@ describe("every registry command reaches a handler", () => {
     "rect x=0 y=0 w=1 h=1",
     'text x=0 y=0 "hi"',
     "table x=0 y=0",
+    "image x=0 y=0",
     "set polygon_1.radius 42",
     "set polygon_1.radius = 1 + 1",
     "link polygon_1.origin.x table_x.A1",
