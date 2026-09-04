@@ -1,7 +1,8 @@
-# STATUS — as of entry 0165
+# STATUS — as of entry 0166-REVIEW-phase6
 
-**PHASE 6 IS OPEN AND HALF OF IT IS BLOCKED. §5.7's `image` is BUILT (headless). §5.8's `script`
-CANNOT BE STARTED until Q-026 is ruled — read Q-026 before anything else.**
+**PHASE 6 IS OPEN AND NOTHING IS BLOCKED. §5.7's `image` is BUILT (headless) and ACCEPTED (D-140).
+§5.8's `script` is UNBLOCKED: Q-026 is CLOSED → D-141 — read D-141 before writing a line of script
+code, especially clause 7, which says which slice comes first and what may not be fused into it.**
 
 STATE: **GREEN**. Both configs compile, **1789/1789** tests pass, 0 skipped, 0 `.only`.
 **34 test files.** `npx vite build` clean.
@@ -9,17 +10,18 @@ STATE: **GREEN**. Both configs compile, **1789/1789** tests pass, 0 skipped, 0 `
 Current phase: 6 — script stub + image
 Phase 6 acceptance criterion: *"`script_1.in.factor` is bound to a cell, `polygon_1.radius` is bound
 to `script_1.out.result`, and changing the placeholder output value moves the polygon — with no
-script-specific code in `eval.ts`"* — **NOT STARTED, BLOCKED on Q-026.**
-Last review point: **0164-REVIEW-phase5-gate** (ACCEPT WITH EDITS)
-Cycles since last review: **1/3** · diff since last review: **~320 lines / 9 files** (cap 800/10)
+script-specific code in `eval.ts`"* — **NOT STARTED. No longer blocked (D-141).**
+Last review point: **0166-REVIEW-phase6** (ACCEPT WITH EDITS — entry 0165 accepted; D-140, D-141)
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10)
 
-**REVIEW IS REQUIRED BEFORE THE NEXT SLICE.** Entry 0165 fired §6.1 trigger 3 twice (one brief
-deviation, one load-bearing ambiguity) and trigger 5 once. It also touched `primitives/schema.ts`,
-which §6.2 puts on the load-bearing list.
+**THE GATE IS OPEN — start the next slice.** Entry 0165's three §6.1 triggers (deviation ×2,
+changed test expectations ×1) and its `primitives/schema.ts` touch under §6.2 are all cleared by
+0166-REVIEW. The next slice is D-141 clause 7's data-model change, or `image`'s render half; either
+is a fresh batch.
 
 ---
 
-## THE ONE THING TO READ FIRST — Q-026 BLOCKS THE SCRIPT NODE
+## THE ONE THING TO READ FIRST — D-141 (Q-026, ANSWERED) SHAPES THE WHOLE SCRIPT NODE
 
 §5.8 makes `script.in.*` and `script.out.*` per-OBJECT slot families whose members are named by the
 operator. **This codebase has nowhere to store that list of names**, and the gap is structural, not
@@ -39,12 +41,21 @@ read at **seven** non-test sites (`mutation.ts` ×3, `document.ts` ×2, `graph/e
 `derived`-kind slot at every declared derived path, so today a per-object `out.*` cannot be expressed
 in either direction.
 
-**Q-026 lays out four options and recommends (a)** — a structural field on `GraphObject` (D-046's own
-scope note already left that door open: *"A future `GraphObject`-structural home would preserve Rule 6
-by construction and remains open"*), with `derivedSlots` widened to the same `static`/`dynamic` group
-shape `nonDerivedSlotPaths` has carried since 0041-REVIEW. **No provisional choice was taken and no
-`PROVISIONAL(Q-026)` tag exists** — §7 clause 3 forbids one, because the answer shapes the data model
-and the mutation sequence.
+**Q-026 IS ANSWERED — D-141 (0166-REVIEW), option (a). Read the ruling, not this summary, before
+building.** Its seven clauses in one breath: port NAMES are structural, ORDERED, name-only state on
+`GraphObject` (D-046's scope note already left that door open); a name with a `.`, an empty name or a
+duplicate is REJECTED at mutation time; `ports.out` is the SINGLE authority for the out-port name set
+and §5.8's `placeholders` holds VALUES only, reconciled two-way in D-018's shape;
+`ObjectSchema.derivedSlots` widens to `static`/`dynamic` groups resolved against the OBJECT, never
+against `Object.keys(object.slots)` (D-010); a port set changes only through a new `Operation` kind,
+and removing an out port something references is REJECTED, never silently dropped. Options (b), (c)
+and (d) are rejected on the record — do not re-litigate them.
+
+**D-141 clause 7 is the scope rule for the next cycle: the data-model change is its OWN slice**
+(`graph/node.ts`, `document.ts`, `mutation.ts`, `primitives/schema.ts`'s widening, every existing
+`derivedSlots` read site migrated and green). `engine/script/stub.ts`, `SCRIPT_SCHEMA` and §5.10's
+`script` command come AFTER it — and `engine/script/`'s first file is a §6.1 trigger 2 review point
+of its own. **Do not fuse the two.**
 
 ## What the last cycle did
 
@@ -65,8 +76,8 @@ the per-component origin drag reach an image with no image-specific code), `widt
 `opacity`, `source`. **No derived slots at all.**
 - **`source` IS A SIXTH SLOT §5.7's OWN LIST DOES NOT NAME.** §5.7 enumerates five and then says the
   data URL is "stored in the document"; a `GraphObject` is `{ id, name, type, slots }`, so that can
-  only mean a slot, and `Value` admits `string`. Disclosed deviation, entry 0165 decision 1, awaiting
-  the reviewer.
+  only mean a slot, and `Value` admits `string`. Disclosed deviation, entry 0165 decision 1,
+  **RATIFIED at D-140** — permanent, not provisional.
 - **`source` is NOT `literal`-only.** D-122 narrowed `text.content` because a formula-driven
   `content` hides embedded references from edge derivation. Nothing parses a data URL, so no guard
   is needed and none was added. Do not "fix" this into a D-122 clone.
@@ -79,9 +90,11 @@ the per-component origin drag reach an image with no image-specific code), `widt
 - **`DEFAULT_IMAGE_WIDTH`/`_HEIGHT` are `100`, not `"auto"`.** `text`'s `"auto"` works because a
   measurer answers it; §5.7's equivalent is the decoded bitmap's NATURAL size, which no engine slot
   can see. The file-picker cycle is free to write the natural size over these.
-- **A CREATED IMAGE IS INVISIBLE AND UNSELECTABLE.** `extent.ts`, `hittest.ts` and `renderer.ts` all
-  still return "draws nothing" for `image`, untouched this cycle. **Do not give `image` an extent
-  before the renderer draws it** — D-066 makes drawn extent and clickable extent ONE extent.
+- **A CREATED IMAGE IS INVISIBLE AND UNSELECTABLE, and D-140 clause 4 says that is CORRECT as
+  shipped.** `extent.ts`, `hittest.ts` and `renderer.ts` all return "draws nothing" for `image`.
+  **Do not give `image` an extent before the renderer draws it** — D-066 makes drawn extent and
+  clickable extent ONE extent. (0166-REVIEW corrected the comments in those three files that still
+  said `image` has no schema; the arms themselves are unchanged.)
 
 **0. `TEXT_SCHEMA` HAS ELEVEN NON-DERIVED + THREE DERIVED SLOTS.** Non-derived: `origin.x`/`origin.y`
 (D-121) + `content` + `width`/`height`/**`autoresize`** + five `style.*`. **NO `overflow`** — the slot
@@ -278,12 +291,13 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 
 ## Next slice (recommended)
 
-**STOP AND GET 0165 REVIEWED FIRST.** After that, in order:
+**0165 IS REVIEWED AND ACCEPTED (0166-REVIEW). The gate is open.** In order:
 
-1. **Q-026's ruling, then §5.8's script node.** This is the phase's whole acceptance criterion and
-   nothing else in Phase 6 unblocks it. Expect the ruling to touch `graph/node.ts`,
+1. **D-141's data-model slice, then §5.8's script node.** This is the phase's whole acceptance
+   criterion and nothing else in Phase 6 unblocks it. The ruling touches `graph/node.ts`,
    `primitives/schema.ts`, `mutation.ts` and `document.ts` — every one of them on §6.2's load-bearing
-   list, so plan it as its own reviewed batch, not as a tail on something else.
+   list, so it is its own reviewed batch, not a tail on something else, and `engine/script/stub.ts`
+   is a separate slice after it (D-141 clause 7; §6.1 trigger 2 fires on it in its own right).
 2. **`image` rendering + §5.7's file picker**, needs no ruling and can proceed in parallel: a
    `renderer.ts` arm, an `extent.ts` arm and a `hittest.ts` arm (all three TOGETHER — D-066 makes
    drawn extent and clickable extent one extent, so shipping the extent without the drawing is
@@ -330,17 +344,19 @@ rendering; D-123, Q-024 answered · **0142-REVIEW** `measuredWidth`; Q-024 CLOSE
 · the wiring — `layOutText` replacing `layOutLines`, `renderer.ts`'s `drawText` painting runs and
 aligning by arithmetic, `main.ts`'s `sourceMeasurer` (0160) · hanging indents for wrapped list items
 (0161) · **0162-REVIEW** the 0159–0161 batch; **D-139** (Q-025 closed) · Phase 5 gate test (0163) ·
-**0164-REVIEW** the Phase 5 gate — CLOSED, ACCEPT WITH EDITS.
+**0164-REVIEW** the Phase 5 gate — CLOSED, ACCEPT WITH EDITS · §5.7's `image`, headless, + Q-026
+(0165) · **0166-REVIEW** entry 0165 ACCEPTED WITH EDITS; **D-140** (the `source` slot ratified) and
+**D-141** (Q-026 closed, option (a)).
 
 **PHASES 0–5 ARE DONE.** Do not reopen the text pipeline to "add more" to it — anything new belongs
 to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-- **§5.7's `image` primitive, engine + command layers, headless** (entry 0165):
-  `src/engine/primitives/image.ts` (NEW), `IMAGE_SCHEMA`, `CreateImageCommand` + registry entry +
-  prompt sequence, `createImage` + `DEFAULT_IMAGE_*`, and tests across five files.
-- **Q-026 raised** (no code, no tag).
+Nothing. Entry 0165 — §5.7's `image` primitive through the engine and command layers, headless
+(`src/engine/primitives/image.ts`, `IMAGE_SCHEMA`, `CreateImageCommand` + registry entry + prompt
+sequence, `createImage` + `DEFAULT_IMAGE_*`, tests across five files) — is **REVIEWED and ACCEPTED**
+at 0166-REVIEW, and Q-026 is **answered** (D-141). The tree since that review is untouched.
 
 ## Reviewed but NOT yet seen on screen
 
@@ -349,7 +365,7 @@ Nothing — and nothing this batch is SEEABLE either: `image` draws no pixels ye
 
 ## Not started
 
-§5.8's script node (BLOCKED — Q-026) · `image` rendering, hit-testing and the §5.7 file picker ·
+§5.8's script node (unblocked — build it to D-141) · `image` rendering, hit-testing and the §5.7 file picker ·
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
@@ -503,7 +519,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-139**) binds **except where entries 0153/0154/0155
+Every ruling in `DECISIONS.md` (D-001 through **D-141**) binds **except where entries 0153/0154/0155
 overruled one on the human's explicit instruction.** Those, in full:
 
 - **D-123 clause 3 — INVERTED.** A set `width`/`height` no longer crops the text; the box grows.
@@ -537,14 +553,14 @@ inherits the same posture. **`image.source` does NOT** — nothing parses it, so
 
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117**, **Q-021 → D-120**, **Q-022 →
-D-121**, **Q-023 → D-122**, **Q-024 → D-123**, **Q-025 → D-139** — all CLOSED. **Q-026 is OPEN and
-BLOCKING.** Next free: **Q-027**.
+D-121**, **Q-023 → D-122**, **Q-024 → D-123**, **Q-025 → D-139**, **Q-026 → D-141** — all CLOSED.
+Next free: **Q-027**.
 
 ## Live PROVISIONAL tags and open questions
 
-**Q-026 HAS NO TAGS AND MUST NOT GET ONE.** Not reversible (§7 clause 3), so no provisional choice
-was taken. `primitives/schema.ts`'s NOT DONE HERE and `command/parser.ts`'s
-`COMMANDS_SPECIFIED_BUT_NOT_BUILT` name the question instead of a guess.
+**Q-026 HAS NO TAGS AND NEVER WILL — it is ANSWERED (D-141), not deferred.** Nothing to reconcile.
+`primitives/schema.ts`'s NOT DONE HERE and `command/parser.ts`'s `COMMANDS_SPECIFIED_BUT_NOT_BUILT`
+still name the QUESTION; the cycle that implements D-141 replaces those pointers with the ruling.
 
 **`PROVISIONAL(Q-012)` → `src/render/renderer.ts`** (×3), **`src/render/slots.ts`** (×1) and
 **`src/render/editor.ts`** (×1): world units or screen pixels for stroke width / cell size / font?
@@ -558,12 +574,15 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
 
 ## Gotchas for the next model
 
-- **DO NOT START THE SCRIPT NODE. READ Q-026.** The blocker is not "this is hard" — it is that
-  `Value` has no list arm and slot keys have no inverse, so there is literally nowhere to put a port
-  name. Two hours of cleverness will land you on option (b) or (c) and both are worse than waiting.
+- **BUILD THE SCRIPT NODE TO D-141, AND START WITH THE DATA MODEL, NOT THE STUB.** The reason the
+  ruling exists: `Value` has no list arm and slot keys have no inverse, so a port name has nowhere to
+  live until `GraphObject` gains a structural home for it. Options (b) (a two-level slot family) and
+  (c) (a `string[]` arm on `Value`) are REJECTED — reaching for either is re-litigating a closed
+  question.
 - **`ObjectSchema.derivedSlots` IS PER TYPE, `nonDerivedSlotPaths` IS PER OBJECT.** That asymmetry is
   invisible until you need a per-object derived slot, and then it is the whole problem. Seven
-  non-test sites read the former directly.
+  non-test sites read the former directly — **D-141 clause 4 ends the asymmetry, and every one of
+  those sites migrates in that slice.**
 - **AN INERT MODULE'S TESTS AGREE WITH ITS AUTHOR.** 0159's parser passed everything and was wrong.
   0165's `image` is inert BY DESIGN, which is why it carries mutation checks it did not owe — if you
   add to it, wire it to a consumer in the same cycle.

@@ -155,7 +155,7 @@ describe("hitTest — topmost object wins (§5.9, array order = z-order per rend
   });
 });
 
-describe("hitTest — object types with no schema/visual definition yet never hit (mirrors renderer.ts)", () => {
+describe("hitTest — object types with no visual definition yet never hit (mirrors renderer.ts)", () => {
   it("never hits a polyline/script/image/value/add object, regardless of point", () => {
     for (const type of ["polyline", "script", "image", "value", "add"] as const) {
       const object: GraphObject = { id: "obj_1", name: `${type}_1`, type, slots: {} };

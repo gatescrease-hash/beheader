@@ -54,7 +54,10 @@
  *     job; DOM event handling is `main.ts`'s. This file only ANSWERS "what is
  *     under this point."
  *   - `script`/`image` bounding boxes, and `polyline`'s open-path distance
- *     test — no schema or visual definition exists to read yet. `text` IS
+ *     test — no VISUAL definition exists to read yet. `image` HAS a schema as
+ *     of entry 0165 and is still unhittable, deliberately: D-066 makes the
+ *     drawn extent and the clickable extent one extent, so a type that draws
+ *     nothing has nothing to hit. `text` IS
  *     tested now (entry 0138): §5.9's "bounding box for text", read straight
  *     off `extent.ts`'s `objectExtent` so the click box is exactly the drawn
  *     box (D-066/D-010). An auto-width `text` object's box comes from its
@@ -201,7 +204,7 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
     case "image":
     case "value":
     case "add":
-      return false; // No schema/visual definition yet (file header) — nothing to hit.
+      return false; // No visual definition yet (file header) — nothing to hit.
     default: {
       // Compile-time exhaustiveness, without a throw — the same idiom
       // `renderer.ts`'s `drawObject` carries (0062-REVIEW edit 1), so a new

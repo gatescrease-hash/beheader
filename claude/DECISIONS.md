@@ -4996,3 +4996,94 @@ standard D-042 sets for a product-taste call.
 (`measure.ts`, `editor.ts`, `main.ts` ×2) before this ruling landed, and `grep -rn
 "PROVISIONAL(Q-025)" src` returns nothing — this ruling only makes binding what was already built and
 cited by name.
+
+---
+
+## D-140 — An `image` object's data URL lives in a sixth slot, `source`; §5.7's five-name list is a slot list, not a completeness claim
+
+Ruled: 0166-REVIEW-phase6 (reviewer), on entry 0165's disclosed deviation (decision 1) and Q-026's
+neighbouring gap. **Ratifies what entry 0165 built. No code change.**
+
+1. **`IMAGE_SOURCE_PATH` (`source`) is a legitimate, permanent slot of the `image` type.** §5.7 says
+   the picture is "stored as a data URL in the document" and then lists five slots. A `GraphObject`
+   is `{ id, name, type, slots }`, so "in the document" can only mean "in a slot"; §5.1's `Value`
+   admits `string`; §5.6's `content` is already exactly this shape. The five-name list enumerates
+   §5.7's *geometry*, and the sentence before it names a sixth thing that must be stored. This is
+   the brief being terse, not the brief forbidding a slot.
+2. **`source` is NOT narrowed to `literal` the way D-122 narrows `text.content`.** D-122 exists
+   because a formula-driven `content` hides embedded `{= … }` references from edge derivation.
+   Nothing parses a data URL, so a formula-driven `source` reading a URL out of a cell tracks its
+   dependencies through the ordinary edge set. Adding a guard here would be a mechanism defending
+   nothing.
+3. **`opacity` is unbounded document state.** D-070 bounds COUNTS because a count decides how many
+   slots get allocated and Rule 6 leaves no later moment to refuse. `opacity` sizes nothing; the
+   renderer clamps what it paints, the posture `style.align` already takes. A later cycle may NOT
+   "fix" this into a write-time refusal without overruling this clause.
+4. **A created `image` is invisible and unselectable, and that is correct as shipped.** D-066 makes
+   the drawn extent and the clickable extent ONE extent, so giving `image` an extent before the
+   renderer draws it would break D-066 to manufacture a click target for something nobody can see.
+   The drawing pass, the decoded-bitmap cache and §5.7's file picker are one cycle of their own.
+
+**Rationale.** The alternative readings all cost more than they buy: a second storage mechanism for
+one string (a structural `GraphObject` field for image data alone) duplicates what slots already do,
+and refusing to store the URL at all makes §5.7 unbuildable. Entry 0165 stopped and disclosed rather
+than quietly widening the type, which is the behaviour §6.1 trigger 3 is for.
+
+---
+
+## D-141 — Q-026 ANSWERED: a script node's port NAMES live in a structural `GraphObject` field, and `ObjectSchema.derivedSlots` becomes `static`/`dynamic` groups
+
+Ruled: 0166-REVIEW-phase6 (reviewer), answering **Q-026** (raised entry 0165). Option **(a)**.
+Options (b), (c) and (d) are REJECTED, for the record and against re-litigation.
+
+1. **Port names are structural state on `GraphObject`, not slot values and not slot keys.**
+   `graph/node.ts` gains a field of plain, serializable, ID-free data — the shape §2's "store IDs,
+   no closures, no live `Map`s" demands and the one D-046's scope note already left open ("A future
+   `GraphObject`-structural home would preserve Rule 6 by construction and remains open"). The brief
+   itself models a script node with structural fields beside its slots (§5.8's `ScriptNode` block:
+   `language`, `placeholders`), so this is the brief's own shape, not an invention.
+2. **The field is ORDERED and name-only.** Two `readonly string[]`s — the in-port order and the
+   out-port order — because slot enumeration must be deterministic (`nonDerivedSlotPaths` already
+   is) and because a `Record`'s key order is not a thing the engine may lean on. Duplicate names,
+   an empty name, and any name containing `.` are REJECTED at mutation time: slot keys are
+   dot-joined and D-010 leaves them with no inverse, so a dot in a port name would forge a key no
+   schema declares.
+3. **§5.8's `placeholders: Record<string, Value>` holds VALUES ONLY; `ports.out` is the single
+   source of truth for the NAME set.** The two are reconciled two-way at load and at mutation
+   exactly as D-018 already reconciles declared derived paths against carried slots: every out port
+   has a placeholder entry, and no placeholder entry names a port that does not exist. One
+   authority, one check, no drift.
+4. **`ObjectSchema.derivedSlots` is widened to the same `static | dynamic` group shape
+   `nonDerivedSlotPaths` has carried since 0041-REVIEW.** A `dynamic` derived group resolves against
+   the OBJECT (its `ports.out`), never against `Object.keys(object.slots)` — D-010's no-inverse rule
+   binds the new resolver exactly as it binds the old one. One shape for both halves of a schema,
+   because two shapes is how the seven `derivedSlots` read sites drift apart.
+5. **REJECTED — (b) a two-level slot family** (`inPortCount` sizing `portName.<i>` string slots
+   sizing `in.*`): it makes the slot set depend on the *values* of slots two levels deep, needs its
+   own D-097 write-time gate, and leaves the per-object `out.*` set unsolved. **REJECTED — (c) a
+   `string[]` arm on `Value`**: it reaches the formula engine, the serializer, every compute
+   function and every value-legality check for one type's benefit. **REJECTED — (d) fixed port
+   sets**: it passes Phase 6's criterion by contradicting §5.8's `Record<string, Slot>` for both
+   families and its "declared manually in the UI", and a later phase would have to undo it.
+6. **Mutation is the only way a port set changes** (Rule 2, Rule 6). Adding or removing a port is a
+   new `Operation` kind, staged/validated/committed like every other, preserved by `mutation.ts`'s
+   clone per D-019, and visible in the journal. Removing an in port re-derives edges; removing an
+   out port that something still references is REJECTED, never silently dropped (§5.1.1 — reject or
+   repair, no third option).
+7. **Scope of the cycle this unblocks.** The data-model change is its OWN slice: `graph/node.ts`,
+   `document.ts` (serialize + the two-way validate), `mutation.ts` (the operation kinds and clone
+   fidelity), and `primitives/schema.ts`'s widening — with every existing `derivedSlots` read site
+   migrated and green. `engine/script/stub.ts`, `SCRIPT_SCHEMA` and §5.10's `script` command come
+   AFTER it, and `engine/script/`'s first file is a §6.1 trigger 2 review point of its own. Do not
+   fuse the two.
+
+**Rationale.** Only (a) closes both halves of Q-026 — where names live *and* how a per-object
+derived set is declared — and it closes them with mechanisms the codebase already has one of
+(structural plain state; `static`/`dynamic` groups), rather than a new one. Entry 0165 was right not
+to guess: every option here changes `GraphObject`, the mutation sequence, or the schema registry,
+which §7 clause 3 puts out of reach of a `PROVISIONAL` tag.
+
+**Reconciliation required.** None outstanding — no `PROVISIONAL(Q-026)` tag was ever written
+(confirmed: `grep -rn "PROVISIONAL(Q-026)" src` returns nothing). `primitives/schema.ts`'s NOT DONE
+HERE and `command/parser.ts`'s `COMMANDS_SPECIFIED_BUT_NOT_BUILT` name Q-026 today; the cycle that
+implements this ruling replaces those pointers with `D-141`.

@@ -15,7 +15,14 @@ Next free ID: **Q-027**
 ## Q-026 — Where does a script node's PORT LIST live, given `Value` cannot hold a list of names and a slot key has no sanctioned inverse?
 Raised: entry 0165-image-primitive (implementer)   Brief section: §5.8 (`ScriptNode`'s `in`/`out`/
 `placeholders`), against §5.1's `Value` union, Rule 6, D-010, D-017, D-018 and D-046.
-Status: **OPEN — BLOCKING Phase 6's script half.** No provisional choice taken: every option below
+Status: **CLOSED → D-141** (entry 0166-REVIEW-phase6, reviewer). Option **(a)** is ruled, with
+`ports.out` as the single authority for the out-port NAME set and §5.8's `placeholders` holding
+values only, reconciled two-way in D-018's shape; `ObjectSchema.derivedSlots` is widened to
+`static`/`dynamic` groups. (b), (c) and (d) are rejected on the record. **The script half of Phase 6
+is UNBLOCKED**; D-141 clause 7 says which slice comes first and what may not be fused into it. The
+question text below is kept verbatim as raised — it is the reasoning D-141 rests on.
+
+Status when raised: **OPEN — BLOCKING Phase 6's script half.** No provisional choice taken: every option below
 changes either the data model or `primitives/schema.ts`'s central shape, which PROCESS_BRIEF §7
 clause 3 makes not-reversible and therefore an escalation rather than a tagged guess.
 

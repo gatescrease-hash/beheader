@@ -102,7 +102,8 @@
  *   - `style` slots (§5.5's `Path` shape) — `geometry.ts` declares none yet,
  *     so every shape draws with one disclosed default stroke, and the
  *     selection highlight and chrome text below are equally untuned (Rule 5).
- *   - `script`/`image` objects (no schema — Phase 6) and `polyline`'s per-vertex
+ *   - `script`/`image` objects (no VISUAL definition here; `image` DOES have a
+ *     schema as of entry 0165 and still draws nothing) and `polyline`'s per-vertex
  *     shape (deferred with `explode`) draw no body AND no chrome —
  *     `chromeAnchorPoint` returns `undefined` for every type with no extent.
  *     `text` DOES draw now (entry 0138): `drawText` paints the layout
@@ -423,7 +424,7 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
     case "image":
     case "value":
     case "add":
-      return; // No schema/visual definition yet (see file header's NOT DONE HERE).
+      return; // No visual definition yet (see file header's NOT DONE HERE).
     default: {
       // Compile-time exhaustiveness, WITHOUT a throw — the same arm every other
       // discriminated-union switch in this codebase carries (`formula/deps.ts`,

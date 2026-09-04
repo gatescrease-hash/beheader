@@ -360,7 +360,7 @@ describe("renderDocument — object types with no schema/visual definition yet",
     expect(drawCalls).toEqual([]);
   });
 
-  it("draws nothing for a polyline/script/image fixture object (no schema/visual definition yet)", () => {
+  it("draws nothing for a polyline/script/image fixture object (no visual definition yet)", () => {
     for (const type of ["polyline", "script", "image"] as const) {
       const { ctx, calls } = createFakeContext();
       renderDocument(ctx, 800, 600, [{ id: "obj_1", name: `${type}_1`, type, slots: {} }], CAMERA_IDENTITY);
