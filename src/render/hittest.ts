@@ -53,14 +53,16 @@
  *   - Selection state and calling any mutation — `render/interaction.ts`'s
  *     job; DOM event handling is `main.ts`'s. This file only ANSWERS "what is
  *     under this point."
- *   - `script`/`image` bounding boxes, and `polyline`'s open-path distance
- *     test — no VISUAL definition exists to read yet. `image` HAS a schema as
- *     of entry 0165 and is still unhittable, deliberately: D-066 makes the
+ *   - `script`'s bounding box and `polyline`'s open-path distance test — no
+ *     VISUAL definition exists to read for either yet, and D-066 makes the
  *     drawn extent and the clickable extent one extent, so a type that draws
- *     nothing has nothing to hit. `text` IS
- *     tested now (entry 0138): §5.9's "bounding box for text", read straight
+ *     nothing has nothing to hit. `text` (entry 0138) and `image` (**D-142**)
+ *     ARE tested now: §5.9's "bounding box for text/tables/images/scripts",
+ *     read straight
  *     off `extent.ts`'s `objectExtent` so the click box is exactly the drawn
- *     box (D-066/D-010). An auto-width `text` object's box comes from its
+ *     box (D-066/D-010). An `image` object's box is its `width`/`height` slots
+ *     whether or not its picture has decoded — `extent.ts`'s `imageExtent`
+ *     says why. An auto-width `text` object's box comes from its
  *     `measuredWidth`/`measuredHeight` derived slots (**D-123**); only a `text`
  *     object nothing could measure (no `TextMeasurer` wired — `#MEASURE`, D-118)
  *     falls back to `extent.ts`'s fixed size.
@@ -172,13 +174,14 @@ function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
 }
 
 /**
- * §5.9's "bounding box for text" — an inclusive point-in-box test against the
- * object's `extent.ts` extent, which is the exact box `renderer.ts` draws the
- * text into (D-066: drawn extent and clickable extent are ONE extent; D-010:
- * read once, not re-derived). `false` for a `text` object with no extent (no
- * resolved content) — nothing is drawn to click on. Inclusive bounds, the same
- * as `hitTestTable`; `textExtent` never returns a zero-area box (its fallbacks
- * are positive), so no separate degenerate guard is needed here.
+ * §5.9's "bounding box for text ... and images" — an inclusive point-in-box test
+ * against the object's `extent.ts` extent, which is the exact box `renderer.ts`
+ * draws into (D-066: drawn extent and clickable extent are ONE extent; D-010:
+ * read once, not re-derived). `false` for an object with no extent — a `text`
+ * object with no resolved content, or an `image` object with a non-positive
+ * `width`/`height` — since nothing is drawn to click on. Inclusive bounds, the
+ * same as `hitTestTable`; neither `textExtent` nor `imageExtent` returns a
+ * zero-area box, so no separate degenerate guard is needed here.
  */
 function hitTestBoundingBox(object: GraphObject, worldPoint: WorldPoint): boolean {
   const extent = objectExtent(object);
@@ -198,10 +201,10 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
     case "table":
       return hitTestTable(object, worldPoint);
     case "text":
+    case "image":
       return hitTestBoundingBox(object, worldPoint);
     case "polyline":
     case "script":
-    case "image":
     case "value":
     case "add":
       return false; // No visual definition yet (file header) — nothing to hit.

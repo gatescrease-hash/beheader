@@ -13,7 +13,8 @@
  *
  * WHAT THIS IS
  *   `renderDocument(ctx, viewportWidth, viewportHeight, objects, camera,
- *   selectedObjectIds?, panelledObjectIds?)` — the one exported entry point, a
+ *   selectedObjectIds?, panelledObjectIds?, editing?, images?)` — the one
+ *   exported entry point, a
  *   pure function of its arguments. It takes `objects`, not a whole engine
  *   `Document`: this file draws graph state, and the narrow argument both
  *   keeps it testable and sidesteps `Document` colliding with the DOM's own
@@ -102,10 +103,17 @@
  *   - `style` slots (§5.5's `Path` shape) — `geometry.ts` declares none yet,
  *     so every shape draws with one disclosed default stroke, and the
  *     selection highlight and chrome text below are equally untuned (Rule 5).
- *   - `script`/`image` objects (no VISUAL definition here; `image` DOES have a
- *     schema as of entry 0165 and still draws nothing) and `polyline`'s per-vertex
- *     shape (deferred with `explode`) draw no body AND no chrome —
+ *   - `script` objects (no VISUAL definition here — §5.8's labelled box with
+ *     ports is a separate future slice, **D-142** clause 3) and `polyline`'s
+ *     per-vertex shape (deferred with `explode`) draw no body AND no chrome —
  *     `chromeAnchorPoint` returns `undefined` for every type with no extent.
+ *     `image` DOES draw now (**D-142**): `drawImage` strokes the object's
+ *     `width` x `height` box and fits the decoded picture inside it, preserving
+ *     its aspect ratio; the decoded bitmap arrives through the injected
+ *     `ImageBitmaps` (`render/images.ts`), because Rule 1 keeps a `Map` of live
+ *     `HTMLImageElement`s out of `engine/` and this file takes it as an argument
+ *     rather than holding one. A missing `ImageBitmaps` — every test that does
+ *     not pass one — draws the frame and no picture.
  *     `text` DOES draw now (entry 0138): `drawText` paints the layout
  *     `render/measure.ts`'s `layOutText` returns for `resolvedContent`, from
  *     `origin` (top-left), wrapping at a numeric `width` slot and honouring
@@ -144,9 +152,11 @@ import {
   TEXT_STYLE_LINE_HEIGHT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
+import { IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH } from "../engine/primitives/image.ts";
 import { formatCellReference, indexToColumnLetters, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
+import type { ImageBitmaps } from "./images.ts";
 import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";
 import { layOutText } from "./measure.ts";
 import { asPointArray, readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
@@ -189,6 +199,116 @@ const DEFAULT_TEXT_FILL_STYLE = "#1a1a1a";
 const DEFAULT_TEXT_FONT_FAMILY = "sans-serif";
 const DEFAULT_TEXT_FONT_SIZE = 16;
 const DEFAULT_TEXT_LINE_HEIGHT = 20;
+
+/**
+ * §5.7's `image` frame — the object's own box, stroked whether or not a picture
+ * has been chosen or decoded yet.
+ *
+ * It is what makes `imageExtent`'s "the box is the extent, always" honest under
+ * D-066: an image is a real object occupying `width` x `height` from the moment
+ * it is created, so it is drawn from that moment and is selectable from that
+ * moment. Without it, an image whose picker was dismissed, whose file was not a
+ * picture, or whose decode has not landed yet would be an invisible click
+ * target — the state **D-142** refused, merely moved one step later.
+ *
+ * Grey and one world unit wide, the same untuned reading `TABLE_GRID_STROKE_STYLE`
+ * takes (Rule 5, PROVISIONAL(Q-012) like every other world-unit width here). It
+ * is one constant and one `strokeRect` to delete if the operator would rather see
+ * a bare picture.
+ */
+const IMAGE_FRAME_STROKE_STYLE = "#999999";
+
+/**
+ * §5.7's `opacity`, for a slot holding something unusable — missing, an
+ * `ErrorValue`, a string. Fully opaque, which is `command/commands.ts`'s own
+ * `DEFAULT_IMAGE_OPACITY`; not imported from there because `render/` may not
+ * import `command/`, and a picture that vanished because its slot was broken
+ * would be indistinguishable from one that never decoded.
+ */
+const DEFAULT_IMAGE_OPACITY = 1;
+
+/**
+ * §5.7: "draw at a position with width/height, preserve aspect ratio by
+ * default." Draws the object's frame, then — once `images` has a decoded
+ * picture for its `source` — that picture, fitted inside the frame.
+ *
+ * The box comes from `extent.ts`'s `objectExtent`, not from a second reading of
+ * `origin`/`width`/`height` here: D-066 makes the drawn box and the click box one
+ * box, and taking them from one function is what makes that structural rather
+ * than a thing two files must agree about (D-010). An object with no extent
+ * draws nothing at all.
+ *
+ * `opacity` is CLAMPED here rather than refused at write time — D-140 clause 3:
+ * the slot is unbounded document state and the renderer clamps what it paints,
+ * exactly as `resolveTextStyle` does for an unknown `style.align`. The frame is
+ * drawn at full opacity deliberately: it is the object's box, not part of the
+ * picture, so `set image_1.opacity 0` hides the picture without losing the object.
+ *
+ * Never throws: a missing/wrong-typed `source`, a decode still in flight, and a
+ * decode that failed are one case here — no picture yet, frame only.
+ */
+function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: ImageBitmaps | undefined): void {
+  const box = objectExtent(object);
+  if (box === undefined) {
+    return;
+  }
+  const boxWidth = box.maxX - box.minX;
+  const boxHeight = box.maxY - box.minY;
+  ctx.strokeStyle = IMAGE_FRAME_STROKE_STYLE;
+  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
+  ctx.strokeRect(box.minX, box.minY, boxWidth, boxHeight);
+
+  const source = readText(object, IMAGE_SOURCE_PATH);
+  if (source === undefined || images === undefined) {
+    return;
+  }
+  const bitmap = images.bitmapFor(source);
+  if (bitmap === undefined) {
+    return;
+  }
+  const fitted = fitBitmapIntoBox(boxWidth, boxHeight, bitmap.naturalWidth, bitmap.naturalHeight);
+  const opacity = readNumber(object, IMAGE_OPACITY_PATH) ?? DEFAULT_IMAGE_OPACITY;
+  const previousAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : DEFAULT_IMAGE_OPACITY;
+  ctx.drawImage(bitmap.image, box.minX + fitted.x, box.minY + fitted.y, fitted.width, fitted.height);
+  // Restored rather than set to 1: every other draw call in this file assumes it
+  // owns nothing about `ctx` beyond what it sets itself, and leaving a
+  // half-transparent context behind would fade whichever object is drawn next.
+  ctx.globalAlpha = previousAlpha;
+}
+
+/**
+ * §5.7's "preserve aspect ratio by default", as arithmetic: the largest box with
+ * the picture's own proportions that fits inside `boxWidth` x `boxHeight`,
+ * centred in it. Offsets are relative to the box's top-left corner.
+ *
+ * PROVISIONAL(Q-027): this reads §5.7's clause as a permanent property of how a
+ * picture is DRAWN — the `width`/`height` slots bound the picture and its
+ * proportions are never distorted, at any size the operator sets. The other
+ * reading is that the clause is about the size a picture is first given: write
+ * the decoded natural size into the two slots at load time and let the operator
+ * distort them afterwards. That reading needs the natural size to reach a SLOT,
+ * which 0172-REVIEW §8 named as the load-bearing half of the question, so it is
+ * asked rather than taken (Q-027). This one is reversible in this one function.
+ *
+ * A non-positive or non-finite natural size cannot yield a ratio, so the picture
+ * simply fills the box — unreachable through `images.ts`, which refuses such a
+ * decode, and total rather than assumed away.
+ */
+function fitBitmapIntoBox(
+  boxWidth: number,
+  boxHeight: number,
+  naturalWidth: number,
+  naturalHeight: number,
+): { readonly x: number; readonly y: number; readonly width: number; readonly height: number } {
+  if (!(naturalWidth > 0) || !(naturalHeight > 0) || !Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) {
+    return { x: 0, y: 0, width: boxWidth, height: boxHeight };
+  }
+  const scale = Math.min(boxWidth / naturalWidth, boxHeight / naturalHeight);
+  const width = naturalWidth * scale;
+  const height = naturalHeight * scale;
+  return { x: (boxWidth - width) / 2, y: (boxHeight - height) / 2, width, height };
+}
 
 /**
  * §5.9's selection highlight (D-068): the SAME path/box `drawObject` built
@@ -285,6 +405,7 @@ export function renderDocument(
   selectedObjectIds: readonly string[] = [],
   panelledObjectIds: readonly string[] = selectedObjectIds,
   editing: EditorTarget | undefined = undefined,
+  images: ImageBitmaps | undefined = undefined,
 ): void {
   clearScreen(ctx, viewportWidth, viewportHeight);
 
@@ -319,7 +440,7 @@ export function renderDocument(
     if (object.id === editingTextId) {
       continue;
     }
-    drawObject(ctx, object, editingCellOn(object.id));
+    drawObject(ctx, object, editingCellOn(object.id), images);
   }
 
   // D-100 clause 8: every selected id, not just one. A `Set` so a duplicate
@@ -404,7 +525,7 @@ function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: CameraState, o
 }
 
 /** Dispatches by `ObjectType` (§5.1's own switch-not-dispatch-table style, PROCESS_BRIEF §5.5). Every unsupported type draws nothing — see file header. */
-function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingCell: string | undefined): void {
+function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingCell: string | undefined, images: ImageBitmaps | undefined): void {
   switch (object.type) {
     case "circle":
       drawCircle(ctx, object);
@@ -419,9 +540,11 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
     case "text":
       drawText(ctx, object);
       return;
+    case "image":
+      drawImage(ctx, object, images);
+      return;
     case "polyline":
     case "script":
-    case "image":
     case "value":
     case "add":
       return; // No visual definition yet (see file header's NOT DONE HERE).
@@ -778,12 +901,14 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       ctx.strokeRect(originX, originY, width, height);
       return;
     }
-    case "text": {
-      // The SAME box `drawText` draws into and `hittest.ts` clicks against —
-      // `extent.ts`'s `objectExtent` (D-066/D-010), not a second reading.
+    case "text":
+    case "image": {
+      // The SAME box `drawText`/`drawImage` draw into and `hittest.ts` clicks
+      // against — `extent.ts`'s `objectExtent` (D-066/D-010), not a second
+      // reading.
       const extent = objectExtent(object);
       if (extent === undefined) {
-        return; // No resolved content — nothing drawn, nothing to highlight.
+        return; // No resolved content, or no positive box — nothing drawn, nothing to highlight.
       }
       ctx.strokeStyle = SELECTION_HIGHLIGHT_STYLE;
       ctx.lineWidth = SELECTION_HIGHLIGHT_WIDTH;
@@ -792,7 +917,6 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
     }
     case "polyline":
     case "script":
-    case "image":
     case "value":
     case "add":
       return; // Nothing drawn for these yet (file header) — nothing to highlight.

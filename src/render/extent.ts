@@ -24,9 +24,10 @@
  *
  * INVARIANTS UPHELD HERE
  *   - Never throws. An object with no extent (missing/wrong-typed/empty
- *     `vertices`, a non-finite vertex, a table with zero rows or columns, or a
- *     `text` object with no resolved content) returns `undefined` rather than a
- *     degenerate box (D-066).
+ *     `vertices`, a non-finite vertex, a table with zero rows or columns, a
+ *     `text` object with no resolved content, or an `image` object with a
+ *     non-positive or non-finite `width`/`height`) returns `undefined` rather
+ *     than a degenerate box (D-066).
  *   - Reads only, writes nothing (Rule 2).
  *   - Built from the SAME reads `hittest.ts` and `renderer.ts`'s drawing use —
  *     via `slots.ts` and (for `text`) the shared `TEXT_*_PATH` constants —
@@ -45,6 +46,7 @@
  */
 import { getSlot, type GraphObject } from "../engine/graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
   TEXT_AUTORESIZE_PATH,
@@ -87,9 +89,10 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return tableExtent(object);
     case "text":
       return textExtent(object);
+    case "image":
+      return imageExtent(object);
     case "polyline":
     case "script":
-    case "image":
     case "value":
     case "add":
       return undefined; // Draws nothing yet (`renderer.ts`'s header) — nothing to bound.
@@ -171,6 +174,42 @@ function textExtent(object: GraphObject): WorldExtent | undefined {
     measuredWidth: readNumber(object, TEXT_MEASURED_WIDTH_PATH),
     measuredHeight: readNumber(object, TEXT_MEASURED_HEIGHT_PATH),
   });
+  return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
+}
+
+/**
+ * An `image` object's drawn box (§5.7's "draw at a position with width/height",
+ * §5.9's "bounding box for ... images"), positioned from `origin.x`/`origin.y` —
+ * the top-left corner, the same meaning `rect`, `table` and `text` give `origin`.
+ * Never throws.
+ *
+ * **It does NOT read `source`, and that is the point.** An `image` object's box
+ * is its `width`/`height` slots whether or not a picture has been chosen or
+ * decoded yet, because `renderer.ts` draws that box as a frame either way — so
+ * the drawn extent and the clickable extent stay one extent (D-066) through the
+ * whole life of the object, including the seconds between choosing a file and
+ * its decode landing. It also means an image whose picker was dismissed is
+ * visible and selectable rather than an invisible object only `list` can find,
+ * which is the state entry 0165 shipped and **D-142** refused.
+ *
+ * `undefined` for a non-positive or non-finite `width`/`height` — a degenerate
+ * box draws nothing (`drawImage`'s own guard is this function returning
+ * `undefined`), so under D-066 it must not be clickable either.
+ */
+function imageExtent(object: GraphObject): WorldExtent | undefined {
+  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
+  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
+  const width = readNumber(object, IMAGE_WIDTH_PATH);
+  const height = readNumber(object, IMAGE_HEIGHT_PATH);
+  if (width === undefined || height === undefined || !(width > 0) || !(height > 0)) {
+    return undefined;
+  }
+  // `> 0` already excludes `NaN`; `Infinity` passes it, and an infinite box
+  // would poison `documentExtent` and every `fit` after it (D-027's own
+  // `finiteOrFallback` reasoning, applied one layer earlier).
+  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(originX) || !Number.isFinite(originY)) {
+    return undefined;
+  }
   return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
 }
 

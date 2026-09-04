@@ -14,6 +14,7 @@ import type { GraphObject, Slot } from "../engine/graph/node.ts";
 import { getObjectSchema, resolveDerivedSlots } from "../engine/primitives/schema.ts";
 import type { CameraState } from "../engine/document.ts";
 import { renderDocument } from "./renderer.ts";
+import type { ImageBitmaps } from "./images.ts";
 
 type RecordedCall =
   | { readonly op: "clearRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
@@ -26,7 +27,10 @@ type RecordedCall =
   | { readonly op: "arc"; readonly x: number; readonly y: number; readonly radius: number; readonly startAngle: number; readonly endAngle: number }
   | { readonly op: "strokeRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
-  | { readonly op: "fillText"; readonly text: string; readonly x: number; readonly y: number; readonly align: string };
+  | { readonly op: "fillText"; readonly text: string; readonly x: number; readonly y: number; readonly align: string }
+  // §5.7's picture (D-142). `alpha` is `globalAlpha` AS OF THE CALL, so a test
+  // can pin both the clamp and the fact that it was restored afterwards.
+  | { readonly op: "drawImage"; readonly image: unknown; readonly x: number; readonly y: number; readonly w: number; readonly h: number; readonly alpha: number };
 
 /** The fake measurer's per-character width — see `measureText` below. */
 const FAKE_CHAR_WIDTH = 7;
@@ -84,6 +88,10 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
     },
     fillText(text: string, x: number, y: number) {
       calls.push({ op: "fillText", text, x, y, align: ctx.textAlign });
+    },
+    globalAlpha: 1,
+    drawImage(image: unknown, x: number, y: number, w: number, h: number) {
+      calls.push({ op: "drawImage", image, x, y, w, h, alpha: ctx.globalAlpha });
     },
     // A FIXED-WIDTH fake measurer — the same posture Rule 1 prescribes for the
     // engine's injected `TextMeasurer`, translated to this layer. 7px per
@@ -1277,5 +1285,145 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [grid(1, 2)], CAMERA_IDENTITY, [], [], { kind: "cell", objectId: "obj_1", cell: "A1" });
     expect(drawn(calls).map((call) => call.text)).toEqual(expect.arrayContaining(["A", "B", "1"]));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §5.7's image (D-142) — the frame, the fitted picture, and opacity
+// ---------------------------------------------------------------------------
+
+/** An `image` object with the six slots `IMAGE_SCHEMA` declares, each overridable per test. */
+function imageObject(overrides: Record<string, Slot> = {}): GraphObject {
+  return {
+    id: "obj_1",
+    name: "image_1",
+    type: "image",
+    slots: {
+      "origin.x": { kind: "literal", value: 10 },
+      "origin.y": { kind: "literal", value: 20 },
+      width: { kind: "literal", value: 100 },
+      height: { kind: "literal", value: 100 },
+      opacity: { kind: "literal", value: 1 },
+      source: { kind: "literal", value: "" },
+      ...overrides,
+    },
+  };
+}
+
+/** A stored data URL — its CONTENT never matters here, only that the slot holds a non-empty string, since `images.ts` is the half that decodes one. */
+const A_DATA_URL: Slot = { kind: "literal", value: "data:image/png;base64,AAAA" };
+
+/** A hand-written `ImageBitmaps` (`images.ts`'s read side) answering with one decoded picture of the given natural size — no DOM, no cache, no decode. */
+function readyBitmaps(naturalWidth: number, naturalHeight: number): ImageBitmaps {
+  const image = { decoded: true } as unknown as CanvasImageSource;
+  return { bitmapFor: () => ({ image, naturalWidth, naturalHeight }) };
+}
+
+/** Every `drawImage` call, in order. */
+function pictures(calls: readonly RecordedCall[]): readonly Extract<RecordedCall, { op: "drawImage" }>[] {
+  return calls.filter((call): call is Extract<RecordedCall, { op: "drawImage" }> => call.op === "drawImage");
+}
+
+/** Every `strokeRect` call, in order — an image's frame, a table's grid and both highlights all use it, so a test filters by geometry. */
+function strokeRects(calls: readonly RecordedCall[]): readonly Extract<RecordedCall, { op: "strokeRect" }>[] {
+  return calls.filter((call): call is Extract<RecordedCall, { op: "strokeRect" }> => call.op === "strokeRect");
+}
+
+describe("renderDocument — image (§5.7)", () => {
+  it("strokes the object's width x height box from origin even with no picture chosen, so a created image is visible and selectable rather than invisible (D-142)", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [imageObject()], CAMERA_IDENTITY);
+    expect(strokeRects(calls)).toContainEqual({ op: "strokeRect", x: 10, y: 20, w: 100, h: 100 });
+    expect(pictures(calls)).toEqual([]);
+  });
+
+  it("draws no picture while a decode is still in flight, which is what the cache reports as undefined", () => {
+    const { ctx, calls } = createFakeContext();
+    const pending: ImageBitmaps = { bitmapFor: () => undefined };
+    renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, pending);
+    expect(pictures(calls)).toEqual([]);
+    expect(strokeRects(calls)).toContainEqual({ op: "strokeRect", x: 10, y: 20, w: 100, h: 100 });
+  });
+
+  it("draws no picture when no ImageBitmaps was supplied at all, and still draws the frame", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY);
+    expect(pictures(calls)).toEqual([]);
+    expect(strokeRects(calls)).toContainEqual({ op: "strokeRect", x: 10, y: 20, w: 100, h: 100 });
+  });
+
+  it("fills the box exactly when the picture's proportions already match it", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(50, 50));
+    expect(pictures(calls)).toHaveLength(1);
+    expect(pictures(calls)[0]).toMatchObject({ x: 10, y: 20, w: 100, h: 100 });
+  });
+
+  it("preserves a WIDE picture's aspect ratio inside its box and centres it vertically (§5.7)", () => {
+    const { ctx, calls } = createFakeContext();
+    // 200x100 natural into a 100x100 box: scale 0.5, so 100x50, centred at y + 25.
+    renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(200, 100));
+    expect(pictures(calls)[0]).toMatchObject({ x: 10, y: 45, w: 100, h: 50 });
+  });
+
+  it("preserves a TALL picture's aspect ratio inside its box and centres it horizontally (§5.7)", () => {
+    const { ctx, calls } = createFakeContext();
+    // 100x400 natural into a 100x100 box: scale 0.25, so 25x100, centred at x + 37.5.
+    renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 400));
+    expect(pictures(calls)[0]).toMatchObject({ x: 47.5, y: 20, w: 25, h: 100 });
+  });
+
+  it("keeps the ratio at any box the operator sets, because §5.7's clause is read as a property of DRAWING (PROVISIONAL(Q-027))", () => {
+    const { ctx, calls } = createFakeContext();
+    const wideBox = imageObject({ source: A_DATA_URL, width: { kind: "literal", value: 400 } });
+    // 100x100 natural into a 400x100 box: scale 1, so 100x100, centred at x + 150.
+    renderDocument(ctx, 800, 600, [wideBox], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
+    expect(pictures(calls)[0]).toMatchObject({ x: 160, y: 20, w: 100, h: 100 });
+  });
+
+  it("paints the picture at the opacity slot's value and restores the context's alpha afterwards", () => {
+    const { ctx, calls } = createFakeContext();
+    const faded = imageObject({ source: A_DATA_URL, opacity: { kind: "literal", value: 0.25 } });
+    renderDocument(ctx, 800, 600, [faded], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
+    expect(pictures(calls)[0]?.alpha).toBe(0.25);
+    expect(ctx.globalAlpha).toBe(1);
+  });
+
+  it("CLAMPS an out-of-range opacity when it paints rather than refusing the value, which D-140 clause 3 keeps as legitimate document state", () => {
+    for (const [stored, painted] of [[4, 1], [-2, 0]] as const) {
+      const { ctx, calls } = createFakeContext();
+      const image = imageObject({ source: A_DATA_URL, opacity: { kind: "literal", value: stored } });
+      renderDocument(ctx, 800, 600, [image], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
+      expect(pictures(calls)[0]?.alpha).toBe(painted);
+    }
+  });
+
+  it("paints at full opacity for an unusable opacity slot, so a broken slot never makes a picture vanish", () => {
+    const { ctx, calls } = createFakeContext();
+    const broken = imageObject({ source: A_DATA_URL, opacity: { kind: "literal", value: { error: "#TYPE", message: "no" } } });
+    renderDocument(ctx, 800, 600, [broken], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
+    expect(pictures(calls)[0]?.alpha).toBe(1);
+  });
+
+  it("draws nothing at all — no frame, no picture — for a non-positive box, matching the extent that refuses to bound one (D-066)", () => {
+    const { ctx, calls } = createFakeContext();
+    const flat = imageObject({ source: A_DATA_URL, width: { kind: "literal", value: 0 } });
+    renderDocument(ctx, 800, 600, [flat], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
+    expect(pictures(calls)).toEqual([]);
+    expect(strokeRects(calls)).toEqual([]);
+  });
+
+  it("highlights a selected image as its own drawn box, the same box hittest.ts clicks against (D-066/D-010)", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [imageObject()], CAMERA_IDENTITY, ["obj_1"]);
+    // The frame and the highlight are the same rectangle in different styles —
+    // the frame in the object pass, the highlight in the pass after it.
+    expect(strokeRects(calls).filter((call) => call.x === 10 && call.y === 20 && call.w === 100 && call.h === 100)).toHaveLength(2);
+  });
+
+  it("labels an image with its name, because it now has an extent to hang chrome from (D-092 clause 1)", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [imageObject()], CAMERA_IDENTITY);
+    expect(calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text)).toContain("image_1");
   });
 });

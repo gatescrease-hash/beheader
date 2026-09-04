@@ -24,6 +24,7 @@ import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camer
 import {
   abandonCreatedTextBox,
   buildPanelModel,
+  commitImageSource,
   commitPanelChoice,
   commitPanelEdit,
   commitTableCell,
@@ -1316,6 +1317,74 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
     const outcome = submitLine(opened(), "text x=0 y=0", VIEWPORT);
     expect(outcome.refused).toBe(true);
     expect(outcome.openEditor).toBeUndefined();
+  });
+});
+
+// **D-142** — §5.7's file picker, on D-124's own shape one type over: creating
+// an `image` object asks for a picture to be chosen for it
+// (`AppTransition.pickImageFor`), and `commitImageSource` is the pure half that
+// writes the chosen data URL back through `executeCommand`. `start`'s picker
+// itself is untested by construction (D-001), like every other DOM path here.
+describe("image creation asks for a picture, and the chosen one is written to `source` (§5.7, D-142)", () => {
+  /** A data URL long enough to exercise the display elision, shaped like a real one. */
+  const PICTURE = `data:image/png;base64,${"A".repeat(300)}`;
+
+  it("a typed `image` creation names the new object as the one to pick a picture for", () => {
+    const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
+    const created = objectNamed(outcome.state, "image_1");
+    expect(outcome.pickImageFor).toBe(created.id);
+  });
+
+  it("the canvas pick that completes a bare `image` sequence asks for the picker too, so pointing and choosing are one gesture", () => {
+    const state = typed(opened(), "image");
+    const outcome = pointerDownAt(state, { x: 40, y: 60 }, VIEWPORT);
+    const created = objectNamed(outcome.state, "image_1");
+    expect(numberAt(created, ["origin", "x"])).toBe(40);
+    expect(outcome.pickImageFor).toBe(created.id);
+  });
+
+  it("no other creation asks for a picker, and neither does a refused image creation", () => {
+    expect(submitLine(opened(), "circle x=0 y=0 r=5", VIEWPORT).pickImageFor).toBeUndefined();
+    expect(submitLine(opened(), 'text x=0 y=0 "hi"', VIEWPORT).pickImageFor).toBeUndefined();
+    const refused = submitLine(opened(), "image x=0", VIEWPORT);
+    expect(refused.refused).toBe(true);
+    expect(refused.pickImageFor).toBeUndefined();
+  });
+
+  it("commitImageSource writes the whole data URL into the object's `source` slot as an ordinary literal (Rule 2, through executeCommand)", () => {
+    const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
+    const id = objectNamed(outcome.state, "image_1").id;
+    const after = commitImageSource(outcome.state, id, PICTURE);
+    expect(getSlot(objectNamed(after, "image_1"), ["source"])).toEqual({ kind: "literal", value: PICTURE });
+  });
+
+  it("echoes a SUMMARY of the write, never the URL itself — a line the operator could neither read nor retype", () => {
+    const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
+    const id = objectNamed(outcome.state, "image_1").id;
+    const after = commitImageSource(outcome.state, id, PICTURE);
+    const echoed = newLines(outcome.state, after).join("\n");
+    expect(echoed).toContain("set image_1.source <picture, 322 characters>");
+    expect(echoed).not.toContain(PICTURE);
+  });
+
+  it("is a no-op for a stale object id — the image was deleted while the picker was open (D-023's posture)", () => {
+    const state = typed(opened(), "image x=10 y=20");
+    expect(commitImageSource(state, "obj_404", PICTURE)).toBe(state);
+  });
+
+  it("is a no-op for an empty url, so a caller with nothing to write cannot clear a picture the operator already has", () => {
+    const state = typed(opened(), "image x=10 y=20");
+    expect(commitImageSource(state, objectNamed(state, "image_1").id, "")).toBe(state);
+  });
+
+  it("gives the panel an ELIDED source row and an UNELIDED edit seed, so a row committed untouched writes the picture back whole (D-107)", () => {
+    const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
+    const withPicture = commitImageSource(outcome.state, objectNamed(outcome.state, "image_1").id, PICTURE);
+    const image = objectNamed(withPicture, "image_1");
+    const row = buildPanelModel(image, withPicture.document.objects).modifiable.find((candidate) => candidate.path === "source");
+    expect(row?.value).toContain("(322 characters)");
+    expect(row?.value).not.toContain(PICTURE);
+    expect(row?.editSeed).toBe(`"${PICTURE}"`);
   });
 });
 

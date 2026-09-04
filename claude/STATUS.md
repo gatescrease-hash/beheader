@@ -1,31 +1,36 @@
-# STATUS — as of entry 0172-REVIEW-phase6-gate
+# STATUS — as of entry 0173-image-load-and-render
 
-**PHASE 6'S GATE WAS CLAIMED (entry 0171) AND REFUSED (0172-REVIEW, verdict REVISE). PHASE 6 IS
-OPEN. PHASE 7 MAY NOT BEGIN.** The ✅ line itself **PASSES** — 0172-REVIEW re-proved it with two
-independent D-016 mutation checks (§2 of that entry) and read the criterion test line by line (§6).
-Nothing about the `script` half is in doubt. **What refused the gate is `image`**, on a ruling the
-human made directly at that review:
+**PHASE 6 IS OPEN AND WAITING ON ONE THING: THE HUMAN LOOKING AT AN IMAGE ON SCREEN.** The ✅ line
+passes and has passed since 0171 (re-proved independently at 0172-REVIEW §2 and §6 — do NOT
+re-derive it). `image` load + render, which **D-142** made the other half of this gate, is **BUILT
+as of entry 0173 and NOT YET REVIEWED, and NOT YET SEEN**.
 
 > **D-142 — a phase's ✅ line is its TEST, not the whole of what the phase must deliver. Where the
 > phase heading names a subsystem the brief specifies elsewhere, that subsystem is part of the
 > gate. Applied to Phase 6: `image` MUST be loadable and MUST render properly — confirmed by the
 > human ON SCREEN — before this gate may be claimed.**
 
+**THE MANUAL CHECK, IN FULL, IS THE NEXT ACTION:** `npm run dev`, type `image x=0 y=0`, choose a
+picture in the file dialog that opens, and confirm it appears — in proportion, inside its frame.
+Then drag it, and click it. **Entry 0173 deliberately did NOT claim the gate**, because D-142
+clause 2 says "renders properly" is settled by the human seeing it and not by a test asserting a
+`drawImage` call happened.
+
 Entry 0171's scope call (that Phase 6's heading is descriptive and `image` rendering is therefore
-not a precondition) is **OVERTURNED** by D-142. The entry stays in the log unedited and is not
+not a precondition) was **OVERTURNED** by D-142. The entry stays in the log unedited and is not
 otherwise criticised — it flagged this exact call as overturnable, in three places, and its ✅-line
-proof stands and **need not be re-derived** by whoever re-claims the gate.
+proof stands.
 
 **D-142 does NOT pull `script` rendering into this gate** (clause 3): §5.8 is titled **STUB ONLY**,
 the heading's own word is "Script *stub*", and its gate clause is engine-side and passes. `image`'s
 heading word carries no such narrowing and §5.7's four sentences are almost entirely about loading
 and drawing. Do not fold the two together.
 
-STATE: **GREEN**. Both configs compile, **1844/1844** tests pass, 0 skipped, 0 `.only`.
-**35 test files.** `npx vite build` clean. (Re-verified independently at 0172-REVIEW §1.)
+STATE: **GREEN**. Both configs compile, **1887/1887** tests pass, 0 skipped, 0 `.only`.
+**36 test files.** `npx vite build` clean.
 
-Current phase: 6 — script stub + image (**OPEN — gate refused at 0172-REVIEW; `image` load+render
-is what it is waiting on**)
+Current phase: 6 — script stub + image (**OPEN — the ✅ line passes; `image` is built but unseen,
+and D-142 clause 2 makes the human's look the precondition**)
 Phase 6 acceptance criterion: *"`script_1.in.factor` is bound to a cell, `polygon_1.radius` is bound
 to `script_1.out.result`, and changing the placeholder output value moves the polygon — with no
 script-specific code in `eval.ts`"* — **PASSING, CONFIRMED BY THE REVIEWER** (0172-REVIEW §2 and §6).
@@ -35,9 +40,10 @@ forced to `return null` → `expected null to be 10`; (2) the `placeholder.<port
 stronger of the two — it neutralises §5.8's SEAM rather than its dependency plumbing. The "no
 script-specific code in `eval.ts`" clause is grep-clean for the fourth independent time (0169,
 0170-REVIEW, 0171, 0172-REVIEW). **The criterion passing is NOT sufficient for the gate — see D-142.**
-Last review point: **0172-REVIEW-phase6-gate** (**REVISE** — the gate is refused; the ✅ line is
+Last review point: **0172-REVIEW-phase6-gate** (**REVISE** — the gate was refused; the ✅ line is
 confirmed).
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files**
+Cycles since last review: **1/3** · diff since last review: **~1050 lines / 11 files (OVER the
+800/10 cap — entry 0173 is a review point on its own, §6.3)**
 
 **0168-REVIEW's finding (settled, kept for history):** the ORIGINAL `isLegalPortName`
 (`graph/node.ts`) only checked non-empty/no-dot, LOOSER than `address.ts`'s `PATH_SEGMENT_PATTERN`
@@ -165,6 +171,18 @@ D-142; this file rewritten. 0172-REVIEW §4 carries one warning worth reading be
 cycle starts: **the decoded-bitmap cache is a `Map` of live DOM objects and may never live in
 `src/engine/`** (Rule 1 + §5.5).
 
+**0173 — UNREVIEWED. THIS IS THE WHOLE BATCH.** Built §5.7's unbuilt half in one slice, exactly as
+0172-REVIEW §8 item 2 scoped it. New `src/render/images.ts` (the decoded-bitmap cache: one decode
+per distinct data URL, failures remembered and never retried, `onDecoded` = `main.ts`'s `paint`);
+`extent.ts`'s `imageExtent`; `hittest.ts`'s `image` arm (joins `text` on the existing bounding-box
+arm); `renderer.ts`'s `drawImage` (frame ALWAYS, picture fitted inside it preserving aspect ratio,
+`opacity` clamped at paint time) plus `renderDocument`'s optional 9th argument, the INJECTED
+`ImageBitmaps`; `main.ts`'s `AppTransition.pickImageFor` + `commitImageSource` + `start`'s
+`choosePicture`; `props.ts`'s display elision for a very long string. 1887/1887, both configs
+clean, `vite build` clean, two D-016 mutation checks both red as predicted and both reverted.
+**Q-027 raised** (§5.7's aspect-ratio clause), provisional (a) taken and tagged. **The gate was
+deliberately NOT claimed — D-142 clause 2 needs the human's eyes first.**
+
 ---
 
 ## Read this first — what a cold reader needs
@@ -203,10 +221,37 @@ SEPARATE family from `out.*` because `out.*` is `derived` and can never be user-
   group. Disclosed in `props.ts`'s own header now; not fixed. Whoever gives `script` a summary row
   should read that header first.
 
-**0img. AN `image` OBJECT HAS SIX SLOTS AND DRAWS NOTHING.** `origin.x`/`origin.y` (imported from
+**0img. AN `image` OBJECT HAS SIX SLOTS, AND AS OF 0173 IT DRAWS, IS CLICKABLE, AND GETS ITS
+PICTURE FROM A FILE PICKER (UNREVIEWED).** `origin.x`/`origin.y` (imported from
 `primitives/geometry.ts`, NOT re-declared — the same identity D-121 gave `text`, which is what makes
 the per-component origin drag reach an image with no image-specific code), `width`, `height`,
 `opacity`, `source`. **No derived slots at all.**
+- **`image x=<n> y=<n>` OPENS THE FILE PICKER ON THE OBJECT IT JUST CREATED.** That is
+  `AppTransition.pickImageFor` — **D-124's shape one type over** (a creation hands straight to the
+  gesture that gives the new object its content; there the in-place editor, here the picker). The
+  chosen file becomes a data URL and is written to `source` by `main.ts`'s `commitImageSource`, a
+  literal `set` through `executeCommand` (Rule 2). **There is NO `addport`-style second command and
+  no way to RE-pick** — see the known problem below; it is a real hole, not a tidy scope line.
+- **`imageExtent` IS `origin` + `width` x `height` AND DOES NOT READ `source`.** An image's box is
+  its size slots whether or not a picture is chosen or decoded, because `drawImage` strokes that box
+  as a FRAME either way. That is what keeps drawn extent and clickable extent one extent (D-066) at
+  every moment — including the seconds between choosing a file and the decode landing — and it is
+  what makes a dismissed picker survivable: you get a visible, deletable empty frame instead of the
+  invisible object D-142 refused. **Do not "fix" the frame away without replacing that guarantee.**
+- **THE PICTURE IS FITTED INSIDE THE BOX, PRESERVING ITS ASPECT RATIO, CENTRED — `PROVISIONAL(Q-027)`.**
+  The box may therefore be larger than the ink in one axis. The other reading (write the decoded
+  natural size into the two slots at load time) needs the natural size to reach a SLOT, which
+  0172-REVIEW §8 named as load-bearing, so it was ASKED not guessed. Reversible in one function,
+  `renderer.ts`'s `fitBitmapIntoBox`.
+- **THE DECODED-BITMAP CACHE IS `src/render/images.ts` AND MAY NEVER MOVE TO `src/engine/`.** It
+  holds a `Map` of live `HTMLImageElement`s — precisely what Rule 1 and §5.5 forbid the engine to
+  hold. The document stores the URL STRING; `renderDocument` takes the cache as an INJECTED 9th
+  argument (`ImageBitmaps`), so tests hand it a hand-written fake and no DOM is needed. A decode
+  that finishes calls `paint` again — that callback is the whole async story.
+- **A VERY LONG STRING NOW ELIDES IN EVERY DISPLAY READER** (`describeSlotValue`, `props.ts`): a
+  data URL would otherwise print in full in a `props` line, a `set` echo and a panel row.
+  `main.ts`'s `editSeed` is the ONE caller that opts out (`{ fullStrings: true }`) — it must stay
+  retypeable, which is D-107/F3's whole reason for existing. **Do not remove that opt-out.**
 - **`source` IS A SIXTH SLOT §5.7's OWN LIST DOES NOT NAME.** §5.7 enumerates five and then says the
   data URL is "stored in the document"; a `GraphObject` is `{ id, name, type, slots }`, so that can
   only mean a slot, and `Value` admits `string`. Disclosed deviation, entry 0165 decision 1,
@@ -222,12 +267,13 @@ the per-component origin drag reach an image with no image-specific code), `widt
   failure, pinned.
 - **`DEFAULT_IMAGE_WIDTH`/`_HEIGHT` are `100`, not `"auto"`.** `text`'s `"auto"` works because a
   measurer answers it; §5.7's equivalent is the decoded bitmap's NATURAL size, which no engine slot
-  can see. The file-picker cycle is free to write the natural size over these.
-- **A CREATED IMAGE IS INVISIBLE AND UNSELECTABLE, and D-140 clause 4 says that is CORRECT as
-  shipped.** `extent.ts`, `hittest.ts` and `renderer.ts` all return "draws nothing" for `image`.
-  **Do not give `image` an extent before the renderer draws it** — D-066 makes drawn extent and
-  clickable extent ONE extent. (0166-REVIEW corrected the comments in those three files that still
-  said `image` has no schema; the arms themselves are unchanged.)
+  can see. **0173 did NOT write the natural size over these** — that is Q-027's option (b), and it
+  is the open question, not a shortcut a later cycle may take on its own.
+- **"A CREATED IMAGE IS INVISIBLE AND UNSELECTABLE" IS NO LONGER TRUE — that line described the tree
+  from 0165 to 0172 and is now history.** All three arms are built (`renderer.ts`'s `drawImage`,
+  `extent.ts`'s `imageExtent`, `hittest.ts`'s bounding-box arm), and they were shipped TOGETHER
+  because D-066 makes drawn extent and clickable extent one extent. D-140 clause 4 said the
+  invisible state was correct *as 0165 shipped it*; D-142 said it was not a gate-passing state.
 
 **0. `TEXT_SCHEMA` HAS ELEVEN NON-DERIVED + THREE DERIVED SLOTS.** Non-derived: `origin.x`/`origin.y`
 (D-121) + `content` + `width`/`height`/**`autoresize`** + five `style.*`. **NO `overflow`** — the slot
@@ -422,34 +468,29 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 `parser.ts` (two) and `commands.ts` (three, two of which were stale COUNTS — "all four handlers",
 "the four types below").
 
-## Next slice — NOT a recommendation. This is what D-142 requires
+## Next — NOT a recommendation. Two things, in this order
 
-**`image` LOAD + RENDER. It is the only thing standing between here and the Phase 6 gate.** Phase 7
-may not begin until it lands and the human has seen it work. 0172-REVIEW §8 is the fix list; in
-short, and all of it ONE slice with its own scope statement:
+**1. THE HUMAN LOOKS AT AN IMAGE ON SCREEN.** `npm run dev` → `image x=0 y=0` → choose a picture →
+confirm it appears, in proportion, inside its frame; then drag it and click it. D-142 clause 2 makes
+this a PRECONDITION of the gate, not a courtesy, and STATUS's standing note — *the operator cannot
+see what you can see* — is why. Entry 0173 built it and did not claim the gate; **do not claim the
+gate before this has happened.**
 
-1. A **`renderer.ts` arm, an `extent.ts` arm and a `hittest.ts` arm, shipped TOGETHER** — D-066
-   makes drawn extent and clickable extent one extent, so shipping the extent without the drawing is
-   forbidden. All three sit in the "no visual definition yet" arms today
-   (`renderer.ts:424`, `extent.ts:92`, `hittest.ts:204`).
-2. A **decoded-`HTMLImageElement` cache with a repaint when a decode completes.** **THIS LIVES IN
-   `render/`/`main.ts` AND NEVER IN `src/engine/`** — an `HTMLImageElement` is a live DOM object and
-   a `Map` of them is exactly what Rule 1 and §5.5 forbid the engine to hold. The document stores
-   the data URL STRING and nothing else. **The cache and the async repaint are the real design
-   question here** — where live render state lives, and what re-triggers a paint.
-3. **§5.7's file picker, as a `CommandEffect`** — follow `load`'s own precedent exactly:
-   `commands.ts` returns the effect (`CommandEffect` at `commands.ts:212-217`), `main.ts`'s
-   `performEffect` owns the DOM half.
-4. **§5.7's "preserve aspect ratio by default"** — a real specified clause, not decoration, and the
-   one part with no ruling behind it. `DEFAULT_IMAGE_WIDTH`/`_HEIGHT` are `100`/`100` and the
-   natural size of a decoded bitmap is what that clause actually needs. If honouring it requires the
-   decoded natural size to reach a SLOT, that is load-bearing — **raise Q-027, do not guess** (§7).
-5. **Then get it on screen and have the human confirm it** (D-142 clause 2 — "renders properly" is
-   settled by the human seeing it, not by a test asserting a `drawImage` call happened), **and only
-   then re-claim the gate** in a new entry, citing 0172-REVIEW §2 and §6 for the ✅ line rather than
-   re-deriving it.
+Things worth the human's opinion while looking, none of which a test can settle:
+- **the FRAME.** Every image is stroked with a light grey box, always, picture or not. It is what
+  makes an empty image visible and what explains the letterbox margin — but it is a visual choice,
+  it is one constant and one `strokeRect` to remove, and the human may hate it.
+- **Q-027** — the picture is FITTED inside `width` x `height` (so a 16:9 photo in the default
+  100x100 box leaves a band above and below). The alternative is the box hugging the picture's
+  natural size at load time. This is exactly the "what do you want to see" call the question exists
+  to put to the operator.
+- **re-picking**: there is none. Choosing the wrong file means `delete image_1` and starting over.
 
-**NOT in that slice, explicitly:** `script` rendering (a labelled box with ports) is its OWN
+**2. THEN re-claim the gate in a NEW entry**, citing 0172-REVIEW §2 and §6 for the ✅ line rather
+than re-deriving it, and 0173's own two mutation checks plus the human's confirmation for the
+`image` half.
+
+**NOT in either step, explicitly:** `script` rendering (a labelled box with ports) is its OWN
 unscoped future slice — D-142 clause 3 keeps it out of this gate, and nothing in 0169 touches
 `render/`. It needs a real `addport`/`removeport` UI mechanism too, or ports stay reachable only via
 raw `mutation.ts` operations (§5.10 names no grammar for either command; do not invent one under
@@ -509,23 +550,23 @@ to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-**Nothing.** Entry 0171 has been reviewed (0172-REVIEW). The tree is byte-identical to `21066c7`
-plus this review's documentation changes; 0172-REVIEW's own two mutation checks were both reverted
-and the tree re-verified clean afterwards. 0/3 cycles, 0 lines / 0 files since the last review.
+**Entry 0173 — §5.7's `image` load + render, the whole slice.** `src/render/images.ts` (NEW),
+`render/extent.ts`, `render/hittest.ts`, `render/renderer.ts`, `command/props.ts`, `src/main.ts`,
+plus five test files. 1/3 cycles, **~1050 lines / 11 files — OVER §6.3's 800/10 cap**, so this is a
+review point on its own even before D-142's on-screen precondition.
 
 ## Reviewed but NOT yet seen on screen
 
 Nothing REVIEWED is unseen. Entry 0169 (reviewed at 0170-REVIEW) is unseeable by construction —
-pure engine work, no render file touched, a `script` object draws nothing (the same posture `image`
-still has). Entry 0161's hanging indent, the last visual item, was confirmed on screen 2026-09-03.
+pure engine work, no render file touched, a `script` object draws nothing. Entry 0161's hanging
+indent, the last visual item, was confirmed on screen 2026-09-03.
 
-**The next thing to reach this section will be `image` itself, and D-142 makes the human's look at
-it a precondition of the Phase 6 gate rather than a courtesy.**
+**BUILT AND UNSEEN: entry 0173's `image`.** It is unreviewed AND unseen, and D-142 clause 2 makes
+the human's look a precondition of the Phase 6 gate rather than a courtesy. See "Next" above for
+what to look at.
 
 ## Not started
 
-**`image` RENDERING, HIT-TESTING AND §5.7's FILE PICKER — THE PHASE 6 GATE IS WAITING ON THIS**
-(D-142). See "Next slice" above; it is no longer an optional adjacent item. ·
 §5.8's script node's RENDERING (a labelled box with input ports left, output ports right — §5.8's own
 words). The schema/stub/command are BUILT AND REVIEWED as of entry 0169/0170-REVIEW — this item is
 specifically the `render/`/`extent.ts`/`hittest.ts` work, plus a real `addport`/`removeport` UI
@@ -582,12 +623,26 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
-- **AN `image` OBJECT IS INVISIBLE AND UNSELECTABLE — AND AS OF D-142 THIS IS WHAT IS BLOCKING THE
-  PHASE 6 GATE.** Six correct slots, round-trips, renameable, `props`-able, `link`-able,
-  `delete`-able — and it draws nothing, and nothing can load a picture into it. Deliberate and
-  disclosed at 0165, and D-140 clause 4 still says that was correct AS THAT CYCLE SHIPPED IT; D-142
-  says it is not a gate-passing state. The render arm, the extent, the cache and the picker are one
-  cycle, not four footnotes. **Do not add the extent alone** (D-066).
+- **THERE IS NO WAY TO RE-PICK AN `image`'s PICTURE.** The file dialog opens ONCE, on creation
+  (`AppTransition.pickImageFor`). Choosing the wrong file means `delete image_1` and starting over;
+  the only other route to `source` is typing a data URL by hand, which no person can do. Entry 0173
+  judged a new command word to be §8's last-bullet gold-plating and a picker button on the
+  properties panel to be D-102 clause 9's deferred territory, and built neither. **A real hole, not
+  a tidy scope line** — the cheapest honest fix is probably the panel's `source` row offering the
+  picker instead of a text input, and that needs a ruling.
+- **THE PROPERTIES PANEL BUILDS THE WHOLE DATA URL AS A STRING ON EVERY PAINT** — the `source` row's
+  `editSeed`, which must stay unelided (D-107/F3). Only while an image is SELECTED, and only a few
+  hundred KB per pointer move; Rule 5 says do not optimise, so 0173 did not. Named here so it is
+  known rather than discovered.
+- **DRAGGING AN IMAGE DEEP-CLONES A MULTI-MEGABYTE DOCUMENT PER POINTER MOVE.** Unmeasured. Strings
+  are immutable and `cloneObjects` should share them by reference, but if dragging an image is
+  visibly laggy this is the first place to look — and §5.9's own perf note applies: **throttle to
+  animation frames, NEVER write outside the mutation API.**
+- **AN IMAGE WHOSE FILE WAS NOT A PICTURE, OR WHOSE PICKER WAS DISMISSED, DRAWS AN EMPTY FRAME AND
+  SAYS NOTHING.** `images.ts` remembers the failed decode and never retries; there is no error badge
+  for it, because no `ErrorValue` is involved — the `source` slot holds a perfectly valid string
+  that simply does not decode. Deliberate; a badge would need a render-layer error channel that does
+  not exist.
 - **A `script` OBJECT IS INVISIBLE, UNSELECTABLE, AND UNREACHABLE FROM THE COMMAND LINE FOR PORTS.**
   `script x= y=` creates a real, schema-conformant, correctly-evaluating node (entry 0169, reviewed
   and ACCEPTED at 0170-REVIEW) — but `render/`/`extent.ts`/`hittest.ts` have zero `script`-specific
@@ -623,7 +678,8 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 - **A panel with a focused `<select>` stops updating its other rows** until it is blurred.
 - **A freshly-created `text` object opens its editor UNSELECTED** (D-136 clause 4 leaves it).
 - **`text 30,40` (unquoted, comma) places a box at (30,40) with empty content** (entry 0149).
-  **`image 30,40` does the same for an image** — the identical point-shorthand path.
+  **`image 30,40` does the same for an image** — the identical point-shorthand path — and, as of
+  0173, also opens the file picker on it.
 - **THE EDITOR SHOWS RAW SOURCE; THE CANVAS DRAWS `resolvedContent`, NOW WITH MARKUP RENDERED.**
   Two deliberate differences, not one.
 - **The cell editor does not reproduce `TABLE_CELL_TEXT_PADDING`'s 4-unit inset, and left-aligns a
@@ -734,8 +790,8 @@ inherits the same posture. **`image.source` does NOT** — nothing parses it, so
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117**, **Q-021 → D-120**, **Q-022 →
 D-121**, **Q-023 → D-122**, **Q-024 → D-123**, **Q-025 → D-139**, **Q-026 → D-141** — all CLOSED.
-Next free: **Q-027**, and the `image` slice above names the one thing likely to need it (whether a
-decoded bitmap's NATURAL size must reach a slot for §5.7's "preserve aspect ratio by default").
+**Q-027 is OPEN** (raised 0173, §5.7's aspect-ratio clause — exactly the question 0172-REVIEW §8
+predicted would be needed), provisional (a) taken and tagged. Next free: **Q-028**.
 
 ## Live PROVISIONAL tags and open questions
 
@@ -751,6 +807,14 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (×2, `-0`): open, deferred, blocking nothing.
 
+**`PROVISIONAL(Q-027)` → `src/render/renderer.ts`** (×1, `fitBitmapIntoBox`'s doc comment): does
+§5.7's "preserve aspect ratio by default" describe how a picture is DRAWN (taken: the box bounds the
+picture and never distorts it, at any size) or the size its `width`/`height` slots are FIRST GIVEN
+(the decoded natural size written into the two slots at load time)? Raised at entry 0173; reversible
+in that one function, which reads no state and writes none. **Option (b) is the one that needs the
+natural size to reach a SLOT** — which 0172-REVIEW §8 named as the load-bearing half, and is why
+this was asked rather than guessed.
+
 **No other `PROVISIONAL` tags exist.** `grep -rn "PROVISIONAL(" src` confirms it.
 
 ## Gotchas for the next model
@@ -764,7 +828,20 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
   and honestly, and was still overturned.
 - **THE DECODED-BITMAP CACHE MAY NEVER LIVE IN `src/engine/`.** An `HTMLImageElement` is a live DOM
   object; a `Map` of them is precisely what Rule 1 and §5.5 forbid the engine to hold. The document
-  stores the data URL STRING. This is the single easiest way to fail Rule 1 in the `image` cycle.
+  stores the data URL STRING. It is `src/render/images.ts` as of 0173, INJECTED into
+  `renderDocument` as an optional 9th argument rather than held by it — do not move it, and do not
+  let `renderer.ts` construct one.
+- **`extent.ts` CANNOT SEE WHETHER A PICTURE HAS DECODED, AND MUST NOT LEARN TO.** It is pure and
+  has no cache; threading one through `objectExtent` would touch eight call sites. That is WHY an
+  image's extent is its `width`/`height` slots alone and why `drawImage` strokes the box as a frame
+  unconditionally — the frame is what keeps D-066 true, not a decoration. Removing the frame without
+  replacing that guarantee re-creates the invisible-click-target D-066 forbids.
+- **A DISPLAY FORMATTER THAT CAN RECEIVE AN `image.source` MUST NOT PRINT IT WHOLE.**
+  `describeSlotValue` elides by default now; the ONE opt-out (`{ fullStrings: true }`) is
+  `main.ts`'s `editSeed`, and it needs the string whole for D-107/F3's reason. A new display caller
+  gets the safe behaviour for free; a new EDIT-seed caller has to know to ask.
+- **`renderer.ts`'s `drawImage` RESTORES `ctx.globalAlpha` rather than setting it to 1.** Every draw
+  call in that file assumes it owns nothing about `ctx` beyond what it sets itself.
 - **D-141's DATA MODEL AND ITS OWN NEXT SLICE ARE BOTH BUILT AND REVIEWED (entry 0167 →
   0168-REVIEW ACCEPT WITH EDITS; entry 0169 → 0170-REVIEW ACCEPT, no edits). THE GATE IS OPEN — DO
   NOT REBUILD** `GraphObject.ports`, `DerivedSlotGroup`, `resolveDerivedSlots`,
@@ -788,8 +865,10 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
 - **AN INERT MODULE'S TESTS AGREE WITH ITS AUTHOR.** 0159's parser passed everything and was wrong.
   0165's `image` is inert BY DESIGN, which is why it carries mutation checks it did not owe — if you
   add to it, wire it to a consumer in the same cycle.
-- **D-066: DRAWN EXTENT AND CLICKABLE EXTENT ARE ONE EXTENT.** Giving `image` an `objectExtent` arm
-  without a `renderer.ts` arm creates a click target for an invisible object. Ship them together.
+- **D-066: DRAWN EXTENT AND CLICKABLE EXTENT ARE ONE EXTENT.** Giving a type an `objectExtent` arm
+  without a `renderer.ts` arm creates a click target for an invisible object. Ship them together —
+  0173 did, for `image`, and `drawImage` takes its box FROM `objectExtent` so the two cannot drift.
+  **`script` is the type this still binds** the next time someone reaches for its extent.
 - **THE MARKDOWN PARSER'S FLANKING RULE IS LOAD-BEARING, NOT POLISH.** If you simplify
   `opensEmphasis`/`closesEmphasis`, you reintroduce a shipped bug that 30 green tests missed.
 - **`measure.ts` AND `renderer.ts` MUST MOVE TOGETHER, ALWAYS.** One `layOutText`, two readers.

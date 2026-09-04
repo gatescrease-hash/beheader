@@ -24,7 +24,11 @@
  * `parser.ts` prompt step — and its new box opens D-125's editor on creation
  * WHEN no content was given; `advance` returns `AppTransition.openEditor`,
  * `applyTransition` acts on it, and an editor abandoned while still empty
- * removes the box — D-136 clause 2).
+ * removes the box — D-136 clause 2), and **D-142** (§5.7's `image`: creating one
+ * opens a file picker on it — `AppTransition.pickImageFor`, D-124's shape one
+ * type over — and the chosen picture is written to its `source` slot as an
+ * ordinary literal `set` through `executeCommand`; `start` also owns the
+ * decoded-bitmap cache, which Rule 1 forbids `engine/` to hold).
  * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
  *        May import: engine/*, render/*, command/*. Imported by nothing but
  *        `main.test.ts`, which reaches the pure half through the bootstrap guard
@@ -98,8 +102,11 @@
  *     that prunes `AppState.panels` down to the current selection, so every
  *     caller that replaces `interaction` goes through it rather than
  *     assigning the field directly.
- *   - Drawing anything — `render/renderer.ts`'s (a `text` object included, since
- *     entry 0138). `start` builds an `EvalContext` around `render/measure.ts`'s
+ *   - Drawing anything — `render/renderer.ts`'s (a `text` object included since
+ *     entry 0138, an `image` object since D-142). DECODING a picture is
+ *     `render/images.ts`'s; `start` owns the one cache instance and hands it to
+ *     `renderDocument`, and hands `paint` back to it as the repaint a finished
+ *     decode triggers. `start` builds an `EvalContext` around `render/measure.ts`'s
  *     Canvas2D `TextMeasurer` (Rule 1) — over its OWN offscreen 2D context, so
  *     setting `ctx.font` to measure never disturbs a draw — and threads it
  *     through `executeCommand`, `loadDocument`, and the drag path
@@ -138,6 +145,7 @@ import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
 import { formatFormula } from "./engine/formula/format.ts";
 import { getSlot, slotKey, type GraphObject, type Value } from "./engine/graph/node.ts";
 import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
+import { IMAGE_SOURCE_PATH } from "./engine/primitives/image.ts";
 import { executeCommand, type CommandEffect } from "./command/commands.ts";
 import { parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
@@ -164,6 +172,7 @@ import {
 import { resizeCursor } from "./render/handles.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { renderDocument } from "./render/renderer.ts";
+import { createImageBitmapCache } from "./render/images.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 
 // ---------------------------------------------------------------------------
@@ -250,6 +259,25 @@ export interface AppTransition {
   readonly fileRequest: FileRequest | undefined;
   readonly refused: boolean;
   readonly openEditor?: EditorTarget;
+  /**
+   * §5.7's "load via file picker": the id of an `image` object that has just
+   * been created and now wants a picture chosen for it.
+   *
+   * A separate field rather than a widened `FileRequest` for the reason
+   * `openEditor` is one: it names an OBJECT, and `save`/`load` name none. It
+   * follows `openEditor`'s precedent exactly (**D-124**: a creation hands
+   * straight to the gesture that gives the new object its content — there, the
+   * in-place editor; here, the file picker), so `image x=0 y=0` is one gesture
+   * ending in a picture, not two the operator has to know to pair.
+   *
+   * The picker is DOM, and reading a file is asynchronous, so the pure half can
+   * only describe the request — `start`'s `choosePicture` performs it and writes
+   * the resulting data URL back through `commitImageSource`, which runs an
+   * ordinary `set` through `executeCommand` (Rule 2). Dismissing the picker
+   * writes nothing and leaves the created image with its empty `source`, drawn
+   * as an empty frame the operator can `delete` or point at again.
+   */
+  readonly pickImageFor?: string;
 }
 
 /**
@@ -439,6 +467,16 @@ function advance(state: AppState, session: CommandSession, viewport: Viewport, c
       // the command bar focused, the same ending `circle`/`rect`/`table` have.
       if (session.command.kind === "text" && session.command.content === "" && outcome.createdObjectId !== undefined) {
         return { state: executed, fileRequest: undefined, refused: false, openEditor: { kind: "text", objectId: outcome.createdObjectId } };
+      }
+      // §5.7's "load via file picker", on D-124's own precedent one type over: a
+      // freshly-created `image` object has an empty `source`, and choosing the
+      // picture is the second half of the same gesture rather than a command the
+      // operator has to know to type next. Unconditional, unlike `text`'s —
+      // §5.10's `image x= y=` form carries no picture argument, so there is no
+      // "content was given" case to exclude (D-136 clause 1's distinction has
+      // nothing to bite on here).
+      if (session.command.kind === "image" && outcome.createdObjectId !== undefined) {
+        return { state: executed, fileRequest: undefined, refused: false, pickImageFor: outcome.createdObjectId };
       }
       return transition(executed);
     }
@@ -786,10 +824,12 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
       // places, trimmed — so float dust (`10.000000000000002`) doesn't read
       // as precision. `props`'s own output (`commands.ts`) stays untouched.
       value: describeSlotValue(descriptor.value, { maxDecimals: 4 }),
-      // D-107 (F3): the EDIT seed, unrounded — what an untouched commit must
-      // write back bit-for-bit. Same formatter, no `maxDecimals`, never a
-      // third copy of the display logic.
-      editSeed: describeSlotValue(descriptor.value),
+      // D-107 (F3): the EDIT seed, unrounded and UNELIDED — what an untouched
+      // commit must write back bit-for-bit, which is why this is the one caller
+      // that asks `describeSlotValue` for a long string whole (`props.ts`'s
+      // `fullStrings`). Same formatter either way, never a third copy of the
+      // display logic.
+      editSeed: describeSlotValue(descriptor.value, { fullStrings: true }),
       formulaSource: descriptor.formulaSource,
       kind: descriptor.kind,
       synthetic: descriptor.synthetic === true,
@@ -906,13 +946,21 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
  * `select`/`zoom`/`fit`/`save`/`load`), so there is no effect to perform here
  * and none is looked for; a future synthesised command that DID carry one would
  * need this function widened deliberately, not silently ignored.
+ *
+ * `echo` overrides only the ECHOED TEXT, never the command that runs. Its one
+ * caller is `commitImageSource`: §5.7's data URL is hundreds of thousands of
+ * characters and clause 7's "echo the synthesised command itself" is unmeetable
+ * for it — a line the operator could not read, could not retype, and would have
+ * to scroll past for the rest of the session. Every other caller takes
+ * `describePanelCommand`'s exact text, unchanged.
  */
 function runPanelCommand(
   state: AppState,
   command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | ClearCommand | DeleteCommand,
   context: EvalContext,
+  echo: string = describePanelCommand(command),
 ): AppState {
-  const echoed = withLog(state, [`> ${describePanelCommand(command)}`]);
+  const echoed = withLog(state, [`> ${echo}`]);
   const outcome = executeCommand(command, echoed.document, context);
   if (!outcome.ok) {
     return withLog(echoed, [outcome.message]);
@@ -1107,6 +1155,40 @@ export function commitTextContent(
     return state;
   }
   return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, slotKey(TEXT_CONTENT_PATH)), value: raw }, context);
+}
+
+/**
+ * Writes a chosen picture into an `image` object's `source` slot (§5.7's "load
+ * via file picker, store as a data URL in the document").
+ *
+ * A literal `set`, through the same `executeCommand` seam a typed `set` uses
+ * (Rule 2, D-069) — the data URL is an ordinary `string` `Value` and the slot is
+ * an ordinary `literal` slot (**D-140**), so nothing here is special except the
+ * size of the string. `buildPanelSetCommand` is deliberately NOT reused, for
+ * `commitTextContent`'s reason: it routes every non-numeric string to
+ * `set-formula`, which would try to PARSE the URL.
+ *
+ * The echo is a summary rather than the command (`runPanelCommand`'s `echo`
+ * argument): the URL is unreadable, unretypeable, and long enough to bury
+ * §5.10's log. What is written is the full string regardless.
+ *
+ * A stale `objectId` is a no-op — the operator deleted the image while the
+ * picker was open — as is an EMPTY url, which is what a caller with nothing to
+ * write passes rather than clearing a picture the operator already had. D-023's
+ * posture, the same one `commitPanelEdit` and `commitTextContent` take.
+ */
+export function commitImageSource(
+  state: AppState,
+  objectId: string,
+  dataUrl: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined || dataUrl === "") {
+    return state;
+  }
+  const target = panelSlotAddress(object.name, slotKey(IMAGE_SOURCE_PATH));
+  return runPanelCommand(state, { kind: "set", target, value: dataUrl }, context, `set ${target} <picture, ${dataUrl.length} characters>`);
 }
 
 /**
@@ -1327,6 +1409,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   // the panel plumbing. `panelsContainer` is the fallback only if the DOM shape
   // ever changes out from under this.
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
+  // §5.7's decoded pictures, keyed by data URL. It lives HERE and never in
+  // `src/engine/` — an `HTMLImageElement` is a live DOM object and a `Map` of
+  // them is exactly what Rule 1 and PROCESS_BRIEF §5.5 forbid the engine to hold
+  // (0172-REVIEW §4). The document stores the URL string; this holds the pixels.
+  // `paint` is the decode callback: the paint that first asked for a picture drew
+  // the object's frame alone, and this is what draws the picture into it once the
+  // browser has one. Declared before `paint` and referenced through the closure,
+  // which is why the callback is a wrapper rather than `paint` itself.
+  const imageBitmaps = createImageBitmapCache(() => paint());
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
 
@@ -1391,6 +1482,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       state.interaction.selectedObjectIds,
       panelledIds,
       inPlaceEditor,
+      imageBitmaps,
     );
     updatePanels(panelledIds);
     updateEditor();
@@ -1806,6 +1898,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         (loaded, line) => apply(replaceDocument(state, loaded, line)),
         (message) => apply(logLine(state, message)),
         evalContext,
+      );
+    }
+    // §5.7's file picker, on the same shape `load` uses: the pure half described
+    // the request, this half performs it, and the answer comes back through
+    // `executeCommand` like every other write (Rule 2). Read AFTER `apply`, so
+    // `state` already holds the just-created image the id names.
+    if (next.pickImageFor !== undefined) {
+      const objectId = next.pickImageFor;
+      choosePicture(
+        (dataUrl) => apply(commitImageSource(state, objectId, dataUrl, evalContext)),
+        (message) => apply(logLine(state, message)),
       );
     }
   };
@@ -2367,6 +2470,59 @@ function openDocument(
         const reason = error instanceof Error ? error.message : String(error);
         onRefused(`could not read ${file.name}: ${reason}`);
       });
+  });
+  picker.click();
+}
+
+/**
+ * §5.7's "Load via file picker, store as a data URL in the document."
+ *
+ * The same shape `openDocument` above takes, and deliberately so — a file input
+ * created on demand, clicked, and read asynchronously — with two differences that
+ * follow from what is being read:
+ *
+ * - `accept="image/*"`, because the file has to DECODE, not parse. A file that
+ *   is not a picture reaches `render/images.ts`, which records the failed decode
+ *   and leaves the object drawn as an empty frame; `accept` is the browser's
+ *   own filter, not a guarantee (an operator can always choose "all files").
+ * - `readAsDataURL`, not `.text()`. §5.7 says the document stores a data URL, and
+ *   `FileReader` is the one API that produces one — the alternative is reading
+ *   bytes and base64-encoding them by hand, which would be a second encoder for
+ *   a thing the platform already does.
+ *
+ * A DISMISSED picker calls nothing, exactly as `openDocument`'s does: there is
+ * no refusal to report and nothing to write. The created image keeps its empty
+ * `source` and draws as a frame — visible and deletable, unlike the invisible
+ * object D-142 refused.
+ *
+ * Every failure path reports through `onRefused` rather than falling silent, for
+ * D-127 clause 5's reason: a boundary that turns an error into silence is the
+ * defect, whatever the particular error.
+ */
+function choosePicture(onChosen: (dataUrl: string) => void, onRefused: (message: string) => void): void {
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = "image/*";
+  picker.addEventListener("change", () => {
+    const file = picker.files?.[0];
+    if (file === undefined) {
+      return; // The picker was dismissed — not a refusal, and nothing to say.
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      // `readAsDataURL` yields a string on success; the other arm of
+      // `FileReader.result` (an `ArrayBuffer`) belongs to `readAsArrayBuffer` and
+      // cannot occur here. Checked rather than cast, so a surprise is a message.
+      if (typeof reader.result !== "string") {
+        onRefused(`could not read ${file.name} as a data URL`);
+        return;
+      }
+      onChosen(reader.result);
+    });
+    reader.addEventListener("error", () => {
+      onRefused(`could not read ${file.name}`);
+    });
+    reader.readAsDataURL(file);
   });
   picker.click();
 }

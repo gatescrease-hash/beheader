@@ -26,7 +26,11 @@
  *   `commands.ts` caller, `props` included), a number renders exactly as
  *   before; `main.ts`'s `buildPanelModel` is the ONE caller that passes
  *   `{ maxDecimals: 4 }`, rounding a displayed number for the panel while
- *   leaving `props`'s own output byte-identical.
+ *   leaving `props`'s own output byte-identical. A second option,
+ *   `fullStrings`, is the same shape inverted — a very long string ELIDES
+ *   unless the caller asks for it whole — so §5.7's data-URL `source` slot
+ *   cannot print a hundred thousand characters into a log line, a panel row, or
+ *   a `set` echo. `main.ts`'s `editSeed` is its one caller.
  *
  *   `commands.ts`'s `props` handler formats `SlotDescriptor[]` into log
  *   lines; the properties panel (D-094, not yet built) will render rows from
@@ -220,10 +224,20 @@ function tableCellsSummary(object: GraphObject): SlotDescriptor {
  * `Point` round to at most that many decimal places — see
  * `formatDisplayNumber`. Untouched either way (D-099 clause 4): the `n
  * points` summary, the table `cells` summary string (already text, not a bare
- * number, by the time it reaches here), the error-value text, and the
- * quoting of strings.
+ * number, by the time it reaches here), and the error-value text.
+ *
+ * `options.fullStrings` inverts D-099's shape for the STRING arm, deliberately:
+ * a very long string is ELIDED by default and rendered whole only when the
+ * caller asks. §5.7's `image.source` holds a data URL of hundreds of thousands
+ * of characters, and every display reader of this function — `props`'s log
+ * lines, a `set` echo, a panel row — would otherwise print all of it. The one
+ * caller that needs the string back verbatim is `main.ts`'s `editSeed`, which
+ * must stay a value the operator could type back unchanged (D-107's own reason
+ * for existing), so it opts in. Defaulting the other way would put the burden on
+ * every future display caller to remember, and the failure mode of forgetting is
+ * a megabyte in the log.
  */
-export function describeSlotValue(value: Value, options?: { readonly maxDecimals?: number }): string {
+export function describeSlotValue(value: Value, options?: { readonly maxDecimals?: number; readonly fullStrings?: boolean }): string {
   if (value === null) {
     return "nothing";
   }
@@ -231,7 +245,7 @@ export function describeSlotValue(value: Value, options?: { readonly maxDecimals
     return `${value.error}: ${value.message}`;
   }
   if (typeof value === "string") {
-    return `"${value}"`;
+    return options?.fullStrings === true ? `"${value}"` : elideLongString(value);
   }
   if (typeof value === "boolean") {
     return String(value);
@@ -244,6 +258,32 @@ export function describeSlotValue(value: Value, options?: { readonly maxDecimals
   }
   const point = value as Point;
   return `${formatDisplayNumber(point.x, options?.maxDecimals)},${formatDisplayNumber(point.y, options?.maxDecimals)}`;
+}
+
+/**
+ * How much of a string `describeSlotValue` shows before eliding it, and how much
+ * of the head it keeps. Round, untuned numbers (Rule 5), chosen only to be
+ * comfortably longer than every string any other slot in the registry holds — a
+ * font family, an alignment keyword, a text box's content — so the elision fires
+ * for §5.7's data URLs and effectively nothing else.
+ */
+const DISPLAY_STRING_MAX_LENGTH = 80;
+const DISPLAY_STRING_HEAD_LENGTH = 40;
+
+/**
+ * A string as display text: quoted whole when it is short, and otherwise its
+ * head plus its true length.
+ *
+ * The elided form is deliberately NOT re-typeable — it says how many characters
+ * were dropped rather than pretending to be the value — because a display string
+ * that looks like a literal is exactly how a truncated value gets committed back
+ * over a real one (the F3 defect D-107 fixed, in a different disguise).
+ */
+function elideLongString(value: string): string {
+  if (value.length <= DISPLAY_STRING_MAX_LENGTH) {
+    return `"${value}"`;
+  }
+  return `"${value.slice(0, DISPLAY_STRING_HEAD_LENGTH)}…" (${value.length} characters)`;
 }
 
 /**

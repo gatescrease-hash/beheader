@@ -182,3 +182,26 @@ describe("describeSlotValue — maxDecimals (D-099): panel-only display rounding
     expect(describeSlotValue([{ x: 0, y: 0 }, { x: 1, y: 1 }], { maxDecimals: 4 })).toBe("2 points");
   });
 });
+
+describe("describeSlotValue — a very long string is elided, so §5.7's data URL cannot flood a log line or a panel row", () => {
+  /** 200 characters — comfortably past the display cap, and shaped like the data URL an `image` object's `source` slot actually holds. */
+  const LONG = `data:image/png;base64,${"A".repeat(178)}`;
+
+  it("shows the head of a long string and its true length, never the whole of it", () => {
+    const described = describeSlotValue(LONG);
+    expect(described).toBe('"data:image/png;base64,AAAAAAAAAAAAAAAAAA…" (200 characters)');
+    expect(described).not.toContain(LONG);
+  });
+
+  it("renders a short string whole, quoted, exactly as before", () => {
+    expect(describeSlotValue("sans-serif")).toBe('"sans-serif"');
+  });
+
+  it("renders a long string whole when the caller asks for it, which is how an edit seed stays typeable back (D-107)", () => {
+    expect(describeSlotValue(LONG, { fullStrings: true })).toBe(`"${LONG}"`);
+  });
+
+  it("elides independently of maxDecimals, so the panel's rounded display still gets the short form", () => {
+    expect(describeSlotValue(LONG, { maxDecimals: 4 })).toContain("(200 characters)");
+  });
+});

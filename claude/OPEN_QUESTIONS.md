@@ -8,7 +8,46 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-027**
+Next free ID: **Q-028**
+
+---
+
+## Q-027 — Does §5.7's "preserve aspect ratio by default" describe how a picture is DRAWN, or the size its `width`/`height` slots are first given?
+Raised: entry 0173-image-load-and-render (implementer)   Brief section: §5.7, against D-066,
+D-140 and Rule 6. Status: **OPEN**. Flagged in advance by 0172-REVIEW §8 item 2 as the one part
+of the `image` slice with no ruling behind it.
+
+Ambiguity: §5.7's four sentences say "draw at a position with width/height, preserve aspect ratio
+by default" and stop. An `image` object has exactly the two size slots §5.7 names, and nothing
+tells them what the picture's own proportions are — only a decoded bitmap knows that, and the
+decode lives in `render/` because Rule 1 forbids the engine to hold one (D-142's own note,
+0172-REVIEW §4). So the clause can be honoured in two places, and they are not the same rule:
+
+Options:
+(a) **A property of DRAWING.** `width`/`height` are the BOX; the picture is scaled to fit inside
+    it, centred, its proportions never distorted at any size the operator sets. Nothing is written
+    to a slot when a picture loads. The cost: the box can be larger than the ink in one axis (a
+    16:9 photo in the default 100x100 box leaves a band above and below), so the click box and the
+    selection outline cover space the picture does not — mitigated, but not erased, by `drawImage`
+    stroking the whole box as a frame.
+(b) **A property of the SIZE FIRST GIVEN.** When a picture decodes, write its natural size (or
+    that size scaled to some default extent) into `width`/`height`, so the box matches the picture
+    exactly; afterwards `set image_1.width 300` distorts it freely, which is what "by default"
+    would then mean. The cost: the natural size has to reach a SLOT, so the render layer writes
+    document state that no command asked for, asynchronously, some time after the mutation that
+    set `source` committed — a second write path in everything but name unless it goes through
+    `executeCommand`, and a write whose value comes from outside the graph either way.
+
+Recommendation: **(a)**, taken provisionally. It keeps the clause TRUE forever rather than only at
+the instant of loading — under (b) the first `set image_1.width` destroys the ratio the brief asks
+to preserve — and it needs nothing from the engine, which is what makes it reversible. (b) is the
+reading that would let the box hug the picture, and if the human wants that on screen it is worth
+its cost; that is exactly the call the operator should make rather than the implementer.
+
+Reversible? **Yes** — (a) lives entirely in `renderer.ts`'s `fitBitmapIntoBox`, one function that
+reads no state and writes none. Adopting (b) later replaces it and adds a write path; it does not
+have to undo anything. Provisional choice taken: **yes, (a)**. Tagged at:
+`src/render/renderer.ts` (`fitBitmapIntoBox`'s doc comment).
 
 ---
 
