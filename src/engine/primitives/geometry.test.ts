@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
 import { mutate } from "../mutation.ts";
 import type { GraphObject, Point, Value } from "../graph/node.ts";
-import { getObjectSchema } from "./schema.ts";
+import { getObjectSchema, resolveDerivedSlots } from "./schema.ts";
 import {
   BOUNDS_MAX_X_PATH,
   BOUNDS_MAX_Y_PATH,
@@ -367,7 +367,8 @@ function derivedPlaceholders(type: "circle" | "polygon" | "rect"): Record<string
     throw new Error(`test setup: expected a schema for ${type}`);
   }
   const placeholders: Record<string, { readonly kind: "derived"; readonly value: null }> = {};
-  for (const slot of schema.derivedSlots) {
+  const stub: GraphObject = { id: "stub", name: "stub", type, slots: {} };
+  for (const slot of resolveDerivedSlots(stub, schema.derivedSlots)) {
     placeholders[slot.path.join(".")] = { kind: "derived", value: null };
   }
   return placeholders;

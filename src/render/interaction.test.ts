@@ -15,7 +15,7 @@ import type { CameraState } from "../engine/document.ts";
 import type { EvalContext } from "../engine/eval-context.ts";
 import type { GraphObject } from "../engine/graph/node.ts";
 import { mutate, type MutationJournalEntry } from "../engine/mutation.ts";
-import { getObjectSchema } from "../engine/primitives/schema.ts";
+import { getObjectSchema, resolveDerivedSlots } from "../engine/primitives/schema.ts";
 import { deselect, INITIAL_INTERACTION_STATE, pointerDown, pointerMove, pointerUp, type InteractionState } from "./interaction.ts";
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
@@ -27,7 +27,8 @@ function derivedPlaceholders(type: "circle" | "polygon" | "rect"): Record<string
     throw new Error(`test setup: expected a schema for ${type}`);
   }
   const placeholders: Record<string, { readonly kind: "derived"; readonly value: null }> = {};
-  for (const slot of schema.derivedSlots) {
+  const stub: GraphObject = { id: "stub", name: "stub", type, slots: {} };
+  for (const slot of resolveDerivedSlots(stub, schema.derivedSlots)) {
     placeholders[slot.path.join(".")] = { kind: "derived", value: null };
   }
   return placeholders;

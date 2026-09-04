@@ -14,23 +14,30 @@ import {
   derivedSlotDependencyAddresses,
   findDerivedSlotSchema,
   getObjectSchema,
+  resolveDerivedSlots,
   resolveNonDerivedSlotPaths,
   type DerivedSlotDependencies,
   type NonDerivedSlotPathGroup,
 } from "./schema.ts";
 
+/** A minimal, schema-agnostic stub object — every schema in this registry declares only `static` derived groups, which ignore the object entirely, so this stub's `type` is the only field `resolveDerivedSlots` actually reads. */
+function stubObject(type: GraphObject["type"]): GraphObject {
+  return { id: "stub", name: "stub", type, slots: {} };
+}
+
 describe("getObjectSchema", () => {
   it("returns a real entry for 'value', with no derived slots (§6: one literal numeric slot)", () => {
     const schema = getObjectSchema("value");
     expect(schema).toBeDefined();
-    expect(schema?.derivedSlots).toEqual([]);
+    expect(resolveDerivedSlots(stubObject("value"), schema?.derivedSlots ?? [])).toEqual([]);
   });
 
   it("returns a real entry for 'add', with exactly one derived slot: out.result", () => {
     const schema = getObjectSchema("add");
     expect(schema).toBeDefined();
-    expect(schema?.derivedSlots).toHaveLength(1);
-    expect(schema?.derivedSlots[0]?.path).toEqual(["out", "result"]);
+    const derivedSlots = resolveDerivedSlots(stubObject("add"), schema?.derivedSlots ?? []);
+    expect(derivedSlots).toHaveLength(1);
+    expect(derivedSlots[0]?.path).toEqual(["out", "result"]);
   });
 
   // nonDerivedSlotPaths (mutation.ts's deriveEdges) is the full set of PATH
@@ -71,7 +78,7 @@ describe("getObjectSchema", () => {
   it("returns a real entry for 'table' (D-017's dynamic-slot-family mechanism), with no derived slots", () => {
     const schema = getObjectSchema("table");
     expect(schema).toBeDefined();
-    expect(schema?.derivedSlots).toEqual([]);
+    expect(resolveDerivedSlots(stubObject("table"), schema?.derivedSlots ?? [])).toEqual([]);
   });
 
   // primitives/geometry.ts's own file owns the compute-function behaviour;
@@ -85,8 +92,9 @@ describe("getObjectSchema", () => {
   ] as const)("returns a real entry for '%s', with vertices + the eight shared derived slots, and its own %s parameter paths", (type, paths) => {
     const schema = getObjectSchema(type);
     expect(schema).toBeDefined();
-    expect(schema?.derivedSlots).toHaveLength(9);
-    expect(schema?.derivedSlots.map((slot) => slot.path)).toEqual(
+    const derivedSlots = resolveDerivedSlots(stubObject(type), schema?.derivedSlots ?? []);
+    expect(derivedSlots).toHaveLength(9);
+    expect(derivedSlots.map((slot) => slot.path)).toEqual(
       expect.arrayContaining([
         ["vertices"],
         ["centroid", "x"],
@@ -129,17 +137,18 @@ describe("getObjectSchema", () => {
       ["style", "color"],
       ["style", "align"],
     ]);
-    expect(schema?.derivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"], ["measuredWidth"]]);
+    const textDerivedSlots = resolveDerivedSlots(stubObject("text"), schema?.derivedSlots ?? []);
+    expect(textDerivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"], ["measuredWidth"]]);
     // resolvedContent's deps are `dynamic` (parsed content); measuredHeight's and
     // measuredWidth's are `static` (§5.6: resolvedContent + width + the
     // size-relevant style fields) and IDENTICAL — D-123 clause 1: one measurement
     // answers both, so they must subscribe to the same inputs.
-    expect(schema?.derivedSlots[0]?.dependencies.kind).toBe("dynamic");
-    expect(schema?.derivedSlots[1]?.dependencies).toEqual({
+    expect(textDerivedSlots[0]?.dependencies.kind).toBe("dynamic");
+    expect(textDerivedSlots[1]?.dependencies).toEqual({
       kind: "static",
       paths: [["resolvedContent"], ["width"], ["style", "font"], ["style", "fontSize"], ["style", "lineHeight"]],
     });
-    expect(schema?.derivedSlots[2]?.dependencies).toEqual(schema?.derivedSlots[1]?.dependencies);
+    expect(textDerivedSlots[2]?.dependencies).toEqual(textDerivedSlots[1]?.dependencies);
   });
 
   // §5.7's own five-name slot list plus `source`, the sixth the data URL needs and
@@ -158,7 +167,7 @@ describe("getObjectSchema", () => {
       ["opacity"],
       ["source"],
     ]);
-    expect(schema?.derivedSlots).toEqual([]);
+    expect(resolveDerivedSlots(stubObject("image"), schema?.derivedSlots ?? [])).toEqual([]);
     // Every group is `static`: an image's slot set never changes (Rule 6), so there
     // is no sizing slot for D-046/D-097 to bind and no `dynamic` group to resolve.
     expect(schema?.nonDerivedSlotPaths.every((group) => group.kind === "static")).toBe(true);
@@ -168,24 +177,24 @@ describe("getObjectSchema", () => {
 describe("findDerivedSlotSchema", () => {
   it("finds 'add's out.result by path, matching structurally rather than by array reference (D-010)", () => {
     const freshlyBuiltPath = ["out", "result"]; // deliberately not the schema's own array instance
-    const entry = findDerivedSlotSchema("add", freshlyBuiltPath);
+    const entry = findDerivedSlotSchema(stubObject("add"), freshlyBuiltPath);
     expect(entry).toBeDefined();
     expect(entry?.path).toEqual(["out", "result"]);
   });
 
   it("returns undefined for a path on 'add' that is NOT a derived slot (in.a is formula, not derived)", () => {
-    expect(findDerivedSlotSchema("add", ["in", "a"])).toBeUndefined();
+    expect(findDerivedSlotSchema(stubObject("add"), ["in", "a"])).toBeUndefined();
   });
 
   it("returns undefined for a type with no schema at all", () => {
     // "polyline" is the example type with no schema entry at all;
     // circle/polygon/rect all have real ones (the describe block below).
     // Switched from "circle" at entry 0059.
-    expect(findDerivedSlotSchema("polyline", ["centroid", "x"])).toBeUndefined();
+    expect(findDerivedSlotSchema(stubObject("polyline"), ["centroid", "x"])).toBeUndefined();
   });
 
   it("returns undefined for 'value', which has no derived slots", () => {
-    expect(findDerivedSlotSchema("value", ["value"])).toBeUndefined();
+    expect(findDerivedSlotSchema(stubObject("value"), ["value"])).toBeUndefined();
   });
 });
 
@@ -290,6 +299,51 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
   });
 });
 
+// D-141 clause 4: `derivedSlots` widened to the same static/dynamic group
+// shape `nonDerivedSlotPaths` already had. No SCHEMA in today's registry
+// declares a `dynamic` derived group yet (that waits on `script`'s own
+// entry) — these tests exercise `resolveDerivedSlots` directly, the same way
+// `resolveNonDerivedSlotPaths`'s own dynamic case is proven above before any
+// real schema used `dynamic` for it (`table`'s `cells.*` came later).
+describe("resolveDerivedSlots — the D-141 dynamic-derived-slot-family mechanism", () => {
+  const noopCompute = () => null;
+
+  it("resolves a single static group to exactly its fixed DerivedSlotSchemas, ignoring the object entirely", () => {
+    const outResult = getObjectSchema("add")?.derivedSlots;
+    if (outResult === undefined) {
+      throw new Error("test setup: expected add's schema to exist");
+    }
+    // The object's type is irrelevant to a static group.
+    expect(resolveDerivedSlots(stubObject("value"), outResult).map((slot) => slot.path)).toEqual([["out", "result"]]);
+  });
+
+  it("concatenates a static group's fixed slots with a dynamic group's own enumerate(object) result, in declared order", () => {
+    const groups = [
+      { kind: "static" as const, slots: [{ path: ["fixed"], dependencies: { kind: "static" as const, paths: [] }, compute: noopCompute }] },
+      { kind: "dynamic" as const, enumerate: (object: GraphObject) => [{ path: ["dyn", object.id], dependencies: { kind: "static" as const, paths: [] }, compute: noopCompute }] },
+    ];
+    const resolved = resolveDerivedSlots({ id: "obj_7", name: "script_1", type: "script", slots: {} }, groups);
+    expect(resolved.map((slot) => slot.path)).toEqual([["fixed"], ["dyn", "obj_7"]]);
+  });
+
+  it("resolves a dynamic group against the object's OWN structural state (ports.out), not against Object.keys(object.slots) (D-010)", () => {
+    const groups = [
+      {
+        kind: "dynamic" as const,
+        enumerate: (object: GraphObject) =>
+          (object.ports?.out ?? []).map((name) => ({ path: ["out", name], dependencies: { kind: "static" as const, paths: [] }, compute: noopCompute })),
+      },
+    ];
+    const script: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: { "out.result": { kind: "derived", value: null } }, ports: { in: [], out: ["result", "extra"] } };
+    // Two ports declared -> two DerivedSlotSchemas, even though `slots` only carries one of them yet.
+    expect(resolveDerivedSlots(script, groups).map((slot) => slot.path)).toEqual([["out", "result"], ["out", "extra"]]);
+  });
+
+  it("returns an empty list for an empty groups array", () => {
+    expect(resolveDerivedSlots(stubObject("value"), [])).toEqual([]);
+  });
+});
+
 describe("derivedSlotDependencyAddresses", () => {
   const addObject: GraphObject = {
     id: "obj_2",
@@ -303,7 +357,7 @@ describe("derivedSlotDependencyAddresses", () => {
   };
 
   it("pairs each static dependency path with the object's own id (§5.1: 'within the same object')", () => {
-    const outResult = getObjectSchema("add")?.derivedSlots[0];
+    const outResult = resolveDerivedSlots(stubObject("add"), getObjectSchema("add")?.derivedSlots ?? [])[0];
     if (outResult === undefined) {
       throw new Error("test setup: expected add's out.result schema entry to exist");
     }
@@ -343,7 +397,7 @@ describe("add's out.result compute function", () => {
   // slot's dependencies already evaluated earlier in the same topological pass"
   // (§5.1), so a wrong answer here is the compute function's rather than
   // `graph/eval.ts`'s ordering.
-  const computeAdd = getObjectSchema("add")?.derivedSlots[0]?.compute;
+  const computeAdd = resolveDerivedSlots(stubObject("add"), getObjectSchema("add")?.derivedSlots ?? [])[0]?.compute;
   if (computeAdd === undefined) {
     throw new Error("test setup: expected add's out.result schema entry to exist");
   }

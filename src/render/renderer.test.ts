@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { mutate } from "../engine/mutation.ts";
 import type { GraphObject, Slot } from "../engine/graph/node.ts";
-import { getObjectSchema } from "../engine/primitives/schema.ts";
+import { getObjectSchema, resolveDerivedSlots } from "../engine/primitives/schema.ts";
 import type { CameraState } from "../engine/document.ts";
 import { renderDocument } from "./renderer.ts";
 
@@ -567,7 +567,7 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
       throw new Error("test setup: expected a schema for text");
     }
     const placeholders: Record<string, Slot> = {};
-    for (const slot of schema.derivedSlots) {
+    for (const slot of resolveDerivedSlots({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema.derivedSlots)) {
       placeholders[slot.path.join(".")] = derivedPlaceholder();
     }
     const text: GraphObject = {
@@ -607,7 +607,7 @@ describe("renderDocument — wired through the real mutate() pipeline (D-016 dis
       throw new Error("test setup: expected a schema for polygon");
     }
     const placeholders: Record<string, Slot> = {};
-    for (const slot of schema.derivedSlots) {
+    for (const slot of resolveDerivedSlots({ id: "obj_1", name: "polygon_1", type: "polygon", slots: {} }, schema.derivedSlots)) {
       placeholders[slot.path.join(".")] = derivedPlaceholder();
     }
     const polygon: GraphObject = {

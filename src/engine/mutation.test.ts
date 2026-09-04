@@ -3814,6 +3814,102 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
   });
 });
 
+// AddPortOperation/RemovePortOperation (D-141 clause 6) — the ONLY way a
+// GraphObject's structural `ports` field changes. No `script` schema exists
+// yet (D-141 clause 7's own scope note), so these tests build bare `script`
+// GraphObjects by hand, exactly as node.ts's own D-007 tests do for a type
+// with no built primitive yet.
+describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () => {
+  function scriptObject(id: string, name: string, ports?: { readonly in: readonly string[]; readonly out: readonly string[] }): GraphObject {
+    return ports === undefined ? { id, name, type: "script", slots: {} } : { id, name, type: "script", slots: {}, ports };
+  }
+
+  it("addPort appends to an absent ports field, creating { in: [], out: [] } implicitly", () => {
+    const result = mutate([scriptObject("obj_1", "script_1")], [{ kind: "addPort", objectId: "obj_1", family: "in", name: "factor" }], []);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.objects[0]?.ports).toEqual({ in: ["factor"], out: [] });
+  });
+
+  it("addPort appends to the END of the named family's existing list, leaving the other family untouched", () => {
+    const objects = [scriptObject("obj_1", "script_1", { in: ["factor"], out: ["result"] })];
+    const result = mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "speed" }], []);
+    expect(result.ok && result.objects[0]?.ports).toEqual({ in: ["factor", "speed"], out: ["result"] });
+  });
+
+  it("rejects an empty or dotted port name (D-141 clause 2), touching nothing", () => {
+    const objects = [scriptObject("obj_1", "script_1")];
+    expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "" }], []).ok).toBe(false);
+    expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "a.b" }], []).ok).toBe(false);
+  });
+
+  it("rejects adding a name that already exists in the SAME family", () => {
+    const objects = [scriptObject("obj_1", "script_1", { in: ["factor"], out: [] })];
+    const result = mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "factor" }], []);
+    expect(result.ok).toBe(false);
+  });
+
+  it("ALLOWS the same name in the OTHER family — 'in' and 'out' are independent namespaces", () => {
+    const objects = [scriptObject("obj_1", "script_1", { in: ["result"], out: [] })];
+    const result = mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "out", name: "result" }], []);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.objects[0]?.ports).toEqual({ in: ["result"], out: ["result"] });
+  });
+
+  it("removePort removes the name from its family and drops the corresponding slot, if present", () => {
+    const objects: readonly GraphObject[] = [
+      { id: "obj_1", name: "script_1", type: "script", slots: { "out.result": { kind: "derived", value: 5 } }, ports: { in: [], out: ["result"] } },
+    ];
+    const result = mutate(objects, [{ kind: "removePort", objectId: "obj_1", family: "out", name: "result" }], []);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.objects[0]?.ports).toEqual({ in: [], out: [] });
+    expect(result.ok && result.objects[0]?.slots["out.result"]).toBeUndefined();
+  });
+
+  it("rejects removing a port that does not exist in that family", () => {
+    const objects = [scriptObject("obj_1", "script_1", { in: [], out: ["result"] })];
+    expect(mutate(objects, [{ kind: "removePort", objectId: "obj_1", family: "in", name: "result" }], []).ok).toBe(false);
+  });
+
+  it("REJECTS removing an out port some OTHER object's formula still references — D-141 clause 6, no new mechanism beyond the existing dangling-reference check", () => {
+    const scriptWithOut: GraphObject = {
+      id: "obj_1",
+      name: "script_1",
+      type: "script",
+      slots: { "out.result": { kind: "derived", value: 5 } },
+      ports: { in: [], out: ["result"] },
+    };
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "out", "result") }, value: 5 } },
+    };
+    const result = mutate([scriptWithOut, dependent], [{ kind: "removePort", objectId: "obj_1", family: "out", name: "result" }], []);
+    expect(result.ok).toBe(false);
+  });
+
+  it("a batch that removes then re-adds the same name in one call is legal — simulated left-to-right (D-050's reasoning)", () => {
+    const objects = [scriptObject("obj_1", "script_1", { in: [], out: ["result"] })];
+    const result = mutate(
+      objects,
+      [
+        { kind: "removePort", objectId: "obj_1", family: "out", name: "result" },
+        { kind: "addPort", objectId: "obj_1", family: "out", name: "result" },
+      ],
+      [],
+    );
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.objects[0]?.ports).toEqual({ in: [], out: ["result"] });
+  });
+
+  it("leaves the caller's objects untouched on a rejection (§5.1 step 6)", () => {
+    const objects = [scriptObject("obj_1", "script_1")];
+    const snapshot = JSON.stringify(objects);
+    expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "a.b" }], []).ok).toBe(false);
+    expect(JSON.stringify(objects)).toBe(snapshot);
+  });
+});
+
 describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the same way findInvalidTableResizes does (D-050's reasoning)", () => {
   function pair(): readonly GraphObject[] {
     return [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];

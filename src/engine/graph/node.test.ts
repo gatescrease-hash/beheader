@@ -16,12 +16,14 @@ import {
   hasIllegalNumber,
   isErrorValue,
   isIllegalNumber,
+  isLegalPortName,
   resolveSlot,
   slotKey,
   type DerivedSlot,
   type ErrorValue,
   type FormulaSlot,
   type GraphObject,
+  type GraphObjectPorts,
   type LiteralSlot,
   type ObjectType,
   type Point,
@@ -298,5 +300,36 @@ describe("object type is mutable across mutations, not fixed per object (D-007)"
     expect(beforeExplode.id).toBe(afterExplode.id);
     expect(beforeExplode.name).toBe(afterExplode.name);
     expect(beforeExplode.type).not.toBe(afterExplode.type);
+  });
+});
+
+// D-141: a script node's port names, structural state on GraphObject.
+describe("isLegalPortName (D-141 clause 2)", () => {
+  it("accepts an ordinary, non-empty, dot-free name", () => {
+    expect(isLegalPortName("factor")).toBe(true);
+    expect(isLegalPortName("speed_2")).toBe(true);
+  });
+
+  it("rejects an empty name", () => {
+    expect(isLegalPortName("")).toBe(false);
+  });
+
+  it("rejects a name containing '.' — it would forge a slot key no schema path may contain", () => {
+    expect(isLegalPortName("a.b")).toBe(false);
+    expect(isLegalPortName(".")).toBe(false);
+  });
+});
+
+describe("GraphObject.ports (D-141)", () => {
+  it("is optional — every type but 'script' simply has no ports field", () => {
+    const rect: GraphObject = { id: "obj_1", name: "rect_1", type: "rect", slots: {} };
+    expect(rect.ports).toBeUndefined();
+  });
+
+  it("holds two ORDERED, plain string arrays when present", () => {
+    const ports: GraphObjectPorts = { in: ["factor", "speed"], out: ["result"] };
+    const script: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {}, ports };
+    expect(script.ports?.in).toEqual(["factor", "speed"]);
+    expect(script.ports?.out).toEqual(["result"]);
   });
 });

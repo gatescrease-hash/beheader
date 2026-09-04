@@ -265,6 +265,47 @@ export type Slot = LiteralSlot | FormulaSlot | DerivedSlot;
 // ---------------------------------------------------------------------------
 
 /**
+ * A script node's port NAMES (§5.8), structural state on the `GraphObject`
+ * itself — **D-141** (answering Q-026), option (a). Neither a slot value (no
+ * `Value` arm holds a list of strings) nor recoverable from a slot KEY (D-010
+ * has no sanctioned inverse), so the name list needs a home of its own,
+ * exactly the "future `GraphObject`-structural field" D-046's scope note left
+ * open. Plain, serializable, ID-free data (§2) — two ORDERED lists, because
+ * slot enumeration must be deterministic and a `Record`'s key order is not
+ * something the engine may lean on (D-141 clause 2).
+ *
+ * `in` is the in-port name order; `out` is the out-port name order and is the
+ * SINGLE authority for the out-port NAME set — §5.8's `placeholders` holds
+ * VALUES only and is reconciled against this two-way (D-141 clause 3).
+ * Legality of an individual name (non-empty, no `.`) is `isLegalPortName`
+ * below; uniqueness within a family and the reject-on-referenced-removal rule
+ * are `mutation.ts`'s job (D-141 clause 6) — this file only shapes the data.
+ *
+ * Optional on `GraphObject` because only `script` carries it today; every
+ * other type's `ports` is simply absent, not an empty pair — see
+ * `document.ts`'s loader for how an older saved document without this field
+ * still loads.
+ */
+export interface GraphObjectPorts {
+  readonly in: readonly string[];
+  readonly out: readonly string[];
+}
+
+/**
+ * Whether `name` is a legal port name (D-141 clause 2): non-empty, and
+ * containing no `.` — a dot would forge a slot key
+ * (`in.<name>`/`out.<name>`, dot-joined by `slotKey`) that no schema path
+ * segment is allowed to contain (`address.ts`'s `PATH_SEGMENT_PATTERN`),
+ * giving the port an address nothing could ever address correctly. Declared
+ * here, beside `GraphObjectPorts`, so `mutation.ts`'s port operations and any
+ * future caller share one predicate rather than each re-typing the same two
+ * conditions.
+ */
+export function isLegalPortName(name: string): boolean {
+  return name.length > 0 && !name.includes(".");
+}
+
+/**
  * A user-visible thing on the canvas (§5.1): a polygon, a table, a text box, an
  * image, a script node, or (Phase 0 only) a `value`/`add` test fixture. `slots`
  * is keyed by `slotKey(path)` — see the file header for why that join is safe.
@@ -272,9 +313,14 @@ export type Slot = LiteralSlot | FormulaSlot | DerivedSlot;
  * Structurally satisfies address.ts's `AddressableObject` (`id`, `name`, `type`),
  * so a document's object list can be passed directly to `parseAddress` /
  * `formatAddress` without an adapter.
+ *
+ * `ports` (**D-141**) is the structural port-name state a `script` node
+ * carries; every other type simply has no `ports` field. See
+ * `GraphObjectPorts`'s own doc comment.
  */
 export interface GraphObject extends AddressableObject {
   readonly slots: Readonly<Record<string, Slot>>;
+  readonly ports?: GraphObjectPorts;
 }
 
 // ---------------------------------------------------------------------------

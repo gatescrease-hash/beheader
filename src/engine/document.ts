@@ -124,8 +124,8 @@
 import { mutate, type MutationJournalEntry, type Operation } from "./mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import { exceedsMaxFormulaAstDepth, MAX_FORMULA_AST_DEPTH, validateFormulaAstShape, type FormulaAst } from "./formula/ast.ts";
-import { isIllegalNumber, slotKey, type GraphObject, type ObjectType, type Slot, type Value } from "./graph/node.ts";
-import { getObjectSchema } from "./primitives/schema.ts";
+import { isIllegalNumber, isLegalPortName, slotKey, type GraphObject, type GraphObjectPorts, type ObjectType, type Slot, type Value } from "./graph/node.ts";
+import { getObjectSchema, resolveDerivedSlots } from "./primitives/schema.ts";
 
 /** §5.11: "a top-level `formatVersion` integer from the first commit." Bump on any future format change; Phase 0 has never needed a second value. */
 export const FORMAT_VERSION = 1;
@@ -207,6 +207,8 @@ export interface SerializedGraphObject {
   readonly name: string;
   readonly type: ObjectType;
   readonly slots: Readonly<Record<string, SerializedSlot>>;
+  /** **D-141**: a `script` node's structural port names — plain data, serialized unchanged. Absent for every other type, matching `GraphObject.ports`'s own optionality. */
+  readonly ports?: GraphObjectPorts;
 }
 
 export interface SerializedDocument {
@@ -237,7 +239,9 @@ function serializeObject(object: GraphObject): SerializedGraphObject {
     }
     slots[key] = slot.kind === "derived" ? { kind: "derived" } : slot;
   }
-  return { id: object.id, name: object.name, type: object.type, slots };
+  return object.ports === undefined
+    ? { id: object.id, name: object.name, type: object.type, slots }
+    : { id: object.id, name: object.name, type: object.type, slots, ports: object.ports };
 }
 
 /** `saveDocument`'s/`deserializeDocument`'s shared ok/fail shape, matching every other typed result in this codebase (`MutationResult`, `IntegrityCheckResult`). */
@@ -469,7 +473,7 @@ function reconstructObject(raw: unknown, index: number): ObjectReconstructionRes
   if (!isPlainObject(raw)) {
     return { ok: false, message: `objects[${index}] must be an object` };
   }
-  const { id, name, type, slots: rawSlots } = raw;
+  const { id, name, type, slots: rawSlots, ports: rawPorts } = raw;
   if (typeof id !== "string" || typeof name !== "string" || typeof type !== "string") {
     return { ok: false, message: `objects[${index}] must have a string id, name, and type` };
   }
@@ -486,11 +490,60 @@ function reconstructObject(raw: unknown, index: number): ObjectReconstructionRes
     slots[key] = slotResult.slot;
   }
 
+  const portsResult = reconstructPorts(rawPorts, name);
+  if (!portsResult.ok) {
+    return portsResult;
+  }
+
   // The cast is deliberate, not an oversight — see this function's own doc
   // comment: an unrecognised `type` string is treated the same honest way
   // `getObjectSchema` already treats one, not rejected here.
   const objectType = type as ObjectType;
-  return { ok: true, object: { id, name, type: objectType, slots: withSchemaDerivedSlots(objectType, slots) } };
+  const object: GraphObject = portsResult.ports === undefined
+    ? { id, name, type: objectType, slots }
+    : { id, name, type: objectType, slots, ports: portsResult.ports };
+  return { ok: true, object: { ...object, slots: withSchemaDerivedSlots(object) } };
+}
+
+type PortsReconstructionResult = { readonly ok: true; readonly ports: GraphObjectPorts | undefined } | { readonly ok: false; readonly message: string };
+
+/**
+ * **D-141**: `ports` is ABSENT on every document saved before this ruling
+ * (every type but a not-yet-buildable `script`), so `undefined` is the
+ * legal, expected case — not a defect to fill in, the same posture D-126
+ * already takes for a document saved before a derived slot existed. Present
+ * means well-FORMED (structural validation only, mirroring
+ * `reconstructObject`'s own stance): each of `in`/`out` an array of legal port
+ * names (`isLegalPortName` — non-empty, no `.`), unique WITHIN each family.
+ * Nothing here checks a `script` object's `out.*` against `placeholders`
+ * (D-141 clause 3) — that reconciliation is `mutate`'s job, over the fully
+ * reconstructed graph, exactly like every other cross-slot check this file
+ * defers to `validateIntegrity`.
+ */
+function reconstructPorts(raw: unknown, objectName: string): PortsReconstructionResult {
+  if (raw === undefined) {
+    return { ok: true, ports: undefined };
+  }
+  if (!isPlainObject(raw) || !Array.isArray(raw.in) || !Array.isArray(raw.out)) {
+    return { ok: false, message: `${objectName}.ports must be an object with array "in" and "out" fields` };
+  }
+  const families: readonly (readonly [string, readonly unknown[]])[] = [
+    ["in", raw.in],
+    ["out", raw.out],
+  ];
+  for (const [family, names] of families) {
+    const seen = new Set<string>();
+    for (const name of names) {
+      if (typeof name !== "string" || !isLegalPortName(name)) {
+        return { ok: false, message: `${objectName}.ports.${family} holds an illegal port name (must be non-empty and contain no ".")` };
+      }
+      if (seen.has(name)) {
+        return { ok: false, message: `${objectName}.ports.${family} names "${name}" more than once` };
+      }
+      seen.add(name);
+    }
+  }
+  return { ok: true, ports: { in: raw.in as readonly string[], out: raw.out as readonly string[] } };
 }
 
 /**
@@ -523,13 +576,22 @@ function reconstructObject(raw: unknown, index: number): ObjectReconstructionRes
  * An object whose type has no schema entry keeps its slots exactly as the file had
  * them — the same honest-`undefined` stance `reconstructObject` takes for the type
  * string itself.
+ *
+ * **D-141**: takes the whole OBJECT, not merely its `type`/`slots` — a `dynamic`
+ * `DerivedSlotGroup` (once `script`'s schema declares one) resolves against the
+ * object's own `ports.out`, so this file must hand `resolveDerivedSlots` a real
+ * object rather than a bare type string. Every schema declared today has only
+ * `static` derived groups, which ignore `ports` entirely — a widening, not a
+ * behaviour change, for every type this file already loads.
  */
-function withSchemaDerivedSlots(type: ObjectType, slots: Record<string, Slot>): Record<string, Slot> {
-  const schema = getObjectSchema(type);
+function withSchemaDerivedSlots(object: GraphObject): Record<string, Slot> {
+  const schema = getObjectSchema(object.type);
+  const slots = object.slots as Record<string, Slot>;
   if (schema === undefined) {
     return slots;
   }
-  const declared = new Set(schema.derivedSlots.map((derived) => slotKey(derived.path)));
+  const derivedSlots = resolveDerivedSlots(object, schema.derivedSlots);
+  const declared = new Set(derivedSlots.map((derived) => slotKey(derived.path)));
   const rebuilt: Record<string, Slot> = {};
   for (const key of Object.keys(slots)) {
     const slot = slots[key];
@@ -541,7 +603,7 @@ function withSchemaDerivedSlots(type: ObjectType, slots: Record<string, Slot>): 
     }
     rebuilt[key] = slot;
   }
-  for (const derived of schema.derivedSlots) {
+  for (const derived of derivedSlots) {
     const key = slotKey(derived.path);
     if (rebuilt[key] === undefined) {
       rebuilt[key] = { kind: "derived", value: null };

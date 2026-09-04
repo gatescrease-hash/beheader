@@ -20,6 +20,13 @@
  *   membership varies with that object's own `rows`/`cols`
  *   (`primitives/table.ts`'s `enumerateTableCellSlotPaths`).
  *
+ *   **D-141**: `derivedSlots` is the SAME `static`/`dynamic` group shape, resolved
+ *   PER OBJECT via `resolveDerivedSlots(object, groups)` — the derived-slot
+ *   analogue of the paragraph above, added so a `script` node's per-OBJECT
+ *   `out.*` set (§5.8) can be expressed once its schema exists (not yet — see
+ *   NOT DONE HERE). Every type in this file today declares only `static`
+ *   derived groups.
+ *
  *   Scope today: `value` and `add` (PROJECT_BRIEF §6's two Phase 0 fixture types,
  *   D-011), `table` (§5.4), the three PARAMETRIC geometry presets `circle`/
  *   `polygon`/`rect` (§5.5), `text` (§5.6 — its eleven non-derived slots and its
@@ -86,9 +93,11 @@
  *     rather than carrying its own.
  *   - Deriving an `Edge[]` from these declarations (`mutation.ts`'s `deriveEdges`,
  *     which consumes this file), cycle detection, or topological evaluation.
- *   - `polyline` and `script` schema entries. `script`'s (§5.8) waits on the answer
- *     to **Q-026**: `derivedSlots` is a fixed list per TYPE, while a script node's
- *     `out.*` set is per OBJECT, so this file cannot express one yet.
+ *   - `polyline` and `script` schema entries. `derivedSlots` widened to
+ *     `static`/`dynamic` groups (**D-141**, answering Q-026) so a script node's
+ *     per-OBJECT `out.*` set CAN be expressed — `script`'s own entry, its
+ *     `SCRIPT_SCHEMA`, and `engine/script/stub.ts` are D-141 clause 7's own
+ *     separate slice, still not built here.
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";
@@ -232,6 +241,65 @@ export interface DerivedSlotSchema {
 }
 
 /**
+ * One declaration inside `ObjectSchema.derivedSlots` (**D-141** clause 4).
+ * Deliberately the SAME `static`/`dynamic` shape `NonDerivedSlotPathGroup`
+ * already has, applied to the other half of a schema: "which derived slots
+ * does this object currently have," not merely "what are this TYPE's fixed
+ * derived slots." Before D-141, `ObjectSchema.derivedSlots` WAS a bare
+ * `readonly DerivedSlotSchema[]` — correct only as long as every type's
+ * derived-slot SET was fixed per type, which a script node's per-OBJECT
+ * `out.*` breaks.
+ *
+ * - `static` — a fixed list of `DerivedSlotSchema`s every object of this type
+ *   has (every type built before `script`).
+ * - `dynamic` — a function of the object's OWN CURRENT structural state,
+ *   returning whatever `DerivedSlotSchema`s currently belong to the family.
+ *   Resolved against the OBJECT (its `ports.out`, once a `script` schema
+ *   exists), NEVER against `Object.keys(object.slots)` — D-010's no-inverse
+ *   rule binds this resolver exactly as it binds `NonDerivedSlotPathGroup`'s.
+ *   MUST be resolved only during edge derivation (Rule 6) — same rule as
+ *   every other `dynamic` resolver in this file.
+ */
+export type DerivedSlotGroup =
+  | { readonly kind: "static"; readonly slots: readonly DerivedSlotSchema[] }
+  | { readonly kind: "dynamic"; readonly enumerate: (object: GraphObject) => readonly DerivedSlotSchema[] };
+
+/**
+ * Resolves every `DerivedSlotGroup` in `groups`, for ONE object, into the
+ * concrete `DerivedSlotSchema[]` currently declared — the derived-slot analogue
+ * of `resolveNonDerivedSlotPaths` above, and for the identical reason: this is
+ * the ONLY place the concatenation happens, so `deriveEdges`,
+ * `findUndeclaredFormulaOrDerivedSlots`, `findSchemaSlotKindMismatches`,
+ * `graph/eval.ts`, `command/commands.ts`, `command/props.ts`, and
+ * `document.ts` can never disagree about which derived slots a given object
+ * currently declares.
+ *
+ * Never throws, and appends one slot at a time for the same bounded-size
+ * reason `resolveNonDerivedSlotPaths` appends one path at a time (D-077) —
+ * a `dynamic` derived family is smaller by construction (port counts, not
+ * cell counts) but the discipline is one this file applies uniformly rather
+ * than case by case.
+ */
+export function resolveDerivedSlots(
+  object: GraphObject,
+  groups: readonly DerivedSlotGroup[],
+): readonly DerivedSlotSchema[] {
+  const slots: DerivedSlotSchema[] = [];
+  for (const group of groups) {
+    if (group.kind === "static") {
+      for (const slot of group.slots) {
+        slots.push(slot);
+      }
+    } else {
+      for (const slot of group.enumerate(object)) {
+        slots.push(slot);
+      }
+    }
+  }
+  return slots;
+}
+
+/**
  * One declaration inside `ObjectSchema.nonDerivedSlotPaths` (D-017).
  * Deliberately the SAME `static`/`dynamic` shape as
  * `DerivedSlotDependencies` above, applied to a different question
@@ -334,7 +402,8 @@ export function resolveNonDerivedSlotPaths(
 export interface ObjectSchema {
   readonly type: ObjectType;
   readonly nonDerivedSlotPaths: readonly NonDerivedSlotPathGroup[];
-  readonly derivedSlots: readonly DerivedSlotSchema[];
+  /** **D-141 clause 4**: the same `static`/`dynamic` group shape `nonDerivedSlotPaths` has carried since 0041-REVIEW. See `DerivedSlotGroup`. */
+  readonly derivedSlots: readonly DerivedSlotGroup[];
   /**
    * The slots whose legal values are a small CLOSED SET, and what that set is
    * (the human's 2026-09-02 instruction: "if properties only have a small
@@ -457,6 +526,7 @@ const ADD_SCHEMA: ObjectSchema = {
   type: "add",
   nonDerivedSlotPaths: [{ kind: "static", paths: [ADD_IN_A_PATH, ADD_IN_B_PATH] }],
   derivedSlots: [
+    { kind: "static", slots: [
     {
       path: ADD_OUT_RESULT_PATH,
       dependencies: {
@@ -501,6 +571,7 @@ const ADD_SCHEMA: ObjectSchema = {
         return sum;
       },
     },
+  ] },
   ],
 };
 
@@ -552,36 +623,36 @@ const TABLE_SCHEMA: ObjectSchema = {
 const CIRCLE_SCHEMA: ObjectSchema = {
   type: "circle",
   nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] }],
-  derivedSlots: [
+  derivedSlots: [{ kind: "static", slots: [
     { path: VERTICES_PATH, dependencies: { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] }, compute: computeCircleVerticesSlot },
     ...verticesDerivedSlots("circle"),
-  ],
+  ] }],
 };
 
 const POLYGON_SCHEMA: ObjectSchema = {
   type: "polygon",
   nonDerivedSlotPaths: [{ kind: "static", paths: [POLYGON_SIDES_PATH, RADIUS_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, POLYGON_ROTATION_PATH] }],
-  derivedSlots: [
+  derivedSlots: [{ kind: "static", slots: [
     {
       path: VERTICES_PATH,
       dependencies: { kind: "static", paths: [POLYGON_SIDES_PATH, RADIUS_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, POLYGON_ROTATION_PATH] },
       compute: computePolygonVerticesSlot,
     },
     ...verticesDerivedSlots("polygon"),
-  ],
+  ] }],
 };
 
 const RECT_SCHEMA: ObjectSchema = {
   type: "rect",
   nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RECT_WIDTH_PATH, RECT_HEIGHT_PATH] }],
-  derivedSlots: [
+  derivedSlots: [{ kind: "static", slots: [
     {
       path: VERTICES_PATH,
       dependencies: { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RECT_WIDTH_PATH, RECT_HEIGHT_PATH] },
       compute: computeRectVerticesSlot,
     },
     ...verticesDerivedSlots("rect"),
-  ],
+  ] }],
 };
 
 /**
@@ -677,7 +748,7 @@ const TEXT_SCHEMA: ObjectSchema = {
       labels: ["shrink to fit text", "keep the size I set"],
     },
   ],
-  derivedSlots: [
+  derivedSlots: [{ kind: "static", slots: [
     {
       path: TEXT_RESOLVED_CONTENT_PATH,
       dependencies: { kind: "dynamic", resolve: resolveTextDependencyAddresses },
@@ -713,7 +784,7 @@ const TEXT_SCHEMA: ObjectSchema = {
       },
       compute: computeMeasuredWidth,
     },
-  ],
+  ] }],
 };
 
 /**
@@ -783,25 +854,32 @@ export function findSlotOptions(type: ObjectType, path: readonly string[]): Slot
 }
 
 /**
- * Looks up a single derived slot's declaration by (type, path). `undefined`
- * covers three honestly-indistinguishable cases: the type has no schema yet,
- * the type's schema exists but has no derived slot at this path, or the path
- * names a `literal`/`formula` slot instead — all three simply mean "this file
- * has nothing to say about that slot," which is exactly what `undefined`
- * means everywhere else in this codebase (`getSlot`, `resolveSlot`).
+ * Looks up a single derived slot's declaration, by (object, path). `undefined`
+ * covers three honestly-indistinguishable cases: the object's type has no
+ * schema yet, the type's schema exists but has no derived slot at this path,
+ * or the path names a `literal`/`formula` slot instead — all three simply
+ * mean "this file has nothing to say about that slot," which is exactly what
+ * `undefined` means everywhere else in this codebase (`getSlot`, `resolveSlot`).
+ *
+ * Takes the whole OBJECT, not merely its `type` (**D-141 clause 4**): a
+ * `dynamic` `DerivedSlotGroup` (a `script` node's per-object `out.*` set, once
+ * that schema exists) can only be resolved against the object's own current
+ * structural state (`ports.out`) — see `resolveDerivedSlots`. Every type built
+ * before D-141 has only `static` groups, which ignore the object entirely, so
+ * this is a widening, not a behaviour change, for every existing caller.
  *
  * Compares by `slotKey` (D-010), so a freshly built path array that is
  * structurally equal to a declared one still matches — this function does not
  * rely on the caller passing the exact same array reference back.
  */
 export function findDerivedSlotSchema(
-  type: ObjectType,
+  object: GraphObject,
   path: readonly string[],
 ): DerivedSlotSchema | undefined {
-  const schema = getObjectSchema(type);
+  const schema = getObjectSchema(object.type);
   if (schema === undefined) {
     return undefined;
   }
   const key = slotKey(path);
-  return schema.derivedSlots.find((entry) => slotKey(entry.path) === key);
+  return resolveDerivedSlots(object, schema.derivedSlots).find((entry) => slotKey(entry.path) === key);
 }

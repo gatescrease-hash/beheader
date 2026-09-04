@@ -121,7 +121,7 @@ import {
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
 } from "../engine/primitives/geometry.ts";
-import { findDerivedSlotSchema, getObjectSchema, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
+import { findDerivedSlotSchema, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
 import { MAX_TABLE_LINES, MIN_TABLE_LINES, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
 import {
   TEXT_AUTORESIZE_PATH,
@@ -480,7 +480,11 @@ function createObjectFromCommand(
   for (const literal of literals) {
     slots[slotKey(literal.path)] = { kind: "literal", value: literal.value };
   }
-  for (const derived of schema.derivedSlots) {
+  // D-141: resolved PER OBJECT (a `dynamic` derived group, once one exists,
+  // reads the object's own structural state) — the object below carries no
+  // `ports` yet, which every `static`-only schema in today's registry ignores.
+  const objectSoFar: GraphObject = { id: minted.id, name, type, slots };
+  for (const derived of resolveDerivedSlots(objectSoFar, schema.derivedSlots)) {
     slots[slotKey(derived.path)] = { kind: "derived", value: null };
   }
 
@@ -694,7 +698,7 @@ function resolveWritableSlot(target: string, document: Document): SlotTargetResu
   }
   const displayName = formatSlotName(address, document.objects, target);
 
-  if (findDerivedSlotSchema(object.type, address.path) !== undefined) {
+  if (findDerivedSlotSchema(object, address.path) !== undefined) {
     return { ok: false, message: `${displayName} is a derived slot — its value is computed by its object's schema and can never be set or linked (§5.1)` };
   }
 
@@ -1231,7 +1235,7 @@ function resolveRefsTarget(typed: string, document: Document): RefsTargetResult 
  * reason; a THIRD site asking it must not be written.
  */
 function declaresSlotPath(object: GraphObject, path: readonly string[]): boolean {
-  if (findDerivedSlotSchema(object.type, path) !== undefined) {
+  if (findDerivedSlotSchema(object, path) !== undefined) {
     return true;
   }
   const schema = getObjectSchema(object.type);

@@ -111,18 +111,20 @@
  * before `detectCycle` does, or a document whose only cycle runs through an undeclared
  * slot gets a false "no cycle" pass instead of the rejection those checks exist to give.
  *
- * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. SEVEN
+ * `mutate(objects, operations, journal)` — steps 1, 2, 6, 8 around the above. NINE
  * operation kinds: `setSlot`, **`clearSlot`**, `deleteObject`, `createObject`,
- * `insertTableLine`, `deleteTableLine`, `renameObject`. SEVEN PRECONDITIONS run over the whole batch before
+ * `insertTableLine`, `deleteTableLine`, `renameObject`, and **`addPort`/`removePort`**
+ * (D-141 clause 6). EIGHT PRECONDITIONS run over the whole batch before
  * staging even starts — an empty batch, a target that does not resolve (D-021; simulated
  * LEFT-TO-RIGHT so a batch that creates or deletes objects mid-fold is checked against
  * each operation's own position, not pre-batch state alone), an illegal payload value
  * or stored AST literal (D-048), an invalid table resize (D-050/D-046/D-053), a `setSlot`
  * that would leave a dynamic-family sizing slot (`table`'s `rows`/`cols`) unreadable by
  * `readTableDimension` (**D-097**), a `clearSlot` at anything but a table cell
- * (`findIllegalSlotClears` — D-047 settles only that one), and a rename to a name §5.2
- * does not allow (D-080).
- * The last four are simulated in that same left-to-right walk. Then: deep-clone once
+ * (`findIllegalSlotClears` — D-047 settles only that one), a rename to a name §5.2
+ * does not allow (D-080), and an `addPort`/`removePort` naming an illegal, already-taken,
+ * or nonexistent port (`findInvalidPortOperations` — **D-141**).
+ * The last five are simulated in that same left-to-right walk. Then: deep-clone once
  * (D-019 — a real recursive clone, not a JSON round-trip), fold every operation onto
  * that ONE clone, validate and evaluate ONCE, commit all-or-nothing with exactly one
  * journal entry holding the whole list (D-020).
@@ -154,8 +156,10 @@
  *   - Holding "the current document" across calls — Rule 2 forbids it. `mutate` is a
  *     pure function of its three arguments; the caller owns the `objects`/`journal`
  *     pair and decides what to do with a rejection.
- *   - Operation kinds beyond the six above (`explode`, vertex add/remove) — they
- *     belong to the phases that introduce the state they touch.
+ *   - Operation kinds beyond the nine above (`explode`, vertex add/remove) — they
+ *     belong to the phases that introduce the state they touch. `addPort`/`removePort`
+ *     manage the port NAME LIST only — the `script` schema, its `SCRIPT_SCHEMA`
+ *     entry, and §5.10's `script` command are D-141 clause 7's own separate slice.
  *   - A user-facing "add a new circle" COMMAND (§5.10): choosing a fresh id from
  *     `nextObjectId` and a type's starting slot values is `command/commands.ts`'s,
  *     layered ON TOP of `CreateObjectOperation`, not the same thing as it.
@@ -166,7 +170,7 @@ import { checkNameAvailable, formatAddress, isAddressError, TABLE_CELL_PATH_PREF
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
-import { derivedSlotDependencyAddresses, getObjectSchema, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
+import { derivedSlotDependencyAddresses, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
 import {
   deleteTableLine,
   enumerateRangeCellAddresses,
@@ -186,7 +190,7 @@ import {
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasIllegalNumber, isIllegalNumber, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, isIllegalNumber, isLegalPortName, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Rebuilds the full `Edge[]` for `objects`, from every formula slot at a
@@ -301,7 +305,7 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
     // `dynamic` case that needs it — `text.resolvedContent`, whose references
     // are names to resolve and ranges to expand against the current document
     // (D-114); a `static` or same-object `dynamic` resolver ignores it.
-    for (const derivedSlotEntry of schema.derivedSlots) {
+    for (const derivedSlotEntry of resolveDerivedSlots(object, schema.derivedSlots)) {
       const dependencyAddresses = derivedSlotDependencyAddresses(object, derivedSlotEntry.dependencies, objects);
       for (const sourceSlot of dependencyAddresses) {
         edges.push({
@@ -700,6 +704,67 @@ export interface RenameObjectOperation {
 }
 
 /**
+ * **D-141 clause 6**: the ONLY way a `script` node's port set changes —
+ * "adding or removing a port is a new `Operation` kind, staged/validated/
+ * committed like every other." `family` picks `ports.in` or `ports.out`;
+ * `name` is appended to that family's ORDERED list (D-141 clause 2).
+ *
+ * PRECONDITIONS, enforced by `mutate` before this is ever folded (mirroring
+ * every other variant's own precondition doc comment, `findInvalidPortOperations`):
+ * `objectId` names an existing object; `name` is a legal port name
+ * (`graph/node.ts`'s `isLegalPortName` — non-empty, no `.`); `name` is not
+ * already present in that family, AS OF THIS OPERATION'S OWN POSITION in the
+ * batch (simulated left-to-right, the same D-050 posture every other
+ * batch-order-sensitive check takes).
+ *
+ * Carries no slot VALUE: adding an `in` port declares the NAME only — the
+ * slot itself (a `literal`/`formula` at `in.<name>`) is written by a
+ * SEPARATE `setSlot` in the same batch, the same layering `createObject`
+ * already has with `command/commands.ts`'s literal-supplying callers. Adding
+ * an `out` port likewise declares the name only; §5.8's `placeholders` VALUE
+ * reconciliation (D-141 clause 3) belongs to the `script` schema/command
+ * cycle this data-model slice unblocks, not to this primitive.
+ */
+export interface AddPortOperation {
+  readonly kind: "addPort";
+  readonly objectId: string;
+  readonly family: "in" | "out";
+  readonly name: string;
+}
+
+/**
+ * **D-141 clause 6**'s other half: removes `name` from `objectId`'s `family`
+ * port list, and drops the corresponding slot (`in.<name>`/`out.<name>`) from
+ * that object's own `slots`, if present — the port no longer exists, so
+ * neither does its slot (mirroring `ClearSlotOperation`'s "an absent slot is
+ * how this codebase spells legally gone," but for a whole port rather than
+ * one table cell).
+ *
+ * **Removing an OUT port that something still references is REJECTED, never
+ * silently dropped** (D-141 clause 6, §5.1.1's "reject or repair, no third
+ * option") — enforced by NO new mechanism: dropping the `out.<name>` slot
+ * here means any OTHER object's formula still naming it dangles, and
+ * `validateIntegrity`'s existing dangling-reference check (§5.1.1 clause 1)
+ * rejects the whole batch exactly as it already does for `delete <object>`
+ * without `force`. Removing an IN port cannot break a reference the same way:
+ * nothing outside a script node's own formulas can `read` its `in.*` (a
+ * script's inputs are written INTO, never read FROM, by another object's
+ * formula — §5.8), so no analogous rejection path is needed for that family.
+ *
+ * PRECONDITIONS, enforced by `mutate` before this is ever folded (mirroring
+ * `AddPortOperation`'s own doc comment): `objectId` names an existing object;
+ * `name` currently names a port in that family, AS OF THIS OPERATION'S OWN
+ * POSITION in the batch (`findInvalidPortOperations`, same left-to-right
+ * simulation).
+ */
+export interface RemovePortOperation {
+  readonly kind: "removePort";
+  readonly objectId: string;
+  readonly family: "in" | "out";
+  readonly name: string;
+}
+
+/**
  * The full set of operations `mutate` can apply. A new kind WIDENS this union,
  * per Q-005/D-020's "widen the union, never restructure" stance — never a
  * second entry point.
@@ -711,7 +776,9 @@ export type Operation =
   | CreateObjectOperation
   | InsertTableLineOperation
   | DeleteTableLineOperation
-  | RenameObjectOperation;
+  | RenameObjectOperation
+  | AddPortOperation
+  | RemovePortOperation;
 
 /** The object id an operation targets, whichever variant it is — shared by the existence check and the message-building below. */
 function operationTargetId(operation: Operation): string {
@@ -721,7 +788,13 @@ function operationTargetId(operation: Operation): string {
   if (operation.kind === "createObject") {
     return operation.object.id;
   }
-  if (operation.kind === "insertTableLine" || operation.kind === "deleteTableLine" || operation.kind === "renameObject") {
+  if (
+    operation.kind === "insertTableLine" ||
+    operation.kind === "deleteTableLine" ||
+    operation.kind === "renameObject" ||
+    operation.kind === "addPort" ||
+    operation.kind === "removePort"
+  ) {
     return operation.objectId;
   }
   return operation.address.objectId;
@@ -961,6 +1034,56 @@ function applyOperation(
           }
         }
         return { ...object, slots };
+      }),
+      brokenSlots: [],
+    };
+  }
+  if (operation.kind === "addPort") {
+    // D-141 clause 6: append `name` to the named family's ORDERED list.
+    // Nothing else about the object changes here — the slot the new port's
+    // NAME will eventually address (`in.<name>`/`out.<name>`) is a SEPARATE
+    // operation in the same batch (see `AddPortOperation`'s own doc comment).
+    return {
+      objects: objects.map((object) => {
+        if (object.id !== operation.objectId) {
+          return object;
+        }
+        const ports = object.ports ?? { in: [], out: [] };
+        return {
+          ...object,
+          ports: operation.family === "in" ? { ...ports, in: [...ports.in, operation.name] } : { ...ports, out: [...ports.out, operation.name] },
+        };
+      }),
+      brokenSlots: [],
+    };
+  }
+  if (operation.kind === "removePort") {
+    // D-141 clause 6: remove `name` from the family list AND drop the
+    // corresponding slot, if the object carries one — "the port no longer
+    // exists, so neither does its slot" (see `RemovePortOperation`'s own doc
+    // comment for why this needs no separate reject-if-referenced check: an
+    // out port's slot going away is exactly what makes
+    // `validateIntegrity`'s existing dangling-reference check catch a
+    // remaining reference to it).
+    const key = slotKey([operation.family, operation.name]);
+    return {
+      objects: objects.map((object) => {
+        if (object.id !== operation.objectId) {
+          return object;
+        }
+        const ports = object.ports ?? { in: [], out: [] };
+        const nextPorts =
+          operation.family === "in"
+            ? { ...ports, in: ports.in.filter((name) => name !== operation.name) }
+            : { ...ports, out: ports.out.filter((name) => name !== operation.name) };
+        const slots: Record<string, Slot> = {};
+        for (const existing of Object.keys(object.slots)) {
+          const slot = object.slots[existing];
+          if (existing !== key && slot !== undefined) {
+            slots[existing] = slot;
+          }
+        }
+        return { ...object, ports: nextPorts, slots };
       }),
       brokenSlots: [],
     };
@@ -1338,6 +1461,10 @@ export function mutate(
         detail = `attempts to delete a ${operation.axis} from object id "${targetId}"`;
       } else if (operation.kind === "renameObject") {
         detail = `attempts to rename object id "${targetId}" to "${operation.name}"`;
+      } else if (operation.kind === "addPort") {
+        detail = `attempts to add ${operation.family} port "${operation.name}" to object id "${targetId}"`;
+      } else if (operation.kind === "removePort") {
+        detail = `attempts to remove ${operation.family} port "${operation.name}" from object id "${targetId}"`;
       } else {
         detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
       }
@@ -1400,6 +1527,14 @@ export function mutate(
   const invalidNameMessages = findInvalidNames(operations, objects);
   if (invalidNameMessages.length > 0) {
     return { ok: false, message: invalidNameMessages.join("; ") };
+  }
+
+  // **D-141 clause 6**: every `addPort`/`removePort` in the batch, simulated
+  // left-to-right for the same reason names are (D-050) — see
+  // `findInvalidPortOperations`'s own doc comment.
+  const invalidPortMessages = findInvalidPortOperations(operations, objects);
+  if (invalidPortMessages.length > 0) {
+    return { ok: false, message: invalidPortMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -1505,7 +1640,7 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
     // why this must be the one place that resolution happens.
     const declaredKeys = new Set<string>([
       ...resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).map((path) => slotKey(path)),
-      ...schema.derivedSlots.map((entry) => slotKey(entry.path)),
+      ...resolveDerivedSlots(object, schema.derivedSlots).map((entry) => slotKey(entry.path)),
     ]);
 
     for (const key of Object.keys(object.slots)) {
@@ -1588,7 +1723,7 @@ function findSchemaSlotKindMismatches(objects: readonly GraphObject[]): readonly
       continue; // Same permitted exception as D-017 — see file header.
     }
 
-    for (const derivedSlotEntry of schema.derivedSlots) {
+    for (const derivedSlotEntry of resolveDerivedSlots(object, schema.derivedSlots)) {
       const slot = object.slots[slotKey(derivedSlotEntry.path)];
       if (slot !== undefined && slot.kind === "derived") {
         continue; // Correctly present and correctly kinded.
@@ -2326,6 +2461,69 @@ function findInvalidNames(operations: readonly Operation[], objects: readonly Gr
     if (entry !== undefined) {
       entry.name = operation.name; // Frees the old name for a later operation, and claims the new one.
     }
+  });
+
+  return problems;
+}
+
+/**
+ * **D-141 clause 6**'s pre-staging gate for every `addPort`/`removePort` in a
+ * batch, simulated left-to-right for the same reason `findInvalidNames` is
+ * (D-050): whether a name is free to add, or exists to remove, is a function
+ * of the batch's OWN effect so far, not of the pre-batch document alone —
+ * `[removePort out factor, addPort out factor]` on the same object must be
+ * legal (the first frees the name the second then claims).
+ *
+ * Three things reject an `addPort`: `objectId` does not resolve (already
+ * caught by the existence-simulation above, but this function does not
+ * assume that ran first); `name` is not legal (`isLegalPortName`); `name`
+ * already names a port in that SAME family, as of this operation's position.
+ * `removePort` rejects when `name` does NOT currently name a port in that
+ * family — there is no "nearest port" to remove instead of a nonexistent
+ * one, the same stance `deleteTableLine`'s own precondition takes for an
+ * out-of-range index.
+ */
+function findInvalidPortOperations(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  const tracked = new Map<string, { in: Set<string>; out: Set<string> }>(
+    objects.map((object) => [object.id, { in: new Set(object.ports?.in ?? []), out: new Set(object.ports?.out ?? []) }]),
+  );
+
+  operations.forEach((operation, index) => {
+    if (operation.kind === "createObject") {
+      tracked.set(operation.object.id, { in: new Set(operation.object.ports?.in ?? []), out: new Set(operation.object.ports?.out ?? []) });
+      return;
+    }
+    if (operation.kind === "deleteObject") {
+      tracked.delete(operation.objectId);
+      return;
+    }
+    if (operation.kind !== "addPort" && operation.kind !== "removePort") {
+      return;
+    }
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+    const ports = tracked.get(operation.objectId);
+    if (ports === undefined) {
+      return; // Reported by the existence-simulation above; nothing more to check here.
+    }
+    const family = ports[operation.family];
+    if (operation.kind === "addPort") {
+      if (!isLegalPortName(operation.name)) {
+        problems.push(`${prefix} attempts to add a port named "${operation.name}", which is not a legal port name (D-141: non-empty, no ".")`);
+        return;
+      }
+      if (family.has(operation.name)) {
+        problems.push(`${prefix} attempts to add ${operation.family} port "${operation.name}", which already exists (D-141)`);
+        return;
+      }
+      family.add(operation.name);
+      return;
+    }
+    if (!family.has(operation.name)) {
+      problems.push(`${prefix} attempts to remove ${operation.family} port "${operation.name}", which does not exist (D-141)`);
+      return;
+    }
+    family.delete(operation.name);
   });
 
   return problems;

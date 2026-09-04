@@ -568,6 +568,67 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
   });
 });
 
+// D-141: a `script` node's structural port names round-trip through save/load
+// like any other plain data. No `script` schema exists yet (D-141 clause 7's
+// own scope note), so these tests build the `ports`-carrying object by hand,
+// the same posture the D-126 block above takes for `add`/`value`.
+describe("deserializeDocument — ports (D-141), structural validation only", () => {
+  function documentWithPorts(ports: unknown): unknown {
+    return {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 2,
+      camera: { x: 0, y: 0, zoom: 1 },
+      journal: [],
+      objects: [{ id: "obj_1", name: "script_1", type: "script", slots: {}, ports }],
+    };
+  }
+
+  it("is ABSENT on a document with no ports field at all — every document saved before D-141 still loads", () => {
+    const noPorts = { formatVersion: FORMAT_VERSION, nextObjectId: 2, camera: { x: 0, y: 0, zoom: 1 }, journal: [], objects: [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } }] };
+    const result = deserializeDocument(noPorts);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.objects[0]?.ports).toBeUndefined();
+    }
+  });
+
+  it("round-trips a well-formed ports field unchanged", () => {
+    const result = deserializeDocument(documentWithPorts({ in: ["factor", "speed"], out: ["result"] }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.objects[0]?.ports).toEqual({ in: ["factor", "speed"], out: ["result"] });
+    }
+  });
+
+  it("rejects a ports field that is not an object with array in/out fields", () => {
+    expect(deserializeDocument(documentWithPorts("nope")).ok).toBe(false);
+    expect(deserializeDocument(documentWithPorts({ in: "not an array", out: [] })).ok).toBe(false);
+    expect(deserializeDocument(documentWithPorts({ in: [] })).ok).toBe(false); // missing `out`
+  });
+
+  it("rejects an illegal port name — empty or containing '.' (D-141 clause 2)", () => {
+    expect(deserializeDocument(documentWithPorts({ in: [""], out: [] })).ok).toBe(false);
+    expect(deserializeDocument(documentWithPorts({ in: ["a.b"], out: [] })).ok).toBe(false);
+  });
+
+  it("rejects a duplicate name WITHIN the same family", () => {
+    expect(deserializeDocument(documentWithPorts({ in: ["factor", "factor"], out: [] })).ok).toBe(false);
+  });
+
+  it("ALLOWS the same name across DIFFERENT families — 'in' and 'out' are independent namespaces", () => {
+    expect(deserializeDocument(documentWithPorts({ in: ["result"], out: ["result"] })).ok).toBe(true);
+  });
+
+  it("round-trips through save/load unchanged (saveDocument(loadDocument(json)) === json)", () => {
+    const json = JSON.stringify(documentWithPorts({ in: ["factor"], out: ["result"] }));
+    const loaded = loadDocument(json);
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      expect(JSON.parse(saveDocument(loaded.document)) as unknown).toEqual(JSON.parse(json));
+    }
+  });
+});
+
 describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-REVIEW-phase0 finding 1, closed cycle 0026)", () => {
   it("rejects a document whose JOURNAL holds a raw non-finite number — probe I: the SAME 1e999 that is rejected in the object list must also be rejected here, not silently corrupted on the next save", () => {
     // 0025-REVIEW-phase0's sharpest probe: JSON.parse("1e999") is Infinity —

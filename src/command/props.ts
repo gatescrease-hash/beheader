@@ -58,7 +58,7 @@
  */
 import { formatFormula } from "../engine/formula/format.ts";
 import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Slot, type Value } from "../engine/graph/node.ts";
-import { findSlotOptions, getObjectSchema, type SlotOptionSet } from "../engine/primitives/schema.ts";
+import { findSlotOptions, getObjectSchema, resolveDerivedSlots, type SlotOptionSet } from "../engine/primitives/schema.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import { TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 
@@ -130,7 +130,7 @@ export function buildSlotDescriptors(object: GraphObject, objects: readonly Grap
       descriptors.push({ ...describeNonDerivedSlot(path, slot, objects), ...optionsFor(object, path) });
     }
   }
-  for (const derived of schema.derivedSlots) {
+  for (const derived of resolveDerivedSlots(object, schema.derivedSlots)) {
     const slot = getSlot(object, derived.path);
     // D-018 requires a `derived`-kind slot at every declared derived path
     // once an object exists; `?? null` is defensive, not an expected case.

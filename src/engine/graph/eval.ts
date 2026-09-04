@@ -99,7 +99,7 @@ import { NULL_EVAL_CONTEXT, type EvalContext } from "../eval-context.ts";
 import type { FormulaAst } from "../formula/ast.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
 import { enumerateRangeCellAddresses, isInExtentTableCellAddress, isRangeEnumerationError } from "../primitives/table.ts";
-import { getObjectSchema, type DerivedSlotSchema } from "../primitives/schema.ts";
+import { getObjectSchema, resolveDerivedSlots, type DerivedSlotSchema } from "../primitives/schema.ts";
 import { addressKey, type Edge } from "./edge.ts";
 import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
 
@@ -399,7 +399,8 @@ function evaluateDerivedSlot(
   evaluatedValues: ReadonlyMap<string, Value>,
   context: EvalContext,
 ): Value {
-  const schemaEntry = findDerivedSlotSchemaByKey(getObjectSchema(object.type)?.derivedSlots, key);
+  const schema = getObjectSchema(object.type);
+  const schemaEntry = findDerivedSlotSchemaByKey(schema === undefined ? undefined : resolveDerivedSlots(object, schema.derivedSlots), key);
   if (schemaEntry === undefined) {
     return {
       error: "#REF",
