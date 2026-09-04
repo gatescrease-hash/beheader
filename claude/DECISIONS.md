@@ -5087,3 +5087,51 @@ which §7 clause 3 puts out of reach of a `PROVISIONAL` tag.
 (confirmed: `grep -rn "PROVISIONAL(Q-026)" src` returns nothing). `primitives/schema.ts`'s NOT DONE
 HERE and `command/parser.ts`'s `COMMANDS_SPECIFIED_BUT_NOT_BUILT` name Q-026 today; the cycle that
 implements this ruling replaces those pointers with `D-141`.
+
+---
+
+## D-142 — A phase's ✅ line is its TEST, not the whole of what the phase must deliver; where the phase heading names a subsystem the brief specifies elsewhere, that subsystem is part of the gate
+
+Ruled: 0172-REVIEW-phase6-gate, **by the human directly**, overturning entry 0171's
+"Decisions I made" #1. Binding on: all future phase gates.
+
+1. **The ✅ **Done when:** line is the executable proof a phase owes, and it remains exactly that —
+   PROCESS_BRIEF §12 clause 1 is untouched, and a criterion still MUST be expressed as a test before
+   a phase is claimed. What this ruling denies is the *inverse* reading: that anything the ✅ line
+   does not name is therefore outside the phase. A phase's §6 heading names its subject matter, and
+   where that subject matter is a subsystem the brief specifies in its own §5 section, **building
+   that subsystem is part of the gate even when the ✅ line is silent about it.** The ✅ line is
+   chosen to prove the phase's hardest or least obvious claim, not to enumerate its deliverables.
+2. **Applied to Phase 6, concretely: `image` MUST be loadable and MUST render properly before the
+   Phase 6 gate may be claimed.** §5.7 is four sentences — load via file picker, store as a data
+   URL, draw at a position with width/height, preserve aspect ratio by default — and three of them
+   are about loading and drawing. A headless `image` that draws nothing does not satisfy the phase
+   that names it. **"Renders properly" is settled by the human seeing it on screen**, not by a test
+   asserting a `drawImage` call happened; PROCESS_BRIEF §12 clause 1's "where the criterion is
+   inherently visual, test the engine-side consequence and describe the manual check separately"
+   governs how it is reported, and STATUS's standing "the operator cannot see what you can see"
+   governs when it is believed.
+3. **This ruling does NOT widen a heading into every adjacent thing.** The heading's own words
+   bound it. Phase 6 reads "Script **stub** + image": §5.8 is titled **STUB ONLY**, its gate clause
+   is engine-side, and it passes — so §5.8's "render as a labelled box with ports" is *not* pulled
+   into this gate by clause 1, and remains the separate future slice it already was. Where a
+   heading and a §5 section genuinely leave the scope ambiguous, that is a §6.1 trigger 3 stop, not
+   a call an implementer makes alone.
+4. **D-140 clause 4 is NOT overturned.** An `image` that draws nothing was correct *as entry 0165
+   shipped it* — that cycle scoped itself headless deliberately and disclosed it, and D-066 still
+   forbids giving `image` an extent without the drawing pass. Clause 4 says that state is
+   acceptable *between* cycles; this ruling says it is not a *gate-passing* state.
+5. **No past gate is reopened.** Phases 0–5 closed on reviews that had the whole phase in front of
+   them, and nothing in this ruling suggests otherwise. It binds Phase 6 forward.
+
+**Rationale.** Entry 0171's textual argument was careful and honestly flagged as overturnable, and
+the ambiguity it found is real: PROJECT_BRIEF §6 and PROCESS_BRIEF §12 both say "the criterion is
+the contract," which read strictly makes a phase's own heading non-binding. That reading would let
+a phase gate on its most-testable half while its least-testable half — which is reliably the visual
+half, and reliably the half the operator actually experiences — accumulates behind the gate under
+the label "done". The human owns "is this phase finished," and has ruled that it is not finished
+while the thing the phase is named for cannot be seen.
+
+**Reconciliation required.** None in source — no `PROVISIONAL` tag and no code depends on the
+overturned reading. Entry 0171 stays in the log unedited (§2's append-only rule); it is superseded
+on this one point, not withdrawn, and its ✅-line proof stands and need not be re-derived.

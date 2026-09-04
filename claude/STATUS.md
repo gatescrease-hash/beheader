@@ -1,38 +1,43 @@
-# STATUS — as of entry 0171-phase6-gate
+# STATUS — as of entry 0172-REVIEW-phase6-gate
 
-**PHASE 6 IS GATED (entry 0171, `REVIEW: REQUIRED` — awaiting review).** D-141 clause 7's whole
-slice (data model at 0167/0168-REVIEW, `engine/script/stub.ts` + `SCRIPT_SCHEMA` + §5.10's `script`
-command at 0169/0170-REVIEW) was already built and reviewed. Entry 0171 is the phase-gate claim
-itself (§12, always a §6.1 trigger 1, never absorbed into a batch): Phase 6's ✅ criterion is
-**PASSING**, backed by a D-016 mutation check run fresh in that entry (not merely cited from
-0169/0170-REVIEW's own runs). **This gate has NOT yet cleared review** — the next phase (7) may not
-begin until a reviewer confirms it (§12 clause 4).
+**PHASE 6'S GATE WAS CLAIMED (entry 0171) AND REFUSED (0172-REVIEW, verdict REVISE). PHASE 6 IS
+OPEN. PHASE 7 MAY NOT BEGIN.** The ✅ line itself **PASSES** — 0172-REVIEW re-proved it with two
+independent D-016 mutation checks (§2 of that entry) and read the criterion test line by line (§6).
+Nothing about the `script` half is in doubt. **What refused the gate is `image`**, on a ruling the
+human made directly at that review:
 
-**Entry 0171 also settled a scope question STATUS previously left open**, as an implementation-level
-call, not a Q-NNN (it decides gate wording/timing, not data model/addressing/mutation sequence):
-Phase 6's build-order PROSE TITLE ("script stub + image") is descriptive, not part of the ✅
-contract — PROCESS_BRIEF §12 and PROJECT_BRIEF §6 both say the ✅ line IS the contract, and that line
-names only `script`/`polygon`. **`image` rendering is therefore NOT a precondition of this gate** and
-stays exactly as open as it already was (see "Not started" below). **A reviewer may overturn this
-reading** — if so, un-claim the gate with one more entry; no code or stored state depends on it
-either way.
+> **D-142 — a phase's ✅ line is its TEST, not the whole of what the phase must deliver. Where the
+> phase heading names a subsystem the brief specifies elsewhere, that subsystem is part of the
+> gate. Applied to Phase 6: `image` MUST be loadable and MUST render properly — confirmed by the
+> human ON SCREEN — before this gate may be claimed.**
+
+Entry 0171's scope call (that Phase 6's heading is descriptive and `image` rendering is therefore
+not a precondition) is **OVERTURNED** by D-142. The entry stays in the log unedited and is not
+otherwise criticised — it flagged this exact call as overturnable, in three places, and its ✅-line
+proof stands and **need not be re-derived** by whoever re-claims the gate.
+
+**D-142 does NOT pull `script` rendering into this gate** (clause 3): §5.8 is titled **STUB ONLY**,
+the heading's own word is "Script *stub*", and its gate clause is engine-side and passes. `image`'s
+heading word carries no such narrowing and §5.7's four sentences are almost entirely about loading
+and drawing. Do not fold the two together.
 
 STATE: **GREEN**. Both configs compile, **1844/1844** tests pass, 0 skipped, 0 `.only`.
-**35 test files.** `npx vite build` clean.
+**35 test files.** `npx vite build` clean. (Re-verified independently at 0172-REVIEW §1.)
 
-Current phase: 6 — script stub + image (**GATED, entry 0171 — awaiting review**)
+Current phase: 6 — script stub + image (**OPEN — gate refused at 0172-REVIEW; `image` load+render
+is what it is waiting on**)
 Phase 6 acceptance criterion: *"`script_1.in.factor` is bound to a cell, `polygon_1.radius` is bound
 to `script_1.out.result`, and changing the placeholder output value moves the polygon — with no
-script-specific code in `eval.ts`"* — **CLAIMED PASSING at entry 0171**, its own fresh D-016
-mutation check pasted in that entry (removed the `placeholder.<port>` dependency line in
-`engine/script/stub.ts`, re-ran the named test, it failed with the predicted D-013 `#REF`, restored,
-full suite re-confirmed green). The "no script-specific code in `eval.ts`" clause reconfirmed by
-grep, third time running (0169, 0170-REVIEW, 0171 all independently).
-Last review point: **0170-REVIEW-phase6** (ACCEPT — entry 0169 accepted with no edits). Entry 0171
-(the gate claim) has not yet been reviewed.
-Cycles since last review: **1/3** · diff since last review: **0 lines / 0 files** (0171 neutralised
-and fully restored one line for its own verification; the tracked diff is empty — but §6.1 trigger 1
-fires regardless of batch state, per §12, so this does not change when review is required)
+script-specific code in `eval.ts`"* — **PASSING, CONFIRMED BY THE REVIEWER** (0172-REVIEW §2 and §6).
+Two mutation checks, both red as predicted and both reverted: (1) `evaluateScriptOutput`'s body
+forced to `return null` → `expected null to be 10`; (2) the `placeholder.<port>` address dropped from
+`scriptOutDependencies` → the predicted D-013 `#REF`. Check (1) is the reviewer's own and is the
+stronger of the two — it neutralises §5.8's SEAM rather than its dependency plumbing. The "no
+script-specific code in `eval.ts`" clause is grep-clean for the fourth independent time (0169,
+0170-REVIEW, 0171, 0172-REVIEW). **The criterion passing is NOT sufficient for the gate — see D-142.**
+Last review point: **0172-REVIEW-phase6-gate** (**REVISE** — the gate is refused; the ✅ line is
+confirmed).
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files**
 
 **0168-REVIEW's finding (settled, kept for history):** the ORIGINAL `isLegalPortName`
 (`graph/node.ts`) only checked non-empty/no-dot, LOOSER than `address.ts`'s `PATH_SEGMENT_PATTERN`
@@ -109,7 +114,7 @@ dependencies had to include it, both independently re-derived and confirmed at 0
 the finding above (the in.*/placeholder.* real-slot requirement, traced to its actual mechanism at
 0170-REVIEW §5).
 
-## What the last three cycles did
+## What the last cycles did
 
 **0168-REVIEW** accepted entry 0167 (the data-model slice) with edits, all re-verified green
 (1818/1818, both configs clean, `vite build` clean). One real gap fixed: `isLegalPortName`
@@ -146,14 +151,19 @@ reconciliation is actually satisfied (traced to the interaction of `deriveEdges`
 generation and the generic dangling-reference check, not a special-cased one). Both held. No new
 ruling — D-141 stands exactly as written.
 
-**0171** (`REVIEW: REQUIRED` — **awaiting review**) claims Phase 6's gate: the ✅ criterion is
-PASSING, backed by its own fresh D-016 mutation check (not merely a citation of 0169's/0170-REVIEW's
-prior runs — see that entry's "Verification"). Also answered, as an implementation-level call rather
-than a Q-NNN, the scope question STATUS had left open: the phase's build-order PROSE TITLE ("script
-stub + image") is descriptive, not part of the ✅ contract, so `image` rendering is NOT a
-precondition of this gate. No source changed net (a neutralise-and-restore for the mutation check).
-**The reviewer should confirm or overturn both the criterion claim and the scope-call reading before
-Phase 7 may begin (§12 clause 4).**
+**0171** claimed Phase 6's gate: the ✅ criterion PASSING, backed by its own fresh D-016 mutation
+check, plus the scope call that the phase's build-order heading ("script stub + image") is
+descriptive rather than part of the ✅ contract. No source changed net (a neutralise-and-restore).
+
+**0172-REVIEW** (verdict **REVISE**) **CONFIRMED the criterion claim and OVERTURNED the scope call.**
+Re-ran everything from a clean tree (§1), then ran two D-016 mutation checks rather than reading
+0171's — one of them a NEW route through §5.8's seam function itself, which 0171 had not tested —
+and read the criterion test line by line rather than trusting its title. All held; the honesty audit
+found the log matching the diff exactly. **The human ruled directly at that review that `image` must
+load and render before Phase 6 gates — D-142.** No source or test edited; `DECISIONS.md` gained
+D-142; this file rewritten. 0172-REVIEW §4 carries one warning worth reading before the `image`
+cycle starts: **the decoded-bitmap cache is a `Map` of live DOM objects and may never live in
+`src/engine/`** (Rule 1 + §5.5).
 
 ---
 
@@ -412,33 +422,40 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 `parser.ts` (two) and `commands.ts` (three, two of which were stale COUNTS — "all four handlers",
 "the four types below").
 
-## Next slice (recommended)
+## Next slice — NOT a recommendation. This is what D-142 requires
 
-**PHASE 6'S GATE IS CLAIMED (entry 0171) BUT NOT YET REVIEWED.** Per §12 clause 4, "the next phase
-does not begin before the gate clears" — so **the human/reviewer should review entry 0171 next**,
-either confirming the gate (Phase 7 becomes startable) or overturning its scope call (see STATUS's
-top section) and sending it back. This is a `REVIEW: REQUIRED` stop, not a slice an implementer
-should build past.
+**`image` LOAD + RENDER. It is the only thing standing between here and the Phase 6 gate.** Phase 7
+may not begin until it lands and the human has seen it work. 0172-REVIEW §8 is the fix list; in
+short, and all of it ONE slice with its own scope statement:
 
-Independent of the gate outcome, and startable regardless (Phase 7 needs neither, and the gate's
-scope call explicitly does not make either a precondition):
+1. A **`renderer.ts` arm, an `extent.ts` arm and a `hittest.ts` arm, shipped TOGETHER** — D-066
+   makes drawn extent and clickable extent one extent, so shipping the extent without the drawing is
+   forbidden. All three sit in the "no visual definition yet" arms today
+   (`renderer.ts:424`, `extent.ts:92`, `hittest.ts:204`).
+2. A **decoded-`HTMLImageElement` cache with a repaint when a decode completes.** **THIS LIVES IN
+   `render/`/`main.ts` AND NEVER IN `src/engine/`** — an `HTMLImageElement` is a live DOM object and
+   a `Map` of them is exactly what Rule 1 and §5.5 forbid the engine to hold. The document stores
+   the data URL STRING and nothing else. **The cache and the async repaint are the real design
+   question here** — where live render state lives, and what re-triggers a paint.
+3. **§5.7's file picker, as a `CommandEffect`** — follow `load`'s own precedent exactly:
+   `commands.ts` returns the effect (`CommandEffect` at `commands.ts:212-217`), `main.ts`'s
+   `performEffect` owns the DOM half.
+4. **§5.7's "preserve aspect ratio by default"** — a real specified clause, not decoration, and the
+   one part with no ruling behind it. `DEFAULT_IMAGE_WIDTH`/`_HEIGHT` are `100`/`100` and the
+   natural size of a decoded bitmap is what that clause actually needs. If honouring it requires the
+   decoded natural size to reach a SLOT, that is load-bearing — **raise Q-027, do not guess** (§7).
+5. **Then get it on screen and have the human confirm it** (D-142 clause 2 — "renders properly" is
+   settled by the human seeing it, not by a test asserting a `drawImage` call happened), **and only
+   then re-claim the gate** in a new entry, citing 0172-REVIEW §2 and §6 for the ✅ line rather than
+   re-deriving it.
 
-1. **`image` rendering + §5.7's file picker.** A `renderer.ts` arm, an `extent.ts` arm and a
-   `hittest.ts` arm (all three TOGETHER — D-066 makes drawn extent and clickable extent one extent,
-   so shipping the extent without the drawing is forbidden), a decoded-`HTMLImageElement` cache with
-   a repaint on load, and a `CommandEffect` for the picker. **The cache and the async repaint are the
-   real design question there** — where live render state lives and what re-triggers a paint — and
-   it deserves its own scope statement.
-2. **`script` rendering** (a labelled box with ports) — its own unscoped future slice, same posture
-   `image`'s pre-render state had. Needs a real `addport`/`removeport` UI mechanism too, or ports
-   stay reachable only via raw `mutation.ts` operations (§5.10 names no grammar for either command;
-   do not invent one under §8's last bullet without a real need naming it).
-
-Also open, smaller: `script` rendering (a labelled box with ports) is its OWN unscoped future
-slice — nothing in 0169 touches `render/`. `command/props.ts`'s D-077 walk does not summarise
-`script`'s two dynamic non-derived families (`in.*`/`placeholder.*`) — disclosed in that file's
-header, not fixed. No `addport`/`removeport` COMMAND exists (§5.10 names no grammar for one; do not
-invent one under §8's last bullet without a real need naming it).
+**NOT in that slice, explicitly:** `script` rendering (a labelled box with ports) is its OWN
+unscoped future slice — D-142 clause 3 keeps it out of this gate, and nothing in 0169 touches
+`render/`. It needs a real `addport`/`removeport` UI mechanism too, or ports stay reachable only via
+raw `mutation.ts` operations (§5.10 names no grammar for either command; do not invent one under
+§8's last bullet without a real need naming it). `command/props.ts`'s D-077 walk not summarising
+`script`'s two dynamic non-derived families (`in.*`/`placeholder.*`) is disclosed in that file's
+header and is also not this slice's to fix.
 
 Cheap adds, still owed, not blocking: a direct `link text_1.origin.y <cell>` test (0137-REVIEW
 §honesty). **D-109 clauses 1–2** (cell decimal precision + no cell-text clipping,
@@ -482,34 +499,38 @@ aligning by arithmetic, `main.ts`'s `sourceMeasurer` (0160) · hanging indents f
 `isLegalPortName` grammar fix; no new ruling) · D-141 clause 7's own next slice —
 `engine/script/stub.ts` (`ScriptNode`/`evaluateScriptOutput`, path constants, `in.*`/`placeholder.*`/
 `out.*` dynamic-group enumerators, `out.<port>`'s compute), `SCRIPT_SCHEMA` wired into the registry,
-§5.10's `script x= y=` command (0169) · **0170-REVIEW** entry 0169 ACCEPTED, no edits, no new ruling.
+§5.10's `script x= y=` command (0169) · **0170-REVIEW** entry 0169 ACCEPTED, no edits, no new ruling
+· Phase 6's ✅ criterion claim (0171) · **0172-REVIEW** the Phase 6 gate — **REVISE, gate REFUSED**;
+the ✅ line CONFIRMED passing by two independent mutation checks; **D-142** (the human's ruling that
+`image` must load and render first).
 
 **PHASES 0–5 ARE DONE.** Do not reopen the text pipeline to "add more" to it — anything new belongs
 to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-**Entry 0171 — the Phase 6 gate claim itself.** No source file changed (net); the entry is the
-`REVIEW: REQUIRED` claim that Phase 6's ✅ criterion passes, backed by a fresh D-016 mutation check,
-plus the scope-call answer (see STATUS's top section) for whether `image` rendering is a
-precondition. 1/3 cycles, 0 lines/files since 0170-REVIEW — irrelevant to whether review is
-required, since §6.1 trigger 1 (a phase gate) always forces it regardless of batch state.
+**Nothing.** Entry 0171 has been reviewed (0172-REVIEW). The tree is byte-identical to `21066c7`
+plus this review's documentation changes; 0172-REVIEW's own two mutation checks were both reverted
+and the tree re-verified clean afterwards. 0/3 cycles, 0 lines / 0 files since the last review.
 
 ## Reviewed but NOT yet seen on screen
 
-Nothing REVIEWED is unseen. Entry 0169 (now reviewed, 0170-REVIEW) is unseeable by construction —
-pure engine work, no render file touched, a `script` object draws nothing (same posture `image` had
-before its own rendering cycle). Entry 0161's hanging indent, the last visual item, was confirmed on
-screen 2026-09-03.
+Nothing REVIEWED is unseen. Entry 0169 (reviewed at 0170-REVIEW) is unseeable by construction —
+pure engine work, no render file touched, a `script` object draws nothing (the same posture `image`
+still has). Entry 0161's hanging indent, the last visual item, was confirmed on screen 2026-09-03.
+
+**The next thing to reach this section will be `image` itself, and D-142 makes the human's look at
+it a precondition of the Phase 6 gate rather than a courtesy.**
 
 ## Not started
 
+**`image` RENDERING, HIT-TESTING AND §5.7's FILE PICKER — THE PHASE 6 GATE IS WAITING ON THIS**
+(D-142). See "Next slice" above; it is no longer an optional adjacent item. ·
 §5.8's script node's RENDERING (a labelled box with input ports left, output ports right — §5.8's own
 words). The schema/stub/command are BUILT AND REVIEWED as of entry 0169/0170-REVIEW — this item is
 specifically the `render/`/`extent.ts`/`hittest.ts` work, plus a real `addport`/`removeport` UI
-mechanism (§5.10 names no command-line grammar for one, so this may not be "just add a command"). ·
-`image`
-rendering, hit-testing and the §5.7 file picker ·
+mechanism (§5.10 names no command-line grammar for one, so this may not be "just add a command").
+**D-142 clause 3 keeps this OUT of the Phase 6 gate** — §5.8 is a STUB ONLY section. ·
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
@@ -561,10 +582,12 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
-- **AN `image` OBJECT IS INVISIBLE AND UNSELECTABLE.** Six correct slots, round-trips, renameable,
-  `props`-able, `link`-able, `delete`-able — and it draws nothing. Deliberate and disclosed (0165);
-  the render arm, the extent and the picker are one cycle, not three footnotes. **Do not add the
-  extent alone** (D-066).
+- **AN `image` OBJECT IS INVISIBLE AND UNSELECTABLE — AND AS OF D-142 THIS IS WHAT IS BLOCKING THE
+  PHASE 6 GATE.** Six correct slots, round-trips, renameable, `props`-able, `link`-able,
+  `delete`-able — and it draws nothing, and nothing can load a picture into it. Deliberate and
+  disclosed at 0165, and D-140 clause 4 still says that was correct AS THAT CYCLE SHIPPED IT; D-142
+  says it is not a gate-passing state. The render arm, the extent, the cache and the picker are one
+  cycle, not four footnotes. **Do not add the extent alone** (D-066).
 - **A `script` OBJECT IS INVISIBLE, UNSELECTABLE, AND UNREACHABLE FROM THE COMMAND LINE FOR PORTS.**
   `script x= y=` creates a real, schema-conformant, correctly-evaluating node (entry 0169, reviewed
   and ACCEPTED at 0170-REVIEW) — but `render/`/`extent.ts`/`hittest.ts` have zero `script`-specific
@@ -674,7 +697,7 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Settled — do not re-raise
 
-Every ruling in `DECISIONS.md` (D-001 through **D-141**) binds **except where entries 0153/0154/0155
+Every ruling in `DECISIONS.md` (D-001 through **D-142**) binds **except where entries 0153/0154/0155
 overruled one on the human's explicit instruction.** Those, in full:
 
 - **D-123 clause 3 — INVERTED.** A set `width`/`height` no longer crops the text; the box grows.
@@ -695,8 +718,10 @@ overruled one on the human's explicit instruction.** Those, in full:
   `src/engine/` — STANDS untouched, and 0160 extended it to markup for the same reason.
 - **§5.10's command list — EXTENDED (0155).** `clear <address>`. **D-047 itself is RELIED ON.**
 
-**AWAITING A VERDICT, NOT SETTLED: §5.7's slot list — DEVIATED (0165).** `source` ADDED, a sixth slot
-§5.7 does not name. See 0img above and entry 0165 decision 1.
+**§5.7's slot list — DEVIATED (0165), AND THE VERDICT IS IN: RATIFIED at D-140.** `source` ADDED, a
+sixth slot §5.7 does not name — permanent, not provisional. (This line read "AWAITING A VERDICT, NOT
+SETTLED" for six entries after D-140 had already settled it, contradicting 0img's own correct note
+above; corrected in passing at 0172-REVIEW.)
 
 **D-046 STANDS.** A dimension slot is read `literal`-only and fails closed to `0`. `content`
 inherits the same posture. **`image.source` does NOT** — nothing parses it, so nothing needs it to.
@@ -709,7 +734,8 @@ inherits the same posture. **`image.source` does NOT** — nothing parses it, so
 **Q-014 and Q-018 are CLOSED.** **Q-013 is NOT mooted.** **Q-016 and Q-017 remain OPEN**, both the
 human's, neither blocking. **Q-019 → D-116**, **Q-020 → D-117**, **Q-021 → D-120**, **Q-022 →
 D-121**, **Q-023 → D-122**, **Q-024 → D-123**, **Q-025 → D-139**, **Q-026 → D-141** — all CLOSED.
-Next free: **Q-027**.
+Next free: **Q-027**, and the `image` slice above names the one thing likely to need it (whether a
+decoded bitmap's NATURAL size must reach a slot for §5.7's "preserve aspect ratio by default").
 
 ## Live PROVISIONAL tags and open questions
 
@@ -729,6 +755,16 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
 
 ## Gotchas for the next model
 
+- **D-142 IS THE ONE THAT CHANGES WHAT "DONE" MEANS.** A phase's ✅ line is its TEST, not the whole
+  of what it must deliver: where the phase HEADING names a subsystem the brief specifies elsewhere,
+  that subsystem is part of the gate. Phase 6 is waiting on `image` load + render, confirmed by the
+  human ON SCREEN. Clause 3 bounds it — the heading's own words are the limit, and "Script *stub*"
+  keeps §5.8's rendering out. **Where a heading and a §5 section leave scope genuinely ambiguous,
+  that is a §6.1 trigger 3 stop, not a call to make alone** — entry 0171 made it alone, carefully
+  and honestly, and was still overturned.
+- **THE DECODED-BITMAP CACHE MAY NEVER LIVE IN `src/engine/`.** An `HTMLImageElement` is a live DOM
+  object; a `Map` of them is precisely what Rule 1 and §5.5 forbid the engine to hold. The document
+  stores the data URL STRING. This is the single easiest way to fail Rule 1 in the `image` cycle.
 - **D-141's DATA MODEL AND ITS OWN NEXT SLICE ARE BOTH BUILT AND REVIEWED (entry 0167 →
   0168-REVIEW ACCEPT WITH EDITS; entry 0169 → 0170-REVIEW ACCEPT, no edits). THE GATE IS OPEN — DO
   NOT REBUILD** `GraphObject.ports`, `DerivedSlotGroup`, `resolveDerivedSlots`,
@@ -791,5 +827,7 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
 - **DO NOT TRUST A RULING'S CLAIM ABOUT REACHABILITY — GREP FOR THE CALLER** (D-127's lesson).
 - **`#MEASURE` is a real `ErrorCode`** (`graph/node.ts`), sixth after `#SCRIPT`.
 - **The operator cannot see what you can see.** Ask for a live look before treating an authoring
-  surface as done — the deciding step in six cycles running (0152–0161). Nothing is queued unseen as
-  of 2026-09-03; `image` is unseen only because it is unseeable. Keep it that way.
+  surface as done — the deciding step in six cycles running (0152–0161), and now the deciding step
+  for the Phase 6 gate itself (**D-142 clause 2**: "renders properly" is settled by the human seeing
+  it, never by a test asserting a `drawImage` call happened). `image` is unseen today only because it
+  is unseeable — and D-142 is the ruling that this stops being acceptable.
