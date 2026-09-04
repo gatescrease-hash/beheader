@@ -10,6 +10,10 @@
  * a data URL into pixels. Imports nothing at all. NEVER imported by engine/*.
  *
  * WHAT THIS IS
+ *   Two exports over one decode mechanism. `decodeBitmap(source, onDecoded)`
+ *   decodes ONCE and reports what came back — the file picker's question, asked
+ *   on a gesture, because a chosen picture's natural size decides the object's
+ *   `width`/`height` slots (the human's Q-027 ruling).
  *   `createImageBitmapCache(onDecoded)` returns an `ImageBitmaps`, whose one
  *   method answers "is there a decoded picture for this data URL yet?".
  *   `renderer.ts` asks once per `image` object per paint and draws that object's
@@ -91,6 +95,54 @@ interface CacheEntry {
 }
 
 /**
+ * Decodes `source` ONCE and reports what came back — the decoded picture, or
+ * `undefined` if it is not one.
+ *
+ * Why this is exported alongside the cache rather than folded into it: the file
+ * picker needs a picture's NATURAL SIZE at the moment it is chosen, because
+ * that size decides the object's `width`/`height` slots (the human's Q-027
+ * ruling — the box takes the picture's proportions). That is a one-shot
+ * question asked on a gesture, not the cache's standing "is it ready yet" asked
+ * on every paint, and answering it through the cache would mean either polling
+ * it or giving it a per-source callback list. The cache uses this too, so there
+ * is exactly one place that wires an element's handlers (D-010).
+ *
+ * The picker's decode and the cache's later one are two decodes of the same
+ * data URL. That is Rule 5's accepted cost — the browser's own cache makes the
+ * second one cheap, and one shared decode would need lifetime rules that buy
+ * nothing at this scale.
+ *
+ * Never throws. `onDecoded` is called exactly once, asynchronously.
+ */
+export function decodeBitmap(
+  source: string,
+  onDecoded: (bitmap: DecodedBitmap | undefined) => void,
+  createElement: () => HTMLImageElement = () => new Image(),
+): void {
+  if (source === "") {
+    onDecoded(undefined);
+    return;
+  }
+  const element = createElement();
+  element.onload = (): void => {
+    // A decode that reports no size is not usable — `drawImage` with a zero
+    // natural dimension draws nothing, and neither `fitBitmapIntoBox` nor
+    // `pictureBoxSize` can take a ratio from it. Reported as a failure.
+    if (!Number.isFinite(element.naturalWidth) || !Number.isFinite(element.naturalHeight) || element.naturalWidth <= 0 || element.naturalHeight <= 0) {
+      onDecoded(undefined);
+      return;
+    }
+    onDecoded({ image: element, naturalWidth: element.naturalWidth, naturalHeight: element.naturalHeight });
+  };
+  element.onerror = (): void => {
+    // Not a picture — a text file chosen through the picker, or a hand-typed
+    // `set image_1.source "nonsense"`.
+    onDecoded(undefined);
+  };
+  element.src = source;
+}
+
+/**
  * Builds the cache.
  *
  * `onDecoded` is called once per successful decode, after the entry is marked
@@ -118,31 +170,28 @@ export function createImageBitmapCache(onDecoded: () => void, createElement: () 
         return existing.status === "ready" ? existing.bitmap : undefined;
       }
 
-      const element = createElement();
-      // Written BEFORE `src` is assigned: a browser may fire `onload` for a data
-      // URL as soon as the microtask queue drains, and an entry written after
-      // the handler ran would overwrite a `ready` entry back to `loading`.
+      // Written BEFORE the decode is started: a browser may fire `onload` for a
+      // data URL as soon as the microtask queue drains, and an entry written
+      // after the handler ran would overwrite a `ready` entry back to `loading`.
+      // It is also what makes "one decode per source" true — the next paint's
+      // ask finds this entry and starts nothing.
       const entry: CacheEntry = { status: "loading", bitmap: undefined };
       entries.set(source, entry);
-      element.onload = (): void => {
-        // A decode that reports no size is not usable — `drawImage` with a zero
-        // natural dimension draws nothing and `fitBitmapIntoBox` cannot take a
-        // ratio from it. Treated as a failure so it is never retried either.
-        if (!Number.isFinite(element.naturalWidth) || !Number.isFinite(element.naturalHeight) || element.naturalWidth <= 0 || element.naturalHeight <= 0) {
-          entry.status = "failed";
-          return;
-        }
-        entry.status = "ready";
-        entry.bitmap = { image: element, naturalWidth: element.naturalWidth, naturalHeight: element.naturalHeight };
-        onDecoded();
-      };
-      element.onerror = (): void => {
-        // A source that is not a picture — a text file chosen through the
-        // picker, or a hand-typed `set image_1.source "nonsense"`. Remembered so
-        // the next paint does not start the same doomed decode again.
-        entry.status = "failed";
-      };
-      element.src = source;
+      decodeBitmap(
+        source,
+        (bitmap) => {
+          if (bitmap === undefined) {
+            // Remembered as failed so the next paint does not start the same
+            // doomed decode again, and NOT repainted: nothing on screen changes.
+            entry.status = "failed";
+            return;
+          }
+          entry.status = "ready";
+          entry.bitmap = bitmap;
+          onDecoded();
+        },
+        createElement,
+      );
       return undefined;
     },
   };

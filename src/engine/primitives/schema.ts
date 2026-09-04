@@ -119,7 +119,7 @@ import {
   VERTICES_PATH,
   verticesDerivedSlots,
 } from "./geometry.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./image.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./image.ts";
 import {
   enumerateScriptInPaths,
   enumerateScriptOutDerivedSlots,
@@ -800,29 +800,44 @@ const TEXT_SCHEMA: ObjectSchema = {
 };
 
 /**
- * `image` (PROJECT_BRIEF §5.7): the smallest primitive in the brief. SIX fixed
+ * `image` (PROJECT_BRIEF §5.7): the smallest primitive in the brief. SEVEN fixed
  * non-derived slots — `origin.x`/`origin.y` (`primitives/geometry.ts`'s own
  * constants, the identical spelling every positioned object uses, so
- * `render/interaction.ts`'s per-component origin drag reaches an image with no
- * image-specific code), `width`/`height`, `opacity`, and `source` — and NO derived
- * slots. §5.7 asks for no computed value: an image is drawn from the data URL it
- * holds at the box it names, and preserving aspect ratio needs the decoded
- * bitmap's natural size, which lives in `render/` and is not graph state.
+ * `render/interaction.ts`'s per-component origin drag and its resize grabbers
+ * reach an image with no image-specific code), `width`/`height`, `opacity`,
+ * `source` and `preserveAspect` — and NO derived slots. §5.7 asks for no computed
+ * value: an image is drawn from the data URL it holds at the box it names, and the
+ * decoded bitmap's natural size lives in `render/` and is not graph state.
  *
- * `source` is a SIXTH slot §5.7's own list does not name. It is where §5.7's "store
- * as a data URL in the document" has to land: a `GraphObject` is `{ id, name,
- * type, slots }`, so "in the document" means "in a slot", and §5.1's `Value` union
- * admits `string` — the same shape §5.6's `content` already takes. Disclosed as a
- * deviation at entry 0165; see `primitives/image.ts` for the full reasoning.
+ * TWO of the seven are not in §5.7's own five-name list, each for a reason
+ * `primitives/image.ts` states in full at its own constant:
+ *   - `source`, where §5.7's "store as a data URL in the document" has to land —
+ *     disclosed at entry 0165, **RATIFIED at D-140**.
+ *   - `preserveAspect`, the operator's toggle for §5.7's "preserve aspect ratio by
+ *     default" — the human's **Q-027** ruling, given on screen at entry 0173.
  *
- * All six are `static`. An image's slot set never changes (Rule 6), so unlike
+ * All seven are `static`. An image's slot set never changes (Rule 6), so unlike
  * `table` there is no `dynamic` group here and no sizing slot for D-046/D-097 to
  * bind — the correct declaration, not merely the convenient one.
  */
 const IMAGE_SCHEMA: ObjectSchema = {
   type: "image",
   nonDerivedSlotPaths: [
-    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, IMAGE_WIDTH_PATH, IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH] },
+    {
+      kind: "static",
+      paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, IMAGE_WIDTH_PATH, IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH, IMAGE_PRESERVE_ASPECT_PATH],
+    },
+  ],
+  // A closed value set, so the properties panel offers it as a drop-down rather
+  // than a free text box the operator must know the words for — the identical
+  // mechanism and the identical shape `TEXT_SCHEMA`'s `autoresize` uses, labelled
+  // in the operator's words rather than as bare `TRUE`/`FALSE`.
+  slotOptions: [
+    {
+      path: IMAGE_PRESERVE_ASPECT_PATH,
+      values: [true, false],
+      labels: ["keep the picture's proportions", "stretch to fill the box"],
+    },
   ],
   derivedSlots: [],
 };

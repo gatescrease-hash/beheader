@@ -24,7 +24,7 @@ import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camer
 import {
   abandonCreatedTextBox,
   buildPanelModel,
-  commitImageSource,
+  commitImagePicture,
   commitPanelChoice,
   commitPanelEdit,
   commitTableCell,
@@ -397,7 +397,8 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     // `editSeed` (D-107, F3) equals `value` here because an integer has
     // nothing D-099's rounding would ever change — see the dedicated test
     // below for the case where they diverge.
-    expect(originX).toEqual({ path: "origin.x", value: "10", editSeed: "10", formulaSource: undefined, kind: "literal", synthetic: false });
+    // `picker` (entry 0175) is false for every row but an `image`'s `source`.
+    expect(originX).toEqual({ path: "origin.x", value: "10", editSeed: "10", formulaSource: undefined, kind: "literal", synthetic: false, picker: false });
   });
 
   it("seeds a row's editor with the value the command line would accept back, not the D-099-rounded display value (D-107, F3)", () => {
@@ -1328,6 +1329,8 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
 describe("image creation asks for a picture, and the chosen one is written to `source` (§5.7, D-142)", () => {
   /** A data URL long enough to exercise the display elision, shaped like a real one. */
   const PICTURE = `data:image/png;base64,${"A".repeat(300)}`;
+  /** A decoded 2:1 picture, as `render/images.ts`'s `decodeBitmap` reports one. `image` is never read by anything under test here. */
+  const WIDE = { naturalWidth: 200, naturalHeight: 100 };
 
   it("a typed `image` creation names the new object as the one to pick a picture for", () => {
     const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
@@ -1351,40 +1354,129 @@ describe("image creation asks for a picture, and the chosen one is written to `s
     expect(refused.pickImageFor).toBeUndefined();
   });
 
-  it("commitImageSource writes the whole data URL into the object's `source` slot as an ordinary literal (Rule 2, through executeCommand)", () => {
+  it("commitImagePicture writes the whole data URL into the object's `source` slot as an ordinary literal (Rule 2, through executeCommand)", () => {
     const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
     const id = objectNamed(outcome.state, "image_1").id;
-    const after = commitImageSource(outcome.state, id, PICTURE);
+    const after = commitImagePicture(outcome.state, id, PICTURE, WIDE);
     expect(getSlot(objectNamed(after, "image_1"), ["source"])).toEqual({ kind: "literal", value: PICTURE });
   });
 
   it("echoes a SUMMARY of the write, never the URL itself — a line the operator could neither read nor retype", () => {
     const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
     const id = objectNamed(outcome.state, "image_1").id;
-    const after = commitImageSource(outcome.state, id, PICTURE);
+    const after = commitImagePicture(outcome.state, id, PICTURE, WIDE);
     const echoed = newLines(outcome.state, after).join("\n");
-    expect(echoed).toContain("set image_1.source <picture, 322 characters>");
+    expect(echoed).toContain("picture into image_1 — 322 characters, 200x100, box 100x50");
     expect(echoed).not.toContain(PICTURE);
   });
 
   it("is a no-op for a stale object id — the image was deleted while the picker was open (D-023's posture)", () => {
     const state = typed(opened(), "image x=10 y=20");
-    expect(commitImageSource(state, "obj_404", PICTURE)).toBe(state);
+    expect(commitImagePicture(state, "obj_404", PICTURE, WIDE)).toBe(state);
   });
 
   it("is a no-op for an empty url, so a caller with nothing to write cannot clear a picture the operator already has", () => {
     const state = typed(opened(), "image x=10 y=20");
-    expect(commitImageSource(state, objectNamed(state, "image_1").id, "")).toBe(state);
+    expect(commitImagePicture(state, objectNamed(state, "image_1").id, "", WIDE)).toBe(state);
   });
 
-  it("gives the panel an ELIDED source row and an UNELIDED edit seed, so a row committed untouched writes the picture back whole (D-107)", () => {
+  it("describes the source row by what the picture IS, and keeps an UNELIDED edit seed so a row committed untouched writes it back whole (D-107)", () => {
     const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
-    const withPicture = commitImageSource(outcome.state, objectNamed(outcome.state, "image_1").id, PICTURE);
+    const withPicture = commitImagePicture(outcome.state, objectNamed(outcome.state, "image_1").id, PICTURE, WIDE);
     const image = objectNamed(withPicture, "image_1");
     const row = buildPanelModel(image, withPicture.document.objects).modifiable.find((candidate) => candidate.path === "source");
-    expect(row?.value).toContain("(322 characters)");
+    expect(row?.value).toBe("PNG picture · about 0 KB");
     expect(row?.value).not.toContain(PICTURE);
     expect(row?.editSeed).toBe(`"${PICTURE}"`);
+  });
+
+  // The human's note 4 at entry 0173: *"Re-picking needs to be possible from the
+  // props window."* The panel row carries the flag; `start`'s delegated listener
+  // is what opens the dialog, and is DOM (untested by construction, D-001).
+  it("marks the source row as the one chosen from a file, and no other row", () => {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const image = objectNamed(created, "image_1");
+    const rows = buildPanelModel(image, created.document.objects).modifiable;
+    expect(rows.filter((row) => row.picker).map((row) => row.path)).toEqual(["source"]);
+  });
+
+  it("says so plainly when no picture has been chosen yet", () => {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const image = objectNamed(created, "image_1");
+    const row = buildPanelModel(image, created.document.objects).modifiable.find((candidate) => candidate.path === "source");
+    expect(row?.value).toBe("no picture chosen");
+  });
+
+  it("leaves a FORMULA-driven source with its ordinary paperclip, because the meaningful gesture on a driven slot is unlink (D-102 clause 3)", () => {
+    const withTable = typed(opened(), "table x=0 y=0 rows=1 cols=1");
+    const seeded = typed(withTable, 'set table_1.A1 "data:image/png;base64,AAAA"');
+    const withImage = typed(seeded, "image x=0 y=0");
+    const linked = typed(withImage, "link image_1.source table_1.A1");
+    const image = objectNamed(linked, "image_1");
+    const row = buildPanelModel(image, linked.document.objects).modifiable.find((candidate) => candidate.path === "source");
+    expect(row?.kind).toBe("formula");
+    expect(row?.picker).toBe(false);
+  });
+});
+
+// The human's **Q-027** ruling, on screen at entry 0173: *"Box should fit to
+// aspect ratio of image, not hang over it."* The box takes the PICTURE's shape
+// when one is chosen — which is the option that needs the decoded natural size
+// to reach a slot, and the one entry 0173 did not take.
+describe("a chosen picture gives the image its own proportions (Q-027, ruled by the human)", () => {
+  const PICTURE = `data:image/jpeg;base64,${"A".repeat(60)}`;
+
+  /** The `width`/`height` slots of `image_1` after a picture of this natural size is chosen for a freshly created one. */
+  function boxAfterChoosing(naturalWidth: number, naturalHeight: number): { width: unknown; height: unknown } {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const after = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth, naturalHeight });
+    const image = objectNamed(after, "image_1");
+    return { width: getSlot(image, ["width"])?.value, height: getSlot(image, ["height"])?.value };
+  }
+
+  it("gives a WIDE picture a wide box, its longer side at the default extent", () => {
+    expect(boxAfterChoosing(400, 300)).toEqual({ width: 100, height: 75 });
+  });
+
+  it("gives a TALL picture a tall box", () => {
+    expect(boxAfterChoosing(300, 600)).toEqual({ width: 50, height: 100 });
+  });
+
+  it("scales a huge photograph DOWN to the default extent rather than writing its raw pixel size, so it does not dwarf everything else on the canvas", () => {
+    expect(boxAfterChoosing(4000, 3000)).toEqual({ width: 100, height: 75 });
+  });
+
+  it("leaves a square picture square, unchanged from the empty frame it replaced", () => {
+    expect(boxAfterChoosing(512, 512)).toEqual({ width: 100, height: 100 });
+  });
+
+  it("leaves the box alone but still records the source when the chosen file did not decode", () => {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const after = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, undefined);
+    const image = objectNamed(after, "image_1");
+    expect(getSlot(image, ["source"])?.value).toBe(PICTURE);
+    expect(getSlot(image, ["width"])?.value).toBe(100);
+    expect(newLines(created, after).join("\n")).toContain("did not decode, box unchanged");
+  });
+
+  it("takes no ratio from a degenerate natural size — the square default stands", () => {
+    expect(boxAfterChoosing(0, 100)).toEqual({ width: 100, height: 100 });
+    expect(boxAfterChoosing(100, Number.POSITIVE_INFINITY)).toEqual({ width: 100, height: 100 });
+  });
+
+  it("makes the drawn extent hug the picture, which is what the ruling asked for", () => {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const after = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 300 });
+    expect(objectExtent(objectNamed(after, "image_1"))).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 95 });
+  });
+
+  it("offers `preserveAspect` as a panel drop-down, on by default (§5.7's 'by default', the human's note 3)", () => {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const image = objectNamed(created, "image_1");
+    expect(getSlot(image, ["preserveAspect"])).toEqual({ kind: "literal", value: true });
+    const row = buildPanelModel(image, created.document.objects).modifiable.find((candidate) => candidate.path === "preserveAspect");
+    expect(row?.choices?.labels).toEqual(["keep the picture's proportions", "stretch to fill the box"]);
+    expect(row?.choices?.selectedIndex).toBe(0);
   });
 });
 

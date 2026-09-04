@@ -296,18 +296,23 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(isCommandFailure(listed) ? undefined : listed.createdObjectId).toBeUndefined();
   });
 
-  it("creates an image with all six non-derived slots — §5.7's five plus the `source` the data URL needs — and no derived ones (entry 0165)", () => {
+  it("creates an image with all seven non-derived slots — §5.7's five plus `source` and `preserveAspect` — and no derived ones", () => {
     const object = onlyObject(committed("image x=30 y=40", createEmptyDocument()));
     expect(object.type).toBe("image");
     expect(object.name).toBe("image_1");
     expect(literalValue(object, ["origin", "x"])).toBe(30);
     expect(literalValue(object, ["origin", "y"])).toBe(40);
+    // The EMPTY frame's size. A chosen picture replaces both with its own
+    // proportions (`main.ts`'s `pictureBoxSize`, the human's Q-027 ruling).
     expect(literalValue(object, ["width"])).toBe(100);
     expect(literalValue(object, ["height"])).toBe(100);
     expect(literalValue(object, ["opacity"])).toBe(1);
-    // §5.10's creation form carries no picture; §5.7's file picker does not exist yet.
+    // §5.10's creation form carries no picture; the file picker `main.ts` opens
+    // on creation is what fills this.
     expect(literalValue(object, ["source"])).toBe("");
-    expect(Object.keys(object.slots).sort()).toEqual(["height", "opacity", "origin.x", "origin.y", "source", "width"]);
+    // §5.7's "preserve aspect ratio BY DEFAULT", read literally (entry 0174).
+    expect(literalValue(object, ["preserveAspect"])).toBe(true);
+    expect(Object.keys(object.slots).sort()).toEqual(["height", "opacity", "origin.x", "origin.y", "preserveAspect", "source", "width"]);
   });
 
   it("gives an image the SAME origin paths every positioned object uses, so `link image_1.origin.x <cell>` commits (D-017, D-121's reasoning)", () => {

@@ -152,7 +152,7 @@ import {
   TEXT_STYLE_LINE_HEIGHT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
-import { IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH } from "../engine/primitives/image.ts";
+import { IMAGE_OPACITY_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH } from "../engine/primitives/image.ts";
 import { formatCellReference, indexToColumnLetters, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
@@ -230,7 +230,16 @@ const DEFAULT_IMAGE_OPACITY = 1;
 /**
  * §5.7: "draw at a position with width/height, preserve aspect ratio by
  * default." Draws the object's frame, then — once `images` has a decoded
- * picture for its `source` — that picture, fitted inside the frame.
+ * picture for its `source` — that picture inside the frame: FITTED, preserving
+ * its proportions, while `preserveAspect` is on, and STRETCHED to fill the box
+ * when the operator has turned it off (the human's Q-027 ruling, entry 0173).
+ *
+ * In ordinary use the two are the same thing, and deliberately: a chosen picture
+ * writes its own proportions into `width`/`height` (`main.ts`'s
+ * `pictureBoxSize`), so the fitted picture fills the frame exactly and the frame
+ * hugs the picture. Fitting only becomes visible once the operator has made the
+ * box disagree with the picture — by `set image_1.width`, or by a grabber drag —
+ * and `preserveAspect` is what says which of the two they meant.
  *
  * The box comes from `extent.ts`'s `objectExtent`, not from a second reading of
  * `origin`/`width`/`height` here: D-066 makes the drawn box and the click box one
@@ -266,7 +275,10 @@ function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: I
   if (bitmap === undefined) {
     return;
   }
-  const fitted = fitBitmapIntoBox(boxWidth, boxHeight, bitmap.naturalWidth, bitmap.naturalHeight);
+  const preserveAspect = readBoolean(object, IMAGE_PRESERVE_ASPECT_PATH) ?? true;
+  const fitted = preserveAspect
+    ? fitBitmapIntoBox(boxWidth, boxHeight, bitmap.naturalWidth, bitmap.naturalHeight)
+    : { x: 0, y: 0, width: boxWidth, height: boxHeight };
   const opacity = readNumber(object, IMAGE_OPACITY_PATH) ?? DEFAULT_IMAGE_OPACITY;
   const previousAlpha = ctx.globalAlpha;
   ctx.globalAlpha = Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : DEFAULT_IMAGE_OPACITY;
@@ -278,18 +290,17 @@ function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: I
 }
 
 /**
- * §5.7's "preserve aspect ratio by default", as arithmetic: the largest box with
- * the picture's own proportions that fits inside `boxWidth` x `boxHeight`,
- * centred in it. Offsets are relative to the box's top-left corner.
+ * The largest box with the picture's own proportions that fits inside
+ * `boxWidth` x `boxHeight`, centred in it. Offsets are relative to the box's
+ * top-left corner.
  *
- * PROVISIONAL(Q-027): this reads §5.7's clause as a permanent property of how a
- * picture is DRAWN — the `width`/`height` slots bound the picture and its
- * proportions are never distorted, at any size the operator sets. The other
- * reading is that the clause is about the size a picture is first given: write
- * the decoded natural size into the two slots at load time and let the operator
- * distort them afterwards. That reading needs the natural size to reach a SLOT,
- * which 0172-REVIEW §8 named as the load-bearing half of the question, so it is
- * asked rather than taken (Q-027). This one is reversible in this one function.
+ * **Q-027 is ANSWERED — the human, on screen at entry 0173: "Box should fit to
+ * aspect ratio of image, not hang over it."** So the primary mechanism is not
+ * this function: a chosen picture writes its own proportions into
+ * `width`/`height` (`main.ts`'s `pictureBoxSize`), which is the option this
+ * question called (b) and the one 0173 did NOT take. This function is what keeps
+ * the promise afterwards, for a box the operator has since made disagree with
+ * the picture, and it runs only while `preserveAspect` is on.
  *
  * A non-positive or non-finite natural size cannot yield a ratio, so the picture
  * simply fills the box — unreachable through `images.ts`, which refuses such a

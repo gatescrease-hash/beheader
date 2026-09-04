@@ -143,10 +143,10 @@
 import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
 import { formatFormula } from "./engine/formula/format.ts";
-import { getSlot, slotKey, type GraphObject, type Value } from "./engine/graph/node.ts";
+import { getSlot, IMAGE_TYPE, slotKey, type GraphObject, type Value } from "./engine/graph/node.ts";
 import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
-import { IMAGE_SOURCE_PATH } from "./engine/primitives/image.ts";
-import { executeCommand, type CommandEffect } from "./command/commands.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./engine/primitives/image.ts";
+import { DEFAULT_IMAGE_EXTENT, executeCommand, type CommandEffect } from "./command/commands.ts";
 import { parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./command/props.ts";
@@ -172,7 +172,7 @@ import {
 import { resizeCursor } from "./render/handles.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { renderDocument } from "./render/renderer.ts";
-import { createImageBitmapCache } from "./render/images.ts";
+import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 
 // ---------------------------------------------------------------------------
@@ -765,6 +765,15 @@ export interface PanelRow {
   readonly kind: "literal" | "formula" | "derived";
   readonly synthetic: boolean;
   /**
+   * `true` on the ONE row whose value is chosen from a file rather than typed:
+   * an `image` object's `source` (the human's note 4 at entry 0173). It gets a
+   * "choose…" control where every other modifiable row gets a paperclip,
+   * because a data URL is not a thing anyone types into a text box.
+   *
+   * See `isPictureSourceRow` for why a formula-driven `source` is excluded.
+   */
+  readonly picker: boolean;
+  /**
    * The choices this row offers instead of a free text box (the human's
    * 2026-09-02 instruction: a slot with "only a small subset of valid inputs"
    * shows a drop-down). `undefined` for every free-text row, which is all of
@@ -820,10 +829,17 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
   const grouped = buildSlotDescriptors(object, objects).map((descriptor) => ({
     row: {
       path: slotKey(descriptor.path),
+      picker: isPictureSourceRow(object, descriptor),
       // D-099: the ONE caller that rounds a displayed number — 4 decimal
       // places, trimmed — so float dust (`10.000000000000002`) doesn't read
       // as precision. `props`'s own output (`commands.ts`) stays untouched.
-      value: describeSlotValue(descriptor.value, { maxDecimals: 4 }),
+      //
+      // An `image`'s `source` row is the one exception, and it is a DISPLAY
+      // exception only (the human's note 4 at entry 0173: the row should say
+      // what the picture IS): a truncated run of base64 tells the operator
+      // nothing, while the data URL's own MIME type and size do. The row's
+      // `editSeed` below is untouched by this and still carries the whole URL.
+      value: isPictureSourceRow(object, descriptor) ? describePictureSource(descriptor.value) : describeSlotValue(descriptor.value, { maxDecimals: 4 }),
       // D-107 (F3): the EDIT seed, unrounded and UNELIDED — what an untouched
       // commit must write back bit-for-bit, which is why this is the one caller
       // that asks `describeSlotValue` for a long string whole (`props.ts`'s
@@ -842,6 +858,49 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
     modifiable: grouped.filter((entry) => !entry.derived).map((entry) => entry.row),
     derived: grouped.filter((entry) => entry.derived).map((entry) => entry.row),
   };
+}
+
+/**
+ * Whether this row is an `image` object's `source` — the row the operator
+ * re-picks a picture from (the human's note 4 at entry 0173: *"Re-picking needs
+ * to be possible from the props window"*).
+ *
+ * `literal` only, for D-102 clause 3's reason: a formula-driven `source` keeps
+ * its BLUE paperclip, because the meaningful gesture on a driven slot is
+ * `unlink`, not "replace the value the formula will overwrite".
+ */
+function isPictureSourceRow(object: GraphObject, descriptor: SlotDescriptor): boolean {
+  return object.type === IMAGE_TYPE && descriptor.kind === "literal" && slotKey(descriptor.path) === slotKey(IMAGE_SOURCE_PATH);
+}
+
+/**
+ * An `image`'s `source` slot as a line a person can read: what KIND of picture
+ * it holds and how big it is, rather than the first forty characters of base64.
+ *
+ * **A note the operator is owed, and the reason there is no file path here:**
+ * §5.7 stores the picture IN the document as a data URL, so a saved document
+ * carries the bytes and does not depend on the file it came from. There is no
+ * link to break — and a browser will not disclose a chosen file's path anyway
+ * (`C:\fakepath\…` is all a file input yields). Its NAME could be stored, but
+ * only in a slot §5.7 does not name — see **Q-028**.
+ *
+ * The byte count is the decoded size ESTIMATED from the base64 length (4
+ * characters carry 3 bytes), not measured: measuring would mean decoding the
+ * whole string on every paint, and the number is here to give a sense of scale.
+ */
+function describePictureSource(value: Value): string {
+  if (typeof value !== "string" || value === "") {
+    return "no picture chosen";
+  }
+  const match = /^data:([^;,]*)[;,]/.exec(value);
+  if (match === null) {
+    // Not a data URL at all — a hand-typed `set image_1.source "…"`. Shown the
+    // ordinary way (elided if long), because there is nothing to summarise.
+    return describeSlotValue(value);
+  }
+  const kind = (match[1] ?? "").replace(/^image\//, "").toUpperCase();
+  const kilobytes = Math.round((value.length * 3) / 4 / 1024);
+  return `${kind === "" ? "picture" : `${kind} picture`} · about ${kilobytes} KB`;
 }
 
 /**
@@ -1158,37 +1217,103 @@ export function commitTextContent(
 }
 
 /**
- * Writes a chosen picture into an `image` object's `source` slot (§5.7's "load
- * via file picker, store as a data URL in the document").
+ * The `width` x `height` an `image` object takes when a picture is chosen for
+ * it: the picture's own proportions, scaled so its LONGER side is
+ * `DEFAULT_IMAGE_EXTENT`.
  *
- * A literal `set`, through the same `executeCommand` seam a typed `set` uses
- * (Rule 2, D-069) — the data URL is an ordinary `string` `Value` and the slot is
- * an ordinary `literal` slot (**D-140**), so nothing here is special except the
- * size of the string. `buildPanelSetCommand` is deliberately NOT reused, for
- * `commitTextContent`'s reason: it routes every non-numeric string to
- * `set-formula`, which would try to PARSE the URL.
+ * **This is the human's Q-027 ruling, given on screen at entry 0173** — *"Box
+ * should fit to aspect ratio of image, not hang over it."* Entry 0173 had read
+ * §5.7's clause as a drawing rule and left the box square; the ruling is that the
+ * BOX takes the picture's shape, which is the option that needs the decoded
+ * natural size to reach a slot.
  *
- * The echo is a summary rather than the command (`runPanelCommand`'s `echo`
- * argument): the URL is unreadable, unretypeable, and long enough to bury
- * §5.10's log. What is written is the full string regardless.
+ * Scaled rather than written raw: a 4000x3000 photograph would otherwise become a
+ * 4000-unit object beside a 100-unit polygon, and `fit` would be the only way to
+ * see it again. The long side is `DEFAULT_IMAGE_EXTENT` — the same number the
+ * empty frame uses (imported, never re-spelled) — so choosing a picture never
+ * makes the object jump in size, it only makes it the right SHAPE.
+ *
+ * A non-positive or non-finite natural size has no ratio to take, so the square
+ * default stands. Unreachable through `decodeBitmap`, which refuses such a
+ * decode; total rather than assumed away.
+ */
+export function pictureBoxSize(naturalWidth: number, naturalHeight: number): { readonly width: number; readonly height: number } {
+  const usable =
+    naturalWidth > 0 && naturalHeight > 0 && Number.isFinite(naturalWidth) && Number.isFinite(naturalHeight);
+  if (!usable) {
+    return { width: DEFAULT_IMAGE_EXTENT, height: DEFAULT_IMAGE_EXTENT };
+  }
+  const scale = DEFAULT_IMAGE_EXTENT / Math.max(naturalWidth, naturalHeight);
+  return { width: naturalWidth * scale, height: naturalHeight * scale };
+}
+
+/**
+ * Writes a chosen picture into an `image` object (§5.7's "load via file picker,
+ * store as a data URL in the document", plus the human's Q-027 ruling that the
+ * box takes the picture's proportions).
+ *
+ * THREE literal `set`s — `source`, then `width`, then `height` — each through the
+ * same `executeCommand` seam a typed `set` uses (Rule 2, D-069). Three commands
+ * rather than one because `executeCommand` takes one `Command` and §5.10 has no
+ * multi-slot form; they are three mutations, which Rule 5 says is fine.
+ * `buildPanelSetCommand` is deliberately NOT reused, for `commitTextContent`'s
+ * reason: it routes every non-numeric string to `set-formula`, which would try to
+ * PARSE the URL.
+ *
+ * ONE echo line for the three, because they are one gesture and the operator
+ * performed one action; a refusal still reports itself, so nothing fails
+ * silently. The line summarises rather than quoting the URL, which is
+ * unreadable, unretypeable, and long enough to bury §5.10's log.
+ *
+ * `natural` is `undefined` when the chosen file did not decode. The `source` is
+ * still written — the document records what the operator chose, and the frame
+ * stays where it was — while `width`/`height` are left alone, since there is no
+ * shape to take.
  *
  * A stale `objectId` is a no-op — the operator deleted the image while the
  * picker was open — as is an EMPTY url, which is what a caller with nothing to
  * write passes rather than clearing a picture the operator already had. D-023's
  * posture, the same one `commitPanelEdit` and `commitTextContent` take.
  */
-export function commitImageSource(
+export function commitImagePicture(
   state: AppState,
   objectId: string,
   dataUrl: string,
+  natural: { readonly naturalWidth: number; readonly naturalHeight: number } | undefined,
   context: EvalContext = NULL_EVAL_CONTEXT,
 ): AppState {
   const object = state.document.objects.find((candidate) => candidate.id === objectId);
   if (object === undefined || dataUrl === "") {
     return state;
   }
-  const target = panelSlotAddress(object.name, slotKey(IMAGE_SOURCE_PATH));
-  return runPanelCommand(state, { kind: "set", target, value: dataUrl }, context, `set ${target} <picture, ${dataUrl.length} characters>`);
+  const box = natural === undefined ? undefined : pictureBoxSize(natural.naturalWidth, natural.naturalHeight);
+  const shape =
+    natural === undefined
+      ? "did not decode, box unchanged"
+      : `${natural.naturalWidth}x${natural.naturalHeight}, box ${round(box?.width)}x${round(box?.height)}`;
+  const writes: SetLiteralCommand[] = [
+    { kind: "set", target: panelSlotAddress(object.name, slotKey(IMAGE_SOURCE_PATH)), value: dataUrl },
+    ...(box === undefined
+      ? []
+      : [
+          { kind: "set", target: panelSlotAddress(object.name, slotKey(IMAGE_WIDTH_PATH)), value: box.width } as SetLiteralCommand,
+          { kind: "set", target: panelSlotAddress(object.name, slotKey(IMAGE_HEIGHT_PATH)), value: box.height } as SetLiteralCommand,
+        ]),
+  ];
+  let next = withLog(state, [`> picture into ${object.name} — ${dataUrl.length} characters, ${shape}`]);
+  for (const write of writes) {
+    const outcome = executeCommand(write, next.document, context);
+    // A refusal reports itself and the rest still run: `source` is the write that
+    // matters, and a `width` refused because it is formula-driven (§5.9's
+    // per-component posture) must not cost the operator the picture.
+    next = outcome.ok ? { ...next, document: outcome.document } : withLog(next, [outcome.message]);
+  }
+  return next;
+}
+
+/** A box dimension for the echo line only — a picture's scaled side is rarely a whole number and the log is not the place for sixteen decimals. `describeSlotValue`'s D-099 rounding is for a slot's VALUE and this is not one. */
+function round(value: number | undefined): string {
+  return value === undefined ? "?" : String(Math.round(value * 100) / 100);
 }
 
 /**
@@ -1907,7 +2032,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (next.pickImageFor !== undefined) {
       const objectId = next.pickImageFor;
       choosePicture(
-        (dataUrl) => apply(commitImageSource(state, objectId, dataUrl, evalContext)),
+        // Decoded BEFORE anything is written, because the picture's natural size
+        // is what its `width`/`height` become (the human's Q-027 ruling). A file
+        // that does not decode still writes its `source` — see
+        // `commitImagePicture`'s `natural === undefined` arm.
+        (dataUrl) =>
+          decodeBitmap(dataUrl, (bitmap) => apply(commitImagePicture(state, objectId, dataUrl, bitmap, evalContext))),
         (message) => apply(logLine(state, message)),
       );
     }
@@ -2146,6 +2276,23 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
 
+    // The human's note 4 at entry 0173: re-picking a picture from the panel.
+    // Delegated exactly as the paperclip below is, and read the same way — the
+    // row's `dataset.path` is not needed, because an object has one picture and
+    // `commitImagePicture` names the slot itself.
+    const pick = target.closest(".panel-pick");
+    if (pick !== null) {
+      const objectId = (pick.closest(".panel") as HTMLElement | null)?.dataset.objectId;
+      if (objectId !== undefined) {
+        choosePicture(
+          (dataUrl) =>
+            decodeBitmap(dataUrl, (bitmap) => apply(commitImagePicture(state, objectId, dataUrl, bitmap, evalContext))),
+          (message) => apply(logLine(state, message)),
+        );
+      }
+      return;
+    }
+
     // D-102 clauses 2-4: a paperclip on a modifiable row. Delegated the same
     // way and for the same reason as the dismiss control above — the row it
     // sits on is rebuilt whole on every paint (until its own editor opens,
@@ -2293,7 +2440,13 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
     // `PanelRow.editSeed`'s own doc comment for why they must differ.
     right.append(panelEditInput(row.editSeed, editing.handlers));
   } else {
-    if (!derived && !row.synthetic) {
+    if (row.picker) {
+      // The human's note 4: a picture is chosen from a file, so this row offers
+      // the picker where every other one offers a paperclip. The paperclip's own
+      // text input is not merely unhelpful here — nobody types a data URL — so
+      // the two are alternatives rather than neighbours.
+      right.append(panelPickElement(row));
+    } else if (!derived && !row.synthetic) {
       right.append(panelClipElement(row));
     }
     const value = document.createElement("span");
@@ -2347,6 +2500,25 @@ function panelClipElement(row: PanelRow): HTMLElement {
   clip.textContent = "📎";
   clip.setAttribute("aria-label", row.kind === "formula" ? `unlink ${row.path} — it is driven by a formula` : `edit ${row.path}`);
   return clip;
+}
+
+/**
+ * The "choose…" control on an `image`'s `source` row (the human's note 4 at
+ * entry 0173) — a plain glyph-and-word span, like the paperclip and the dismiss
+ * `×` beside it (Rule 5: no icon font, no SVG, no `<button>` whose default focus
+ * behaviour D-107 would then have to be taught about).
+ *
+ * NO listener is bound here, for the reason every panel control is delegated:
+ * this element is rebuilt whole on every paint, so a listener bound to it would
+ * die mid-gesture. `start`'s delegated `pointerdown` finds it by class and reads
+ * the row's `dataset.path` and the panel's `dataset.objectId`.
+ */
+function panelPickElement(row: PanelRow): HTMLElement {
+  const pick = document.createElement("span");
+  pick.className = "panel-pick";
+  pick.textContent = "📁 choose…";
+  pick.setAttribute("aria-label", `choose a picture for ${row.path}`);
+  return pick;
 }
 
 /**

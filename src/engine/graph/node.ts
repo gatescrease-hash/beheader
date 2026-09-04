@@ -213,6 +213,9 @@ export const TABLE_TYPE: ObjectType = "table";
 /** The `text` member of `ObjectType`, exported so `command/commands.ts`'s D-122 guard tests `object.type` against this definition instead of a bare `"text"` literal (D-009). */
 export const TEXT_TYPE: ObjectType = "text";
 
+/** The `image` member of `ObjectType`, exported so `render/handles.ts`'s resize-grabber check and `render/interaction.ts`'s per-type resize plan test `object.type` against this definition instead of a bare `"image"` literal (D-009). A render-layer `switch` over the whole union needs no constant and does not use this. */
+export const IMAGE_TYPE: ObjectType = "image";
+
 // ---------------------------------------------------------------------------
 // The three slot kinds (§5.1's table)
 // ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@
 import { describe, expect, it } from "vitest";
 import type { CameraState } from "../engine/document.ts";
 import type { EvalContext } from "../engine/eval-context.ts";
-import type { GraphObject } from "../engine/graph/node.ts";
+import { getSlot, type GraphObject } from "../engine/graph/node.ts";
 import { mutate, type MutationJournalEntry } from "../engine/mutation.ts";
 import { getObjectSchema, resolveDerivedSlots } from "../engine/primitives/schema.ts";
 import { deselect, INITIAL_INTERACTION_STATE, pointerDown, pointerMove, pointerUp, type InteractionState } from "./interaction.ts";
@@ -766,5 +766,133 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
 
   it("Escape clears a resize in progress, like every other gesture", () => {
     expect(deselect().resize).toBeUndefined();
+  });
+});
+
+// The human's note 2 at entry 0173 — an image resizes by the same grabbers a
+// text box does — and note 3: `preserveAspect` decides whether the drag keeps
+// the picture's proportions or distorts them.
+describe("resize — an image's grabbers write its own width/height slots (entry 0175)", () => {
+  /** A committed 200x100 image at (0,0), already selected. Its extent is its `width`/`height` slots outright (`extent.ts`'s `imageExtent`), so no measurer is involved. */
+  function selectedImage(preserveAspect: boolean): { state: InteractionState; objects: readonly GraphObject[]; journal: readonly MutationJournalEntry[] } {
+    const image: GraphObject = {
+      id: "obj_i",
+      name: "image_1",
+      type: "image",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        width: { kind: "literal", value: 200 },
+        height: { kind: "literal", value: 100 },
+        opacity: { kind: "literal", value: 1 },
+        source: { kind: "literal", value: "" },
+        preserveAspect: { kind: "literal", value: preserveAspect },
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: image }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: ${created.message}`);
+    }
+    return {
+      state: { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined },
+      objects: created.objects,
+      journal: created.journal,
+    };
+  }
+
+  /** The `width`/`height` of `image_1` after one grabber drag from `(fromX, fromY)` to `(toX, toY)`. */
+  function afterDrag(preserveAspect: boolean, from: [number, number], to: [number, number]): { width: unknown; height: unknown } {
+    const { state, objects, journal } = selectedImage(preserveAspect);
+    const pressed = pointerDown(state, { x: from[0], y: from[1] }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: to[0], y: to[1] }, objects, journal, CAMERA_IDENTITY);
+    const image = moved.objects.find((candidate) => candidate.id === "obj_i");
+    return { width: getSlot(image!, ["width"])?.value, height: getSlot(image!, ["height"])?.value };
+  }
+
+  it("arms a resize from a press on its corner, exactly as a text box does", () => {
+    const { state, objects } = selectedImage(true);
+    const pressed = pointerDown(state, { x: 200, y: 100 }, objects, CAMERA_IDENTITY);
+    expect(pressed.resize).toMatchObject({ objectId: "obj_i", handle: "se" });
+    expect(pressed.drag).toBeUndefined();
+  });
+
+  it("writes the IMAGE's own width/height slots, never the text ones", () => {
+    expect(afterDrag(false, [200, 100], [300, 100])).toEqual({ width: 300, height: 100 });
+  });
+
+  it("distorts freely once `preserveAspect` is off — the human's note 3", () => {
+    expect(afterDrag(false, [200, 100], [400, 120])).toEqual({ width: 400, height: 120 });
+  });
+
+  it("keeps the picture's proportions while `preserveAspect` is on, scaling BOTH sides from a corner", () => {
+    // A 200x100 box dragged to 300 wide: 2:1 keeps it 300x150.
+    expect(afterDrag(true, [200, 100], [300, 100])).toEqual({ width: 300, height: 150 });
+  });
+
+  it("scales BOTH sides from a SIDE grabber too, since keeping a ratio means the other side has to follow", () => {
+    // The `e` grabber sits at (200, 50) on a 200x100 box.
+    expect(afterDrag(true, [200, 50], [100, 50])).toEqual({ width: 100, height: 50 });
+  });
+
+  it("never writes `autoresize` on an image — that flag is a text box's, and an image has no text to shrink to", () => {
+    const { state, objects, journal } = selectedImage(true);
+    const pressed = pointerDown(state, { x: 200, y: 100 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 300, y: 100 }, objects, journal, CAMERA_IDENTITY);
+    const image = moved.objects.find((candidate) => candidate.id === "obj_i");
+    expect(getSlot(image!, ["autoresize"])).toBeUndefined();
+  });
+
+  it("keeps the ratio when the slot is MISSING, so a document saved before it existed still resizes as §5.7's default says", () => {
+    const image: GraphObject = {
+      id: "obj_i",
+      name: "image_1",
+      type: "image",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        width: { kind: "literal", value: 200 },
+        height: { kind: "literal", value: 100 },
+        opacity: { kind: "literal", value: 1 },
+        source: { kind: "literal", value: "" },
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: image }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: ${created.message}`);
+    }
+    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined };
+    const pressed = pointerDown(state, { x: 200, y: 100 }, created.objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 300, y: 100 }, created.objects, created.journal, CAMERA_IDENTITY);
+    const resized = moved.objects.find((candidate) => candidate.id === "obj_i");
+    expect(getSlot(resized!, ["height"])?.value).toBe(150);
+  });
+
+  it("still applies §5.9's per-component rule to a ratio-kept drag: a bound width refuses on its own and says what drives it", () => {
+    const bound: GraphObject = {
+      id: "obj_i",
+      name: "image_1",
+      type: "image",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        width: { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 200 },
+        height: { kind: "literal", value: 100 },
+        opacity: { kind: "literal", value: 1 },
+        source: { kind: "literal", value: "" },
+        preserveAspect: { kind: "literal", value: true },
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: tableObject(1, [200]) }, { kind: "createObject", object: bound }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: ${created.message}`);
+    }
+    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined };
+    const pressed = pointerDown(state, { x: 200, y: 100 }, created.objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 300, y: 100 }, created.objects, created.journal, CAMERA_IDENTITY);
+    const resized = moved.objects.find((candidate) => candidate.id === "obj_i");
+    // The height still moved; only the driven width refused.
+    expect(getSlot(resized!, ["height"])?.value).toBe(150);
+    expect(getSlot(resized!, ["width"])?.kind).toBe("formula");
+    expect(moved.notices.join(" ")).toContain("did not resize");
   });
 });

@@ -134,6 +134,20 @@
         font-size: 0.85em;
         opacity: 0.7;
       }
+      /*
+        The "choose…" control on an `image`'s `source` row (the human's note 4 at
+        entry 0173). It REPLACES that row's paperclip: a data URL is not
+        something anyone types, so the text input the paperclip opens has nothing
+        to offer here. Styled as a quiet link rather than a button, so it reads
+        as part of the row like every other panel control.
+      */
+      .panel-pick {
+        cursor: pointer;
+        line-height: 1;
+        font-size: 0.85em;
+        color: #1a56db;
+        white-space: nowrap;
+      }
       .panel-row__input {
         font: inherit;
         width: 10em;

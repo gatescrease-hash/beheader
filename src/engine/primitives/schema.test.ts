@@ -155,7 +155,11 @@ describe("getObjectSchema", () => {
   // FIRST and are `primitives/geometry.ts`'s constants, not image-specific ones —
   // that identity is what makes an image draggable by the same per-component rule
   // every other positioned object uses.
-  it("returns a real entry for 'image' (§5.7), with six static non-derived paths and NO derived slots", () => {
+  // SEVEN as of entry 0174, not the six entry 0165 declared: `preserveAspect`
+  // joined on the human's Q-027 ruling ("There should be a property toggle for
+  // 'preserve aspect ratio'"), the same way `source` joined at 0165 and was
+  // ratified at D-140. Both are slots §5.7's own five-name list does not carry.
+  it("returns a real entry for 'image' (§5.7), with seven static non-derived paths and NO derived slots", () => {
     const schema = getObjectSchema("image");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "image_1", type: "image", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -165,6 +169,7 @@ describe("getObjectSchema", () => {
       ["height"],
       ["opacity"],
       ["source"],
+      ["preserveAspect"],
     ]);
     expect(resolveDerivedSlots(stubObject("image"), schema?.derivedSlots ?? [])).toEqual([]);
     // Every group is `static`: an image's slot set never changes (Rule 6), so there

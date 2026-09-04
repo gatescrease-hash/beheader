@@ -8,14 +8,72 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-028**
+Next free ID: **Q-029**
+
+---
+
+## Q-028 — May an `image` object store the NAME of the file its picture came from, in a slot §5.7 does not name?
+Raised: entry 0175-image-grabbers-and-repick (implementer)   Brief section: §5.7, against D-140.
+Status: **OPEN**. Blocking nothing: re-picking works without it, and the row shows what the
+picture IS (`"JPEG picture · about 194 KB"`) rather than a run of base64.
+
+Ambiguity: the human asked, at entry 0173 note 4, that the properties panel's `source` row show
+*"the link to the image on the drive that it's pulling from"*. Two things stand in the way of that
+sentence as written, and neither is a defect:
+
+1. **A browser will not disclose a chosen file's PATH.** A file input yields `C:\fakepath\name.jpg`
+   by design; only the `name` is real. So a "link to the drive" is not available to any
+   implementation of §5.7 in this stack.
+2. **Nothing is "pulling from" the drive.** §5.7 says the picture is stored IN the document as a
+   data URL, which is what makes a saved document self-contained — the file is read once, at pick
+   time, and never consulted again. A path would be a label, not a link, and would go stale
+   silently the moment the file moved.
+
+What CAN be done is store the file's NAME at pick time and show it. That needs an eighth slot
+(`fileName`), which §5.7's five-name list does not carry — the same class of deviation `source`
+was, and D-140 ratified that one on the grounds that the data URL had nowhere else to live. This
+one is weaker: a name has nowhere else to live either, but nothing except the display needs it.
+
+Options: (a) an eighth `literal` slot, written at pick time, shown in the row; (b) no slot — the
+row keeps saying what the picture is and how big (**taken**, entry 0175); (c) a slot, but only if
+the human wants the name badly enough to widen the type for it.
+
+Recommendation: **(b) until the human says otherwise.** (b) needs no deviation and already answers
+the underlying complaint (the row said nothing legible). (a) is one small slot and easy, and the
+human may simply want it — this is a display preference and theirs to state.
+
+Reversible? Yes for (b)→(a): adding a `literal` slot with a `?? ""` read is load-compatible
+(D-126's lesson), and nothing depends on its absence. Provisional choice taken: **(b)**, and
+because (b) is "do not add state" there is nothing to tag.
 
 ---
 
 ## Q-027 — Does §5.7's "preserve aspect ratio by default" describe how a picture is DRAWN, or the size its `width`/`height` slots are first given?
 Raised: entry 0173-image-load-and-render (implementer)   Brief section: §5.7, against D-066,
-D-140 and Rule 6. Status: **OPEN**. Flagged in advance by 0172-REVIEW §8 item 2 as the one part
-of the `image` slice with no ruling behind it.
+D-140 and Rule 6. Flagged in advance by 0172-REVIEW §8 item 2 as the one part of the `image` slice
+with no ruling behind it.
+
+Status: **ANSWERED BY THE HUMAN DIRECTLY, on screen at entry 0173 — option (b).** Their words:
+*"Box should fit to aspect ratio of image, not hang over it."* Plus a second clause the question
+did not anticipate: *"There should be a property toggle for 'preserve aspect ratio'. When toggled,
+resizing preserves ratio. When untoggled, resizing distorts aspect ratio."*
+
+Built at entries **0174** (the box takes the picture's proportions; the `preserveAspect` slot;
+drawing honours it) and **0175** (resizing honours it). Concretely:
+- a chosen picture's natural size, scaled so its longer side is `DEFAULT_IMAGE_EXTENT`, is written
+  into `width`/`height` by `main.ts`'s `pictureBoxSize` — so the decoded natural size DOES reach a
+  slot, which is the half 0172-REVIEW §8 named as load-bearing;
+- `IMAGE_PRESERVE_ASPECT_PATH` is a seventh `image` slot, `true` by default (§5.7's own "by
+  default"), offered in the panel as a drop-down;
+- `renderer.ts` fits the picture inside its box while the flag is on and stretches it to fill when
+  it is off; `interaction.ts` constrains a grabber drag to the box's proportions while it is on.
+
+The `PROVISIONAL(Q-027)` tag entry 0173 put on `renderer.ts`'s `fitBitmapIntoBox` is REMOVED, and
+that function now serves the flag rather than standing in for the answer.
+
+**This ruling is recorded here, not in `DECISIONS.md`** — an implementer may never write that file
+(PROCESS_BRIEF §2). It is owed a `D-NNN` from the reviewer, on the 0153/0154/0155 precedent where
+the human overruled directly, the implementer built, and the review ratified afterwards.
 
 Ambiguity: §5.7's four sentences say "draw at a position with width/height, preserve aspect ratio
 by default" and stop. An `image` object has exactly the two size slots §5.7 names, and nothing
@@ -38,16 +96,18 @@ Options:
     set `source` committed — a second write path in everything but name unless it goes through
     `executeCommand`, and a write whose value comes from outside the graph either way.
 
-Recommendation: **(a)**, taken provisionally. It keeps the clause TRUE forever rather than only at
-the instant of loading — under (b) the first `set image_1.width` destroys the ratio the brief asks
-to preserve — and it needs nothing from the engine, which is what makes it reversible. (b) is the
-reading that would let the box hug the picture, and if the human wants that on screen it is worth
-its cost; that is exactly the call the operator should make rather than the implementer.
+Recommendation at the time: (a), taken provisionally. **The human chose (b), and the reasoning the
+recommendation rested on turned out to be the wrong axis entirely** — it argued that (a) keeps the
+clause true forever while (b) only sets an initial size, and the human's answer supplies the
+missing piece: the ratio is kept forever by a TOGGLE the operator owns, and the initial size is
+what stops the box hanging over the picture. Both halves, not one or the other. Worth recording:
+the implementer framed a product question as a choice between two mechanisms when the operator
+wanted both, and the visible defect — a blue box with white bands down each side — is exactly what
+made that obvious on screen and invisible in a test.
 
-Reversible? **Yes** — (a) lives entirely in `renderer.ts`'s `fitBitmapIntoBox`, one function that
-reads no state and writes none. Adopting (b) later replaces it and adds a write path; it does not
-have to undo anything. Provisional choice taken: **yes, (a)**. Tagged at:
-`src/render/renderer.ts` (`fitBitmapIntoBox`'s doc comment).
+Reversible? Yes, and it was: (a) lived entirely in `renderer.ts`'s `fitBitmapIntoBox`, and adopting
+(b) kept that function (now serving `preserveAspect`) and added the slot write beside it. The
+`PROVISIONAL(Q-027)` tag is removed.
 
 ---
 

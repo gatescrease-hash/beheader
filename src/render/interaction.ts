@@ -90,15 +90,16 @@
  */
 import { formatAddress, isAddressError, type Address } from "../engine/address.ts";
 import { extractDependencies } from "../engine/formula/deps.ts";
-import { getSlot, type DerivedSlot, type FormulaSlot, type GraphObject } from "../engine/graph/node.ts";
+import { getSlot, IMAGE_TYPE, TEXT_TYPE, type DerivedSlot, type FormulaSlot, type GraphObject } from "../engine/graph/node.ts";
 import { mutate, type MutationJournalEntry, type Operation } from "../engine/mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { TEXT_AUTORESIZE_PATH, TEXT_HEIGHT_PATH, TEXT_WIDTH_PATH } from "../engine/primitives/text.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
-import { handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
+import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
 import { hitTest } from "./hittest.ts";
 import { readBoolean } from "./slots.ts";
 
@@ -495,10 +496,46 @@ function resizeMove(
 }
 
 /**
+ * Which slots a grabber drag writes on this type, and how it behaves — the one
+ * place the two resizable types differ. `undefined` for a type with no resize
+ * plan, which `hasResizeHandles` already prevents a gesture from starting on.
+ *
+ * `keepsRatio` is the operator's own `preserveAspect` choice for an `image`
+ * (§5.7, the human's note 3), read with `?? true` so a document saved before the
+ * slot existed keeps §5.7's "by default" — D-126's lesson. A `text` box has no
+ * such flag and never had: its shape is dictated by its text, not by a picture.
+ *
+ * `dropsAutoresize` is `text`-only, and is the reason this is a per-type record
+ * rather than a shared path list. See `planResize` for why a height drag turns
+ * it off.
+ */
+interface ResizePlanShape {
+  readonly widthPath: readonly string[];
+  readonly heightPath: readonly string[];
+  readonly keepsRatio: boolean;
+  readonly dropsAutoresize: boolean;
+}
+
+function resizePlanShape(object: GraphObject): ResizePlanShape | undefined {
+  if (object.type === TEXT_TYPE) {
+    return { widthPath: TEXT_WIDTH_PATH, heightPath: TEXT_HEIGHT_PATH, keepsRatio: false, dropsAutoresize: true };
+  }
+  if (object.type === IMAGE_TYPE) {
+    return {
+      widthPath: IMAGE_WIDTH_PATH,
+      heightPath: IMAGE_HEIGHT_PATH,
+      keepsRatio: readBoolean(object, IMAGE_PRESERVE_ASPECT_PATH) ?? true,
+      dropsAutoresize: false,
+    };
+  }
+  return undefined;
+}
+
+/**
  * What one resize step wants to write: the `width`/`height` the grabbed box
  * should have, plus `origin` when a LEFT or TOP edge moved (moving those edges
- * moves the box's anchor as well as its size), plus `autoresize: false` when a
- * height was dragged.
+ * moves the box's anchor as well as its size), plus — for a `text` box —
+ * `autoresize: false` when a height was dragged.
  *
  * **Why a height drag also turns `autoresize` off.** `autoresize` on means the
  * box shrinks back to its text (`textbox.ts`), so a dragged height would snap
@@ -507,6 +544,13 @@ function resizeMove(
  * flag stores, so the gesture writes it. This mirrors Word turning "resize
  * shape to fit text" off when you size a box by hand. A WIDTH drag does not
  * touch it: a set width never shrinks anyway (`textbox.ts`'s one asymmetry).
+ * An `image` has no such flag: its box is its size outright.
+ *
+ * **An `image` whose `preserveAspect` is on keeps its proportions**, through
+ * `handles.ts`'s `constrainBoxToRatio` — the human's note 3 at entry 0173. Note
+ * that this constrains the BOX BEFORE any slot is written, so the per-component
+ * rule below still applies to the constrained box and a bound `width` refuses
+ * on its own without silently distorting the picture.
  *
  * §5.9's per-component rule applies unchanged: a slot that is not `literal` is
  * skipped, with a notice naming what drives it, and the rest of the box still
@@ -520,8 +564,13 @@ function planResize(
   deltaX: number,
   deltaY: number,
 ): DragPlan {
+  const shape = resizePlanShape(object);
+  if (shape === undefined) {
+    return { operations: [], notices: [] };
+  }
   const edges = handleEdges(resize.handle);
-  const box = resizeBox(resize.startExtent, resize.handle, deltaX, deltaY);
+  const requested = resizeBox(resize.startExtent, resize.handle, deltaX, deltaY);
+  const box = shape.keepsRatio ? constrainBoxToRatio(resize.startExtent, requested, resize.handle) : requested;
   const operations: Operation[] = [];
   const notices: string[] = [];
 
@@ -535,18 +584,21 @@ function planResize(
     operations.push({ kind: "setSlot", address, slot: { kind: "literal", value } });
   };
 
-  if (edges.left || edges.right) {
-    write(TEXT_WIDTH_PATH, box.maxX - box.minX);
+  // A ratio-kept drag changes BOTH sides even when the grabber moves one edge —
+  // that is what keeping a ratio means — so the write set follows the BOX, not
+  // the handle, whenever the ratio is being kept.
+  if (edges.left || edges.right || shape.keepsRatio) {
+    write(shape.widthPath, box.maxX - box.minX);
     if (edges.left) {
       write(ORIGIN_X_PATH, box.minX);
     }
   }
-  if (edges.top || edges.bottom) {
-    write(TEXT_HEIGHT_PATH, box.maxY - box.minY);
+  if (edges.top || edges.bottom || shape.keepsRatio) {
+    write(shape.heightPath, box.maxY - box.minY);
     if (edges.top) {
       write(ORIGIN_Y_PATH, box.minY);
     }
-    if (readBoolean(object, TEXT_AUTORESIZE_PATH) !== false) {
+    if (shape.dropsAutoresize && (edges.top || edges.bottom) && readBoolean(object, TEXT_AUTORESIZE_PATH) !== false) {
       write(TEXT_AUTORESIZE_PATH, false);
     }
   }

@@ -11,10 +11,11 @@ import type { CameraState } from "../engine/document.ts";
 import type { GraphObject } from "../engine/graph/node.ts";
 import type { WorldExtent } from "./extent.ts";
 import {
+  constrainBoxToRatio,
   handleEdges,
   handlePoint,
   hasResizeHandles,
-  MIN_TEXT_BOX_SIZE,
+  MIN_RESIZE_BOX_SIZE,
   RESIZE_HANDLES,
   resizeBox,
   resizeCursor,
@@ -28,9 +29,61 @@ function objectOfType(type: GraphObject["type"]): GraphObject {
   return { id: "obj_1", name: "thing_1", type, slots: {} };
 }
 
+describe("constrainBoxToRatio — a resize that keeps the object's proportions (§5.7's `preserveAspect`)", () => {
+  /** A 200x100 box at the origin — a 2:1 ratio, so every expectation below is checkable by eye. */
+  const START: WorldExtent = { minX: 0, minY: 0, maxX: 200, maxY: 100 };
+
+  it("derives the height from a SIDE grabber's width, so dragging one edge scales the whole box", () => {
+    // `e` dragged out by 100: 300 wide asked for, 2:1 keeps it 300x150.
+    const requested = resizeBox(START, "e", 100, 0);
+    expect(constrainBoxToRatio(START, requested, "e")).toEqual({ minX: 0, minY: 0, maxX: 300, maxY: 150 });
+  });
+
+  it("lets a SIDE grabber SHRINK — the axis it moves is the only one carrying information, which is why the larger scale is not taken here", () => {
+    const requested = resizeBox(START, "e", -100, 0);
+    expect(constrainBoxToRatio(START, requested, "e")).toEqual({ minX: 0, minY: 0, maxX: 100, maxY: 50 });
+  });
+
+  it("derives the width from a TOP/BOTTOM grabber's height", () => {
+    const requested = resizeBox(START, "s", 0, 100);
+    expect(constrainBoxToRatio(START, requested, "s")).toEqual({ minX: 0, minY: 0, maxX: 400, maxY: 200 });
+  });
+
+  it("takes the LARGER scale on a CORNER, so a diagonal drag responds to whichever axis moved more", () => {
+    // `se` out by (100, 0): scaleX 1.5, scaleY 1 -> 1.5.
+    expect(constrainBoxToRatio(START, resizeBox(START, "se", 100, 0), "se")).toEqual({ minX: 0, minY: 0, maxX: 300, maxY: 150 });
+    // `se` out by (0, 100): scaleX 1, scaleY 2 -> 2.
+    expect(constrainBoxToRatio(START, resizeBox(START, "se", 0, 100), "se")).toEqual({ minX: 0, minY: 0, maxX: 400, maxY: 200 });
+  });
+
+  it("anchors the edges the grabber did NOT move, so the box never slides out from under the pointer", () => {
+    // `nw` moves the left and top edges, so the bottom-right corner stays put.
+    const constrained = constrainBoxToRatio(START, resizeBox(START, "nw", -100, 0), "nw");
+    expect(constrained.maxX).toBe(200);
+    expect(constrained.maxY).toBe(100);
+    expect(constrained).toEqual({ minX: -100, minY: -50, maxX: 200, maxY: 100 });
+  });
+
+  it("never leaves a box below the minimum, on either axis", () => {
+    const squashed = constrainBoxToRatio(START, resizeBox(START, "e", -1000, 0), "e");
+    expect(squashed.maxX - squashed.minX).toBeGreaterThanOrEqual(MIN_RESIZE_BOX_SIZE);
+    expect(squashed.maxY - squashed.minY).toBeGreaterThanOrEqual(MIN_RESIZE_BOX_SIZE);
+  });
+
+  it("returns the requested box untouched when the start box has no ratio to keep", () => {
+    const flat: WorldExtent = { minX: 0, minY: 0, maxX: 200, maxY: 0 };
+    const requested = resizeBox(flat, "e", 50, 0);
+    expect(constrainBoxToRatio(flat, requested, "e")).toEqual(requested);
+  });
+});
+
 describe("hasResizeHandles — which objects get grabbers", () => {
   it("a `text` object does", () => {
     expect(hasResizeHandles(objectOfType("text"))).toBe(true);
+  });
+
+  it("an `image` object does too — its size is two ordinary literal slots, exactly like a text box's (entry 0175)", () => {
+    expect(hasResizeHandles(objectOfType("image"))).toBe(true);
   });
 
   it("a parametric shape and a table do NOT — their size is `radius`/`sides`/`rows`/`cols`, a different question this file does not answer", () => {
@@ -120,13 +173,13 @@ describe("resizeBox — the box a drag asks for", () => {
   it("clamps rather than inverting when an edge is dragged past its opposite — the OPPOSITE edge never moves", () => {
     const squashed = resizeBox(BOX, "w", 1000, 0);
     expect(squashed.maxX).toBe(300);
-    expect(squashed.maxX - squashed.minX).toBe(MIN_TEXT_BOX_SIZE);
+    expect(squashed.maxX - squashed.minX).toBe(MIN_RESIZE_BOX_SIZE);
   });
 
   it("clamps a bottom drag upward the same way", () => {
     const squashed = resizeBox(BOX, "s", 0, -1000);
     expect(squashed.minY).toBe(200);
-    expect(squashed.maxY - squashed.minY).toBe(MIN_TEXT_BOX_SIZE);
+    expect(squashed.maxY - squashed.minY).toBe(MIN_RESIZE_BOX_SIZE);
   });
 
   it("leaves an untouched axis EXACTLY alone, so a NaN delta on one axis cannot disturb the other", () => {

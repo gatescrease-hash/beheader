@@ -13,6 +13,11 @@
  *   default value with no computation over it, so unlike `geometry.ts` and `text.ts`
  *   this file declares no compute function and `IMAGE_SCHEMA` has no `derivedSlots`.
  *
+ *   SEVEN slots, of which §5.7 names five: `origin.x`/`origin.y`, `width`/`height`,
+ *   `opacity`, plus `source` (D-140) and `preserveAspect` (the human's Q-027 ruling
+ *   at entry 0173). Each of the two additions has its own doc comment below saying
+ *   why §5.7's five-name list could not hold it.
+ *
  *   `origin.x`/`origin.y` are NOT declared here. They are `geometry.ts`'s
  *   `ORIGIN_X_PATH`/`ORIGIN_Y_PATH`, the identical spelling every positioned object
  *   already uses (D-121's reasoning for `text`, applied unchanged): `render/
@@ -33,15 +38,16 @@
  *
  * NOT DONE HERE
  *   - Wiring these paths into the registry — `primitives/schema.ts`'s `IMAGE_SCHEMA`.
- *   - Creation defaults for `width`/`height`/`opacity`/`source`. A creation command
- *     carries its own values (`command/commands.ts`'s `DEFAULT_IMAGE_*`), the same
- *     split `text`'s `DEFAULT_TEXT_*` already uses.
+ *   - Creation defaults for `width`/`height`/`opacity`/`source`/`preserveAspect`. A
+ *     creation command carries its own values (`command/commands.ts`'s
+ *     `DEFAULT_IMAGE_*`), the same split `text`'s `DEFAULT_TEXT_*` already uses.
  *   - DRAWING an image, decoding a data URL, or reading a file. All three are
- *     `render/`'s and `main.ts`'s, on the far side of Rule 1: an `image` object
- *     currently has no extent and draws nothing (`render/extent.ts`), which is
- *     D-066-consistent and is the next cycle's work, not a defect here.
- *   - Preserving aspect ratio (§5.7). That needs the decoded bitmap's NATURAL size,
- *     which only the render layer can see; it is not a slot and not engine state.
+ *     `render/`'s and `main.ts`'s, on the far side of Rule 1.
+ *   - ENFORCING `preserveAspect`. This file declares the path; what the flag MEANS
+ *     is two render-layer behaviours (`renderer.ts` fits or stretches the picture,
+ *     `interaction.ts` constrains or frees a grabber drag), because both need the
+ *     decoded bitmap's NATURAL size or a screen gesture, neither of which is engine
+ *     state. Nothing here reads the flag.
  */
 
 /**
@@ -65,6 +71,26 @@ export const IMAGE_HEIGHT_PATH: readonly string[] = ["height"];
  * `style.align` already takes (`render/renderer.ts`'s `resolveTextStyle`).
  */
 export const IMAGE_OPACITY_PATH: readonly string[] = ["opacity"];
+
+/**
+ * §5.7's "preserve aspect ratio by default", as a slot the operator can turn
+ * OFF — the human's ruling on **Q-027**, given on screen at entry 0173: *"There
+ * should be a property toggle for 'preserve aspect ratio'. When toggled,
+ * resizing preserves ratio. When untoggled, resizing distorts aspect ratio."*
+ *
+ * It is document state rather than a render-layer constant because it is the
+ * operator's choice about one object, exactly as `text`'s `autoresize` is, and
+ * it is read by two different layers for two different gestures: `render/
+ * renderer.ts` decides whether a picture is FITTED inside its box or STRETCHED
+ * to fill it, and `render/interaction.ts` decides whether a grabber drag keeps
+ * the box's proportions.
+ *
+ * A MISSING slot reads as `true` at every site (`readBoolean(...) ?? true`),
+ * which is what "by default" means in §5.7's own sentence and what lets a
+ * document saved before this slot existed load and behave as it did —
+ * **D-126**'s lesson, applied to a non-derived slot.
+ */
+export const IMAGE_PRESERVE_ASPECT_PATH: readonly string[] = ["preserveAspect"];
 
 /**
  * The image's own content: §5.7's "store as a data URL in the document".

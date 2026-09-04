@@ -1305,6 +1305,7 @@ function imageObject(overrides: Record<string, Slot> = {}): GraphObject {
       height: { kind: "literal", value: 100 },
       opacity: { kind: "literal", value: 1 },
       source: { kind: "literal", value: "" },
+      preserveAspect: { kind: "literal", value: true },
       ...overrides,
     },
   };
@@ -1373,12 +1374,31 @@ describe("renderDocument — image (§5.7)", () => {
     expect(pictures(calls)[0]).toMatchObject({ x: 47.5, y: 20, w: 25, h: 100 });
   });
 
-  it("keeps the ratio at any box the operator sets, because §5.7's clause is read as a property of DRAWING (PROVISIONAL(Q-027))", () => {
+  it("keeps the ratio at a box the operator has since made disagree with the picture, while `preserveAspect` is on", () => {
     const { ctx, calls } = createFakeContext();
     const wideBox = imageObject({ source: A_DATA_URL, width: { kind: "literal", value: 400 } });
     // 100x100 natural into a 400x100 box: scale 1, so 100x100, centred at x + 150.
     renderDocument(ctx, 800, 600, [wideBox], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
     expect(pictures(calls)[0]).toMatchObject({ x: 160, y: 20, w: 100, h: 100 });
+  });
+
+  it("STRETCHES the picture to fill the box once `preserveAspect` is turned off (the human's note 3, entry 0174)", () => {
+    const { ctx, calls } = createFakeContext();
+    const stretched = imageObject({
+      source: A_DATA_URL,
+      width: { kind: "literal", value: 400 },
+      preserveAspect: { kind: "literal", value: false },
+    });
+    renderDocument(ctx, 800, 600, [stretched], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
+    expect(pictures(calls)[0]).toMatchObject({ x: 10, y: 20, w: 400, h: 100 });
+  });
+
+  it("preserves the ratio when the slot is MISSING, which is what lets a document saved before it existed keep §5.7's default (D-126's lesson)", () => {
+    const { ctx, calls } = createFakeContext();
+    const old = imageObject({ source: A_DATA_URL, width: { kind: "literal", value: 400 } });
+    delete (old.slots as Record<string, Slot | undefined>)["preserveAspect"];
+    renderDocument(ctx, 800, 600, [old], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
+    expect(pictures(calls)[0]).toMatchObject({ x: 160, w: 100, h: 100 });
   });
 
   it("paints the picture at the opacity slot's value and restores the context's alpha afterwards", () => {

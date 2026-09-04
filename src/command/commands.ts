@@ -135,7 +135,7 @@ import {
   TEXT_STYLE_LINE_HEIGHT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH } from "../engine/script/stub.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
@@ -287,24 +287,32 @@ const DEFAULT_TEXT_STYLE_ALIGN = "left";
 
 /**
  * §5.7 gives an `image` object five slots and §5.10's `image x=0 y=0` form supplies
- * only the position, so the handler fills `width`/`height`/`opacity` and the
- * `source` slot `primitives/image.ts` adds — the same split `DEFAULT_TEXT_*` above
- * already uses. They are the handler's provisional pick, not the brief's: §5.7
- * states no default size and §5.10's grammar has no argument for one.
+ * only the position, so the handler fills `width`/`height`/`opacity` and the two
+ * slots `primitives/image.ts` adds, `source` and `preserveAspect` — the same split
+ * `DEFAULT_TEXT_*` above already uses. They are the handler's pick, not the
+ * brief's: §5.7 states no default size and §5.10's grammar has no argument for one.
  *
- * A plain number rather than `text`'s `"auto"`: §5.7's "preserve aspect ratio by
- * default" wants the decoded bitmap's NATURAL size, which no engine slot can see,
- * so a box the operator can immediately move with `set image_1.width` is the
- * dumbest correct answer (Rule 5). §5.7's file-picker cycle is free to write the
- * natural size over these at the moment a picture is chosen.
+ * **`DEFAULT_IMAGE_EXTENT` is the LONG SIDE a chosen picture is scaled to, as well
+ * as the empty frame's size**, and it is one number for both on purpose: a picture
+ * appears at the same scale as the frame it replaces, so choosing one never makes
+ * the object jump in size. `main.ts`'s `pictureBoxSize` is the other reader
+ * (imported, never re-spelled — D-010).
  *
- * `source` starts EMPTY — §5.10's creation form carries no picture, and §5.7 gets one
- * from a file picker that does not exist yet.
+ * A plain number rather than `text`'s `"auto"`: an empty image has no picture to
+ * take a size from, and `"auto"` works for `text` only because a measurer answers
+ * it. Once a picture IS chosen, its own proportions replace both slots — the
+ * human's **Q-027** ruling, entry 0173.
+ *
+ * `source` starts EMPTY — §5.10's creation form carries no picture; the file picker
+ * `main.ts` opens on creation is what fills it. `preserveAspect` starts TRUE,
+ * which is §5.7's "by default" read literally.
  */
-const DEFAULT_IMAGE_WIDTH = 100;
-const DEFAULT_IMAGE_HEIGHT = 100;
+export const DEFAULT_IMAGE_EXTENT = 100;
+const DEFAULT_IMAGE_WIDTH = DEFAULT_IMAGE_EXTENT;
+const DEFAULT_IMAGE_HEIGHT = DEFAULT_IMAGE_EXTENT;
 const DEFAULT_IMAGE_OPACITY = 1;
 const DEFAULT_IMAGE_SOURCE = "";
+const DEFAULT_IMAGE_PRESERVE_ASPECT = true;
 
 /**
  * §5.8 fixes `language` to `"python"` and gives no creation-time default for
@@ -627,20 +635,20 @@ function createText(command: CreateTextCommand, document: Document, context: Eva
 /**
  * `image x=0 y=0` (§5.10, §5.7).
  *
- * Supplies all SIX non-derived slots: `origin.x`/`origin.y` from the command, and
- * `width`/`height`/`opacity`/`source` from the `DEFAULT_IMAGE_*` values above,
- * exactly as `createText` supplies its eight layout/style defaults. `IMAGE_SCHEMA`
- * declares no derived slot, so `createObjectFromCommand` fills none.
+ * Supplies all SEVEN non-derived slots: `origin.x`/`origin.y` from the command, and
+ * `width`/`height`/`opacity`/`source`/`preserveAspect` from the `DEFAULT_IMAGE_*`
+ * values above, exactly as `createText` supplies its eight layout/style defaults.
+ * `IMAGE_SCHEMA` declares no derived slot, so `createObjectFromCommand` fills none.
  *
- * No count-style refusal, and none is owed: an `image` object allocates a fixed six
- * slots whatever its arguments say (Rule 6), so unlike `polygon`/`table` there is no
- * unbounded slot allocation for D-070 to bound. `opacity` is a VALUE, not a count,
- * and is deliberately unbounded here — see `primitives/image.ts`.
+ * No count-style refusal, and none is owed: an `image` object allocates a fixed
+ * seven slots whatever its arguments say (Rule 6), so unlike `polygon`/`table` there
+ * is no unbounded slot allocation for D-070 to bound. `opacity` is a VALUE, not a
+ * count, and is deliberately unbounded here — see `primitives/image.ts`.
  *
- * A freshly created image is INVISIBLE and unselectable: `source` is empty, nothing
- * in `render/` draws an `image` yet, and D-066 makes an object that draws nothing
- * unhittable. That is the state entry 0165 shipped, disclosed rather than papered
- * over — §5.7's file picker and the drawing pass are the next cycle's.
+ * A freshly created image draws as an EMPTY FRAME at `DEFAULT_IMAGE_EXTENT` square
+ * and is immediately selectable: `source` is empty until `main.ts`'s file picker —
+ * which this creation asks for, `AppTransition.pickImageFor` — fills it, and the
+ * chosen picture's own proportions then replace `width`/`height`.
  */
 function createImage(command: CreateImageCommand, document: Document, context: EvalContext): CommandOutcome {
   return createObjectFromCommand(document, "image", [
@@ -650,6 +658,7 @@ function createImage(command: CreateImageCommand, document: Document, context: E
     { path: IMAGE_HEIGHT_PATH, value: DEFAULT_IMAGE_HEIGHT },
     { path: IMAGE_OPACITY_PATH, value: DEFAULT_IMAGE_OPACITY },
     { path: IMAGE_SOURCE_PATH, value: DEFAULT_IMAGE_SOURCE },
+    { path: IMAGE_PRESERVE_ASPECT_PATH, value: DEFAULT_IMAGE_PRESERVE_ASPECT },
   ], context);
 }
 

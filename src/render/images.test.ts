@@ -7,7 +7,7 @@
  * takes for `CanvasRenderingContext2D` and the engine takes for `TextMeasurer`.
  */
 import { describe, expect, it } from "vitest";
-import { createImageBitmapCache } from "./images.ts";
+import { createImageBitmapCache, decodeBitmap } from "./images.ts";
 
 /** The mutable half of an `HTMLImageElement` this file actually drives: the src it was given, the two handlers, and the size a decode reports. */
 interface FakeImageElement {
@@ -32,6 +32,56 @@ function fakeElements(): { readonly create: () => HTMLImageElement; readonly mad
 }
 
 const SOURCE = "data:image/png;base64,AAAA";
+
+// The file picker's one-shot decode. It exists because a chosen picture's
+// NATURAL SIZE decides the object's `width`/`height` slots (the human's Q-027
+// ruling), which is a question asked on a gesture rather than on every paint.
+describe("decodeBitmap — the size a chosen picture reports", () => {
+  it("reports the decoded picture and its natural size", () => {
+    const { create, made } = fakeElements();
+    let reported: unknown = "not called";
+    decodeBitmap(SOURCE, (bitmap) => {
+      reported = bitmap;
+    }, create);
+    made[0]?.onload?.();
+    expect(reported).toEqual({ image: made[0], naturalWidth: 40, naturalHeight: 20 });
+  });
+
+  it("reports undefined for a file that is not a picture, so the caller can still record what was chosen", () => {
+    const { create, made } = fakeElements();
+    let reported: unknown = "not called";
+    decodeBitmap(SOURCE, (bitmap) => {
+      reported = bitmap;
+    }, create);
+    made[0]?.onerror?.();
+    expect(reported).toBeUndefined();
+  });
+
+  it("reports undefined for an empty source without starting a decode at all", () => {
+    const { create, made } = fakeElements();
+    let calls = 0;
+    decodeBitmap("", (bitmap) => {
+      calls += 1;
+      expect(bitmap).toBeUndefined();
+    }, create);
+    expect(calls).toBe(1);
+    expect(made).toHaveLength(0);
+  });
+
+  it("reports undefined for a decode that lands with no usable size, since no ratio can be taken from it", () => {
+    const { create, made } = fakeElements();
+    let reported: unknown = "not called";
+    decodeBitmap(SOURCE, (bitmap) => {
+      reported = bitmap;
+    }, create);
+    const element = made[0];
+    if (element !== undefined) {
+      element.naturalHeight = 0;
+    }
+    element?.onload?.();
+    expect(reported).toBeUndefined();
+  });
+});
 
 describe("createImageBitmapCache — asking for a picture", () => {
   it("returns undefined for an empty source and starts no decode at all, because an image with no picture chosen is the ordinary created state", () => {
