@@ -53,11 +53,11 @@
  *   - Selection state and calling any mutation — `render/interaction.ts`'s
  *     job; DOM event handling is `main.ts`'s. This file only ANSWERS "what is
  *     under this point."
- *   - `script`'s bounding box and `polyline`'s open-path distance test — no
- *     VISUAL definition exists to read for either yet, and D-066 makes the
- *     drawn extent and the clickable extent one extent, so a type that draws
- *     nothing has nothing to hit. `text` (entry 0138) and `image` (**D-142**)
- *     ARE tested now: §5.9's "bounding box for text/tables/images/scripts",
+ *   - `polyline`'s open-path distance test — no VISUAL definition exists to read
+ *     yet, and D-066 makes the drawn extent and the clickable extent one extent,
+ *     so a type that draws nothing has nothing to hit. `text` (entry 0138),
+ *     `image` (**D-142**) and `script` (**D-146**) ARE tested now, which
+ *     completes §5.9's own list — "bounding box for text/tables/images/scripts",
  *     read straight
  *     off `extent.ts`'s `objectExtent` so the click box is exactly the drawn
  *     box (D-066/D-010). An `image` object's box is its `width`/`height` slots

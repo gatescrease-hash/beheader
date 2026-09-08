@@ -16,7 +16,7 @@ import type { CameraState } from "../engine/document.ts";
 import { renderDocument } from "./renderer.ts";
 import type { ImageBitmaps } from "./images.ts";
 import { objectExtent } from "./extent.ts";
-import { SCRIPT_BOX_WIDTH, SCRIPT_PORT_ROW_HEIGHT } from "./slots.ts";
+import { SCRIPT_BOX_WIDTH, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT } from "./slots.ts";
 
 type RecordedCall =
   | { readonly op: "clearRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
@@ -1533,13 +1533,19 @@ describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
     expect(output?.align).toBe("right");
   });
 
-  it("grows one row per port row, taking the LONGER family rather than their sum, because the two sit side by side", () => {
-    const short = objectExtent(scriptObject({ in: ["a"], out: ["b"] }));
-    const tall = objectExtent(scriptObject({ in: ["a", "b", "c"], out: ["d"] }));
-    const shortHeight = (short?.maxY ?? 0) - (short?.minY ?? 0);
-    const tallHeight = (tall?.maxY ?? 0) - (tall?.minY ?? 0);
-    expect(shortHeight).toBeGreaterThan(0);
-    expect(tallHeight).toBe(shortHeight + 2 * SCRIPT_PORT_ROW_HEIGHT);
+  it("grows one row per port ROW, taking the LONGER family rather than their sum, because the two sit side by side", () => {
+    // Absolute heights, not the difference between them: a D-016 check showed
+    // that `max(in, out)` and `in + out` produce the SAME difference for these
+    // two fixtures, so pinning the difference alone left the claim untested.
+    const height = (ports: { in: string[]; out: string[] }): number => {
+      const extent = objectExtent(scriptObject(ports));
+      return (extent?.maxY ?? 0) - (extent?.minY ?? 0);
+    };
+    // One in and one out share ONE row — the whole "side by side" claim.
+    expect(height({ in: ["a"], out: ["b"] })).toBe(SCRIPT_HEADER_HEIGHT + SCRIPT_PORT_ROW_HEIGHT);
+    expect(height({ in: ["a", "b", "c"], out: ["d"] })).toBe(SCRIPT_HEADER_HEIGHT + 3 * SCRIPT_PORT_ROW_HEIGHT);
+    // And a portless node still gets a row, so it is visible rather than a bare header.
+    expect(height({ in: [], out: [] })).toBe(SCRIPT_HEADER_HEIGHT + SCRIPT_PORT_ROW_HEIGHT);
   });
 
   it("draws the box `extent.ts` reports and not a second reading of it, so the drawn box and the click box cannot disagree (D-066)", () => {

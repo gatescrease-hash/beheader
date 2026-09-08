@@ -1,128 +1,54 @@
-# STATUS — as of entry 0179-script-rendering
+# STATUS — as of entry 0180-REVIEW-phase6-gate
 
-**PHASE 6 IS OPEN. THE BATCH IS REVIEWED AND ACCEPTED — the review gate is CLEAR and the next slice
-may start.** The ✅ line passes and has passed since 0171 (re-proved independently at 0172-REVIEW §2
-and §6 — do NOT re-derive it). `image`, which **D-142** made the other half of this gate, is **BUILT
-across entries 0173/0174/0175 and REVIEWED at 0176-REVIEW (ACCEPT WITH EDITS)**. What the gate
-waits on is now ONE thing: **the human seeing it work.** Q-029 was ruled (option b, **D-146**) and
-is BUILT — `addport`/`removeport` at entry 0178, §5.8's rendering at 0179.
+**PHASE 6 IS CLOSED. PHASE 7 IS OPEN.** The gate was claimed and closed at **0180-REVIEW**, on all
+four of its conditions: the ✅ line passes (0171, re-proved at 0172-REVIEW §2/§6 — do NOT re-derive
+it), the ✅ line is PERFORMABLE by an operator (D-146 clause 1, entry 0178), `image` loads and
+renders (D-142 clause 2), and §5.8's node renders and is usable (D-146 clause 5). **The last two
+were confirmed by the human ON SCREEN, 2026-09-07** — *"Image changes work perfectly. Steps 1-5
+pass. Script half: works in its current state. Ports link and pass results/update geometry."*
 
-> **Q-029 — ANSWERED (D-146, option b) and BUILT. Kept here because it is the finding worth
-> remembering.** Phase 6's ✅ line is written as an operator scenario,
-> and **not one step of it can be performed by a person in the running app.** `script x=0 y=0`
-> creates a node with four slots and `ports: undefined`; `link script_1.in.factor table_1.A1` is
-> refused; there is no `addport` command; `set script_1.placeholder.result 10` is refused. The
-> criterion passes only from a fixture calling `mutate` directly. §5.8 says *"ports are declared
-> manually in the UI for now"* and nothing declares them. **0177-REVIEW §3 also finds that D-142
-> clause 3 — this reviewer's own ruling, excluding §5.8's rendering — rests on a misreading:
-> "STUB ONLY" scopes the EXECUTION, and the section's next sentence says the node is to be a
-> "real, first-class graph citizen".** Options (a)/(b)/(c) and a recommendation are in
-> `OPEN_QUESTIONS.md`. All of it is now built: **every step above is a line an operator can type**
-> (0178's verification pastes the transcript), and §5.8's box is drawn (0179).
+**Phase 7 is the road network — the brief's own acceptance test, and the last phase.**
 
-**0176-REVIEW's one substantive finding, now fixed:** `commitImagePicture`'s comment and entry
-0174's decision #3 both claimed `executeCommand` REFUSES a `set` on a formula-driven slot. It does
-not — a plain `set` REPLACES a formula with a literal — so choosing a picture for an image whose
-`width` was linked to a cell silently unlinked it, and the `"replaced formula"` notice was being
-discarded too. `main.ts`'s new `commitGestureWrites` now applies `planResize`'s exact per-component
-rule (§5.9) to every multi-write gesture. **The general lesson: `executeCommand` is a WRITE seam,
-not a guard. A gesture that must not overwrite the operator's links has to screen slot kinds
-itself.**
+> **THE LESSON PHASE 6 COST, AND PHASE 7 STATES OUT LOUD.** Phase 6's ✅ line was reported PASSING
+> at five separate points, honestly and with real tests — and **not one step of it could be
+> performed by a person in the running app** until entry 0178. The criterion test reached past the
+> command line into `mutate` with hand-built operations; `script x=0 y=0` made a node with
+> `ports: undefined`, `link script_1.in.factor …` was refused, and no `addport` command existed.
+> 0177-REVIEW found it by typing the criterion out. **Phase 7 says the quiet part explicitly —
+> "Build by hand from primitives, VIA THE COMMAND LINE. No new features should be needed — if
+> something is impossible here, that is a real gap worth fixing." Walk it by hand EARLY. Anything
+> impossible is the phase's deliverable, not an obstacle to it.**
 
-**The human's instruction at 0176-REVIEW is built and ruled as D-144:** an `image` now remembers its
-picture's own ratio in a `pictureAspect` slot, and turning the panel's `preserve aspect ratio`
-drop-down back on puts a distorted box back to it. See "Gotchas" and D-144 before touching the
-resize path.
+**PHASE 7's criterion, quoted:** *"two circles act as intersections; a polyline's endpoints are
+bound to the two circles' centers; two text boxes read traffic volumes from a table and are
+positioned relative to their intersection's center; and **dragging either intersection keeps the
+road connected and both labels following**, while editing the volumes updates the label text."*
 
-> **D-142 — a phase's ✅ line is its TEST, not the whole of what the phase must deliver. Where the
-> phase heading names a subsystem the brief specifies elsewhere, that subsystem is part of the
-> gate. Applied to Phase 6: `image` MUST be loadable and MUST render properly — confirmed by the
-> human ON SCREEN — before this gate may be claimed.**
-
-**THE MANUAL CHECK, IN FULL, IS THE NEXT ACTION** (0176-REVIEW §10 has the same list):
-`npm run dev`, then —
-1. `image x=0 y=0` → a file dialog opens. Choose a picture. It should appear **in proportion**,
-   inside a frame that HUGS it rather than hanging over it (0174).
-2. Drag it; select it — eight grabbers. A corner drag should SCALE, not distort (0175).
-3. Panel → `preserveAspect` → "stretch to fill the box". A side-grabber drag should now distort.
-4. Panel → `preserveAspect` → "keep the picture's proportions". **The box should SNAP BACK to the
-   picture's real shape** (D-144, built at 0176-REVIEW — the newest thing here, look hardest at it).
-5. Panel → `source` row → "📁 choose…" re-picks; the row reads "JPEG picture · about N KB", never
-   base64 (0175).
-
-**AND THE SCRIPT HALF (D-146, entries 0178/0179), which has never been on screen at all:**
-6. `script x=0 y=0` → a labelled box appears, and is selectable and draggable. Before 0179 this
-   object was invisible.
-7. `addport script_1.in.factor` then `addport script_1.out.result` → the box grows a row per port,
-   input named on the LEFT edge, output on the RIGHT (§5.8's own sentence).
-8. Walk the ✅ line by hand — 0178's verification block has the exact eight lines — and watch the
-   polygon's radius follow `set script_1.placeholder.result 25`. **Every one of those lines was
-   refused before entry 0178.**
-
-**No entry has claimed the gate**, because D-142 clause 2 says "renders properly" is settled by the
-human seeing it and not by a test asserting a `drawImage` call happened. If all five hold, the next
-entry claims the gate, citing 0172-REVIEW §2/§6 for the ✅ line rather than re-deriving it.
-
-**THE HUMAN'S FOUR NOTES AT ENTRY 0173, AND WHERE EACH LANDED:**
-1. *"Box should fit to aspect ratio of image, not hang over it"* — **Q-027 ANSWERED, built at
-   0174.** A chosen picture's natural size, scaled so its long side is `DEFAULT_IMAGE_EXTENT`, is
-   written into `width`/`height`.
-2. *"Should have grip points (same as text box) to resize the actual image"* — **built at 0175.**
-   `hasResizeHandles` is now `text` OR `image`.
-3. *"A property toggle for 'preserve aspect ratio'"* — **built at 0174 (the slot, the drop-down,
-   the drawing) and 0175 (the resize).**
-4. *"Re-picking needs to be possible from the props window… displayed the link to the image on the
-   drive"* — **re-picking built at 0175. The LINK half is not buildable as written: Q-028, ANSWERED
-   as D-145** — a browser will not disclose a file's path, and §5.7 embeds the picture in the
-   document, so nothing is "pulling from" the drive. The row shows what the picture IS instead.
-   **D-145 is a display preference the human may overrule** — if they want the file's NAME, it is
-   one slot and one small cycle.
-
-**AND A FIFTH NOTE, GIVEN AT 0176-REVIEW AND BUILT THERE:** *"image resizing and distortion can
-always be put back to the original aspect ratio — saved somewhere so it can be regained if 'preserve
-aspect ratio' is toggled back on."* → **D-144.** `pictureAspect` is an eighth `image` slot holding
-the picture's own `naturalWidth / naturalHeight`, written by the pick gesture; the panel's toggle
-going back on snaps the box to `fitBitmapIntoBox`'s rectangle. This closes entry 0175's own flagged
-hole (`constrainBoxToRatio` kept the DISTORTED ratio, not the picture's).
-
-Entry 0171's scope call (that Phase 6's heading is descriptive and `image` rendering is therefore
-not a precondition) was **OVERTURNED** by D-142. The entry stays in the log unedited and is not
-otherwise criticised — it flagged this exact call as overturnable, in three places, and its ✅-line
-proof stands.
-
-**D-142 clause 3 said `script` rendering is NOT in this gate — and 0177-REVIEW §3 finds that clause
-MISREAD THE BRIEF.** It argued from §5.8's **STUB ONLY** title; the section's very next sentence is
-*"Build the node as a **real, first-class graph citizen** whose execution is fake."* **STUB ONLY
-scopes the EXECUTION — no Python runs — not the node's existence as a usable object.** Clause 3 is
-therefore **OVERTURNED by the human at 0177-REVIEW (D-146, option b)**: §5.8's rendering IS in this
-gate, and so is the node being usable by an operator at all. Every OTHER clause of D-142 stands,
-clause 1 included — what is withdrawn is the specific exclusion, not the principle. The
-`image` half is unaffected — §5.7's four sentences are almost entirely about loading and drawing,
-and that half is built and reviewed.
+**The first thing Phase 7 will hit:** `polyline` does not exist. It has no schema entry
+(`getObjectSchema("polyline")` returns `undefined`, deliberately and tested), no creation command
+(`COMMANDS_SPECIFIED_BUT_NOT_BUILT` names it), no extent, no hit test, and no renderer arm.
+§5.5's `polyline 0,0 100,0 100,100` form and §5.9's per-vertex drag are both unbuilt. That is the
+phase's largest single piece of work and it is a NEW SUBSYSTEM — **§6.1 trigger 2 fires on its
+first file.**
 
 STATE: **GREEN**. Both configs compile, **1955/1955** tests pass, 0 skipped, 0 `.only`.
-**36 test files.** `npx vite build` clean (`index-DglJNPMO.js`, 138.32 kB).
+**36 test files.** `npx vite build` clean.
 
-Current phase: 6 — script stub + image (**OPEN — the ✅ line passes; `image` is built AND reviewed,
-but the current state is unseen, and D-142 clause 2 makes the human's look the precondition**)
-Phase 6 acceptance criterion: *"`script_1.in.factor` is bound to a cell, `polygon_1.radius` is bound
-to `script_1.out.result`, and changing the placeholder output value moves the polygon — with no
-script-specific code in `eval.ts`"* — **PASSING, CONFIRMED BY THE REVIEWER** (0172-REVIEW §2 and §6).
-Two mutation checks, both red as predicted and both reverted: (1) `evaluateScriptOutput`'s body
-forced to `return null` → `expected null to be 10`; (2) the `placeholder.<port>` address dropped from
-`scriptOutDependencies` → the predicted D-013 `#REF`. Check (1) is the reviewer's own and is the
-stronger of the two — it neutralises §5.8's SEAM rather than its dependency plumbing. The "no
-script-specific code in `eval.ts`" clause is grep-clean for the fourth independent time (0169,
-0170-REVIEW, 0171, 0172-REVIEW). **The criterion passing is NOT sufficient for the gate — see D-142.**
-Last review point: **0177-REVIEW-phase6-scope** (a scope FINDING; Q-029 raised, then ruled by the
-human as D-146 and built at entries 0178/0179 — those two cycles are UNREVIEWED). Before it: **0176-REVIEW-phase6** (**ACCEPT WITH EDITS** — entries 0173/0174/0175; one real
-defect found and fixed, D-143/D-144/D-145 ruled). The previous one was 0172-REVIEW-phase6-gate
-(REVISE — the gate was refused; the ✅ line confirmed).
-Cycles since last review: **2/3** · diff since last review: **~600 lines / 12 files** (cap 800/10).
-**D-146's build is complete and is the unreviewed work.** For the record of what was reviewed: the
-0173–0175 batch ran to ~1750 lines / 18 files against §6.3's 800/10, exceeded by cycle 1 alone, and
-continued on the human's routing after they saw 0173 on screen. Entry 0175 disclosed that rather
-than absorbing it, which is the behaviour §6.3 wants when a cap and a human instruction disagree.
+Current phase: **7 — Acceptance test: the road network (OPEN, nothing built)**
+Phase 7 acceptance criterion: quoted above — **NOT STARTED.**
+Last review point: **0180-REVIEW-phase6-gate** (ACCEPT WITH EDITS; the gate CLOSED, Phase 7 OPENED).
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+**The review gate is CLEAR — the next slice may start.**
+
+**What closed Phase 6, in one list**, so nothing here needs re-deriving:
+- §5.7's `image`: loads via a file picker, draws, is bounded and clickable, resizes by grabbers,
+  keeps or drops its aspect ratio on a toggle, and can be re-picked from the panel — entries
+  0165/0173/0174/0175, reviewed 0166/0172/0176, plus **D-144**'s aspect restore.
+- §5.8's `script`: ports declared by `addport`/`removeport`, drawn as a labelled box with inputs
+  left and outputs right, selectable and draggable — entries 0167/0169/0178/0179, reviewed
+  0168/0170/0180.
+- Rulings that came out of it: **D-140** through **D-146**. D-142 clause 3 was OVERTURNED by D-146
+  — read 0177-REVIEW §3 before arguing with either.
 
 **0168-REVIEW's finding (settled, kept for history):** the ORIGINAL `isLegalPortName`
 (`graph/node.ts`) only checked non-empty/no-dot, LOOSER than `address.ts`'s `PATH_SEGMENT_PATTERN`
@@ -155,50 +81,20 @@ missing, while D-018 clause 1 separately requires `out.<name>` itself to exist. 
 
 ---
 
-## THE ONE THING TO READ FIRST — D-141 clause 7 IS FULLY BUILT AND REVIEWED
+## D-141 and the script node — SETTLED, kept as the pointer a cold reader needs
 
-§5.8 makes `script.in.*` and `script.out.*` per-OBJECT slot families whose members are named by the
-operator. **This codebase has nowhere to store that list of names**, and the gap is structural, not
-an oversight of any past cycle:
+§5.8 makes `script.in.*`/`script.out.*` per-OBJECT slot families whose members the operator names,
+and this codebase had nowhere to store that list (not a slot value — §5.1's `Value` union has no
+list-of-strings arm; not the slot keys — D-010 forbids inverting one; not a count plus positions —
+the criterion names `script_1.in.factor`, and the NAME is operator data).
 
-- **Not a slot value.** §5.1's `Value` union is `number | string | boolean | Point | Point[] | null |
-  ErrorValue`. No list-of-strings arm. So no `literal` slot can hold `["factor", "speed"]` the way
-  `table`'s `rows` holds `8`.
-- **Not the slot keys.** `graph/node.ts`'s header and `mutation.ts`'s both state D-010's consequence:
-  "There is no sanctioned inverse — never `key.split('.')`". A `dynamic` `enumerate(object)` may not
-  scan `Object.keys(object.slots)` for `in.*`.
-- **Not a count plus positions.** The criterion names `script_1.in.factor`. The NAME is operator data.
-
-And a second gap the same ruling must close: **`ObjectSchema.derivedSlots` is a fixed list per TYPE**,
-read at **seven** non-test sites (`mutation.ts` ×3, `document.ts` ×2, `graph/eval.ts`,
-`command/commands.ts`, `command/props.ts`), while `out.*` is per OBJECT. D-018 requires a
-`derived`-kind slot at every declared derived path, so today a per-object `out.*` cannot be expressed
-in either direction.
-
-**Q-026 IS ANSWERED — D-141 (0166-REVIEW), option (a). Read the ruling, not this summary, before
-building.** Its seven clauses in one breath: port NAMES are structural, ORDERED, name-only state on
-`GraphObject` (D-046's scope note already left that door open); a name with a `.`, an empty name or a
-duplicate is REJECTED at mutation time; `ports.out` is the SINGLE authority for the out-port name set
-and §5.8's `placeholders` holds VALUES only, reconciled two-way in D-018's shape;
-`ObjectSchema.derivedSlots` widens to `static`/`dynamic` groups resolved against the OBJECT, never
-against `Object.keys(object.slots)` (D-010); a port set changes only through a new `Operation` kind,
-and removing an out port something references is REJECTED, never silently dropped. Options (b), (c)
-and (d) are rejected on the record — do not re-litigate them.
-
-**D-141 clause 7's data-model slice IS BUILT AND REVIEWED — entry 0167, ACCEPTED WITH EDITS at
-0168-REVIEW** (`graph/node.ts`'s `ports` field, `document.ts`'s serialize/deserialize,
-`mutation.ts`'s two new operation kinds, `primitives/schema.ts`'s `static`/`dynamic` widening,
-every existing `derivedSlots` read site migrated and green).
-
-**D-141 clause 7's OWN NEXT SLICE — `engine/script/stub.ts`, `SCRIPT_SCHEMA`, §5.10's `script`
-command — IS NOW BUILT AND REVIEWED TOO, entry 0169 ACCEPTED (no edits) at 0170-REVIEW.**
-`engine/script/`'s first file fired its own §6.1 trigger 2 review point; it has cleared. **The gate
-is open** — build further on `script/`/`SCRIPT_SCHEMA` freely. Read entry 0169's own log for the
-full account, especially "Decisions I made" (the `placeholder.<port>` family and why `out.<port>`'s
-dependencies had to include it, both independently re-derived and confirmed at 0170-REVIEW §4) and
-the finding above (the in.*/placeholder.* real-slot requirement, traced to its actual mechanism at
-0170-REVIEW §5).
-
+**Q-026 was ANSWERED as D-141 (0166-REVIEW), option (a), and every clause of it is now BUILT AND
+REVIEWED**: port names are ordered structural state on `GraphObject` (0167, reviewed 0168);
+`ObjectSchema.derivedSlots` widened to `static`/`dynamic` groups resolved per OBJECT (same);
+`engine/script/stub.ts` and `SCRIPT_SCHEMA` (0169, reviewed 0170); the `addport`/`removeport`
+commands that finally gave clause 6's operations an operator surface (0178, reviewed 0180); and
+§5.8's rendering (0179, same review). **Read D-141 and D-146, not this summary, before touching
+any of it.** Options (b), (c) and (d) of Q-026 are rejected on the record — do not re-litigate.
 ## What the last cycles did
 
 **0168-REVIEW** accepted entry 0167 (the data-model slice) with edits, all re-verified green
@@ -608,50 +504,34 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 `parser.ts` (two) and `commands.ts` (three, two of which were stale COUNTS — "all four handlers",
 "the four types below").
 
-## Next — NOT a recommendation. Two things, in this order
+## Next — the phase is open and nothing is built
 
-**1. DONE.** The 0173–0175 `image` batch is reviewed (0176-REVIEW: ACCEPT WITH EDITS, one real
-defect fixed, D-143/D-144/D-145 ruled). Q-029 is ruled (**D-146**, option b) and BUILT at entries
-0178/0179 — those two cycles are themselves unreviewed, and a reviewer should read them knowing
-that 0179's own D-016 check caught a test asserting `textAlign` where it meant to assert a
-position.
+**Phase 7 is the last phase and it is an ACCEPTANCE TEST, not a feature list.** Its own words:
+*"Build by hand from primitives, via the command line. No new features should be needed — if
+something is impossible here, that is a real gap worth fixing."*
 
-**2. THE HUMAN LOOKS — the ONLY thing between here and the Phase 6 gate.**
-`npm run dev` → `image x=0 y=0` → choose a picture; the five-step check is at the top of this file.
-Their four notes plus the fifth (D-144) are all built; what is unseen is the result. Worth their
-opinion while looking, none of it settleable by a test:
-- **the FRAME.** Every image is stroked with a light grey box, always, picture or not. It is what
-  makes an empty image visible and what keeps D-066 true while a decode is in flight — but it is a
-  visual choice, one constant and one `strokeRect` to remove.
-- **the long-side rule.** Every chosen picture arrives with its long side at 100 world units,
-  whatever its pixel size. A phone photo and an icon therefore land the same size on canvas. That
-  is a pick, not a ruling.
-- **the corner-drag rule.** A diagonal drag with `preserveAspect` on follows whichever axis moved
-  MORE. The alternative (obey one axis) makes half of every diagonal drag do nothing.
-- **turning `preserveAspect` back ON after distorting NOW RESTORES the picture's proportions**
-  (D-144, 0176-REVIEW — this answers entry 0175's flagged call). The restored box is the rectangle
-  the renderer would DRAW inside the distorted one, so it SHRINKS rather than grows and the origin
-  stays put. Whether shrinking is the right direction is the visual call worth their eye.
-- **Q-028 — ANSWERED as D-145, and reversible.** The `source` row says *"JPEG picture · about 194
-  KB"*. Storing the file's NAME instead needs an eighth slot; a file PATH is not obtainable in a
-  browser at all. If they want the name, say so — one slot, one small cycle.
+**Suggested first slice: walk the road network by hand and write down what stops you.** Not code
+— a list. Every step of the criterion, typed at the command line, with the refusal message where
+there is one. That is one cycle, it produces the phase's actual work plan, and it is exactly the
+check whose absence cost Phase 6 five reports (see the head of this file).
 
-**3. THEN re-claim the gate in a NEW entry**, citing 0172-REVIEW §2 and §6 for the ✅ line rather
-than re-deriving it, and the three entries' plus 0176-REVIEW's mutation checks, plus the human's
-confirmation, for the `image` half.
+**What is already known to be missing**, from reading rather than from trying:
+- **`polyline` does not exist at all** — no schema entry, no creation command, no extent, no hit
+  test, no renderer arm, and no per-vertex drag (§5.9). Its first file fires **§6.1 trigger 2**
+  (first file of a new subsystem), so expect a review point there.
+- **`explode`, `addvertex`, `delvertex`** are in `COMMANDS_SPECIFIED_BUT_NOT_BUILT`. The criterion
+  does not obviously need them — a polyline whose endpoints are BOUND is not an exploded one —
+  but D-090's prompt-sequence work and §5.9's vertex drag sit next to them.
+- **Binding a polyline endpoint to a circle's centre** needs `circle`'s `centroid.x`/`centroid.y`
+  derived slots (they exist) and a vertex address to bind TO (does not exist). That addressing
+  question is load-bearing and is the one most likely to need a ruling rather than a guess.
 
-**NOT in either step, explicitly:** `script` rendering (a labelled box with ports) is its OWN
-unscoped future slice — D-142 clause 3 keeps it out of this gate, and nothing in 0169 touches
-`render/`. It needs a real `addport`/`removeport` UI mechanism too, or ports stay reachable only via
-raw `mutation.ts` operations (§5.10 names no grammar for either command; do not invent one under
-§8's last bullet without a real need naming it). `command/props.ts`'s D-077 walk not summarising
-`script`'s two dynamic non-derived families (`in.*`/`placeholder.*`) is disclosed in that file's
-header and is also not this slice's to fix.
+**Do NOT start by building `polyline`.** Walk the criterion first; the walk decides what shape the
+polyline work has to take, and Rule 5 says build the dumbest thing that satisfies it.
 
 Cheap adds, still owed, not blocking: a direct `link text_1.origin.y <cell>` test (0137-REVIEW
 §honesty). **D-109 clauses 1–2** (cell decimal precision + no cell-text clipping,
 `render/renderer.ts` only) still need no ruling. **Q-017** headers remain the human's.
-
 ## Built and reviewed
 
 Phase 0 (0027-REVIEW) · formula engine (0037) · table primitive through row/column insert/delete and
@@ -700,42 +580,28 @@ to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-**Entries 0178 and 0179 — D-146's whole build.** New: nothing. Changed: `engine/graph/node.ts`
-(`SCRIPT_TYPE`), `command/parser.ts` (two registry entries), `command/commands.ts` (the two
-handlers plus `resolvePortTarget`), `command/props.ts` (a dynamic family is enumerated unless it
-is a table's cells), `render/slots.ts` (the script box geometry), `render/extent.ts`
-(`scriptExtent`), `render/hittest.ts`, `render/renderer.ts` (`drawScript`), plus four test files.
-**2/3 cycles, ~600 lines / 12 files against §6.3's 800/10.**
-
-The 0173–0175 `image` batch was reviewed at 0176-REVIEW and the reviewer's edits went in with it.
+**Nothing.** Entries 0178/0179 were reviewed at 0180-REVIEW, which also fixed three stale headers
+and strengthened one of their tests. Phase 7 starts a fresh batch at 0/3.
 
 ## Reviewed but NOT yet seen on screen
 
-**The whole of §5.7's `image` — entries 0173/0174/0175 plus 0176-REVIEW's edits.** New:
-`src/render/images.ts` + its test. Changed: `engine/graph/node.ts`, `engine/primitives/image.ts`,
-`engine/primitives/schema.ts`, `command/commands.ts`, `command/props.ts`, `render/extent.ts`,
-`render/hittest.ts`, `render/renderer.ts`, `render/handles.ts`, `render/interaction.ts`,
-`src/main.ts`, `index.html`, plus test files.
+**Nothing.** The human confirmed the whole of Phase 6 on screen on 2026-09-07 — `image` steps 1-5
+and the script half, ports linking and driving geometry — and the screenshot is in that turn of the
+log. Entry 0169 remains unseeable by construction (pure engine work).
 
-**SEEN ONCE: entry 0173's state**, which produced the human's four notes. **UNSEEN: everything
-those notes changed (0174 + 0175), everything D-144 added (0176-REVIEW), and the ENTIRE script
-half (0178 + 0179) — a `script` object has never been visible on screen in this project's
-history.** D-142 clause 2 makes
-the human's look a precondition of the Phase 6 gate rather than a courtesy — the five-step check is
-at the top of this file.
-
-Entry 0169 (reviewed at 0170-REVIEW) is unseeable by construction — pure engine work, a `script`
-object draws nothing. Entry 0161's hanging indent was confirmed on screen 2026-09-03.
-
+This section exists because "the operator cannot see what you can see" has cost this project two
+phase gates. Keep it honest: anything visual built and not yet looked at belongs here.
 ## Not started
 
-(§5.8's script node RENDERING and its `addport`/`removeport` mechanism were here until entry 0179.
-Both are BUILT — D-146 overturned D-142 clause 3 and pulled them into the gate.) ·
-D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
-`polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
-hit-testing (D-067) · §5.4's formula bar · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
-**D-109 clauses 1–2** · Phase 7.
+**`polyline` — the whole subsystem, and Phase 7's largest piece.** No schema entry
+(`getObjectSchema("polyline")` returns `undefined`, deliberately and tested), no creation command
+(`COMMANDS_SPECIFIED_BUT_NOT_BUILT`), no extent, no hit test, no renderer arm, no per-vertex drag
+(§5.9). **Its first file fires §6.1 trigger 2.** · `explode`/`addvertex`/`delvertex` ·
+D-090's prompt-sequence preview · `style` slots as authorable · point-in-polygon fill hit-testing
+(D-067) · §5.4's formula bar · D-088 clauses 2–4 · D-089 · D-102 clause 9 · **D-109 clauses 1–2**.
 
+(§5.8's script node RENDERING and its `addport`/`removeport` mechanism were here until entry 0179.
+Both are BUILT — D-146 overturned D-142 clause 3 and pulled them into the Phase 6 gate.)
 ## Open fix list — read 0090-REVIEW §9, 0091-REVIEW §5 and 0100-REVIEW §9 for the full text
 
 Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and open unless noted.
@@ -782,6 +648,21 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
+- **A LONG PORT NAME OVERFLOWS THE SCRIPT BOX.** `factor`/`result` fit in 140 world units;
+  `average_speed` will not. Fixing it properly means measuring, which `extent.ts` cannot do (see
+  Gotchas). Cosmetic; disclosed at entry 0179.
+- **NOTHING DRAWS A WIRE** between a bound `in` port and the cell driving it. §5.8 asks for a
+  labelled box and not for wires, so this is not a defect — but an operator looking at a canvas of
+  nodes expects one, and entry 0179 is the first render where the absence is visible.
+- **`removeport` HAS NO `force`.** `delete <object> force` exists because §5.1.1 gives whole
+  objects a repair path; §5.8 asks for none for a port, so an operator whose out port is
+  referenced must `unlink` the dependent first. Deliberate, possibly annoying.
+- **A PORT CANNOT BE RENAMED.** `removeport` + `addport` loses any binding on an in port. §5.8
+  names no rename and entry 0178 did not invent one.
+- **THE PANEL SHOWS PORTS BUT CANNOT DECLARE ONE.** `props` and the properties panel both
+  enumerate a script's ports now (entry 0178), but declaring one is keyboard-only — D-146 clause 2
+  kept a port-declaring panel control out because it collides with **Q-014**, which is the human's
+  alone. That seam is worth their eye.
 - **`constrainBoxToRatio` BREAKS THE RATIO AT THE FLOOR.** It clamps width and height to
   `MIN_RESIZE_BOX_SIZE` INDEPENDENTLY, so a very elongated box dragged to its minimum ends up 8x8
   and square rather than 8-by-its-ratio. Reachable (a 200x20 box dragged fully in), harmless, and
@@ -1011,6 +892,19 @@ load-compatible).
 
 ## Gotchas for the next model
 
+- **A TEST THAT ASSERTS A DIFFERENCE, A FLAG, OR A NEIGHBOURING PROPERTY WILL PASS ITS OWN
+  MUTATION.** Three instances in the 0178–0180 batch, all green, all reading as though they
+  pinned the claim: (1) §5.8's "outputs on the right" asserted `ctx.textAlign`, which is a
+  different property from the x it is applied to; (2) the script box's "longer family, not their
+  sum" asserted the DIFFERENCE between two fixtures, and `max(in,out)` and `in+out` give the same
+  difference for those two; (3) 0176-REVIEW found `commitImagePicture` documenting a refusal that
+  `executeCommand` never performed. **Assert the value the sentence is about.** D-016 checks are
+  what caught all three — run them against the CLAIM, not against the code path.
+- **A `script` node's box is FIXED geometry** (`render/slots.ts`'s `SCRIPT_BOX_WIDTH`,
+  `SCRIPT_HEADER_HEIGHT`, `SCRIPT_PORT_ROW_HEIGHT`, `scriptBoxHeight`), shared by `renderer.ts`,
+  `extent.ts` and `hittest.ts` so the drawn box, the click box and the extent are ONE box
+  (D-066/D-010). It is NOT measured, deliberately: `extent.ts` has no `ctx` and giving it a
+  `TextMeasurer` would thread through every caller. A long port name overflows the box.
 - **A CRITERION THAT PASSES IN A FIXTURE IS NOT THE SAME AS ONE AN OPERATOR CAN REACH — 0177-REVIEW.**
   Phase 6's ✅ line was reported PASSING at five separate points (0171, 0172-REVIEW, 0173, 0174,
   0175, 0176-REVIEW) and is genuinely proved by tests. **Nobody had typed it into the app.** Every

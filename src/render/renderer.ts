@@ -103,10 +103,15 @@
  *   - `style` slots (§5.5's `Path` shape) — `geometry.ts` declares none yet,
  *     so every shape draws with one disclosed default stroke, and the
  *     selection highlight and chrome text below are equally untuned (Rule 5).
- *   - `script` objects (no VISUAL definition here — §5.8's labelled box with
- *     ports is a separate future slice, **D-142** clause 3) and `polyline`'s
- *     per-vertex shape (deferred with `explode`) draw no body AND no chrome —
- *     `chromeAnchorPoint` returns `undefined` for every type with no extent.
+ *   - `polyline`'s per-vertex shape (deferred with `explode`) draws no body AND
+ *     no chrome — `chromeAnchorPoint` returns `undefined` for every type with no
+ *     extent.
+ *     `script` DOES draw now (**D-146**): `drawScript` fills and strokes the box
+ *     `extent.ts` sizes from the object's port list, labels it with `language`,
+ *     and draws one row per port — input names against the LEFT edge, output
+ *     names against the RIGHT (§5.8's own sentence). A PORTLESS node draws its
+ *     header and an empty body rather than nothing, so a freshly created one is
+ *     visible and selectable.
  *     `image` DOES draw now (**D-142**): `drawImage` strokes the object's
  *     `width` x `height` box and fits the decoded picture inside it, preserving
  *     its aspect ratio; the decoded bitmap arrives through the injected

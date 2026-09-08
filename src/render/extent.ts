@@ -35,10 +35,14 @@
  *     `text` bounding-box test calls THIS function.
  *
  * NOT DONE HERE
- *   - MEASURING a `text` object. This file has no `ctx` and never will; the
- *     measurement arrives as graph state, through the `measuredWidth` /
- *     `measuredHeight` derived slots the topological pass already computed
- *     (**D-123**).
+ *   - MEASURING anything. This file has no `ctx` and never will — which is also
+ *     why a `script` node's box is a FIXED width by a port-count height
+ *     (`slots.ts`'s `SCRIPT_BOX_WIDTH`/`scriptBoxHeight`, D-146) rather than one
+ *     sized to its labels: giving this file a `TextMeasurer` to size one would
+ *     thread through every caller.
+ *   - MEASURING a `text` object specifically. That measurement arrives as graph
+ *     state, through the `measuredWidth` / `measuredHeight` derived slots the
+ *     topological pass already computed (**D-123**).
  *   - DECIDING how a set size, a measurement and `autoresize` combine into a
  *     box — `textbox.ts`'s `textBoxSize`, which `renderer.ts` and the in-place
  *     editor read too. This file supplies that rule's four inputs and anchors
