@@ -1,21 +1,14 @@
 /**
- * measure.test.ts — Tests for `measure.ts` (§5.6, Rule 1's `TextMeasurer` seam, D-120).
+ * measure.test.ts
  *
- * No jsdom (D-001 / PROCESS_BRIEF §4: never add a runtime dependency): every
- * test builds a fake `MeasurementContext` — a settable `font` string and a
- * `measureText` that returns a width from the string's length — and records what
- * `font` it was set to. The render-layer analogue of the engine's injected-fake
- * `TextMeasurer` pattern (Rule 1's own test posture), and the same shape
- * `renderer.test.ts` already uses for its wider canvas fake.
+ * The line breaker and the two measurers.
  */
 import { describe, expect, it } from "vitest";
 import type { TextStyle } from "../engine/eval-context.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer, cssFont, layOutText, type MeasurementContext } from "./measure.ts";
 
-/** Per-character width the fake reports — keeps every expected number exact and hand-checkable, the way `renderer.test.ts`'s `FAKE_CHAR_WIDTH` does. */
 const CHAR = 10;
 
-/** A fake context: `measureText` is `CHAR` px per character, and every `font` it is set to is recorded so a test can assert the shorthand. */
 function fakeContext(): { readonly ctx: MeasurementContext; readonly fonts: readonly string[] } {
   const fonts: string[] = [];
   const ctx: MeasurementContext = {
@@ -34,14 +27,6 @@ function fakeContext(): { readonly ctx: MeasurementContext; readonly fonts: read
 
 const STYLE: TextStyle = { font: "Inter, sans-serif", fontSize: 16, lineHeight: 20 };
 
-/**
- * The plain STRINGS `layOutText` lays `text` out as, with no markup honoured.
- *
- * Every assertion that uses this was written against `layOutLines`, which
- * `layOutText` replaced call-for-call at entry 0160 — the expectations are
- * unchanged; only the shape of the call is. Joining a line's runs gives the
- * line, because a plain line's pieces are merged back into one run per font.
- */
 function plainLines(text: string, wrapWidth: number | undefined, measure: (line: string) => number): readonly string[] {
   return layOutText({ text, style: STYLE, wrapWidth, markup: false, measureRun: (runText) => measure(runText) }).lines.map(
     (line) => line.runs.map((run) => run.text).join(""),
@@ -75,7 +60,7 @@ describe("createCanvas2dTextMeasurer — height is lineCount * lineHeight (lineH
   it("counts the operator's hard newlines, blank lines included", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
     expect(measurer.measure("a\nb\nc", STYLE).height).toBe(3 * 20);
-    expect(measurer.measure("a\n\nb", STYLE).height).toBe(3 * 20); // the blank middle line still counts
+    expect(measurer.measure("a\n\nb", STYLE).height).toBe(3 * 20);
   });
 
   it("treats \\r\\n the same as \\n", () => {
@@ -101,72 +86,52 @@ describe("createCanvas2dTextMeasurer — line-breaking lives here (D-120), and o
   it("does NOT wrap when maxWidth is undefined — a long line stays one line", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
     const result = measurer.measure("one two three four five", STYLE);
-    expect(result.height).toBe(20); // one line
+    expect(result.height).toBe(20);
     expect(result.width).toBe("one two three four five".length * CHAR);
   });
 
   it("greedily wraps a hard line to fit maxWidth, growing the height", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    // Each word is 3 chars = 30px; "aaa bbb" is 70px. maxWidth 75 fits two words
-    // per line, so "aaa bbb ccc ddd" -> ["aaa bbb", "ccc ddd"] -> 2 lines.
     const result = measurer.measure("aaa bbb ccc ddd", STYLE, 75);
     expect(result.height).toBe(2 * 20);
     expect(result.width).toBe("aaa bbb".length * CHAR);
   });
 
-  // The human's 2026-09-02 report: "the text wrapping ... refuses to break up
-  // continuous streams of text without spaces, which also sort of breaks the box
-  // boundaries". A word too wide for its own line used to sit there and punch
-  // out through the side of the box, while the editor's `<textarea>` — which has
-  // `overflow-wrap: break-word` — broke it neatly. Now both break it.
   it("BREAKS a word wider than maxWidth between characters rather than letting it overflow (CSS `overflow-wrap: break-word`)", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    // CHAR = 10, maxWidth 50 -> five characters per line. The 20-character word
-    // fills four of them, then "short" (exactly 50) follows on its own.
     const result = measurer.measure("supercalifragilistic short", STYLE, 50);
     expect(result.height).toBe(5 * 20);
-    // The measured width no longer exceeds the wrap width — which is what stops
-    // the drawn text from escaping its own box.
     expect(result.width).toBe(50);
   });
 
   it("moves the long word to a fresh line FIRST and only then breaks it — `break-word`, not `break-all`", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    // "ab" (20px) is on line 1; the 8-char word does not fit after it, so it
-    // starts line 2 whole and is split from there — never "ab" + "abcd" on one.
     expect(plainLines("ab abcdefgh", 50, (line) => line.length * CHAR)).toEqual(["ab", "abcde", "fgh"]);
   });
 
   it("never loops forever when even ONE character is wider than the line — it goes on and overflows, as a browser does", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    const result = measurer.measure("abc", STYLE, 4); // 4px wide box, 10px characters
-    expect(result.height).toBe(3 * 20); // one character per line
+    const result = measurer.measure("abc", STYLE, 4);
+    expect(result.height).toBe(3 * 20);
     expect(result.width).toBe(CHAR);
   });
 
   it("wraps each hard line independently — a newline plus wrapping compound", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    // "aaa bbb" wraps to 2 lines at maxWidth 35 (one 3-char word = 30px per line); "ccc" is its own hard line.
     expect(measurer.measure("aaa bbb\nccc", STYLE, 35).height).toBe(3 * 20);
   });
 
-  // Also the human's 2026-09-02 report ("some edge cases where the text shows as
-  // X lines in the rendered mode but pops to X+1 lines in the editor mode").
-  // `white-space: pre-wrap` — what a soft-wrapping `<textarea>` uses — PRESERVES
-  // a run of spaces, so collapsing it here made the canvas fit text on one line
-  // that the editor had already pushed onto two.
   it("PRESERVES a run of spaces when fitting, so it can force the same break the editor's pre-wrap does", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    // "aaa bbb" (70px) fits in 75; "aaa    bbb" (100px) does not.
     expect(measurer.measure("aaa bbb", STYLE, 75).height).toBe(20);
     expect(measurer.measure("aaa    bbb", STYLE, 75).height).toBe(2 * 20);
   });
 
   it("HANGS spaces at the end of a line (CSS Text 3): they neither force a break nor widen the box", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
-    const result = measurer.measure("aaa     ", STYLE, 40); // 3 characters of text, 5 of trailing space
-    expect(result.height).toBe(20); // still one line
-    expect(result.width).toBe(3 * CHAR); // the spaces take no room in the box
+    const result = measurer.measure("aaa     ", STYLE, 40);
+    expect(result.height).toBe(20);
+    expect(result.width).toBe(3 * CHAR);
   });
 
   it("does not wrap for a non-positive or non-finite maxWidth (same as 'auto')", () => {
@@ -225,15 +190,10 @@ describe("layOutText / cssFont — exported for renderer.ts to draw the SAME lin
   });
 
   it("greedily word-wraps each hard line when wrapWidth is set", () => {
-    // CHAR = 10: "aaa" is 30px, "aaa bbb" is 70px; wrapWidth 40 -> one word per line.
     expect(plainLines("aaa bbb ccc", 40, width)).toEqual(["aaa", "bbb", "ccc"]);
     expect(plainLines("aaa bbb\nzzz", 100, width)).toEqual(["aaa bbb", "zzz"]);
   });
 
-  // `renderer.ts` DRAWS these strings. Collapsing a double space here did not
-  // just move a wrap point — it drew "a  b" as "a b", so the text visibly
-  // changed the moment the editor closed. That is the exact thing the
-  // 2026-09-02 rework exists to make impossible.
   it("emits the operator's spacing VERBATIM, so the drawn glyphs are the typed ones", () => {
     expect(plainLines("a  b", 200, width)).toEqual(["a  b"]);
     expect(plainLines("  indented", 200, width)).toEqual(["  indented"]);
@@ -244,9 +204,6 @@ describe("layOutText / cssFont — exported for renderer.ts to draw the SAME lin
   });
 
   it("splits a long word between CODE POINTS, so a break never halves an emoji into two lone surrogates", () => {
-    // Each astral character is one code point and (to the fake) two "characters"
-    // of width, since `.length` counts UTF-16 units. Four of them at wrapWidth
-    // 40 -> two per line, and every emitted piece must still be a valid string.
     const lines = plainLines("😀😀😀😀", 40, width);
     expect(lines).toEqual(["😀😀", "😀😀"]);
     expect(lines.join("")).toBe("😀😀😀😀");
@@ -261,12 +218,10 @@ describe("layOutText / cssFont — exported for renderer.ts to draw the SAME lin
 describe("layOutText — markup:true honours §5.6's markdown-lite; markup:false takes every character at face value", () => {
   const width = (line: string): number => line.length * CHAR;
 
-  /** One layout of `text`, markup honoured, at the shared `STYLE` and an optional wrap width. */
   function markupLayout(text: string, wrapWidth?: number) {
     return layOutText({ text, style: STYLE, wrapWidth, markup: true, measureRun: (runText) => width(runText) });
   }
 
-  /** Every run of every line, flattened — for assertions about fonts rather than about lines. */
   function allRuns(text: string, wrapWidth?: number) {
     return markupLayout(text, wrapWidth).lines.flatMap((line) => line.runs);
   }
@@ -307,7 +262,7 @@ describe("layOutText — markup:true honours §5.6's markdown-lite; markup:false
   it("stacks a heading's neighbours below its OWN height, not below one lineHeight", () => {
     const layout = markupLayout("# Big\nafter");
     expect(layout.lines[0]?.top).toBe(0);
-    expect(layout.lines[1]?.top).toBe(40); // the h1 line was 2 x 20 tall
+    expect(layout.lines[1]?.top).toBe(40);
     expect(layout.height).toBe(60);
   });
 
@@ -328,13 +283,10 @@ describe("layOutText — markup:true honours §5.6's markdown-lite; markup:false
   });
 
   it("does NOT break a word at a run boundary — `**bo**ld` is one word to CSS and to this file", () => {
-    // 40px fits four characters. "bold" is four, so it fits on one line; the
-    // marker split inside it must not become a break opportunity.
     expect(markupLayout("**bo**ld", 40).lines).toHaveLength(1);
   });
 
   it("wraps markup text at the width the markers do NOT count toward", () => {
-    // "**aaa** bbb" is 11 raw characters but 7 drawn ones, so it fits in 70px.
     expect(markupLayout("**aaa** bbb", 70).lines).toHaveLength(1);
     expect(plainLines("**aaa** bbb", 70, width)).toHaveLength(2);
   });
@@ -363,29 +315,26 @@ describe("createSourceTextMeasurer — the overlay's measurer (Q-025 (a), provis
 describe("layOutText — a wrapped list item hangs its continuation lines under its text (entry 0161)", () => {
   const width = (line: string): number => line.length * CHAR;
 
-  /** One markup layout at the shared `STYLE`. `CHAR` = 10, and the bullet `"• "` is two characters, so the indent is 20 wherever it applies. */
   function listLayout(text: string, wrapWidth?: number) {
     return layOutText({ text, style: STYLE, wrapWidth, markup: true, measureRun: (runText) => width(runText) });
   }
 
   it("starts the FIRST line at zero and every continuation at the bullet's width", () => {
-    // "• aaa bbb" is 9 characters = 90px; at 60px it wraps after "aaa".
     const lines = listLayout("- aaa bbb", 60).lines;
     expect(lines).toHaveLength(2);
     expect(lines[0]?.runs[0]?.x).toBe(0);
-    expect(lines[1]?.runs[0]?.x).toBe(2 * CHAR); // the width of "• "
+    expect(lines[1]?.runs[0]?.x).toBe(2 * CHAR);
   });
 
   it("wraps the continuation at the NARROWER width, so the indent cannot push a word out of the box", () => {
-    // Indent 20 leaves 40px for continuations: "bbb ccc" (70px) cannot share one.
     const lines = listLayout("- aaa bbb ccc", 60).lines;
     expect(lines.map((line) => line.runs.map((run) => run.text).join(""))).toEqual(["• aaa", "bbb", "ccc"]);
   });
 
   it("counts the indent in the line's width, so measuredWidth is wide enough to hold the indented text", () => {
     const layout = listLayout("- aaa bbb", 60);
-    expect(layout.lines[1]?.width).toBe(2 * CHAR + 3 * CHAR); // indent + "bbb"
-    expect(layout.width).toBe(50); // the first line, "• aaa"
+    expect(layout.lines[1]?.width).toBe(2 * CHAR + 3 * CHAR);
+    expect(layout.width).toBe(50);
   });
 
   it("indents NOTHING when the line does not wrap — there is no continuation to hang", () => {
@@ -402,8 +351,6 @@ describe("layOutText — a wrapped list item hangs its continuation lines under 
   });
 
   it("gives up the indent rather than the text when the bullet is as wide as the whole box", () => {
-    // A 15px box is narrower than the 20px bullet: indenting would leave a
-    // negative continuation width and put one character on every line.
     const lines = listLayout("- aaa bbb", 15).lines;
     for (const line of lines) {
       expect(line.runs[0]?.x ?? 0).toBe(0);
@@ -411,7 +358,6 @@ describe("layOutText — a wrapped list item hangs its continuation lines under 
   });
 
   it("indents by the BULLET's own width even when the item's text is a different font", () => {
-    // "`aaa` `bbb`" is code, but the bullet is not: the indent is still 2 chars.
     expect(listLayout("- `aaa` `bbb`", 60).lines[1]?.runs[0]?.x).toBe(2 * CHAR);
   });
 });

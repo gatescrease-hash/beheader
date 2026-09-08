@@ -1,25 +1,13 @@
 /**
- * parser.test.ts — Tests for `command/parser.ts` (§5.10).
+ * parser.test.ts
  *
- * No document fixtures anywhere in this file, and that is the point: the subject
- * resolves nothing, so every test here is a claim about GRAMMAR alone. The tests that
- * look like they are missing — "rejects an unknown object name", "rejects a name
- * already in use" — belong to `command/commands.ts`, which has the document.
- *
- * `DOCUMENTED_EXAMPLES` is the load-bearing block: it holds §5.10's own example line
- * for every registered command, and a coverage assertion fails if a command is added
- * to the registry without one. That is also what pins each entry's `build` against
- * its own spec — a `build` reading an argument name its spec does not declare
- * produces the loud fallback instead of the value, and the expected command object
- * catches it. One entry, `props`, is not §5.10's own — it is D-092 clause 4's
- * addition through §5.10's own extension mechanism — and gets a plain example line
- * instead of a quoted one for the same reason.
+ * Every command form, every failure message, and the rule that the
+ * built registry and the not built list stay disjoint.
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
 import { COMMAND_NAMES, COMMANDS_SPECIFIED_BUT_NOT_BUILT, isCommandParseFailure, parseCommand, type Command } from "./parser.ts";
 
-/** The parsed command, or a thrown test failure naming the parser's own message. */
 function parsed(line: string): Command {
   const result = parseCommand(line);
   if (isCommandParseFailure(result)) {
@@ -28,7 +16,6 @@ function parsed(line: string): Command {
   return result.command;
 }
 
-/** The failure, or a thrown test failure — the mirror of `parsed`. */
 function rejected(line: string): { readonly message: string; readonly start: number } {
   const result = parseCommand(line);
   if (!isCommandParseFailure(result)) {
@@ -37,11 +24,6 @@ function rejected(line: string): { readonly message: string; readonly start: num
   return { message: result.message, start: result.start };
 }
 
-/**
- * One example line per registered command, taken verbatim from §5.10 wherever §5.10
- * writes one out. `zoom 2` and `delete intersection_a` supply the argument §5.10
- * leaves as a placeholder.
- */
 const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: Command }[] = [
   { line: "circle x=100 y=100 r=20", command: { kind: "circle", x: 100, y: 100, radius: 20 } },
   { line: "polygon sides=5 x=0 y=0 r=50", command: { kind: "polygon", sides: 5, x: 0, y: 0, radius: 50 } },
@@ -55,14 +37,8 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "script x=0 y=0", command: { kind: "script", x: 0, y: 0 } },
   { line: "link polygon_1.origin.x table_x.A1", command: { kind: "link", target: "polygon_1.origin.x", source: "table_x.A1" } },
   { line: "unlink polygon_1.origin.x", command: { kind: "unlink", target: "polygon_1.origin.x" } },
-  // NOT a §5.10 command word — added 2026-09-02 so a table cell can be emptied
-  // at all (`mutation.ts`'s `ClearSlotOperation`). Same one-address grammar as
-  // `unlink`; the handler is where it narrows to cells.
   { line: "clear table_x.A1", command: { kind: "clear", target: "table_x.A1" } },
   { line: "set polygon_1.radius 42", command: { kind: "set", target: "polygon_1.radius", value: 42 } },
-  // NOT §5.10 command words either — added at 0178 under D-146, because §5.8 says
-  // ports are declared manually and §5.10 gave no way to. Same one-address grammar
-  // as `unlink`; the handler is where the family and the port name are checked.
   { line: "addport script_1.in.factor", command: { kind: "addport", target: "script_1.in.factor" } },
   { line: "removeport script_1.out.result", command: { kind: "removeport", target: "script_1.out.result" } },
   { line: "rename polygon_1 intersection_a", command: { kind: "rename", target: "polygon_1", newName: "intersection_a" } },

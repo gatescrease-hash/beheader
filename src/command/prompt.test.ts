@@ -1,21 +1,13 @@
 /**
- * prompt.test.ts — Tests for `command/prompt.ts` (D-072).
+ * prompt.test.ts
  *
- * No document fixtures and no canvas fake anywhere in this file, and that is the
- * point twice over: the subject resolves nothing (D-069) and draws nothing, so a pick
- * is just a world point and every test here is a claim about the prompt sequence
- * alone.
- *
- * `EQUIVALENT_FORMS` is the load-bearing block. D-072 clause 3 says the typed form and
- * the prompted form MUST produce the identical `Command`, and a coverage assertion
- * fails if a command grows a prompt sequence without an entry proving it does.
+ * The prompt state machine, one argument at a time.
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
 import { COMMAND_NAMES, findCommandSpec, type Command } from "./parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./prompt.ts";
 
-/** The session, asserted to be mid-sequence. */
 function prompting(session: CommandSession): { readonly pending: PendingCommand; readonly message: string; readonly error: string | undefined } {
   if (session.status !== "prompting") {
     throw new Error(`expected a prompt, got ${session.status}: ${JSON.stringify(session)}`);
@@ -23,7 +15,6 @@ function prompting(session: CommandSession): { readonly pending: PendingCommand;
   return { pending: session.pending, message: session.message, error: session.error };
 }
 
-/** The finished command, or a thrown test failure naming what came back instead. */
 function completed(session: CommandSession): Command {
   if (session.status !== "complete") {
     throw new Error(`expected a completed command, got ${session.status}: ${JSON.stringify(session)}`);
@@ -31,7 +22,6 @@ function completed(session: CommandSession): Command {
   return session.command;
 }
 
-/** Walks a whole sequence from a bare command word, applying each answer in order. */
 function walk(line: string, ...responses: readonly PromptResponse[]): CommandSession {
   let session = beginCommand(line);
   for (const response of responses) {
@@ -43,24 +33,13 @@ function walk(line: string, ...responses: readonly PromptResponse[]): CommandSes
 const typed = (text: string): PromptResponse => ({ kind: "typed", text });
 const picked = (x: number, y: number): PromptResponse => ({ kind: "picked", point: { x, y } });
 
-/**
- * One command per prompt sequence: §5.10's typed line, and the same command answered
- * step by step. D-072 clause 3 — both MUST produce the identical `Command`.
- */
 const EQUIVALENT_FORMS: readonly { readonly name: string; readonly typedLine: string; readonly responses: readonly PromptResponse[] }[] = [
   { name: "circle", typedLine: "circle x=100 y=100 r=20", responses: [picked(100, 100), picked(120, 100)] },
   { name: "polygon", typedLine: "polygon sides=5 x=0 y=0 r=50", responses: [typed("5"), picked(0, 0), picked(0, 50)] },
   { name: "rect", typedLine: "rect x=0 y=0 w=200 h=100", responses: [picked(0, 0), picked(200, 100)] },
   { name: "table", typedLine: "table x=0 y=0 rows=8 cols=8", responses: [picked(0, 0), typed(""), typed("")] },
-  // §5.10's `image x=0 y=0` gives the command nothing but a position, so its
-  // sequence is ONE point step — the same shape `text`'s is, for the same reason.
   { name: "image", typedLine: "image x=0 y=0", responses: [picked(0, 0)] },
-  // `script x=0 y=0` (entry 0169) takes the identical `image` shape — one
-  // point step, nothing else to ask for.
   { name: "script", typedLine: "script x=0 y=0", responses: [picked(0, 0)] },
-  // D-124: `text` has ONE step, a point, and NO content step — the pick completes
-  // the command with `content` `""`. The typed form that produces the identical
-  // Command is therefore `text x=0 y=0 ""`, not §5.10's own content-bearing example.
   { name: "text", typedLine: 'text x=0 y=0 ""', responses: [picked(0, 0)] },
 ];
 
@@ -153,12 +132,6 @@ describe("both forms of every prompting command produce the identical Command (D
     }
   });
 
-  // D-073 one layer up: `beginCommand` tokenizes the whole rest of the line once it
-  // knows the command declares `prompts`, and that is only safe because no such
-  // command declares a `literal-or-formula` position for the lexer to run over. Both
-  // the function and the file header state that property; this is what enforces it,
-  // so a registry entry declaring both fails here rather than silently reinstating
-  // the defect D-073 rules against (0074-REVIEW F2).
   it("gives no prompting command a `literal-or-formula` position, which is what lets beginCommand tokenize the rest of its line at all (D-073)", () => {
     for (const name of COMMAND_NAMES) {
       const spec = findCommandSpec(name);
@@ -273,7 +246,6 @@ describe("text is placed by pointing — one step, no content step (D-124)", () 
 
   it("an unquoted `x,y` reads as the point shorthand — box there, empty content — the same as `circle 30,40`", () => {
     expect(completed(beginCommand("text 30,40"))).toEqual({ kind: "text", x: 30, y: 40, content: "" });
-    // A literal "30,40" string is still reachable by quoting it.
     expect(completed(beginCommand('text "30,40"'))).toEqual({ kind: "text", x: 0, y: 0, content: "30,40" });
   });
 });

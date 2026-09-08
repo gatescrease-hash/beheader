@@ -5,24 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Graphpaper</title>
     <!--
-      §5.10's interface: the canvas, the scrolling log above the input, and the
-      always-focused input bar. main.ts finds each by id and wires it.
+      The furniture of the page: the canvas, the log above the input, and the
+      input bar that holds focus. main.ts finds each element by id.
 
-      #panels is D-094's properties panel container, now **D-101**'s N of
-      them — one child `.panel` per selected object with a drawn extent
-      (D-106's default), each built and positioned by main.ts every paint. The
-      container itself still takes no clicks (`pointer-events: none`, so an
-      area with no panel falls through to the canvas beneath), but **D-102**
-      lifts that off each `.panel` itself: the whole body is interactive now,
-      not only its `.panel-header` (D-101 clause 4's drag handle, D-106 clause
-      2's dismiss control). The disclosed cost (D-102 clause 1) is that a
-      panel overlapping its own object hides that part of it from the mouse —
-      D-101 clause 5 (drag the panel away) is the remedy. `.panel-clip` is the
-      per-row paperclip main.ts builds only for a modifiable, non-synthetic
-      row (D-102 clause 2); `.panel-row__input` is the text box that replaces
-      a row's value when its GREY paperclip is clicked (clause 4). It floats
-      over the canvas, so the canvas lives inside a positioned #stage. Nothing
-      here holds state or behaviour.
+      #panels holds one .panel for each selected object. main.ts builds and
+      places them on every paint. The container takes no clicks, so an empty
+      area falls through to the canvas below. Each .panel does take clicks. A
+      panel that covers its own object hides that part from the mouse. The
+      remedy is to drag the panel away.
+
+      #panels floats over the canvas, so the canvas sits inside a positioned
+      #stage. Nothing here holds state or behaviour.
     -->
     <style>
       html,
@@ -54,7 +47,7 @@
       #panels {
         position: absolute;
         inset: 0;
-        /* See the comment above: the container itself never takes a click. */
+        /* The container never takes a click. Each panel takes its own. */
         pointer-events: none;
       }
       .panel {
@@ -65,7 +58,7 @@
         max-width: 320px;
         max-height: 100%;
         overflow: auto;
-        /* D-094 clause 10's `pointer-events: none` is LIFTED here at D-102 clause 1: every row is now interactive (the paperclip; the row's own input once opened). */
+        /* Every row is interactive: the paperclip, and the input it opens. */
         pointer-events: auto;
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid #d0d0d0;
@@ -80,7 +73,7 @@
         gap: 8px;
         font-weight: bold;
         padding-bottom: 2px;
-        /* D-101 clause 4: the ONE part of the panel that takes clicks this cycle — it is the drag handle, and it carries the dismiss control. */
+        /* The drag handle. It also carries the dismiss control. */
         pointer-events: auto;
         cursor: move;
       }
@@ -94,7 +87,7 @@
         padding: 0 2px;
         color: inherit;
       }
-      /* D-094 clause 5: the thick rule between modifiable slots and derived ones. */
+      /* The thick rule between the modifiable slots and the derived ones. */
       .panel-rule {
         border-top: 3px solid #1a1a1a;
         margin: 3px 0;
@@ -105,14 +98,14 @@
         gap: 12px;
         white-space: nowrap;
       }
-      /* D-094 clause 5: derived rows in italics — the operator cannot write them. */
+      /* A derived row is italic. The operator cannot write it. */
       .panel-row--derived {
         font-style: italic;
       }
       .panel-row__path {
         color: #555555;
       }
-      /* D-102: the row's right-hand cluster — the paperclip (if any) beside the value, or the row's own text input once opened. */
+      /* The right hand cluster: the paperclip and the value, or the row input. */
       .panel-row__right {
         display: flex;
         align-items: center;
@@ -123,23 +116,22 @@
         cursor: pointer;
         line-height: 1;
       }
-      /* D-102 clause 3: bold blue for a `formula` slot — clicking it unlinks. */
+      /* Bold blue marks a formula slot. A click on it unlinks the slot. */
       .panel-clip--formula {
         color: #1a56db;
         font-weight: bold;
       }
-      /* D-102 clause 3: "faded and small, doesn't want to be that apparent" (the human's own words) — clicking it opens the row's input. */
+      /* Faded and small on purpose. A click on it opens the row input. */
       .panel-clip--literal {
         color: #999999;
         font-size: 0.85em;
         opacity: 0.7;
       }
       /*
-        The "choose…" control on an `image`'s `source` row (the human's note 4 at
-        entry 0173). It REPLACES that row's paperclip: a data URL is not
-        something anyone types, so the text input the paperclip opens has nothing
-        to offer here. Styled as a quiet link rather than a button, so it reads
-        as part of the row like every other panel control.
+        The choose control on the source row of an image. It replaces the
+        paperclip of that row. Nobody types a data URL, so the text input has
+        nothing to offer here. It reads as a quiet link, like every other
+        control in the panel.
       */
       .panel-pick {
         cursor: pointer;
@@ -154,12 +146,11 @@
         box-sizing: border-box;
       }
       /*
-        A drop-down row (the human's 2026-09-02 instruction: a slot with only a
-        small set of valid inputs offers them rather than making the operator
-        know them). It REPLACES the value text and the grey paperclip for such a
-        row — there is no edit mode, it commits on `change`. Same width as the
-        text input it stands in for, so a panel's right-hand column does not
-        jump between row kinds.
+        A drop down row. A slot with a small set of valid values offers them,
+        so the operator does not have to know them. It replaces the value
+        text and the paperclip. There is no edit mode. It commits on a change.
+        Its width matches the text input it stands in for, so the right hand
+        column does not jump between row kinds.
       */
       .panel-row__choice {
         font: inherit;
@@ -168,51 +159,35 @@
         cursor: pointer;
       }
       /*
-        D-125's in-place editor: a real text input overlaid on the canvas at
-        the receiver's own position (a `text` object's `content`, or a table
-        cell). main.ts sizes and positions it every paint from
-        render/editor.ts, and sets `font-size`/`font-family`/`line-height`/
-        `text-align` inline from the receiver's OWN style slots (D-129, widened
-        at entry 0147) — so nothing here may set a font: the page's is
-        monospace and a `text` object's default is `sans-serif`, and that
-        mismatch alone re-wrapped the operator's text. It is mounted in #stage,
-        a sibling of #panels with no delegated listeners, so a click in it never
-        has to be carved out of the panel plumbing. One at a time, document-wide.
+        The in place editor: a real text input over the canvas, at the position
+        of the receiver. A receiver is the content of a text object, or one
+        table cell. main.ts sizes and places it on every paint. It also sets
+        the font size, the family, the line height, the alignment and the
+        colour inline, from the style slots of the receiver.
 
-        NO padding and NO border, deliberately: the box main.ts places IS the
-        receiver's drawn box, and for an auto-width object that box is fitted to
-        the exact width of the committed text — so any horizontal inset makes
-        the text no longer fit the box it was measured in, which is a wrap (or a
-        scrollbar) the canvas underneath does not have. The focus ring is an
-        `outline`, which is painted outside the box and takes no layout.
+        This file must not set a font, a padding or a border. The box that
+        main.ts places is the drawn box of the receiver. For an object with an
+        auto width, that box fits the committed text exactly. So any inset
+        makes the text no longer fit the box that the measurer measured. The
+        focus ring is an outline, which paints outside the box and takes no
+        layout.
 
-        NO SCROLLING, EVER — `overflow: hidden` (the human, 2026-09-02: "no
-        goddamn scroll bars when editing text! either vertically or
-        horizontally!"). This is not a scrollbar being hidden; there is nothing
-        to scroll. `main.ts` re-measures the typed text on every keystroke and
-        re-sizes this element to fit it (`editorTextBoxSize` -> the same
-        `render/textbox.ts` rule the committed box uses), so the box grows under
-        the caret and the text always fits. `overflow: hidden` is the belt to
-        that braces: if a measurement is ever a pixel short, the overflow is
-        clipped invisibly rather than announced with a scrollbar that steals
+        There are no scroll bars. main.ts measures the typed text on every
+        keystroke and resizes this element to fit, so the box grows under the
+        caret. The overflow rule is the belt to that brace. If a measurement
+        falls a pixel short, the overflow clips out of sight. A scroll bar steals
         width and re-wraps the paragraph.
 
-        SIZED AND FONTED IN WORLD UNITS, then magnified by a `transform: scale()`
-        `main.ts` sets from `camera.zoom / ratio`. That is what makes the typed
-        line breaks land exactly where the drawn ones do: the browser lays the
-        text out at the same round font size and width `render/measure.ts`
-        measures with, and the transform only magnifies the finished layout.
-        Nothing here may set a font, a padding or a border — `main.ts` sets the
-        type inline from the receiver's OWN slots (size, family, line height,
-        alignment and colour), and any inset would make the text no longer fit
-        the box it was measured in.
+        The element lays out in world units, and one transform scales it. That
+        is what makes a typed line break land where the drawn one does. The
+        browser lays the text out at the same font size and width that
+        render/measure.ts measures with, and the transform only magnifies the
+        finished layout.
 
-        The focus ring is an `outline`, painted outside the box and taking no
-        layout. `background: transparent` because the canvas underneath is NOT
-        drawing this receiver's text while the editor is open (`renderDocument`
-        takes the whole `EditorTarget` — a `text` box is skipped entire, a table
-        keeps everything but the one edited cell's value) — so what shows
-        through is the page, exactly as it would around the drawn text.
+        The background is transparent, because the canvas does not draw this
+        receiver while the editor is open. What shows through is the page.
+
+        It mounts in #stage, not in #panels. One editor at a time.
       */
       .text-editor {
         position: absolute;
@@ -225,19 +200,15 @@
         outline: 1px solid #1a56db;
         overflow: hidden;
         /*
-          The wrap rule, stated rather than inherited from the UA stylesheet:
-          `render/measure.ts` reproduces `overflow-wrap: break-word` exactly (a
-          word too wide for the line is split between characters), so the two
-          must not be left to disagree because a browser defaults differently.
-          `word-break: normal` keeps that to a LAST resort — `break-all` would
-          split words that would have fitted on the next line, which the
-          measurer does not do.
+          The wrap rule, stated here and not left to the browser default.
+          render/measure.ts implements break-word exactly. A word too wide for
+          the line splits between characters. The two must agree, so neither
+          can rely on a default. The word-break rule keeps that split to a last
+          resort.
 
-          `white-space` is deliberately NOT set here: the `wrap` attribute
-          (`main.ts` sets it from `editorTextStyle.wraps`) is what decides
-          whether this box wraps at all, and an author rule would override the
-          `white-space: pre` that `wrap="off"` relies on — re-breaking exactly
-          the auto-width lines that must stay whole.
+          Do not set white-space here. The wrap attribute decides whether this
+          box wraps at all, and an author rule overrides the white-space that
+          the off value needs.
         */
         overflow-wrap: break-word;
         word-break: normal;

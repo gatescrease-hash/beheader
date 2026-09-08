@@ -1,12 +1,8 @@
 /**
- * parser.test.ts — tests for formula/parser.ts (PROJECT_BRIEF §5.3, parser stage).
+ * parser.test.ts
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.3, and the slice of Phase 1's own acceptance criterion
- * this file can demonstrate in isolation — literals, operator precedence, nested `IF`,
- * reference resolution, ranges in aggregates, and "malformed input yields #PARSE
- * rather than throwing." NOT demonstrated here: eager/total dependency extraction and
- * lazy/short-circuit EVALUATION (both need `deps.ts`/`eval.ts`, later cycles) — this
- * file only builds the AST; it never evaluates it.
+ * Operator precedence, nested calls, name resolution, and the depth
+ * limit. Bad input must give a parse error, never an exception.
  */
 import { describe, expect, it } from "vitest";
 import type { AddressableObject } from "../address.ts";
@@ -14,13 +10,10 @@ import type { ObjectType } from "../graph/node.ts";
 import { MAX_FORMULA_AST_DEPTH, type FormulaAst } from "./ast.ts";
 import { isParseError, MAX_FORMULA_PARSE_DEPTH, type ParseError, parseFormula, parseFormulaTokens } from "./parser.ts";
 
-// Same fixture-building convention as address.test.ts: `type` defaults to a harmless
-// non-table type unless a test is specifically exercising table/bare-cell-ref behaviour.
 function objects(...entries: Array<[id: string, name: string, type?: ObjectType]>): AddressableObject[] {
   return entries.map(([id, name, type = "polygon"]) => ({ id, name, type }));
 }
 
-/** Parses and asserts success, narrowing away the ParseError arm for the caller. */
 function parseOk(source: string, docObjects: readonly AddressableObject[] = [], tableObjectId?: string): FormulaAst {
   const result = parseFormula(source, docObjects, tableObjectId);
   if (isParseError(result)) {
@@ -29,7 +22,6 @@ function parseOk(source: string, docObjects: readonly AddressableObject[] = [], 
   return result;
 }
 
-/** Parses and asserts failure, narrowing away the FormulaAst arm for the caller. */
 function parseFail(source: string, docObjects: readonly AddressableObject[] = [], tableObjectId?: string): ParseError {
   const result = parseFormula(source, docObjects, tableObjectId);
   if (!isParseError(result)) {
@@ -130,9 +122,6 @@ describe("parseFormula — references", () => {
   });
 });
 
-// Every fixture object below is referenced as "<name>.v" (a plain, single-segment
-// path) rather than bare — address.ts's parseAddress always requires "name.path" (2+
-// segments), so a bare object name alone is never a resolvable reference (§5.2).
 const refA: FormulaAst = { type: "reference", address: { objectId: "obj_1", path: ["v"] } };
 const refB: FormulaAst = { type: "reference", address: { objectId: "obj_2", path: ["v"] } };
 const refC: FormulaAst = { type: "reference", address: { objectId: "obj_3", path: ["v"] } };
@@ -242,26 +231,22 @@ describe("parseFormula — function calls", () => {
     expect(parseOk("PI()")).toEqual({ type: "functionCall", name: "PI", args: [] });
   });
 
-  // D-038 (Q-010 answered by the human, 2026-08-23): inverts this file's own
-  // pre-ruling behaviour, pre-authorised at 0037-REVIEW — not a §6.1 trigger 5
-  // escalation. Anything decidable from the AST alone, without reading a value, now
-  // fails at parse time, matching how an unresolvable reference already behaves.
   it("rejects an unrecognised function name at parse time (D-038), naming it and pointing at its position", () => {
     const error = parseFail("FOO(1, 2, 3)");
     expect(error.message).toContain('"FOO"');
-    expect(error.start).toBe(0); // "FOO" starts the source
+    expect(error.start).toBe(0);
   });
 
   it("rejects a known function called with the wrong argument count (D-038)", () => {
     const error = parseFail("ROUND(1)");
     expect(error.message).toContain("ROUND");
-    expect(error.start).toBe(0); // "ROUND" starts the source
+    expect(error.start).toBe(0);
   });
 
   it("reports the wrong-arity function's position, not offset 0, when it is not at the start of the source", () => {
     const error = parseFail("1 + ROUND(1)");
     expect(error.message).toContain("ROUND");
-    expect(error.start).toBe(4); // "ROUND" begins at index 4
+    expect(error.start).toBe(4);
   });
 
   it("still parses a known function with a correct argument count, including AND/OR's at-least-one arity (D-035)", () => {
@@ -461,9 +446,6 @@ describe("isParseError (0032-REVIEW-phase1, D-032)", () => {
   });
 
   it("is FALSE for ast.ts's ErrorNode, which is a FormulaAst that also has an 'error' field (D-028)", () => {
-    // A repaired reference (§5.1.1/§5.4) is a perfectly good AST, and can be the ROOT
-    // of one: a cell holding "= B1" whose column is deleted repairs to exactly this.
-    // Discriminating on the mere PRESENCE of "error" would report it as a parse failure.
     const repairedRoot: FormulaAst = { type: "error", error: "#REF" };
     expect(isParseError(repairedRoot)).toBe(false);
   });
@@ -493,16 +475,9 @@ describe("parseFormulaTokens — the lower-level, already-lexed entry point", ()
 });
 
 describe("the two depth limits — D-079's fixed constants, not a measured band", () => {
-  // The point of these tests is that BOTH numbers are constants: they are asserted
-  // here directly, so raising one is a visible diff against this file rather than a
-  // silent widening. D-079 clause 2 forbids deriving either from a measurement.
   it("MAX_FORMULA_PARSE_DEPTH is 256 nesting steps and MAX_FORMULA_AST_DEPTH is 1000 levels", () => {
     expect(MAX_FORMULA_PARSE_DEPTH).toBe(256);
     expect(MAX_FORMULA_AST_DEPTH).toBe(1000);
-    // Both sit below the smallest depth either recursion has EVER been observed to
-    // fail at (~2,000 steps for the descent, ~6,000 levels for the post-parse walk).
-    // Those observations are why there is a margin, not where the numbers came from,
-    // and neither is assertable here: an observation is not a property of the code.
   });
 
   it("refuses a parenthesis nesting past the descent limit with a #PARSE, and does not throw", () => {
@@ -513,9 +488,6 @@ describe("the two depth limits — D-079's fixed constants, not a measured band"
   });
 
   it("still parses a nesting just inside the descent limit", () => {
-    // 127 parenthesis levels — one step for parseUnaryExpr and one for
-    // parsePrimaryExpr per level, plus the two the innermost literal itself costs:
-    // 256 steps exactly, and 128 levels is the first refusal.
     const source = `${"(".repeat(127)}1${")".repeat(127)}`;
     expect(parseFormula(source, [])).toEqual({ type: "literal", value: 1 });
   });
@@ -527,9 +499,6 @@ describe("the two depth limits — D-079's fixed constants, not a measured band"
   });
 
   it("refuses a left-associative chain past the AST limit — the case the descent's own counter cannot see", () => {
-    // `1 + 1 + ...` is a LOOP in the descent (parseLeftAssociativeExpr) and one AST
-    // level per term. This is the shape that used to unwind a RangeError out of
-    // executeCommand; it is now a #PARSE.
     const source = Array.from({ length: MAX_FORMULA_AST_DEPTH + 1 }, () => "1").join(" + ");
     const result = parseFormula(source, []);
     expect(isParseError(result)).toBe(true);
@@ -537,7 +506,6 @@ describe("the two depth limits — D-079's fixed constants, not a measured band"
   });
 
   it("still parses a left-associative chain exactly AT the AST limit", () => {
-    // 1000 terms is 999 binaryOp levels over one literal — depth 1000 exactly.
     const source = Array.from({ length: MAX_FORMULA_AST_DEPTH }, () => "1").join(" + ");
     const result = parseFormula(source, []);
     expect(isParseError(result)).toBe(false);
@@ -545,9 +513,6 @@ describe("the two depth limits — D-079's fixed constants, not a measured band"
   });
 
   it("does not throw for the sizes that used to throw — 20,000 and 80,000 terms", () => {
-    // Entry 0079 measured a RangeError at ~5,000 terms and entry 0081 at ~3,000; the
-    // depth at which V8 actually dies moves with what was compiled before the call
-    // (D-079). These two sizes threw reliably before this limit existed.
     for (const size of [20_000, 80_000]) {
       const source = Array.from({ length: size }, () => "1").join(" + ");
       expect(() => parseFormula(source, [])).not.toThrow();
@@ -556,19 +521,11 @@ describe("the two depth limits — D-079's fixed constants, not a measured band"
   });
 
   it("does not accumulate depth across SIBLINGS — 300 nested-but-shallow terms on one line still parse", () => {
-    // The mechanism the descent limit rests on: `withNestingStep` decrements on its
-    // one return path, so nesting that has already CLOSED costs nothing. Without the
-    // decrement these 300 terms would total well past 256 steps and refuse, while the
-    // deepest point of the line is four. This is the test that catches a leaked
-    // increment; the one below cannot, because each parse gets a fresh `ParserState`.
     const source = Array.from({ length: 300 }, () => "((1))").join(" + ");
     expect(isParseError(parseFormula(source, []))).toBe(false);
   });
 
   it("leaves the nesting counter unraised after a refusal, so a later formula on the same call path still parses", () => {
-    // The counter is decremented on the one return path withNestingStep has; a leaked
-    // increment would be invisible here (each parse gets a fresh ParserState) and
-    // fatal in a long-lived one, so this asserts the intent rather than the mechanism.
     expect(isParseError(parseFormula(`${"(".repeat(1000)}1${")".repeat(1000)}`, []))).toBe(true);
     expect(parseFormula("1 + 2", [])).toEqual({
       type: "binaryOp",

@@ -1,144 +1,14 @@
 /**
- * main.ts — Wires engine + render + command together, and performs every effect.
+ * main.ts
  *
- * IMPLEMENTS: PROJECT_BRIEF §4 (entry point), §5.9's event wiring, §5.10's input
- * bar and scrolling log, §5.11's save/load through the DOM. Binding here: D-075
- * and D-082 (performing a `CommandEffect`), D-062 (clamping a loaded camera),
- * D-061 and D-066 (`fit`), D-027 clause 2 (`camera` is written directly, never
- * through `mutate`), D-072 (a canvas pick answers a live prompt step), D-101
- * (one properties panel per selected object, dragged by its header), D-106
- * (every selected object's panel shows by default; a dismiss control hides one
- * without deselecting, and a dismissed object's canvas name returns),
- * **D-102** (the panel becomes WRITABLE: a paperclip per modifiable row, every
- * write the `Command` the command line would have built, run through
- * `executeCommand` — never `mutate`, never `writeSlot`), **D-107** (a
- * panel gesture never leaves the command bar's keyboard homeless, and a
- * handler bound to DOM a repaint can destroy acts only while it still owns
- * what it names), **D-109** clause 3 (a refused line stays in the input;
- * only an accepted one clears it), and **D-125** (in-place editing: a
- * double-click opens a DOM input over a `text` object's `content` or a table
- * cell; a commit synthesises a `Command` and runs it through the same
- * `executeCommand` seam — `content` always a literal `set`, a cell
- * Excel-style; the commit logic is here in the pure half, not in `start`,
- * per clause 7), and **D-124** / **D-136** (`text` is placed by POINTING — a
- * `parser.ts` prompt step — and its new box opens D-125's editor on creation
- * WHEN no content was given; `advance` returns `AppTransition.openEditor`,
- * `applyTransition` acts on it, and an editor abandoned while still empty
- * removes the box — D-136 clause 2), and **D-142** (§5.7's `image`: creating one
- * opens a file picker on it — `AppTransition.pickImageFor`, D-124's shape one
- * type over — and the chosen picture is written to its `source` slot as an
- * ordinary literal `set` through `executeCommand`; `start` also owns the
- * decoded-bitmap cache, which Rule 1 forbids `engine/` to hold).
- * LAYER: application entry. May touch the DOM — this is the ONE file allowed to.
- *        May import: engine/*, render/*, command/*. Imported by nothing but
- *        `main.test.ts`, which reaches the pure half through the bootstrap guard
- *        at the bottom (D-065: D-082 called this "the one file no test reaches",
- *        and entry 0089 falsified that).
+ * Layer: application. This is the only file that owns the browser. It finds
+ * the DOM elements and connects the engine, the renderer and the command line.
  *
- * WHAT THIS IS
- *   Two halves, split so the interesting one is testable. `AppState` and the
- *   pure functions over it (`submitLine`, `pointerDownAt`, `performEffect`, …)
- *   hold the whole application: a `Document`, the selection/drag state, the
- *   prompt sequence in progress, and the lines to echo. They take a `Viewport`
- *   and screen-space points as plain numbers and touch no DOM at all. Below
- *   them, `start` builds the canvas, the log and the input bar, listens, calls
- *   into that half, and paints — the only part of this file that knows a browser
- *   exists, and the only part not under test.
+ * The state transitions here are pure functions from state to state. That is
+ * why a file this size has a full test suite and needs no browser. Keep new
+ * logic in a pure transition. Keep the DOM work at the edge.
  *
- *   `state.document.camera` is ALWAYS inside `[MIN_ZOOM, MAX_ZOOM]`: every
- *   camera entering this file goes through `render/camera.ts`'s `clampCamera` or
- *   comes out of one of its producers (D-062). Nothing downstream re-checks it.
- *
- * INVARIANTS UPHELD HERE
- *   - Every document state change goes through `executeCommand` or
- *     `render/interaction.ts`, both of which call `mutate` (Rule 2). The one
- *     field this file writes directly is `camera`, which D-027 clause 2 and
- *     D-075 clause 5 keep OUT of `mutate` — it is view state, not graph state.
- *   - **D-102 clause 5**: a panel row's write is a `Command`
- *     (`buildPanelSetCommand`/`unlink`) run through `executeCommand`, the exact
- *     same seam a typed line uses (D-069) — never a direct `mutate` call, and
- *     never `commands.ts`'s internal `writeSlot`. A panel write therefore
- *     inherits every refusal a typed `set`/`link`/`unlink` already has, D-097's
- *     table-dimension guard included, for free.
- *   - **D-107**: every panel `pointerdown` prevents the DOM's own default focus
- *     move and places focus deliberately instead — the command bar, unless a
- *     row editor already owns the keyboard. `onCancel` acts only while
- *     `openEditor` still names the exact row it was built for, so a blur fired
- *     by a repaint that already moved on cannot cancel someone else's gesture.
- *   - **D-109 clause 3**: the command bar's `keydown` listener clears
- *     `input.value` only when `submitLine`'s returned `AppTransition.refused`
- *     is `false`. A refusal leaves the line in place for correction.
- *   - An effect is performed through a `switch` on `kind` with the `never`
- *     default (D-082 clause 3), because `effect` is optional on the success arm
- *     and a missing arm would otherwise be silent rather than a compile error.
- *   - This file resolves NO name and re-derives no identity (D-082 clause 4): an
- *     effect names an object by ID and that ID is used as handed over.
- *   - A pick on the canvas during a live prompt sequence is a `picked` response,
- *     never a selection (D-072); screen->world happens here, via
- *     `render/camera.ts`, so `command/` only ever sees a world point (D-069).
- *
- * NOT DONE HERE
- *   - **Drawing** §5.9's visual feedback trio, D-092 clause 1's name labels,
- *     or D-090's prompt preview — all `render/renderer.ts`'s (0092-REVIEW),
- *     which this file hands `state.interaction.selectedObjectIds` to and
- *     nothing more (D-082 clause 4: no name resolved, no chrome drawn here).
- *   - **The placement ARITHMETIC of D-094's properties panel** — a pure tested
- *     function in `render/panel.ts` (clause 11), called once per PANEL now
- *     (**D-101**). This file builds one panel element per selected object with
- *     a drawn extent, from `command/props.ts`'s descriptors (D-094 clause 9),
- *     re-placed every paint (clause 13) unless the operator has DRAGGED it —
- *     **D-101** clause 5's manual position, held in `AppState.panels`, wins
- *     instead.
- *   - **Slot-to-slot linking BY DRAGGING between two panels** (D-102 clause 9,
- *     explicitly NOT this cycle's). A row now takes typed text, which is D-102's
- *     whole mechanism for Q-014's remaining half; dragging one row onto another
- *     is a further feature the human has not asked for.
- *   - **Which objects get a panel at all** is `AppState.panels`' own
- *     `dismissed` flag (**D-106**): every selected object with a drawn extent
- *     shows one BY DEFAULT, and dismissing it hides that one panel without
- *     touching the selection. Both `dismissed` and a dragged panel's manual
- *     position are discarded the moment the object leaves the selection
- *     (D-101 clause 6, D-106 clause 6) — `withInteraction` is the one place
- *     that prunes `AppState.panels` down to the current selection, so every
- *     caller that replaces `interaction` goes through it rather than
- *     assigning the field directly.
- *   - Drawing anything — `render/renderer.ts`'s (a `text` object included since
- *     entry 0138, an `image` object since D-142). DECODING a picture is
- *     `render/images.ts`'s; `start` owns the one cache instance and hands it to
- *     `renderDocument`, and hands `paint` back to it as the repaint a finished
- *     decode triggers. `start` builds an `EvalContext` around `render/measure.ts`'s
- *     Canvas2D `TextMeasurer` (Rule 1) — over its OWN offscreen 2D context, so
- *     setting `ctx.font` to measure never disturbs a draw — and threads it
- *     through `executeCommand`, `loadDocument`, and the drag path
- *     (`pointerMove`), so a `text` object's `measuredHeight`/`measuredWidth`
- *     evaluate for real rather than reporting `#MEASURE` (D-118). `start` builds
- *     a SECOND measurer over the same offscreen context —
- *     `createSourceTextMeasurer`, which reads §5.6's markdown-lite VERBATIM —
- *     and only the in-place editor's live box uses it (**Q-025**, answered by
- *     the human on screen at entry 0161: the overlay shows raw source, so it is
- *     measured as raw source, and the box changes size on commit).
- *   - Deciding WHICH receiver a double-click opens the editor on, and where the
- *     overlay floats — `render/editor.ts` (D-125 clause 1). This file opens the
- *     editor on a double-click AND, since **D-124**, on a newly-created `text`
- *     object that was given no content (**D-136** clause 1 — a content-bearing
- *     typed `text` leaves the command bar focused instead); it never opens one
- *     on a `circle`/`rect`/`table`.
- *   - Rendering MARKDOWN-lite in the overlay. Size, family, line height,
- *     alignment and colour all match the drawn text as of entry 0153, and the
- *     overlay is laid out in WORLD units with ONE `transform: scale()` — never
- *     pre-multiplied into CSS pixels, which is the bug that rework removed.
- *     Markup is the one remaining difference, and it is raw on both sides
- *     today. Keeping the overlay clear of an overlapping properties panel is
- *     also still unsolved (both anchor to the object's box; they stay clear at
- *     normal window sizes).
- *   - Validating a LOADED document beyond what `loadDocument` checks — that
- *     file owns its own boundary, and entry 0156 closed it (D-108 shape
- *     validation, D-126's schema-driven derived slots, D-083 clause 4's depth
- *     check). What `openDocument` adds here is the `.catch` that turns anything
- *     escaping the promise chain into a refusal instead of silence (D-127).
- *   - Throttling drag mutations to animation frames (§5.9's perf note). One
- *     `mutate` per pointer move, as specified — a fix MUST throttle and MUST NOT
- *     write outside the mutation API.
+ * The in place editor mounts in #stage, not in #panels.
  */
 import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
@@ -176,28 +46,11 @@ import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 
-// ---------------------------------------------------------------------------
-// The pure half — application state, and every transition over it
-// ---------------------------------------------------------------------------
-
-/** The canvas's current pixel size. Supplied per call rather than stored, because the browser may resize it between any two events (D-061: the camera itself needs no viewport size). */
 export interface Viewport {
   readonly width: number;
   readonly height: number;
 }
 
-/**
- * One selected object's panel, as the operator has left it (**D-101**, **D-106**).
- * `dismissed` is D-106 clause 2's per-panel hide; `manualPosition` is D-101
- * clause 5's drag-detached CSS point, `undefined` while the panel still
- * follows its object via `placePropertiesPanel`. A missing entry in
- * `AppState.panels` means both defaults: shown, auto-placed — the common case,
- * which is why `panelUiState` below returns this shape rather than every
- * caller writing `?? { dismissed: false, manualPosition: undefined }` itself.
- *
- * APPLICATION state, never DOCUMENT state (D-101 clause 7, D-106 clause 6): it
- * never enters `state.document`, never goes through `mutate`, is never saved.
- */
 export interface PanelUiState {
   readonly dismissed: boolean;
   readonly manualPosition: PanelPlacement | undefined;
@@ -205,20 +58,8 @@ export interface PanelUiState {
 
 const DEFAULT_PANEL_UI_STATE: PanelUiState = { dismissed: false, manualPosition: undefined };
 
-/** Every selected object's panel state that differs from the default, keyed by object id. Plain and serializable, like every other collection here — though nothing ever serializes it (it is UI state, not document state). */
 export type PanelUiRegistry = Readonly<Record<string, PanelUiState>>;
 
-/**
- * Everything the application holds. Plain data, like every other state shape in
- * this codebase — the DOM half below keeps exactly one of these in one variable
- * and replaces it wholesale, so there is no second place a change can hide.
- *
- * `pending` is the prompt sequence in progress (D-072), `undefined` when the
- * input bar is waiting for a fresh command word. `log` is §5.10's scrolling
- * echo, oldest first. `panels` is D-101/D-106's per-panel UI state — see
- * `PanelUiState`'s own doc comment, and `withInteraction` below for the one
- * place it is kept in sync with the selection.
- */
 export interface AppState {
   readonly document: Document;
   readonly interaction: InteractionState;
@@ -227,68 +68,17 @@ export interface AppState {
   readonly panels: PanelUiRegistry;
 }
 
-/** What §5.11 asks the DOM half to do with a file. `save`/`load` are the only two effects this file cannot finish on its own. */
 export type FileRequest = "save" | "load";
 
-/**
- * A transition's result: the new state, plus a file request when the operator
- * asked for one, plus whether the line that produced it was REFUSED.
- *
- * Why the request travels back out rather than being done in place: the pure
- * half cannot open a file picker, and returning a description keeps every
- * transition testable — the same reason `commands.ts` returns an effect instead
- * of performing one (D-075). `refused` exists for the same reason, one layer
- * up: **D-109** clause 3 says a refused command keeps the operator's typed line
- * in the input bar rather than clearing it, and only the DOM half owns
- * `input.value`. Meaningless outside `submitLine`'s own path — `pointerDownAt`'s
- * plain click and every branch of `performEffect` are reached only once a
- * command has already been ACCEPTED, so they carry `false` via `transition`'s
- * own default parameter and are never read for it.
- *
- * `openEditor` travels back out for the same reason `fileRequest` does: **D-124**
- * says a newly-placed `text` object hands straight to D-125's in-place editor
- * (clause 2), the editor's open/closed state lives in `start`'s closure, not in
- * `AppState` (like the GREY paperclip — opening writes no document state), and
- * the pure half cannot touch a DOM element. `advance` sets it after a `text`
- * creation commits, but only when the command carried no content (**D-136**
- * clause 1 — a typed `text "hi"` places the box and stops); `applyTransition`
- * in `start` sets `inPlaceEditor` from it. `undefined` for every other
- * transition.
- */
 export interface AppTransition {
   readonly state: AppState;
   readonly fileRequest: FileRequest | undefined;
   readonly refused: boolean;
   readonly openEditor?: EditorTarget;
-  /**
-   * §5.7's "load via file picker": the id of an `image` object that has just
-   * been created and now wants a picture chosen for it.
-   *
-   * A separate field rather than a widened `FileRequest` for the reason
-   * `openEditor` is one: it names an OBJECT, and `save`/`load` name none. It
-   * follows `openEditor`'s precedent exactly (**D-124**: a creation hands
-   * straight to the gesture that gives the new object its content — there, the
-   * in-place editor; here, the file picker), so `image x=0 y=0` is one gesture
-   * ending in a picture, not two the operator has to know to pair.
-   *
-   * The picker is DOM, and reading a file is asynchronous, so the pure half can
-   * only describe the request — `start`'s `choosePicture` performs it and writes
-   * the resulting data URL back through `commitImageSource`, which runs an
-   * ordinary `set` through `executeCommand` (Rule 2). Dismissing the picker
-   * writes nothing and leaves the created image with its empty `source`, drawn
-   * as an empty frame the operator can `delete` or point at again.
-   */
+
   readonly pickImageFor?: string;
 }
 
-/**
- * The state a document opens in: nothing selected, no command in progress, and
- * a camera brought inside `render/`'s zoom range (D-062).
- *
- * Every path that replaces the whole document — startup, and a `load` — comes
- * through here, which is what makes "the camera in `AppState` is always usable"
- * a property of this file rather than a thing each caller remembers.
- */
 export function initialAppState(document: Document, log: readonly string[] = []): AppState {
   return {
     document: { ...document, camera: clampCamera(document.camera) },
@@ -299,58 +89,28 @@ export function initialAppState(document: Document, log: readonly string[] = [])
   };
 }
 
-/**
- * A state whose document carries `camera`. The ONE direct state write in this
- * file, and deliberately so: D-027 clause 2 and D-075 clause 5 both put the
- * camera outside the mutation channel, because it is view state that no slot can
- * read and no edge can point at. Every camera change goes through here;
- * `initialAppState` sets the other one, which is D-062's clamping boundary.
- */
 function withCamera(state: AppState, camera: CameraState): AppState {
   return { ...state, document: { ...state.document, camera } };
 }
 
-/** A state with `lines` appended to the log — §5.10's "echo results and errors in a small scrolling log above the input". */
 function withLog(state: AppState, lines: readonly string[]): AppState {
   return lines.length === 0 ? state : { ...state, log: [...state.log, ...lines] };
 }
 
-/**
- * A state with `interaction` replaced, its selection kept in sync with
- * `panels` (**D-101** clause 6, **D-106** clause 6). This is the ONE place
- * that assigns `interaction`, so that pruning cannot be forgotten at a new
- * call site the way a hand-repeated check could be (D-010's shape, applied to
- * a state transition rather than a schema walk).
- *
- * Every caller that can CHANGE which objects are selected — a press, escape,
- * `select <name>` — goes through here. `pointerMoveTo`/`pointerUpNow` do not:
- * neither ever changes `selectedObjectIds`, only `drag`, so routing them here
- * too would cost a call for a prune that is always a no-op.
- */
 function withInteraction(state: AppState, interaction: InteractionState): AppState {
   return { ...state, interaction, panels: prunePanelsToSelection(state.panels, interaction.selectedObjectIds) };
 }
 
-/** Drops every `panels` entry whose object id is no longer selected — D-101 clause 6 and D-106 clause 6's shared rule, stated once. Returns `panels` BY REFERENCE when nothing needed dropping, matching this file's existing "no same-valued rebuild" posture (`interaction.ts`'s own `widenEmittedNotices` takes the same care). */
 function prunePanelsToSelection(panels: PanelUiRegistry, selectedObjectIds: readonly string[]): PanelUiRegistry {
   const selected = new Set(selectedObjectIds);
   const kept = Object.entries(panels).filter(([objectId]) => selected.has(objectId));
   return kept.length === Object.keys(panels).length ? panels : Object.fromEntries(kept);
 }
 
-/** `state.panels[objectId]`, defaulted (see `PanelUiState`'s own doc comment) — the one place that reads the registry, so a caller never repeats the `?? DEFAULT` fallback. */
 function panelUiState(state: AppState, objectId: string): PanelUiState {
   return state.panels[objectId] ?? DEFAULT_PANEL_UI_STATE;
 }
 
-/**
- * Hides one selected object's panel WITHOUT deselecting it (**D-106** clauses
- * 2-3) — the dismiss control in the panel's header calls this. A no-op,
- * returning `state` unchanged, for an object that is not currently selected:
- * there is no panel to hide, and `withInteraction` would discard the entry on
- * the very next selection change anyway (clause 6), so writing it here too
- * would be a write nothing can ever observe.
- */
 export function dismissPanel(state: AppState, objectId: string): AppState {
   if (!state.interaction.selectedObjectIds.includes(objectId)) {
     return state;
@@ -358,13 +118,6 @@ export function dismissPanel(state: AppState, objectId: string): AppState {
   return { ...state, panels: { ...state.panels, [objectId]: { ...panelUiState(state, objectId), dismissed: true } } };
 }
 
-/**
- * Records a panel's manually-dragged CSS position (**D-101** clause 5) — the
- * operator dragging it by its header. Detaching it this way means
- * `placePropertiesPanel` is no longer consulted for this object's panel until
- * it leaves and re-enters the selection (clause 6): the position here WINS.
- * Same no-op posture as `dismissPanel` for an object that is not selected.
- */
 export function movePanel(state: AppState, objectId: string, position: PanelPlacement): AppState {
   if (!state.interaction.selectedObjectIds.includes(objectId)) {
     return state;
@@ -372,27 +125,10 @@ export function movePanel(state: AppState, objectId: string, position: PanelPlac
   return { ...state, panels: { ...state.panels, [objectId]: { ...panelUiState(state, objectId), manualPosition: position } } };
 }
 
-/**
- * A transition that changed state and asked for no file. `refused` defaults to
- * `false` — every caller except `advance`'s own refusal branches wants that,
- * since D-109 clause 3's distinction only exists on `submitLine`'s path.
- */
 function transition(state: AppState, refused: boolean = false): AppTransition {
   return { state, fileRequest: undefined, refused };
 }
 
-/**
- * Runs one line from the input bar (§5.10).
- *
- * Routes to `respond` when a prompt sequence is live and to `beginCommand`
- * otherwise, so the operator's Enter key means the same thing in both cases and
- * `command/prompt.ts` stays the one entry point for a typed line (D-072).
- *
- * A blank line during a live sequence is not sent as an answer: `respond` would
- * refuse it, and an empty input bar is how AutoCAD accepts a default. It is
- * routed as a typed empty answer anyway rather than special-cased here, because
- * the default belongs to the STEP and only `prompt.ts` can read it.
- */
 export function submitLine(
   state: AppState,
   line: string,
@@ -406,14 +142,6 @@ export function submitLine(
   return advance(echoed, beginCommand(line), viewport, context);
 }
 
-/**
- * Answers the live prompt step with a canvas pick (D-072: "every prompt accepts
- * a typed value or a picked point").
- *
- * A no-op when no sequence is live — the caller checks first and selects
- * instead, but this is total so that a race between a click and a cancel cannot
- * misroute a point into a command that is no longer running.
- */
 export function respondToPrompt(
   state: AppState,
   response: PromptResponse,
@@ -426,74 +154,35 @@ export function respondToPrompt(
   return advance(state, respond(state.pending, response), viewport, context);
 }
 
-/** Abandons a live prompt sequence (D-072 clause 7 — the only path that discards gathered answers), and clears the selection: §5.9's "escape to deselect", one key doing both. */
 export function escape(state: AppState): AppState {
   const cancelled = state.pending === undefined ? state : withLog({ ...state, pending: undefined }, [sessionMessage(cancelCommand())]);
   return withInteraction(cancelled, deselect());
 }
 
-/**
- * Where a `CommandSession` becomes new application state.
- *
- * The four statuses are the whole protocol: a finished command goes to
- * `executeCommand` (D-069 — the only place a `Command` meets a `Document`), a
- * prompting one is held in `pending` and its message echoed, and a failed or
- * cancelled one clears `pending` and echoes why.
- */
 function advance(state: AppState, session: CommandSession, viewport: Viewport, context: EvalContext): AppTransition {
   switch (session.status) {
     case "complete": {
       const cleared: AppState = { ...state, pending: undefined };
       const outcome = executeCommand(session.command, cleared.document, context);
       if (!outcome.ok) {
-        // D-109 clause 3: refused — the operator's line stays in the input.
         return transition(withLog(cleared, [outcome.message]), true);
       }
       const executed = withLog({ ...cleared, document: outcome.document }, outcome.lines);
-      // The document part is done; the rest is this file's (D-075 clause 3).
       if (outcome.effect !== undefined) {
         return performEffect(outcome.effect, executed, viewport);
       }
-      // D-124: a freshly-placed `text` object hands straight to D-125's in-place
-      // editor — placing and typing are one gesture (D-125 clause 4). `createText`
-      // is the only handler whose command `kind` is `"text"`, and every successful
-      // creation carries `createdObjectId`; the pair names the new box without this
-      // file resolving anything (D-082 clause 4).
-      //
-      // **D-136 clause 1** (overrules entry 0149's Decision 2): the editor opens
-      // ONLY when no content was given — `session.command.content === ""`, which
-      // is exactly the pointing / prompt path (`buildFromPrompts` always yields
-      // `content: ""`) plus an explicit `text ""`. A content-bearing typed command
-      // (`text "hi"`, `text x=0 y=0 "hi"`, `text hi`) creates the box and leaves
-      // the command bar focused, the same ending `circle`/`rect`/`table` have.
       if (session.command.kind === "text" && session.command.content === "" && outcome.createdObjectId !== undefined) {
         return { state: executed, fileRequest: undefined, refused: false, openEditor: { kind: "text", objectId: outcome.createdObjectId } };
       }
-      // §5.7's "load via file picker", on D-124's own precedent one type over: a
-      // freshly-created `image` object has an empty `source`, and choosing the
-      // picture is the second half of the same gesture rather than a command the
-      // operator has to know to type next. Unconditional, unlike `text`'s —
-      // §5.10's `image x= y=` form carries no picture argument, so there is no
-      // "content was given" case to exclude (D-136 clause 1's distinction has
-      // nothing to bite on here).
       if (session.command.kind === "image" && outcome.createdObjectId !== undefined) {
         return { state: executed, fileRequest: undefined, refused: false, pickImageFor: outcome.createdObjectId };
       }
       return transition(executed);
     }
     case "prompting":
-      // D-109 clause 3, applied to one step of a live sequence: `session.error`
-      // is set exactly when THIS answer was refused and the same step is being
-      // asked again (`sessionLines`'s own reading of it) — the typed answer
-      // stays put, same as a refused `set`. No error means the previous answer
-      // was ACCEPTED and the sequence moved on to the next step; the input
-      // clears for it, same as any other accepted line.
       return transition(withLog({ ...state, pending: session.pending }, sessionLines(session)), session.error !== undefined);
     case "failed":
     case "cancelled":
-      // "cancelled" never actually reaches here (`respond` never returns it;
-      // `escape` builds it directly, bypassing `advance`) — `true` is the
-      // conservative reading if that ever changes, not a claim it is exercised.
       return transition(withLog({ ...state, pending: undefined }, [sessionMessage(session)]), true);
     default: {
       const exhaustive: never = session;
@@ -503,12 +192,10 @@ function advance(state: AppState, session: CommandSession, viewport: Viewport, c
   }
 }
 
-/** A prompting session's echo: the refusal first when the previous answer was refused, then the step being asked again (D-074 — the sequence's own message, never one re-read from elsewhere). */
 function sessionLines(session: Extract<CommandSession, { status: "prompting" }>): readonly string[] {
   return session.error === undefined ? [session.message] : [session.error, session.message];
 }
 
-/** The one line a non-prompting session echoes. */
 function sessionMessage(session: CommandSession): string {
   switch (session.status) {
     case "failed":
@@ -527,40 +214,13 @@ function sessionMessage(session: CommandSession): string {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Performing an effect (D-075 clause 3, D-082 clauses 3-5)
-// ---------------------------------------------------------------------------
-
-/**
- * §5.10's `fit` leaves this much of the viewport around the document's extent.
- * Untuned (Rule 5): fitting to the exact edges would half-clip the strokes of
- * the outermost objects, since a stroke straddles its own path.
- */
 export const FIT_VIEWPORT_FRACTION = 0.9;
 
-/** §5.9's "zoom to cursor (wheel)" step. One wheel notch multiplies or divides the zoom by this; untuned, and the file that owns the transform deliberately does not interpret wheel deltas (`render/camera.ts`'s NOT DONE HERE). */
 export const WHEEL_ZOOM_STEP = 1.1;
 
-/**
- * Performs one `CommandEffect` (D-075 clause 3).
- *
- * The `switch` is exhaustive with a `never` default, and that is required rather
- * than stylistic: `effect` is OPTIONAL on `CommandOutcome`'s success arm, so a
- * new effect kind would otherwise be dropped here in silence (D-082 clause 3).
- *
- * Resolves no name and re-derives no identity — `select` uses the ID it was
- * handed (D-082 clause 4). Reports the RESULT where `commands.ts` could only
- * echo the request: a clamped zoom, and a degenerate extent (clause 5).
- */
 export function performEffect(effect: CommandEffect, state: AppState, viewport: Viewport): AppTransition {
   switch (effect.kind) {
     case "select":
-      // `select <name>` REPLACES the whole selection with this one object
-      // (D-100 clause 7) — no multi-select command syntax exists; the mouse is
-      // where multi-selection lives. The drag is cleared, not carried: a
-      // selection made from the input bar has no pointer holding it, and
-      // `render/interaction.ts`'s `DragState` means "a pointer is dragging
-      // this right now".
       return transition(withInteraction(state, { selectedObjectIds: [effect.objectId], drag: undefined, resize: undefined }));
     case "zoom":
       return transition(zoomBy(state, effect.factor, viewport));
@@ -578,15 +238,6 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
   }
 }
 
-/**
- * `zoom <factor>`, about the viewport's centre — a typed command has no cursor
- * to zoom toward, and the centre is the only point on screen that does not
- * depend on where the mouse happens to be.
- *
- * `commands.ts` has already refused a factor that is not a positive finite
- * multiplier (D-082 clause 1); what is left for this side is the RANGE, which
- * `zoomAtScreenPoint` clamps, and reporting what the camera actually did.
- */
 function zoomBy(state: AppState, factor: number, viewport: Viewport): AppState {
   const camera = state.document.camera;
   const requested = camera.zoom * factor;
@@ -594,69 +245,29 @@ function zoomBy(state: AppState, factor: number, viewport: Viewport): AppState {
   return withLog(withCamera(state, zoomed), [describeZoom(zoomed.zoom, requested)]);
 }
 
-/**
- * §5.10's `fit`: every object that draws something, inside the viewport.
- *
- * D-066's guard, which `commands.ts` explicitly does NOT discharge by refusing
- * an empty document: an extent can also be a single POINT (one circle of radius
- * 0, or a document whose objects sit on top of each other), and dividing the
- * viewport by a zero extent is what produces the `Infinity` zoom D-027 wrote
- * `finiteOrFallback` for. A degenerate extent centres at the CURRENT zoom
- * instead, which is the only reading of "fit" that means anything for a point.
- */
 function fitToDocument(state: AppState, viewport: Viewport): AppState {
   const camera = state.document.camera;
   const extent = documentExtent(state.document.objects);
   if (extent === undefined) {
-    // `commands.ts` refused the EMPTY document (D-082 clause 1); this is the
-    // other emptiness — objects exist, none of them draws anything.
     return withLog(state, ["nothing on the canvas has an extent to fit to"]);
   }
   const width = extent.maxX - extent.minX;
   const height = extent.maxY - extent.minY;
-  // D-066's degeneracy is BOTH extents zero — a point. A FLAT extent (a rect of
-  // zero height, a run of collinear vertices) has a real axis to fit to, and the
-  // `Math.min` below already handles the other: dividing by a zero extent gives
-  // `Infinity`, which loses the min to the finite axis. Requiring both to be
-  // positive reported a 200x0 rect as "a single point" and refused to fit it
-  // (0090-REVIEW F2).
   const fits = (width > 0 || height > 0) && viewport.width > 0 && viewport.height > 0;
   const zoom = fits
     ? clampZoom(Math.min((viewport.width * FIT_VIEWPORT_FRACTION) / width, (viewport.height * FIT_VIEWPORT_FRACTION) / height), camera.zoom)
     : camera.zoom;
   const centreX = (extent.minX + extent.maxX) / 2;
   const centreY = (extent.minY + extent.maxY) / 2;
-  // The world point that must land at the screen's centre, expressed as the
-  // world point at the screen's TOP-LEFT corner — which is what `camera.x`/`.y`
-  // mean (D-061). Clamped rather than trusted: `viewport` comes from the DOM.
   const fitted = clampCamera({ x: centreX - viewport.width / (2 * zoom), y: centreY - viewport.height / (2 * zoom), zoom });
   const line = fits ? describeZoom(fitted.zoom, fitted.zoom) : `the document's extent is a single point — centred it at zoom ${fitted.zoom}`;
   return withLog(withCamera(state, fitted), [line]);
 }
 
-/** What the camera actually did, which is this file's to report and not `commands.ts`'s to predict (D-082 clause 5). */
 function describeZoom(actual: number, requested: number): string {
   return actual === requested ? `zoom is now ${actual}` : `zoom is now ${actual} — clamped to the ${MIN_ZOOM}-${MAX_ZOOM} range`;
 }
 
-// ---------------------------------------------------------------------------
-// Pointer and wheel (§5.9)
-// ---------------------------------------------------------------------------
-
-/**
- * A press on the canvas: an answer to the live prompt step if there is one
- * (D-072), and otherwise §5.9's "click to select" — widened by **D-100** to a
- * multi-object selection — which also arms a drag.
- *
- * `additive` is the shift key (D-100 clauses 3-4): `false` for a plain click,
- * `true` to add to (or toggle out of) the selection instead of replacing it.
- * Defaults to `false` so every existing caller — a typed `select`, a test —
- * keeps meaning "plain click" without naming the modifier.
- *
- * The screen->world conversion for a pick happens HERE, through
- * `render/camera.ts`, because `command/` may never import `render/` and must
- * receive a world point (D-069, D-072).
- */
 export function pointerDownAt(
   state: AppState,
   screenPoint: ScreenPoint,
@@ -671,14 +282,6 @@ export function pointerDownAt(
   return transition(withInteraction(state, pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive)));
 }
 
-/**
- * A pointer move (§5.9's per-component drag). A no-op unless a drag is running,
- * which is what lets the DOM half wire it unconditionally.
- *
- * Notices and a rejection both reach the log: §5.9 asks for "non-blocking
- * feedback" on a component that is driven, and `mutate`'s own refusal is a
- * different thing that must not be swallowed.
- */
 export function pointerMoveTo(
   state: AppState,
   screenPoint: ScreenPoint,
@@ -701,63 +304,28 @@ export function pointerMoveTo(
   return withLog(moved, lines);
 }
 
-/** A pointer release: ends the drag, keeps the selection (§5.9 separates selecting from moving). */
 export function pointerUpNow(state: AppState): AppState {
   return { ...state, interaction: pointerUp(state.interaction) };
 }
 
-/** §5.9's "zoom to cursor (wheel)". A negative `wheelDeltaY` (scroll up, the browser's own sign) zooms IN, matching every other canvas application. */
 export function wheelZoomAt(state: AppState, screenPoint: ScreenPoint, wheelDeltaY: number): AppState {
   const camera = state.document.camera;
   const factor = wheelDeltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
   return withCamera(state, zoomAtScreenPoint(camera, screenPoint, camera.zoom * factor));
 }
 
-/** §5.9's pan, by a screen-space drag delta. The content follows the pointer at any zoom — `render/camera.ts` owns that arithmetic. */
 export function panByScreen(state: AppState, dxScreen: number, dyScreen: number): AppState {
   return withCamera(state, panByScreenDelta(state.document.camera, dxScreen, dyScreen));
 }
 
-/** One line into §5.10's log, for something that happened outside a command — a refused file, say. */
 export function logLine(state: AppState, line: string): AppState {
   return withLog(state, [line]);
 }
 
-/** Replaces the whole document — §5.11's load, and startup. Keeps the log, because the lines already echoed are a record of what the operator did, not of what the document contains. */
 export function replaceDocument(state: AppState, document: Document, line: string): AppState {
   return withLog(initialAppState(document, state.log), [line]);
 }
 
-// ---------------------------------------------------------------------------
-// The properties panel's row model (D-094 clauses 3-9)
-// ---------------------------------------------------------------------------
-
-/**
- * One row of the properties panel: the slot PATH exactly as the operator would
- * type it after the object's name (D-094 clause 4), the last evaluated VALUE as
- * `command/props.ts`'s `describeSlotValue` renders it — rounded to at most 4
- * decimal places, per **D-099** — and — only for a formula slot (D-094 clause
- * 6) — the source `formula/format.ts` reconstructed, without a leading `=`
- * (the DOM writer adds one).
- *
- * `editSeed` (**D-107**, fixing F3) is a SEPARATE string from `value`: the
- * same slot rendered through `describeSlotValue` with NO `maxDecimals`, which
- * is what the command line would accept back unchanged. `value` stays rounded
- * for display — D-099 is not weakened — but seeding a row's editor with the
- * ROUNDED string let committing an untouched row silently truncate a literal
- * (`0.123456789` opened as `0.1235` and, if left untouched, committed as
- * `0.1235`). Two formatter calls over the SAME value, never a fourth
- * formatter (`STATUS.md`'s standing rule) — `describeSlotValue`'s one
- * optional argument is all either needs.
- *
- * `kind` and `synthetic` (**D-102** clause 2) carry `command/props.ts`'s
- * `SlotDescriptor` fields of the same name through to the DOM writer, which is
- * what decides whether a row gets a paperclip at all (never for a `derived` or
- * `synthetic` row) and which colour it gets (clause 3: blue for `formula`,
- * grey for `literal`). A `derived` row's `kind` is carried too, though nothing
- * reads it there — `main.ts`'s own `derived: boolean` grouping is what the DOM
- * writer actually branches on, the same split `PanelModel` already made.
- */
 export interface PanelRow {
   readonly path: string;
   readonly value: string;
@@ -765,61 +333,18 @@ export interface PanelRow {
   readonly formulaSource: string | undefined;
   readonly kind: "literal" | "formula" | "derived";
   readonly synthetic: boolean;
-  /**
-   * `true` on the ONE row whose value is chosen from a file rather than typed:
-   * an `image` object's `source` (the human's note 4 at entry 0173). It gets a
-   * "choose…" control where every other modifiable row gets a paperclip,
-   * because a data URL is not a thing anyone types into a text box.
-   *
-   * See `isPictureSourceRow` for why a formula-driven `source` is excluded.
-   */
+
   readonly picker: boolean;
-  /**
-   * The choices this row offers instead of a free text box (the human's
-   * 2026-09-02 instruction: a slot with "only a small subset of valid inputs"
-   * shows a drop-down). `undefined` for every free-text row, which is all of
-   * them but a `text` object's `style.align` and `autoresize`.
-   *
-   * Only a `literal` row gets one. A `formula` row keeps its blue paperclip and
-   * its `= source` text — it is DRIVEN, and offering a choice that would
-   * silently overwrite the formula is exactly what D-040 forbids a gesture from
-   * doing; unlink first, as with every other bound slot.
-   */
+
   readonly choices: PanelRowChoices | undefined;
 }
 
-/**
- * A row's drop-down, resolved for display (see `PanelRow.choices`).
- *
- * `values` are the raw `Value`s a choice writes and `labels` what the operator
- * reads for each, positionally paired; `selectedIndex` is `-1` when the slot's
- * current value is none of them, which a formula that has since been unlinked,
- * or a hand-typed `set`, can genuinely produce — the drop-down then shows a
- * blank rather than lying about which choice is live.
- *
- * An INDEX is what the DOM carries, never the rendered label: a label is text
- * for a human and two of them could coincide, while the index resolves back to
- * the exact `Value` — including a `boolean`, which no string round-trip does
- * (`"false"` is a non-empty string, and D-102 clause 6's grammar would make it
- * a formula).
- */
 export interface PanelRowChoices {
   readonly labels: readonly string[];
   readonly values: readonly (number | string | boolean)[];
   readonly selectedIndex: number;
 }
 
-/**
- * The properties panel's content for one object (D-094 clauses 3, 5, 7): its
- * name as the header, then its slots in SCHEMA declaration order split into the
- * two groups clause 5 names — `modifiable` (kind `literal` or `formula`, the
- * ones an operator may `set`/`link`/`unlink`) above the thick rule, `derived`
- * (read-only) below it and rendered in italics by the DOM writer.
- *
- * Built from `command/props.ts`'s `buildSlotDescriptors` and no other reading
- * of the schema (D-094 clause 9): the panel and `props` must never disagree
- * about what slots an object has.
- */
 export interface PanelModel {
   readonly header: string;
   readonly modifiable: readonly PanelRow[];
@@ -831,21 +356,7 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
     row: {
       path: slotKey(descriptor.path),
       picker: isPictureSourceRow(object, descriptor),
-      // D-099: the ONE caller that rounds a displayed number — 4 decimal
-      // places, trimmed — so float dust (`10.000000000000002`) doesn't read
-      // as precision. `props`'s own output (`commands.ts`) stays untouched.
-      //
-      // An `image`'s `source` row is the one exception, and it is a DISPLAY
-      // exception only (the human's note 4 at entry 0173: the row should say
-      // what the picture IS): a truncated run of base64 tells the operator
-      // nothing, while the data URL's own MIME type and size do. The row's
-      // `editSeed` below is untouched by this and still carries the whole URL.
       value: isPictureSourceRow(object, descriptor) ? describePictureSource(descriptor.value) : describeSlotValue(descriptor.value, { maxDecimals: 4 }),
-      // D-107 (F3): the EDIT seed, unrounded and UNELIDED — what an untouched
-      // commit must write back bit-for-bit, which is why this is the one caller
-      // that asks `describeSlotValue` for a long string whole (`props.ts`'s
-      // `fullStrings`). Same formatter either way, never a third copy of the
-      // display logic.
       editSeed: describeSlotValue(descriptor.value, { fullStrings: true }),
       formulaSource: descriptor.formulaSource,
       kind: descriptor.kind,
@@ -861,42 +372,16 @@ export function buildPanelModel(object: GraphObject, objects: readonly GraphObje
   };
 }
 
-/**
- * Whether this row is an `image` object's `source` — the row the operator
- * re-picks a picture from (the human's note 4 at entry 0173: *"Re-picking needs
- * to be possible from the props window"*).
- *
- * `literal` only, for D-102 clause 3's reason: a formula-driven `source` keeps
- * its BLUE paperclip, because the meaningful gesture on a driven slot is
- * `unlink`, not "replace the value the formula will overwrite".
- */
 function isPictureSourceRow(object: GraphObject, descriptor: SlotDescriptor): boolean {
   return object.type === IMAGE_TYPE && descriptor.kind === "literal" && slotKey(descriptor.path) === slotKey(IMAGE_SOURCE_PATH);
 }
 
-/**
- * An `image`'s `source` slot as a line a person can read: what KIND of picture
- * it holds and how big it is, rather than the first forty characters of base64.
- *
- * **A note the operator is owed, and the reason there is no file path here:**
- * §5.7 stores the picture IN the document as a data URL, so a saved document
- * carries the bytes and does not depend on the file it came from. There is no
- * link to break — and a browser will not disclose a chosen file's path anyway
- * (`C:\fakepath\…` is all a file input yields). Its NAME could be stored, but
- * only in a slot §5.7 does not name — see **Q-028**.
- *
- * The byte count is the decoded size ESTIMATED from the base64 length (4
- * characters carry 3 bytes), not measured: measuring would mean decoding the
- * whole string on every paint, and the number is here to give a sense of scale.
- */
 function describePictureSource(value: Value): string {
   if (typeof value !== "string" || value === "") {
     return "no picture chosen";
   }
   const match = /^data:([^;,]*)[;,]/.exec(value);
   if (match === null) {
-    // Not a data URL at all — a hand-typed `set image_1.source "…"`. Shown the
-    // ordinary way (elided if long), because there is nothing to summarise.
     return describeSlotValue(value);
   }
   const kind = (match[1] ?? "").replace(/^image\//, "").toUpperCase();
@@ -904,15 +389,6 @@ function describePictureSource(value: Value): string {
   return `${kind === "" ? "picture" : `${kind} picture`} · about ${kilobytes} KB`;
 }
 
-/**
- * A row's drop-down, or `undefined` when it has none — see `PanelRow.choices`
- * for why only a `literal` row gets one.
- *
- * `labels` defaults to the values rendered as text when the schema declares
- * none, so a set like `style.align`'s three words needs no parallel label list
- * to maintain; `autoresize` declares labels because `true`/`false` says nothing
- * about what it does.
- */
 function resolveChoices(descriptor: SlotDescriptor): PanelRowChoices | undefined {
   if (descriptor.options === undefined || descriptor.kind !== "literal") {
     return undefined;
@@ -925,32 +401,10 @@ function resolveChoices(descriptor: SlotDescriptor): PanelRowChoices | undefined
   };
 }
 
-// ---------------------------------------------------------------------------
-// Writing through the panel (**D-102**) — every write is the `Command` the
-// command line would have built for the same input, run through the SAME
-// `executeCommand` (D-069). Nothing here calls `mutate` or `writeSlot`
-// directly (clause 5).
-// ---------------------------------------------------------------------------
-
-/** The full address a panel row's write targets, exactly as the operator would type it after the object's name (D-094 clause 4) — `row.path` already IS that suffix, so this is one string join, never a second address-building idiom. */
 function panelSlotAddress(objectName: string, path: string): string {
   return `${objectName}.${path}`;
 }
 
-/**
- * D-102 clause 6: disambiguates the text a panel row's input held at commit
- * into the SAME two `Command` shapes the command line's own `set` produces —
- * a bare number is a LITERAL write, anything else a FORMULA write. A leading
- * `=` the operator typed is absorbed rather than doubled, so retyping what was
- * already shown (a formula's own reconstructed source, or a plain edit) does
- * not accidentally nest a second `=`.
- *
- * This is deliberately narrower than `parser.ts`'s own `set` grammar: there is
- * no quoted-string or `TRUE`/`FALSE` reading here, because a panel row is a
- * bare text input with no quoting affordance. A string literal is reachable
- * the same way a formula reaches one — typing `"hello"` — which is D-102
- * clause 6 read literally, not a gap this cycle is leaving open.
- */
 function buildPanelSetCommand(target: string, raw: string): SetLiteralCommand | SetFormulaCommand {
   const trimmed = raw.trim();
   const asNumber = parseCommandNumber(trimmed);
@@ -961,18 +415,6 @@ function buildPanelSetCommand(target: string, raw: string): SetLiteralCommand | 
   return { kind: "set-formula", target, source: `=${expression}` };
 }
 
-/**
- * One synthesised `Command`, rendered the way the operator would have typed it
- * — D-102 clause 7's "echo of the synthesised command itself". `delete` is here
- * for D-136 clause 2's abandon path only, and only ever with `force` false, so
- * no ` force` suffix is emitted.
- *
- * A BOOLEAN value echoes as `TRUE`/`FALSE`, §5.3's exact-uppercase spelling and
- * the only one `parser.ts` reads back as a boolean (0157-REVIEW). A template
- * literal would print `false`, which retyped writes the STRING "false" — an
- * echo the operator cannot type back is not the echo clause 7 asks for. Same
- * convention `cellLiteralSeed` uses one screen away, for the same reason.
- */
 function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | ClearCommand | DeleteCommand): string {
   switch (command.kind) {
     case "set":
@@ -993,27 +435,6 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
   }
 }
 
-/**
- * Runs one panel-synthesised `Command` through `executeCommand` (D-102 clause
- * 5) and echoes it into the log exactly as a typed line would be (clause 7):
- * the synthesised command first, then whatever `executeCommand` itself would
- * have echoed — its result lines, or its refusal message.
- *
- * The synthesised command is always `set`/`set-formula`/`unlink` (a panel or
- * in-place-editor write), `clear` (a cell edit left empty — 2026-09-02) or
- * `delete` (D-136 clause 2's abandon of a just-created empty `text` box) — none
- * of which ever carries a `CommandEffect` (D-075 — those five belong to
- * `select`/`zoom`/`fit`/`save`/`load`), so there is no effect to perform here
- * and none is looked for; a future synthesised command that DID carry one would
- * need this function widened deliberately, not silently ignored.
- *
- * Every caller takes `describePanelCommand`'s exact text. The two gestures whose
- * echo cannot be a command — `commitImagePicture` and `restorePictureAspect`, which
- * each run several `set`s under one line — do not come through here at all; they
- * drive `executeCommand` themselves through `commitGestureWrites`. (Entry 0173
- * added an `echo` override here for a `commitImageSource` that entry 0174 replaced,
- * leaving the parameter with no caller; removed at 0176-REVIEW.)
- */
 function runPanelCommand(
   state: AppState,
   command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | ClearCommand | DeleteCommand,
@@ -1027,13 +448,6 @@ function runPanelCommand(
   return withLog({ ...echoed, document: outcome.document }, outcome.lines);
 }
 
-/**
- * Commits a panel row's open text input (D-102 clauses 4-7) — the GREY
- * paperclip's Enter key. A stale `objectId` (the object was deleted or left
- * the selection while the input was open) is a no-op, `state` returned
- * unchanged, rather than a throw or a refusal with nothing to name (D-023's
- * posture, applied to a UI event instead of a stored address).
- */
 export function commitPanelEdit(
   state: AppState,
   objectId: string,
@@ -1048,31 +462,6 @@ export function commitPanelEdit(
   return runPanelCommand(state, buildPanelSetCommand(panelSlotAddress(object.name, path), raw), context);
 }
 
-/**
- * Writes a panel drop-down's chosen value (the human's 2026-09-02 instruction).
- *
- * A LITERAL `set` of the exact `Value` the schema declared — never routed
- * through `buildPanelSetCommand`, whose D-102 clause 6 grammar reads any
- * non-numeric string as a formula and would turn choosing `center` into
- * `= center`. That grammar exists because a free-text row cannot tell a string
- * from an expression; a drop-down can, because the schema already said what the
- * choices are, so it does not need the guess.
- *
- * Same `runPanelCommand` -> `executeCommand` seam as every other panel write
- * (Rule 2, D-102 clause 5) and the same stale-id no-op posture (D-023).
- *
- * **The one drop-down that does more than write its slot** is an `image`'s
- * `preserveAspect` (**D-144**): choosing "keep the picture's proportions" also puts
- * a distorted box back to them. `restorePictureAspect` holds every condition for
- * that and returns `state` untouched when any fails, so this function stays generic
- * — it calls it after every choice rather than testing a type here, and a `text`
- * box's `autoresize` choice passes through it unchanged.
- *
- * A CHOICE is a gesture, not a command, which is why the restore lives here and not
- * in `executeCommand`: a typed `set image_1.preserveAspect true` writes exactly the
- * slot it names and moves no box, the same way a typed `set image_1.source` records
- * no `pictureAspect`. D-144 states that line and its cost.
- */
 export function commitPanelChoice(
   state: AppState,
   objectId: string,
@@ -1088,7 +477,6 @@ export function commitPanelChoice(
   return restorePictureAspect(written, objectId, context);
 }
 
-/** Unlinks one panel row (D-102 clause 4's BLUE paperclip) — `unlink <address>`, run the same way `commitPanelEdit` runs a `set`. Same stale-id no-op posture. */
 export function unlinkPanelSlot(
   state: AppState,
   objectId: string,
@@ -1102,53 +490,8 @@ export function unlinkPanelSlot(
   return runPanelCommand(state, { kind: "unlink", target: panelSlotAddress(object.name, path) }, context);
 }
 
-// ---------------------------------------------------------------------------
-// In-place editing (**D-125**) — a DOM text input overlaid on the canvas at
-// the receiver's own position, for a `text` object's `content` and for a
-// table cell. Like every panel write, a commit synthesises a `Command` and
-// runs it through `runPanelCommand` -> `executeCommand` (Rule 2, D-069,
-// D-102 clause 5) — a NEW SURFACE over the existing seam, never a second
-// write path. The commit rule DIFFERS BY RECEIVER (D-125 clause 3, the trap):
-// `content` is ALWAYS a literal `set`, a cell is Excel-style. The geometry —
-// which receiver a double-click names, and where the overlay floats — is
-// `render/editor.ts`'s (clause 1); this half owns the seed text, the
-// `Command`, and (below, in `start`) every line of DOM (clauses 5, 7).
-// ---------------------------------------------------------------------------
-
-/** The stored path prefix a table cell slot lives under (`cells.A1`). `editorSeed` is the only reader in this file — `render/editor.ts` builds the reference half through `address.ts`'s formatter. */
 const TABLE_CELL_PREFIX = "cells";
 
-/**
- * The text the in-place editor opens showing (**D-125**) — what the operator
- * would type to reproduce the receiver, so committing an untouched editor is a
- * no-op in intent (the same principle as `PanelRow.editSeed`, D-107).
- *
- * A `text` object's `content` is its raw literal source, verbatim (§5.6:
- * "raw source including markup" — `{= }`/`{? }` and all). A table cell is
- * shown Excel-style: a formula's reconstructed source with a leading `=`, or a
- * literal in the AUTHORING form (`cellLiteralSeed`) — the characters that,
- * retyped, produce the value that is already there.
- *
- * **It used to render a literal with `describeSlotValue`, and that was a defect
- * (the human's 2026-09-02 report).** That formatter is for DISPLAY, and it
- * QUOTES a string: a cell holding `hello` seeded the editor with `"hello"`, so
- * committing an untouched editor wrote the seven-character string `"hello"` —
- * and the next open seeded `"""hello"""`. The operator found it on the worst
- * case, an empty cell: `""` → `""""` → `""""""`, a pair of quotes added every
- * time they opened and closed it. The seed's whole contract is that an
- * untouched commit is a no-op (D-107's principle), and a formatter that adds
- * syntax cannot satisfy it.
- *
- * The round-trip is EXACT for the values a cell edit can produce, because
- * `cellLiteralSeed` is the inverse of `buildCellCommand` — see its own comment
- * for the one asymmetry (a string that LOOKS like a number or a formula) and
- * why that is Excel's behaviour rather than a bug to fix here.
- *
- * A cell formula's same-table references are shown in bare Excel form (`=A1 * 2`,
- * not `=table_1.A1 * 2`) — `formatFormula`'s `relativeToObjectId` (D-131), passed
- * the cell's own host table id, which is exactly the context `commitTableCell` →
- * `parseFormula` reads the seed back with, so an untouched commit is a no-op.
- */
 export function editorSeed(state: AppState, target: EditorTarget): string {
   const object = state.document.objects.find((candidate) => candidate.id === target.objectId);
   if (object === undefined) {
@@ -1165,32 +508,6 @@ export function editorSeed(state: AppState, target: EditorTarget): string {
   return slot.kind === "formula" ? `=${formatFormula(slot.ast, state.document.objects, object.id)}` : cellLiteralSeed(slot.value);
 }
 
-/**
- * One cell literal as the characters that would RE-AUTHOR it — the inverse of
- * `buildCellCommand`, and the reason an untouched cell edit is a no-op.
- *
- * Not `describeSlotValue`: that one is for display and quotes strings, prints
- * `"nothing"` for `null` and `"#TYPE: …"` for an error. None of those are
- * things the operator could type back.
- *
- * - a string → itself, verbatim
- * - a number → its plain form, which `parseCommandNumber` reads back identically
- * - a boolean → `TRUE`/`FALSE`, `parser.ts` §5.3's exact-uppercase spelling
- * - anything else (`null`, an `ErrorValue`, a `Point`) → empty. A literal cell
- *   cannot hold one today — `buildCellCommand` writes only the three above —
- *   and seeding the editor with a value that cannot be retyped would make the
- *   commit rewrite the cell into something else. Empty means an untouched
- *   commit CLEARS the cell, which is the honest outcome for a value with no
- *   authoring form.
- *
- * ONE asymmetry, deliberate and Excel's own: a string cell holding `"42"` seeds
- * `42`, which commits back as the NUMBER 42, and a string holding `"=x"` seeds
- * `=x`, which commits back as a formula. Both are reachable only by `set
- * table_1.A1 "42"` from the command line, never by editing, because editing
- * `42` would have produced a number in the first place. D-125 clause 3 declares
- * the Excel model for this editor; quoting to preserve the distinction is
- * exactly what caused the defect above.
- */
 function cellLiteralSeed(value: Value): string {
   if (typeof value === "string") {
     return value;
@@ -1204,18 +521,6 @@ function cellLiteralSeed(value: Value): string {
   return "";
 }
 
-/**
- * Commits the in-place editor over a `text` object's `content` (**D-125**
- * clauses 2-3).
- *
- * ALWAYS a literal `set`, whatever was typed. `content` is permanently
- * `literal`-kind (D-122) and §5.6's `{= }`/`{? }` are markup INSIDE the raw
- * string, so the text is never sniffed for a leading `=` — `buildPanelSetCommand`
- * (which routes every non-numeric string to `set-formula`) is deliberately NOT
- * reused here (clause 3, the trap: `Hello world` must not become `=Hello world`).
- * Runs through the same `executeCommand` seam a typed `set` uses. A stale
- * `objectId` is a no-op (D-023's posture, as `commitPanelEdit` takes).
- */
 export function commitTextContent(
   state: AppState,
   objectId: string,
@@ -1229,27 +534,6 @@ export function commitTextContent(
   return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, slotKey(TEXT_CONTENT_PATH)), value: raw }, context);
 }
 
-/**
- * The `width` x `height` an `image` object takes when a picture is chosen for
- * it: the picture's own proportions, scaled so its LONGER side is
- * `DEFAULT_IMAGE_EXTENT`.
- *
- * **This is the human's Q-027 ruling, given on screen at entry 0173** — *"Box
- * should fit to aspect ratio of image, not hang over it."* Entry 0173 had read
- * §5.7's clause as a drawing rule and left the box square; the ruling is that the
- * BOX takes the picture's shape, which is the option that needs the decoded
- * natural size to reach a slot.
- *
- * Scaled rather than written raw: a 4000x3000 photograph would otherwise become a
- * 4000-unit object beside a 100-unit polygon, and `fit` would be the only way to
- * see it again. The long side is `DEFAULT_IMAGE_EXTENT` — the same number the
- * empty frame uses (imported, never re-spelled) — so choosing a picture never
- * makes the object jump in size, it only makes it the right SHAPE.
- *
- * A non-positive or non-finite natural size has no ratio to take, so the square
- * default stands. Unreachable through `decodeBitmap`, which refuses such a
- * decode; total rather than assumed away.
- */
 export function pictureBoxSize(naturalWidth: number, naturalHeight: number): { readonly width: number; readonly height: number } {
   const usable =
     naturalWidth > 0 && naturalHeight > 0 && Number.isFinite(naturalWidth) && Number.isFinite(naturalHeight);
@@ -1260,40 +544,6 @@ export function pictureBoxSize(naturalWidth: number, naturalHeight: number): { r
   return { width: naturalWidth * scale, height: naturalHeight * scale };
 }
 
-/**
- * Writes a chosen picture into an `image` object (§5.7's "load via file picker,
- * store as a data URL in the document", plus the human's Q-027 ruling that the
- * box takes the picture's proportions).
- *
- * FOUR literal `set`s — `source`, then `width`, `height` and `pictureAspect` — each
- * through the same `executeCommand` seam a typed `set` uses (Rule 2, D-069). Four
- * commands rather than one because `executeCommand` takes one `Command` and §5.10
- * has no multi-slot form; they are four mutations, which Rule 5 says is fine.
- *
- * `pictureAspect` records the shape the other three writes are derived FROM
- * (**D-144**), so that turning `preserveAspect` back on after a distortion has
- * something to restore to — see `restorePictureAspect`. It is written here and
- * nowhere else, because this is the only moment the decoded natural size exists
- * outside `render/`.
- * `buildPanelSetCommand` is deliberately NOT reused, for `commitTextContent`'s
- * reason: it routes every non-numeric string to `set-formula`, which would try to
- * PARSE the URL.
- *
- * ONE echo line for the three, because they are one gesture and the operator
- * performed one action; a refusal still reports itself, so nothing fails
- * silently. The line summarises rather than quoting the URL, which is
- * unreadable, unretypeable, and long enough to bury §5.10's log.
- *
- * `natural` is `undefined` when the chosen file did not decode. The `source` is
- * still written — the document records what the operator chose, and the frame
- * stays where it was — while `width`/`height` are left alone, since there is no
- * shape to take.
- *
- * A stale `objectId` is a no-op — the operator deleted the image while the
- * picker was open — as is an EMPTY url, which is what a caller with nothing to
- * write passes rather than clearing a picture the operator already had. D-023's
- * posture, the same one `commitPanelEdit` and `commitTextContent` take.
- */
 export function commitImagePicture(
   state: AppState,
   objectId: string,
@@ -1306,10 +556,6 @@ export function commitImagePicture(
     return state;
   }
   const box = natural === undefined ? undefined : pictureBoxSize(natural.naturalWidth, natural.naturalHeight);
-  // The shape the box above was derived FROM, kept so it can be restored later
-  // (D-144). `0` for a decode with no usable ratio — the same degenerate case
-  // `pictureBoxSize` answers with the square default, spelled the same way here so
-  // the two cannot disagree about what "no shape" is.
   const aspect = natural === undefined ? 0 : usableAspect(natural.naturalWidth, natural.naturalHeight);
   const shape =
     natural === undefined
@@ -1325,35 +571,14 @@ export function commitImagePicture(
           { path: IMAGE_PICTURE_ASPECT_PATH, value: aspect },
         ]),
   ];
-  // Each write stands or falls alone (§5.9's per-component posture, via
-  // `commitGestureWrites`): `source` is the write that matters, and a `width` a
-  // formula drives is left alone and said so rather than costing the operator
-  // either their picture or their link.
   const echoed = withLog(state, [`> picture into ${object.name} — ${dataUrl.length} characters, ${shape}`]);
   return commitGestureWrites(echoed, object, writes, context);
 }
 
-/** A box dimension for the echo line only — a picture's scaled side is rarely a whole number and the log is not the place for sixteen decimals. `describeSlotValue`'s D-099 rounding is for a slot's VALUE and this is not one. */
 function round(value: number | undefined): string {
   return value === undefined ? "?" : String(Math.round(value * 100) / 100);
 }
 
-/**
- * Runs a gesture's several slot writes as ONE action: each through
- * `executeCommand` (Rule 2), each SKIPPED and reported if a formula or a schema
- * drives that slot, and every message appended under the caller's single echo line.
- *
- * **§5.9's per-component posture, which a plain `set` does not give you.** A typed
- * `set` on a formula-driven slot REPLACES the formula with a literal and says
- * "replaced formula: = table_1.A1" — correct for a line the operator typed, and
- * wrong for a gesture they performed on something else entirely: choosing a picture
- * or straightening a box must not silently unlink a `width` bound to a cell.
- * `render/interaction.ts`'s `planResize` already refuses exactly this way for a
- * drag; this is the same rule for the gestures that do not go through a drag plan.
- * (Entries 0173/0174 documented `executeCommand` as refusing such a write on its
- * own. It does not, and the notice it does return was being discarded here.
- * Corrected at 0176-REVIEW.)
- */
 function commitGestureWrites(
   state: AppState,
   object: GraphObject,
@@ -1375,16 +600,6 @@ function commitGestureWrites(
   return next;
 }
 
-/**
- * A picture's `naturalWidth / naturalHeight`, or `0` when the pair names no usable
- * shape (**D-144**) — the ONE screen every reader of `pictureAspect` applies, so
- * "no picture whose shape is known" has exactly one spelling.
- *
- * The same `> 0 && Number.isFinite` test `pictureBoxSize` makes, and deliberately
- * the same: a natural size `pictureBoxSize` refuses to take a ratio from must not
- * leave a ratio behind in a slot either, or the box and the restore would disagree
- * about what the picture's shape is.
- */
 function usableAspect(naturalWidth: number, naturalHeight: number): number {
   if (!(naturalWidth > 0) || !(naturalHeight > 0) || !Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) {
     return 0;
@@ -1392,37 +607,6 @@ function usableAspect(naturalWidth: number, naturalHeight: number): number {
   return naturalWidth / naturalHeight;
 }
 
-/**
- * Puts a distorted `image` back to its picture's own proportions (**D-144**, the
- * human's instruction at 0176-REVIEW: *"image resizing and distortion can always be
- * put back to the original aspect ratio ... so it can be regained if 'preserve
- * aspect ratio' is toggled back on"*).
- *
- * The restored box is the rectangle `renderer.ts` would DRAW inside the current one
- * — `fitBitmapIntoBox`, the very same function, called with the remembered
- * `pictureAspect` rather than a decoded bitmap. Three consequences follow from that
- * choice and are the reason for it:
- *
- *   - the frame ends up hugging the picture exactly, by construction rather than by
- *     two files agreeing (D-010), which is the human's own Q-027 words — *"box
- *     should fit to aspect ratio of image, not hang over it"* — made true again;
- *   - the object never GROWS. Undoing a distortion cannot push the image over its
- *     neighbours, which is what "keep the longer side" would do to a box stretched
- *     wide;
- *   - it is idempotent: a box already in proportion is its own fitted rectangle, so
- *     nothing is written and no line appears in the log.
- *
- * `origin` is untouched — the top-left corner stays put, so the operator's eye does
- * not have to follow the object.
- *
- * A no-op, `state` returned unchanged, whenever there is nothing to restore: a
- * stale or non-`image` object, `preserveAspect` off (the operator is asking for the
- * distortion), no remembered `pictureAspect` (no picture, or a `source` typed by
- * hand — `primitives/image.ts` names that cost), a box with no positive size, or a
- * box already in proportion. One `set` per side under ONE echo line, because the
- * operator made one choice; §5.9's per-component posture governs each write through
- * `commitGestureWrites`, so a formula-driven side is left alone and says so.
- */
 export function restorePictureAspect(state: AppState, objectId: string, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
   const object = state.document.objects.find((candidate) => candidate.id === objectId);
   if (object === undefined || object.type !== IMAGE_TYPE) {
@@ -1437,13 +621,9 @@ export function restorePictureAspect(state: AppState, objectId: string, context:
   if (usableAspect(aspect, 1) === 0 || width === undefined || height === undefined || !(width > 0) || !(height > 0)) {
     return state;
   }
-  // `(aspect, 1)` is any pair with the picture's ratio — `fitBitmapIntoBox` reads
-  // only the ratio of the two, so the remembered number is enough and no decode is
-  // needed. See its own doc for why this shares that function rather than
-  // recomputing the fit.
   const fitted = fitBitmapIntoBox(width, height, aspect, 1);
   if (fitted.width === width && fitted.height === height) {
-    return state; // Already in proportion — nothing to undo, and no log line for a gesture that changed nothing.
+    return state;
   }
   const echoed = withLog(state, [`> ${object.name} back to the picture's proportions — box ${round(fitted.width)}x${round(fitted.height)}`]);
   return commitGestureWrites(
@@ -1457,21 +637,6 @@ export function restorePictureAspect(state: AppState, objectId: string, context:
   );
 }
 
-/**
- * Removes a `text` object whose in-place editor was opened ON CREATION (D-136
- * clause 1's `content === ""` path) and is now being abandoned with the box
- * still empty — Escape, or a blur with an empty field (**D-136** clause 2).
- *
- * Why: an empty-`content` `text` object has no ink, no extent and no hit box
- * (D-066), so one left behind by an abandoned placement gesture is unreachable
- * except by typing its name. D-124 makes placing-and-typing one gesture;
- * abandoning the gesture abandons the object.
- *
- * Through `executeCommand` as a `delete` (Rule 2, D-069 — no second write
- * path), echoed in the log like any command. A box that received text before
- * the edit ended is KEPT: a non-empty `content` slot makes this a no-op, so the
- * caller need not re-check. A stale `objectId` is a no-op too (D-023's posture).
- */
 export function abandonCreatedTextBox(
   state: AppState,
   objectId: string,
@@ -1483,37 +648,11 @@ export function abandonCreatedTextBox(
   }
   const content = getSlot(object, TEXT_CONTENT_PATH)?.value;
   if (typeof content === "string" && content !== "") {
-    return state; // Got text before the edit ended — keep it (D-136 clause 2).
+    return state;
   }
   return runPanelCommand(state, { kind: "delete", target: object.name, force: false }, context);
 }
 
-/**
- * Commits the in-place editor over a table cell (**D-125** clauses 2-3) —
- * Excel-style: a leading `=` is a formula, a bare number is a literal number,
- * anything else a literal string. §5.4's own model. The address is built
- * through `panelSlotAddress` from `render/editor.ts`'s already-formatted cell
- * reference, never concatenated ad hoc. Same stale-id no-op posture.
- *
- * **An editor left EMPTY clears the cell rather than writing `""`** (the human's
- * 2026-09-02 report: *"double clicking in an empty table cell but not typing
- * anything, then exiting, sets that table cell's contents to `""` rather than
- * just keeping it blank/empty... although it looks empty visually, it's not
- * anymore"*).
- *
- * `""` is a STRING — content that happens to have no glyphs. D-047's empty cell
- * is an ABSENT slot, so restoring one is a `clear`, and the whole reason that
- * command exists (`command/commands.ts`) is that nothing could express this.
- * Two paths, and the difference matters:
- *
- * - the cell was already empty (nothing typed, nothing there) → `clear`
- *   succeeds having mutated nothing, so opening and closing an empty cell
- *   leaves the document byte-identical and puts no entry in §5.11's journal;
- * - the cell HELD something the operator deleted → `clear` removes the slot,
- *   which is the gesture that was previously impossible: `set table_1.A1 ""`
- *   left the phantom this report is about, and there was no other way to empty
- *   a cell once written.
- */
 export function commitTableCell(
   state: AppState,
   objectId: string,
@@ -1528,18 +667,6 @@ export function commitTableCell(
   return runPanelCommand(state, buildCellCommand(panelSlotAddress(object.name, cell), raw), context);
 }
 
-/**
- * D-125 clause 3's Excel-style disambiguation for a table cell — distinct from
- * `buildPanelSetCommand` (D-102 clause 6), which has no `=`-means-formula rule
- * because a panel row edits a named slot and already shows a formula's own `=`.
- * A leading `=` the operator typed is kept verbatim on the `source` (`setFormula`
- * slices it back off — `SetFormulaCommand`'s own contract).
- *
- * The EMPTY arm is `clear`, not `set ""` — see `commitTableCell`. It is first
- * because it is a test on the trimmed text, and a whitespace-only cell is empty
- * for the same reason a blank one is: nothing was typed. (A string of spaces IS
- * still reachable deliberately, from the command line: `set table_1.A1 "   "`.)
- */
 function buildCellCommand(target: string, raw: string): SetLiteralCommand | SetFormulaCommand | ClearCommand {
   const trimmed = raw.trim();
   if (trimmed === "") {
@@ -1552,12 +679,6 @@ function buildCellCommand(target: string, raw: string): SetLiteralCommand | SetF
   if (asNumber !== undefined) {
     return { kind: "set", target, value: asNumber };
   }
-  // `TRUE`/`FALSE` through `parser.ts`'s own reader, never a second spelling of
-  // §5.3's booleans (D-010). Added 2026-09-02 with the seed fix: `editorSeed`
-  // showed a boolean cell as `TRUE`, this had no boolean arm, so committing the
-  // editor untouched turned the boolean into the STRING "TRUE" — the same
-  // seed/commit asymmetry as the quoting defect, found by its own round-trip
-  // test rather than on screen.
   const asBoolean = parseCommandBoolean(trimmed);
   if (asBoolean !== undefined) {
     return { kind: "set", target, value: asBoolean };
@@ -1565,56 +686,27 @@ function buildCellCommand(target: string, raw: string): SetLiteralCommand | SetF
   return { kind: "set", target, value: trimmed };
 }
 
-// ---------------------------------------------------------------------------
-// The DOM half — the only part of this file that knows a browser exists
-// ---------------------------------------------------------------------------
-//
-// NOTE ON ONE NAME: the global `document` below is the BROWSER's document. The
-// project's own `Document` (§5.11) is a TYPE and lives on `state.document`.
-// They never collide in the compiler (one is a value, the other a type), and
-// this comment exists so they do not collide in a reader either.
-
-/** Where the pan gesture stands. §5.9: "pan (middle-drag or space-drag)" — both produce the same screen-space delta. */
 interface PanGesture {
   readonly lastScreenX: number;
   readonly lastScreenY: number;
 }
 
-/**
- * Where a panel-drag gesture stands (**D-101** clause 4). `offsetLeft`/`Top`
- * is the pointer's position WITHIN the panel at the moment the header was
- * pressed, in CSS pixels — held constant for the gesture so the point the
- * operator grabbed stays under the pointer, the same "delta from a fixed
- * reference" shape `PanGesture` uses for the canvas.
- */
 interface PanelDragGesture {
   readonly objectId: string;
   readonly offsetLeft: number;
   readonly offsetTop: number;
 }
 
-/** What to do with the text an open panel row input holds (**D-102** clauses 4, 6-7): Enter's `onCommit`, Escape's or blur's `onCancel`. Built fresh per row, once, when the row's editor opens — see `panelEditInput`'s own doc comment for why one input never needs a second pair. */
 interface PanelEditHandlers {
   readonly onCommit: (raw: string) => void;
   readonly onCancel: () => void;
 }
 
-/** Which row is open for editing, and what its input should do (**D-102** clause 8: at most one, across every panel — `openEditor` below is a single value, not a per-panel map). */
 interface PanelRowEdit {
   readonly path: string;
   readonly handlers: PanelEditHandlers;
 }
 
-/**
- * Builds the canvas, the log and the input bar, wires every listener, and paints
- * (§5.9, §5.10).
- *
- * Untested, and that is a real gap rather than an accepted one: it needs a DOM,
- * and adding one to the test environment is a dependency this project has not
- * taken. Everything it can do without a browser lives above, so what remains
- * here is listener wiring and drawing — checked by hand, described in the log
- * entry, and NOT covered by any assertion.
- */
 function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLInputElement, panelsContainer: HTMLElement): void {
   const context = canvas.getContext("2d");
   if (context === null) {
@@ -1622,80 +714,25 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     return;
   }
 
-  // §5.1's `EvalContext` — the injected `TextMeasurer` (§5.6, Rule 1) every
-  // `mutate` call below is handed, so a `text` object's `measuredHeight`
-  // evaluates for real instead of `#MEASURE` (D-118). It measures on its OWN
-  // offscreen 2D context, NEVER `context`: `render/measure.ts` sets `ctx.font`
-  // per line, which would corrupt a draw in progress if it shared the renderer's
-  // (measure.ts's own header). A browser that gave `context` but declines a
-  // second one falls back to the null measurer — loud `#MEASURE`, not a silent
-  // wrong height.
   const measureContext = document.createElement("canvas").getContext("2d");
   const evalContext: EvalContext =
     measureContext === null ? NULL_EVAL_CONTEXT : { measurer: createCanvas2dTextMeasurer(measureContext) };
-  // The SECOND measurer, and the only difference between the two is whether
-  // §5.6's markdown-lite is honoured. The engine's one is markup-aware because
-  // the canvas DRAWS markup; the in-place editor's overlay is a `<textarea>`
-  // that can only ever show RAW SOURCE, so its box is measured from raw source.
-  // That is **Q-025 option (a)**, answered by the human on screen at entry 0161
-  // and ruled binding at **D-139** — the box shrinking to the raw text as the
-  // editor opens is the behaviour they want, not a cost they accepted.
-  // Sharing `measureContext` is safe: both set `ctx.font` before every read.
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
   let pan: PanGesture | undefined;
   let spaceHeld = false;
-  // One DOM element per PANELLED object id, reused across paints — D-101's N
-  // panels, each held here rather than in `AppState` (D-101 clause 7: a DOM
-  // handle is not plain, serializable state). Keyed the same way `AppState.panels`
-  // is, so the two stay easy to reason about together even though neither reads
-  // the other directly.
   const panelElements = new Map<string, HTMLElement>();
   let panelDrag: PanelDragGesture | undefined;
-  // The one panel row currently open for editing, across every panel (**D-102**
-  // clause 4's GREY paperclip). `undefined` — the common case — means no row
-  // anywhere is being edited. `updatePanels` reads this to decide which panel
-  // (if any) must NOT be rebuilt whole this paint (clause 8).
   let openEditor: { readonly objectId: string; readonly path: string } | undefined;
-  // **D-125**'s in-place editor: the receiver it is open on, and its one DOM
-  // element. `undefined`/`undefined` — the common case — means nothing is being
-  // typed into the canvas. At most one, document-wide (clause 1). Held here, not
-  // in `AppState`: opening writes no document state (like the GREY paperclip),
-  // and a DOM handle is not plain serializable state (D-101 clause 7's reason).
   let inPlaceEditor: EditorTarget | undefined;
   let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | undefined;
-  // **D-136** clause 2: `true` while the current editor was opened ON CREATION
-  // (`applyTransition`'s `openEditor` branch), so its cancel/commit paths know
-  // to remove the box if it is abandoned empty. Cleared whenever the editor
-  // closes, and never set by the double-click path.
   let inPlaceEditorFromCreation = false;
-  // Where the overlay is mounted: `#stage`, a sibling of `#panels` with no
-  // delegated listeners, so a click in the editor never has to be carved out of
-  // the panel plumbing. `panelsContainer` is the fallback only if the DOM shape
-  // ever changes out from under this.
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
-  // §5.7's decoded pictures, keyed by data URL. It lives HERE and never in
-  // `src/engine/` — an `HTMLImageElement` is a live DOM object and a `Map` of
-  // them is exactly what Rule 1 and PROCESS_BRIEF §5.5 forbid the engine to hold
-  // (0172-REVIEW §4). The document stores the URL string; this holds the pixels.
-  // `paint` is the decode callback: the paint that first asked for a picture drew
-  // the object's frame alone, and this is what draws the picture into it once the
-  // browser has one. Declared before `paint` and referenced through the closure,
-  // which is why the callback is a wrapper rather than `paint` itself.
   const imageBitmaps = createImageBitmapCache(() => paint());
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
 
-  /**
-   * A screen point in BACKING pixels, which is the space `hitTest`,
-   * `renderDocument` and `viewport()` all work in (D-086 clause 2).
-   *
-   * The ratio is read off the canvas itself rather than from
-   * `devicePixelRatio`, so it stays exact through the rounding `paint` does when
-   * it sizes the backing store, and degrades to 1 for a canvas the layout has
-   * given no width.
-   */
   const screenPointOf = (event: MouseEvent): ScreenPoint => {
     const bounds = canvas.getBoundingClientRect();
     const ratioX = bounds.width > 0 ? canvas.width / bounds.width : 1;
@@ -1703,20 +740,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     return { x: (event.clientX - bounds.left) * ratioX, y: (event.clientY - bounds.top) * ratioY };
   };
 
-  // The canvas's BACKING size follows its CSS size times the display's device
-  // pixel ratio. A backing store sized in CSS pixels is stretched by the display
-  // and every line drawn into it is resampled, which is the fuzziness entry 0091
-  // reported: the log and the command input are DOM text and stay sharp, so only
-  // the picture looks soft (D-086, widened at 0091-REVIEW).
-  //
-  // `screenPointOf` above converts INTO this space, which D-086 clause 3 requires
-  // to happen in the same change: a pointer event carries CSS pixels and
-  // everything downstream of here consumes backing pixels.
-  //
-  // Re-read before every paint rather than on `resize` alone, because the log
-  // growing shortens the canvas with no window resize behind it (0090-REVIEW F1).
-  // Rule 5: one layout read per frame is not a cost this project trades
-  // correctness for.
   const paint = (): void => {
     const ratio = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
     const backingWidth = Math.round(canvas.clientWidth * ratio);
@@ -1725,20 +748,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       canvas.width = backingWidth;
       canvas.height = backingHeight;
     }
-    // Every selected object reaches the renderer as an ID only (D-082 clause
-    // 4's own rule, applied here too): this file resolves no name, and
-    // `renderer.ts` draws no highlight at all for an id naming nothing
-    // (D-068), now over the whole list (D-100 clause 8). `panelledIds` is a
-    // SEPARATE list (D-106 clause 5) — every selected object with a drawn
-    // extent whose panel is not dismissed — because a dismissed panel's
-    // object keeps its highlight but gets its canvas name label back.
     const panelledIds = panelledObjectIds();
-    // What the overlay is currently holding, if anything — the WHOLE target,
-    // not just its object id. The renderer needs the cell reference too: while
-    // a cell editor is open the overlay IS that cell's text, so drawing the
-    // committed value underneath double-prints it (the human's 2026-09-02
-    // report). This used to pass a `text`-only id and `undefined` for a cell,
-    // which is precisely why the table ghosted and the text box did not.
     renderDocument(
       context,
       canvas.width,
@@ -1754,14 +764,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     updateEditor();
   };
 
-  /**
-   * Which selected objects actually show a panel right now (**D-106** clause
-   * 5's `panelledObjectIds`): selected, drawing something (so there is an
-   * extent to hang a panel off — D-094 clause 2's rule, unchanged), and not
-   * dismissed. Computed once per paint and handed to both `renderDocument`
-   * (the suppression pass) and `updatePanels` (which panels to build), so the
-   * two can never disagree about which objects have one (D-010's shape).
-   */
   const panelledObjectIds = (): readonly string[] => {
     const ids: string[] = [];
     for (const objectId of state.interaction.selectedObjectIds) {
@@ -1775,63 +777,23 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     return ids;
   };
 
-  /**
-   * Builds, fills and places one panel per id in `panelledIds` (**D-101**),
-   * and removes every panel element whose id is no longer in it — the
-   * "everything currently shown, nothing else" immediate-mode posture this
-   * file already takes for the log and the canvas. `panelElements` persists
-   * elements across paints (a fresh `<div>` per id every time would only cost
-   * churn, not correctness — nothing here relies on element identity
-   * surviving a paint, because the drag gesture below tracks its own state in
-   * `panelDrag`, not in the DOM).
-   *
-   * **D-102 clause 8**: the one panel whose row `openEditor` names is the
-   * exception — `writePanel`'s `replaceChildren` would drop that row's open
-   * input's focus, caret and typed text on the very next paint, which runs on
-   * every pointer move, making the feature unusable rather than slow. So a
-   * panel is skipped ONLY while it is already showing exactly the editor it
-   * should be (its own `dataset.editingPath` already matches); every other
-   * panel, and this one whenever nothing on it is being edited, is rebuilt
-   * every paint exactly as before — the skip must never fire for "nothing is
-   * being edited", or a panel that is never edited would freeze after its
-   * first paint.
-   */
   const updatePanels = (panelledIds: readonly string[]): void => {
     const shown = new Set(panelledIds);
     if (openEditor !== undefined && !shown.has(openEditor.objectId)) {
-      // Its object left the panelled set — deselected, dismissed, or its
-      // extent vanished — while the row's editor was open. Nothing left to
-      // edit; D-023's posture, applied to a UI gesture instead of a stored
-      // address.
       openEditor = undefined;
     }
     for (const objectId of panelledIds) {
       const object = state.document.objects.find((candidate) => candidate.id === objectId);
       const extent = object === undefined ? undefined : objectExtent(object);
       if (object === undefined || extent === undefined) {
-        continue; // Unreachable — `panelledObjectIds` already checked both — but this file never throws on a stale id (D-023's posture).
+        continue;
       }
       const element = panelElement(objectId);
       const editing: PanelRowEdit | undefined =
         openEditor !== undefined && openEditor.objectId === objectId
           ? { path: openEditor.path, handlers: panelEditHandlers(objectId, openEditor.path) }
           : undefined;
-      // The skip applies ONLY while THIS panel is already showing exactly the
-      // editor it should be showing — every other panel, and this one
-      // whenever nothing on it is being edited, is rebuilt every paint
-      // exactly as before (immediate-mode, so a live value — a derived
-      // `centroid` moving mid-drag — keeps updating on screen). `editing ===
-      // undefined` must never take the skip path, or a panel that is never
-      // edited would freeze after its first paint.
       const alreadyShowingThisEditor = editing !== undefined && element.dataset.editingPath === editing.path;
-      // The same protection, for the drop-down rows the 2026-09-02 rework
-      // added: a `<select>` the operator is actually using must not be torn out
-      // from under them by a repaint, and `replaceChildren` would do exactly
-      // that — closing an open popup and discarding the choice. Keyed on FOCUS,
-      // which is the state a select holds throughout the gesture (popup open,
-      // or arrow keys). The cost is that this panel's other rows stop updating
-      // live until the select is blurred; that is the smaller injury, and it
-      // self-heals the moment focus leaves.
       const holdsFocusedChoice =
         document.activeElement !== null &&
         element.contains(document.activeElement) &&
@@ -1842,18 +804,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         if (editing !== undefined) {
           const opened = element.querySelector<HTMLInputElement>(".panel-row__input");
           if (opened === null) {
-            // F4 / D-107: the row `openEditor` names is not in the model just
-            // built — its path left the object's schema while the object
-            // stayed panelled. Nothing exists to focus, commit, or cancel;
-            // clearing the gate here is what stops it latching forever
-            // (`alreadyShowingThisEditor` would otherwise keep matching a
-            // dataset string that names nothing, freezing this panel).
             openEditor = undefined;
           } else {
-            // Focus it and select its seeded text so typing straight over it
-            // works, matching the command bar's own "always focused" spirit
-            // for the one control that now competes with it (§5.10: "not
-            // editing text or a cell").
             opened.focus();
             opened.select();
           }
@@ -1869,20 +821,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
   };
 
-  /**
-   * Builds the `onCommit`/`onCancel` pair for the one row currently open at
-   * `objectId`/`path` (**D-102** clauses 4, 6-7). Reads `state` live at call
-   * time, like every other closure in `start` — the input this is attached to
-   * survives many paints (clause 8), so a snapshot taken when it was CREATED
-   * would go stale the moment anything else in the document changed.
-   *
-   * **D-107 fix items 2-3 (F1, F2)**: both branches restore the command bar's
-   * keyboard, and `onCancel` acts only while `openEditor` still names THIS
-   * exact row. Without the guard, a blur fired by the repaint that opens a
-   * DIFFERENT row's editor — this row's own input being torn out of the DOM as
-   * a side effect — would clear the editor that repaint just opened, out from
-   * under it (F2's "the operator must click twice").
-   */
   const panelEditHandlers = (objectId: string, path: string): PanelEditHandlers => ({
     onCommit: (raw: string) => {
       openEditor = undefined;
@@ -1891,7 +829,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     },
     onCancel: () => {
       if (openEditor === undefined || openEditor.objectId !== objectId || openEditor.path !== path) {
-        return; // Stale: some other gesture already moved `openEditor` on.
+        return;
       }
       openEditor = undefined;
       input.focus();
@@ -1899,7 +837,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     },
   });
 
-  /** The DOM element for `objectId`'s panel, creating and appending it the first time it is shown. */
   const panelElement = (objectId: string): HTMLElement => {
     const existing = panelElements.get(objectId);
     if (existing !== undefined) {
@@ -1913,24 +850,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     return element;
   };
 
-  /**
-   * One panel's placement (D-094 clauses 11-13, **D-101** clause 5): a
-   * DRAGGED panel's manual CSS position wins outright and `placePropertiesPanel`
-   * is not even called — clause 5's "no longer consulted while detached,"
-   * taken literally, and also what makes a detached panel NOT follow pan or
-   * zoom (nothing here re-derives its position from the camera). Otherwise
-   * the same measured-after-the-rows-are-in placement D-094 always used.
-   */
   const placePanelElement = (element: HTMLElement, extent: WorldExtent, manualPosition: PanelPlacement | undefined): void => {
     if (manualPosition !== undefined) {
       element.style.left = `${manualPosition.left}px`;
       element.style.top = `${manualPosition.top}px`;
       return;
     }
-    // D-094 clause 12: worldToScreen is in BACKING pixels, the panel is laid
-    // out in CSS pixels — divide by the ratio the canvas actually has, read
-    // off the canvas the way `screenPointOf` reads it, never
-    // `devicePixelRatio` by assumption.
     const bounds = canvas.getBoundingClientRect();
     const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
     const panelRect = element.getBoundingClientRect();
@@ -1945,15 +870,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     element.style.top = `${placement.top}px`;
   };
 
-  // -------------------------------------------------------------------------
-  // **D-125**'s in-place editor — the DOM half. `render/editor.ts` says which
-  // receiver a double-click names and where the overlay goes; the pure half
-  // above (`commitTextContent`/`commitTableCell`/`editorSeed`) owns the seed
-  // and the `Command`. Everything here is listener wiring and element
-  // lifecycle, and — like `start` as a whole — untested by construction.
-  // -------------------------------------------------------------------------
-
-  /** Tears out the overlay element, nulling the handle FIRST so the `blur` its removal fires sees a closed editor and does not re-commit. */
   const removeInPlaceElement = (): void => {
     if (inPlaceElement !== undefined) {
       const element = inPlaceElement;
@@ -1962,25 +878,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
   };
 
-  /** Closes the editor with no write — Escape (D-125 clause 5), or its receiver vanishing mid-edit. `inPlaceEditor` is cleared before the element goes, so the removal's `blur` is a no-op. Also clears D-136's opened-on-creation flag; a caller acting on it captures it first. */
   const closeInPlaceEditor = (): void => {
     inPlaceEditor = undefined;
     inPlaceEditorFromCreation = false;
     removeInPlaceElement();
   };
 
-  /**
-   * D-125 clause 5: commit is a click outside (which blurs the input) or, in a
-   * table cell, Enter. Reads the element's current text, closes the editor,
-   * returns the keyboard to the command bar, then runs the receiver's commit
-   * through the pure half. Re-entrant-safe: `closeInPlaceEditor` nulls
-   * `inPlaceEditor` before removing the focused element, so the `blur` that
-   * removal fires re-enters here and returns at the guard below.
-   *
-   * **D-136** clause 2: a box that was opened on creation and blurred while
-   * still empty is removed instead of committed — abandoning the placement
-   * gesture abandons the object.
-   */
   const commitInPlace = (): void => {
     const target = inPlaceEditor;
     const element = inPlaceElement;
@@ -2002,12 +905,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     );
   };
 
-  /**
-   * D-125 clause 5: Escape cancels and writes nothing — nothing was committed,
-   * so there is nothing to restore. **D-136** clause 2: if the editor was
-   * opened on creation, Escape also removes the box (the edit was discarded, so
-   * `content` is still `""` — `abandonCreatedTextBox` confirms and deletes).
-   */
   const cancelInPlace = (): void => {
     if (inPlaceEditor === undefined) {
       return;
@@ -2023,19 +920,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     paint();
   };
 
-  /**
-   * The overlay element for `target`: a `<textarea>` for a `text` object (Enter
-   * inserts a newline — §5.6's hard breaks), a one-line `<input>` for a table
-   * cell (Enter commits, Excel-style). Every keydown `stopPropagation`s so none
-   * of it reaches the always-focused command bar's window listeners — §5.10's
-   * "not editing text or a cell" carve-out, made real (the same move
-   * `panelEditInput` makes for a panel row).
-   */
   const buildInPlaceElement = (target: EditorTarget, style: EditorTextStyle): HTMLTextAreaElement | HTMLInputElement => {
-    // `stopPropagation` on every keydown keeps the whole gesture off the
-    // always-focused command bar's window listeners. Escape cancels; Enter
-    // commits ONLY in a cell — in a `<textarea>` it falls through and inserts a
-    // newline (§5.6's hard breaks).
     const keydown = (event: KeyboardEvent): void => {
       event.stopPropagation();
       if (event.key === "Escape") {
@@ -2046,24 +931,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         commitInPlace();
       }
     };
-    // The 2026-09-02 rework: every keystroke re-measures the typed text and
-    // re-sizes the overlay, so the box grows under the caret instead of
-    // scrolling. `paint` is what recomputes it (`updateEditor` is its last
-    // step); repainting the whole canvas per keystroke is Rule 5's accepted
-    // trade, the same one every pointer move already makes.
     const grow = (): void => {
       paint();
     };
     if (target.kind === "text") {
       const area = document.createElement("textarea");
       area.className = "text-editor";
-      // D-129, widened at entry 0147: a `<textarea>` soft-wraps by default, so an
-      // AUTO-width object — the normal case, `DEFAULT_TEXT_WIDTH` is `"auto"` —
-      // had its one drawn line broken into two typed ones (the operator's
-      // report). `wrap="off"` is the attribute that turns soft wrapping off; it
-      // is set once here rather than per paint because `editorTextStyle.wraps`
-      // reads the `width` slot, which no gesture can change while this element
-      // holds the keyboard.
       area.wrap = style.wraps ? "soft" : "off";
       area.value = editorSeed(state, target);
       area.addEventListener("keydown", keydown);
@@ -2080,13 +953,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     return field;
   };
 
-  /**
-   * Builds the overlay the first time it is shown and re-places it every paint
-   * (so it tracks its receiver through pan, zoom and a resize). NEVER rebuilds
-   * the element once open — that would drop focus, the caret and the typed
-   * text on the next pointer move, the same trap `updatePanels` navigates for a
-   * panel row. A receiver deleted mid-edit closes the editor (D-023's posture).
-   */
   const updateEditor = (): void => {
     if (inPlaceEditor === undefined) {
       removeInPlaceElement();
@@ -2106,11 +972,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       inPlaceElement.focus();
       inPlaceElement.select();
     }
-    // The 2026-09-02 rework: the box is measured from the text CURRENTLY IN THE
-    // EDITOR, not from the object's last-committed `resolvedContent`, so it
-    // grows under the caret. That is what removes the scrollbar rather than
-    // hiding it — there is never anything to scroll to. Only a `text` receiver
-    // grows; a table cell's box is the cell, which is fixed (§5.4).
     const liveSize =
       inPlaceEditor.kind === "text"
         ? editorTextBoxSize(object, inPlaceElement.value, style, sourceMeasurer)
@@ -2118,14 +979,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const placement = editorPlacement(inPlaceEditor, object, state.document.camera, ratio, liveSize);
     inPlaceElement.style.left = `${placement.left}px`;
     inPlaceElement.style.top = `${placement.top}px`;
-    // WORLD units for the box and the type, then ONE transform for the zoom.
-    // This is the whole reason the typed line breaks land where the drawn ones
-    // do: the browser is handed the same font size and the same wrap width
-    // `render/measure.ts` measures with, instead of both pre-multiplied into
-    // fractions (see `render/editor.ts`'s `EditorPlacement`). Family matters as
-    // much as size — the page font is monospace, a `text` object's is
-    // `sans-serif` — and colour now matches too, so clicking into a box does
-    // not change how its text looks.
     inPlaceElement.style.width = `${placement.width}px`;
     inPlaceElement.style.height = `${placement.height}px`;
     inPlaceElement.style.fontSize = `${style.fontSize}px`;
@@ -2144,14 +997,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
 
   const applyTransition = (next: AppTransition): void => {
-    // D-124: a contentless `text` creation asks for its in-place editor to open
-    // on the new box (D-136 clause 1 — `advance` only sets `openEditor` when no
-    // content was given). Set BEFORE `apply` so the `paint` it triggers builds
-    // and focuses the overlay in the same frame — `updateEditor` finds the
-    // just-created object in `state.document.objects` and uses D-125 clause 6's
-    // fallback box. At most one editor document-wide, so this replaces any open
-    // one (the same "one editor" rule the dblclick path follows). The
-    // opened-on-creation flag arms D-136 clause 2's abandon-empty removal.
     if (next.openEditor !== undefined) {
       inPlaceEditor = next.openEditor;
       inPlaceEditorFromCreation = true;
@@ -2166,17 +1011,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         evalContext,
       );
     }
-    // §5.7's file picker, on the same shape `load` uses: the pure half described
-    // the request, this half performs it, and the answer comes back through
-    // `executeCommand` like every other write (Rule 2). Read AFTER `apply`, so
-    // `state` already holds the just-created image the id names.
     if (next.pickImageFor !== undefined) {
       const objectId = next.pickImageFor;
       choosePicture(
-        // Decoded BEFORE anything is written, because the picture's natural size
-        // is what its `width`/`height` become (the human's Q-027 ruling). A file
-        // that does not decode still writes its `source` — see
-        // `commitImagePicture`'s `natural === undefined` arm.
         (dataUrl) =>
           decodeBitmap(dataUrl, (bitmap) => apply(commitImagePicture(state, objectId, dataUrl, bitmap, evalContext))),
         (message) => apply(logLine(state, message)),
@@ -2192,26 +1029,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     const line = input.value;
     const outcome = submitLine(state, line, viewport(), evalContext);
-    // D-109 clause 3: a refused command keeps what the operator typed, so it
-    // can be corrected in place; only an accepted line clears the input.
     if (!outcome.refused) {
       input.value = "";
     }
     applyTransition(outcome);
   });
 
-  // §5.10: the input bar is "always focused when the user is not editing text or
-  // a cell" — neither of which exists yet, so it is simply always focused.
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Escape") {
       apply(escape(state));
       return;
     }
-    // §5.9's space-drag meets §5.10's always-focused input bar: every space key
-    // arrives at the input, so a `target !== input` guard made the gesture
-    // unreachable (0090-REVIEW F3). An EMPTY input is the one case where a space
-    // means nothing as text — no command word starts with one — so that is where
-    // the gesture wins, and the keystroke is swallowed rather than typed.
     if (event.key === " " && input.value === "") {
       event.preventDefault();
       spaceHeld = true;
@@ -2224,26 +1052,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
-    // A press on the canvas moves focus to the body as its DEFAULT action, which
-    // runs AFTER this listener — so `input.focus()` alone was undone a moment
-    // later, and every keystroke after a click went nowhere until the operator
-    // clicked the input (entry 0091). Refusing the default keeps focus where it
-    // is; the deliberate `focus()` calls below then place it (§5.10: the command
-    // input is "always focused when the user is not editing text or a cell").
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
     const point = screenPointOf(event);
     if (event.button === 1 || spaceHeld) {
-      // **D-130**: a pan gesture is camera navigation, not "a click outside" — it
-      // leaves an open in-place editor alone, and the overlay tracks its receiver
-      // through the pan (it re-places every paint).
-      //
-      // The FOCUS is the load-bearing half, and entry 0146 missed it: the overlay
-      // commits on `blur`, and an unconditional `input.focus()` here IS a blur —
-      // so moving `commitInPlace()` below this branch changed nothing and any
-      // middle click still committed, with or without a drag (the operator's
-      // report at entry 0147). An open editor therefore KEEPS the keyboard
-      // across a pan; with nothing open, the command bar takes it as always.
       if (inPlaceEditor === undefined) {
         input.focus();
       }
@@ -2251,54 +1063,29 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     input.focus();
-    // D-125 clause 5 / D-128: a plain canvas press IS "a click outside" and
-    // commits an open in-place editor before the press selects anything.
-    //
-    // TWO paths reach that commit and the order between them is the thing to
-    // hold on to (it is what entry 0146 got wrong): when the overlay holds the
-    // keyboard, `input.focus()` above blurs it and the `blur` handler commits
-    // SYNCHRONOUSLY, inside that call — so by the time this line runs the work
-    // is done and `commitInPlace` returns at its own re-entrancy guard. This
-    // call is the path for a press while the overlay is open but does NOT hold
-    // focus, where no blur is coming. Either way the commit lands before
-    // `pointerDownAt` moves the selection, which is the ordering that matters.
     if (inPlaceEditor !== undefined) {
       commitInPlace();
     }
-    // D-100 clauses 3-4: shift is the additive-selection modifier.
     applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey, evalContext));
   });
 
-  // D-125 clause 4: double-click opens the in-place editor on the `text` object
-  // or table cell under the pointer; single-click still means select-and-drag,
-  // untouched. The two `pointerdown`s of the double-click land first — they
-  // select the object — then this fires and opens the editor on it. `paint`'s
-  // `updateEditor` step builds and focuses the element.
   canvas.addEventListener("dblclick", (event: MouseEvent) => {
     const target = editorTargetAt(screenPointOf(event), state.document.objects, state.document.camera);
     if (target === undefined) {
       return;
     }
     inPlaceEditor = target;
-    inPlaceEditorFromCreation = false; // D-136: a double-click is not a creation — never abandon-deletes.
+    inPlaceEditorFromCreation = false;
     paint();
   });
 
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
     const point = screenPointOf(event);
     if (pan !== undefined) {
-      // Backing-pixel deltas, like every other screen number here: a CSS-pixel
-      // delta would pan at 1/ratio of the pointer's speed on a scaled display.
       apply(panByScreen(state, point.x - pan.lastScreenX, point.y - pan.lastScreenY));
       pan = { lastScreenX: point.x, lastScreenY: point.y };
       return;
     }
-    // A grabber says which way it stretches BEFORE the press (the 2026-09-02
-    // text-box rework). Read from the same lookup `pointerDown` arms a resize
-    // from, so the cursor can never promise one the press would miss. Set
-    // straight on the element rather than through state: it is a hover hint,
-    // nothing in the document depends on it, and routing it through `apply`
-    // would repaint the canvas on every mouse move that changed nothing else.
     const overHandle = resizeHandleUnder(state.interaction, point, state.document.objects, state.document.camera);
     canvas.style.cursor = overHandle === undefined ? "" : resizeCursor(overHandle);
     apply(pointerMoveTo(state, point, evalContext));
@@ -2321,35 +1108,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     { passive: false },
   );
 
-  // D-101 clause 4: a panel is dragged by its HEADER only. ONE delegated
-  // listener on the container (rather than one per header, re-attached every
-  // `updatePanels` rebuild) so a rebuild mid-gesture cannot drop it — see
-  // `panelDrag`'s own doc comment for why the gesture continues on `window`
-  // rather than on the header element for the same reason. The dismiss
-  // button sits inside the header (D-106 clause 2), so it is excluded below
-  // FIRST — otherwise pressing it would also arm a drag.
-  //
-  // **D-107 fix item 1 (F1)**: `preventDefault()` now runs for every panel
-  // press — not only a header press, which is all the previous version
-  // covered — EXCEPT a press inside the row editor's OWN input: that element
-  // already legitimately owns the keyboard (§5.10's "editing text or a cell"
-  // carve-out), and its native mousedown handling is what places the caret at
-  // the clicked character, not merely "moves focus" — preventing THAT default
-  // would break clicking inside an open editor to reposition the caret while
-  // fixing nothing, since a focused input never suffers the "focus falls to
-  // body" bug this exists to stop (verified live: without this carve-out, a
-  // click anywhere in an open input's text moved the caret to the END
-  // regardless of where the pointer landed). Everywhere else, focus is placed
-  // DELIBERATELY: the command bar, but only when no row editor is open — an
-  // open editor's input keeps the keyboard, never both at once and never
-  // neither.
   panelsContainer.addEventListener("pointerdown", (event: PointerEvent) => {
     const target = event.target as HTMLElement;
-    // A drop-down joins the row input in this carve-out: `preventDefault` on a
-    // `<select>`'s press stops it OPENING, which would make the control the
-    // 2026-09-02 rework added inert. Like the input, it is a real form control
-    // that owns its own focus, so neither the default nor the command bar's
-    // `focus()` may be taken from it.
     const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice") !== null;
     if (!insideOpenEditor) {
       event.preventDefault();
@@ -2366,24 +1126,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (element === null || objectId === undefined) {
       return;
     }
-    // D-101 clause 8: a panel drag must not reach the canvas. This listener
-    // is on `panelsContainer`, a sibling of `canvas` under `#stage`, so the
-    // press never fires there to begin with — nothing to suppress, unlike
-    // the canvas's own pointerdown (D-088).
     const bounds = element.getBoundingClientRect();
     panelDrag = { objectId, offsetLeft: event.clientX - bounds.left, offsetTop: event.clientY - bounds.top };
   });
 
-  /**
-   * D-101's drag gesture continues on `window`, deliberately NOT on the
-   * header element `pointerdown` fired on. `updatePanels` rebuilds every
-   * panel element on every paint, and a paint runs on every `apply` this very
-   * listener triggers — so a listener or `setPointerCapture` bound to that
-   * header would be torn down mid-gesture the moment the first `pointermove`
-   * repainted it. Reading `panelDrag` from `window` events instead survives
-   * that by construction, the same reason `pan` above is tracked in a
-   * closure variable rather than on the canvas element's own state.
-   */
   window.addEventListener("pointermove", (event: PointerEvent) => {
     if (panelDrag === undefined) {
       return;
@@ -2402,9 +1148,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   window.addEventListener("pointerup", endPanelDrag);
   window.addEventListener("pointercancel", endPanelDrag);
 
-  // D-106 clauses 2-3: the dismiss control hides one panel without touching
-  // the selection. Delegated the same way and for the same reason as the
-  // drag listener above.
   panelsContainer.addEventListener("click", (event: MouseEvent) => {
     const target = event.target as HTMLElement;
     const dismissButton = target.closest(".panel-dismiss");
@@ -2417,10 +1160,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
 
-    // The human's note 4 at entry 0173: re-picking a picture from the panel.
-    // Delegated exactly as the paperclip below is, and read the same way — the
-    // row's `dataset.path` is not needed, because an object has one picture and
-    // `commitImagePicture` names the slot itself.
     const pick = target.closest(".panel-pick");
     if (pick !== null) {
       const objectId = (pick.closest(".panel") as HTMLElement | null)?.dataset.objectId;
@@ -2434,11 +1173,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
 
-    // D-102 clauses 2-4: a paperclip on a modifiable row. Delegated the same
-    // way and for the same reason as the dismiss control above — the row it
-    // sits on is rebuilt whole on every paint (until its own editor opens,
-    // clause 8), so a listener bound to the paperclip element itself would be
-    // torn down mid-gesture.
     const clip = target.closest(".panel-clip");
     if (clip === null) {
       return;
@@ -2451,20 +1185,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     if (clip.classList.contains("panel-clip--formula")) {
-      // Clause 4: BLUE unlinks immediately — no input to open.
       apply(unlinkPanelSlot(state, objectId, path, evalContext));
       return;
     }
-    // Clause 4: GREY opens that row's own text input. `updatePanels` (next
-    // paint) is what actually builds it and moves focus into it.
     openEditor = { objectId, path };
     paint();
   });
 
-  // A drop-down row commits the moment it changes (the human's 2026-09-02
-  // instruction) — there is no edit mode and no Enter to press, because the
-  // schema already said what the choices are. Delegated for the same reason
-  // every other panel listener is: the `<select>` is rebuilt on every paint.
   panelsContainer.addEventListener("change", (event: Event) => {
     const select = (event.target as HTMLElement).closest(".panel-row__choice") as HTMLSelectElement | null;
     if (select === null) {
@@ -2473,10 +1200,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const rowElement = select.closest(".panel-row") as HTMLElement | null;
     const objectId = (select.closest(".panel") as HTMLElement | null)?.dataset.objectId;
     const path = rowElement?.dataset.path;
-    // The option's value is its INDEX into the row's declared choices; the
-    // model is rebuilt from the CURRENT document rather than trusting anything
-    // the DOM carried, so a panel rebuilt between the click and this event
-    // cannot write a value from a stale choice list.
     const object = state.document.objects.find((candidate) => candidate.id === objectId);
     if (objectId === undefined || path === undefined || object === undefined) {
       return;
@@ -2494,25 +1217,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   input.focus();
 }
 
-/** §5.10's scrolling log, redrawn whole. Immediate-mode, like the canvas: there is no diffing here and nothing to keep in sync. */
 function drawLog(logElement: HTMLElement, lines: readonly string[]): void {
   logElement.textContent = lines.join("\n");
   logElement.scrollTop = logElement.scrollHeight;
 }
 
-/**
- * D-094's properties panel, redrawn whole (immediate-mode, like the log and the
- * canvas). Header, then the modifiable rows, then — if there are any — the thick
- * rule (clause 5) and the derived rows. Every piece of text goes in through
- * `textContent`: an object's name and a slot's value are user-controlled, and
- * `<b>` is a legal object name (D-094 clause 14).
- *
- * The header now carries a DISMISS control beside the name (**D-106** clause
- * 2) — `main.ts`'s delegated listeners above find both it and the header's
- * drag handle by class name, never by element identity, which is what lets
- * this function rebuild the header whole on every call without breaking a
- * gesture already in progress (see `panelDrag`'s own doc comment in `start`).
- */
 function writePanel(panelElement: HTMLElement, model: PanelModel, editing: PanelRowEdit | undefined): void {
   const header = document.createElement("div");
   header.className = "panel-header";
@@ -2522,7 +1231,7 @@ function writePanel(panelElement: HTMLElement, model: PanelModel, editing: Panel
   const dismiss = document.createElement("button");
   dismiss.type = "button";
   dismiss.className = "panel-dismiss";
-  dismiss.textContent = "×"; // ×, a plain glyph rather than an icon (Rule 5).
+  dismiss.textContent = "×";
   dismiss.setAttribute("aria-label", `hide the ${model.header} panel`);
   header.append(name, dismiss);
   const children: HTMLElement[] = [header];
@@ -2535,30 +1244,12 @@ function writePanel(panelElement: HTMLElement, model: PanelModel, editing: Panel
     rule.className = "panel-rule";
     children.push(rule);
     for (const row of model.derived) {
-      // A derived row is never the one `editing` names (D-102 clause 2: it
-      // carries no paperclip at all, so nothing can have opened one on it),
-      // but `editing` is still passed through rather than hard-coded
-      // `undefined` — one caller, one meaning, never two spellings of "not
-      // editable" for what is structurally the same row-building call.
       children.push(panelRowElement(row, true, editing));
     }
   }
   panelElement.replaceChildren(...children);
 }
 
-/**
- * One panel row: `<path>` and, on its right, either the value (D-094 clause 6
- * shows a formula's reconstructed source too) or — when `editing` names this
- * row — a text input in its place (**D-102** clauses 4, 6-7). `derived` rows
- * get the italic class (D-094 clause 5) and, being read-only, never a
- * paperclip; neither does a `synthetic` row (D-102 clause 2 — the table
- * `cells` summary stands for a whole family, not one slot to write).
- *
- * `dataset.path` is what the delegated paperclip-click listener in `start`
- * reads to know which row was clicked — never a listener bound to the row
- * itself, for the same rebuild-mid-gesture reason every other panel listener
- * here is delegated (see `panelDrag`'s own doc comment).
- */
 function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit | undefined): HTMLElement {
   const element = document.createElement("div");
   element.className = derived ? "panel-row panel-row--derived" : "panel-row";
@@ -2571,21 +1262,11 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
   const right = document.createElement("span");
   right.className = "panel-row__right";
   if (row.choices !== undefined) {
-    // A closed value set is a drop-down, always — not a paperclip that opens a
-    // text box the operator has to know the words for (the human, 2026-09-02).
-    // It commits on `change`, so there is no edit MODE for such a row and
-    // `editing` cannot name one.
     right.append(panelChoiceSelect(row.choices));
   } else if (editing !== undefined && editing.path === row.path) {
-    // D-107 (F3): the SEED, not the rounded display `value` — see
-    // `PanelRow.editSeed`'s own doc comment for why they must differ.
     right.append(panelEditInput(row.editSeed, editing.handlers));
   } else {
     if (row.picker) {
-      // The human's note 4: a picture is chosen from a file, so this row offers
-      // the picker where every other one offers a paperclip. The paperclip's own
-      // text input is not merely unhelpful here — nobody types a data URL — so
-      // the two are alternatives rather than neighbours.
       right.append(panelPickElement(row));
     } else if (!derived && !row.synthetic) {
       right.append(panelClipElement(row));
@@ -2600,17 +1281,6 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
   return element;
 }
 
-/**
- * A row's drop-down (the human's 2026-09-02 instruction). One `<option>` per
- * declared choice, carrying its INDEX as the option value — never the rendered
- * label, and never the value stringified, so a `boolean` choice survives the
- * round trip (see `PanelRowChoices`).
- *
- * NO listener is bound here. The `change` is caught by the delegated listener in
- * `start`, which finds the row by `dataset.path` — the same reason the paperclip
- * and the header's drag handle are delegated: this element is rebuilt whole on
- * every paint, and a listener bound to it would die mid-gesture.
- */
 function panelChoiceSelect(choices: PanelRowChoices): HTMLSelectElement {
   const select = document.createElement("select");
   select.className = "panel-row__choice";
@@ -2620,21 +1290,10 @@ function panelChoiceSelect(choices: PanelRowChoices): HTMLSelectElement {
     option.textContent = choices.labels[index] ?? "";
     select.append(option);
   }
-  // -1 — the slot holds something none of the choices names (a hand-typed
-  // `set`, or a formula since unlinked) — shows blank rather than claiming the
-  // first choice is live.
   select.selectedIndex = choices.selectedIndex;
   return select;
 }
 
-/**
- * D-102 clauses 2-3: a paperclip on a MODIFIABLE, non-synthetic row — bold
- * blue when the slot's KIND is `formula`, faded grey when it is `literal`.
- * The icon reports the kind, never whether a formula happens to reference
- * anything, so it can never disagree with the `= ...` text beside it (the
- * human's own reasoning at D-102 clause 3). A plain glyph, like the dismiss
- * control's `×` (Rule 5) — no icon font, no SVG.
- */
 function panelClipElement(row: PanelRow): HTMLElement {
   const clip = document.createElement("span");
   clip.className = row.kind === "formula" ? "panel-clip panel-clip--formula" : "panel-clip panel-clip--literal";
@@ -2643,18 +1302,6 @@ function panelClipElement(row: PanelRow): HTMLElement {
   return clip;
 }
 
-/**
- * The "choose…" control on an `image`'s `source` row (the human's note 4 at
- * entry 0173) — a plain glyph-and-word span, like the paperclip and the dismiss
- * `×` beside it (Rule 5: no icon font, no SVG, no `<button>` whose default focus
- * behaviour D-107 would then have to be taught about).
- *
- * NO listener is bound here, for the reason every panel control is delegated:
- * this element is rebuilt whole on every paint, so a listener bound to it would
- * die mid-gesture. `start`'s delegated `pointerdown` finds it by class and reads
- * the panel's `dataset.objectId` — and not the row's `dataset.path`, because an
- * object has one picture and `commitImagePicture` names the slot itself.
- */
 function panelPickElement(row: PanelRow): HTMLElement {
   const pick = document.createElement("span");
   pick.className = "panel-pick";
@@ -2663,27 +1310,6 @@ function panelPickElement(row: PanelRow): HTMLElement {
   return pick;
 }
 
-/**
- * The GREY paperclip's text input (D-102 clauses 4, 6-7), seeded with
- * `PanelRow.editSeed` — the unrounded value, per D-107's own fix (F3), not
- * the rounded `value` text shown beside it.
- *
- * Every keydown here `stopPropagation`s, unconditionally: none of it may
- * reach the window-level handlers built for the ALWAYS-focused command bar
- * (space held for a pan-drag, Escape's cancel-then-deselect) — §5.10's own
- * carve-out, "not editing text or a cell," made true of a panel row for the
- * first time this cycle. This is also what gives Escape its D-102 clause 7
- * meaning here for free: stopped before it ever reaches the `window`
- * listener, so ONLY this input's own handler sees it, and the selection is
- * never touched — no separate check needed at that outer listener.
- *
- * `settled` guards against calling a handler twice: committing or cancelling
- * triggers a repaint that removes this very input from the DOM (D-102 clause
- * 8 — the panel is rebuilt once, to show the plain row again), and removing a
- * focused element fires its OWN `blur` — which would otherwise re-invoke
- * `onCancel` a second time, reentrantly, from inside the repaint the first
- * call already started.
- */
 function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputElement {
   const input = document.createElement("input");
   input.type = "text";
@@ -2716,45 +1342,17 @@ function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputEle
   return input;
 }
 
-/** §5.11's "save via JSON download". */
 function downloadDocument(state: Document): void {
   const url = URL.createObjectURL(new Blob([saveDocument(state)], { type: "application/json" }));
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = "graphpaper.json";
-  // In the document, and revoked LATER: a detached anchor's click is ignored by
-  // some browsers, and revoking the URL in the same tick can cancel the download
-  // the click just started (0090-REVIEW F4).
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/**
- * §5.11's "load via file input".
- *
- * A refused file reports its reason and changes nothing — `deserializeDocument`
- * is the boundary that decides, and this half neither re-checks it nor repairs
- * it. `onLoaded` receives the document only when there is one; `onRefused`
- * receives the message otherwise, so a caller cannot accidentally treat a
- * failure as a load.
- *
- * **The promise chain has a rejection path (D-127 clause 5).** It did not, and
- * that is what made D-108's defect invisible rather than merely wrong: a
- * malformed AST threw a `TypeError` out of `loadDocument` INSIDE this `.then()`,
- * so the operator got no message, no log line, and no sign the load had failed —
- * the program simply did nothing. `loadDocument` no longer throws for those
- * shapes, but the `catch` stays regardless: `file.text()` can reject on its own
- * (an unreadable file, a revoked permission), and a boundary that turns an
- * exception into silence is the defect, not the particular exception that
- * exposed it. Anything that escapes now reaches `onRefused` like any other
- * refusal.
- *
- * `context` is passed straight to `loadDocument` so a loaded `text` object's
- * `measuredHeight` measures against the real `TextMeasurer` rather than
- * `#MEASURE` (D-118).
- */
 function openDocument(
   onLoaded: (loaded: Document, line: string) => void,
   onRefused: (message: string) => void,
@@ -2766,7 +1364,7 @@ function openDocument(
   picker.addEventListener("change", () => {
     const file = picker.files?.[0];
     if (file === undefined) {
-      return; // The picker was dismissed — not a refusal, and nothing to say.
+      return;
     }
     void file
       .text()
@@ -2779,8 +1377,6 @@ function openDocument(
         onRefused(result.message);
       })
       .catch((error: unknown) => {
-        // D-127 clause 5. Names the file, because at this point nothing else
-        // will: there is no refusal message from the loader to quote.
         const reason = error instanceof Error ? error.message : String(error);
         onRefused(`could not read ${file.name}: ${reason}`);
       });
@@ -2788,31 +1384,6 @@ function openDocument(
   picker.click();
 }
 
-/**
- * §5.7's "Load via file picker, store as a data URL in the document."
- *
- * The same shape `openDocument` above takes, and deliberately so — a file input
- * created on demand, clicked, and read asynchronously — with two differences that
- * follow from what is being read:
- *
- * - `accept="image/*"`, because the file has to DECODE, not parse. A file that
- *   is not a picture reaches `render/images.ts`, which records the failed decode
- *   and leaves the object drawn as an empty frame; `accept` is the browser's
- *   own filter, not a guarantee (an operator can always choose "all files").
- * - `readAsDataURL`, not `.text()`. §5.7 says the document stores a data URL, and
- *   `FileReader` is the one API that produces one — the alternative is reading
- *   bytes and base64-encoding them by hand, which would be a second encoder for
- *   a thing the platform already does.
- *
- * A DISMISSED picker calls nothing, exactly as `openDocument`'s does: there is
- * no refusal to report and nothing to write. The created image keeps its empty
- * `source` and draws as a frame — visible and deletable, unlike the invisible
- * object D-142 refused.
- *
- * Every failure path reports through `onRefused` rather than falling silent, for
- * D-127 clause 5's reason: a boundary that turns an error into silence is the
- * defect, whatever the particular error.
- */
 function choosePicture(onChosen: (dataUrl: string) => void, onRefused: (message: string) => void): void {
   const picker = document.createElement("input");
   picker.type = "file";
@@ -2820,13 +1391,10 @@ function choosePicture(onChosen: (dataUrl: string) => void, onRefused: (message:
   picker.addEventListener("change", () => {
     const file = picker.files?.[0];
     if (file === undefined) {
-      return; // The picker was dismissed — not a refusal, and nothing to say.
+      return;
     }
     const reader = new FileReader();
     reader.addEventListener("load", () => {
-      // `readAsDataURL` yields a string on success; the other arm of
-      // `FileReader.result` (an `ArrayBuffer`) belongs to `readAsArrayBuffer` and
-      // cannot occur here. Checked rather than cast, so a surprise is a message.
       if (typeof reader.result !== "string") {
         onRefused(`could not read ${file.name} as a data URL`);
         return;
@@ -2841,9 +1409,6 @@ function choosePicture(onChosen: (dataUrl: string) => void, onRefused: (message:
   picker.click();
 }
 
-// The bootstrap. Guarded so that importing this module in a headless test
-// environment (`vitest` runs `node`) reaches the pure half above without
-// touching a DOM that is not there.
 if (typeof document !== "undefined") {
   const canvas = document.querySelector<HTMLCanvasElement>("#canvas");
   const logElement = document.querySelector<HTMLElement>("#log");

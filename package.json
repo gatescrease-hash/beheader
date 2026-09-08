@@ -2,12 +2,14 @@
   "name": "graphpaper",
   "private": true,
   "version": "0.0.0",
+  "description": "A spatial canvas where every object is a live node in one shared dependency graph.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.engine.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prose": "node tools/ste-check.mjs --all"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

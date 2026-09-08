@@ -1,12 +1,7 @@
 /**
- * format.test.ts — tests for formula/format.ts (§5.2's "displaying a formula maps IDs
- * back to current names", and the report D-040 requires).
+ * format.test.ts
  *
- * The claim most of this file makes is a ROUND TRIP: parse a source string, format the
- * AST, parse the result, and require the two ASTs to be identical. That is the only
- * assertion strong enough to catch a dropped parenthesis, because a formatter that
- * loses one still produces a plausible-looking string — `a - (b - c)` and `a - b - c`
- * differ by nothing a reader would flag and by everything the evaluator would.
+ * AST back to text. A renamed object must format with its new name.
  */
 import { describe, expect, it } from "vitest";
 import type { AddressableObject } from "../address.ts";
@@ -15,7 +10,6 @@ import { MAX_FORMULA_AST_DEPTH, type FormulaAst } from "./ast.ts";
 import { formatFormula } from "./format.ts";
 import { isParseError, parseFormula } from "./parser.ts";
 
-/** Same fixture convention as `parser.test.ts`: a non-table type unless a test is about bare cell refs. */
 function objects(...entries: Array<[id: string, name: string, type?: ObjectType]>): AddressableObject[] {
   return entries.map(([id, name, type = "polygon"]) => ({ id, name, type }));
 }
@@ -30,12 +24,10 @@ function parseOk(source: string, docObjects: readonly AddressableObject[] = DOCU
   return result;
 }
 
-/** Formats a parsed source string — the shape almost every test below wants. */
 function formatted(source: string, docObjects: readonly AddressableObject[] = DOCUMENT, tableObjectId?: string): string {
   return formatFormula(parseOk(source, docObjects, tableObjectId), docObjects);
 }
 
-/** Asserts that formatting then re-parsing yields an AST identical to the original. */
 function expectRoundTrip(source: string, docObjects: readonly AddressableObject[] = DOCUMENT, tableObjectId?: string): string {
   const first = parseOk(source, docObjects, tableObjectId);
   const text = formatFormula(first, docObjects);
@@ -199,7 +191,6 @@ describe("relativeToObjectId — the in-place cell editor's bare Excel form (D-1
 });
 
 describe("the depth guard — a saved AST deeper than any parse could build (D-079)", () => {
-  /** A left-deep `1 + 1 + ...` ladder, built by hand: `parseFormula` refuses this shape past MAX_FORMULA_AST_DEPTH, so a document holding one arrived through §5.11's load path, not through typing. */
   function ladder(levels: number): FormulaAst {
     let ast: FormulaAst = { type: "literal", value: 1 };
     for (let index = 0; index < levels; index += 1) {
@@ -209,21 +200,17 @@ describe("the depth guard — a saved AST deeper than any parse could build (D-0
   }
 
   it("formats an AST exactly at the limit without eliding anything", () => {
-    // MAX_FORMULA_AST_DEPTH - 1 binaryOp levels over one literal = depth 1000.
     const formatted = formatFormula(ladder(MAX_FORMULA_AST_DEPTH - 1), DOCUMENT);
     expect(formatted).not.toContain("...");
     expect(formatted.startsWith("1 + 1")).toBe(true);
   });
 
   it("elides past the limit rather than unwinding a RangeError", () => {
-    // 40,000 levels: a size at which this recursion threw before the guard existed.
     let formatted = "";
     expect(() => {
       formatted = formatFormula(ladder(40_000), DOCUMENT);
     }).not.toThrow();
     expect(formatted).toContain("...");
-    // The elision is at the DEEP end (the left spine), and everything shallower than
-    // the limit still prints — a truncated display, not a lost one.
     expect(formatted.endsWith("1 + 1")).toBe(true);
   });
 });

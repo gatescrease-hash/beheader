@@ -1,16 +1,8 @@
 /**
- * document.test.ts — Tests for §5.11's save/load format, closing PROJECT_BRIEF
- * §6 Phase 0 acceptance clause 4 ("a document round-trips to JSON and back
- * identically").
+ * document.test.ts
  *
- * Colocated with document.ts per D-001. Fixtures are built by hand, matching
- * `mutation.test.ts`'s own convention — but round-trip fixtures are first run
- * through `deriveValidateAndEvaluate` so their formula/derived caches are
- * ALREADY correct before being saved; otherwise a "round-trip" test would be
- * comparing against a deliberately-stale fixture rather than the document's
- * true, internally-consistent state (evaluate() always recomputes on load,
- * so a stale input fixture would legitimately differ after reload — that
- * would be a bug in the TEST, not in document.ts).
+ * The save and load round trip. A document must come back the same. A
+ * derived value must never appear in the file.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "./address.ts";
@@ -49,7 +41,6 @@ function addObject(id: string, name: string, aRef: Address, bRef: Address): Grap
   };
 }
 
-/** PROJECT_BRIEF §6's value/add fixture, already evaluated (see file header). */
 function consistentFixture(): readonly GraphObject[] {
   const initial = [
     valueObject("obj_1", "value_1", 3),
@@ -107,12 +98,6 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
   });
 
   it("round-trips a JOURNAL carrying the SAME value vocabulary the object list does (0025-REVIEW-phase0 finding 1 / REVISE item 4) — including the literal saveDocument(loaded) === json text equality that catches this whole class", () => {
-    // 0025-REVIEW-phase0's own diagnosis: the previous round-trip test's
-    // fixture journal held a single finite `3`, so the journal was carried
-    // through the test without ever being TESTED. This fixture exercises
-    // every member of Value a journal operation payload can carry — number,
-    // string, boolean, null, Point, Point[], ErrorValue — across all three
-    // operation kinds, so a future regression in ANY of them fails this test.
     const document: Document = {
       formatVersion: FORMAT_VERSION,
       nextObjectId: 3,
@@ -149,10 +134,6 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.document).toEqual(document);
-    // The one-line check 0025-REVIEW-phase0 asked for: saving what was just
-    // loaded reproduces the EXACT same JSON text, not merely an equal-shaped
-    // document — catches any silent rewrite, whatever value turns out to be
-    // the next one JSON cannot represent.
     expect(saveDocument(result.document)).toBe(json);
   });
 
@@ -168,9 +149,6 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
   });
 
   it("re-evaluates on load rather than trusting a stale cached formula/derived value sitting in the file", () => {
-    // Simulates drift/tampering: the file's own cached in.a value disagrees
-    // with what value_1.value actually holds. Loading must recompute, not
-    // trust the file — §5.11: "then evaluates."
     const document: Document = { ...createEmptyDocument(), objects: consistentFixture() };
     const parsed = JSON.parse(saveDocument(document)) as { objects: Array<{ id: string; slots: Record<string, { value?: unknown }> }> };
     const add1 = parsed.objects.find((object) => object.id === "obj_3");
@@ -184,15 +162,11 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const reloadedAdd1 = result.document.objects.find((object) => object.id === "obj_3");
-    expect(reloadedAdd1?.slots["in.a"]).toMatchObject({ value: 3 }); // recomputed from value_1, not the tampered 999
+    expect(reloadedAdd1?.slots["in.a"]).toMatchObject({ value: 3 });
     expect(reloadedAdd1?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
   });
 
   it("round-trips an `image` object — six literal slots, no derived ones, and now a SCHEMA to be reconciled against (§5.7, entry 0165)", () => {
-    // Before `image` had a schema entry, `validateIntegrity` skipped the whole
-    // object (D-017's one permitted exception). It no longer does, so a loaded
-    // image must satisfy D-018's two-way check like every other type — which is
-    // what this pins, not the JSON encoding of six plain values.
     const image: GraphObject = {
       id: "obj_1",
       name: "image_1",
@@ -258,13 +232,13 @@ describe("deserializeDocument — malformed input, never throws", () => {
   it("rejects a missing or malformed camera", () => {
     const serialized = serializeDocument(createEmptyDocument());
     expect(deserializeDocument({ ...serialized, camera: undefined }).ok).toBe(false);
-    expect(deserializeDocument({ ...serialized, camera: { x: 1, y: 2 } }).ok).toBe(false); // missing zoom
+    expect(deserializeDocument({ ...serialized, camera: { x: 1, y: 2 } }).ok).toBe(false);
     expect(deserializeDocument({ ...serialized, camera: { x: "1", y: 2, zoom: 3 } }).ok).toBe(false);
   });
 
   it("rejects an object missing id/name/type, or with a non-object slots", () => {
     const serialized = serializeDocument(createEmptyDocument());
-    expect(deserializeDocument({ ...serialized, objects: [{ name: "x", type: "value", slots: {} }] }).ok).toBe(false); // missing id
+    expect(deserializeDocument({ ...serialized, objects: [{ name: "x", type: "value", slots: {} }] }).ok).toBe(false);
     expect(deserializeDocument({ ...serialized, objects: [{ id: "obj_1", name: "x", type: "value", slots: null }] }).ok).toBe(false);
   });
 
@@ -279,8 +253,6 @@ describe("deserializeDocument — malformed input, never throws", () => {
   });
 
   it("routes a formula slot at an undeclared path (D-017) through mutate's own rejection — the shape a hand-edited file could carry today, since document.ts trusts a slot's content unchecked", () => {
-    // `bogus` is not `value`'s one schema-declared path (`primitives/schema.ts`'s
-    // VALUE_SCHEMA) — D-017's undeclared-slot check, not this file's job to catch.
     const objects: readonly GraphObject[] = [
       {
         id: "obj_1",
@@ -361,15 +333,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
   });
 });
 
-// **D-108 clause 1 / D-127**, the reconciliation both rulings left owed. Until the
-// load-hardening cycle, `reconstructSlot` cast `raw.ast as FormulaAst` unchecked and
-// each of these four shapes threw a `TypeError` STRAIGHT OUT of `loadDocument` —
-// which `main.ts`'s `openDocument` turned into an unhandled promise rejection, so
-// the operator saw nothing happen at all. D-108's own note says this test "does not
-// currently cover a formula slot at all" and that extending it is the intended
-// visible diff; this is that diff.
 describe("deserializeDocument — a loaded formula AST's SHAPE is validated at the boundary (D-108 clause 2, owner D-127)", () => {
-  /** A one-object document whose single formula slot carries `ast` verbatim, however malformed. */
   function documentWithRawAst(ast: unknown): unknown {
     return {
       formatVersion: FORMAT_VERSION,
@@ -380,7 +344,6 @@ describe("deserializeDocument — a loaded formula AST's SHAPE is validated at t
     };
   }
 
-  /** D-108 clause 1's four shapes, by name, plus the ones the same cast let through. */
   const MALFORMED_ASTS: readonly { readonly label: string; readonly ast: unknown }[] = [
     { label: "a null ast", ast: null },
     { label: "a binaryOp with null children", ast: { type: "binaryOp", operator: "+", left: null, right: null } },
@@ -407,8 +370,6 @@ describe("deserializeDocument — a loaded formula AST's SHAPE is validated at t
       }).not.toThrow();
       expect(result?.ok).toBe(false);
       if (result !== undefined && !result.ok) {
-        // §5.10: a rejection names the slot involved. "value_1.value" is the
-        // whole point — "malformed document" would leave the operator hunting.
         expect(result.message).toContain("value_1.value");
       }
     });
@@ -429,8 +390,6 @@ describe("deserializeDocument — a loaded formula AST's SHAPE is validated at t
     ];
     for (const ast of wellFormed) {
       const result = deserializeDocument(documentWithRawAst(ast));
-      // A `reference`/`range` to a slot on this same object may still be refused
-      // by mutate's graph checks — what must NOT happen is a SHAPE refusal.
       if (!result.ok) {
         expect(result.message).not.toContain("is not a formula node type");
         expect(result.message).not.toContain("must be an object, not");
@@ -465,17 +424,7 @@ describe("deserializeDocument — a loaded formula AST's SHAPE is validated at t
   });
 });
 
-// **D-126**, the reconciliation that ruling left owed: "a document serialized under
-// a schema with N derived slots loads under a schema with N+1, and the new slot
-// arrives as its placeholder."
-//
-// The defect: `serializeSlot` drops a derived slot's VALUE but keeps its KEY, and
-// the loader took the file's key set as authoritative — so D-018's "every declared
-// derived path must be present" refused every document saved before a schema gained
-// a derived slot. A real document saved before entry 0141 was rejected with
-// `text_1.measuredWidth is missing`, which reads as a corrupt file.
 describe("deserializeDocument — the SCHEMA says which derived slots exist, not the file (D-126)", () => {
-  /** An `add` object as an OLDER build would have saved it: its formula inputs, but no `out.result` key at all — the shape a schema that later gained a derived slot produces. */
   function documentMissingADerivedSlot(): unknown {
     return {
       formatVersion: FORMAT_VERSION,
@@ -492,7 +441,6 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
           slots: {
             "in.a": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_1", path: ["value"] } }, value: null },
             "in.b": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["value"] } }, value: null },
-            // No `out.result`. THIS is the whole test.
           },
         },
       ],
@@ -515,7 +463,7 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
     }
     const added = result.document.objects.find((object) => object.name === "add_1");
     expect(added?.slots["out.result"]?.kind).toBe("derived");
-    expect(added?.slots["out.result"]?.value).toBe(7); // 3 + 4, recomputed on load
+    expect(added?.slots["out.result"]?.value).toBe(7);
   });
 
   it("DROPS a derived slot the file carries that this build's schema no longer declares (§5.1: `derived` is fixed by schema)", () => {
@@ -550,10 +498,6 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
     const result = deserializeDocument(unknownType);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // The slot SURVIVES rather than being dropped — that is the claim. Its
-      // VALUE is then whatever `evaluate` makes of a derived slot no schema has
-      // a compute for, which is an `ErrorValue` and is legitimate state (§5.1),
-      // not this function's business.
       expect(result.document.objects[0]?.slots["anything"]?.kind).toBe("derived");
     }
   });
@@ -568,18 +512,6 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
   });
 });
 
-// D-141: a `script` node's structural port names round-trip through save/load
-// like any other plain data. `SCRIPT_SCHEMA` now exists (entry 0169), so a
-// document whose `ports.out` is non-empty must ALSO carry that out port's
-// `placeholder.<name>`/`out.<name>` slots and, for every name in `ports.in`,
-// an `in.<name>` slot — `out.<name>`'s dependencies are real addresses
-// (`in.*` plus the port's own placeholder), and `validateIntegrity`'s
-// dangling-reference check requires every dependency address to resolve to a
-// slot that actually exists (§5.1.1) — an absent NON-derived slot is tolerated
-// on its OWN account (D-018's second check) but not as another slot's
-// dependency. `documentWithPorts`'s optional `slots` parameter supplies
-// exactly what each test's own `ports` value requires; every test below that
-// keeps `out: []` needs none of this, unaffected.
 describe("deserializeDocument — ports (D-141), structural validation only", () => {
   function documentWithPorts(ports: unknown, slots: Record<string, unknown> = {}): unknown {
     return {
@@ -608,9 +540,6 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
           "in.factor": { kind: "literal", value: 1 },
           "in.speed": { kind: "literal", value: 2 },
           "placeholder.result": { kind: "literal", value: 0 },
-          // "out.result" is deliberately OMITTED — `withSchemaDerivedSlots`
-          // (D-126) synthesizes it, the same mechanical fill a load already
-          // gives every other declared derived path.
         },
       ),
     );
@@ -623,7 +552,7 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
   it("rejects a ports field that is not an object with array in/out fields", () => {
     expect(deserializeDocument(documentWithPorts("nope")).ok).toBe(false);
     expect(deserializeDocument(documentWithPorts({ in: "not an array", out: [] })).ok).toBe(false);
-    expect(deserializeDocument(documentWithPorts({ in: [] })).ok).toBe(false); // missing `out`
+    expect(deserializeDocument(documentWithPorts({ in: [] })).ok).toBe(false);
   });
 
   it("rejects an illegal port name — empty or containing '.' (D-141 clause 2)", () => {
@@ -658,10 +587,6 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
     const loaded = loadDocument(json);
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
-      // `out.result` was synthesized by `withSchemaDerivedSlots` on load — the
-      // committed document carries it even though `json` never did, so this
-      // asserts against `json` PLUS that one mechanically-added slot rather
-      // than a bare re-parse of `json` itself.
       const expected = JSON.parse(json) as { objects: { slots: Record<string, unknown> }[] };
       const expectedSlots = expected.objects[0]?.slots;
       if (expectedSlots !== undefined) {
@@ -674,10 +599,6 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
 
 describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-REVIEW-phase0 finding 1, closed cycle 0026)", () => {
   it("rejects a document whose JOURNAL holds a raw non-finite number — probe I: the SAME 1e999 that is rejected in the object list must also be rejected here, not silently corrupted on the next save", () => {
-    // 0025-REVIEW-phase0's sharpest probe: JSON.parse("1e999") is Infinity —
-    // a syntactically ordinary JSON number token that overflows on parse.
-    // Before cycle 0026 this loaded fine and then saveDocument silently wrote
-    // "null" in its place. It must now be rejected outright.
     const parsed = JSON.parse(
       `{"formatVersion":${FORMAT_VERSION},"nextObjectId":1,"objects":[],"journal":[{"operations":[{"kind":"setSlot","address":{"objectId":"obj_1","path":["value"]},"slot":{"kind":"literal","value":1e999}}]}],"camera":{"x":0,"y":0,"zoom":1}}`,
     ) as unknown;
@@ -709,9 +630,6 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
   });
 
   it("rejects an illegal number inside a createObject payload sitting in the journal, even though a deleteObject in the SAME entry removes it", () => {
-    // The write-side analogue of this exact shape (mutation.test.ts's "probe
-    // F") is rejected by mutate() before it can ever reach a journal this
-    // software writes — but a FOREIGN file can still claim one.
     const document = {
       formatVersion: FORMAT_VERSION,
       nextObjectId: 1,
@@ -726,10 +644,6 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
       ],
       camera: { x: 0, y: 0, zoom: 1 },
     };
-    // NaN has no JSON literal, so build this one directly rather than through
-    // JSON.stringify/parse (which would already turn it into null before this
-    // test could exercise anything) — deserializeDocument accepts raw
-    // `unknown` data structurally, and this is exactly that shape.
 
     const result = deserializeDocument(document);
 
@@ -750,17 +664,11 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
 
     const result = deserializeDocument(document);
 
-    expect(result.ok).toBe(true); // 42 is a perfectly legal number — nothing here is illegal
+    expect(result.ok).toBe(true);
   });
 });
 
 describe("deserializeDocument — D-027: the same value rule over the document's OTHER numeric fields (reviewer edit, 0027-REVIEW-phase0)", () => {
-  // Cycle 0026 closed the object list and the journal. `camera` and
-  // `nextObjectId` are the document's two remaining numeric surfaces, and they
-  // never pass through `mutate` at all — so they had neither guard. Probed at
-  // 0027-REVIEW: a file whose camera zoom is the JSON token `1e999` loaded as
-  // Infinity and re-saved as `null`; a camera x of `-0` re-saved as `0`. Both
-  // are §6 clause 4 counterexamples in a field §5.11 names explicitly.
   const legal = { formatVersion: FORMAT_VERSION, nextObjectId: 1, objects: [], journal: [], camera: { x: 0, y: 0, zoom: 1 } };
 
   it("rejects a camera whose zoom is non-finite (a file written as 1e999 parses to Infinity)", () => {
@@ -801,7 +709,6 @@ describe("deserializeDocument — D-027: the same value rule over the document's
 });
 
 describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth is checked ONCE, at the load boundary", () => {
-  /** A left-deep `1 + 1 + ...` ladder — the same fixture shape ast.test.ts's and format.test.ts's own depth-guard tests use. */
   function ladder(levels: number): FormulaAst {
     let ast: FormulaAst = { type: "literal", value: 1 };
     for (let index = 0; index < levels; index += 1) {
@@ -810,7 +717,6 @@ describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth i
     return ast;
   }
 
-  /** A one-object document whose only object's only slot is the formula `ast` given — `value`'s ONE declared path, per `primitives/schema.ts`. */
   function documentWithFormula(ast: FormulaAst): unknown {
     return {
       ...serializeDocument(createEmptyDocument()),
@@ -819,7 +725,6 @@ describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth i
   }
 
   it("accepts a formula slot's AST exactly at MAX_FORMULA_AST_DEPTH — the ceiling is not off by one", () => {
-    // MAX_FORMULA_AST_DEPTH - 1 binaryOp levels over one literal = depth 1000.
     const result = deserializeDocument(documentWithFormula(ladder(MAX_FORMULA_AST_DEPTH - 1)));
     expect(result.ok).toBe(true);
   });
@@ -839,22 +744,12 @@ describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth i
   });
 
   it("rejects the too-deep AST before mutate ever runs — the message names the DEPTH problem, not a dangling reference or an evaluation failure", () => {
-    // A ladder of `1 + 1 + ...` is otherwise perfectly legal graph state (no
-    // dangling reference, nothing non-finite) — if this were accepted here
-    // and only failed downstream, the message would say something else
-    // entirely. It must not reach that far.
     const result = deserializeDocument(documentWithFormula(ladder(MAX_FORMULA_AST_DEPTH)));
     expect(result.ok === false && result.message.includes("nested operations")).toBe(true);
   });
 });
 
-// `loadDocument`/`deserializeDocument` gained an optional `context` at entry
-// 0132 — §5.1's `EvalContext`, forwarded to the load batch's `mutate`. A loaded
-// `text` object's `measuredHeight` is regenerated on load (§5.11 — derived
-// values are never serialized), so it turns on the context: `#MEASURE` (D-118)
-// under the default null one, a real height under `main.ts`'s Canvas2D measurer.
 describe("deserializeDocument / loadDocument forward §5.1's EvalContext to the load batch (entry 0132, D-118)", () => {
-  /** The schema's five required non-derived `text` slots + all three derived placeholders (`measuredWidth` — D-123). */
   function textObject(width: number | "auto" = "auto"): GraphObject {
     return {
       id: "obj_1",

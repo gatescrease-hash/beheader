@@ -1,89 +1,21 @@
 /**
- * parser.ts — Command string -> command object (PROJECT_BRIEF §5.10).
+ * parser.ts
  *
- * IMPLEMENTS: §5.10's parsing half — "Table-driven parser; adding a command is one
- * registry entry." Not on §6.2's load-bearing list.
- * LAYER: command. Pure text processing: touches no canvas, DOM, or window, and reads
- * no document. May import: engine/*, own layer. NEVER imported by engine/*.
+ * Layer: command. It turns a typed line into mutation calls. It imports from
+ * engine and from its own layer.
  *
- * WHAT THIS IS
- *   `parseCommand(line)` tokenises the line, looks its first word up in the command
- *   registry, matches the remaining tokens against that entry's declared arguments,
- *   and returns a typed `Command` — or a failure carrying a message and the character
- *   offset it points at. Never throws.
+ * One typed line to one command object, through a table of specs.
  *
- *   **It resolves nothing.** A `Command` carries the object names and address strings
- *   the operator typed, verbatim. Turning those into `Address`es (`parseAddress`),
- *   checking a new name (`checkNameAvailable`), building `Operation`s and calling
- *   `mutate` all belong to `command/commands.ts`, which has the document this file
- *   deliberately does not take. §5.2's "names resolve to IDs at parse time" governs a
- *   STORED AST; a command object is transient input to resolution, never stored and
- *   never journaled, so holding a name here breaks no invariant. The rejected
- *   alternative — pass the object list in and resolve here — splits resolution in
- *   two, because a creation command's fresh id and default name come from
- *   `nextObjectId`, which lives in the document this file would still not have.
+ * It never throws. A bad line comes back as a failure that names what is wrong
+ * and where.
  *
- *   The line that follows from that: GRAMMAR failures are this file's (how many
- *   arguments, which keys, whether a token is a number). IDENTITY failures are not
- *   (no object of that name, a name already taken, a slot that does not exist).
- *   `address.ts` draws the same line for the same reason (L-4, 0002-REVIEW-phase0):
- *   one failure path per problem, owned by the file that owns the form, rather than
- *   two copies free to drift apart.
- *
- *   Quoting decides TYPE, so it is never ignored: `set v.x 42` writes the number and
- *   `set v.x "42"` writes the string, and a quoted token is refused wherever a number
- *   is declared.
- *
- * INVARIANTS UPHELD HERE
- *   - Never throws; every malformed line is a returned failure.
- *   - Every failure names the offending token and, where the shape is wrong, the
- *     command's usage line — §5.10's "every rejection message must name the specific
- *     slots involved", at the one layer where there is no slot yet to name.
- *   - Every failure carries a character offset into the line, so an echo log can
- *     point at the problem. Same habit D-038 requires of a formula rejection.
- *   - Adding a command is one registry entry plus its `Command` arm. There is no
- *     dispatch switch here to extend, which is what §5.10 asks for.
- *   - A number produced here may be non-finite (a long digit run overflows). That is
- *     deliberate: D-031 clause 3 keeps document-state policy in `mutate` rather than
- *     in a text-scanning stage, and `mutate` refuses it (D-025).
- *   - This file's OWN lexer stops at a formula's `=` (D-073): tokens are read ONE AT A
- *     TIME, in line order, and the moment a `literal-or-formula` position's token is
- *     seen to start with an unquoted `=`, everything from there to end of line is
- *     sliced and carried WITHOUT being tokenized, quote-checked, or scanned. A
- *     formula's own quoting (`CONCAT("a", "b")`) is `formula/lexer.ts`'s to read, at
- *     `commands.ts` — never this file's.
- *
- * NOT DONE HERE
- *   - Command HANDLERS: resolution, `Operation` building, `mutate`, and the echo text
- *     §5.10 wants above the input. Owner: `command/commands.ts`, then `main.ts` for
- *     the input bar itself.
- *   - `pan`. §5.10 lists it with no arguments, §5.9 gives panning a mouse gesture, and
- *     a typed `pan <dx> <dy>` would have to say whether those are world units or
- *     screen pixels — which is Q-012's open question, not this slice's to settle.
- *     Owner: the cycle that wires camera commands in `main.ts`.
- *   - `polyline` creation, `explode`, `addvertex`,
- *     `delvertex`. `COMMANDS_SPECIFIED_BUT_NOT_BUILT` names them, and each waits on a
- *     primitive schema or an `Operation` kind that does not exist yet. Owner: the
- *     cycle that builds one. (`text` creation landed at entry 0136 — a normal
- *     registry entry, `content` positional plus optional `x`/`y`; `image` at entry
- *     0165, §5.10's `x`/`y` form with no other argument; `script` at entry 0169,
- *     the identical `x`/`y` form, D-141's data model having unblocked it.)
- *   - PARSING a formula. `set <address> = <source>` (D-071) captures the source as a
- *     raw substring and stops; `parseFormula` is never called here. Owner:
- *     `command/commands.ts`, where D-038's four conditions come due.
- *   - PROMPTING. A bare command word starts an AutoCAD-style prompt sequence (D-072),
- *     and that state machine is `command/prompt.ts`'s. This file still answers only
- *     the one-shot question "is this complete line a command?" — `prompt.ts` calls it
- *     for the complete forms and drives the incomplete ones itself, and reads its own
- *     head word through this file's single-token reader for the same reason (D-073).
+ * It also holds the list of commands that the spec names and the code does not
+ * build yet. An operator who types one gets the truth instead of an unknown
+ * command error. That list and the built registry must stay disjoint, and a
+ * test pins it.
  */
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
 
-// ---------------------------------------------------------------------------
-// The command object (§4: "parser.ts — command string -> command object")
-// ---------------------------------------------------------------------------
-
-/** `circle x=100 y=100 r=20` (§5.10) — §5.5's circle preset. */
 export interface CreateCircleCommand {
   readonly kind: "circle";
   readonly x: number;
@@ -91,7 +23,6 @@ export interface CreateCircleCommand {
   readonly radius: number;
 }
 
-/** `polygon sides=5 x=0 y=0 r=50` (§5.10). `rotation` is a real slot (§5.5) that §5.10's form gives no argument; `set polygon_1.rotation` reaches it. */
 export interface CreatePolygonCommand {
   readonly kind: "polygon";
   readonly sides: number;
@@ -100,7 +31,6 @@ export interface CreatePolygonCommand {
   readonly radius: number;
 }
 
-/** `rect x=0 y=0 w=200 h=100` (§5.10). */
 export interface CreateRectCommand {
   readonly kind: "rect";
   readonly x: number;
@@ -109,37 +39,18 @@ export interface CreateRectCommand {
   readonly height: number;
 }
 
-/**
- * `image x=0 y=0` (§5.10, §5.7).
- *
- * Two coordinates and nothing else — §5.10 writes this form out in full and gives it
- * no other argument. §5.7's `width`/`height`/`opacity` and the data URL itself come
- * from the handler's defaults and are changed by `set` afterwards, because a picture
- * is chosen from a file (§5.7) rather than typed.
- */
 export interface CreateImageCommand {
   readonly kind: "image";
   readonly x: number;
   readonly y: number;
 }
 
-/**
- * `script x=0 y=0` (§5.10, §5.8).
- *
- * Two coordinates and nothing else, the identical shape `image`'s form takes: §5.10
- * writes this form out in full with no other argument, and a script node's other
- * state — `language`/`source` and its `in.*`/`out.*` ports — has no place in a
- * creation line. `language`/`source` come from the handler's defaults (`"python"`/
- * `""`); ports are declared by explicit `addPort`/`removePort` mutations (D-141
- * clause 6), not by this command, which creates a portless node.
- */
 export interface CreateScriptCommand {
   readonly kind: "script";
   readonly x: number;
   readonly y: number;
 }
 
-/** `table x=0 y=0 rows=8 cols=8` (§5.10). `rows`/`cols` default to §5.4's 8x8, read from `primitives/table.ts` rather than re-spelled here. */
 export interface CreateTableCommand {
   readonly kind: "table";
   readonly x: number;
@@ -148,23 +59,6 @@ export interface CreateTableCommand {
   readonly cols: number;
 }
 
-/**
- * `text x=0 y=0 "Hello {= table_x.A1 }"` (§5.10, §5.6).
- *
- * `content` is the operator's raw source string, markup and `{= }`/`{? }` included —
- * `primitives/text.ts` parses it into a block tree when `resolvedContent` is computed,
- * never here and never at the command line (§5.6: "raw source including markup").
- *
- * `x`/`y` are OPTIONAL, defaulting to `0` (**D-121** clause 3) — unlike the geometry
- * presets, whose position §5.10 always writes out. They land on the `origin.x`/
- * `origin.y` literal slots D-121 puts on `TEXT_SCHEMA`.
- *
- * **D-124** makes POINTING the normal path: `text` typed alone walks a one-step
- * prompt sequence (a `point`, no content step) and creates the box with
- * `content` `""`, which `main.ts` then opens D-125's in-place editor on. The
- * typed `x`/`y` form stays as the fallback and produces the identical `Command`
- * shape.
- */
 export interface CreateTextCommand {
   readonly kind: "text";
   readonly x: number;
@@ -172,173 +66,92 @@ export interface CreateTextCommand {
   readonly content: string;
 }
 
-/** `link polygon_1.origin.x table_x.A1` (§5.10) — `target` becomes a formula slot reading `source`, §5.1's degenerate formula. */
 export interface LinkCommand {
   readonly kind: "link";
   readonly target: string;
   readonly source: string;
 }
 
-/** `unlink polygon_1.origin.x` (§5.10). D-041 binds the handler: the value last displayed is the value kept, errors included. */
 export interface UnlinkCommand {
   readonly kind: "unlink";
   readonly target: string;
 }
 
-/**
- * `addport script_1.in.factor` / `removeport script_1.out.result` — §5.8's
- * *"Ports are declared manually in the UI for now"*, as a command word.
- *
- * NOT one of §5.10's command words, and a deliberate extension of its list under
- * **D-146**: §5.8 requires an operator to declare ports, §5.10's list has no way to,
- * and D-141's `addPort`/`removePort` operations had no caller outside a test fixture
- * — so Phase 6's own acceptance criterion could not be performed by a person at all
- * (0177-REVIEW §2 walked it; every step was refused). The `clear` precedent above is
- * the same shape: the brief's command list is extended rather than worked around,
- * under the human's standing leave.
- *
- * The argument is the SLOT ADDRESS the port will occupy, not an object plus two
- * words, so `addport script_1.in.factor` and the `link script_1.in.factor …` that
- * follows it spell the port identically (D-010) — there is no second way to name one.
- * `family` and `name` are not split here: D-069 keeps the parser out of address
- * semantics, so it hands over the string exactly as typed and `commands.ts` decides
- * whether `in`/`out` is a legal family and whether the name is a legal port name.
- */
 export interface AddPortCommand {
   readonly kind: "addport";
   readonly target: string;
 }
 
-/** `removeport script_1.out.result` — `addport`'s other half. See `AddPortCommand` for why the argument is an address and why nothing is split here. */
 export interface RemovePortCommand {
   readonly kind: "removeport";
   readonly target: string;
 }
 
-/**
- * `clear table_1.A1` — empties a table cell by REMOVING its slot, not by
- * writing something empty into it (`mutation.ts`'s `ClearSlotOperation`).
- *
- * NOT one of §5.10's command words. Added 2026-09-02 on the human's report that
- * an in-place edit of an empty cell left it holding `""` — *"although it looks
- * empty visually, it's not anymore"*. There was no way to express "make this
- * cell empty again" at all: D-047 makes an ABSENT slot the empty state, `set`
- * only ever writes one, and `""`/`0` are content. The brief's command list is
- * extended rather than worked around, under the human's standing leave to
- * overrule it where the app needs to work.
- *
- * The handler restricts it further than the grammar does — see `commands.ts`.
- */
 export interface ClearCommand {
   readonly kind: "clear";
   readonly target: string;
 }
 
-/**
- * `set polygon_1.radius 42` (§5.10) — a `literal` slot's new value.
- *
- * Only three arms of `graph/node.ts`'s `Value` are reachable from a command line;
- * there is no syntax for a `Point`, a `Point[]`, `null`, or an `ErrorValue`. The
- * field claims exactly those three rather than `Value`, because a type is a claim
- * about a domain (D-032's principle); a `LiteralSlot` accepts it unchanged.
- *
- * D-040 binds the handler, not this file: writing a slot that currently holds a
- * formula REPLACES the formula and must report what it replaced.
- */
 export interface SetLiteralCommand {
   readonly kind: "set";
   readonly target: string;
   readonly value: number | string | boolean;
 }
 
-/**
- * `set table_x.B1 = polygon_b.origin.x * 2` (D-071) — the slot becomes a FORMULA.
- *
- * `source` is the RAW SUBSTRING of the line from the `=` to its end, verbatim,
- * including the `=` and the operator's own spacing. It is never re-joined from
- * tokens: re-joining would discard the offsets a `#PARSE` message points with, and
- * D-038 clause 4 forbids the layer that rejects a formula from discarding its source
- * text. Nothing here parses it — `commands.ts` calls `parseFormula` (D-069), and
- * D-038's four conditions come due there.
- *
- * A QUOTED value is never this: `set text_1.content "= not a formula"` is a string,
- * because quoting decides type everywhere on this line.
- */
 export interface SetFormulaCommand {
   readonly kind: "set-formula";
   readonly target: string;
   readonly source: string;
 }
 
-/** `rename polygon_1 intersection_a` (§5.10). Both names pass through verbatim — §5.2's grammar and uniqueness are `checkNameAvailable`'s to enforce. */
 export interface RenameCommand {
   readonly kind: "rename";
   readonly target: string;
   readonly newName: string;
 }
 
-/** `delete intersection_a [force]` (§5.10). `force` selects §5.1.1's repair path over its rejection path; running either is the handler's business. */
 export interface DeleteCommand {
   readonly kind: "delete";
   readonly target: string;
   readonly force: boolean;
 }
 
-/** `refs intersection_a` (§5.10) — inbound dependents of an object or one slot, so the operator can look before deleting. */
 export interface RefsCommand {
   readonly kind: "refs";
   readonly target: string;
 }
 
-/**
- * `props polygon_1` — every slot the object's schema declares: path, kind, value,
- * and a formula's source. NOT in §5.10's own command table; added by **D-092
- * clause 4** through §5.10's own extension mechanism ("adding a command is one
- * registry entry"), so it needs no brief amendment.
- */
 export interface PropsCommand {
   readonly kind: "props";
   readonly target: string;
 }
 
-/** `list` (§5.10) — dump all objects and names. */
 export interface ListCommand {
   readonly kind: "list";
 }
 
-/** `select intersection_a` (§5.10) — the command-line route to `render/interaction.ts`'s selection. */
 export interface SelectCommand {
   readonly kind: "select";
   readonly target: string;
 }
 
-/** `zoom 2` (§5.10) — a multiplier on the current zoom. Dimensionless, so it takes no side in Q-012. Clamping is `render/camera.ts`'s. */
 export interface ZoomCommand {
   readonly kind: "zoom";
   readonly factor: number;
 }
 
-/** `fit` (§5.10) — zoom to the document's extent. Needs a viewport size the handler supplies per call (D-061). */
 export interface FitCommand {
   readonly kind: "fit";
 }
 
-/** `save` (§5.10/§5.11) — serialize the document to JSON for download. */
 export interface SaveCommand {
   readonly kind: "save";
 }
 
-/** `load` (§5.10/§5.11) — read a document back through a file input. */
 export interface LoadCommand {
   readonly kind: "load";
 }
 
-/**
- * Every command this parser can produce. A new command WIDENS this union, the same
- * stance `mutation.ts`'s `Operation` takes (Q-005/D-020): widen, never restructure.
- * `kind` is the registry name verbatim, so a handler's switch reads as the command
- * the operator typed.
- */
 export type Command =
   | CreateCircleCommand
   | CreatePolygonCommand
@@ -365,22 +178,11 @@ export type Command =
   | SaveCommand
   | LoadCommand;
 
-/** A line that parsed. */
 export interface CommandParseSuccess {
   readonly ok: true;
   readonly command: Command;
 }
 
-/**
- * A line that did not parse. `start` is a character offset into the line the caller
- * passed in — the offending token's first character, or the line's end where what is
- * missing is an argument that was never typed at all.
- *
- * Shaped as an `ok` result rather than an `error`-coded value on purpose: a command
- * that fails to parse never becomes graph state, so it is not an `ErrorValue` and
- * must not be mistakable for one. `document.ts`'s `DocumentLoadResult` and
- * `address.ts`'s `NameCheckResult` have the same shape for the same reason.
- */
 export interface CommandParseFailure {
   readonly ok: false;
   readonly message: string;
@@ -389,57 +191,30 @@ export interface CommandParseFailure {
 
 export type CommandParseResult = CommandParseSuccess | CommandParseFailure;
 
-/** Narrows a result to its failure arm, discriminating on the VALUE of `ok` (D-032's principle) rather than on a field's presence. */
 export function isCommandParseFailure(value: CommandParseResult): value is CommandParseFailure {
   return value.ok === false;
 }
 
-// ---------------------------------------------------------------------------
-// The registry (§5.10: "Table-driven parser; adding a command is one registry entry")
-// ---------------------------------------------------------------------------
-
-/** What a positional argument's token is read AS. `text` passes through verbatim, which is what the addresses and names this file does not resolve need. */
 type PositionalKind = "text" | "number" | "literal" | "literal-or-formula";
 
-/** One positional argument. Every one is required: §5.10 declares no optional positional, and an optional trailing word is a flag instead. */
 interface PositionalParameter {
   readonly name: string;
   readonly kind: PositionalKind;
 }
 
-/**
- * One `key=value` argument. Every named argument §5.10 shows is a number, so there is
- * no kind to declare — the first non-numeric one widens this shape.
- * `defaultValue: undefined` means the argument is required.
- */
 interface NamedParameter {
   readonly key: string;
   readonly defaultValue: number | undefined;
 }
 
-/**
- * One step of a command's AutoCAD-style prompt sequence (D-072).
- *
- * `accepts` is what the step reads a response AS, and it is the whole reason a step
- * exists as data rather than as code: `point` takes a pick verbatim or an `x,y` the
- * operator typed, while `distance` turns a pick into "how far from the point step
- * `relativeTo` already gave" — which is the CIRCLE gesture (pick a centre, then pick
- * anywhere on the rim) and cannot be expressed without letting a step see an earlier
- * step's answer.
- *
- * `defaultValue` makes the step optional: an empty response takes it, and `message`
- * shows it the way AutoCAD does (`specify rows <8>`).
- */
 interface PromptStep {
   readonly name: string;
   readonly message: string;
   readonly accepts: "point" | "distance" | "number";
-  /** For `distance` only: the name of the earlier `point` step a pick is measured from. */
   readonly relativeTo?: string;
   readonly defaultValue?: number;
 }
 
-/** One registry entry: the whole grammar of one command, plus the two lines that turn its matched arguments into its `Command` arm. */
 interface CommandSpec {
   readonly name: string;
   readonly usage: string;
@@ -447,43 +222,31 @@ interface CommandSpec {
   readonly named: readonly NamedParameter[];
   readonly flags: readonly string[];
   readonly build: (args: MatchedArguments) => Command;
-  /**
-   * D-072: the steps a bare command word walks the operator through. A command with
-   * no `prompts` is typed-form only and behaves exactly as it did before D-072 —
-   * which is every non-creation command today, because an object-selection prompt
-   * needs hit-testing and a document (see `prompt.ts`'s header).
-   */
+
   readonly prompts?: readonly PromptStep[];
-  /** D-072: turns a completed prompt sequence into the SAME `Command` the typed form produces. */
   readonly buildFromPrompts?: (answers: PromptAnswers) => Command;
 }
 
-/** Every answer a completed prompt sequence gathered, by step name. A `point` step yields a `Point`; `distance` and `number` yield a `number`. */
 export interface PromptAnswers {
   readonly [stepName: string]: PromptValue;
 }
 
-/** What one prompt step resolves to. */
 export type PromptValue = number | PromptPoint;
 
-/** A world point. `render/camera.ts` converts a screen pick to one of these before it ever reaches `command/` (D-072, D-069). */
 export interface PromptPoint {
   readonly x: number;
   readonly y: number;
 }
 
-/** One argument that matched its declared parameter, already converted to the value that parameter's kind asks for. */
 interface MatchedArgument {
   readonly name: string;
   readonly value: number | string | boolean;
 }
 
-/** Everything one command line supplied, after matching: one entry per declared parameter, plus whichever flags were present. */
 interface MatchedArguments {
   readonly positional: readonly MatchedArgument[];
   readonly named: readonly MatchedArgument[];
   readonly flags: readonly string[];
-  /** D-071: the raw source of a `literal-or-formula` argument that began with `=`, `=` included. `undefined` whenever the value was a literal. */
   readonly formula: string | undefined;
 }
 
@@ -499,10 +262,6 @@ function text(name: string): PositionalParameter {
   return { name, kind: "text" };
 }
 
-/**
- * §5.10's command table, in §5.10's own listing order: creation, then the slot and
- * object commands, then the query and view commands.
- */
 const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "circle",
@@ -511,7 +270,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [requiredNumber("x"), requiredNumber("y"), requiredNumber("r")],
     flags: [],
     build: (args) => ({ kind: "circle", x: numberArgument(args, "x"), y: numberArgument(args, "y"), radius: numberArgument(args, "r") }),
-    // AutoCAD's CIRCLE, and D-072's worked example: centre, then a point on the rim.
     prompts: [
       { name: "center", message: "specify center point", accepts: "point" },
       { name: "radius", message: "specify radius", accepts: "distance", relativeTo: "center" },
@@ -534,7 +292,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       y: numberArgument(args, "y"),
       radius: numberArgument(args, "r"),
     }),
-    // AutoCAD's POLYGON order: how many sides, then centre, then the radius.
     prompts: [
       { name: "sides", message: "specify number of sides", accepts: "number" },
       { name: "center", message: "specify center point", accepts: "point" },
@@ -564,15 +321,10 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       width: numberArgument(args, "w"),
       height: numberArgument(args, "h"),
     }),
-    // AutoCAD's RECTANG: two opposite corners, in either direction.
     prompts: [
       { name: "corner", message: "specify first corner", accepts: "point" },
       { name: "opposite", message: "specify opposite corner", accepts: "point" },
     ],
-    // D-072 clause 8: normalise to the lower-left corner and a non-negative extent.
-    // The preset is corner-anchored and `#TYPE`s on a negative width/height
-    // (`primitives/geometry.ts`), so without this a pick up-and-left would draw an
-    // error value instead of a rectangle.
     buildFromPrompts: (answers) => {
       const corner = pointAnswer(answers, "corner");
       const opposite = pointAnswer(answers, "opposite");
@@ -588,10 +340,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "text",
     usage: 'text [x=<number>] [y=<number>] "<content>"',
-    // `content` is a positional `text` argument — passed through verbatim, quoted
-    // when it has spaces or markup (§5.10's own example). `x`/`y` are optional
-    // key=value numbers defaulting to 0 (D-121 clause 3), so `text "hi"` is a
-    // complete typed line.
     positional: [text("content")],
     named: [optionalNumber("x", 0), optionalNumber("y", 0)],
     flags: [],
@@ -601,19 +349,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       y: numberArgument(args, "y"),
       content: textArgument(args, "content"),
     }),
-    // **D-124**: `text` is placed by POINTING, like every other creation command
-    // — type `text`, then click. ONE `point` step, NO content step: the pick
-    // completes the command with `content` `""` and `main.ts` hands the new box
-    // straight to D-125's in-place editor (D-124 clause 2). `accepts` stays
-    // `"point"`, an existing kind — D-124 clause 4 forbids widening
-    // `PromptStep.accepts`, and clause 2 (no content step) is what buys that.
-    //
-    // Both typed forms are untouched (D-124 clause 3): `text "hi"` hits
-    // `beginCommand`'s `token.quoted` branch, `text x=0 y=0 "hi"` hits
-    // `usesNamedForm`, and both defer to `parseCommand` whole. An UNQUOTED
-    // `text 30,40` now reads as the point shorthand (box at 30,40, empty
-    // content), exactly as `circle 30,40` does — a literal `"30,40"` string is
-    // still reachable by quoting it.
     prompts: [{ name: "position", message: "specify text position", accepts: "point" }],
     buildFromPrompts: (answers) => {
       const position = pointAnswer(answers, "position");
@@ -633,8 +368,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       rows: numberArgument(args, "rows"),
       cols: numberArgument(args, "cols"),
     }),
-    // The two counts carry §5.4's 8x8, so an operator who wants the default answers
-    // both prompts with a bare Enter — D-072 clause 6's `<8>`.
     prompts: [
       { name: "origin", message: "specify origin point", accepts: "point" },
       { name: "rows", message: "specify rows", accepts: "number", defaultValue: DEFAULT_TABLE_ROWS },
@@ -654,19 +387,10 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "image",
     usage: "image x=<number> y=<number>",
-    // §5.10's own form, verbatim: two required coordinates and nothing else. The
-    // other four slots (`width`/`height`/`opacity`/`source`) are the handler's
-    // `DEFAULT_IMAGE_*` and are changed afterwards with `set image_1.width 200` —
-    // adding `w=`/`h=` arguments §5.10 does not write would be the command-language
-    // gold-plating §8's last bullet forbids.
     positional: [],
     named: [requiredNumber("x"), requiredNumber("y")],
     flags: [],
     build: (args) => ({ kind: "image", x: numberArgument(args, "x"), y: numberArgument(args, "y") }),
-    // D-072 binds every command added from here: typing `image` alone points the
-    // box instead of typing its corner. ONE `point` step, the same shape `text`'s
-    // sequence takes — there is nothing else to ask for, because a picture is
-    // chosen from a file and not from the command line.
     prompts: [{ name: "origin", message: "specify image position", accepts: "point" }],
     buildFromPrompts: (answers) => {
       const origin = pointAnswer(answers, "origin");
@@ -676,16 +400,10 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "script",
     usage: "script x=<number> y=<number>",
-    // §5.10's own form, verbatim: two required coordinates and nothing else. A
-    // script node's `language`/`source` are the handler's defaults, and its
-    // `in.*`/`out.*` ports do not exist until an explicit `addPort` mutation
-    // declares one (D-141 clause 6) — there is no argument here for either.
     positional: [],
     named: [requiredNumber("x"), requiredNumber("y")],
     flags: [],
     build: (args) => ({ kind: "script", x: numberArgument(args, "x"), y: numberArgument(args, "y") }),
-    // D-072, the same one `image`'s sequence takes: typing `script` alone points
-    // the box instead of typing its corner.
     prompts: [{ name: "origin", message: "specify script position", accepts: "point" }],
     buildFromPrompts: (answers) => {
       const origin = pointAnswer(answers, "origin");
@@ -722,10 +440,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     positional: [text("target"), { name: "value", kind: "literal-or-formula" }],
     named: [],
     flags: [],
-    // D-071: the same command word writes a literal or a formula, and the leading `=`
-    // is what decides — the spreadsheet's own gesture, and what §5.4's formula bar
-    // will do too. `commands.ts` routes both through one slot-writing path so D-040's
-    // report and D-041's kept value cannot drift between them.
     build: (args) =>
       args.formula !== undefined
         ? { kind: "set-formula", target: textArgument(args, "target"), source: args.formula }
@@ -829,21 +543,8 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   },
 ];
 
-/** Every command word this parser understands. Enumerable by design, the way D-038 clause 3 keeps `FUNCTION_REGISTRY` enumerable — a later autocomplete or `help` reads this rather than a private list. */
 export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec.name);
 
-/**
- * §5.10 commands with no registry entry yet, so an operator who types one is told the
- * truth ("not built") instead of "unknown command", which would be false. Each waits
- * on something that does not exist: `polyline` has no schema,
- * `explode`/`addvertex`/`delvertex` have no `Operation` kind, and `pan` has no stated
- * argument grammar (see the file header). `text` LEFT this list at entry 0136,
- * `image` at entry 0165, and `script` at entry 0169, each when its schema and its
- * registry entry landed together.
- *
- * A name moving into the registry MUST leave this list in the same cycle; the two
- * being disjoint is pinned by a test rather than by anyone remembering.
- */
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
   "polyline",
   "explode",
@@ -852,21 +553,7 @@ export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
   "pan",
 ];
 
-// ---------------------------------------------------------------------------
-// Parsing
-// ---------------------------------------------------------------------------
-
-/**
- * Parses one command line (§5.10). Never throws: a malformed line comes back as a
- * `CommandParseFailure` naming what is wrong and where.
- *
- * Command words and `key=value` keys match case-insensitively — §5.2 already makes
- * object-name lookup case-insensitive and D-039 does the same for cell references, so
- * a case-sensitive command word would be the odd one out. Argument VALUES are never
- * case-folded: a name, an address, or a quoted string reaches the handler exactly as
- * typed, because folding either belongs elsewhere (`findObjectByName` folds its own
- * lookup; D-043 owns the cell form).
- */
+/** One line to one command object. It never throws. */
 export function parseCommand(line: string): CommandParseResult {
   const headScan = nextToken(line, 0);
   if (!headScan.ok) {
@@ -891,7 +578,6 @@ export function parseCommand(line: string): CommandParseResult {
   return { ok: true, command: spec.build(matched.args) };
 }
 
-/** One token of a command line: a bare word, or the unescaped contents of a double-quoted run. `start` is its first character's offset, the opening quote included. */
 interface CommandToken {
   readonly text: string;
   readonly start: number;
@@ -900,28 +586,8 @@ interface CommandToken {
 
 type TokenizeResult = { readonly ok: true; readonly tokens: readonly CommandToken[] } | CommandParseFailure;
 
-/** One token read from a line, or none where only whitespace (or nothing) remained — that is not a failure, just the end. */
 type NextTokenResult = { readonly ok: true; readonly token: CommandToken | undefined; readonly next: number } | CommandParseFailure;
 
-/**
- * Reads the next token starting at `index`, skipping leading whitespace — a bare word,
- * or a WHOLE double-quoted run — and nothing past it.
- *
- * This is the ONE lexer this file has, called one token at a time rather than run to
- * end of line, which is what D-073 requires: `matchArguments` stops calling it the
- * moment a `literal-or-formula` position's token is seen to start with an unquoted
- * `=`, so a formula's own quoting is never read by this function at all — reading it
- * to find that out would be the defect D-073 rules against, reached from inside the
- * fix instead of around it. `parseCommand` calls it once, for the command word, before
- * it even knows which spec — and therefore which position is the formula's — applies.
- *
- * A token is either a bare word or a WHOLE quoted string, and arguments are separated
- * by whitespace with nothing else allowed to join them: a quote inside a bare word
- * (`a"b"`) and a bare word running on from a closing quote (`"a"b`) are BOTH rejected
- * rather than given shell-like concatenation semantics. That keeps the one thing
- * quoting decides — whether `42` is a number or a string — legible at a glance instead
- * of dependent on where the quote sits inside a word.
- */
 function nextToken(line: string, index: number): NextTokenResult {
   let cursor = index;
   while (cursor < line.length && isWhitespace(line[cursor])) {
@@ -936,11 +602,6 @@ function nextToken(line: string, index: number): NextTokenResult {
     if (!scanned.ok) {
       return scanned;
     }
-    // A closing quote ends the whole argument. Without this, `delete "a"force`
-    // splits into two tokens and silently sets the flag — §5.1.1's repair path
-    // chosen by a line the operator never wrote as two words. It is the same
-    // shell-style concatenation the bare-word branch below refuses, arriving from
-    // the other side, so both directions refuse it or neither does (0069-REVIEW).
     if (scanned.next < line.length && !isWhitespace(line[scanned.next])) {
       return failure("a quoted argument ends at its closing quote — separate arguments with a space", scanned.next);
     }
@@ -958,7 +619,6 @@ function nextToken(line: string, index: number): NextTokenResult {
   return { ok: true, token: { text: word, start, quoted: false }, next: cursor };
 }
 
-/** Reads the double-quoted run starting at `openIndex`, unescaping `\"` and `\\` — §5.3's own string escapes, so one spelling serves both surfaces. */
 function scanQuoted(line: string, openIndex: number): { readonly ok: true; readonly token: CommandToken; readonly next: number } | CommandParseFailure {
   let index = openIndex + 1;
   let text = "";
@@ -989,27 +649,8 @@ function isWhitespace(character: string | undefined): boolean {
   return character !== undefined && /\s/.test(character);
 }
 
-/**
- * The command line's number form: §5.3's own `[0-9]+(\.[0-9]+)?`, plus a sign.
- *
- * The sign is the one addition, and it is needed: a formula gets a negative from its
- * unary-minus operator, and a command line has no operators at all, so
- * `set polygon_1.origin.x -50` would otherwise be unwritable.
- */
 const NUMBER_PATTERN = /^[+-]?[0-9]+(\.[0-9]+)?$/;
 
-/**
- * Matches a command's arguments against its declared parameters, reading tokens ONE AT
- * A TIME from `line` starting at `startIndex` — never a pre-built array — and
- * converting each to the value its parameter's kind asks for.
- *
- * Takes `line` itself, not tokens, for two reasons: D-071's formula source is a RAW
- * SUBSTRING of it, not a re-join of tokens; and D-073 requires that nothing past a
- * formula's `=` is ever handed to `nextToken` at all, which is only possible if this
- * function decides "the rest of the line is a formula" BEFORE reading the token that
- * would contain it. `line.length` is also what a missing-argument failure points at —
- * "you never typed this argument" has no token of its own to blame.
- */
 function matchArguments(
   spec: CommandSpec,
   line: string,
@@ -1033,13 +674,6 @@ function matchArguments(
       break;
     }
 
-    // D-073: once the position about to be filled is the `literal-or-formula` one,
-    // an unquoted leading `=` means the rest of the LINE is the formula's source —
-    // decided from a single character, BEFORE `nextToken` ever runs on it, so a
-    // formula's own quoting (`CONCAT("a", "b")`) is never read by this file's lexer.
-    // `positionalTokens.length` is the count already DISTRIBUTED, not a raw token
-    // index, so this reads correctly even past an interleaved `key=value` or flag
-    // (0071-REVIEW F5, resolved by this restructuring rather than left a hazard).
     if (formulaAt >= 0 && positionalTokens.length === formulaAt && line[tokenStart] === "=") {
       formula = line.slice(tokenStart);
       break;
@@ -1055,11 +689,6 @@ function matchArguments(
     }
     cursor = scanned.next;
 
-    // Everywhere else a leading `=` is still refused, but only where a malformed
-    // `key=value` cannot already explain it: `circle =1` is a keyless pair and
-    // `matchNamedToken` below says so precisely, which is the better message of the
-    // two. A quoted token is exempt — quoting decides type everywhere on this line
-    // (D-071 clause 3), so `"=x"` is a string, never a stray formula marker.
     if (spec.named.length === 0 && !token.quoted && token.text.startsWith("=")) {
       return failure(`"${spec.name}" takes no formula — only "set <address> = <formula>" does (D-071)`, token.start);
     }
@@ -1076,9 +705,6 @@ function matchArguments(
       positionalTokens.push(token);
       continue;
     }
-    // Positionals fill BEFORE flags are considered, so `delete force` deletes the
-    // object named `force` and `delete force force` deletes it down §5.1.1's repair
-    // path. A flag is never quoted: quoting means "this is a value", everywhere.
     const flag = token.quoted ? undefined : spec.flags.find((candidate) => candidate === token.text.toLowerCase());
     if (flag !== undefined) {
       if (flags.includes(flag)) {
@@ -1096,8 +722,6 @@ function matchArguments(
 
   const positional: MatchedArgument[] = [];
   for (const [index, parameter] of spec.positional.entries()) {
-    // The formula swallowed this position and every one after it (there are none
-    // after it today — a formula runs to end of line, so nothing can follow).
     if (formula !== undefined && index >= formulaAt) {
       break;
     }
@@ -1131,14 +755,12 @@ function matchArguments(
   return { ok: true, args: { positional, named, flags, formula } };
 }
 
-/** One `key=value` token that matched a declared named parameter. `token` is kept so a bad VALUE can still be reported at the position it was typed. */
 interface NamedTokenMatch {
   readonly parameter: NamedParameter;
   readonly token: CommandToken;
   readonly valueText: string;
 }
 
-/** Splits one `key=value` token and checks its key against the spec: an unknown key and a repeated one are both rejected, rather than silently taking the last. */
 function matchNamedToken(
   spec: CommandSpec,
   token: CommandToken,
@@ -1160,7 +782,6 @@ function matchNamedToken(
   return { ok: true, entry: { parameter, token, valueText } };
 }
 
-/** Reads one positional token as its parameter's kind. A `text` parameter takes whatever was typed — this file resolves nothing (see the header). */
 function readPositionalValue(
   spec: CommandSpec,
   parameter: PositionalParameter,
@@ -1175,9 +796,6 @@ function readPositionalValue(
       }
       return { ok: true, value: Number(token.text) };
     }
-    // A `literal-or-formula` position reaches here only when it was NOT a formula —
-    // `matchArguments` takes the formula before tokens are distributed — so from here
-    // the two kinds are the same reader.
     case "literal":
     case "literal-or-formula": {
       if (token.quoted) {
@@ -1186,8 +804,6 @@ function readPositionalValue(
       if (NUMBER_PATTERN.test(token.text)) {
         return { ok: true, value: Number(token.text) };
       }
-      // Exact uppercase, matching `lexer.ts`'s own booleans (§5.3), so one spelling
-      // serves both surfaces; accepting `true` later widens and breaks nothing.
       if (token.text === "TRUE" || token.text === "FALSE") {
         return { ok: true, value: token.text === "TRUE" };
       }
@@ -1197,8 +813,6 @@ function readPositionalValue(
       );
     }
     default: {
-      // Compile-time exhaustiveness without a throw — the idiom every
-      // discriminated-union switch in this codebase carries.
       const exhaustive: never = parameter.kind;
       void exhaustive;
       return failure(`<${parameter.name}> declares an argument kind this parser does not read`, token.start);
@@ -1206,15 +820,6 @@ function readPositionalValue(
   }
 }
 
-/**
- * Finds one matched argument by the name its spec declared, positional first.
- *
- * `undefined` is unreachable through `parseCommand`: `matchArguments` produces one
- * entry per declared parameter or fails outright, so a `build` reading only names its
- * own spec declares always finds one. The three wrappers below therefore return a loud
- * fallback rather than throwing, and the "every command parses its own example" test
- * is what catches a spec/build disagreement.
- */
 function findArgument(args: MatchedArguments, name: string): MatchedArgument | undefined {
   return args.positional.find((argument) => argument.name === name) ?? args.named.find((argument) => argument.name === name);
 }
@@ -1224,7 +829,6 @@ function textArgument(args: MatchedArguments, name: string): string {
   return typeof found?.value === "string" ? found.value : "";
 }
 
-/** NaN, never 0: a spec/build disagreement must not read as a valid coordinate, and `mutate` refuses a non-finite value loudly (D-025). */
 function numberArgument(args: MatchedArguments, name: string): number {
   const found = findArgument(args, name);
   return typeof found?.value === "number" ? found.value : Number.NaN;
@@ -1238,15 +842,6 @@ function hasFlag(args: MatchedArguments, name: string): boolean {
   return args.flags.includes(name);
 }
 
-/**
- * Reads one prompt answer as the kind its step declared.
- *
- * Both fall back loudly rather than throwing, for the same reason the argument
- * readers above do: a step/build disagreement is a registry bug, and every command's
- * prompt sequence is driven end to end by a test, which is what catches one. NaN and
- * the origin are chosen because `mutate` refuses a non-finite coordinate (D-025) and
- * an object silently placed at (0,0) would look deliberate.
- */
 function pointAnswer(answers: PromptAnswers, name: string): PromptPoint {
   const found = answers[name];
   return typeof found === "object" ? found : { x: Number.NaN, y: Number.NaN };
@@ -1257,42 +852,15 @@ function numberAnswer(answers: PromptAnswers, name: string): number {
   return typeof found === "number" ? found : Number.NaN;
 }
 
-/**
- * The registry entry for a command word, or `undefined`.
- *
- * Exists so `command/prompt.ts` can read a command's prompt sequence without a second
- * copy of the registry — D-072 clause 2 keeps §5.10's "adding a command is one
- * registry entry" true, and two tables would be exactly the drift D-043 rules against.
- * Matches case-insensitively, as `parseCommand` does.
- */
 export function findCommandSpec(name: string): CommandSpec | undefined {
   const folded = name.toLowerCase();
   return COMMAND_SPECS.find((candidate) => candidate.name === folded);
 }
 
-/**
- * The command line's number, or `undefined` if `text` is not one.
- *
- * Exported so `command/prompt.ts` reads a typed prompt response with the SAME number
- * form the typed command line uses — `circle x=-50 …` and answering `-50` at a prompt
- * must accept and reject exactly the same strings, or the two surfaces drift.
- */
 export function parseCommandNumber(text: string): number | undefined {
   return NUMBER_PATTERN.test(text) ? Number(text) : undefined;
 }
 
-/**
- * The command line's boolean, or `undefined` if `text` is not one — EXACT
- * uppercase `TRUE`/`FALSE`, matching `lexer.ts`'s own booleans (§5.3) and the
- * `literal` argument reader above.
- *
- * Exported for the same reason `parseCommandNumber` is, and added for the same
- * class of bug (2026-09-02): `main.ts`'s in-place cell editor does its own
- * Excel-style disambiguation of what was typed, and it read numbers through
- * this file while reading booleans not at all — so a cell holding `true` seeded
- * the editor with `TRUE` and committed back the STRING `"TRUE"`. Two surfaces,
- * one spelling, one reader.
- */
 export function parseCommandBoolean(text: string): boolean | undefined {
   if (text === "TRUE") {
     return true;
@@ -1300,17 +868,6 @@ export function parseCommandBoolean(text: string): boolean | undefined {
   return text === "FALSE" ? false : undefined;
 }
 
-/**
- * Splits a line into tokens from `startIndex` to its end (see `nextToken`). Exported
- * for `command/prompt.ts`, which must apply the same quoting rules rather than a
- * second copy of them.
- *
- * `startIndex` defaults to the start of the line, but `prompt.ts` passes the offset
- * just past the command word — D-073 again: a word tokenized in isolation reports
- * offsets relative to itself, and re-slicing the line to tokenize "the rest" would
- * make every failure inside it point at the wrong character. Reading from an offset
- * INTO the original line keeps every `CommandToken.start` absolute.
- */
 export function tokenizeCommandLine(line: string, startIndex = 0): TokenizeResult {
   const tokens: CommandToken[] = [];
   let cursor = startIndex;
@@ -1327,17 +884,6 @@ export function tokenizeCommandLine(line: string, startIndex = 0): TokenizeResul
   }
 }
 
-/**
- * Reads ONLY the first token of a line — the command word — without tokenizing
- * anything past it.
- *
- * Exported so `command/prompt.ts`'s `beginCommand` can learn which spec applies
- * before deciding whether to tokenize the rest of the line at all. That ordering is
- * what D-073 needs one layer up from `matchArguments`: `beginCommand` must not run a
- * whole-line tokenize (as `tokenizeCommandLine(line)` would) ahead of knowing that the
- * spec is `set`'s — the one command with a `literal-or-formula` position and no
- * `prompts` — because a formula's own quoting would already have been read by then.
- */
 export function readCommandHead(line: string): NextTokenResult {
   return nextToken(line, 0);
 }

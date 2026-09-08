@@ -1,15 +1,11 @@
 /**
- * images.test.ts — Tests for `images.ts` (§5.7's decoded-bitmap cache).
+ * images.test.ts
  *
- * No jsdom (D-001/PROCESS_BRIEF §4: never add a runtime dependency). Every test
- * passes `createImageBitmapCache` a fake element factory and fires
- * `onload`/`onerror` by hand — the same injected-fake posture `renderer.test.ts`
- * takes for `CanvasRenderingContext2D` and the engine takes for `TextMeasurer`.
+ * The bitmap cache.
  */
 import { describe, expect, it } from "vitest";
 import { createImageBitmapCache, decodeBitmap } from "./images.ts";
 
-/** The mutable half of an `HTMLImageElement` this file actually drives: the src it was given, the two handlers, and the size a decode reports. */
 interface FakeImageElement {
   src: string;
   naturalWidth: number;
@@ -18,14 +14,11 @@ interface FakeImageElement {
   onerror: (() => void) | null;
 }
 
-/** A factory plus the elements it handed out, so a test can both fire a decode and count how many were started. */
 function fakeElements(): { readonly create: () => HTMLImageElement; readonly made: readonly FakeImageElement[] } {
   const made: FakeImageElement[] = [];
   const create = (): HTMLImageElement => {
     const element: FakeImageElement = { src: "", naturalWidth: 40, naturalHeight: 20, onload: null, onerror: null };
     made.push(element);
-    // The fake implements exactly the members `images.ts` touches; a real
-    // element has many more it never does (file header's reasoning).
     return element as unknown as HTMLImageElement;
   };
   return { create, made };
@@ -33,9 +26,6 @@ function fakeElements(): { readonly create: () => HTMLImageElement; readonly mad
 
 const SOURCE = "data:image/png;base64,AAAA";
 
-// The file picker's one-shot decode. It exists because a chosen picture's
-// NATURAL SIZE decides the object's `width`/`height` slots (the human's Q-027
-// ruling), which is a question asked on a gesture rather than on every paint.
 describe("decodeBitmap — the size a chosen picture reports", () => {
   it("reports the decoded picture and its natural size", () => {
     const { create, made } = fakeElements();

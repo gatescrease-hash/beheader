@@ -1,33 +1,22 @@
 /**
- * cycles.test.ts — Tests for naive DFS cycle detection (§5.1 step 5).
+ * cycles.test.ts
  *
- * Colocated with cycles.ts per D-001. These tests build `Edge[]` fixtures by
- * hand rather than deriving them from real formula ASTs through `mutation.ts`,
- * so they exercise cycle detection itself and nothing upstream of it.
+ * Cycle detection. A found cycle must name every slot in it.
  */
+
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
 import { addressKey, type Edge } from "./edge.ts";
 import { detectCycle } from "./cycles.ts";
 
-/** A short-hand for building a same-shaped Address in every test below. */
 function slot(objectId: string, ...path: readonly string[]): Address {
   return { objectId, path };
 }
 
-/** A short-hand for building an Edge from two slot() calls. */
 function edge(source: Address, dependent: Address): Edge {
   return { sourceSlot: source, dependentSlot: dependent };
 }
 
-/**
- * Verifies a reported cycle is a GENUINE cycle against the edges it was
- * detected from, rather than asserting one specific array literal — the DFS's
- * exact traversal order (which node it starts from, which neighbor it visits
- * first) is an implementation detail this test suite should not be pinned to.
- * A genuine cycle of length n has a real edge from cycle[i] to
- * cycle[(i + 1) % n] for every i, wrapping around.
- */
 function isGenuineCycle(cycle: readonly Address[], edges: readonly Edge[]): boolean {
   if (cycle.length === 0) {
     return false;
@@ -54,9 +43,6 @@ describe("detectCycle — acyclic graphs report hasCycle: false", () => {
   });
 
   it("reports no cycle for a diamond DAG (two paths converging on one node)", () => {
-    // A -> B -> D and A -> C -> D. D has two inbound edges but the graph is
-    // still acyclic — this is the case a naive "any node visited twice" check
-    // (rather than real coloring) would get wrong.
     const a = slot("obj_1", "value");
     const b = slot("obj_2", "in", "a");
     const c = slot("obj_3", "in", "a");
@@ -126,7 +112,7 @@ describe("detectCycle — cyclic graphs report hasCycle: true, naming every slot
     const cycleA = slot("obj_3", "in", "a");
     const cycleB = slot("obj_4", "out", "result");
     const edges = [
-      edge(unrelatedA, unrelatedB), // visited first (acyclic), and MUST NOT stop the DFS early
+      edge(unrelatedA, unrelatedB),
       edge(cycleA, cycleB),
       edge(cycleB, cycleA),
     ];
@@ -139,9 +125,6 @@ describe("detectCycle — cyclic graphs report hasCycle: true, naming every slot
   });
 
   it("detects a cycle reachable only after a non-cyclic detour (B has an extra outgoing edge to an unrelated node)", () => {
-    // A -> B -> C -> A is the cycle; B ALSO points at an unrelated D. This
-    // defends against an implementation that stops exploring a node's
-    // neighbors as soon as ONE of them turns out to be acyclic.
     const a = slot("obj_1", "in", "a");
     const b = slot("obj_2", "in", "b");
     const c = slot("obj_3", "out", "result");
@@ -156,13 +139,6 @@ describe("detectCycle — cyclic graphs report hasCycle: true, naming every slot
   });
 
   it("names ONLY the slots in the cycle, never the upstream slots the DFS walked through to reach it", () => {
-    // root -> tail -> a -> b -> a. The cycle is a <-> b; root and tail feed
-    // into it but are NOT in it. §5.10 requires a rejection message to name
-    // "the specific slots involved", and §6's acceptance criterion is that the
-    // OFFENDING slots are named — naming an innocent upstream slot tells the
-    // user a slot is in a cycle when it is not. This defends the one
-    // non-obvious line in detectCycle: the reported cycle is sliced from where
-    // the gray node ENTERED the stack, not from the stack's root.
     const root = slot("obj_1", "value");
     const tail = slot("obj_2", "in", "a");
     const a = slot("obj_3", "in", "a");

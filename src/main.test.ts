@@ -1,17 +1,8 @@
 /**
- * main.test.ts — Tests for `main.ts`'s pure half (§5.9, §5.10, §5.11).
+ * main.test.ts
  *
- * What is covered and what is not: `AppState` and every transition over it are
- * covered here; `start` and the two file helpers below it are NOT, because they
- * need a DOM and this project adds no test dependency to get one (D-001,
- * PROCESS_BRIEF §4). Importing this module is itself part of the claim — the
- * bootstrap is guarded on `typeof document`, so a `node` environment reaches the
- * pure half without touching a browser that is not there.
- *
- * Lines go in as the operator would type them, through `submitLine`, wherever
- * the point is end to end: this is the file where a typed line, a command
- * handler, a mutation, a camera and the selection all meet, and a fixture that
- * skipped the typing would not be testing that.
+ * The pure state transitions. It drives the whole application with no
+ * browser.
  */
 import { describe, expect, it } from "vitest";
 import { createEmptyDocument, deserializeDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
@@ -51,17 +42,14 @@ import {
 
 const VIEWPORT: Viewport = { width: 800, height: 600 };
 
-/** A fresh application, as `start` opens one. */
 function opened(): AppState {
   return initialAppState(createEmptyDocument());
 }
 
-/** Types one line and returns the new state, or throws naming the last line echoed — the mirror of `commands.test.ts`'s `committed`. */
 function typed(state: AppState, line: string): AppState {
   return submitLine(state, line, VIEWPORT).state;
 }
 
-/** The object of that name, or a thrown test failure. Tests may resolve a name; `main.ts` itself never does (D-082 clause 4). */
 function objectNamed(state: AppState, name: string): GraphObject {
   const found = state.document.objects.find((object) => object.name === name);
   if (found === undefined) {
@@ -70,7 +58,6 @@ function objectNamed(state: AppState, name: string): GraphObject {
   return found;
 }
 
-/** A slot's current numeric value, or a thrown test failure naming what was there instead. */
 function numberAt(object: GraphObject, path: readonly string[]): number {
   const value = getSlot(object, path)?.value;
   if (typeof value !== "number") {
@@ -79,7 +66,6 @@ function numberAt(object: GraphObject, path: readonly string[]): number {
   return value;
 }
 
-/** The lines added by the last transition. */
 function newLines(before: AppState, after: AppState): readonly string[] {
   return after.log.slice(before.log.length);
 }
@@ -142,9 +128,9 @@ describe("submitLine — a command word alone enters its prompt sequence (D-072)
     state = typed(state, "100,100");
     const before = state;
     state = typed(state, "not-a-radius");
-    expect(state.pending?.stepIndex).toBe(1); // the same step, not the next one
+    expect(state.pending?.stepIndex).toBe(1);
     expect(state.pending?.answers).toEqual(before.pending?.answers);
-    expect(newLines(before, state).length).toBeGreaterThan(2); // the echo, the refusal, the re-ask
+    expect(newLines(before, state).length).toBeGreaterThan(2);
   });
 
   it("escape abandons the sequence and clears the selection — one key, §5.9's deselect and D-072's cancel", () => {
@@ -180,14 +166,14 @@ describe("submitLine — the returned AppTransition reports whether the line was
     const midSequence = typed(opened(), "circle");
     const outcome = submitLine(midSequence, "100,100", VIEWPORT);
     expect(outcome.refused).toBe(false);
-    expect(outcome.state.pending?.stepIndex).toBe(1); // moved on, not re-asking step 0
+    expect(outcome.state.pending?.stepIndex).toBe(1);
   });
 
   it("IS refused when a prompt step's own answer is refused, so the same step re-asks (D-072 clause 7)", () => {
     const midSequence = typed(typed(opened(), "circle"), "100,100");
     const outcome = submitLine(midSequence, "not-a-radius", VIEWPORT);
     expect(outcome.refused).toBe(true);
-    expect(outcome.state.pending?.stepIndex).toBe(1); // re-asks the SAME step
+    expect(outcome.state.pending?.stepIndex).toBe(1);
   });
 
   it("is NOT refused for an accepted command that also requests a file (save)", () => {
@@ -265,8 +251,6 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
     const fitted = typed(state, "fit").document.camera;
     expect(fitted.zoom).toBeGreaterThanOrEqual(MIN_ZOOM);
     expect(fitted.zoom).toBeLessThanOrEqual(MAX_ZOOM);
-    // Everything the document draws is on screen afterwards: both corners of the
-    // extent map inside the viewport under the fitted camera.
     const topLeft = worldToScreen(fitted, { x: -50, y: -50 });
     const bottomRight = worldToScreen(fitted, { x: 1160, y: 1048 });
     expect(topLeft.x).toBeGreaterThanOrEqual(0);
@@ -279,13 +263,10 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
     const before = opened();
     const after = typed(before, "fit");
     expect(after.document.camera).toEqual(before.document.camera);
-    expect(newLines(before, after).length).toBe(2); // the echo, and one refusal
+    expect(newLines(before, after).length).toBe(2);
   });
 
   it("centres a DEGENERATE single-point extent at the current zoom instead of dividing by it (D-066)", () => {
-    // A zero-radius circle: the extent is one point, so width and height are 0.
-    // `commands.ts` cannot refuse this — the document is not empty — which is why
-    // D-066 says the guard here is not discharged by that refusal.
     let state = typed(opened(), "circle x=100 y=100 r=0");
     const zoomBefore = state.document.camera.zoom;
     state = typed(state, "fit");
@@ -296,10 +277,6 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
   });
 
   it("fits a FLAT extent to its one real axis instead of calling it a point (0090-REVIEW F2)", () => {
-    // `rect w=200 h=0` is legal — no creation handler bounds a rect's size — and
-    // its extent has width but no height. That is not D-066's degeneracy: there
-    // is an axis to fit to, and a guard demanding BOTH axes refused it and
-    // reported "a single point", which was also untrue.
     let state = typed(opened(), "rect x=0 y=0 w=200 h=0");
     const zoomBefore = state.document.camera.zoom;
     state = typed(state, "fit");
@@ -310,12 +287,6 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
   });
 
   it("says so, and moves nothing, when objects exist but none of them draws anything", () => {
-    // Reachable only through a document this build did not create by command —
-    // the `text` command (entry 0136) always supplies a full slot set, so a
-    // slotless `text` object is not one `createObject` would build (entry 0127
-    // gave `text` a schema; `initialAppState` does not re-validate). It is the
-    // other emptiness `documentExtent` reports,
-    // and the branch exists because `commands.ts` cannot see it.
     const undrawable: Document = { ...createEmptyDocument(), objects: [{ id: "obj_1", name: "text_1", type: "text", slots: {} }] };
     const before = initialAppState(undrawable);
     const after = performEffect({ kind: "fit" }, before, VIEWPORT).state;
@@ -383,7 +354,6 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     expect(model.header).toBe("circle_1");
     expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "radius"]);
-    // Every derived row is read-only; `vertices` is the first the schema declares.
     expect(model.derived[0]?.path).toBe("vertices");
     expect(model.derived.map((row) => row.path)).toContain("centroid.x");
   });
@@ -392,12 +362,6 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const state = typed(opened(), "circle x=10 y=20 r=5");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     const originX = model.modifiable.find((row) => row.path === "origin.x");
-    // `kind`/`synthetic` (D-102) round-trip `SlotDescriptor`'s own fields —
-    // see the next `describe` block for what a row's writer does with them.
-    // `editSeed` (D-107, F3) equals `value` here because an integer has
-    // nothing D-099's rounding would ever change — see the dedicated test
-    // below for the case where they diverge.
-    // `picker` (entry 0175) is false for every row but an `image`'s `source`.
     expect(originX).toEqual({ path: "origin.x", value: "10", editSeed: "10", formulaSource: undefined, kind: "literal", synthetic: false, picker: false });
   });
 
@@ -405,12 +369,9 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const state = typed(opened(), "circle x=0.123456789 y=20 r=5");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     const originX = model.modifiable.find((row) => row.path === "origin.x");
-    expect(originX?.value).toBe("0.1235"); // D-099's rounded DISPLAY value — unchanged.
-    expect(originX?.editSeed).toBe("0.123456789"); // The unrounded SEED.
+    expect(originX?.value).toBe("0.1235");
+    expect(originX?.editSeed).toBe("0.123456789");
 
-    // Committing the seed back UNTOUCHED must leave the number bit-for-bit
-    // as it was — this is the failure the review's F3 named: seeding with
-    // `value` instead would have written back the truncated "0.1235".
     const circleId = objectNamed(state, "circle_1").id;
     const after = commitPanelEdit(state, circleId, "origin.x", originX?.editSeed ?? "");
     expect(numberAt(objectNamed(after, "circle_1"), ["origin", "x"])).toBe(0.123456789);
@@ -425,8 +386,6 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const originX = model.modifiable.find((row) => row.path === "origin.x");
     expect(originX?.formulaSource).toBe("table_1.A1");
     expect(model.derived.some((row) => row.path === "origin.x")).toBe(false);
-    // D-102 clause 3: the paperclip's colour comes from `kind`, not from
-    // whether a source string happens to be present.
     expect(originX?.kind).toBe("formula");
   });
 
@@ -435,23 +394,16 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     const model = buildPanelModel(objectNamed(state, "table_1"), state.document.objects);
     expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
     expect(model.derived).toEqual([]);
-    // D-102 clause 2: the cells row is `synthetic` — it stands for a whole
-    // family, not one slot, so the DOM writer must refuse it a paperclip.
     expect(model.modifiable.find((row) => row.path === "cells")?.synthetic).toBe(true);
     expect(model.modifiable.find((row) => row.path === "origin.x")?.synthetic).toBe(false);
   });
 
   it("rounds a derived number's float dust to 4 decimals (D-099), while `props` keeps full precision — the two formatters disagree on purpose", () => {
-    // 0100-REVIEW's own example: a circle's area-weighted centroid (computed
-    // from its polygon-approximated vertices) carries float dust even at an
-    // integer origin.
     const state = typed(opened(), "circle x=10 y=20 r=7");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     const centroidX = model.derived.find((row) => row.path === "centroid.x");
-    expect(centroidX?.value).toBe("10"); // Rounded AND trimmed — never "10.0000".
+    expect(centroidX?.value).toBe("10");
 
-    // The SAME slot, through `props`, is untouched — D-099 clause 5's
-    // disclosed, deliberate divergence.
     const propsState = typed(state, "props circle_1");
     const propsLines = newLines(state, propsState);
     expect(propsLines.some((line) => line.includes("centroid.x = 10.000000000000002"))).toBe(true);
@@ -484,8 +436,6 @@ describe("commitPanelEdit / unlinkPanelSlot — writing through the panel (D-102
     state = typed(state, "circle x=0 y=0 r=5");
     const circleId = objectNamed(state, "circle_1").id;
 
-    // A doubled `=` would reach `parseFormula` as a malformed expression and
-    // come back as a refusal, not a formula.
     const after = commitPanelEdit(state, circleId, "origin.x", "=table_1.A1");
     expect(numberAt(objectNamed(after, "circle_1"), ["origin", "x"])).toBe(7);
     expect(newLines(state, after).some((line) => line.includes("PARSE"))).toBe(false);
@@ -545,7 +495,6 @@ describe("pointer and wheel (§5.9)", () => {
     const second = pointerDownAt(first, { x: 200, y: 20 }, VIEWPORT, true).state;
     expect(second.interaction.selectedObjectIds).toEqual([polygonId, circleId]);
 
-    // Shift-clicking the SAME object again toggles it back out (D-100 clause 4).
     const third = pointerDownAt(second, { x: 200, y: 20 }, VIEWPORT, true).state;
     expect(third.interaction.selectedObjectIds).toEqual([polygonId]);
   });
@@ -553,8 +502,6 @@ describe("pointer and wheel (§5.9)", () => {
   it("answers a live prompt step with a PICKED world point instead of selecting (D-072)", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "circle");
-    // The pointer is over the polygon: without D-072's rule this press would
-    // select it. During a live sequence it is an answer to the step instead.
     const picked = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
     expect(picked.interaction.selectedObjectIds).toEqual([]);
     expect(picked.pending?.stepIndex).toBe(1);
@@ -567,7 +514,7 @@ describe("pointer and wheel (§5.9)", () => {
 
   it("converts a pick to WORLD space with the current camera before it reaches command/ (D-069)", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
-    state = typed(state, "zoom 2"); // camera is no longer the identity
+    state = typed(state, "zoom 2");
     state = typed(state, "circle");
     const world = screenToWorld(state.document.camera, { x: 300, y: 200 });
     let picked = pointerDownAt(state, { x: 300, y: 200 }, VIEWPORT).state;
@@ -632,11 +579,11 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     state = dismissPanel(state, id);
     expect(state.panels[id]?.dismissed).toBe(true);
 
-    state = escape(state); // Clears the whole selection (D-100 clause 5).
+    state = escape(state);
     expect(state.panels[id]).toBeUndefined();
 
-    state = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state; // Re-selects it.
-    expect(state.panels[id]).toBeUndefined(); // Fresh — shown again, per D-106 clause 6.
+    state = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    expect(state.panels[id]).toBeUndefined();
   });
 
   it("discards a manual position the same way, when a plain click REPLACES the selection (D-100 clause 2, D-101 clause 6)", () => {
@@ -647,7 +594,7 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     state = movePanel(state, polygonId, { left: 5, top: 5 });
     expect(state.panels[polygonId]?.manualPosition).toEqual({ left: 5, top: 5 });
 
-    state = pointerDownAt(state, { x: 200, y: 20 }, VIEWPORT).state; // A plain click elsewhere.
+    state = pointerDownAt(state, { x: 200, y: 20 }, VIEWPORT).state;
     expect(state.panels[polygonId]).toBeUndefined();
   });
 
@@ -657,7 +604,7 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     const polygonId = objectNamed(state, "polygon_1").id;
     state = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
     state = dismissPanel(state, polygonId);
-    state = pointerDownAt(state, { x: 200, y: 20 }, VIEWPORT, true).state; // Shift-click adds the circle.
+    state = pointerDownAt(state, { x: 200, y: 20 }, VIEWPORT, true).state;
     expect(state.panels[polygonId]?.dismissed).toBe(true);
   });
 
@@ -673,17 +620,9 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
 });
 
 describe("Phase 3's acceptance criterion, end to end", () => {
-  // "Create a polygon and a table by command, see both drawn, pan/zoom, select,
-  // and drag the polygon." Every step below is one typed line or one pointer
-  // gesture against ONE state, in the order the criterion names them.
-  //
-  // What the tests CANNOT show is the picture itself: they assert the draw calls
-  // `renderer.ts` makes, not pixels. The manual check is described in the log
-  // entry (PROCESS_BRIEF §12 item 1).
 
   type DrawCall = { readonly op: string };
 
-  /** A recording fake — only the members `renderer.ts` calls (the same posture `renderer.test.ts` takes; no jsdom, no dependency). */
   function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly calls: readonly DrawCall[] } {
     const calls: DrawCall[] = [];
     const record = (op: string) => () => {
@@ -706,9 +645,6 @@ describe("Phase 3's acceptance criterion, end to end", () => {
       arc: record("arc"),
       strokeRect: record("strokeRect"),
       fillText: record("fillText"),
-      // `renderer.ts` measures a name label to place the chrome beside it
-      // (entry 0094). A fixed-width fake, like `renderer.test.ts`'s — this
-      // test asserts WHICH calls happen, never where the text lands.
       measureText: (text: string) => ({ width: text.length * 7 }),
     };
     return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
@@ -717,21 +653,15 @@ describe("Phase 3's acceptance criterion, end to end", () => {
   it("creates a polygon and a table by command, draws both, pans, zooms, selects, and drags the polygon", () => {
     let state = opened();
 
-    // 1. Create a polygon and a table by command.
     state = typed(state, "polygon sides=5 x=100 y=100 r=50");
     state = typed(state, "table x=300 y=100 rows=3 cols=3");
     expect(state.document.objects.map((object) => object.name)).toEqual(["polygon_1", "table_1"]);
 
-    // 2. See both drawn. The polygon is a stroked path; the table is stroked
-    //    cell rects. Both reach the context in one `renderDocument` call.
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, VIEWPORT.width, VIEWPORT.height, state.document.objects, state.document.camera);
     expect(calls.filter((call) => call.op === "stroke").length).toBeGreaterThan(0);
-    expect(calls.filter((call) => call.op === "strokeRect").length).toBe(9); // 3x3 cells
+    expect(calls.filter((call) => call.op === "strokeRect").length).toBe(9);
 
-    // 3. Pan and zoom. The pan is the screen-space delta a middle-drag produces:
-    //    the content follows the pointer, so the world point drawn at screen
-    //    (0,0) moves left by exactly the delta at zoom 1.
     const worldAtScreenOrigin = state.document.camera;
     state = panByScreen(state, 40, 25);
     expect(state.document.camera.x).toBeCloseTo(worldAtScreenOrigin.x - 40, 9);
@@ -741,9 +671,6 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     state = typed(state, "zoom 2");
     expect(state.document.camera.zoom).toBeGreaterThan(2);
 
-    // 4. Select the polygon by clicking its stroke. The polygon's own vertices
-    //    are the hit shape (§5.5), and the camera is no longer the identity, so
-    //    this also exercises the screen->world conversion.
     const polygon = objectNamed(state, "polygon_1");
     const vertex = (getSlot(polygon, ["vertices"])?.value as readonly { x: number; y: number }[])[0];
     if (vertex === undefined) {
@@ -753,8 +680,6 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     state = pointerDownAt(state, onStroke, VIEWPORT).state;
     expect(state.interaction.selectedObjectIds).toEqual([polygon.id]);
 
-    // 5. Drag it. The origin slots are literal, so both components move, and
-    //    they move through `mutate` — the journal grows (Rule 2).
     const originXBefore = numberAt(objectNamed(state, "polygon_1"), ["origin", "x"]);
     const journalBefore = state.document.journal.length;
     state = pointerMoveTo(state, { x: onStroke.x + 40, y: onStroke.y + 40 });
@@ -765,7 +690,6 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     expect(state.interaction.drag).toBeUndefined();
     expect(state.interaction.selectedObjectIds).toEqual([polygon.id]);
 
-    // 6. And the picture keeps up: a second render sees the moved polygon.
     const second = createFakeContext();
     renderDocument(second.ctx, VIEWPORT.width, VIEWPORT.height, state.document.objects, state.document.camera);
     expect(second.calls.filter((call) => call.op === "strokeRect").length).toBe(9);
@@ -773,9 +697,6 @@ describe("Phase 3's acceptance criterion, end to end", () => {
   });
 
   it("drags a polygon whose origin.x is a formula along Y only, with §5.9's non-blocking feedback in the log", () => {
-    // Phase 4's (c) is not claimed here — this is the Phase 3 half of it: the
-    // per-component rule reaching the LOG, which is the only place the operator
-    // can currently see it (D-068 defers the on-canvas indicator).
     let state = typed(opened(), "table x=0 y=0 rows=2 cols=2");
     state = typed(state, "set table_1.A1 500");
     state = typed(state, "polygon sides=5 x=100 y=100 r=50");
@@ -792,30 +713,14 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     state = pointerMoveTo(state, { x: worldToScreen(state.document.camera, vertex).x + 30, y: worldToScreen(state.document.camera, vertex).y + 30 });
 
     const after = objectNamed(state, "polygon_1");
-    expect(numberAt(after, ["origin", "x"])).toBe(500); // driven: did not move
-    expect(numberAt(after, ["origin", "y"])).toBeCloseTo(130, 9); // literal: moved
+    expect(numberAt(after, ["origin", "x"])).toBe(500);
+    expect(numberAt(after, ["origin", "y"])).toBeCloseTo(130, 9);
     expect(state.log.slice(logBefore).join("\n")).toContain("table_1.A1");
   });
 });
 
 describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in ONE document, with no false cycle", () => {
-  /**
-   * The brief's §6 Phase 4 gate, verbatim: "all three hold simultaneously in
-   * one document, with no false cycle." The human ran this document by hand at
-   * the gate session (entry 0114) and it passed; this pins the same document so
-   * the result cannot silently regress. §12.1 is why it exists at all — a
-   * criterion shown only by a screenshot is not shown.
-   *
-   * TWO polygons, deliberately, because the brief says so and says why: "one
-   * polygon cannot satisfy both directions, because a bound `origin.x` is by
-   * definition not draggable."
-   *
-   * The ingredients are each already tested elsewhere (`commands.test.ts` for
-   * `link` and for a cell holding a formula; the drag test above for the
-   * per-component rule). What is tested HERE and nowhere else is that they
-   * COMPOSE — a false cycle is precisely the defect that appears only when both
-   * directions are present in one graph at once.
-   */
+
   function firstVertexOf(object: GraphObject): { readonly x: number; readonly y: number } {
     const vertices = getSlot(object, ["vertices"])?.value as readonly { x: number; y: number }[] | undefined;
     const vertex = vertices?.[0];
@@ -825,29 +730,21 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     return vertex;
   }
 
-  /** The gate document: `polygon_1` driven BY the table, `polygon_2` driving it. */
   function gateDocument(): AppState {
     let state = typed(opened(), "table x=0 y=0 rows=4 cols=4");
     state = typed(state, "set table_1.A1 500");
-    state = typed(state, "polygon sides=5 x=100 y=100 r=50"); // polygon_1 — the DRIVEN one.
-    state = typed(state, "polygon sides=4 x=300 y=300 r=40"); // polygon_2 — the DRIVING one.
-    state = typed(state, "link polygon_1.origin.x table_1.A1"); // (a)
-    state = typed(state, "set table_1.B1 = polygon_2.origin.x * 2"); // (b)
+    state = typed(state, "polygon sides=5 x=100 y=100 r=50");
+    state = typed(state, "polygon sides=4 x=300 y=300 r=40");
+    state = typed(state, "link polygon_1.origin.x table_1.A1");
+    state = typed(state, "set table_1.B1 = polygon_2.origin.x * 2");
     return state;
   }
 
   it("builds the whole document without a single refusal — both directions coexist in one graph", () => {
     const state = gateDocument();
     expect(state.document.objects.map((object) => object.name)).toEqual(["table_1", "polygon_1", "polygon_2"]);
-    // The binding is real in BOTH directions before anything is dragged. Assert
-    // the slot KINDS, not only the values: a literal that happens to hold the
-    // right number satisfies a value check and is not a binding at all (caught
-    // by mutation-checking this very test — see entry 0115).
     expect(getSlot(objectNamed(state, "polygon_1"), ["origin", "x"])?.kind).toBe("formula");
     expect(getSlot(objectNamed(state, "table_1"), ["cells", "B1"])?.kind).toBe("formula");
-    // (b)'s driving polygon is LITERAL in X — the half of the brief's own wording
-    // ("polygon_b.origin.x is a literal slot") that is what makes it draggable at
-    // all, and therefore what makes (b) and (c) different tests (0116-REVIEW).
     expect(getSlot(objectNamed(state, "polygon_2"), ["origin", "x"])?.kind).toBe("literal");
     expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(500);
     expect(numberAt(objectNamed(state, "table_1"), ["cells", "B1"])).toBe(600);
@@ -861,7 +758,6 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     state = typed(state, "set table_1.A1 650");
 
     expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(650);
-    // And the polygon's DERIVED geometry followed the origin, not just the slot.
     expect(numberAt(objectNamed(state, "polygon_1"), ["centroid", "x"])).toBeCloseTo(650, 9);
   });
 
@@ -879,8 +775,6 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
 
     const originXAfter = numberAt(objectNamed(state, "polygon_2"), ["origin", "x"]);
     expect(originXAfter).toBeCloseTo(originXBefore + 40 / state.document.camera.zoom, 9);
-    // The cell recomputed inside the same mutation's topological pass — never a
-    // stale value, never a post-pass (§9's standing prohibition).
     expect(numberAt(objectNamed(state, "table_1"), ["cells", "B1"])).toBeCloseTo(originXAfter * 2, 9);
   });
 
@@ -895,24 +789,20 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     state = pointerMoveTo(state, { x: onStroke.x + 30, y: onStroke.y + 30 });
 
     const after = objectNamed(state, "polygon_1");
-    expect(numberAt(after, ["origin", "x"])).toBe(500); // driven by table_1.A1: did not move.
+    expect(numberAt(after, ["origin", "x"])).toBe(500);
     expect(numberAt(after, ["origin", "y"])).toBeCloseTo(originYBefore + 30 / state.document.camera.zoom, 9);
-    // §5.9's non-blocking feedback names what is holding X.
     expect(state.log.slice(logBefore).join("\n")).toContain("table_1.A1");
   });
 
   it("all three hold in ONE state at once — the criterion's own wording", () => {
     let state = gateDocument();
 
-    // (a) drive polygon_1 from the table.
     state = typed(state, "set table_1.A1 650");
-    // (b) drive the table from polygon_2.
     const polygon2 = objectNamed(state, "polygon_2");
     const onPolygon2 = worldToScreen(state.document.camera, firstVertexOf(polygon2));
     state = pointerDownAt(state, onPolygon2, VIEWPORT).state;
     state = pointerMoveTo(state, { x: onPolygon2.x + 40, y: onPolygon2.y });
     state = pointerUpNow(state);
-    // (c) drag the driven polygon; only Y gives.
     const polygon1 = objectNamed(state, "polygon_1");
     const onPolygon1 = worldToScreen(state.document.camera, firstVertexOf(polygon1));
     state = pointerDownAt(state, onPolygon1, VIEWPORT).state;
@@ -923,44 +813,27 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     const finalPolygon2 = objectNamed(state, "polygon_2");
     const finalTable = objectNamed(state, "table_1");
 
-    expect(numberAt(finalPolygon1, ["origin", "x"])).toBe(650); // (a) still driven.
-    expect(numberAt(finalPolygon1, ["origin", "y"])).toBeCloseTo(130, 9); // (c) Y moved, X did not.
-    expect(numberAt(finalTable, ["cells", "B1"])).toBeCloseTo(numberAt(finalPolygon2, ["origin", "x"]) * 2, 9); // (b) still live.
+    expect(numberAt(finalPolygon1, ["origin", "x"])).toBe(650);
+    expect(numberAt(finalPolygon1, ["origin", "y"])).toBeCloseTo(130, 9);
+    expect(numberAt(finalTable, ["cells", "B1"])).toBeCloseTo(numberAt(finalPolygon2, ["origin", "x"]) * 2, 9);
     expect(state.log.join("\n")).not.toContain("cyclic");
   });
 
   it("no FALSE cycle, and cycle detection is still alive — a genuinely cyclic link is refused", () => {
-    // The distinction the criterion is really making: the document above must
-    // NOT be reported as cyclic, while a real cycle still must be. Asserting
-    // only the first would pass just as well if cycle detection were switched
-    // off entirely, which is the failure this second half exists to exclude.
     const state = gateDocument();
-    // polygon_1.origin.x already reads table_1.A1, so pointing A1 back at it closes the loop.
     const outcome = submitLine(state, "set table_1.A1 = polygon_1.origin.x", VIEWPORT);
 
     expect(newLines(state, outcome.state).join("\n")).toContain("cyclic");
-    // §5.1: a rejected mutation leaves prior state bit-for-bit unchanged.
     expect(outcome.state.document).toBe(state.document);
   });
 
   it("no false cycle in §5.1's OWN shape either — ONE object driven BY the table and driving it back", () => {
-    // Added at 0116-REVIEW, because the document above cannot fail this way.
-    // The gate binds through TWO polygons, so its object-level graph —
-    // polygon_2 → table_1 → polygon_1 — is acyclic even for an implementation
-    // whose graph is object-granular rather than slot-granular. The shape §5.1
-    // names as the whole reason for slot granularity is the round trip through
-    // ONE object: "a chain like `table_x.A1 → polygon_1.origin.x →
-    // table_x.B1` would register as `table → polygon → table` and be falsely
-    // rejected as a cycle." That is where "no false cycle" can actually fail,
-    // and it is legal: A1, C1 and origin.x are three distinct slots.
     let state = typed(gateDocument(), "set table_1.C1 = polygon_1.centroid.x");
 
     expect(state.log.join("\n")).not.toContain("cyclic");
     expect(getSlot(objectNamed(state, "table_1"), ["cells", "C1"])?.kind).toBe("formula");
     expect(numberAt(objectNamed(state, "table_1"), ["cells", "C1"])).toBeCloseTo(500, 9);
 
-    // And the round trip propagates in one pass: the cell drives the polygon's
-    // origin, and that same polygon's DERIVED centroid drives the cell beside it.
     state = typed(state, "set table_1.A1 650");
 
     expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(650);
@@ -968,12 +841,6 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   });
 });
 
-// The pure transitions gained a trailing `context` (§5.1's `EvalContext`) at
-// entry 0132 so `start` can thread `render/measure.ts`'s Canvas2D measurer
-// through to every `mutate`. The fixture document carries a hand-built `text`
-// object (deliberately, not the entry-0136 `text` command — this keeps the test
-// about context threading); `measuredHeight` is `#MEASURE` (D-118) on the
-// default path and a real height once a measurer is passed.
 describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-118)", () => {
   function textObject(): GraphObject {
     return {
@@ -988,7 +855,7 @@ describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-
         "style.lineHeight": { kind: "literal", value: 14 },
         resolvedContent: { kind: "derived", value: null },
         measuredHeight: { kind: "derived", value: null },
-        measuredWidth: { kind: "derived", value: null }, // D-123's third derived slot
+        measuredWidth: { kind: "derived", value: null },
       },
     };
   }
@@ -1012,9 +879,6 @@ describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-
   });
 
   it("pointerMoveTo threads the context to pointerMove — a drag keeps a co-resident text object's measuredHeight real", () => {
-    // The rect is created through the real command path (correct schema slots);
-    // the text object was placed in the document directly (deliberately, not the
-    // entry-0136 `text` command — the test is about the drag, not creation).
     const withRect = submitLine(stateWithText(), "rect x=0 y=0 w=20 h=20", VIEWPORT).state;
     const corner = (getSlot(objectNamed(withRect, "rect_1"), ["vertices"])?.value as readonly { x: number; y: number }[])[0];
     if (corner === undefined) {
@@ -1027,15 +891,10 @@ describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-
     const dragged = pointerMoveTo(armed, { x: onStroke.x + 8, y: onStroke.y + 6 }, realMeasurer);
 
     expect(measuredHeightOf(dragged)).toBe(44);
-    expect(numberAt(objectNamed(dragged, "rect_1"), ["origin", "x"])).toBeCloseTo(8, 9); // the drag committed
+    expect(numberAt(objectNamed(dragged, "rect_1"), ["origin", "x"])).toBeCloseTo(8, 9);
   });
 });
 
-// **D-125** — in-place editing commits through the SAME `executeCommand` seam a
-// typed line uses (Rule 2, D-069). These cover the pure half: the `Command`
-// each receiver synthesises (clause 3, the trap) and the seed text. The
-// geometry is `render/editor.test.ts`; the DOM element lifecycle is in `start`,
-// untested by construction (D-001).
 describe("commitTextContent — a `text` object's content is ALWAYS a literal `set` (D-125 clause 3, D-122)", () => {
   function withText(content: string): { state: AppState; id: string } {
     const state = typed(opened(), `text x=0 y=0 "${content}"`);
@@ -1111,10 +970,6 @@ describe("commitTableCell — Excel-style: `=` is a formula, a number is a numbe
     expect(commitTableCell(state, "obj_404", "A1", "5")).toBe(state);
   });
 
-  // The human's 2026-09-02 report, half one: "double clicking in an empty table
-  // cell but not typing anything, then exiting, sets that table cell's contents
-  // to `""` rather than just keeping it blank/empty ... although it looks empty
-  // visually, it's not anymore."
   describe("an empty editor CLEARS the cell rather than writing `\"\"` (2026-09-02)", () => {
     it("leaves an already-empty cell with NO slot at all, not one holding an empty string", () => {
       const { state, id } = withTable();
@@ -1150,21 +1005,12 @@ describe("commitTableCell — Excel-style: `=` is a formula, a number is a numbe
   });
 });
 
-// The human's 2026-09-02 report, half two: re-opening the cell "auto selects in
-// the editor as showing `\"\"`. If I then click back out again without editing,
-// it re-adds quotes to either side, so the cell's value is now `\"\"\"\"`...
-// This repeats so each cancelled commit adds additional quotes."
-//
-// The cause was `editorSeed` rendering a literal with `describeSlotValue`, the
-// DISPLAY formatter, which quotes strings. The seed's contract is that an
-// untouched commit is a no-op, and a formatter that adds syntax cannot meet it.
 describe("editorSeed round-trips a cell exactly — an untouched commit changes nothing (2026-09-02)", () => {
   function withTable(): { state: AppState; id: string } {
     const state = typed(opened(), "table x=0 y=0");
     return { state, id: objectNamed(state, "table_1").id };
   }
 
-  /** Opens the editor on `cell` and commits what it showed, untouched — the exact gesture the report describes. */
   function reopenAndCommit(state: AppState, id: string, cell: string): AppState {
     return commitTableCell(state, id, cell, editorSeed(state, { kind: "cell", objectId: id, cell }));
   }
@@ -1269,10 +1115,6 @@ describe("editorSeed — the text the in-place editor opens showing (D-125)", ()
   });
 });
 
-// **D-124** — `text` is placed by POINTING (a `parser.ts` prompt step), and the
-// new box hands straight to D-125's in-place editor: `advance` returns
-// `AppTransition.openEditor` naming it, which `start` (untested by construction)
-// reads to set `inPlaceEditor`. These cover the pure signal.
 describe("text placed by pointing opens the in-place editor on the new box (D-124)", () => {
   it("a bare `text` word enters the position prompt, not a refusal", () => {
     const before = opened();
@@ -1290,7 +1132,6 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
     expect(numberAt(created, ["origin", "x"])).toBe(100);
     expect(getSlot(created, ["content"])).toEqual({ kind: "literal", value: "" });
     expect(outcome.openEditor).toEqual({ kind: "text", objectId: created.id });
-    // The editor opens showing nothing — the operator types the content in place.
     expect(editorSeed(outcome.state, outcome.openEditor!)).toBe("");
   });
 
@@ -1314,22 +1155,14 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
   });
 
   it("a refused text creation asks for no editor", () => {
-    // `text` needs content in the typed form; the bare positional is missing.
     const outcome = submitLine(opened(), "text x=0 y=0", VIEWPORT);
     expect(outcome.refused).toBe(true);
     expect(outcome.openEditor).toBeUndefined();
   });
 });
 
-// **D-142** — §5.7's file picker, on D-124's own shape one type over: creating
-// an `image` object asks for a picture to be chosen for it
-// (`AppTransition.pickImageFor`), and `commitImageSource` is the pure half that
-// writes the chosen data URL back through `executeCommand`. `start`'s picker
-// itself is untested by construction (D-001), like every other DOM path here.
 describe("image creation asks for a picture, and the chosen one is written to `source` (§5.7, D-142)", () => {
-  /** A data URL long enough to exercise the display elision, shaped like a real one. */
   const PICTURE = `data:image/png;base64,${"A".repeat(300)}`;
-  /** A decoded 2:1 picture, as `render/images.ts`'s `decodeBitmap` reports one. `image` is never read by anything under test here. */
   const WIDE = { naturalWidth: 200, naturalHeight: 100 };
 
   it("a typed `image` creation names the new object as the one to pick a picture for", () => {
@@ -1390,9 +1223,6 @@ describe("image creation asks for a picture, and the chosen one is written to `s
     expect(row?.editSeed).toBe(`"${PICTURE}"`);
   });
 
-  // The human's note 4 at entry 0173: *"Re-picking needs to be possible from the
-  // props window."* The panel row carries the flag; `start`'s delegated listener
-  // is what opens the dialog, and is DOM (untested by construction, D-001).
   it("marks the source row as the one chosen from a file, and no other row", () => {
     const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
     const image = objectNamed(created, "image_1");
@@ -1419,14 +1249,9 @@ describe("image creation asks for a picture, and the chosen one is written to `s
   });
 });
 
-// The human's **Q-027** ruling, on screen at entry 0173: *"Box should fit to
-// aspect ratio of image, not hang over it."* The box takes the PICTURE's shape
-// when one is chosen — which is the option that needs the decoded natural size
-// to reach a slot, and the one entry 0173 did not take.
 describe("a chosen picture gives the image its own proportions (Q-027, ruled by the human)", () => {
   const PICTURE = `data:image/jpeg;base64,${"A".repeat(60)}`;
 
-  /** The `width`/`height` slots of `image_1` after a picture of this natural size is chosen for a freshly created one. */
   function boxAfterChoosing(naturalWidth: number, naturalHeight: number): { width: unknown; height: unknown } {
     const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
     const after = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth, naturalHeight });
@@ -1476,11 +1301,6 @@ describe("a chosen picture gives the image its own proportions (Q-027, ruled by 
     expect(getSlot(objectNamed(after, "image_1"), ["pictureAspect"])).toEqual({ kind: "literal", value: 4 / 3 });
   });
 
-  // 0176-REVIEW's correction: entries 0173/0174 documented this write as being
-  // "refused" by `executeCommand` when a formula drives the slot. It is not — a
-  // plain `set` REPLACES a formula with a literal and reports "replaced formula",
-  // and this gesture was discarding even that line. §5.9's per-component posture
-  // is now applied here the same way `planResize` applies it to a drag.
   it("leaves a formula-driven `width` alone when a picture is chosen, instead of silently unlinking it from the cell that drives it", () => {
     const withTable = typed(opened(), "table x=0 y=0 rows=1 cols=1");
     const seeded = typed(withTable, "set table_1.A1 250");
@@ -1510,22 +1330,14 @@ describe("a chosen picture gives the image its own proportions (Q-027, ruled by 
   });
 });
 
-// **D-144**, the human's instruction at 0176-REVIEW: *"image resizing and
-// distortion can always be put back to the original aspect ratio ... so it can be
-// regained if 'preserve aspect ratio' is toggled back on."* The remembered ratio is
-// `pictureAspect` (written at pick time, tested above); this is the gesture that
-// spends it. The restored box is the rectangle `renderer.ts` would DRAW inside the
-// distorted one, which is why it never grows the object.
 describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", () => {
   const PICTURE = `data:image/jpeg;base64,${"A".repeat(60)}`;
 
-  /** An `image_1` at (10, 20) holding a 2:1 picture — box 100x50, `preserveAspect` on. */
   function withWidePicture(): AppState {
     const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
     return commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 200 });
   }
 
-  /** The same, stretched to a square 100x100 with the toggle off — the state the operator asks to undo. */
   function distorted(): AppState {
     const state = withWidePicture();
     const off = commitPanelChoice(state, objectNamed(state, "image_1").id, "preserveAspect", false);
@@ -1600,12 +1412,10 @@ describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", 
     const linked = typed(distortedIn(seeded), "link image_1.width table_1.A1");
     const back = commitPanelChoice(linked, objectNamed(linked, "image_1").id, "preserveAspect", true);
     expect(newLines(linked, back).join("\n")).toContain("image_1.width left alone");
-    // The link survives; the side nothing drives still lands.
     expect(getSlot(objectNamed(back, "image_1"), ["width"])?.kind).toBe("formula");
     expect(numberAt(objectNamed(back, "image_1"), ["height"])).toBe(60);
   });
 
-  /** `distorted()`, but built on top of an existing state so a table can be there too. */
   function distortedIn(base: AppState): AppState {
     const created = typed(base, "image x=10 y=20");
     const withPicture = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 200 });
@@ -1614,13 +1424,7 @@ describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", 
   }
 });
 
-// **D-136** clause 2 — a `text` box whose editor was opened ON CREATION (the
-// pointing / prompt path) and then abandoned while still empty is removed:
-// abandoning the placement gesture abandons the object. `main.ts`'s `start`
-// arms this off `AppTransition.openEditor`; `abandonCreatedTextBox` is the pure
-// half its Escape / empty-blur paths call, and the only part a test can drive.
 describe("abandonCreatedTextBox — an abandoned just-created empty text box is removed (D-136 clause 2)", () => {
-  /** A state holding one empty `text_1` at (50, 50), as the pointing path leaves it. */
   function withEmptyTextBox(): { state: AppState; id: string } {
     const state = pointerDownAt(typed(opened(), "text"), { x: 50, y: 50 }, VIEWPORT).state;
     return { state, id: objectNamed(state, "text_1").id };
@@ -1647,13 +1451,7 @@ describe("abandonCreatedTextBox — an abandoned just-created empty text box is 
   });
 });
 
-// The human's 2026-09-02 instruction: "if properties only have a small subset
-// of valid inputs ... instead, create a drop-down." The schema declares the
-// closed sets; `buildPanelModel` resolves them for display and
-// `commitPanelChoice` writes the chosen value as a LITERAL — never through the
-// free-text grammar, which would turn choosing `center` into `= center`.
 describe("panel drop-downs — a slot with a closed value set offers it (2026-09-02)", () => {
-  /** The one modifiable row at `path` on the freshly-created `text_1`. */
   function rowOf(state: AppState, path: string, name = "text_1"): PanelRow {
     const object = objectNamed(state, name);
     const found = buildPanelModel(object, state.document.objects).modifiable.find((row) => row.path === path);
@@ -1671,13 +1469,9 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
     const row = rowOf(withText(), "style.align");
     expect(row.choices?.values).toEqual(["left", "center", "right"]);
     expect(row.choices?.labels).toEqual(["left", "center", "right"]);
-    expect(row.choices?.selectedIndex).toBe(0); // DEFAULT_TEXT_STYLE_ALIGN
+    expect(row.choices?.selectedIndex).toBe(0);
   });
 
-  // `overflow` had a drop-down here for exactly one cycle. The human's
-  // follow-up removed the SLOT ("remove overflow options — always default to a
-  // standard overflow"), so there is no row to offer choices on at all — which
-  // is the assertion, because a dead row that still renders is the defect.
   it("has no `overflow` row left to offer choices on — the slot is gone, not just its drop-down", () => {
     const object = objectNamed(withText(), "text_1");
     const model = buildPanelModel(object, withText().document.objects);
@@ -1689,7 +1483,7 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
     const row = rowOf(withText(), "autoresize");
     expect(row.choices?.values).toEqual([true, false]);
     expect(row.choices?.labels).toEqual(["shrink to fit text", "keep the size I set"]);
-    expect(row.choices?.selectedIndex).toBe(0); // DEFAULT_TEXT_AUTORESIZE is true
+    expect(row.choices?.selectedIndex).toBe(0);
   });
 
   it("leaves a free-text slot without choices, so the paperclip and its text box are unchanged for every row that had them", () => {
@@ -1734,8 +1528,6 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
     const state = withText();
     const after = commitPanelChoice(state, objectNamed(state, "text_1").id, "autoresize", false);
     expect(newLines(state, after)[0]).toBe("> set text_1.autoresize FALSE");
-    // The echo is not decoration: typed back verbatim it must reproduce the
-    // same LITERAL BOOLEAN, not the string "false" a lowercase echo would give.
     const retyped = typed(withText(), "set text_1.autoresize FALSE");
     expect(getSlot(objectNamed(retyped, "text_1"), ["autoresize"])).toEqual(getSlot(objectNamed(after, "text_1"), ["autoresize"]));
   });
@@ -1746,8 +1538,6 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
   });
 });
 
-// The text box's own sizing rule, end to end through the command line — the
-// half of the 2026-09-02 rework an operator can reach without a pointer.
 describe("a text box's size follows its text (2026-09-02)", () => {
   it("`text` creates the box with autoresize ON, so a fresh box hugs its text", () => {
     const state = typed(opened(), 'text x=0 y=0 "hello"');
@@ -1761,17 +1551,7 @@ describe("a text box's size follows its text (2026-09-02)", () => {
   });
 });
 
-// Adding `autoresize` to `TEXT_SCHEMA` is exactly the schema growth D-126 says
-// breaks a previously-saved document — for a DERIVED slot. This one is not
-// derived and nothing derived depends on it, which is what makes the difference
-// and is why the slot was declared that way. Pinned here rather than argued,
-// because "it should still load" is the whole claim.
-//
-// The same fixture now covers the OTHER direction too: it carries an `overflow`
-// slot, which the schema no longer declares at all. A document is not only saved
-// before a slot arrives — it can also outlive one.
 describe("a document saved before `autoresize` existed still loads (2026-09-02)", () => {
-  /** A `text` object as `createText` wrote one BEFORE the slot was added: every other declared path filled (`overflow` included — a slot since REMOVED), `autoresize` simply absent. */
   function preAutoresizeDocument(): unknown {
     return {
       formatVersion: 1,
@@ -1820,8 +1600,6 @@ describe("a document saved before `autoresize` existed still loads (2026-09-02)"
     }
     const state = initialAppState(loaded.document);
     expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toBeUndefined();
-    // The box still comes out positive — the missing slot reads as the default,
-    // never as `false` and never as an error.
     const extent = objectExtent(objectNamed(state, "text_1"));
     expect(extent === undefined || extent.maxY > extent.minY).toBe(true);
   });
@@ -1835,11 +1613,6 @@ describe("a document saved before `autoresize` existed still loads (2026-09-02)"
     expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: false });
   });
 
-  // The REMOVAL's own migration risk (the human's 2026-09-02 follow-up: "remove
-  // overflow options"). An undeclared LITERAL slot is legal — `mutation.ts`'s
-  // integrity checks restrict only derived positions — so the old value rides
-  // along untouched instead of failing the load. It just stops being ENUMERATED,
-  // which is what keeps a dead row out of the properties panel.
   it("still loads a document carrying the REMOVED `overflow` slot, keeps it inert, and shows no panel row for it", () => {
     const loaded = deserializeDocument(preAutoresizeDocument());
     if (!loaded.ok) {
@@ -1855,42 +1628,16 @@ describe("a document saved before `autoresize` existed still loads (2026-09-02)"
 });
 
 describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with a REAL measurer", () => {
-  /**
-   * The brief's §6 Phase 5 gate, verbatim: "a text box reading `Radius: {=
-   * table_x.A1 }{? table_x.A1 > 50 } — **LARGE**{:} — small{?}` updates both its
-   * number and its branch as the cell changes, wraps at its set width, and
-   * re-renders when a value referenced only inside the currently non-taken
-   * branch changes." §12.1 requires this be one executable test proving the
-   * criterion, not a description; `STATUS.md`'s own next-slice note additionally
-   * insists on ONE document, through `mutate`, with a real measurer — not four
-   * tests over four fixtures. The `it`s below share `gateDocument()` for that
-   * reason: they are one criterion examined from five angles, not five
-   * unrelated fixtures.
-   *
-   * The brief's own content string has no reference inside EITHER branch, so it
-   * cannot exercise the "non-taken branch" clause as written — extended here
-   * with one embedded reference per branch (`table_1.B1` in the TRUE branch,
-   * `table_1.C1` in the FALSE branch) while keeping the brief's exact
-   * number/condition/markup structure otherwise untouched. See this cycle's log
-   * entry, "Decisions I made", for the reasoning.
-   */
+
   const GATE_CONTENT =
     "Radius: {= table_1.A1 }{? table_1.A1 > 50 } — **LARGE** (max {= table_1.B1 }){:} — small (min {= table_1.C1 }){?}";
 
-  /**
-   * `measureText` is `CHAR` px per character — `render/measure.test.ts`'s own
-   * fake shape — wired through the PRODUCTION `createCanvas2dTextMeasurer`
-   * (`render/measure.ts`), never a hand-rolled height stub. "Wraps at its set
-   * width" has to be proved against the real word-wrap algorithm (D-120) or it
-   * proves nothing.
-   */
   const CHAR = 10;
   function realMeasurerContext(): EvalContext {
     const ctx: MeasurementContext = { font: "", measureText: (text: string) => ({ width: text.length * CHAR }) };
     return { measurer: createCanvas2dTextMeasurer(ctx) };
   }
 
-  /** `typed`, widened with a trailing `EvalContext` — every step of this gate needs the real measurer threaded, not just the wrap step. */
   function typedWith(state: AppState, line: string, context: EvalContext): AppState {
     return submitLine(state, line, VIEWPORT, context).state;
   }
@@ -1903,13 +1650,12 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
     return getSlot(objectNamed(state, "text_1"), ["measuredHeight"])?.value;
   }
 
-  /** `table_1.A1`/`B1`/`C1` are populated BEFORE `text_1` is created, so all three edges exist from the creating mutation on (D-110 clause 4: a reference to an empty in-extent cell gets no edge at all). `A1` starts at 30 — the FALSE branch ("small") is the one taken at creation. */
   function gateDocument(): AppState {
     const context = realMeasurerContext();
     let state = typedWith(opened(), "table x=0 y=0 rows=1 cols=3", context);
     state = typedWith(state, "set table_1.A1 30", context);
-    state = typedWith(state, "set table_1.B1 999", context); // read only by the untaken TRUE branch.
-    state = typedWith(state, "set table_1.C1 5", context); // read by the taken FALSE branch.
+    state = typedWith(state, "set table_1.B1 999", context);
+    state = typedWith(state, "set table_1.C1 5", context);
     state = typedWith(state, `text x=0 y=0 "${GATE_CONTENT}"`, context);
     return state;
   }
@@ -1924,10 +1670,6 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
   });
 
   it("a value referenced ONLY inside the currently non-taken branch is still a real, discoverable dependency (§5.3's eager/total extraction, proved end to end via `refs`)", () => {
-    // table_1.B1 sits only in the untaken TRUE branch (A1 is 30, so the FALSE
-    // branch is the one currently rendered) — §5.3 demands the edge exist
-    // anyway, and `refs` is the end-to-end, render-independent way to observe
-    // an edge without reaching into engine internals from a `main.ts` test.
     const before = gateDocument();
     const after = typedWith(before, "refs table_1.B1", realMeasurerContext());
     expect(newLines(before, after)).toContain("table_1.B1 → text_1.resolvedContent");
@@ -1935,28 +1677,17 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
 
   it("a value changed while its branch is untaken is not stale once that branch is later taken — the observable half of 're-renders'", () => {
     let state = gateDocument();
-    // Change B1 while its branch (TRUE) is still untaken (A1 = 30, unchanged).
     state = typedWith(state, "set table_1.B1 777", realMeasurerContext());
-    expect(resolvedContentOf(state)).toBe("Radius: 30 — small (min 5)"); // unaffected — correct, that branch is not active.
-    // NOW take the TRUE branch. If the untaken reference above had not become
-    // a real edge, this would still happen to read correctly (evaluation
-    // re-walks the block tree fresh every time `content` changes) — so this
-    // test's actual claim is the PREVIOUS one; this one guards against a
-    // regression the reviewer asked to see disclosed rather than silently
-    // dropped.
+    expect(resolvedContentOf(state)).toBe("Radius: 30 — small (min 5)");
     state = typedWith(state, "set table_1.A1 80", realMeasurerContext());
-    expect(resolvedContentOf(state)).toBe("Radius: 80 — **LARGE** (max 777)"); // the FRESH value, not 999 (the value at creation).
+    expect(resolvedContentOf(state)).toBe("Radius: 80 — **LARGE** (max 777)");
   });
 
   it("wraps at its set width — measuredHeight comes from the real word-wrap algorithm, not a fixed-size fake", () => {
     let state = gateDocument();
-    state = typedWith(state, "set table_1.A1 80", realMeasurerContext()); // take the LARGE branch — the longer of the two.
+    state = typedWith(state, "set table_1.A1 80", realMeasurerContext());
     state = typedWith(state, "set text_1.width 100", realMeasurerContext());
-    // B1 is untouched on this path (still 999 from gateDocument()), so
-    // resolvedContent is "Radius: 80 — **LARGE** (max 999)". At CHAR=10/char,
-    // greedy word-wrap (D-120) fills wrapWidth 100 as "Radius: 80" / "— LARGE"
-    // / "(max 999)" — three lines.
-    expect(measuredHeightOf(state)).toBe(60); // 3 lines * the default lineHeight (20).
+    expect(measuredHeightOf(state)).toBe(60);
   });
 
   it("no false cycle — the criterion's own document builds and updates without ever refusing", () => {

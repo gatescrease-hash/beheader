@@ -1,12 +1,7 @@
 /**
- * stub.test.ts — Tests for `engine/script/stub.ts` (§5.8, D-141 clause 7).
+ * stub.test.ts
  *
- * Colocated with `stub.ts` per D-001. Mirrors `primitives/geometry.test.ts`/
- * `primitives/text.test.ts`'s own posture: this file pins the PRIMITIVE's own
- * behaviour (path enumeration, `evaluateScriptOutput`, and `out.<port>`'s
- * compute function called directly with a fake `read`) in isolation from
- * evaluation order. `primitives/schema.test.ts` owns the narrower claim that
- * `SCRIPT_SCHEMA` wires these into the registry correctly.
+ * The script node ports and the placeholder body.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
@@ -22,7 +17,6 @@ import {
   type ScriptNode,
 } from "./stub.ts";
 
-/** A script `GraphObject` with the given ports, otherwise bare — mirrors `mutation.test.ts`'s own `scriptObject` helper. */
 function scriptObject(ports?: { readonly in: readonly string[]; readonly out: readonly string[] }): GraphObject {
   return ports === undefined ? { id: "obj_1", name: "script_1", type: "script", slots: {} } : { id: "obj_1", name: "script_1", type: "script", slots: {}, ports };
 }
@@ -112,11 +106,6 @@ describe("enumerateScriptOutDerivedSlots", () => {
 });
 
 describe("out.<port>'s compute function", () => {
-  // These tests call `compute` directly with a fake `read` standing in for
-  // "this slot's dependencies already evaluated earlier in the same
-  // topological pass" (§5.1) — the same posture `schema.test.ts`'s `add`
-  // compute tests take — so a wrong answer here is the compute function's,
-  // never `graph/eval.ts`'s ordering.
   function computeFor(object: GraphObject, portName: string) {
     const compute = enumerateScriptOutDerivedSlots(object).find((slot) => slot.path.join(".") === `out.${portName}`)?.compute;
     if (compute === undefined) {
@@ -157,7 +146,7 @@ describe("out.<port>'s compute function", () => {
 
   it("returns #REF, never throws, when an in.* address did not resolve at all", () => {
     const object = scriptObject({ in: ["factor"], out: ["result"] });
-    const result = computeFor(object, "result")(object, readFrom({ "placeholder.result": 5 })); // in.factor missing
+    const result = computeFor(object, "result")(object, readFrom({ "placeholder.result": 5 }));
     expect(result).toMatchObject({ error: "#REF" });
   });
 

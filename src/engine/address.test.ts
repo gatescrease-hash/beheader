@@ -1,9 +1,9 @@
 /**
- * address.test.ts — Tests for the addressing scheme (§5.2).
+ * address.test.ts
  *
- * Colocated with address.ts per D-001. These are the tests the seed reviewer
- * (0000-SEED-reviewer.md) flagged as checked hardest: the two-layer name/ID split
- * (rename does not touch stored Addresses) and pure-engine hygiene.
+ * Name rules, the address parser, the address formatter, and the A1 cell
+ * helpers.
+ * A round trip through parse and format must give back the same address.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -27,15 +27,12 @@ import {
 import { RESERVED_WORDS } from "./formula/lexer.ts";
 import type { ObjectType } from "./graph/node.ts";
 
-// `type` defaults to "polygon" — an arbitrary non-table type — for every test that
-// isn't specifically exercising the table/cells path mapping (D-005).
 function objects(
   ...entries: Array<[id: string, name: string, type?: ObjectType]>
 ): AddressableObject[] {
   return entries.map(([id, name, type = "polygon"]) => ({ id, name, type }));
 }
 
-/** Parses and asserts success, narrowing away the AddressError arm for the caller. */
 function parseOk(input: string, docObjects: readonly AddressableObject[]): Address {
   const result = parseAddress(input, docObjects);
   if (isAddressError(result)) {
@@ -107,8 +104,6 @@ describe("isNameTaken / checkNameAvailable", () => {
     expect(result.ok).toBe(true);
   });
 
-  // D-080 (0084-REVIEW). The reserved set is imported from `formula/lexer.ts`, not
-  // retyped, so a sixth keyword added there lands in these tests automatically.
   it("checkNameAvailable rejects every word §5.3 lexes as a formula keyword (D-080)", () => {
     for (const reserved of RESERVED_WORDS) {
       expect(checkNameAvailable(reserved, objects()).ok).toBe(false);
@@ -148,8 +143,6 @@ describe("generateDefaultName", () => {
   });
 
   it("does not skip past a gap left by a deleted object's freed name", () => {
-    // polygon_1 was deleted; only polygon_2 exists. The next default is polygon_1,
-    // not polygon_3 — see the rationale comment in address.ts.
     const docObjects = objects(["obj_2", "polygon_2"]);
     expect(generateDefaultName("polygon", docObjects)).toBe("polygon_1");
   });
@@ -174,9 +167,6 @@ describe("parseAddress", () => {
   });
 
   it("bareCellAddress agrees with parseAddress: two spellings of one cell resolve to ONE slot (0032-REVIEW-phase1)", () => {
-    // formula/parser.ts resolves a BARE "A1" through bareCellAddress and a dotted
-    // "table_x.A1" through parseAddress. If those two ever disagree, one cell has two
-    // slots — the hazard Q-004 was raised about, reached from a different door.
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(bareCellAddress("obj_3", "A1")).toEqual(parseAddress("table_x.A1", docObjects));
     expect(bareCellAddress("obj_3", "AB12")).toEqual(parseAddress("table_x.AB12", docObjects));
@@ -198,9 +188,6 @@ describe("parseAddress", () => {
     expect(parseAddress("polygon_1.radius", docObjects)).toEqual({ objectId: "obj_7", path: ["radius"] });
   });
 
-  // D-008 (reviewer edit at 0004-REVIEW-phase0). The cells-prefix mapping keys on the
-  // A1 *form*, not merely on "table + one segment" — otherwise every future scalar
-  // table slot would be swallowed into a phantom cells.<name> slot no schema declares.
   it.each(["rows", "cols", "opacity", "cells", "typo"])(
     "does not treat the non-A1-form table path %s as a cell reference",
     (segment) => {
@@ -212,11 +199,6 @@ describe("parseAddress", () => {
     },
   );
 
-  // D-039 (Q-004 answered by the human, 2026-08-23): a lowercase cell ref IS a cell
-  // reference, and is normalised to uppercase at the one point the stored path is
-  // built — the test that matters is not "lowercase is accepted" in isolation but
-  // that both spellings land on the SAME stored Address (D-008's own two-slots hazard,
-  // reached from case instead of a structural proxy).
   it("maps a lowercase cell ref, normalised to uppercase (D-039)", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("table_x.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
@@ -228,8 +210,6 @@ describe("parseAddress", () => {
     expect(parseAddress("table_x.aB12", docObjects)).toEqual(parseAddress("table_x.AB12", docObjects));
   });
 
-  // D-043 (0041-REVIEW-phase2): the same one-spelling rule, reached from the two angles
-  // cycle 0039 left open — the already-written stored form, and a row with leading zeros.
   it("the written-out stored form is normalised too: table_x.cells.a1 is the SAME slot as table_x.a1 (D-043)", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("table_x.cells.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
@@ -240,8 +220,6 @@ describe("parseAddress", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(isCellReferenceForm("A007")).toBe(false);
     expect(isCellReferenceForm("A7")).toBe(true);
-    // Not a cell form, so no `cells.` prefix is added — it resolves as an ordinary
-    // path segment, which names no slot, rather than a phantom second cell.
     expect(parseAddress("table_x.A007", docObjects)).toEqual({ objectId: "obj_3", path: ["A007"] });
   });
 
@@ -314,9 +292,6 @@ describe("isAddressError", () => {
 
 describe("formatAddress", () => {
   it("round-trips a parsed table-cell address back to its canonical (short) string", () => {
-    // The table type is what makes this test actually exercise D-005's mapping —
-    // without it, "table_x.A1" would parse to path ["A1"] under the default
-    // non-table type and the test would pass without touching toStoredPath at all.
     const docObjects = objects(["obj_3", "table_x", "table"]);
     const parsed = parseOk("table_x.A1", docObjects);
     expect(parsed).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
@@ -328,40 +303,22 @@ describe("formatAddress", () => {
     expect(result).toMatchObject({ error: "#REF" });
   });
 
-  // The load-bearing guarantee (§5.2, Rule 3): a stored Address never contains a
-  // user-facing name, so renaming an object costs nothing — the same stored
-  // Address simply formats differently afterwards. Flagged explicitly by the seed
-  // reviewer (0000-SEED-reviewer.md) as the test that must exist before anything
-  // else reads addresses.
   it("reflects a rename with no change to the stored address", () => {
     const before = objects(["obj_7", "polygon_1"]);
 
-    // A formula elsewhere is authored against the name and parsed to a stored
-    // Address at that moment (§5.2: "stored ASTs hold IDs, not names").
     const stored = parseOk("polygon_1.origin.x", before);
 
-    // The stored Address is exactly {objectId, path} — no name field exists to
-    // even accidentally carry the old name forward.
     expect(Object.keys(stored).sort()).toEqual(["objectId", "path"]);
     expect(JSON.stringify(stored)).not.toContain("polygon_1");
 
-    // Rename obj_7 to intersection_a. This is a new objects array (rename is a
-    // mutation elsewhere); the point under test is that `stored` itself is
-    // untouched by it — same object, same reference, still {objectId: "obj_7", ...}.
     const after = objects(["obj_7", "intersection_a"]);
     expect(stored).toEqual({ objectId: "obj_7", path: ["origin", "x"] });
 
-    // Formatting the SAME stored Address against the new name table now shows the
-    // new name, without the Address itself having been touched.
     expect(formatAddress(stored, after)).toBe("intersection_a.origin.x");
     expect(formatAddress(stored, before)).toBe("polygon_1.origin.x");
   });
 });
 
-// D-005 (0002-REVIEW-phase0, fixing F-1): parseAddress and formatAddress must be
-// exact inverses for every address form PROJECT_BRIEF §5.2's table specifies,
-// including the one case (table cells) where the surface string and the stored
-// path genuinely differ.
 describe("parseAddress / formatAddress round-trip every address form in §5.2's table", () => {
   const docObjects = objects(
     ["obj_3", "table_x", "table"],
@@ -381,10 +338,6 @@ describe("parseAddress / formatAddress round-trip every address form in §5.2's 
     expect(formatAddress(parsed, docObjects)).toBe(surface);
   });
 
-  // D-008: toStoredPath/toSurfacePath must be inverses over the whole domain, not
-  // just over §5.2's canonical forms. A stored table path whose second segment is
-  // not an A1-form ref must NOT have its prefix stripped — printing `table_x.rows`
-  // for stored ["cells","rows"] would name a different slot than the one printed.
   it("does not strip a cells prefix whose second segment is not an A1-form ref", () => {
     expect(formatAddress({ objectId: "obj_3", path: ["cells", "rows"] }, docObjects)).toBe(
       "table_x.cells.rows",
@@ -453,9 +406,6 @@ describe("parseCellReference / formatCellReference (§5.4, cycle 0040)", () => {
   });
 
   it("agrees with bareCellAddress/toStoredPath's own TABLE_CELL_PATH_PREFIX shape (no drift between the two mappings)", () => {
-    // parseCellReference/formatCellReference operate on the bare reference string;
-    // bareCellAddress wraps it in the stored ["cells", ref] path. Both must agree on
-    // the same uppercase spelling for the same cell.
     const coordinates = parseCellReference("b3");
     expect(coordinates).toEqual({ column: 2, row: 3 });
     const ref = formatCellReference(coordinates as { column: number; row: number });

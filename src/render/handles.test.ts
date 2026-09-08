@@ -1,10 +1,7 @@
 /**
- * handles.test.ts — Tests for `render/handles.ts`, the eight resize grabbers
- * the human asked for on 2026-09-02 ("text boxes need to be able to be expanded
- * and shrunken with grabbers in the corners, like in word/powerpoint").
+ * handles.test.ts
  *
- * The two properties worth defending: a grabber is the same comfortable size at
- * every zoom (it is chrome, not geometry), and a resize can never invert a box.
+ * Grabber placement and the absolute resize math.
  */
 import { describe, expect, it } from "vitest";
 import type { CameraState } from "../engine/document.ts";
@@ -30,11 +27,9 @@ function objectOfType(type: GraphObject["type"]): GraphObject {
 }
 
 describe("constrainBoxToRatio — a resize that keeps the object's proportions (§5.7's `preserveAspect`)", () => {
-  /** A 200x100 box at the origin — a 2:1 ratio, so every expectation below is checkable by eye. */
   const START: WorldExtent = { minX: 0, minY: 0, maxX: 200, maxY: 100 };
 
   it("derives the height from a SIDE grabber's width, so dragging one edge scales the whole box", () => {
-    // `e` dragged out by 100: 300 wide asked for, 2:1 keeps it 300x150.
     const requested = resizeBox(START, "e", 100, 0);
     expect(constrainBoxToRatio(START, requested, "e")).toEqual({ minX: 0, minY: 0, maxX: 300, maxY: 150 });
   });
@@ -50,14 +45,11 @@ describe("constrainBoxToRatio — a resize that keeps the object's proportions (
   });
 
   it("takes the LARGER scale on a CORNER, so a diagonal drag responds to whichever axis moved more", () => {
-    // `se` out by (100, 0): scaleX 1.5, scaleY 1 -> 1.5.
     expect(constrainBoxToRatio(START, resizeBox(START, "se", 100, 0), "se")).toEqual({ minX: 0, minY: 0, maxX: 300, maxY: 150 });
-    // `se` out by (0, 100): scaleX 1, scaleY 2 -> 2.
     expect(constrainBoxToRatio(START, resizeBox(START, "se", 0, 100), "se")).toEqual({ minX: 0, minY: 0, maxX: 400, maxY: 200 });
   });
 
   it("anchors the edges the grabber did NOT move, so the box never slides out from under the pointer", () => {
-    // `nw` moves the left and top edges, so the bottom-right corner stays put.
     const constrained = constrainBoxToRatio(START, resizeBox(START, "nw", -100, 0), "nw");
     expect(constrained.maxX).toBe(200);
     expect(constrained.maxY).toBe(100);
@@ -146,15 +138,11 @@ describe("resizeHandleAt — a press in SCREEN space, so a grabber never shrinks
 
   it("stays the same SCREEN size at high zoom — the tolerance is pixels, not world units", () => {
     const zoomed: CameraState = { x: 0, y: 0, zoom: 10 };
-    // The `se` corner projects to (3000, 2600). A press 4 screen px away still
-    // hits it; the same 4 WORLD units away (40 screen px) does not.
     expect(resizeHandleAt({ x: 3004, y: 2600 }, BOX, zoomed)).toBe("se");
     expect(resizeHandleAt({ x: 3040, y: 2600 }, BOX, zoomed)).toBeUndefined();
   });
 
   it("prefers a CORNER where a corner and an edge grabber overlap — the more specific gesture", () => {
-    // A box only as tall as the grabbers themselves: `e`'s midpoint and both
-    // right corners land within tolerance of each other.
     const tiny: WorldExtent = { minX: 0, minY: 0, maxX: 40, maxY: 4 };
     expect(resizeHandleAt({ x: 40, y: 0 }, tiny, CAMERA_IDENTITY)).toBe("ne");
   });

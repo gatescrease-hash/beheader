@@ -1,10 +1,7 @@
 /**
- * editor.test.ts — Tests for `editor.ts` (**D-125**'s geometry half).
+ * editor.test.ts
  *
- * Pure coordinate math over `GraphObject`/`CameraState` — no Canvas2D fake, no
- * DOM. The DOM half (element lifecycle, focus, commit wiring) lives in `start`
- * and is untested by construction (D-001); the commit `Command` builders live
- * in `main.ts`'s pure half and are tested in `main.test.ts`.
+ * Editor placement and style for a text box and a table cell.
  */
 import { describe, expect, it } from "vitest";
 import type { CameraState } from "../engine/document.ts";
@@ -15,26 +12,17 @@ import { TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
 
-/**
- * The `style.*` slots and the `width` slot a fixture may override. Every one is
- * OMITTED by default, so the base fixture exercises `editorTextStyle`'s
- * missing-slot fallbacks — the shape a hand-built object has.
- */
 interface TextFixtureOptions {
-  /** The `width` SLOT, which decides wrapping (§5.6). Defaults to the fixture's box width (a number, so it wraps); pass `"auto"` for the no-wrap case `DEFAULT_TEXT_WIDTH` actually creates. */
   readonly widthSlot?: number | "auto";
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly font?: string;
   readonly align?: string;
   readonly color?: string;
-  /** The `height` SLOT. Omitted by default (so the measurement decides); set it to exercise `autoresize`. */
   readonly heightSlot?: number | "auto";
-  /** The `autoresize` SLOT (the 2026-09-02 rework). Omitted by default, which reads as `true`. */
   readonly autoresize?: boolean;
 }
 
-/** A `text` object with a drawn extent — `resolvedContent` set and `measuredHeight`/`measuredWidth` present so the box is (originX,originY)-(originX+w, originY+h). */
 function textObject(originX: number, originY: number, width: number, height: number, options: TextFixtureOptions = {}): GraphObject {
   const slots: Record<string, Slot> = {
     "origin.x": { kind: "literal", value: originX },
@@ -68,7 +56,6 @@ function textObject(originX: number, originY: number, width: number, height: num
   return { id: "obj_text", name: "text_1", type: "text", slots };
 }
 
-/** An empty `text` object: `resolvedContent` unset, so `extent.ts` gives it NO extent (D-066). */
 function emptyTextObject(originX: number, originY: number): GraphObject {
   return {
     id: "obj_empty",
@@ -118,13 +105,12 @@ function circleObject(): GraphObject {
 
 describe("editorTargetAt — which receiver a double-click names (D-125 clause 4)", () => {
   it("names a `text` object as a whole when the point is inside its drawn box", () => {
-    const text = textObject(10, 20, 100, 40); // box (10,20)-(110,60)
+    const text = textObject(10, 20, 100, 40);
     expect(editorTargetAt({ x: 50, y: 40 }, [text], CAMERA_IDENTITY)).toEqual({ kind: "text", objectId: "obj_text" });
   });
 
   it("names the specific cell the point falls in, A1-form, for a table", () => {
     const table = tableObject(0, 0, 4, 4);
-    // Column 2, row 3 -> B3. Point sits mid-cell.
     const point = { x: TABLE_CELL_WIDTH * 1.5, y: TABLE_CELL_HEIGHT * 2.5 };
     expect(editorTargetAt(point, [table], CAMERA_IDENTITY)).toEqual({ kind: "cell", objectId: "obj_table", cell: "B3" });
   });
@@ -149,7 +135,7 @@ describe("editorTargetAt — which receiver a double-click names (D-125 clause 4
 
   it("names the topmost object under the point, like a plain click", () => {
     const text = textObject(0, 0, 200, 60);
-    const table = tableObject(0, 0, 2, 2); // later in the array -> drawn on top
+    const table = tableObject(0, 0, 2, 2);
     expect(editorTargetAt({ x: 10, y: 10 }, [text, table], CAMERA_IDENTITY)).toMatchObject({ kind: "cell" });
   });
 });
@@ -177,8 +163,6 @@ describe("editorPlacement — where the overlay floats, and at what scale", () =
     const text = textObject(10, 20, 100, 40);
     const camera: CameraState = { x: 5, y: 5, zoom: 2 };
     const placement = editorPlacement({ kind: "text", objectId: "obj_text" }, text, camera, 1);
-    // world (10,20) -> screen ((10-5)*2, (20-5)*2) = (10, 30). The box stays
-    // 100x40 WORLD units; `scale` 2 is what makes it cover 200x80 CSS pixels.
     expect(placement).toEqual({ left: 10, top: 30, width: 100, height: 40, scale: 2 });
   });
 
@@ -186,7 +170,6 @@ describe("editorPlacement — where the overlay floats, and at what scale", () =
     const text = textObject(0, 0, 100, 40);
     const camera: CameraState = { x: 0, y: 0, zoom: 2 };
     const placement = editorPlacement({ kind: "text", objectId: "obj_text" }, text, camera, 2);
-    // zoom 2 over ratio 2 -> the overlay covers its world size 1:1 in CSS px.
     expect(placement).toEqual({ left: 0, top: 0, width: 100, height: 40, scale: 1 });
   });
 
@@ -229,10 +212,6 @@ describe("editorTextStyle — the overlay lays text out the way the canvas draws
   });
 
   it("reports WORLD lengths, unscaled, at any zoom — `EditorPlacement.scale` magnifies the laid-out element instead (2026-09-02)", () => {
-    // The pre-rework contract multiplied these by `camera.zoom / ratio`, which
-    // handed the browser a fractional font size to lay out against a fractional
-    // width while `render/measure.ts` used the round world numbers — two
-    // different layout problems, so they broke lines in different places.
     const text = textObject(0, 0, 100, 40, { fontSize: 16, lineHeight: 20 });
     expect(editorTextStyle(TEXT_TARGET, text, { x: 0, y: 0, zoom: 2 }, 1)).toMatchObject({ fontSize: 16, lineHeight: 20 });
     expect(editorTextStyle(TEXT_TARGET, text, { x: 0, y: 0, zoom: 3.7 }, 2)).toMatchObject({ fontSize: 16, lineHeight: 20 });
@@ -287,9 +266,9 @@ describe("editorTextStyle — the overlay lays text out the way the canvas draws
   it("uses drawTable's single cell font for a cell, a line box the full cell height, and never wraps", () => {
     const table = tableObject(0, 0, 4, 4);
     expect(editorTextStyle(CELL_TARGET, table, CAMERA_IDENTITY, 1)).toEqual({
-      fontSize: 14, // renderer.ts's TABLE_CELL_FONT
+      fontSize: 14,
       fontFamily: "sans-serif",
-      lineHeight: TABLE_CELL_HEIGHT, // textBaseline "middle" at the cell's centre
+      lineHeight: TABLE_CELL_HEIGHT,
       textAlign: "left",
       color: "#1a1a1a",
       wraps: false,
@@ -313,26 +292,17 @@ describe("editorTextStyle — the overlay lays text out the way the canvas draws
     const style = editorTextStyle({ kind: "text", objectId: "obj_empty" }, emptyTextObject(0, 0), CAMERA_IDENTITY, 1);
     expect(style.fontSize).toBeGreaterThan(0);
     expect(style.lineHeight).toBeGreaterThan(0);
-    expect(style.wraps).toBe(false); // its `width` slot is "auto"
+    expect(style.wraps).toBe(false);
   });
 });
-
-// ---------------------------------------------------------------------------
-// The LIVE box (the human's 2026-09-02 rework). This is what removes the
-// scrollbar rather than hiding it: the overlay is sized from the text CURRENTLY
-// IN THE EDITOR, on every keystroke, so it grows under the caret and there is
-// never anything to scroll to.
-// ---------------------------------------------------------------------------
 
 describe("editorTextBoxSize — the overlay's box follows what is being typed", () => {
   const TEXT_TARGET = { kind: "text", objectId: "obj_text" } as const;
 
-  /** A measurer whose box is a plain function of the string's length — enough to prove the box FOLLOWS the text, without pinning glyph metrics. */
   const perCharacter: TextMeasurer = {
     measure: (text: string, style: TextStyle) => ({ width: text.length * 10, height: style.lineHeight }),
   };
 
-  /** A measurer that reports the same box whatever it is handed, for the cases where only the rule matters. */
   function fixed(width: number, height: number): TextMeasurer {
     return { measure: () => ({ width, height }) };
   }

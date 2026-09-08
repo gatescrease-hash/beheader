@@ -1,11 +1,8 @@
 /**
- * eval.test.ts — tests for formula/eval.ts (PROJECT_BRIEF §5.3, the evaluator).
+ * eval.test.ts
  *
- * IMPLEMENTS: the LAZY/short-circuit half of Phase 1's acceptance criterion ("evaluation
- * short-circuits" — `deps.test.ts` already covers the eager/total half) and D-029's dispatch
- * rider. Most fixtures are hand-built `FormulaAst` literals (this file's input type, isolating it
- * from `parser.ts`, same convention `deps.test.ts` established); a capstone section builds ASTs
- * via the real `lex` -> `parseFormula` -> `evaluate` pipeline to prove all four stages agree.
+ * Evaluation. It must be lazy where extraction is eager. It covers error
+ * propagation and every arithmetic edge case.
  */
 import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";
@@ -42,8 +39,6 @@ function bool(value: boolean): LiteralNode {
   return { type: "literal", value };
 }
 
-/** A `read` backed by a plain map from `objectId::path` to `Value` — enough for every hand-built
- * fixture in this file (all use `addrA`/`addrB`/`addrC`, each a single-segment `["v"]` path). */
 function reader(values: Record<string, Value>): ReadSlot {
   return (address) => {
     const key = `${address.objectId}::${address.path.join(".")}`;
@@ -53,9 +48,6 @@ function reader(values: Record<string, Value>): ReadSlot {
 
 const EMPTY_READ: ReadSlot = () => undefined;
 
-/** A node that ALWAYS errors if evaluated — used to prove a branch was never touched (§5.3: "an
- * error in an untaken branch never occurs and never surfaces"). Division by zero, not a made-up
- * shape, so the proof runs through this file's own real arithmetic path. */
 const POISON: FormulaAst = { type: "binaryOp", operator: "/", left: num(1), right: num(0) };
 
 function expectError(value: Value, code: string): void {
@@ -111,7 +103,6 @@ describe("evaluate — range: the documented fallback when readRange is OMITTED 
 });
 
 describe("evaluate — range: real expansion via readRange (D-036, wired THIS cycle)", () => {
-  /** A `readRange` backed by a plain map from `${start}:${end}` to a fixed Value[]/ErrorValue answer — this file's own test double, standing in for `graph/eval.ts`'s real one (bounded by a table's current extent, D-044). */
   function rangeReader(answers: Record<string, readonly Value[] | ErrorValue>): ReadRange {
     return (start, end) => {
       const key = `${start.objectId}.${start.path.join(".")}:${end.objectId}.${end.path.join(".")}`;
@@ -156,7 +147,6 @@ describe("evaluate — range: real expansion via readRange (D-036, wired THIS cy
   it("D-044: a clamped-to-empty range (readRange answers with []) reaches MIN/MAX's own zero-argument #TYPE, not a crash", () => {
     const readRange = rangeReader({ [RANGE_KEY]: [] });
     expectError(evaluate({ type: "functionCall", name: "MIN", args: [rangeArg] }, EMPTY_READ, readRange), "#TYPE");
-    // SUM's zero-argument identity is 0 — an empty range is a legal, if degenerate, SUM.
     expect(evaluate({ type: "functionCall", name: "SUM", args: [rangeArg] }, EMPTY_READ, readRange)).toBe(0);
   });
 
@@ -187,12 +177,10 @@ describe("evaluate — arithmetic (+ - * / % ^)", () => {
   });
 
   it("% takes the DIVISOR's sign, matching Excel's MOD rather than JavaScript's remainder (D-037)", () => {
-    // Added at 0037-REVIEW-phase1: cycle 0036 used the bare JS operator, which returns -2 here.
-    // D-030's tie-breaker settles a §5.3 gap by Excel, and MOD(-5, 3) is 1.
     expect(evaluate(binary("%", num(-5), num(3)), EMPTY_READ)).toBe(1);
     expect(evaluate(binary("%", num(5), num(-3)), EMPTY_READ)).toBe(-1);
     expect(evaluate(binary("%", num(-5), num(-3)), EMPTY_READ)).toBe(-2);
-    expect(evaluate(binary("%", num(10), num(3)), EMPTY_READ)).toBe(1); // unchanged for positives
+    expect(evaluate(binary("%", num(10), num(3)), EMPTY_READ)).toBe(1);
   });
 
   it("a % that lands exactly on zero is +0, never -0 (D-033 guard still applies)", () => {
@@ -350,8 +338,6 @@ describe("evaluate — D-029 dispatch order: arity is checked before laziness ma
   });
 
   it("every name in LAZY_FUNCTION_NAMES is actually wired into this file's dispatch (no drift)", () => {
-    // Each one, called validly (arity satisfied, all-boolean operands), must NOT hit the
-    // "has no evaluator wired in formula/eval.ts (internal error)" defensive fallback.
     for (const name of LAZY_FUNCTION_NAMES) {
       const args = name === "IF" ? [bool(true), num(1), num(2)] : [bool(true)];
       const node: FunctionCallNode = { type: "functionCall", name, args };
@@ -373,12 +359,6 @@ describe("evaluate — ordinary (eager) function calls", () => {
     expect(evaluate(concat, EMPTY_READ)).toBe("ab");
   });
 
-  // D-038 (Q-010 answered by the human): as of formula/parser.ts's own cycle, typed
-  // input can no longer produce either shape below — parseFormula now rejects an
-  // unknown name / wrong arity at #PARSE time. These two arms stay as genuinely
-  // defensive: a hand-built AST (these tests), or one loaded from a saved document
-  // (D-031's world), can still reach evaluate() directly with either shape, and it
-  // must still not crash.
   it("an unknown function name is #TYPE, never a crash — defensive only, unreachable from typed input since D-038 (D-034)", () => {
     const node: FunctionCallNode = { type: "functionCall", name: "toString", args: [num(1)] };
     expectError(evaluate(node, EMPTY_READ), "#TYPE");
@@ -392,7 +372,6 @@ describe("evaluate — ordinary (eager) function calls", () => {
   it("evaluates every argument left to right, stopping at the first error", () => {
     const errNode: ErrorNode = { type: "error", error: "#REF" };
     const node: FunctionCallNode = { type: "functionCall", name: "SUM", args: [num(1), errNode, POISON] };
-    // POISON would itself be a #DIV0 if ever reached — the result must be the FIRST error (#REF).
     expectError(evaluate(node, EMPTY_READ), "#REF");
   });
 
@@ -403,8 +382,6 @@ describe("evaluate — ordinary (eager) function calls", () => {
 });
 
 describe("evaluate — every §5.3 built-in is reachable through the full dispatch path (not just functions.ts's direct call)", () => {
-  // One minimal, validly-typed argument list per EAGER built-in (LAZY_FUNCTION_NAMES — IF/AND/OR —
-  // are covered by their own dedicated laziness tests above, not here).
   const validArgsByName: Record<string, readonly FormulaAst[]> = {
     NOT: [bool(true)],
     SUM: [num(1), num(2)],
@@ -486,13 +463,10 @@ describe("evaluate — integration: the full lex -> parse -> evaluate pipeline",
   it("a compound formula combining references, arithmetic, comparison, and IF", () => {
     const ast = parseOk("IF(a.v > b.v, a.v - b.v, b.v - a.v)");
     const read = reader({ "obj_1::v": 3, "obj_2::v": 10 });
-    // a.v (3) > b.v (10) is false, so the FALSE branch runs: b.v - a.v = 7.
     expect(evaluate(ast, read)).toBe(7);
   });
 
   it("infix AND and call-form AND agree on real parsed input, including short-circuiting", () => {
-    // b.v never resolves in `read` below — if evaluated, this would be #REF, not a boolean #TYPE.
-    // Both forms must return `false` without ever touching it.
     const infix = parseOk("FALSE AND b.v");
     const call = parseOk("AND(FALSE, b.v)");
     const read = reader({});

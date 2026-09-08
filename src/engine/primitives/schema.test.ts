@@ -1,11 +1,8 @@
 /**
- * schema.test.ts — Tests for the derived-slot declaration mechanism (§5.1).
+ * schema.test.ts
  *
- * Colocated with schema.ts per D-001. These tests exercise the schema mechanism
- * DIRECTLY — calling a declared `compute` function by hand with a fake `read` —
- * so a compute function's own contract is pinned in isolation from evaluation
- * order. `graph/eval.test.ts` and `mutation.test.ts` own the other claim, that
- * the same functions run inside the real topological pass.
+ * The type registry. Static and dynamic slot groups must resolve per
+ * object, and every declared path must be reachable.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
@@ -20,7 +17,6 @@ import {
   type NonDerivedSlotPathGroup,
 } from "./schema.ts";
 
-/** A minimal, schema-agnostic stub object — every schema in this registry declares only `static` derived groups, which ignore the object entirely, so this stub's `type` is the only field `resolveDerivedSlots` actually reads. */
 function stubObject(type: GraphObject["type"]): GraphObject {
   return { id: "stub", name: "stub", type, slots: {} };
 }
@@ -40,12 +36,6 @@ describe("getObjectSchema", () => {
     expect(derivedSlots[0]?.path).toEqual(["out", "result"]);
   });
 
-  // nonDerivedSlotPaths (mutation.ts's deriveEdges) is the full set of PATH
-  // GROUPS a type's literal/formula slots occupy — widened this cycle from a
-  // bare path array to `NonDerivedSlotPathGroup[]` (static | dynamic) so a
-  // table's cells family can be expressed (D-017). `value`/`add` still
-  // declare a single `static` group each, resolved via
-  // `resolveNonDerivedSlotPaths` in the describe block below.
   it("declares 'value's one non-derived slot path, as a single static group", () => {
     expect(getObjectSchema("value")?.nonDerivedSlotPaths).toEqual([{ kind: "static", paths: [["value"]] }]);
   });
@@ -63,13 +53,6 @@ describe("getObjectSchema", () => {
     ]);
   });
 
-  // D-008's lesson: test the unspecified cases, not just the brief's examples.
-  // A not-yet-built ObjectType must be an honest `undefined`, not a placeholder
-  // that would silently pass a future validation check. `table`/`circle`/
-  // `polygon`/`rect`/`text`/`image`/`script` have real entries (their own
-  // describe blocks below); `polyline` is the one remaining unregistered type.
-  // Narrowed at entry 0059, `text` added at 0127, `image` at 0165, `script` at
-  // 0169 — PROCESS_BRIEF §6.1 trigger 5 each time.
   it("returns undefined for an ObjectType with no schema entry yet", () => {
     expect(getObjectSchema("polyline")).toBeUndefined();
   });
@@ -80,10 +63,6 @@ describe("getObjectSchema", () => {
     expect(resolveDerivedSlots(stubObject("table"), schema?.derivedSlots ?? [])).toEqual([]);
   });
 
-  // primitives/geometry.ts's own file owns the compute-function behaviour;
-  // this only confirms the registry wiring — nine derived slots each
-  // (`vertices` plus the eight `verticesDerivedSlots` shares across every
-  // closed preset), and the right non-derived parameter paths per §5.5.
   it.each([
     ["circle", [["origin", "x"], ["origin", "y"], ["radius"]]],
     ["polygon", [["sides"], ["radius"], ["origin", "x"], ["origin", "y"], ["rotation"]]],
@@ -109,27 +88,16 @@ describe("getObjectSchema", () => {
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type, slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual(paths);
   });
 
-  // primitives/text.ts owns the resolver/compute behaviour (its own test file);
-  // this only confirms the §5.6 registry wiring — resolvedContent at entry 0127,
-  // measuredHeight at 0129, measuredWidth (D-123) at 0141.
   it("returns a real entry for 'text' (§5.6 + D-123), with eleven static non-derived paths (origin.x/y at front per D-121, `autoresize` in place of the removed `overflow` per the 2026-09-02 rework) and three derived slots (resolvedContent, measuredHeight, measuredWidth)", () => {
     const schema = getObjectSchema("text");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
-      // D-121 (Q-022): a text object's position is two ordinary literal slots,
-      // the same ORIGIN_X_PATH/ORIGIN_Y_PATH spelling every positioned object uses.
       ["origin", "x"],
       ["origin", "y"],
       ["content"],
       ["width"],
       ["height"],
-      // The 2026-09-02 text-box rework. Deliberately NOT a dependency of either
-      // measured slot — it sizes the BOX, not the text — which is what lets a
-      // document saved before it existed still load.
       ["autoresize"],
-      // NO `overflow`: the human's 2026-09-02 follow-up removed the slot. It was
-      // declared but never read — nothing implemented `clip`/`ellipsis`, and a
-      // box that grows to hold its text has nothing left for them to mean.
       ["style", "font"],
       ["style", "fontSize"],
       ["style", "lineHeight"],
@@ -138,10 +106,6 @@ describe("getObjectSchema", () => {
     ]);
     const textDerivedSlots = resolveDerivedSlots(stubObject("text"), schema?.derivedSlots ?? []);
     expect(textDerivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"], ["measuredWidth"]]);
-    // resolvedContent's deps are `dynamic` (parsed content); measuredHeight's and
-    // measuredWidth's are `static` (§5.6: resolvedContent + width + the
-    // size-relevant style fields) and IDENTICAL — D-123 clause 1: one measurement
-    // answers both, so they must subscribe to the same inputs.
     expect(textDerivedSlots[0]?.dependencies.kind).toBe("dynamic");
     expect(textDerivedSlots[1]?.dependencies).toEqual({
       kind: "static",
@@ -150,17 +114,6 @@ describe("getObjectSchema", () => {
     expect(textDerivedSlots[2]?.dependencies).toEqual(textDerivedSlots[1]?.dependencies);
   });
 
-  // §5.7's own five-name slot list plus `source`, the sixth the data URL needs and
-  // §5.7 does not name (entry 0165's disclosed deviation). `origin.x`/`origin.y` come
-  // FIRST and are `primitives/geometry.ts`'s constants, not image-specific ones —
-  // that identity is what makes an image draggable by the same per-component rule
-  // every other positioned object uses.
-  // EIGHT as of 0176-REVIEW, not the six entry 0165 declared: `preserveAspect`
-  // joined at 0174 on the human's Q-027 ruling ("There should be a property
-  // toggle for 'preserve aspect ratio'"), and `pictureAspect` joined here on
-  // D-144 so that toggle can put a distorted box BACK. Both followed `source`,
-  // which joined at 0165 and was ratified at D-140. All three are slots §5.7's
-  // own five-name list does not carry.
   it("returns a real entry for 'image' (§5.7), with eight static non-derived paths and NO derived slots", () => {
     const schema = getObjectSchema("image");
     expect(schema).toBeDefined();
@@ -175,21 +128,12 @@ describe("getObjectSchema", () => {
       ["pictureAspect"],
     ]);
     expect(resolveDerivedSlots(stubObject("image"), schema?.derivedSlots ?? [])).toEqual([]);
-    // Every group is `static`: an image's slot set never changes (Rule 6), so there
-    // is no sizing slot for D-046/D-097 to bind and no `dynamic` group to resolve.
     expect(schema?.nonDerivedSlotPaths.every((group) => group.kind === "static")).toBe(true);
   });
 
-  // D-141 clause 7's own next slice, on top of that ruling's already-reviewed
-  // data model. `engine/script/stub.ts` owns every path constant, enumerator,
-  // and compute function — its own test file (`script/stub.test.ts`) exercises
-  // those directly; this only confirms the §5.8 registry wiring, the same
-  // split every other multi-file primitive's own describe block above takes.
   it("returns a real entry for 'script' (§5.8), with two static + two dynamic non-derived groups and one dynamic derived group", () => {
     const schema = getObjectSchema("script");
     expect(schema).toBeDefined();
-    // A portless script node (ports absent, as a freshly created one is):
-    // origin + language + source only, and no derived slots at all.
     const portless: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {} };
     expect(resolveNonDerivedSlotPaths(portless, schema?.nonDerivedSlotPaths ?? [])).toEqual([
       ["origin", "x"],
@@ -199,9 +143,6 @@ describe("getObjectSchema", () => {
     ]);
     expect(resolveDerivedSlots(portless, schema?.derivedSlots ?? [])).toEqual([]);
 
-    // A script node with declared ports: in.*/placeholder.* join the static four,
-    // and out.* appears as a derived slot — all sized by `ports`, never by a slot
-    // value (Rule 6; D-141's rationale extended to `placeholder.*` by this entry).
     const wired: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {}, ports: { in: ["factor"], out: ["result"] } };
     expect(resolveNonDerivedSlotPaths(wired, schema?.nonDerivedSlotPaths ?? [])).toEqual([
       ["origin", "x"],
@@ -213,19 +154,15 @@ describe("getObjectSchema", () => {
     ]);
     const derivedSlots = resolveDerivedSlots(wired, schema?.derivedSlots ?? []);
     expect(derivedSlots.map((slot) => slot.path)).toEqual([["out", "result"]]);
-    // out.*'s dependencies are dynamic (all currently-declared in.* addresses
-    // PLUS this port's own placeholder — see `script/stub.ts`'s own doc comment
-    // for why the latter is required, not merely descriptive).
     expect(derivedSlots[0]?.dependencies.kind).toBe("dynamic");
 
-    // `language` is closed to its one legal value (§5.8: fixed for now).
     expect(schema?.slotOptions).toEqual([{ path: ["language"], values: ["python"] }]);
   });
 });
 
 describe("findDerivedSlotSchema", () => {
   it("finds 'add's out.result by path, matching structurally rather than by array reference (D-010)", () => {
-    const freshlyBuiltPath = ["out", "result"]; // deliberately not the schema's own array instance
+    const freshlyBuiltPath = ["out", "result"];
     const entry = findDerivedSlotSchema(stubObject("add"), freshlyBuiltPath);
     expect(entry).toBeDefined();
     expect(entry?.path).toEqual(["out", "result"]);
@@ -236,9 +173,6 @@ describe("findDerivedSlotSchema", () => {
   });
 
   it("returns undefined for a type with no schema at all", () => {
-    // "polyline" is the example type with no schema entry at all;
-    // circle/polygon/rect all have real ones (the describe block below).
-    // Switched from "circle" at entry 0059.
     expect(findDerivedSlotSchema(stubObject("polyline"), ["centroid", "x"])).toBeUndefined();
   });
 
@@ -247,7 +181,6 @@ describe("findDerivedSlotSchema", () => {
   });
 });
 
-/** A bare table GraphObject with only its two dimension slots (rows/cols) — no origin, no cells. Both absences are legal: an absent non-derived slot at a declared path is tolerated (mutation.ts's findSchemaSlotKindMismatches). */
 function tableObject(id: string, name: string, rows: Value, cols: Value): GraphObject {
   return {
     id,
@@ -266,8 +199,6 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     if (groups === undefined) {
       throw new Error("test setup: expected value's schema to exist");
     }
-    // The object shape is irrelevant to a static group — pass a table object
-    // to prove resolution does not secretly depend on matching object.type.
     expect(resolveNonDerivedSlotPaths(tableObject("obj_1", "table_x", 0, 0), groups)).toEqual([["value"]]);
   });
 
@@ -329,7 +260,6 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     }
     const malformed = tableObject("obj_1", "table_x", "not a number", -3);
     expect(() => resolveNonDerivedSlotPaths(malformed, groups)).not.toThrow();
-    // Both dimensions read as 0 (readTableDimension's own fail-safe) — no cell paths, only the four fixed ones.
     expect(resolveNonDerivedSlotPaths(malformed, groups)).toEqual([["origin", "x"], ["origin", "y"], ["rows"], ["cols"]]);
   });
 
@@ -338,22 +268,12 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     if (groups === undefined) {
       throw new Error("test setup: expected table's schema to exist");
     }
-    // A dynamic family's size is DOCUMENT STATE, so this function's "never throws"
-    // claim holds only while it appends one path at a time: `push(...enumerate())`
-    // passes the whole family as arguments and dies of RangeError somewhere above
-    // 90,000 paths (0078-REVIEW measured it), which one typed `table` line reaches.
     const wide = tableObject("obj_1", "table_x", 1000, 200);
     expect(() => resolveNonDerivedSlotPaths(wide, groups)).not.toThrow();
     expect(resolveNonDerivedSlotPaths(wide, groups)).toHaveLength(200_004);
   });
 });
 
-// D-141 clause 4: `derivedSlots` widened to the same static/dynamic group
-// shape `nonDerivedSlotPaths` already had. No SCHEMA in today's registry
-// declares a `dynamic` derived group yet (that waits on `script`'s own
-// entry) — these tests exercise `resolveDerivedSlots` directly, the same way
-// `resolveNonDerivedSlotPaths`'s own dynamic case is proven above before any
-// real schema used `dynamic` for it (`table`'s `cells.*` came later).
 describe("resolveDerivedSlots — the D-141 dynamic-derived-slot-family mechanism", () => {
   const noopCompute = () => null;
 
@@ -362,7 +282,6 @@ describe("resolveDerivedSlots — the D-141 dynamic-derived-slot-family mechanis
     if (outResult === undefined) {
       throw new Error("test setup: expected add's schema to exist");
     }
-    // The object's type is irrelevant to a static group.
     expect(resolveDerivedSlots(stubObject("value"), outResult).map((slot) => slot.path)).toEqual([["out", "result"]]);
   });
 
@@ -384,7 +303,6 @@ describe("resolveDerivedSlots — the D-141 dynamic-derived-slot-family mechanis
       },
     ];
     const script: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: { "out.result": { kind: "derived", value: null } }, ports: { in: [], out: ["result", "extra"] } };
-    // Two ports declared -> two DerivedSlotSchemas, even though `slots` only carries one of them yet.
     expect(resolveDerivedSlots(script, groups).map((slot) => slot.path)).toEqual([["out", "result"], ["out", "extra"]]);
   });
 
@@ -442,10 +360,6 @@ describe("derivedSlotDependencyAddresses", () => {
 });
 
 describe("add's out.result compute function", () => {
-  // These tests call `compute` directly with a fake `read` standing in for "this
-  // slot's dependencies already evaluated earlier in the same topological pass"
-  // (§5.1), so a wrong answer here is the compute function's rather than
-  // `graph/eval.ts`'s ordering.
   const computeAdd = resolveDerivedSlots(stubObject("add"), getObjectSchema("add")?.derivedSlots ?? [])[0]?.compute;
   if (computeAdd === undefined) {
     throw new Error("test setup: expected add's out.result schema entry to exist");
@@ -494,17 +408,10 @@ describe("add's out.result compute function", () => {
   });
 
   it("returns #REF, never throws, when a dependency did not resolve at all (read returns undefined)", () => {
-    const result = computeAdd(addObject, readFrom({ "in.a": 10 })); // in.b missing entirely
+    const result = computeAdd(addObject, readFrom({ "in.a": 10 }));
     expect(result).toMatchObject({ error: "#REF" });
   });
 
-  // Pinned at 0008-REVIEW in answer to entry 0007's Q2. `null` is a member of
-  // Value, and `typeof null === "object"`, so it reaches the #TYPE branch rather
-  // than the error or #REF branches. That is the correct fail-closed answer for
-  // an arithmetic node and is asserted here so it is pinned behaviour rather
-  // than an accident of branch order. Deliberately NOT the spreadsheet
-  // "blank counts as 0" convention — `add` is a Phase 0 fixture (§6), not a
-  // product primitive, so it has no user-facing blank-cell semantics to match.
   it("returns #TYPE for a null input, rather than coercing it to zero", () => {
     const result = computeAdd(addObject, readFrom({ "in.a": null, "in.b": 5 }));
     expect(result).toMatchObject({ error: "#TYPE" });
@@ -515,10 +422,6 @@ describe("add's out.result compute function", () => {
     expect(() => computeAdd(addObject, readFrom({ "in.a": null, "in.b": null }))).not.toThrow();
   });
 
-  // D-025 (Q-006, cycle 0023): non-finite numbers are not legal document
-  // state. Two finite numeric inputs whose SUM overflows must fail closed the
-  // same way a wrong-shaped input already does — #TYPE, never a committed
-  // Infinity/NaN — rather than silently returning a non-finite `Value`.
   it("returns #TYPE, never a raw Infinity, when two finite inputs sum to a non-finite result (D-025)", () => {
     const result = computeAdd(addObject, readFrom({ "in.a": Number.MAX_VALUE, "in.b": Number.MAX_VALUE }));
     expect(result).toMatchObject({ error: "#TYPE" });
@@ -527,7 +430,7 @@ describe("add's out.result compute function", () => {
 
   it("does NOT reject a large but still-finite sum", () => {
     const result = computeAdd(addObject, readFrom({ "in.a": Number.MAX_VALUE, "in.b": 1 }));
-    expect(result).toBe(Number.MAX_VALUE + 1); // still finite — Number.MAX_VALUE dwarfs +1 but doesn't overflow
+    expect(result).toBe(Number.MAX_VALUE + 1);
     expect(Number.isFinite(result as number)).toBe(true);
   });
 });

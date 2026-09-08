@@ -1,11 +1,7 @@
 /**
- * functions.test.ts — tests for formula/functions.ts (PROJECT_BRIEF §5.3, built-in registry).
+ * functions.test.ts
  *
- * IMPLEMENTS: the "every built-in" slice of Phase 1's acceptance criterion, and D-029's
- * requirement that `IF`/`AND`/`OR` are registered WITHOUT an eager implementation while `NOT`
- * gets an ordinary one. NOT demonstrated here: lazy/short-circuit EVALUATION itself (needs
- * `eval.ts`, a later cycle) — this file only tests the registry's own data and each eager
- * implementation's pure computation.
+ * Every built in function, its arity check, and the two lazy entries.
  */
 import { describe, expect, it } from "vitest";
 import type { ErrorValue, Value } from "../graph/node.ts";
@@ -25,7 +21,6 @@ const ALL_BUILTIN_NAMES = [
 
 const ERR: ErrorValue = { error: "#REF", message: "upstream broke" };
 
-/** Calls an eager entry's implementation directly, asserting the entry really is eager. */
 function call(name: string, args: readonly Value[]): Value {
   const entry = getFunctionEntry(name);
   if (entry === undefined || entry.evaluationMode !== "eager") {
@@ -60,10 +55,6 @@ describe("FUNCTION_REGISTRY — completeness", () => {
   });
 
   it("returns undefined for an Object.prototype member name, which a bare index would resolve (D-034)", () => {
-    // `toString(1)` is a formula parser.ts accepts today (it validates no function name), so a
-    // bare `FUNCTION_REGISTRY[name]` would hand eval.ts `Object.prototype.toString` typed as a
-    // FunctionEntry — and the next field read (checkArity's `arity.kind`) would throw inside
-    // src/engine/. Found at 0035-REVIEW-phase1.
     for (const inherited of ["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"]) {
       expect(getFunctionEntry(inherited)).toBeUndefined();
     }
@@ -192,19 +183,11 @@ describe("SUM / MIN / MAX / AVG", () => {
   });
 
   it("MIN/MAX with ZERO arguments (unreachable via checkArity for a literal call, but reachable once a range clamps to empty, D-044 point 2) match Math.min()/Math.max()'s own documented answer — #TYPE, not a crash", () => {
-    // checkArity's AT_LEAST(1) only guards the AST-level argument COUNT
-    // (`MIN(A1:A100)` is one argument node); a range clamped to an empty
-    // rectangle (D-044) still reaches `implementation` with a flattened
-    // EMPTY Value[] — exactly what this call simulates directly.
     expectError(call("MIN", []), "#TYPE");
     expectError(call("MAX", []), "#TYPE");
   });
 
   it("D-036 constraint 5: MIN/MAX over a very large argument list do not throw a RangeError — the Math.min(...)/Math.max(...) spread this replaced would have", () => {
-    // Comfortably past the argument-count ceiling that crashes a bare
-    // `Math.min(...bigArray)` spread in this engine (well under 1e6, chosen
-    // to keep the test fast while still far past any plausible call-stack
-    // argument limit).
     const many = Array.from({ length: 200_000 }, (_, i) => i);
     expect(() => call("MIN", many)).not.toThrow();
     expect(() => call("MAX", many)).not.toThrow();
@@ -222,8 +205,6 @@ describe("ABS / FLOOR / CEIL / SQRT", () => {
   });
 
   it("CEIL of a small negative number is +0, not an error (D-033)", () => {
-    // Math.ceil(-0.5) === -0. The second reachable -0 producer in this file, alongside ROUND;
-    // added at 0035-REVIEW-phase1, where the previous #TYPE behaviour was found and ruled wrong.
     const result = call("CEIL", [-0.5]);
     expect(result).toBe(0);
     expect(Object.is(result, -0)).toBe(false);
@@ -245,16 +226,13 @@ describe("ROUND(n, digits)", () => {
   });
 
   it("a result of -0 is normalised to +0, NOT reported as an error (D-033)", () => {
-    // Math.round(-0.4) === -0 in JS. The answer IS zero and zero is representable, so erroring
-    // would replace a correct answer with a lie; only the sign bit — which JSON cannot carry
-    // (Q-008) — is dropped. Expectation changed from #TYPE at 0035-REVIEW-phase1 (D-033).
     const result = call("ROUND", [-0.4, 0]);
     expect(result).toBe(0);
     expect(Object.is(result, -0)).toBe(false);
   });
 
   it("still reports a genuinely unrepresentable result as #TYPE (D-033's other half)", () => {
-    expectError(call("ROUND", [1, 400]), "#TYPE"); // 10 ** 400 overflows, so the result is NaN
+    expectError(call("ROUND", [1, 400]), "#TYPE");
   });
 
   it("propagates an error from either argument", () => {
@@ -315,7 +293,7 @@ describe("every eager function never throws, over a small malformed-input batter
   it("survives every entry in the battery without throwing", () => {
     for (const [name, entry] of Object.entries(FUNCTION_REGISTRY)) {
       if (entry.evaluationMode !== "eager") {
-        continue; // IF/AND/OR carry no implementation to call (D-029) — nothing to probe here.
+        continue;
       }
       for (const args of malformed) {
         expect(() => entry.implementation(args)).not.toThrow();

@@ -1,18 +1,14 @@
 /**
- * props.test.ts — Tests for `command/props.ts` (D-092 clause 4, D-094 clause 9).
+ * props.test.ts
  *
- * Unit-level, against hand-built `GraphObject`s: `commands.test.ts`'s `props`
- * block exercises this file end to end, through a typed line and real
- * creation/`link` commands. Here the claim is about the MECHANISM —
- * declaration order, the dynamic-group skip, and every `Value` variant
- * `describeSlotValue` renders — independent of how an object came to exist.
+ * Slot descriptors for the panel and for the props command.
  */
+
 import { describe, expect, it } from "vitest";
 import type { GraphObject } from "../engine/graph/node.ts";
 import { isParseError, parseFormula } from "../engine/formula/parser.ts";
 import { buildSlotDescriptors, describeSlotValue } from "./props.ts";
 
-/** A `value` object (Phase 0's one-literal-slot fixture type) holding `value`. */
 function valueObject(id: string, name: string, value: number): GraphObject {
   return { id, name, type: "value", slots: { value: { kind: "literal", value } } };
 }
@@ -24,11 +20,6 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
   });
 
   it("returns an empty list for a type with no schema entry, never throwing (`primitives/schema.ts`'s registry)", () => {
-    // `polyline` is the one remaining type with no schema entry. `text` used to
-    // be the example here (entry 0127 gave it one), then `script` (entry 0169
-    // gave IT one too — `SCRIPT_SCHEMA`'s two dynamic non-derived families are
-    // silently skipped by this file's own D-077 walk, a known gap named in its
-    // header, not exercised by this particular test either way).
     const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {} };
     expect(buildSlotDescriptors(object, [object])).toEqual([]);
   });
@@ -102,8 +93,6 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
     it("names the grid shape and how many cells are WRITTEN, never the declared extent (D-047's absent-is-empty)", () => {
       const object = table(4, 4, { A1: 1, B2: 2 });
       const summary = buildSlotDescriptors(object, [object]).find((descriptor) => descriptor.path[0] === "cells");
-      // `synthetic: true` since D-102 (D-096 clause 2): the cells row stands
-      // in for a whole slot family, so D-102 clause 2 refuses it a paperclip.
       expect(summary).toEqual({ path: ["cells"], kind: "literal", value: "4×4 grid — 2 of 16 cells written", synthetic: true });
     });
 
@@ -154,14 +143,12 @@ describe("describeSlotValue — maxDecimals (D-099): panel-only display rounding
   });
 
   it("rounds to AT MOST maxDecimals decimal places and TRIMS trailing zeros, so an integer stays bare", () => {
-    expect(describeSlotValue(10.000000000000002, { maxDecimals: 4 })).toBe("10"); // never "10.0000"
+    expect(describeSlotValue(10.000000000000002, { maxDecimals: 4 })).toBe("10");
     expect(describeSlotValue(152.95081246064453, { maxDecimals: 4 })).toBe("152.9508");
-    expect(describeSlotValue(1.5, { maxDecimals: 4 })).toBe("1.5"); // fewer than 4 decimals to begin with — nothing padded on
+    expect(describeSlotValue(1.5, { maxDecimals: 4 })).toBe("1.5");
   });
 
   it("a non-zero value that would round to 0 shows in EXPONENTIAL form instead of lying with '0'", () => {
-    // A circle centred on the origin's own float dust — exactly the case
-    // D-099 clause 3 names.
     expect(describeSlotValue(1.2246467991473532e-16, { maxDecimals: 4 })).toBe("1.2246e-16");
     expect(describeSlotValue(-1.2246467991473532e-16, { maxDecimals: 4 })).toBe("-1.2246e-16");
   });
@@ -184,7 +171,6 @@ describe("describeSlotValue — maxDecimals (D-099): panel-only display rounding
 });
 
 describe("describeSlotValue — a very long string is elided, so §5.7's data URL cannot flood a log line or a panel row", () => {
-  /** 200 characters — comfortably past the display cap, and shaped like the data URL an `image` object's `source` slot actually holds. */
   const LONG = `data:image/png;base64,${"A".repeat(178)}`;
 
   it("shows the head of a long string and its true length, never the whole of it", () => {

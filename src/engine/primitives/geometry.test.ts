@@ -1,7 +1,8 @@
 /**
- * geometry.test.ts — Tests for the geometry primitive's pure math, its three
- * presets' `vertices` compute functions, and the eight shared derived slots
- * (§5.5). Colocated with geometry.ts per D-001.
+ * geometry.test.ts
+ *
+ * Vertex math for the presets, and the derived centroid, area, length
+ * and bounds.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
@@ -28,7 +29,6 @@ import {
   verticesDerivedSlots,
 } from "./geometry.ts";
 
-/** Matches `schema.test.ts`'s own `readFrom` pattern — a fake `read` standing in for "already evaluated earlier in the same topological pass" (§5.1), keyed by dotted path since every test object here has id `"obj_1"`. */
 function readFrom(values: Record<string, Value>) {
   return (address: Address): Value | undefined => values[address.path.join(".")];
 }
@@ -58,7 +58,6 @@ describe("computePolygonVertices", () => {
   it("rotation shifts every vertex's starting angle by the same amount", () => {
     const unrotated = computePolygonVertices(4, 1, { x: 0, y: 0 }, 0);
     const rotated = computePolygonVertices(4, 1, { x: 0, y: 0 }, Math.PI / 2);
-    // Rotating a square by 90 degrees maps vertex 0 onto where vertex 1 was.
     expect(rotated[0]?.x).toBeCloseTo(unrotated[1]?.x ?? Number.NaN);
     expect(rotated[0]?.y).toBeCloseTo(unrotated[1]?.y ?? Number.NaN);
   });
@@ -128,8 +127,6 @@ describe("computeCentroid", () => {
   });
 
   it("is the AREA-WEIGHTED centroid, not the arithmetic mean of vertices — the two DIFFER on an irregular quadrilateral", () => {
-    // Same fixture as computeArea's irregular-quadrilateral test (area 55).
-    // Hand-computed area-weighted centroid: (2100/330, 1110/330).
     const vertices: readonly Point[] = [
       { x: 0, y: 0 },
       { x: 10, y: 0 },
@@ -140,8 +137,6 @@ describe("computeCentroid", () => {
     const vertexMean = { x: (0 + 10 + 10 + 0) / 4, y: (0 + 0 + 10 + 1) / 4 };
     expect(centroid.x).toBeCloseTo(2100 / 330);
     expect(centroid.y).toBeCloseTo(1110 / 330);
-    // The point of this test: prove the two formulas actually disagree here,
-    // not merely that the area-weighted one matches its own hand derivation.
     expect(Math.abs(centroid.x - vertexMean.x)).toBeGreaterThan(1);
     expect(Math.abs(centroid.y - vertexMean.y)).toBeGreaterThan(0.5);
   });
@@ -257,10 +252,6 @@ describe("computeRectVerticesSlot", () => {
 
 describe("a preset's vertices compute function never needs to normalise -0 (geometry.ts's own proof, checked rather than assumed)", () => {
   it("a circle centred at the origin has no -0 vertex, even though cos/sin of some angles crosses through 0 and radius may be 0", () => {
-    // Both origin.x/y at the exact 0 that makes the +0/-0 distinction possible,
-    // AND radius 0 (so radius * trig(angle) can itself be -0 for a negative
-    // trig value) — the combination finalizeVertices's own doc comment argues
-    // can never survive the final addition. Checked directly, not assumed.
     const result = computeCircleVerticesSlot(OBJECT, readFrom({ "origin.x": 0, "origin.y": 0, radius: 0 }));
     for (const vertex of result as readonly Point[]) {
       expect(Object.is(vertex.x, -0)).toBe(false);
@@ -330,37 +321,19 @@ describe("verticesDerivedSlots", () => {
   });
 
   it("normalises a computed -0 centroid.x to +0 (D-033) — a REAL -0, not a hypothetical one", () => {
-    // A clockwise-wound square: doubled signed area is NEGATIVE (-8), and the
-    // weighted-x numerator sums to exactly 0 (hand-derivable: the two +x
-    // edges' contributions exactly cancel the two -x edges'), so
-    // computeCentroid's own division is 0 / (a negative number) = -0 before
-    // finiteOrTypeError ever sees it. Verified by mutation-test: with
-    // finiteOrTypeError's `-0` branch removed, this test is the one that
-    // fails (see entry 0059). Note this -0 arrives through a CLOCKWISE
-    // winding, which no PRESET produces (D-064) — it is reachable through
-    // this bundle's stated contract (an arbitrary Point[]), which is what
-    // polyline will hand it.
     const clockwiseSquare: readonly Point[] = [
       { x: -1, y: -1 },
       { x: -1, y: 1 },
       { x: 1, y: 1 },
       { x: 1, y: -1 },
     ];
-    expect(computeCentroid(clockwiseSquare).x).toBe(-0); // the RAW pure-math function is honest about the sign
+    expect(computeCentroid(clockwiseSquare).x).toBe(-0);
     const centroidX = byPath(["centroid", "x"]).compute(OBJECT, readFrom({ vertices: clockwiseSquare }));
     expect(centroidX).toBe(0);
     expect(Object.is(centroidX, -0)).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Wired through the REAL mutate() pipeline (D-016 discipline: a schema
-// registered but never exercised through the real entry point is not yet
-// proven to work — deriveEdges/validateIntegrity/detectCycle/evaluate all
-// have their own say, not just this file's own compute functions).
-// ---------------------------------------------------------------------------
-
-/** Every derived-slot placeholder a schema-registered object must carry (D-018) — `{ kind: "derived", value: null }`, the same shape `document.ts`'s loader uses, overwritten by the first real evaluation. */
 function derivedPlaceholders(type: "circle" | "polygon" | "rect"): Record<string, { readonly kind: "derived"; readonly value: null }> {
   const schema = getObjectSchema(type);
   if (schema === undefined) {
@@ -391,11 +364,6 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
     if (!created.ok) {
       throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
     }
-    // A regular CIRCLE_VERTEX_COUNT-gon inscribed in radius r has area
-    // (1/2) N r^2 sin(2*PI/N) — strictly LESS than the true circle's PI*r^2,
-    // by design (§5.5: vertices is a polygonal APPROXIMATION). Comparing
-    // against the polygon's own area formula, not the circle's, is the
-    // correct check here.
     const expectedArea = 0.5 * CIRCLE_VERTEX_COUNT * 2 ** 2 * Math.sin((2 * Math.PI) / CIRCLE_VERTEX_COUNT);
     expect(created.objects[0]?.slots.area?.value).toBeCloseTo(expectedArea);
     expect(created.objects[0]?.slots["centroid.x"]?.value).toBeCloseTo(0);
@@ -408,9 +376,6 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
     if (!resized.ok) {
       throw new Error(`test setup: expected the resize to succeed, got: ${resized.message}`);
     }
-    // Area grows with the SQUARE of radius: 2 -> 4 quadruples it, proving this
-    // re-derived from the new radius rather than caching the old value. Same
-    // polygon-area formula as above, not the true circle's PI*r^2.
     const expectedResizedArea = 0.5 * CIRCLE_VERTEX_COUNT * 4 ** 2 * Math.sin((2 * Math.PI) / CIRCLE_VERTEX_COUNT);
     expect(resized.objects[0]?.slots.area?.value).toBeCloseTo(expectedResizedArea);
     expect(resized.objects[0]?.slots.area?.value).toBeCloseTo(expectedArea * 4);
@@ -460,23 +425,14 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
   });
 });
 
-/**
- * D-064's pinning test, owed since 0060-REVIEW fix list item 1 and carried at
- * 0062-REVIEW and 0063; added at 0064-REVIEW. It asserts the winding of the
- * OUTPUT rather than calling `computeSignedAreaDoubled`, which is private to
- * `geometry.ts` — the invariant belongs to the vertex order every consumer
- * reads, not to the internal helper, and pinning it this way keeps the helper
- * private.
- */
 describe("D-064 — every preset winds counterclockwise (positive doubled signed area)", () => {
-  /** The shoelace sum over a closed vertex loop. Positive = counterclockwise in a y-up frame. */
   function doubledSignedArea(vertices: readonly Point[]): number {
     let sum = 0;
     for (let i = 0; i < vertices.length; i += 1) {
       const a = vertices[i];
       const b = vertices[(i + 1) % vertices.length];
       if (a === undefined || b === undefined) {
-        continue; // noUncheckedIndexedAccess artifact only — both indices are always in range.
+        continue;
       }
       sum += a.x * b.y - b.x * a.y;
     }
@@ -500,9 +456,6 @@ describe("D-064 — every preset winds counterclockwise (positive doubled signed
   });
 
   it("gives a degenerate shape an EXACTLY zero doubled area, which is neither winding", () => {
-    // D-064 claims positive winding for every LEGAL parameter set; a zero-sized
-    // shape has no winding to claim, and `computeCentroid` already relies on
-    // this being exactly zero rather than near-zero.
     expect(doubledSignedArea(computeRectVertices({ x: 0, y: 0 }, 0, 3))).toBe(0);
     expect(doubledSignedArea(computeCircleVertices(0, { x: 5, y: 5 }))).toBe(0);
   });

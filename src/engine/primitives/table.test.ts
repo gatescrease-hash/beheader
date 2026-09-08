@@ -1,7 +1,8 @@
 /**
- * table.test.ts — tests for primitives/table.ts (PROJECT_BRIEF §5.4, §5.3; D-036;
- * the dynamic-slot-family mechanism, D-017/0041-REVIEW-phase2 §9; range-evaluation
- * wiring's bounding, D-044/D-046).
+ * table.test.ts
+ *
+ * Cell math, range expansion, and the row and column resize passes. It
+ * covers the repair to a #REF node.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
@@ -28,7 +29,6 @@ function cell(objectId: string, ref: string): Address {
   return { objectId, path: ["cells", ref] };
 }
 
-/** A table object with only its two fixed dimension slots populated at the given values — no cells. */
 function tableWithDimensions(rows: Value, cols: Value): GraphObject {
   return {
     id: "obj_1",
@@ -41,7 +41,6 @@ function tableWithDimensions(rows: Value, cols: Value): GraphObject {
   };
 }
 
-/** A table whose `rows`/`cols` are `formula`-kind (cached at the given value) rather than `literal` — D-046's guard. */
 function tableWithFormulaDimensions(rows: number, cols: number): GraphObject {
   return {
     id: "obj_1",
@@ -209,7 +208,6 @@ describe("enumerateTableCellSlotPaths — the dynamic slot family (D-017/0041-RE
   });
 });
 
-/** A table with the given cells populated as literals — `cells` keyed by cell reference ("A1"), not a full path. */
 function tableWithCells(rows: number, cols: number, cells: Record<string, Value>): GraphObject {
   const slots: Record<string, { kind: "literal"; value: Value }> = {
     [TABLE_ROWS_PATH.join(".")]: { kind: "literal", value: rows },
@@ -282,7 +280,7 @@ describe("shiftCellAddressForInsert — entry 0047, §5.4's per-address referenc
 
   it("leaves an address on a DIFFERENT object completely unchanged", () => {
     const other = cell("obj_2", "A5");
-    expect(shiftCellAddressForInsert(other, "obj_1", "row", 3)).toBe(other); // same reference, not just equal
+    expect(shiftCellAddressForInsert(other, "obj_1", "row", 3)).toBe(other);
   });
 
   it("leaves a non-cell address on the SAME table unchanged (e.g. a reference to `rows` itself)", () => {
@@ -297,10 +295,10 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
     const result = insertTableLine(table, "row", 2);
 
     expect(getTableDimensions(result)).toEqual({ rows: 4, cols: 1 });
-    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: 1 }); // before the index: unchanged.
-    expect(result.slots["cells.A2"]).toBeUndefined(); // the NEW row: no slot at all (D-047-legal empty).
-    expect(result.slots["cells.A3"]).toEqual({ kind: "literal", value: 2 }); // old A2 moved here.
-    expect(result.slots["cells.A4"]).toEqual({ kind: "literal", value: 3 }); // old A3 moved here.
+    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: 1 });
+    expect(result.slots["cells.A2"]).toBeUndefined();
+    expect(result.slots["cells.A3"]).toEqual({ kind: "literal", value: 2 });
+    expect(result.slots["cells.A4"]).toEqual({ kind: "literal", value: 3 });
   });
 
   it("does the same for a column insertion, independent of rows", () => {
@@ -310,8 +308,8 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
     expect(getTableDimensions(result)).toEqual({ rows: 1, cols: 4 });
     expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: "a" });
     expect(result.slots["cells.B1"]).toBeUndefined();
-    expect(result.slots["cells.C1"]).toEqual({ kind: "literal", value: "b" }); // old B1.
-    expect(result.slots["cells.D1"]).toEqual({ kind: "literal", value: "c" }); // old C1.
+    expect(result.slots["cells.C1"]).toEqual({ kind: "literal", value: "b" });
+    expect(result.slots["cells.D1"]).toEqual({ kind: "literal", value: "c" });
   });
 
   it("inserting AFTER every existing row (index = rows+1) appends an empty row and moves nothing", () => {
@@ -327,19 +325,16 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
   it("clamps an out-of-range index rather than producing a nonsensical result (defensive arm — see doc comment)", () => {
     const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
     const tooHigh = insertTableLine(table, "row", 999);
-    expect(getTableDimensions(tooHigh)).toEqual({ rows: 3, cols: 1 }); // clamped to rows+1 = 3, an append.
+    expect(getTableDimensions(tooHigh)).toEqual({ rows: 3, cols: 1 });
 
     const tooLow = insertTableLine(table, "row", -5);
-    expect(getTableDimensions(tooLow)).toEqual({ rows: 3, cols: 1 }); // clamped to 1, everything shifts.
+    expect(getTableDimensions(tooLow)).toEqual({ rows: 3, cols: 1 });
     expect(tooLow.slots["cells.A1"]).toBeUndefined();
     expect(tooLow.slots["cells.A2"]).toEqual({ kind: "literal", value: 1 });
   });
 
   it("re-asserts rows as literal even if it was some other kind before (D-046) — and, per THAT SAME guard, a formula-kind rows/cols already read as 0, so inserting a row on a table read this way starts from 0, not the formula's cached value", () => {
     const result = insertTableLine(tableWithFormulaDimensions(2, 2), "row", 1);
-    // D-046: a formula-kind dimension slot reads as 0 (readTableDimension's fail-safe), so
-    // getTableDimensions sees rows=0 here, NOT the formula's cached value of 2 — insertion
-    // starts from that same fail-safe 0, landing at 0+1=1, and the result is LITERAL either way.
     expect(result.slots[TABLE_ROWS_PATH.join(".")]).toEqual({ kind: "literal", value: 1 });
   });
 
@@ -358,10 +353,6 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
     });
 
     it("a cell slot OUTSIDE the table's current declared extent survives an insert", () => {
-      // A 2x1 table (extent = A1, A2) with an incoherent extra slot at A5 —
-      // the coherence gap STATUS.md carries as a known problem, unrelated to
-      // this fix: the point here is only that insertTableLine must not DELETE
-      // a slot it does not recognise as part of the declared extent.
       const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
       const withOutOfExtentCell: GraphObject = { ...table, slots: { ...table.slots, "cells.A5": { kind: "literal", value: 99 } } };
       const result = insertTableLine(withOutOfExtentCell, "row", 1);
@@ -396,7 +387,7 @@ describe("repairCellAddressForDelete — entry 0050, §5.4's per-address DELETE-
 
   it("leaves a row strictly before the deleted index unchanged", () => {
     const address = cell("obj_1", "A2");
-    expect(repairCellAddressForDelete(address, "obj_1", "row", 3)).toBe(address); // same reference, not just equal
+    expect(repairCellAddressForDelete(address, "obj_1", "row", 3)).toBe(address);
   });
 
   it("does the same for a column deletion, independent of row", () => {
@@ -429,19 +420,16 @@ describe("repairRangeEndpointsForDelete — entry 0050, §5.4's \"clamps to the 
   });
 
   it("narrows a range that spans the deleted row (deleted line is strictly INTERIOR): lower bound unchanged, upper bound -1", () => {
-    // A1:A5, delete row 3 (interior) -> remaining rows {1,2,4,5} renumber to {1,2,3,4} = A1:A4.
     const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 3);
     expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A4") });
   });
 
   it("clamps when the deleted row IS the range's lower bound", () => {
-    // A1:A5, delete row 1 -> remaining {2,3,4,5} renumber to {1,2,3,4} = A1:A4.
     const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 1);
     expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A4") });
   });
 
   it("clamps when the deleted row IS the range's upper bound", () => {
-    // A1:A5, delete row 5 -> remaining {1,2,3,4} unchanged = A1:A4.
     const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 5);
     expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A4") });
   });
@@ -451,8 +439,6 @@ describe("repairRangeEndpointsForDelete — entry 0050, §5.4's \"clamps to the 
   });
 
   it("decides which endpoint is the lower/upper bound by VALUE, not by which AST field holds it (a reversed A5:A1 range)", () => {
-    // start=A5 (the numerically larger), end=A1 (the numerically smaller) — a legal, reversed range.
-    // Deleting row 5 (the "start" field's own value, but the UPPER bound by value) must clamp to A4:A1... i.e. new start=A4, end unchanged.
     const result = repairRangeEndpointsForDelete(cell("obj_1", "A5"), cell("obj_1", "A1"), "obj_1", "row", 5);
     expect(result).toEqual({ start: cell("obj_1", "A4"), end: cell("obj_1", "A1") });
   });
@@ -481,10 +467,10 @@ describe("deleteTableLine — entry 0050, §5.4's row/column deletion primitive 
     const result = deleteTableLine(table, "row", 2);
 
     expect(getTableDimensions(result)).toEqual({ rows: 3, cols: 1 });
-    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: 1 }); // before the index: unchanged.
-    expect(result.slots["cells.A2"]).toEqual({ kind: "literal", value: 3 }); // old A3 moved here.
-    expect(result.slots["cells.A3"]).toEqual({ kind: "literal", value: 4 }); // old A4 moved here.
-    expect(result.slots["cells.A4"]).toBeUndefined(); // no longer within the extent.
+    expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: 1 });
+    expect(result.slots["cells.A2"]).toEqual({ kind: "literal", value: 3 });
+    expect(result.slots["cells.A3"]).toEqual({ kind: "literal", value: 4 });
+    expect(result.slots["cells.A4"]).toBeUndefined();
   });
 
   it("does the same for a column deletion, independent of rows", () => {
@@ -493,8 +479,8 @@ describe("deleteTableLine — entry 0050, §5.4's row/column deletion primitive 
 
     expect(getTableDimensions(result)).toEqual({ rows: 1, cols: 3 });
     expect(result.slots["cells.A1"]).toEqual({ kind: "literal", value: "a" });
-    expect(result.slots["cells.B1"]).toEqual({ kind: "literal", value: "c" }); // old C1.
-    expect(result.slots["cells.C1"]).toEqual({ kind: "literal", value: "d" }); // old D1.
+    expect(result.slots["cells.B1"]).toEqual({ kind: "literal", value: "c" });
+    expect(result.slots["cells.C1"]).toEqual({ kind: "literal", value: "d" });
     expect(result.slots["cells.D1"]).toBeUndefined();
   });
 
@@ -507,8 +493,6 @@ describe("deleteTableLine — entry 0050, §5.4's row/column deletion primitive 
 
   it("re-asserts rows/cols as literal even if it was some other kind before (D-046), same posture as insertTableLine", () => {
     const result = deleteTableLine(tableWithFormulaDimensions(2, 2), "row", 1);
-    // D-046: a formula-kind dimension slot reads as 0 (readTableDimension's fail-safe) — the
-    // Math.max(0, ...) floor keeps this from going negative, and the result is LITERAL either way.
     expect(result.slots[TABLE_ROWS_PATH.join(".")]).toEqual({ kind: "literal", value: 0 });
   });
 

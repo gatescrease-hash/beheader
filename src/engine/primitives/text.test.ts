@@ -1,15 +1,10 @@
 /**
- * text.test.ts — tests for primitives/text.ts (PROJECT_BRIEF §5.6's block-tree engine).
+ * text.test.ts
  *
- * IMPLEMENTS: the slice of Phase 5's acceptance criterion this file can demonstrate
- * headless — "updates both its number and its branch as the cell changes" is the
- * EVALUATION half (`evaluateBlockTree`); "re-renders when a value referenced only
- * inside the currently non-taken branch changes" is the DEPENDENCY half
- * (`extractTextDependencies`, pinned directly: a reference inside an untaken branch
- * IS reported). NOT demonstrated here: markdown-lite rendering, layout/wrapping, or
- * anything about a `text` OBJECT/schema — text.ts's own header explains why those are
- * later cycles.
+ * The block tree parser, nested conditionals, the dependency walker,
+ * and the three compute functions.
  */
+
 import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext, type TextMeasurer } from "../eval-context.ts";
@@ -29,7 +24,6 @@ import {
   type Block,
 } from "./text.ts";
 
-// Same fixture-building convention as parser.test.ts/address.test.ts.
 function objects(...entries: Array<[id: string, name: string, type?: ObjectType]>): AddressableObject[] {
   return entries.map(([id, name, type = "table"]) => ({ id, name, type }));
 }
@@ -50,7 +44,6 @@ function expectError(value: Value, code: string): void {
   expect(value).toMatchObject({ error: code });
 }
 
-/** Asserts `blocks` is exactly one `error`-kind Block and returns its message, for tests that only care that parsing recovered rather than threw. */
 function soleErrorMessage(blocks: readonly Block[]): string {
   expect(blocks).toHaveLength(1);
   const block = blocks[0] as Block;
@@ -168,9 +161,6 @@ describe("parseTextContent — {? }{:}{?} conditionals", () => {
     if (outer.type !== "conditional") {
       throw new Error(`expected a conditional, got ${outer.type}`);
     }
-    // The joined "\n"s around each marker are ordinary literal text (indentation is
-    // never special, per §5.6) — so the false branch is whitespace, the nested
-    // conditional, then more whitespace, not the conditional alone.
     const inner = outer.falseBranch.find((block) => block.type === "conditional");
     expect(inner).toBeDefined();
   });
@@ -182,8 +172,6 @@ describe("parseTextContent — {? }{:}{?} conditionals", () => {
     if (block.type !== "error") {
       throw new Error(`expected an error block, got ${block.type}`);
     }
-    // Inline siblings would RENDER once D-116 stops an error block poisoning the tree;
-    // held here they still carry every dependency and print nothing.
     expect(block.orphaned).toEqual([{ type: "text", value: "kept text" }]);
     expect(block.source).toBe("{? 1 + }kept text{?}");
   });
@@ -220,8 +208,6 @@ describe("parseTextContent — {? }{:}{?} conditionals", () => {
     const opens = "{? TRUE }".repeat(MAX_BLOCK_TREE_DEPTH + 5);
     const closes = "{?}".repeat(MAX_BLOCK_TREE_DEPTH + 5);
     expect(() => parseTextContent(opens + closes, [])).not.toThrow();
-    // Some conditional in the (deeply nested) result refused past the bound — the
-    // exact shape of recovery is not the contract; not throwing is.
     const serialized = JSON.stringify(parseTextContent(opens + closes, []));
     expect(serialized).toContain("nests too deeply");
   });
@@ -256,19 +242,12 @@ describe("extractTextDependencies", () => {
   it("a reference living ONLY in the false branch of a BROKEN conditional is still reported (D-115) — the case that made extraction non-total before 0121-REVIEW", () => {
     const other = objects(["obj_9", "poly_1", "polygon"]);
     const blocks = parseTextContent("{? 1 + }x{:}{= poly_1.rows }{?}", [...TABLE_1, ...other]);
-    // The condition is broken, so this whole construct renders `!` + its own source
-    // (D-116) and `orphaned` is never evaluated — but the address the content NAMES
-    // must still be reported, or the object would subscribe to strictly fewer slots
-    // than its own content mentions.
     expect(extractTextDependencies(blocks)).toEqual([
       { kind: "reference", address: { objectId: "obj_9", path: ["rows"] } },
     ]);
   });
 
   it("a cycle reachable only through an untaken branch is still a real, discoverable dependency (§5.3's own rule, applied at the block-tree level)", () => {
-    // extractTextDependencies does not itself detect cycles (that is mutation.ts's job) —
-    // this pins that the edge INTO the untaken branch is reported at all, which is the
-    // precondition a cycle check needs.
     const blocks = parseTextContent("{? FALSE }{= table_1.rows }{?}", TABLE_1);
     expect(extractTextDependencies(blocks)).toEqual([
       { kind: "reference", address: { objectId: "obj_1", path: ["rows"] } },
@@ -293,7 +272,7 @@ describe("evaluateBlockTree — plain text and formula embedding", () => {
   });
 
   it("reads through the supplied read/readRange exactly like an ordinary formula slot, D-110's empty-in-extent-cell 0 included when the caller's read implements it", () => {
-    const read: ReadSlot = () => 0; // stand-in for a caller already applying D-110's coercion
+    const read: ReadSlot = () => 0;
     const blocks = parseTextContent("{= table_1.A1 + 1 }", TABLE_1);
     expect(evaluateBlockTree(blocks, read)).toBe("1");
   });
@@ -370,7 +349,6 @@ describe("evaluateBlockTree — conditionals short-circuit (§5.6: 'evaluation o
 
   it("a PARSE-broken conditional renders its WHOLE construct source verbatim behind `!`, never its branches (D-116 clause 5)", () => {
     const blocks = parseTextContent("x {? 1 + }yes{:}no{?} y", []);
-    // `!{? 1 + }yes{:}no{?}`, NOT `!{? 1 + }` followed by `yesno` — orphaned is never rendered.
     expect(evaluateBlockTree(blocks, EMPTY_READ)).toBe("x !{? 1 + }yes{:}no{?} y");
   });
 
@@ -404,11 +382,7 @@ describe("recovered parse errors carry a readable message", () => {
     if (error === undefined || error.type !== "error") {
       throw new Error(`expected an error block, got: ${JSON.stringify(blocks)}`);
     }
-    // Delimiters included: D-116 renders this span back verbatim, so `{=` and `}` are
-    // part of it — ` SUMM(1) ` alone could not be printed without re-inventing them.
     expect(error.source).toBe("{= SUMM(1) }");
-    // The offset must be into CONTENT — a caller underlining the span reads the
-    // operator's own text, not a substring of it. This round trip is the contract.
     expect(content.slice(error.start, error.start + error.source.length)).toBe(error.source);
     expect(error.start).toBe(20);
   });
@@ -426,10 +400,6 @@ describe("recovered parse errors carry a readable message", () => {
 });
 
 describe("PROJECT_BRIEF §6's Phase 5 acceptance-criterion string, verbatim (added 0121-REVIEW)", () => {
-  // The brief's own words, character for character. Added by the review rather than
-  // paraphrased, because §12 makes the criterion itself the contract: the tests above
-  // exercise the same machinery through fixtures the implementer chose, and a fixture
-  // an implementer chose cannot show that the SPEC's own string parses.
   const CRITERION = "Radius: {= table_x.A1 }{? table_x.A1 > 50 } — **LARGE**{:} — small{?}";
   const TABLE_X = objects(["obj_1", "table_x"]);
   const cellA1 = { objectId: "obj_1", path: ["cells", "A1"] };
@@ -458,11 +428,6 @@ describe("PROJECT_BRIEF §6's Phase 5 acceptance-criterion string, verbatim (add
   });
 });
 
-// ---------------------------------------------------------------------------
-// The `text` schema entry's two halves (entry 0127, D-114)
-// ---------------------------------------------------------------------------
-
-/** A `text` GraphObject with a literal `content` slot and the `resolvedContent` derived-slot placeholder D-018 requires. */
 function textObject(id: string, name: string, content: Value): GraphObject {
   return {
     id,
@@ -475,7 +440,6 @@ function textObject(id: string, name: string, content: Value): GraphObject {
   };
 }
 
-/** A `table` GraphObject: literal `rows`/`cols` plus a `cells.<ref>` literal slot for each populated cell. */
 function tableWithCells(id: string, name: string, rows: number, cols: number, cells: Record<string, Value>): GraphObject {
   const slots: Record<string, Slot> = {
     rows: { kind: "literal", value: rows },
@@ -542,12 +506,12 @@ describe("resolveTextDependencyAddresses — the resolvedContent dynamic depende
   });
 
   it("gives an EMPTY in-extent cell NO edge (D-110 clause 4) — the bare-reference mirror of a range member", () => {
-    const text = textObject("obj_x", "text_1", "{= table_1.B2 }"); // B2 is in a 4x4 extent but has no slot
+    const text = textObject("obj_x", "text_1", "{= table_1.B2 }");
     expect(resolveTextDependencyAddresses(text, [text, table])).toEqual([addr("obj_x", "content")]);
   });
 
   it("DOES emit an edge for an OUT-OF-extent cell, so validateIntegrity's dangling check still names it (D-110 clause 6)", () => {
-    const text = textObject("obj_x", "text_1", "{= table_1.Z9 }"); // Z9 is beyond the 4x4 extent
+    const text = textObject("obj_x", "text_1", "{= table_1.Z9 }");
     expect(resolveTextDependencyAddresses(text, [text, table])).toContainEqual(addr("obj_t", "cells", "Z9"));
   });
 
@@ -580,7 +544,6 @@ describe("computeResolvedContent — the resolvedContent compute (§5.6, D-114 c
   });
 
   it("reads `content` through `read`, so it is a declared dependency, not an object-slots peek", () => {
-    // A `read` that returns undefined for the content path -> empty resolved content.
     expect(computeResolvedContent(text, () => undefined, undefined, { objects: [text] })).toBe("");
   });
 
@@ -609,7 +572,6 @@ describe("computeResolvedContent — the resolvedContent compute (§5.6, D-114 c
 describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, D-120 — entry 0129)", () => {
   const OBJECT: GraphObject = { id: "obj_x", name: "text_1", type: "text", slots: {} };
 
-  /** A read over `resolvedContent` / `width` / the three size-relevant `style.*` fields — the compute's declared deps. */
   function styleRead(over: Partial<Record<"resolvedContent" | "width" | "font" | "fontSize" | "lineHeight", Value>> = {}): ReadSlot {
     return reader({
       "obj_x::resolvedContent": over.resolvedContent ?? "some resolved text",
@@ -620,7 +582,6 @@ describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, D-
     });
   }
 
-  /** A fake: height is `lineHeight + (maxWidth ?? 0)`, so a test can read back BOTH that it ran and what `maxWidth` it got (D-120). Records the last call. */
   function fakeContext(): { context: EvalContext; lastCall: () => Parameters<TextMeasurer["measure"]> | undefined } {
     let last: Parameters<TextMeasurer["measure"]> | undefined;
     return {
@@ -688,7 +649,6 @@ describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, D-
     const { context } = fakeContext();
     expect(computeMeasuredHeight(OBJECT, styleRead({ font: 5 }), context, undefined)).toMatchObject({ error: "#TYPE" });
     expect(computeMeasuredHeight(OBJECT, styleRead({ fontSize: "big" }), context, undefined)).toMatchObject({ error: "#TYPE" });
-    // A missing style.fontSize slot: `read` returns undefined, not a Value — same fail-closed branch.
     const missing = reader({ "obj_x::resolvedContent": "t", "obj_x::width": "auto", "obj_x::style.font": "sans", "obj_x::style.lineHeight": 16 });
     expect(computeMeasuredHeight(OBJECT, missing, context, undefined)).toMatchObject({ error: "#TYPE" });
   });
@@ -710,7 +670,6 @@ describe("computeMeasuredHeight — the measuredHeight compute (§5.6, D-118, D-
 describe("computeMeasuredWidth — the measuredWidth compute (D-123), the other half of ONE measurement", () => {
   const OBJECT: GraphObject = { id: "obj_x", name: "text_1", type: "text", slots: {} };
 
-  /** The same read set `computeMeasuredHeight` declares — D-123 clause 1: one dependency list for both. */
   function styleRead(over: Partial<Record<"resolvedContent" | "width" | "font" | "fontSize" | "lineHeight", Value>> = {}): ReadSlot {
     return reader({
       "obj_x::resolvedContent": over.resolvedContent ?? "some resolved text",
@@ -721,7 +680,6 @@ describe("computeMeasuredWidth — the measuredWidth compute (D-123), the other 
     });
   }
 
-  /** Width is the text's length, height its lineHeight — two distinguishable numbers, so a test can tell which component came back. */
   function fakeContext(): { context: EvalContext; lastCall: () => Parameters<TextMeasurer["measure"]> | undefined } {
     let last: Parameters<TextMeasurer["measure"]> | undefined;
     return {
@@ -753,7 +711,7 @@ describe("computeMeasuredWidth — the measuredWidth compute (D-123), the other 
     expect(computeMeasuredWidth(OBJECT, styleRead(), NULL_EVAL_CONTEXT, undefined)).toMatchObject({ error: "#MEASURE" });
     const isolated = computeMeasuredWidth(OBJECT, styleRead(), undefined, undefined);
     expect(isolated).toMatchObject({ error: "#MEASURE" });
-    expect((isolated as ErrorValue).message).toContain("measuredWidth"); // the message names the slot that was read
+    expect((isolated as ErrorValue).message).toContain("measuredWidth");
   });
 
   it("D-120: a numeric `width` slot still reaches the measurer as maxWidth — the wrap boundary shapes the measured width too", () => {
@@ -766,9 +724,9 @@ describe("computeMeasuredWidth — the measuredWidth compute (D-123), the other 
     const { context } = fakeContext();
     const err: ErrorValue = { error: "#REF", message: "style.fontSize reads a deleted cell" };
     expect(computeMeasuredWidth(OBJECT, styleRead({ fontSize: err }), context, undefined)).toEqual(err);
-    expect(computeMeasuredWidth(OBJECT, styleRead({ width: err }), NULL_EVAL_CONTEXT, undefined)).toEqual(err); // upstream beats #MEASURE
+    expect(computeMeasuredWidth(OBJECT, styleRead({ width: err }), NULL_EVAL_CONTEXT, undefined)).toEqual(err);
     expect(computeMeasuredWidth(OBJECT, styleRead({ font: 5 }), context, undefined)).toMatchObject({ error: "#TYPE" });
-    expect(computeMeasuredWidth(OBJECT, styleRead({ font: 5 }), NULL_EVAL_CONTEXT, undefined)).toMatchObject({ error: "#MEASURE" }); // #MEASURE beats #TYPE
+    expect(computeMeasuredWidth(OBJECT, styleRead({ font: 5 }), NULL_EVAL_CONTEXT, undefined)).toMatchObject({ error: "#MEASURE" });
   });
 
   it("D-123 clause 2: neither slot succeeds while the other fails — a non-finite width #TYPEs BOTH, and so does a non-finite height", () => {

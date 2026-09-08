@@ -1,12 +1,7 @@
 /**
- * ast.test.ts — Tests for the widened §5.3 formula AST (Q-005, cycle 0028).
+ * ast.test.ts
  *
- * Colocated with ast.ts per D-001. This file has no lexer/parser to build
- * fixtures from yet (both are later Phase 1 cycles) — every AST here is
- * hand-built, the same convention `mutation.test.ts` uses for `GraphObject`
- * fixtures. Tests are SHAPE tests: can every node type be constructed, does
- * the union compose recursively, and is `ReferenceNode` byte-for-byte
- * unchanged from Phase 0 (Q-005's own binding constraint).
+ * AST shape checks and the depth check.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
@@ -44,7 +39,6 @@ describe("ReferenceNode — UNCHANGED from Phase 0 (Q-005's binding constraint)"
     const node: ReferenceNode = { type: "reference", address: addr("obj_1", "value") };
     expect(node.type).toBe("reference");
     expect(node.address).toEqual({ objectId: "obj_1", path: ["value"] });
-    // Structural guarantee: exactly two fields, nothing added.
     expect(Object.keys(node).sort()).toEqual(["address", "type"]);
   });
 
@@ -73,7 +67,6 @@ describe("BinaryOpNode", () => {
   });
 
   it("nests recursively — the left/right fields are FormulaAst, not leaf-only", () => {
-    // (1 + 2) * 3
     const node: BinaryOpNode = {
       type: "binaryOp",
       operator: "*",
@@ -108,7 +101,6 @@ describe("FunctionCallNode", () => {
   });
 
   it("represents IF as an ordinary function call, not a dedicated ConditionalNode (§5.3: IF is a built-in)", () => {
-    // IF(A1 > 5, "big", "small")
     const ifCall: FunctionCallNode = {
       type: "functionCall",
       name: "IF",
@@ -134,9 +126,6 @@ describe("FunctionCallNode", () => {
 
 describe("ErrorNode (0029-REVIEW-phase1, D-028)", () => {
   it("replaces ONE reference inside a surviving formula, not the whole formula — §5.1.1's repair path rewrites \"every inbound reference into a #REF error node in the referring AST\"", () => {
-    // `= A1 + B1` after B1's column was deleted (§5.4's adjustment pass). The
-    // BinaryOpNode survives, so A1 still derives its edge — which is the whole
-    // point of repairing at node level rather than failing the formula.
     const repaired: BinaryOpNode = {
       type: "binaryOp",
       operator: "+",
@@ -170,7 +159,6 @@ describe("isReferenceNode", () => {
 });
 
 describe("exceedsMaxFormulaAstDepth — D-083 clause 4's load-boundary check", () => {
-  /** A left-deep `1 + 1 + ...` ladder — the same fixture shape `format.test.ts`'s depth-guard tests use. */
   function ladder(levels: number): FormulaAst {
     let ast: FormulaAst = { type: "literal", value: 1 };
     for (let index = 0; index < levels; index += 1) {
@@ -184,7 +172,6 @@ describe("exceedsMaxFormulaAstDepth — D-083 clause 4's load-boundary check", (
   });
 
   it("is false for an AST exactly at the limit", () => {
-    // MAX_FORMULA_AST_DEPTH - 1 binaryOp levels over one literal = depth 1000.
     expect(exceedsMaxFormulaAstDepth(ladder(MAX_FORMULA_AST_DEPTH - 1))).toBe(false);
   });
 

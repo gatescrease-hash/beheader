@@ -1,8 +1,7 @@
 /**
- * hittest.test.ts — Tests for `hittest.ts` (§5.9).
+ * hittest.test.ts
  *
- * Pure geometry over `GraphObject`/`CameraState` — no Canvas2D fake needed
- * (contrast `renderer.test.ts`), since this file never touches a canvas.
+ * Fills, strokes, boxes and z order.
  */
 import { describe, expect, it } from "vitest";
 import type { GraphObject } from "../engine/graph/node.ts";
@@ -12,15 +11,6 @@ import { documentExtent } from "./extent.ts";
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
 
-/**
- * A closed 20x20 square, `vertices`-shaped — the interface every one of
- * `circle`/`polygon`/`rect` presents (§5.5: "Consumers always read
- * `vertices`"). Sized well past twice the stroke tolerance (5 world units at
- * zoom 1) so its CENTER is unambiguously beyond every edge's tolerance band —
- * a 10x10 square's center sits exactly 5 units from every edge, which is the
- * tolerance itself and would make the "deep inside" test a boundary case
- * instead of the "there is no fill" case it is meant to pin.
- */
 function squareObject(id: string, name: string, type: "circle" | "polygon" | "rect"): GraphObject {
   return {
     id,
@@ -43,8 +33,6 @@ function squareObject(id: string, name: string, type: "circle" | "polygon" | "re
 describe("hitTest — circle/polygon/rect: stroke distance-to-segment via vertices", () => {
   it("hits a point within tolerance of an edge", () => {
     const square = squareObject("obj_1", "rect_1", "rect");
-    // World (5, -4): 4 world units above the top edge (0,0)-(20,0); tolerance
-    // at zoom 1 is STROKE_HIT_TOLERANCE_SCREEN_PIXELS (5) world units.
     expect(hitTest({ x: 5, y: -4 }, [square], CAMERA_IDENTITY)).toBe(square);
   });
 
@@ -55,8 +43,6 @@ describe("hitTest — circle/polygon/rect: stroke distance-to-segment via vertic
 
   it("does not hit a point deep INSIDE the shape — there is no fill yet (file header)", () => {
     const square = squareObject("obj_1", "rect_1", "rect");
-    // The square's center: 10 world units from every edge, well past the
-    // 5-unit tolerance.
     expect(hitTest({ x: 10, y: 10 }, [square], CAMERA_IDENTITY)).toBeUndefined();
   });
 
@@ -69,12 +55,7 @@ describe("hitTest — circle/polygon/rect: stroke distance-to-segment via vertic
 
   it("converts the pixel tolerance into world units via camera.zoom (§5.9: 'pixel tolerance')", () => {
     const square = squareObject("obj_1", "rect_1", "rect");
-    // World (5, -4) is 4 world units from the top edge and DOES hit at zoom 1
-    // (tolerance 5 world units — see the first test in this block).
     expect(hitTest({ x: 5, y: -4 }, [square], CAMERA_IDENTITY)).toBe(square);
-    // The SAME world point (5, -4), reached at zoom 2 (screenToWorld: world =
-    // screen / zoom, so the screen point doubles), no longer hits: the world
-    // tolerance halves to 2.5, and 4 > 2.5.
     const zoomedCamera: CameraState = { x: 0, y: 0, zoom: 2 };
     expect(hitTest({ x: 10, y: -8 }, [square], zoomedCamera)).toBeUndefined();
   });
@@ -105,7 +86,6 @@ describe("hitTest — table: bounding box", () => {
 
   it("hits any point inside the grid's bounding box, falling back to origin (0,0)", () => {
     const table = tableObject("obj_1", "table_1");
-    // 2 rows x 3 cols at the default cell size: box is (0,0) to (240, 48).
     expect(hitTest({ x: 120, y: 24 }, [table], CAMERA_IDENTITY)).toBe(table);
   });
 
@@ -116,23 +96,17 @@ describe("hitTest — table: bounding box", () => {
 
   it("honors origin.x/origin.y when present", () => {
     const table = tableObject("obj_1", "table_1", 100, 200);
-    expect(hitTest({ x: 120, y: 24 }, [table], CAMERA_IDENTITY)).toBeUndefined(); // the un-shifted box no longer applies
+    expect(hitTest({ x: 120, y: 24 }, [table], CAMERA_IDENTITY)).toBeUndefined();
     expect(hitTest({ x: 150, y: 210 }, [table], CAMERA_IDENTITY)).toBe(table);
   });
 
   it("does not hit a 0-row table anywhere on its degenerate box, because nothing is drawn (D-066)", () => {
     const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 0 }, cols: { kind: "literal", value: 3 } } };
-    // The box collapses to the line y = 0, x in [0, 240]. The containment test
-    // is inclusive, so every point ON that line would hit without the guard.
     expect(hitTest({ x: 120, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
     expect(hitTest({ x: 0, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
   });
 
   it("does not hit a table with no rows/cols slots at its origin corner, the point its zero-area box contains (D-066)", () => {
-    // A table carrying no dimension slots at all — a shape a creation command
-    // never produces, but a load or a raw `setSlot` can: `getTableDimensions`
-    // fails safe to 0/0 (D-046) and `drawTable` draws nothing, so no click may
-    // land on it.
     const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: {} };
     expect(hitTest({ x: 0, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
   });
@@ -156,9 +130,6 @@ describe("hitTest — topmost object wins (§5.9, array order = z-order per rend
 });
 
 describe("hitTest — object types with no visual definition yet never hit (mirrors renderer.ts)", () => {
-  // `script` LEFT this list at entry 0179 (D-146): §5.8's box is drawn now, so a
-  // script node is hittable by the same bounding-box arm `text` and `image` use.
-  // §6.1 trigger 5, and the same change `image` made to this list at 0173.
   it("never hits a polyline/value/add object, regardless of point", () => {
     for (const type of ["polyline", "value", "add"] as const) {
       const object: GraphObject = { id: "obj_1", name: `${type}_1`, type, slots: {} };
@@ -173,7 +144,6 @@ describe("hitTest — object types with no visual definition yet never hit (mirr
 });
 
 describe("hitTest — image bounding box (§5.9, D-142) — the same extent renderer.ts frames", () => {
-  /** An `image` object at (`originX`, `originY`), sized by its `width`/`height` slots — the only two `imageExtent` reads besides the origin. */
   function imageObject(originX: number, originY: number, overrides: GraphObject["slots"] = {}): GraphObject {
     return {
       id: "obj_1",
@@ -218,7 +188,6 @@ describe("hitTest — image bounding box (§5.9, D-142) — the same extent rend
 });
 
 describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent renderer.ts draws into", () => {
-  /** A `text` object with `resolvedContent` evaluated, positioned at (`originX`, `originY`). `width` is `"auto"` and no measurement is present, so the default fixture lands on the fixed fallback box (the no-real-measurer case — D-123 clause 3). */
   function textObject(resolved: string | undefined, originX: number, originY: number, overrides: GraphObject["slots"] = {}): GraphObject {
     return {
       id: "obj_1",
@@ -236,13 +205,12 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
   }
 
   it("hits a point inside a fixed-width, measured-height box", () => {
-    // width 120, measuredHeight 30 -> box (10,20)-(130,50).
     const text = textObject("hello", 10, 20, {
       width: { kind: "literal", value: 120 },
       measuredHeight: { kind: "derived", value: 30 },
     });
     expect(hitTest({ x: 40, y: 35 }, [text], CAMERA_IDENTITY)).toBe(text);
-    expect(hitTest({ x: 10, y: 20 }, [text], CAMERA_IDENTITY)).toBe(text); // inclusive top-left corner
+    expect(hitTest({ x: 10, y: 20 }, [text], CAMERA_IDENTITY)).toBe(text);
   });
 
   it("does not hit a point outside the box", () => {
@@ -252,14 +220,12 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
   });
 
   it("falls back to a fixed box only when NOTHING measured the object — no measurer wired, so measuredWidth/Height are absent (D-123 clause 3)", () => {
-    const text = textObject("label", 0, 0); // no width, no measurement -> fallback 240 x 20.
+    const text = textObject("label", 0, 0);
     expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
     expect(hitTest({ x: 300, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
   it("D-123: an auto-width text object's click box is its MEASURED width, not the fallback — a short label no longer swallows its neighbours' clicks", () => {
-    // measuredWidth 30, measuredHeight 20 -> box (0,0)-(30,20). Under the old
-    // fixed 240 fallback the point at x=100 was (wrongly) a hit.
     const text = textObject("label", 0, 0, {
       measuredWidth: { kind: "derived", value: 30 },
       measuredHeight: { kind: "derived", value: 20 },
@@ -288,9 +254,6 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
   });
 
   it("a set width GROWS to the measurement when the text cannot be wrapped into it — a text box never crops (the human, 2026-09-02)", () => {
-    // Reachable with one unbreakable word: `measure.ts` breaks between words
-    // only, so a 400-wide word in a 60-wide box measures 400 and the box must
-    // follow it. This inverts the pre-rework rule, deliberately.
     const text = textObject("label", 0, 0, {
       width: { kind: "literal", value: 60 },
       measuredWidth: { kind: "derived", value: 400 },
@@ -304,7 +267,7 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
     const text = textObject("label", 0, 0, {
       measuredWidth: { kind: "derived", value: { error: "#MEASURE", message: "no measurer" } },
     });
-    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text); // 240-wide fallback
+    expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
   });
 
   it("never hits a text object with no resolved content — nothing is drawn to click (D-066)", () => {
@@ -316,12 +279,10 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
   it("is topmost-wins against an overlapping shape, like every other type", () => {
     const square = squareObject("obj_1", "rect_1", "rect");
     const text = { ...textObject("x", 0, 0, { width: { kind: "literal" as const, value: 40 }, measuredHeight: { kind: "derived" as const, value: 40 } }), id: "obj_2", name: "text_1" };
-    // The text is LAST in array order, so it wins where both cover the point.
     expect(hitTest({ x: 10, y: 10 }, [square, text], CAMERA_IDENTITY)).toBe(text);
   });
 });
 
-// Sanity: the exported tolerance constant is what the zoom-conversion test above assumes.
 describe("hitTest — tolerance constant", () => {
   it("is a positive number of screen pixels", () => {
     expect(STROKE_HIT_TOLERANCE_SCREEN_PIXELS).toBeGreaterThan(0);
@@ -348,8 +309,6 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
   });
 
   it("is undefined when every object draws nothing, which no document read could have refused", () => {
-    // `commands.ts` refuses `fit` over an EMPTY document; this is the other
-    // emptiness, and it is why main.ts still needs a branch for "no extent".
     const unrendered: GraphObject = { id: "obj_1", name: "text_1", type: "text", slots: {} };
     expect(documentExtent([unrendered])).toBeUndefined();
   });
@@ -359,7 +318,6 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
   });
 
   it("bounds a table by the box it is drawn in, at the same cell size hitTestTable uses", () => {
-    // 2 rows x 3 cols at the default cell size, offset to (100, 200).
     expect(documentExtent([tableFixture("obj_1", 100, 200)])).toEqual({ minX: 100, minY: 200, maxX: 340, maxY: 248 });
   });
 
@@ -446,8 +404,6 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
   });
 
   it("gives a single point a real, degenerate extent rather than undefined — the caller decides what to do with it (D-066)", () => {
-    // A zero-radius circle: one repeated vertex. main.ts's `fit` is what refuses
-    // to divide the viewport by it; this function reports the geometry it found.
     const point: GraphObject = {
       id: "obj_1",
       name: "circle_1",

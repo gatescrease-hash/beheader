@@ -1,15 +1,12 @@
 /**
- * markdown.test.ts — Tests for `markdown.ts` (§5.6's markdown-lite list).
+ * markdown.test.ts
  *
- * The parser is a pure string function, so every test is the string in and the
- * runs out. Two properties are checked repeatedly and deliberately: §5.6's list
- * is EXACT (anything not on it is literal text), and an unmatched marker never
- * restyles the rest of the line.
+ * The markdown lite parser. It covers the rule for which asterisk opens
+ * an emphasis span and which one closes it.
  */
 import { describe, expect, it } from "vitest";
 import { LIST_BULLET, parseMarkdownLite, verbatimLines, type MarkdownRun } from "./markdown.ts";
 
-/** The one line `text` parses to — every test here is about a single hard line unless it says otherwise. */
 function onlyLine(text: string) {
   const lines = parseMarkdownLite(text);
   expect(lines).toHaveLength(1);
@@ -20,7 +17,6 @@ function onlyLine(text: string) {
   return line;
 }
 
-/** Just the drawn text of each run, in order — for tests about what survives the markers. */
 function texts(runs: readonly MarkdownRun[]): readonly string[] {
   return runs.map((run) => run.text);
 }
@@ -203,7 +199,6 @@ describe("parseMarkdownLite — CommonMark's flanking rule, reduced: a marker be
   });
 
   it("refuses to CLOSE on a marker preceded by a space, and finds the next one that qualifies", () => {
-    // The `**` at index 4 is space-preceded, so the run closes at the one after `b`.
     expect(onlyLine("**a ** b**").runs).toEqual([{ text: "a ** b", bold: true, italic: false, code: false }]);
   });
 

@@ -1,92 +1,18 @@
 /**
- * interaction.ts — Selection and drag, as a pure state machine over pointer
- * positions.
+ * interaction.ts
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.9's interaction clause ("click to select, drag
- * to move, escape to deselect. Dragging calls the mutation API — it never
- * writes object state directly (Rule 2)") together with its "Dragging is
- * per-component, not all-or-nothing" subsection. Not on §6.2's load-bearing
- * list.
- * LAYER: render. Touches no canvas, DOM, or window — it converts screen points
- * through `camera.ts` and asks `hittest.ts` what is under them. May import:
- * engine/* , own layer. NEVER imported by engine/*.
+ * Layer: render. It reads engine state and calls mutations. It does nothing
+ * else across that line. The engine must never import this file.
  *
- * WHAT THIS IS
- *   `InteractionState` is what is selected — a LIST of object ids, in click
- *   order (**D-100**) — plus, while a drag runs, the world point the last
- *   committed step moved from. Four transitions (`pointerDown`, `pointerMove`,
- *   `pointerUp`, `deselect`), each returning new state instead of mutating it,
- *   so a caller can wire them straight onto DOM events without this file
- *   knowing DOM exists (`main.ts`'s job).
+ * Mouse state to mutation calls.
  *
- *   **D-100's click model.** A plain click REPLACES the selection with
- *   whatever is under the pointer, or clears it on empty canvas (clause 2). A
- *   shift-click ADDS the object hit to the selection, unless it is already
- *   there, in which case it is REMOVED — the conventional toggle (clause 4,
- *   confirmed by the human at 0105-REVIEW; Q-015 is CLOSED). A shift-click on
- *   EMPTY canvas changes nothing — clause 3's
- *   deliberate choice, so an accidental miss cannot destroy a selection built
- *   one object at a time — though it still ends a drag armed before it, the
- *   same as every other press. A drag always targets exactly the object under THIS
- *   press (clause 6), never the whole selection — dragging a multi-selection
- *   as a group is a further feature and is not built here.
+ * A drag writes each component on its own. A literal component moves. A
+ * component that a formula drives stays put, and the caller shows a notice
+ * that does not block. So an object with a bound x slides up and down only,
+ * and an axis constraint falls out for free.
  *
- *   A drag builds `setSlot` operations and hands them to `mutate`; nothing here
- *   ever assigns to a slot (Rule 2). It does so PER COMPONENT (§5.9): a
- *   `literal` `origin.x`/`origin.y` moves, a `formula` or `derived` one stays
- *   put and says what drives it in `notices`. Dragging an object whose x is
- *   bound and whose y is not therefore slides it vertically — the brief's
- *   constrained-axis payoff, and the clause most likely to be normalised into
- *   all-or-nothing dragging (0064-REVIEW §10). **D-040 forbids the other
- *   tempting normalisation**: `set` may overwrite a formula slot, a drag may
- *   NEVER — "a drag is a continuous gesture, not a statement of intent."
- *
- *   §5.9's "independently" governs the per-component DECISION, not the number
- *   of mutations: the components that DO move go in ONE batch, because §5.1
- *   asks dragging to batch and one gesture step is one journal entry. So an
- *   illegal value in one component rejects the other too — reachable only
- *   through a non-finite coordinate (HAZARD below).
- *
- * INVARIANTS UPHELD HERE
- *   - A drag holds an object ID, NEVER a `GraphObject`. `mutate` returns new
- *     objects on every commit, so a held reference is a stale snapshot after
- *     the first step.
- *   - A rejected mutation advances nothing: `objects`, `journal`, and the
- *     drag's own `lastWorldPoint` all come back as they went in, so the
- *     accumulated delta is retried on the next move rather than lost.
- *   - No operation is built for a component that would not change (a zero
- *     delta), and `mutate` is never called with an empty batch — a journal
- *     entry for a mutation that moved nothing is a false record of history,
- *     which is `mutate`'s own reason for rejecting an empty batch.
- *   - Never throws.
- *   - HAZARD, inherited from `hittest.ts`/`camera.ts`: `camera.zoom` must be
- *     non-zero. A loaded document's camera can violate it (D-062) and every
- *     hit here then lands on the topmost object; the clamp belongs at
- *     `main.ts`'s boundary, once, not here (0062-REVIEW §9). A DRAG at
- *     `zoom: 0` at least fails LOUDLY: the delta is `NaN`, so `mutate` refuses
- *     it (D-025), nothing is corrupted, and no journal entry is written — but
- *     the message names the value, not the camera, and the drag can never
- *     succeed (probed at 0067-REVIEW).
- *
- * NOT DONE HERE
- *   - **Per-vertex dragging** for an object with no `origin` slot (§5.9's
- *     editable-path clause). Nothing can have per-vertex slots yet —
- *     `polyline` has no schema entry and `explode` is unbuilt — so this is a
- *     clause conditioned on a thing that cannot exist, the shape D-067 ruled
- *     correct to defer. Owner: the `polyline`/`explode` cycle. Until then such
- *     an object reports that it cannot be dragged rather than swallowing the
- *     gesture. A `table` is NOT in that category: `TABLE_SCHEMA` declares
- *     `origin.x`/`origin.y`, so a table drags down the same per-component path
- *     every preset does.
- *   - §5.9's visual feedback (selection highlight, error badge, formula-driven
- *     slot indicator). All three are draw-time work over a `ctx` this file
- *     never receives, and they belong together in one cycle, with the renderer.
- *   - §5.4's formula bar / in-place cell editing, which `renderer.ts` points
- *     here for. It is this file's kind of work — a pointer and a keyboard over
- *     a selected cell — and none of it is built.
- *   - Pan and zoom (`camera.ts` owns that math), and reading a keyboard, mouse
- *     or wheel at all — `main.ts` listens and calls in. `deselect` is what
- *     Escape calls.
+ * A drag never writes object state. It calls the mutation API like everything
+ * else.
  */
 import { formatAddress, isAddressError, type Address } from "../engine/address.ts";
 import { extractDependencies } from "../engine/formula/deps.ts";
@@ -103,46 +29,12 @@ import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHa
 import { hitTest } from "./hittest.ts";
 import { readBoolean } from "./slots.ts";
 
-/**
- * A drag in progress. `lastWorldPoint` is where the pointer was at the last
- * step this file COMMITTED (or deliberately skipped), not where it was at
- * `pointerDown`: each `pointerMove` moves the object by the delta since the
- * previous one, so a step `mutate` rejects simply leaves that delta on the
- * table for the next step to retry.
- *
- * `emittedNotices` (**D-098**) is every notice TEXT already surfaced during
- * THIS gesture — `pointerDown` starts it empty, `pointerMove` widens it,
- * `pointerUp` discards it with the rest of the drag. A plain `readonly
- * string[]`, matching every other notice collection in this file, rather than
- * a `Set`: a gesture drags at most two components (`origin.x`/`origin.y`), so
- * there is no volume this needs a hash structure for, and a plain array keeps
- * `DragState` comparable with `toEqual` the way every other test fixture here
- * already is.
- */
 export interface DragState {
   readonly objectId: string;
   readonly lastWorldPoint: WorldPoint;
   readonly emittedNotices: readonly string[];
 }
 
-/**
- * A resize in progress — a drag that started on one of a selected text box's
- * eight grabbers (`handles.ts`) rather than on its body (the human's 2026-09-02
- * text-box rework: "text boxes need to be able to be expanded and shrunken with
- * grabbers in the corners, like in word/powerpoint").
- *
- * The same shape and the same rules as `DragState`, plus which grabber is held:
- * an ID never an object, `lastWorldPoint` advanced only by a step that
- * committed, notices deduplicated across the gesture. It is a SEPARATE field on
- * `InteractionState` rather than a variant of `drag` so that every existing
- * reader of `drag` — `pointerMove`'s move path, `main.ts`, the tests — keeps
- * meaning exactly what it meant, and a resize can never be mistaken for a move.
- *
- * `startExtent` is the box as it was when the grabber was pressed. The drag
- * accumulates against THAT, not against the box's current size, because the
- * committed box answers to `textbox.ts`'s rule (it grows to fit its text) and
- * would otherwise feed its own growth back into the gesture.
- */
 export interface ResizeState {
   readonly objectId: string;
   readonly handle: ResizeHandle;
@@ -151,51 +43,18 @@ export interface ResizeState {
   readonly emittedNotices: readonly string[];
 }
 
-/**
- * §5.9's whole interaction state: what is selected, and what a drag is moving.
- * Plain data — a caller may keep it anywhere.
- *
- * `selectedObjectIds` is a LIST, in click order (**D-100** clause 1) — plain,
- * serializable, IDs not references, matching every other collection here. An
- * id may appear at most once; `pointerDown`'s toggle is what keeps that true.
- */
 export interface InteractionState {
   readonly selectedObjectIds: readonly string[];
   readonly drag: DragState | undefined;
-  /** A grabber-drag on a selected text box. Never set at the same time as `drag` — one press arms exactly one gesture. */
   readonly resize: ResizeState | undefined;
 }
 
-/** Nothing selected, no gesture running — where `main.ts` starts and where `deselect` returns to. */
 export const INITIAL_INTERACTION_STATE: InteractionState = {
   selectedObjectIds: [],
   drag: undefined,
   resize: undefined,
 };
 
-/**
- * What one `pointerMove` produced. `objects`/`journal` are what the caller
- * should hold from here on — the committed result when `mutate` succeeded, and
- * otherwise the caller's OWN references handed straight back (Rule 2: a
- * rejected mutation leaves prior state bit-for-bit untouched, so there is
- * nothing to swap in).
- *
- * `notices` is §5.9's "non-blocking feedback": one line per component that did
- * not move, naming what drives it. Non-blocking means exactly that — the
- * components that COULD move already did. **D-098**: a notice whose TEXT was
- * already surfaced earlier in THIS drag gesture is filtered out here — a
- * 30-second drag of a component driven by a formula says so ONCE, not once
- * per pointer sample. `state.drag.emittedNotices` is what tracks "already
- * surfaced"; see `DragState`'s own doc comment.
- *
- * `rejection` is `mutate`'s own message when it refused the batch, and is a
- * different thing from a notice: a notice is a component that was never asked
- * to move, a rejection is the whole step failing.
- *
- * `mutate`'s `brokenSlots` (D-057) is deliberately not surfaced: only a repair
- * path can break a slot and a `setSlot` batch has none, so it is always empty
- * here.
- */
 export interface PointerMoveOutcome {
   readonly state: InteractionState;
   readonly objects: readonly GraphObject[];
@@ -204,27 +63,7 @@ export interface PointerMoveOutcome {
   readonly rejection: string | undefined;
 }
 
-/**
- * §5.9's "click to select", widened by **D-100** to a multi-object selection,
- * plus arming a drag on whatever was hit.
- *
- * `additive` is the shift key. `false` (a plain click) REPLACES the whole
- * selection with the object hit, or clears it on empty canvas (D-100 clause
- * 2) — reading the selection off the hit result rather than growing a branch
- * that keeps a stale one alive, same as before this ruling. `true` (a
- * shift-click) ADDS the object hit, unless it is already selected, in which
- * case it is REMOVED (clause 4, final — Q-015 closed); on empty canvas it
- * leaves the SELECTION exactly as it was (clause 3), but still ends any drag:
- * no press may inherit a gesture armed before it.
- *
- * A drag arms on the object under THIS press regardless of whether the
- * selection just grew or shrank (clause 6: a drag targets exactly the
- * pressed object, "whatever else is selected"). A press is not itself a
- * move: the object does not shift until `pointerMove` reports a pointer
- * position different from this one, so a click that never moves commits no
- * mutation at all. Escape (`deselect`) remains the keyboard path that clears
- * everything.
- */
+/** Starts a select, a drag or a resize. */
 export function pointerDown(
   state: InteractionState,
   screenPoint: ScreenPoint,
@@ -232,11 +71,6 @@ export function pointerDown(
   camera: CameraState,
   additive: boolean = false,
 ): InteractionState {
-  // A grabber wins over everything, INCLUDING the object under it: the corner
-  // handles of a text box overhang its own body, and a press there means
-  // "resize", never "select and move". Grabbers exist only on an already
-  // SELECTED object, so this can never steal a first click (the human's
-  // 2026-09-02 text-box rework).
   const grabbed = resizeGestureAt(state, screenPoint, objects, camera);
   if (grabbed !== undefined) {
     return { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: grabbed };
@@ -247,18 +81,11 @@ export function pointerDown(
     if (!additive) {
       return INITIAL_INTERACTION_STATE;
     }
-    // Clause 3's "changes nothing" is about the SELECTION. A gesture is not part
-    // of it: `main.ts` listens for `pointerup` on the CANVAS, so a release
-    // outside it leaves one armed, and a press must never inherit one —
-    // otherwise the next `pointerMove` moves an object nobody is holding
-    // (0105-REVIEW). The plain-click branch above already clears it.
     return state.drag === undefined && state.resize === undefined
       ? state
       : { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined };
   }
   const selectedObjectIds = additive ? toggleSelection(state.selectedObjectIds, object.id) : [object.id];
-  // The ID, never the object — see the file header's INVARIANTS. D-098: every
-  // gesture starts with no notice yet surfaced.
   return {
     selectedObjectIds,
     drag: { objectId: object.id, lastWorldPoint: screenToWorld(camera, screenPoint), emittedNotices: [] },
@@ -266,14 +93,6 @@ export function pointerDown(
   };
 }
 
-/**
- * Which grabber is under `screenPoint`, for a caller that wants to know without
- * pressing — `main.ts` sets the canvas cursor from it on every pointer move, so
- * a grabber says which way it stretches before you commit to the gesture.
- *
- * Exactly the same lookup `pointerDown` arms a resize from (`resizeGestureAt`),
- * so the cursor can never promise a grabber the press would miss (D-010).
- */
 export function resizeHandleUnder(
   state: InteractionState,
   screenPoint: ScreenPoint,
@@ -283,14 +102,6 @@ export function resizeHandleUnder(
   return resizeGestureAt(state, screenPoint, objects, camera)?.handle;
 }
 
-/**
- * The resize gesture a press arms, or `undefined` when it landed on no grabber.
- *
- * Only a SELECTED object with `hasResizeHandles` is considered, and in reverse
- * selection order so the most recently selected box's grabbers win where two
- * overlap — the same "topmost thing the operator is working with" instinct
- * `hitTest`'s z-order serves.
- */
 function resizeGestureAt(
   state: InteractionState,
   screenPoint: ScreenPoint,
@@ -305,7 +116,7 @@ function resizeGestureAt(
     }
     const extent = objectExtent(object);
     if (extent === undefined) {
-      continue; // Nothing drawn — no box to put grabbers on.
+      continue;
     }
     const handle = resizeHandleAt(screenPoint, extent, camera);
     if (handle !== undefined) {
@@ -321,29 +132,13 @@ function resizeGestureAt(
   return undefined;
 }
 
-/** D-100 clause 4's toggle, ruled final by the human at 0105-REVIEW (Q-015): adds `objectId` if absent, removes it if present. Preserves the rest of the list's click order either way. */
 function toggleSelection(selectedObjectIds: readonly string[], objectId: string): readonly string[] {
   return selectedObjectIds.includes(objectId) ? selectedObjectIds.filter((id) => id !== objectId) : [...selectedObjectIds, objectId];
 }
 
 /**
- * Advances the interaction to `screenPoint`. A no-op unless a drag is running,
- * which is what lets a caller wire this onto every pointer move unconditionally.
- *
- * §5.9's per-component rule in full: each of `origin.x`/`origin.y` moves by its
- * own component of the world-space delta if — and only if — its slot is
- * `literal` and holds a number. Everything else is reported and skipped, so an
- * object with one bound component slides along the other axis, and only an
- * object whose every component is driven does nothing at all.
- *
- * `context` is §5.1's `EvalContext`, forwarded to `mutate` untouched: a `text`
- * object elsewhere in the same document keeps its real `measuredHeight` across a
- * drag rather than being re-stamped `#MEASURE` (**D-118**) every time some
- * geometry moves. It defaults to `NULL_EVAL_CONTEXT`; `main.ts` passes the real
- * Canvas2D measurer (`render/measure.ts`).
- *
- * Never throws, and never writes: the one state change here is `mutate`'s
- * (Rule 2).
+ * Continues a drag or a resize. It writes each component on its own, and reports
+ * the components a formula drives so the caller can tell the operator.
  */
 export function pointerMove(
   state: InteractionState,
@@ -364,10 +159,6 @@ export function pointerMove(
 
   const object = objects.find((candidate) => candidate.id === drag.objectId);
   if (object === undefined) {
-    // The object went away between the press and this move (a `delete` from the
-    // command line, a load). End the drag rather than carry an id resolving to
-    // nothing. D-023: the raw id is printed LABELLED as an id, because there is
-    // no name left to resolve it to.
     return {
       state: { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined },
       objects,
@@ -385,10 +176,6 @@ export function pointerMove(
   }
 
   const plan = planOriginDrag(object, objects, deltaX, deltaY);
-  // D-098: dedupe against every notice TEXT this gesture has already surfaced
-  // — computed BEFORE `mutate` runs, because a skipped component's notice
-  // (formula-driven, no slot, wrong type) is about that component alone and
-  // has nothing to do with whether some OTHER component's mutation commits.
   const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
     selectedObjectIds: state.selectedObjectIds,
@@ -397,24 +184,11 @@ export function pointerMove(
   };
 
   if (plan.operations.length === 0) {
-    // §5.9: "Only when every component is driven does the drag do nothing." The
-    // pointer still moved, so the drag advances — there is no delta left to
-    // retry, because nothing here can ever move.
     return { state: advanced, objects, journal, notices: freshNotices, rejection: undefined };
   }
 
   const result = mutate(objects, plan.operations, journal, context);
   if (!result.ok) {
-    // Prior state is untouched (Rule 2 / D-016) and `lastWorldPoint` is NOT
-    // advanced, so this delta folds into the next move's instead of being
-    // silently dropped. Nothing above pre-checks the value for legality:
-    // `mutate` is the one channel that decides what may be stored (D-025,
-    // D-027), and re-deciding it here would be a second source of truth.
-    // `emittedNotices` STILL widens when this step actually surfaced a fresh
-    // one (D-098's own "scope" clause: only the REJECTION message itself is
-    // never deduplicated, not the skipped-component notices beside it) — but
-    // when there is nothing fresh to fold in, `state` is handed back BY
-    // REFERENCE, exactly as before D-098, rather than a same-valued rebuild.
     if (freshNotices.length === 0) {
       return { state, objects, journal, notices: freshNotices, rejection: result.message };
     }
@@ -428,26 +202,6 @@ export function pointerMove(
   return { state: advanced, objects: result.objects, journal: result.journal, notices: freshNotices, rejection: undefined };
 }
 
-/**
- * One step of a grabber-drag (the human's 2026-09-02 text-box rework).
- *
- * Differs from the move path in exactly one way, and it is the important one:
- * a resize is ABSOLUTE, not incremental. Each step recomputes the box from the
- * gesture's own `startExtent` plus the total pointer delta since the press, and
- * writes that box, rather than nudging the current one by a per-step delta.
- * Two reasons, both load-bearing:
- *
- *   - The committed box is not the box that was asked for. `textbox.ts`'s rule
- *     grows it to fit its text, so an incremental resize would read its own
- *     growth back in on the next step and run away from the pointer.
- *   - A step `mutate` refuses simply does not happen; the next step asks for
- *     the same box again from the same origin, so nothing accumulates and
- *     nothing is lost. (The move path has to hold the delta back instead,
- *     because there each step's ask depends on the previous one having landed.)
- *
- * A grabbed object that vanished mid-gesture ends the resize, the same as a
- * drag; the notice names the id, since there is no name left to resolve.
- */
 function resizeMove(
   state: InteractionState,
   resize: ResizeState,
@@ -487,28 +241,11 @@ function resizeMove(
   }
   const result = mutate(objects, plan.operations, journal, context);
   if (!result.ok) {
-    // Nothing to retry — the next step recomputes the same ask from
-    // `startExtent` (see this function's own doc comment), so the gesture
-    // advances even here.
     return { state: advanced, objects, journal, notices: fresh, rejection: result.message };
   }
   return { state: advanced, objects: result.objects, journal: result.journal, notices: fresh, rejection: undefined };
 }
 
-/**
- * Which slots a grabber drag writes on this type, and how it behaves — the one
- * place the two resizable types differ. `undefined` for a type with no resize
- * plan, which `hasResizeHandles` already prevents a gesture from starting on.
- *
- * `keepsRatio` is the operator's own `preserveAspect` choice for an `image`
- * (§5.7, the human's note 3), read with `?? true` so a document saved before the
- * slot existed keeps §5.7's "by default" — D-126's lesson. A `text` box has no
- * such flag and never had: its shape is dictated by its text, not by a picture.
- *
- * `dropsAutoresize` is `text`-only, and is the reason this is a per-type record
- * rather than a shared path list. See `planResize` for why a height drag turns
- * it off.
- */
 interface ResizePlanShape {
   readonly widthPath: readonly string[];
   readonly heightPath: readonly string[];
@@ -531,32 +268,6 @@ function resizePlanShape(object: GraphObject): ResizePlanShape | undefined {
   return undefined;
 }
 
-/**
- * What one resize step wants to write: the `width`/`height` the grabbed box
- * should have, plus `origin` when a LEFT or TOP edge moved (moving those edges
- * moves the box's anchor as well as its size), plus — for a `text` box —
- * `autoresize: false` when a height was dragged.
- *
- * **Why a height drag also turns `autoresize` off.** `autoresize` on means the
- * box shrinks back to its text (`textbox.ts`), so a dragged height would snap
- * away the instant it was written — the grabber would look broken. Dragging a
- * height IS the operator saying "keep this size", which is exactly what the
- * flag stores, so the gesture writes it. This mirrors Word turning "resize
- * shape to fit text" off when you size a box by hand. A WIDTH drag does not
- * touch it: a set width never shrinks anyway (`textbox.ts`'s one asymmetry).
- * An `image` has no such flag: its box is its size outright.
- *
- * **An `image` whose `preserveAspect` is on keeps its proportions**, through
- * `handles.ts`'s `constrainBoxToRatio` — the human's note 3 at entry 0173. Note
- * that this constrains the BOX BEFORE any slot is written, so the per-component
- * rule below still applies to the constrained box and a bound `width` refuses
- * on its own without silently distorting the picture.
- *
- * §5.9's per-component rule applies unchanged: a slot that is not `literal` is
- * skipped, with a notice naming what drives it, and the rest of the box still
- * resizes. So a text box whose `origin.x` is bound to a cell resizes from its
- * right edge and refuses to move its left one.
- */
 function planResize(
   object: GraphObject,
   objects: readonly GraphObject[],
@@ -584,9 +295,6 @@ function planResize(
     operations.push({ kind: "setSlot", address, slot: { kind: "literal", value } });
   };
 
-  // A ratio-kept drag changes BOTH sides even when the grabber moves one edge —
-  // that is what keeping a ratio means — so the write set follows the BOX, not
-  // the handle, whenever the ratio is being kept.
   if (edges.left || edges.right || shape.keepsRatio) {
     write(shape.widthPath, box.maxX - box.minX);
     if (edges.left) {
@@ -605,16 +313,6 @@ function planResize(
   return { operations, notices };
 }
 
-/**
- * D-098's dedup step: splits `notices` (this step's own, from `planOriginDrag`)
- * into `fresh` (not already in `drag.emittedNotices`) and `widened` (the
- * gesture's full emitted set so far, `fresh` folded in) — the pair every
- * caller in `pointerMove` needs, computed once so the two lists cannot drift
- * apart. Matched by TEXT (D-098's own wording: "a notice whose TEXT differs...
- * is emitted"), not by which component produced it — the ruling's rationale is
- * about what the OPERATOR sees repeated, and two components could in
- * principle produce identical text.
- */
 function widenEmittedNotices(
   drag: DragState,
   notices: readonly string[],
@@ -623,7 +321,7 @@ function widenEmittedNotices(
   return { fresh, widened: fresh.length === 0 ? drag.emittedNotices : [...drag.emittedNotices, ...fresh] };
 }
 
-/** Ends a drag or a resize, keeping the selection — §5.9 separates selecting from moving, and releasing the button does not deselect. */
+/** Ends a drag or a resize. */
 export function pointerUp(state: InteractionState): InteractionState {
   if (state.drag === undefined && state.resize === undefined) {
     return state;
@@ -631,36 +329,20 @@ export function pointerUp(state: InteractionState): InteractionState {
   return { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined };
 }
 
-/**
- * §5.9's "escape to deselect" — clears the selection AND any drag in progress,
- * so a half-finished gesture cannot survive the key. Takes no prior state:
- * there is exactly one deselected state, and this is it.
- */
 export function deselect(): InteractionState {
   return INITIAL_INTERACTION_STATE;
 }
 
-/** One component's contribution to a drag: an operation, a notice explaining why there is none, or neither. */
 interface ComponentPlan {
   readonly operation: Operation | undefined;
   readonly notice: string | undefined;
 }
 
-/** Everything one drag step wants to do, gathered before any of it is attempted. */
 interface DragPlan {
   readonly operations: readonly Operation[];
   readonly notices: readonly string[];
 }
 
-/**
- * Plans a drag of `object` by (`deltaX`, `deltaY`) against its `origin.x` /
- * `origin.y` slots, per §5.9's per-component rule.
- *
- * An object with NEITHER origin slot is §5.9's editable-path case, which this
- * file does not implement (header's NOT DONE HERE). It gets one notice naming
- * the object, not two naming absent slots, because what is missing is the drag
- * STRATEGY, not the individual slots.
- */
 function planOriginDrag(object: GraphObject, objects: readonly GraphObject[], deltaX: number, deltaY: number): DragPlan {
   if (getSlot(object, ORIGIN_X_PATH) === undefined && getSlot(object, ORIGIN_Y_PATH) === undefined) {
     return {
@@ -675,14 +357,6 @@ function planOriginDrag(object: GraphObject, objects: readonly GraphObject[], de
   };
 }
 
-/**
- * One component of §5.9's per-component rule. Moves the slot only if it is
- * `literal` and holds a number; otherwise explains itself and stays put.
- *
- * A zero delta produces neither an operation nor a notice: nothing was
- * attempted, so there is nothing to report and nothing to write (file header's
- * invariant on no-op batches).
- */
 function planComponent(object: GraphObject, path: readonly string[], delta: number, objects: readonly GraphObject[]): ComponentPlan {
   if (delta === 0) {
     return { operation: undefined, notice: undefined };
@@ -701,16 +375,6 @@ function planComponent(object: GraphObject, path: readonly string[], delta: numb
   return { operation: { kind: "setSlot", address, slot: { kind: "literal", value: slot.value + delta } }, notice: undefined };
 }
 
-/**
- * §5.9's own example of the feedback a skipped component owes the user ("x is
- * driven by `table_x.A1`").
- *
- * The addresses come from `formula/deps.ts`, which is EAGER and TOTAL by design
- * (§5.3) — so a branching formula names every slot it COULD read, not the one it
- * happens to be reading now. That is the honest answer to "what drives this":
- * all of them do, which is exactly why the graph subscribes to all of them.
- * Deduplicated only so `= A1 + A1` does not say `A1` twice.
- */
 function describeSlotDriver(slot: FormulaSlot | DerivedSlot, objects: readonly GraphObject[]): string {
   switch (slot.kind) {
     case "derived":
@@ -731,8 +395,6 @@ function describeSlotDriver(slot: FormulaSlot | DerivedSlot, objects: readonly G
       return `it is driven by a formula reading ${sources.join(", ")}`;
     }
     default: {
-      // Compile-time exhaustiveness without a throw — the idiom every
-      // discriminated-union switch in this codebase carries.
       const exhaustive: never = slot;
       void exhaustive;
       return "it is not a literal slot";
@@ -740,12 +402,6 @@ function describeSlotDriver(slot: FormulaSlot | DerivedSlot, objects: readonly G
   }
 }
 
-/**
- * An address as the user should see it (D-015: never `addressKey`), degrading to
- * `formatAddress`'s own `#REF` message rather than throwing when the object no
- * longer resolves — the same shape `mutation.ts`'s `formatCycleRejection` uses,
- * for the same reason.
- */
 function describeAddress(address: Address, objects: readonly GraphObject[]): string {
   const formatted = formatAddress(address, objects);
   return isAddressError(formatted) ? formatted.message : formatted;

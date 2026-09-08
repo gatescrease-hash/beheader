@@ -1,12 +1,7 @@
 /**
- * lexer.test.ts — tests for formula/lexer.ts (PROJECT_BRIEF §5.3, lexer stage).
+ * lexer.test.ts
  *
- * IMPLEMENTS: PROJECT_BRIEF §5.3, and the slice of Phase 1's own acceptance criterion
- * this file alone can demonstrate ("malformed input yields #PARSE rather than
- * throwing") — the rest of that criterion (operator precedence, nested IF, built-ins,
- * reference resolution, dependency extraction/short-circuiting) needs `parser.ts`/
- * `deps.ts`/`eval.ts`/`functions.ts`, none of which exist yet; this file does not claim
- * any part of it beyond the one sentence above.
+ * Tokens. It covers the numeric path segment case.
  */
 import { describe, expect, it } from "vitest";
 import { lex, type Token } from "./lexer.ts";
@@ -135,8 +130,6 @@ describe("lex — strings", () => {
   });
 
   it("returns a #PARSE LexError for a string left open by a trailing escaped quote", () => {
-    // '"abc\"' — the backslash pairs with the following quote as the one defined
-    // escape (file header), so there is no unescaped quote left to close the string.
     const result = lex('"abc\\"');
     expect(result).toEqual({
       error: "#PARSE",
@@ -180,8 +173,6 @@ describe("lex — booleans and keywords (case-sensitive, exact uppercase — fil
   });
 
   it("a keyword-shaped prefix followed by more identifier characters is one longer identifier, not a keyword plus a suffix", () => {
-    // "ANDOR" must not lex as `and` followed by identifier "OR" — the word scan
-    // consumes the whole run of identifier characters before classifying it.
     expect(lex("ANDOR")).toEqual([
       { type: "identifier", text: "ANDOR", start: 0 },
       { type: "eof", text: "", start: 5 },
@@ -210,8 +201,6 @@ describe("lex — identifiers", () => {
 
   it("does not allow a leading digit — a purely-numeric segment lexes as a number token instead (file header's vertex.0.x note)", () => {
     const result = lex("0x") as Token[];
-    // "0x": digit-scan consumes "0" only (no fractional dot follows), leaving "x" as
-    // its own identifier — not "0x" as one token of either kind.
     expect(result).toEqual([
       { type: "number", text: "0", start: 0, value: 0 },
       { type: "identifier", text: "x", start: 1 },
@@ -340,9 +329,6 @@ describe("lex — every source character is accounted for (no character silently
     const source = ' IF(x>1,"y",z) ';
     const result = lex(source) as Token[];
     expect(Array.isArray(result)).toBe(true);
-    // Reconstruct the source from the tokens' own start/text, treating any gap
-    // between one token's end and the next token's start as skipped whitespace —
-    // and assert that gap is ACTUALLY whitespace, not a silently dropped character.
     let cursor = 0;
     for (const token of result) {
       expect(token.start).toBeGreaterThanOrEqual(cursor);

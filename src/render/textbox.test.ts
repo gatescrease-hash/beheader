@@ -1,17 +1,12 @@
 /**
- * textbox.test.ts — Tests for `render/textbox.ts`, the ONE text-box sizing rule.
+ * textbox.test.ts
  *
- * The rule was re-specified by the human on 2026-09-02 ("make it work like a
- * text box in Word or PowerPoint"), and the two halves worth defending are the
- * ones that inverted:
- *   - a set size NEVER crops its text ("the text auto-cropping is honestly an
- *     infuriating behavior"), so the box grows past it;
- *   - whether the box shrinks BACK below a set size is `autoresize`'s to say.
+ * The one rule for the size of a text box, over every combination of
+ * fixed and measured size.
  */
 import { describe, expect, it } from "vitest";
 import { textBoxSize, TEXT_FALLBACK_BOX_HEIGHT, TEXT_FALLBACK_BOX_WIDTH } from "./textbox.ts";
 
-/** The common case: no set size, a real measurement, `autoresize` on (the default `createText` writes). */
 function measured(measuredWidth: number, measuredHeight: number) {
   return { fixedWidth: undefined, fixedHeight: undefined, autoresize: true, measuredWidth, measuredHeight };
 }

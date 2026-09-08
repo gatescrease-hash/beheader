@@ -1,14 +1,8 @@
 /**
- * deps.test.ts — tests for formula/deps.ts (PROJECT_BRIEF §5.3/§9, eager total dependency
- * extraction).
+ * deps.test.ts
  *
- * IMPLEMENTS: the "dependency extraction is TOTAL across both IF branches" slice of Phase 1's
- * acceptance criterion, and D-029's rider (both syntactic forms of `AND`/`OR`/`NOT` produce
- * identical dependency sets). NOT demonstrated here: lazy/short-circuit EVALUATION (needs
- * `eval.ts`, a later cycle) — this file only walks the AST; it never evaluates it. Most fixtures
- * are hand-built `FormulaAst` literals (this file's input type, isolating it from `parser.ts`);
- * a handful of integration-style tests build the AST via the real `parseFormula` to prove the two
- * files agree at the boundary they actually share.
+ * Dependency extraction. It must be total across both branches of an IF.
+ * This suite is the guard on that rule.
  */
 import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";
@@ -72,7 +66,6 @@ describe("extractDependencies — operators walk both operands", () => {
   });
 
   it("nested operators: walks every leaf across a deep tree", () => {
-    // (a.v + b.v) * -c.v
     const node: BinaryOpNode = {
       type: "binaryOp",
       operator: "*",
@@ -111,8 +104,6 @@ describe("extractDependencies — function calls", () => {
   });
 
   it("IF: is EAGER and TOTAL across BOTH the taken-looking and untaken-looking branch (§5.3)", () => {
-    // IF(cond, a.v, b.v) — a.v and b.v are mutually exclusive at evaluation time, but
-    // extractDependencies has no notion of "taken" at all and must report both.
     const ifCall: FunctionCallNode = {
       type: "functionCall",
       name: "IF",
@@ -235,7 +226,7 @@ describe("rewriteAddressesInAst — entry 0047, §5.4's reference-adjustment bui
   it("returns a literal/error node completely unchanged (no address to rewrite)", () => {
     const literal: FormulaAst = { type: "literal", value: 42 };
     const errorNode: ErrorNode = { type: "error", error: "#REF" };
-    expect(rewriteAddressesInAst(literal, bump)).toBe(literal); // same reference — nothing to rebuild.
+    expect(rewriteAddressesInAst(literal, bump)).toBe(literal);
     expect(rewriteAddressesInAst(errorNode, bump)).toBe(errorNode);
   });
 
@@ -348,9 +339,9 @@ describe("repairAddressesInAst — entry 0050, §5.4's DELETE-side reference-adj
     const repaired = repairAddressesInAst(tree, deleteA, identityRange) as FunctionCallNode;
     const binary = repaired.args[0] as BinaryOpNode;
     const unary = repaired.args[1] as UnaryOpNode;
-    expect(binary.left).toEqual({ type: "error", error: "#REF" }); // refA's object was "deleted".
-    expect((binary.right as ReferenceNode).address).toEqual(addrB); // refB untouched.
-    expect((unary.operand as ReferenceNode).address).toEqual(addrC); // refC untouched.
+    expect(binary.left).toEqual({ type: "error", error: "#REF" });
+    expect((binary.right as ReferenceNode).address).toEqual(addrB);
+    expect((unary.operand as ReferenceNode).address).toEqual(addrC);
   });
 
   it("never throws, including on a deeply nested tree", () => {

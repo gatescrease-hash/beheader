@@ -1,12 +1,9 @@
 /**
- * node.test.ts — Tests for the slot/object data model (§5.1).
+ * node.test.ts
  *
- * Colocated with node.ts per D-001. Phase 0 does not yet have eval.ts/cycles.ts/
- * mutation.ts, so these tests exercise SHAPES: can the three slot kinds, a
- * GraphObject, and address.ts's resolver all be built and composed correctly.
- * They deliberately do NOT test propagation, cycle rejection, or evaluation order
- * — that needs graph/eval.ts and graph/cycles.ts, not yet built (see STATUS.md).
+ * The data model. Value guards, the three slot kinds, and slot keys.
  */
+
 import { describe, expect, it } from "vitest";
 import { formatAddress, parseAddress, type Address } from "../address.ts";
 import type { ReferenceNode } from "../formula/ast.ts";
@@ -90,10 +87,6 @@ describe("the three slot kinds (§5.1's table)", () => {
   it("a derived slot has no user-settable content, only a cached computed value", () => {
     const slot: DerivedSlot = { kind: "derived", value: 9 };
     expect(slot.kind).toBe("derived");
-    // Structurally, DerivedSlot has no `ast` and no writable "what the user typed"
-    // field — this is a compile-time guarantee (TypeScript would reject an `ast`
-    // property on a DerivedSlot literal), not something a runtime test can assert
-    // further than checking the two fields that DO exist.
     expect(Object.keys(slot).sort()).toEqual(["kind", "value"]);
   });
 
@@ -104,11 +97,6 @@ describe("the three slot kinds (§5.1's table)", () => {
   });
 });
 
-// §5.1 requires errors to PROPAGATE, so every derived-slot compute function and
-// (later) formula/eval.ts makes exactly this check before touching a value.
-// Tested across the WHOLE Value union rather than just the error case, per
-// D-008's lesson — the two members a naive implementation gets wrong are `null`
-// (typeof null === "object") and `readonly Point[]` (also object-shaped).
 describe("isErrorValue", () => {
   it("is true for an ErrorValue", () => {
     const errorValue: Value = { error: "#REF", message: "no such slot" };
@@ -136,15 +124,6 @@ describe("isErrorValue", () => {
   });
 });
 
-// D-025 (Q-006, cycle 0023) + Q-008 (cycle 0026, PROVISIONAL, recommendation
-// (a)): non-finite numbers AND negative zero are not legal document state —
-// hasIllegalNumber is the ONE predicate for both (widened at cycle 0026, not
-// a second check beside the old hasNonFiniteNumber name). Tested across the
-// WHOLE Value union, same discipline as isErrorValue above — a naive
-// implementation's likely blind spots are a Point/Point[]'s NESTED x/y fields
-// (easy to check only the top-level shape and miss inside it), the non-number
-// members (must stay false unconditionally), and -0 specifically confusable
-// with plain 0 by anything that compares with `===` instead of `Object.is`.
 describe("isIllegalNumber (D-025/Q-006 + Q-008, cycle 0026)", () => {
   it("is true for NaN, +Infinity, -Infinity, and -0", () => {
     expect(isIllegalNumber(NaN)).toBe(true);
@@ -208,12 +187,6 @@ describe("ObjectType / TABLE_TYPE (D-009)", () => {
   });
 });
 
-// PROJECT_BRIEF §6 (Phase 0): "Test with a trivial `value` object (one literal
-// numeric slot) and an `add` object (two formula input slots, one derived output
-// slot) — the `add` node exercises the derived-slot mechanism." This cycle builds
-// the SHAPES these fixtures need; it does not yet evaluate them (no eval.ts/
-// mutation.ts). A later cycle (graph/eval.ts) is where these fixtures are actually
-// propagated and the full Phase 0 acceptance criterion is demonstrated.
 describe("Phase 0 fixture shapes: 'value' and 'add' objects", () => {
   it("builds a 'value' object: one literal numeric slot", () => {
     const valueObject: GraphObject = {
@@ -251,9 +224,6 @@ describe("Phase 0 fixture shapes: 'value' and 'add' objects", () => {
   });
 });
 
-// A GraphObject structurally satisfies address.ts's AddressableObject — the seam
-// D-005/D-009 both depend on — so a document's real object list needs no adapter
-// to be passed straight into parseAddress/formatAddress.
 describe("GraphObject satisfies address.ts's AddressableObject", () => {
   it("parseAddress and formatAddress operate directly on a GraphObject[]", () => {
     const table: GraphObject = {
@@ -269,12 +239,6 @@ describe("GraphObject satisfies address.ts's AddressableObject", () => {
   });
 });
 
-// D-007 (0002-REVIEW-phase0): object `type` is mutable state across mutations —
-// explode changes a preset's type in place, same id, same name. This is a
-// data-shape test only (mutation.ts doesn't exist yet): confirming two GraphObject
-// VALUES with the same id/name and different `type` are both individually valid,
-// which is what "explode produces a new GraphObject value with a different type"
-// will rely on once mutation.ts exists.
 describe("object type is mutable across mutations, not fixed per object (D-007)", () => {
   it("two GraphObject snapshots may share id and name while differing only in type", () => {
     const beforeExplode: GraphObject = {
@@ -303,7 +267,6 @@ describe("object type is mutable across mutations, not fixed per object (D-007)"
   });
 });
 
-// D-141: a script node's port names, structural state on GraphObject.
 describe("isLegalPortName (D-141 clause 2)", () => {
   it("accepts an ordinary, non-empty, dot-free name", () => {
     expect(isLegalPortName("factor")).toBe(true);
@@ -320,9 +283,6 @@ describe("isLegalPortName (D-141 clause 2)", () => {
   });
 
   it("rejects a name legal address.ts's PATH_SEGMENT_PATTERN would still reject — REVIEWER EDIT, 0168-REVIEW", () => {
-    // A dot-free name is not enough: parseAddress rejects any path segment
-    // outside `[a-zA-Z0-9_]+`, so a name like "my-port" would be accepted by
-    // a looser check yet be permanently unaddressable as `script_1.in.my-port`.
     expect(isLegalPortName("my-port")).toBe(false);
     expect(isLegalPortName("my port")).toBe(false);
     expect(isLegalPortName("café")).toBe(false);

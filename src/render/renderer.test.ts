@@ -1,13 +1,10 @@
 /**
- * renderer.test.ts — Tests for `renderer.ts` (§5.9, §5.4's rendering clause).
+ * renderer.test.ts
  *
- * No jsdom (D-001/PROCESS_BRIEF §4: never add a runtime dependency): every
- * test builds a plain object satisfying exactly the `CanvasRenderingContext2D`
- * members `renderer.ts` actually calls, records them, and casts it via
- * `as unknown as CanvasRenderingContext2D` — the render-layer analogue of the
- * engine's injected-fake-`TextMeasurer` pattern (Rule 1's own test posture),
- * translated to a layer the DOM IS available to.
+ * The three passes, drawn against a canvas stub that records each call.
+ * It asserts the call order, not pixels.
  */
+
 import { describe, expect, it } from "vitest";
 import { mutate } from "../engine/mutation.ts";
 import type { GraphObject, Slot } from "../engine/graph/node.ts";
@@ -30,19 +27,12 @@ type RecordedCall =
   | { readonly op: "strokeRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillText"; readonly text: string; readonly x: number; readonly y: number; readonly align: string }
-  // §5.7's picture (D-142). `alpha` is `globalAlpha` AS OF THE CALL, so a test
-  // can pin both the clamp and the fact that it was restored afterwards.
   | { readonly op: "drawImage"; readonly image: unknown; readonly x: number; readonly y: number; readonly w: number; readonly h: number; readonly alpha: number };
 
-/** The fake measurer's per-character width — see `measureText` below. */
 const FAKE_CHAR_WIDTH = 7;
 
-/** A minimal recording fake — only the `CanvasRenderingContext2D` members `renderer.ts` calls. See file header. */
 function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly calls: readonly RecordedCall[]; readonly fonts: readonly string[] } {
   const calls: RecordedCall[] = [];
-  // Every `ctx.font` assignment in order (entry 0138) — `drawText` sets it from
-  // the text object's own style before measuring/drawing, and the chrome pass
-  // resets it afterward, so a test asserts against `fonts`, not the final value.
   const fonts: string[] = [];
   const ctx = {
     fillStyle: "",
@@ -83,8 +73,6 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
     strokeRect(x: number, y: number, w: number, h: number) {
       calls.push({ op: "strokeRect", x, y, w, h });
     },
-    // The resize grabbers (the 2026-09-02 text-box rework) are the only
-    // `fillRect` in this file — a white square outlined in the selection colour.
     fillRect(x: number, y: number, w: number, h: number) {
       calls.push({ op: "fillRect", x, y, w, h });
     },
@@ -95,17 +83,10 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
     drawImage(image: unknown, x: number, y: number, w: number, h: number) {
       calls.push({ op: "drawImage", image, x, y, w, h, alpha: ctx.globalAlpha });
     },
-    // A FIXED-WIDTH fake measurer — the same posture Rule 1 prescribes for the
-    // engine's injected `TextMeasurer`, translated to this layer. 7px per
-    // character keeps every expected coordinate below exact and hand-checkable.
     measureText(text: string) {
       return { width: text.length * FAKE_CHAR_WIDTH };
     },
   };
-  // The fake implements exactly the subset of CanvasRenderingContext2D this
-  // file's tests exercise — a real ctx has many more members renderer.ts
-  // never calls, which is why this is a deliberate cast rather than a
-  // structural fit (see file header).
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls, fonts };
 }
 
@@ -127,7 +108,6 @@ describe("renderDocument — clear and camera transform", () => {
     const { ctx, calls } = createFakeContext();
     const camera: CameraState = { x: 10, y: 20, zoom: 2 };
     renderDocument(ctx, 800, 600, [], camera);
-    // screen = (world - camera) * zoom => e = -10*2 = -20, f = -20*2 = -40.
     expect(calls[2]).toEqual({ op: "setTransform", a: 2, b: 0, c: 0, d: 2, e: -20, f: -40 });
   });
 
@@ -145,10 +125,6 @@ describe("renderDocument — clear and camera transform", () => {
       },
     };
     renderDocument(ctx, 800, 600, [circle], camera);
-    // World (3,4) r=10 stays (3,4) r=10 — NOT worldToScreen'd to (-14,-32) r=20.
-    // Double-transforming is exactly what the single setTransform above exists
-    // to prevent, and every OTHER shape test here uses an identity camera, where
-    // the two are indistinguishable (0062-REVIEW edit 2).
     expect(calls.filter((call) => call.op === "arc")).toEqual([{ op: "arc", x: 3, y: 4, radius: 10, startAngle: 0, endAngle: Math.PI * 2 }]);
   });
 
@@ -189,7 +165,7 @@ describe("renderDocument — circle: true arc, never the polygonal approximation
     const arcCalls = calls.filter((call) => call.op === "arc");
     const lineToCalls = calls.filter((call) => call.op === "lineTo");
     expect(arcCalls).toEqual([{ op: "arc", x: 3, y: 4, radius: 10, startAngle: 0, endAngle: Math.PI * 2 }]);
-    expect(lineToCalls).toEqual([]); // Never the CIRCLE_VERTEX_COUNT-gon approximation (§5.5).
+    expect(lineToCalls).toEqual([]);
   });
 
   it("draws nothing for a circle with a missing radius slot (never throws)", () => {
@@ -237,9 +213,6 @@ describe("renderDocument — polygon/rect: the closed path vertices describes", 
       },
     };
     renderDocument(ctx, 800, 600, [rect], CAMERA_IDENTITY);
-    // Chrome (`fillText`) is excluded: this test is about the world-space PATH.
-    // The rect earns a name label since entry 0094 because it has a `vertices`
-    // slot and therefore an extent — its own describe block covers that.
     const shapeCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect" && call.op !== "fillText");
     expect(shapeCalls).toEqual([
       { op: "beginPath" },
@@ -293,11 +266,6 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     });
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
-    // After the three cell values: D-092 clause 1's name label, centred over the
-    // grid (3 cols x 80 / 2 = 120) — now at y -22 rather than -6, because the
-    // A1 headers (2026-09-02) reserve the band immediately above the top edge
-    // and the name is lifted clear of them. Then the headers themselves: `A B C`
-    // centred on each column at y -4, and `1` right-aligned beside the one row.
     expect(textCalls).toEqual([
       { op: "fillText", text: "42", x: 76, y: 12, align: "right" },
       { op: "fillText", text: "hello", x: 84, y: 12, align: "left" },
@@ -315,14 +283,10 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
     const table = tableObject({ "cells.A1": { kind: "derived", value: { error: "#REF", message: "gone" } } });
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call) => call.op === "fillText");
-    // Plus D-092's name label and D-068's error badge — objectHasError scans
-    // EVERY slot (file header), and cells.A1 here is one of them.
     expect(textCalls).toEqual([
       { op: "fillText", text: "#REF", x: 4, y: 12, align: "left" },
       { op: "fillText", text: "table_1", x: 120, y: -22, align: "center" },
-      { op: "fillText", text: "!", x: 150.5, y: -22, align: "left" }, // 120 + 7 chars * 7px / 2 + 6px gap.
-      // The A1 headers (2026-09-02), drawn after the name and badge and never
-      // suppressed — see the describe block at the end of this file.
+      { op: "fillText", text: "!", x: 150.5, y: -22, align: "left" },
       { op: "fillText", text: "A", x: 40, y: -4, align: "center" },
       { op: "fillText", text: "B", x: 120, y: -4, align: "center" },
       { op: "fillText", text: "C", x: 200, y: -4, align: "center" },
@@ -332,7 +296,7 @@ describe("renderDocument — table: fixed-size grid, alignment per §5.4", () =>
 
   it("draws no CELL text for a null-valued or entirely unset cell — only the name label and the A1 headers", () => {
     const { ctx, calls } = createFakeContext();
-    const table = tableObject({ "cells.A1": { kind: "literal", value: null } }); // B1/C1 have no slot at all.
+    const table = tableObject({ "cells.A1": { kind: "literal", value: null } });
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const textCalls = calls.filter((call) => call.op === "fillText");
     expect(textCalls).toEqual([
@@ -370,10 +334,6 @@ describe("renderDocument — object types with no schema/visual definition yet",
     expect(drawCalls).toEqual([]);
   });
 
-  // `script` LEFT this list at entry 0179 (D-146) — §5.8's labelled box is drawn
-  // now — as `image` did at 0173. A slotless `image` stays: it has no width or
-  // height, so no extent and no frame (D-066). A slotless SCRIPT does draw, because
-  // its box is sized by constants and its port list, not by slots.
   it("draws nothing for a polyline/image fixture object (no visual definition, or no extent)", () => {
     for (const type of ["polyline", "image"] as const) {
       const { ctx, calls } = createFakeContext();
@@ -384,12 +344,6 @@ describe("renderDocument — object types with no schema/visual definition yet",
   });
 });
 
-/**
- * A `text` object with `resolvedContent` already evaluated to `resolved`, its
- * position at (`originX`, `originY`), and the style slots `drawText` reads. A
- * hand-built fixture (not the `text` command) so each test controls exactly the
- * slots under test; `width` defaults to `"auto"` (no wrap).
- */
 function textObject(resolved: string, originX: number, originY: number, overrides: Record<string, Slot> = {}): GraphObject {
   return {
     id: "obj_1",
@@ -410,7 +364,6 @@ function textObject(resolved: string, originX: number, originY: number, override
   };
 }
 
-/** Just the body `fillText` calls — drops D-092's name label, D-068's `!` badge and the `•x`/`•y` ticks (the chrome describe blocks cover those). */
 function bodyText(calls: readonly RecordedCall[]): readonly Extract<RecordedCall, { op: "fillText" }>[] {
   return calls.filter(
     (call): call is Extract<RecordedCall, { op: "fillText" }> =>
@@ -430,7 +383,6 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
 
   it("word-wraps at a numeric width slot, using the same layOutText the measurer uses", () => {
     const { ctx, calls } = createFakeContext();
-    // FAKE_CHAR_WIDTH = 7: "aaa bbb" is 49px, past a 30px width, so each word lands on its own line.
     renderDocument(ctx, 800, 600, [textObject("aaa bbb ccc", 0, 0, { width: { kind: "literal", value: 30 } })], CAMERA_IDENTITY);
     expect(bodyText(calls).map((call) => ({ text: call.text, y: call.y }))).toEqual([
       { text: "aaa", y: 0 },
@@ -439,14 +391,8 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     ]);
   });
 
-  // The human's 2026-09-02 report, at the layer they SAW it: a continuous run of
-  // text with no spaces used to be drawn as one long line straight out through
-  // the side of its own box, because `layOutLines` had no mid-word break. The
-  // measurer's fix reaches the canvas for free — `drawText` breaks lines through
-  // that same function (D-010), so this is the drawn half of the same rule.
   it("breaks a long unbroken run of text between characters instead of drawing it out past the box edge", () => {
     const { ctx, calls } = createFakeContext();
-    // 28px width / 7px characters = four per line.
     renderDocument(ctx, 800, 600, [textObject("abcdefghij", 0, 0, { width: { kind: "literal", value: 28 } })], CAMERA_IDENTITY);
     expect(bodyText(calls).map((call) => ({ text: call.text, y: call.y }))).toEqual([
       { text: "abcd", y: 0 },
@@ -467,12 +413,7 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     expect(bodyText(calls)).toHaveLength(1);
   });
 
-  // A line of two fonts has no single anchor `ctx.textAlign` could measure from,
-  // so entry 0160 moved §5.6's alignment into arithmetic on the line's own
-  // width. The drawn result is unchanged; the recorded call is not.
   it("centres and right-aligns each LINE inside the box by its own width — every run is placed absolutely, so ctx.textAlign is always left", () => {
-    // FAKE_CHAR_WIDTH = 7, so "ab" is 14 wide in a 100-wide box: centred starts
-    // at 10 + (100 - 14) / 2, right-aligned at 10 + (100 - 14).
     const centred = createFakeContext();
     renderDocument(centred.ctx, 800, 600, [textObject("ab", 10, 0, { width: { kind: "literal", value: 100 }, "style.align": { kind: "literal", value: "center" } })], CAMERA_IDENTITY);
     expect(bodyText(centred.calls)[0]).toEqual({ op: "fillText", text: "ab", x: 53, y: 0, align: "left" });
@@ -488,9 +429,6 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     expect(bodyText(calls)[0]).toEqual({ op: "fillText", text: "ab", x: 5, y: 0, align: "left" });
   });
 
-  // REVERSES the "drawn verbatim" test entry 0138 wrote and 0139 reviewed: §5.6's
-  // markdown-lite is honoured from entry 0160, so the markers are gone from the
-  // ink and each run's font comes off the layout `measure.ts` produced.
   it("draws markdown-lite with its markers REMOVED, one run per font", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [textObject("**bold** and `code`", 0, 0)], CAMERA_IDENTITY);
@@ -514,7 +452,7 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
       { op: "fillText", text: "Title", x: 0, y: 0, align: "left" },
       { op: "fillText", text: "after", x: 0, y: 40, align: "left" },
     ]);
-    expect(fonts).toContain("bold 32px sans-serif"); // CSS's own h1: 2em, and bold
+    expect(fonts).toContain("bold 32px sans-serif");
   });
 
   it("draws a list item with a bullet where its `- ` was", () => {
@@ -523,12 +461,8 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     expect(calls.filter((call) => call.op === "fillText" && call.text === "• milk")).toHaveLength(1);
   });
 
-  // The human's request after seeing entry 0160 on screen: a wrapped item read
-  // better with its continuation under the text rather than under the bullet.
   it("HANGS a wrapped list item's continuation under its text, indented by the bullet's width", () => {
     const { ctx, calls } = createFakeContext();
-    // FAKE_CHAR_WIDTH = 7: "• aaa bbb" is 63 wide, past a 42-wide box, and the
-    // bullet "• " is 14 — so the continuation is drawn from x = 14, not x = 0.
     renderDocument(ctx, 800, 600, [textObject("- aaa bbb", 0, 0, { width: { kind: "literal", value: 42 } })], CAMERA_IDENTITY);
     const drawn = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText" && call.text !== "text_1");
     expect(drawn).toEqual([
@@ -565,12 +499,11 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     const slots: Record<string, Slot> = { ...object.slots, "style.fontSize": { kind: "derived", value: { error: "#TYPE", message: "bad" } } };
     renderDocument(ctx, 800, 600, [{ ...object, slots }], CAMERA_IDENTITY);
     expect(bodyText(calls)).toHaveLength(1);
-    expect(fonts).toContain("16px sans-serif"); // DEFAULT_TEXT_FONT_SIZE / DEFAULT_TEXT_FONT_FAMILY
+    expect(fonts).toContain("16px sans-serif");
   });
 
   it("strokes the text's extent box as its selection highlight (same box hittest.ts clicks against)", () => {
     const { ctx, calls } = createFakeContext();
-    // Numeric width 120, measuredHeight 20 -> extent (10,20)-(130,40).
     renderDocument(ctx, 800, 600, [textObject("hi", 10, 20, { width: { kind: "literal", value: 120 } })], CAMERA_IDENTITY, ["obj_1"]);
     expect(calls).toContainEqual({ op: "strokeRect", x: 10, y: 20, w: 120, h: 20 });
   });
@@ -609,7 +542,6 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
     }
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, created.objects, CAMERA_IDENTITY);
-    // `resolvedContent` was evaluated by `mutate` (D-114), not written by this test.
     expect(bodyText(calls)).toEqual([{ op: "fillText", text: "hello world", x: 5, y: 8, align: "left" }]);
   });
 });
@@ -646,22 +578,11 @@ describe("renderDocument — wired through the real mutate() pipeline (D-016 dis
     renderDocument(ctx, 800, 600, created.objects, CAMERA_IDENTITY);
     const moveToCalls = calls.filter((call) => call.op === "moveTo");
     const lineToCalls = calls.filter((call) => call.op === "lineTo");
-    // A pentagon: 1 moveTo (the first vertex) + 4 lineTo (the remaining four) — the REAL evaluated `vertices`, not a fixture this test wrote by hand.
     expect(moveToCalls).toHaveLength(1);
     expect(lineToCalls).toHaveLength(4);
   });
 });
 
-/**
- * A circle at the world origin, radius 5.
- *
- * `vertices` is present and spans the circle's own bounding box: since entry
- * 0094 an object's CHROME hangs from its drawn EXTENT (`chromeAnchorPoint`),
- * and `hittest.ts` reads a circle's extent from `vertices` — §5.5's own
- * instruction that the polygonal approximation is what bounds a circle. Four
- * extreme points stand in for the real `CIRCLE_VERTEX_COUNT`-gon, whose extent
- * is the same box and is all these tests depend on.
- */
 function circleObject(id: string, name: string, slots: Readonly<Record<string, Slot>> = {}): GraphObject {
   return {
     id,
@@ -685,7 +606,6 @@ function circleObject(id: string, name: string, slots: Readonly<Record<string, S
   };
 }
 
-/** Where `circleObject`'s chrome baseline sits at zoom 1: top edge (y = -5) less the 6px anchor margin. */
 const CIRCLE_CHROME_BASELINE = -11;
 
 describe("renderDocument — name label (D-092 clause 1)", () => {
@@ -693,9 +613,6 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_7");
     renderDocument(ctx, 800, 600, [circle], { x: 0, y: 0, zoom: 2 });
-    // Extent top-centre is world (0,-5); at zoom 2 that is screen (0,-10), and
-    // the baseline sits CHROME_ANCHOR_MARGIN_SCREEN (a SCREEN constant, so it
-    // does NOT scale with zoom) above that.
     const textCalls = calls.filter((call) => call.op === "fillText");
     expect(textCalls).toEqual([{ op: "fillText", text: "circle_7", x: 0, y: -16, align: "center" }]);
   });
@@ -705,8 +622,6 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
     const label = calls.find((call) => call.op === "fillText");
-    // The circle's CENTRE is world y=0. The label must be above the top edge
-    // (y=-5), never at or inside the centre — the entry-0093 defect.
     expect(label).toEqual({ op: "fillText", text: "circle_1", x: 0, y: CIRCLE_CHROME_BASELINE, align: "center" });
   });
 
@@ -720,14 +635,6 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
     };
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY);
     const label = calls.find((call) => call.op === "fillText");
-    // Extent x spans 100..260 (2 cols x 80), so top-centre x is 180 — CENTRED
-    // over the grid, where entry 0093 put it over the left corner.
-    //
-    // y is 200 - 6 - 16 = 178, not 194: the A1 column headers (2026-09-02) sit
-    // in the band immediately above the top edge, and the name is lifted clear
-    // of them by `chromeTopReservedScreen`. Every other type still gets the
-    // plain 6px margin — this is a table-only offset, which is why it is a
-    // function of the object rather than a change to the margin constant.
     expect(label).toEqual({ op: "fillText", text: "table_1", x: 180, y: 178, align: "center" });
   });
 
@@ -742,7 +649,7 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
     const { ctx, calls } = createFakeContext();
     const circle: GraphObject = { id: "obj_1", name: "circle_1", type: "circle", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, radius: { kind: "literal", value: 5 } } };
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
-    expect(calls.some((call) => call.op === "arc")).toBe(true); // The BODY still draws from origin/radius (§5.5).
+    expect(calls.some((call) => call.op === "arc")).toBe(true);
     expect(calls.some((call) => call.op === "fillText")).toBe(false);
   });
 
@@ -784,7 +691,6 @@ describe("renderDocument — selection highlight (D-068)", () => {
     const circleA = circleObject("obj_1", "circle_a");
     const circleB = circleObject("obj_2", "circle_b");
     renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY, ["obj_1", "obj_2"]);
-    // 2 arcs for the ordinary draw, then 2 more for each one's own highlight.
     expect(calls.filter((call) => call.op === "arc")).toHaveLength(4);
     expect(calls.filter((call) => call.op === "stroke")).toHaveLength(4);
   });
@@ -794,7 +700,7 @@ describe("renderDocument — selection highlight (D-068)", () => {
     const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 2 }, cols: { kind: "literal", value: 2 } } };
     renderDocument(ctx, 800, 600, [table], CAMERA_IDENTITY, ["obj_1"]);
     const rects = calls.filter((call) => call.op === "strokeRect");
-    expect(rects).toHaveLength(5); // 4 cell borders + 1 highlight around the whole grid.
+    expect(rects).toHaveLength(5);
     expect(rects[4]).toEqual({ op: "strokeRect", x: 0, y: 0, w: 160, h: 48 });
   });
 
@@ -803,7 +709,6 @@ describe("renderDocument — selection highlight (D-068)", () => {
     const circleA = circleObject("obj_1", "circle_a");
     const circleB = circleObject("obj_2", "circle_b");
     renderDocument(ctx, 800, 600, [circleA, circleB], CAMERA_IDENTITY, ["obj_1"]);
-    // 2 arcs for the ordinary draw (a then b), then obj_1's highlight arc LAST.
     const arcCalls = calls.filter((call) => call.op === "arc");
     expect(arcCalls).toHaveLength(3);
   });
@@ -829,7 +734,6 @@ describe("renderDocument — error badge (D-068)", () => {
     const circle = circleObject("obj_1", "a_very_long_object_name", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
     const badge = calls.find((call) => call.op === "fillText" && call.text === "!");
-    // 23 chars * 7px fake width / 2 = 80.5, plus the 6px gap, right of centre 0.
     expect(badge).toEqual({ op: "fillText", text: "!", x: 86.5, y: CIRCLE_CHROME_BASELINE, align: "left" });
   });
 
@@ -850,14 +754,10 @@ describe("renderDocument — error badge (D-068)", () => {
 });
 
 describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
-  // `value: 0` keeps the world anchor at circleObject's own (0,0) origin — only
-  // the KIND differs from the literal default, which is what the indicator
-  // reads (file header: `getSlot(...)?.kind === "formula"`, never the value).
   function boundToCellSlot(): Slot {
     return { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 0 };
   }
 
-  /** The tick text, or undefined — one right-aligned draw carries both axes since entry 0094. */
   function tickCall(calls: readonly RecordedCall[]): RecordedCall | undefined {
     return calls.find((call) => call.op === "fillText" && call.text.includes("•"));
   }
@@ -866,7 +766,6 @@ describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1", { "origin.x": boundToCellSlot() });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
-    // "circle_1" is 8 chars * 7px / 2 = 28, plus the 6px gap, LEFT of centre 0.
     expect(tickCall(calls)).toEqual({ op: "fillText", text: "•x", x: -34, y: CIRCLE_CHROME_BASELINE, align: "right" });
   });
 
@@ -985,17 +884,11 @@ describe("renderDocument — panelledObjectIds is a SEPARATE list from selectedO
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"], []);
-    // 1 arc for the ordinary draw, 1 more for the highlight — panelledObjectIds
-    // being empty does not touch the highlight pass, which reads selectedObjectIds.
     expect(calls.filter((call) => call.op === "arc")).toHaveLength(2);
   });
 });
 
-// The human's 2026-09-02 text-box rework: grabbers on a selected text box, and
-// the object being edited stepping aside entirely so the overlay is the only
-// thing drawing its text.
 describe("renderDocument — resize grabbers and the object being edited (2026-09-02)", () => {
-  /** A `text` object whose committed box is (0,0)-(200,40). */
   function sizedText(): GraphObject {
     return {
       id: "obj_text",
@@ -1033,10 +926,10 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
     const centres = calls
       .filter((call): call is Extract<RecordedCall, { op: "fillRect" }> => call.op === "fillRect")
       .map((call) => ({ x: call.x + call.w / 2, y: call.y + call.h / 2 }));
-    expect(centres).toContainEqual({ x: 0, y: 0 }); // nw
-    expect(centres).toContainEqual({ x: 200, y: 40 }); // se
-    expect(centres).toContainEqual({ x: 100, y: 0 }); // n
-    expect(centres).toContainEqual({ x: 0, y: 20 }); // w
+    expect(centres).toContainEqual({ x: 0, y: 0 });
+    expect(centres).toContainEqual({ x: 200, y: 40 });
+    expect(centres).toContainEqual({ x: 100, y: 0 });
+    expect(centres).toContainEqual({ x: 0, y: 20 });
   });
 
   it("keeps them one SCREEN size at high zoom — they are chrome, drawn after the transform reset", () => {
@@ -1044,8 +937,6 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
     renderDocument(ctx, 800, 600, [sizedText()], { x: 0, y: 0, zoom: 10 }, ["obj_text"]);
     const squares = calls.filter((call): call is Extract<RecordedCall, { op: "fillRect" }> => call.op === "fillRect");
     expect(new Set(squares.map((call) => call.w))).toEqual(new Set([squares[0]?.w]));
-    // At zoom 10 the box's SE corner projects to (2000, 400) — the grabber
-    // moved with it but did not grow.
     expect(squares.some((call) => call.x + call.w / 2 === 2000 && call.y + call.h / 2 === 400)).toBe(true);
   });
 
@@ -1073,7 +964,6 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
     expect(calls.filter((call) => call.op === "fillRect")).toHaveLength(0);
   });
 
-  /** Every string `fillText` drew, in order — body text and screen-space chrome (the name label) alike. */
   function drawnStrings(calls: readonly RecordedCall[]): readonly string[] {
     return calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
   }
@@ -1082,7 +972,6 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [sizedText()], CAMERA_IDENTITY, [], [], { kind: "text", objectId: "obj_text" });
     expect(drawnStrings(calls)).not.toContain("hi");
-    // Its NAME label is chrome, not its text, and still says which box this is.
     expect(drawnStrings(calls)).toContain("text_1");
   });
 
@@ -1090,7 +979,6 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
     const { ctx, calls } = createFakeContext();
     const other: GraphObject = { ...sizedText(), id: "obj_other", name: "text_2" };
     renderDocument(ctx, 800, 600, [sizedText(), other], CAMERA_IDENTITY, [], [], { kind: "text", objectId: "obj_text" });
-    // One "hi" — the other object's. The edited one's is left to the overlay.
     expect(drawnStrings(calls).filter((text) => text === "hi")).toHaveLength(1);
   });
 
@@ -1101,14 +989,7 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
     expect(calls.filter((call) => call.op === "strokeRect")).toHaveLength(0);
   });
 
-  // The human's 2026-09-02 report: a table cell GHOSTED while a text box did
-  // not — the committed value kept drawing under the overlay, so `=A1*2` sat on
-  // top of `84`. The cause was that the renderer was only ever told which
-  // OBJECT was being edited, and `main.ts` (correctly) refused to name a whole
-  // table for a one-cell edit, so it named nothing. It now takes the whole
-  // `EditorTarget` and can suppress exactly one cell.
   describe("a table cell being edited (2026-09-02)", () => {
-    /** A 1x3 table with a value in every cell, so a suppressed one is visible by its absence. */
     function filledTable(): GraphObject {
       return {
         id: "obj_t",
@@ -1147,27 +1028,18 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
       const { ctx, calls } = createFakeContext();
       const other: GraphObject = { ...filledTable(), id: "obj_u", name: "table_2" };
       renderDocument(ctx, 800, 600, [filledTable(), other], CAMERA_IDENTITY, [], [], { kind: "cell", objectId: "obj_t", cell: "B1" });
-      // One "beta" survives — table_2's. Its own B1 is nobody's overlay.
       expect(drawnStrings(calls).filter((text) => text === "beta")).toHaveLength(1);
     });
 
     it("keeps the table's selection highlight while a cell is edited — the table has not moved or grown, which is why a TEXT box loses its outline and this does not", () => {
       const { ctx, calls } = createFakeContext();
       renderDocument(ctx, 800, 600, [filledTable()], CAMERA_IDENTITY, ["obj_t"], ["obj_t"], { kind: "cell", objectId: "obj_t", cell: "B1" });
-      // A table's highlight is its whole drawn extent, one more strokeRect on
-      // top of the three cell borders.
       expect(calls.filter((call) => call.op === "strokeRect")).toHaveLength(4);
     });
   });
 });
 
-// The human's 2026-09-02 request: "we need to add table row/column references in
-// a graphical way for table objects. Almost like in the same font and size as
-// the object title, but centered over each row and column persistently (they
-// should stay when the prop window comes up, not get hidden like the title
-// does)."
 describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () => {
-  /** A `rows` x `cols` table at the world origin, with no cell content — the headers are all this draws. */
   function grid(rows: number, cols: number): GraphObject {
     return {
       id: "obj_1",
@@ -1186,7 +1058,7 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
     renderDocument(ctx, 800, 600, [grid(1, 3)], CAMERA_IDENTITY);
     const headers = drawn(calls).filter((call) => call.align === "center" && call.text !== "table_1");
     expect(headers).toEqual([
-      { op: "fillText", text: "A", x: 40, y: -4, align: "center" }, // 80-wide cells, so centres at 40/120/200
+      { op: "fillText", text: "A", x: 40, y: -4, align: "center" },
       { op: "fillText", text: "B", x: 120, y: -4, align: "center" },
       { op: "fillText", text: "C", x: 200, y: -4, align: "center" },
     ]);
@@ -1197,15 +1069,12 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
     renderDocument(ctx, 800, 600, [grid(3, 1)], CAMERA_IDENTITY);
     const headers = drawn(calls).filter((call) => call.align === "right");
     expect(headers).toEqual([
-      { op: "fillText", text: "1", x: -4, y: 12, align: "right" }, // 24-tall cells, so centres at 12/36/60
+      { op: "fillText", text: "1", x: -4, y: 12, align: "right" },
       { op: "fillText", text: "2", x: -4, y: 36, align: "right" },
       { op: "fillText", text: "3", x: -4, y: 60, align: "right" },
     ]);
   });
 
-  // A header reading `C` over a column whose cells are `cells.D*` would be worse
-  // than no header at all, which is why this shares `address.ts`'s own function
-  // rather than doing its own arithmetic on char codes (D-010).
   it("uses address.ts's own bijective base-26 letters, so column 27 is AA and not Z+1 or A1", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [grid(1, 27)], CAMERA_IDENTITY);
@@ -1226,20 +1095,15 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
   it("tracks pan and zoom, staying over the columns it names", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [grid(1, 2)], { x: 10, y: 20, zoom: 2 });
-    // screen = (world - camera) * zoom: the grid's top-left is (-20, -40) and a
-    // cell is 160 screen px wide, so the two column centres are at 60 and 220.
     const centres = drawn(calls).filter((call) => call.text === "A" || call.text === "B").map((call) => call.x);
     expect(centres).toEqual([60, 220]);
   });
 
-  // The explicit ask, and the reason it is right: a panelled object's NAME moves
-  // into the panel's header, so suppressing it loses nothing — but nothing
-  // anywhere else says which column is `C`.
   it("is NOT suppressed when the object is panelled, unlike the name label", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [grid(1, 2)], CAMERA_IDENTITY, ["obj_1"], ["obj_1"]);
     const texts = drawn(calls).map((call) => call.text);
-    expect(texts).not.toContain("table_1"); // the name IS suppressed (D-106 clause 5)
+    expect(texts).not.toContain("table_1");
     expect(texts).toEqual(expect.arrayContaining(["A", "B", "1"]));
   });
 
@@ -1251,8 +1115,6 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
 
   it("skips them per axis once the cells shrink past legibility, rather than drawing an overlapping smear", () => {
     const { ctx, calls } = createFakeContext();
-    // zoom 0.1: an 80-wide cell is 8 screen px and a 24-tall one is 2.4 — both
-    // under the 14px floor, so neither axis draws.
     renderDocument(ctx, 800, 600, [grid(2, 2)], { x: 0, y: 0, zoom: 0.1 });
     const texts = drawn(calls).map((call) => call.text);
     expect(texts).not.toContain("A");
@@ -1261,7 +1123,6 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
 
   it("keeps the COLUMN letters while dropping the row numbers when only the rows have shrunk past the floor", () => {
     const { ctx, calls } = createFakeContext();
-    // zoom 0.25: a column is 20 screen px (over the floor), a row is 6 (under).
     renderDocument(ctx, 800, 600, [grid(2, 2)], { x: 0, y: 0, zoom: 0.25 });
     const texts = drawn(calls).map((call) => call.text);
     expect(texts).toContain("A");
@@ -1278,8 +1139,6 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         radius: { kind: "literal", value: 10 },
-        // Needed for an EXTENT, without which the object gets no chrome at all
-        // (`chromeAnchorPoint`) and this would pass for the wrong reason.
         vertices: { kind: "derived", value: [{ x: -10, y: -10 }, { x: 10, y: 10 }] },
       },
     };
@@ -1294,11 +1153,6 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
   });
 });
 
-// ---------------------------------------------------------------------------
-// §5.7's image (D-142) — the frame, the fitted picture, and opacity
-// ---------------------------------------------------------------------------
-
-/** An `image` object with the six slots `IMAGE_SCHEMA` declares, each overridable per test. */
 function imageObject(overrides: Record<string, Slot> = {}): GraphObject {
   return {
     id: "obj_1",
@@ -1317,21 +1171,17 @@ function imageObject(overrides: Record<string, Slot> = {}): GraphObject {
   };
 }
 
-/** A stored data URL — its CONTENT never matters here, only that the slot holds a non-empty string, since `images.ts` is the half that decodes one. */
 const A_DATA_URL: Slot = { kind: "literal", value: "data:image/png;base64,AAAA" };
 
-/** A hand-written `ImageBitmaps` (`images.ts`'s read side) answering with one decoded picture of the given natural size — no DOM, no cache, no decode. */
 function readyBitmaps(naturalWidth: number, naturalHeight: number): ImageBitmaps {
   const image = { decoded: true } as unknown as CanvasImageSource;
   return { bitmapFor: () => ({ image, naturalWidth, naturalHeight }) };
 }
 
-/** Every `drawImage` call, in order. */
 function pictures(calls: readonly RecordedCall[]): readonly Extract<RecordedCall, { op: "drawImage" }>[] {
   return calls.filter((call): call is Extract<RecordedCall, { op: "drawImage" }> => call.op === "drawImage");
 }
 
-/** Every `strokeRect` call, in order — an image's frame, a table's grid and both highlights all use it, so a test filters by geometry. */
 function strokeRects(calls: readonly RecordedCall[]): readonly Extract<RecordedCall, { op: "strokeRect" }>[] {
   return calls.filter((call): call is Extract<RecordedCall, { op: "strokeRect" }> => call.op === "strokeRect");
 }
@@ -1368,14 +1218,12 @@ describe("renderDocument — image (§5.7)", () => {
 
   it("preserves a WIDE picture's aspect ratio inside its box and centres it vertically (§5.7)", () => {
     const { ctx, calls } = createFakeContext();
-    // 200x100 natural into a 100x100 box: scale 0.5, so 100x50, centred at y + 25.
     renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(200, 100));
     expect(pictures(calls)[0]).toMatchObject({ x: 10, y: 45, w: 100, h: 50 });
   });
 
   it("preserves a TALL picture's aspect ratio inside its box and centres it horizontally (§5.7)", () => {
     const { ctx, calls } = createFakeContext();
-    // 100x400 natural into a 100x100 box: scale 0.25, so 25x100, centred at x + 37.5.
     renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 400));
     expect(pictures(calls)[0]).toMatchObject({ x: 47.5, y: 20, w: 25, h: 100 });
   });
@@ -1383,7 +1231,6 @@ describe("renderDocument — image (§5.7)", () => {
   it("keeps the ratio at a box the operator has since made disagree with the picture, while `preserveAspect` is on", () => {
     const { ctx, calls } = createFakeContext();
     const wideBox = imageObject({ source: A_DATA_URL, width: { kind: "literal", value: 400 } });
-    // 100x100 natural into a 400x100 box: scale 1, so 100x100, centred at x + 150.
     renderDocument(ctx, 800, 600, [wideBox], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
     expect(pictures(calls)[0]).toMatchObject({ x: 160, y: 20, w: 100, h: 100 });
   });
@@ -1442,8 +1289,6 @@ describe("renderDocument — image (§5.7)", () => {
   it("highlights a selected image as its own drawn box, the same box hittest.ts clicks against (D-066/D-010)", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [imageObject()], CAMERA_IDENTITY, ["obj_1"]);
-    // The frame and the highlight are the same rectangle in different styles —
-    // the frame in the object pass, the highlight in the pass after it.
     expect(strokeRects(calls).filter((call) => call.x === 10 && call.y === 20 && call.w === 100 && call.h === 100)).toHaveLength(2);
   });
 
@@ -1454,13 +1299,7 @@ describe("renderDocument — image (§5.7)", () => {
   });
 });
 
-// §5.8: *"Render as a labelled box with input ports on the left and output ports
-// on the right."* Built at entry 0179 under **D-146**, which put §5.8's rendering
-// inside the Phase 6 gate — 0177-REVIEW found D-142 clause 3 had excluded it by
-// reading the section's STUB ONLY title as scoping the whole node rather than its
-// EXECUTION ("build the node as a real, first-class graph citizen").
 describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
-  /** A `script` object at (0, 0) with the given ports, as `script x=0 y=0` plus `addport` lines leave one. */
   function scriptObject(ports?: { in: string[]; out: string[] }): GraphObject {
     return {
       id: "obj_1",
@@ -1476,7 +1315,6 @@ describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
     };
   }
 
-  /** Every text this render drew, in order. */
   function textsDrawn(object: GraphObject): readonly string[] {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [object], CAMERA_IDENTITY);
@@ -1509,19 +1347,14 @@ describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
   it("puts inputs on the LEFT edge and outputs on the RIGHT edge — §5.8's own words, and the one claim the box's shape cannot fake", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [scriptObject({ in: ["factor"], out: ["result"] })], CAMERA_IDENTITY);
-    // The port stubs are the SMALL `fillRect`s — the body fill is the box-wide one.
     const stubs = calls.filter((call): call is Extract<RecordedCall, { op: "fillRect" }> => call.op === "fillRect" && call.w < SCRIPT_BOX_WIDTH);
     expect(stubs).toHaveLength(2);
     const xs = stubs.map((call) => call.x).sort((left, right) => left - right);
-    // The left stub straddles x=0 (the origin); the right one straddles the far edge.
     expect(xs[0]).toBeLessThan(SCRIPT_BOX_WIDTH / 2);
     expect(xs[1]).toBeGreaterThan(SCRIPT_BOX_WIDTH / 2);
   });
 
   it("draws an input's label against the LEFT edge and an output's against the RIGHT — the position, not just the alignment", () => {
-    // Written this way after a D-016 check: asserting `align` alone passed while
-    // the output label was drawn at the box's left edge, because `align` is a
-    // separate property from the x it is applied to. The POSITION is the claim.
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [scriptObject({ in: ["factor"], out: ["result"] })], CAMERA_IDENTITY);
     const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
@@ -1534,17 +1367,12 @@ describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
   });
 
   it("grows one row per port ROW, taking the LONGER family rather than their sum, because the two sit side by side", () => {
-    // Absolute heights, not the difference between them: a D-016 check showed
-    // that `max(in, out)` and `in + out` produce the SAME difference for these
-    // two fixtures, so pinning the difference alone left the claim untested.
     const height = (ports: { in: string[]; out: string[] }): number => {
       const extent = objectExtent(scriptObject(ports));
       return (extent?.maxY ?? 0) - (extent?.minY ?? 0);
     };
-    // One in and one out share ONE row — the whole "side by side" claim.
     expect(height({ in: ["a"], out: ["b"] })).toBe(SCRIPT_HEADER_HEIGHT + SCRIPT_PORT_ROW_HEIGHT);
     expect(height({ in: ["a", "b", "c"], out: ["d"] })).toBe(SCRIPT_HEADER_HEIGHT + 3 * SCRIPT_PORT_ROW_HEIGHT);
-    // And a portless node still gets a row, so it is visible rather than a bare header.
     expect(height({ in: [], out: [] })).toBe(SCRIPT_HEADER_HEIGHT + SCRIPT_PORT_ROW_HEIGHT);
   });
 
@@ -1563,4 +1391,3 @@ describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
     });
   });
 });
-

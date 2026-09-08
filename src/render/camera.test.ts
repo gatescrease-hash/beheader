@@ -1,6 +1,7 @@
 /**
- * camera.test.ts — Tests for world<->screen transform, pan, and zoom-to-cursor
- * (§5.9). Colocated with camera.ts per D-001.
+ * camera.test.ts
+ *
+ * World to screen and back, pan, zoom to a point, and the clamps.
  */
 import { describe, expect, it } from "vitest";
 import { deserializeDocument, type CameraState } from "../engine/document.ts";
@@ -50,7 +51,6 @@ describe("panByScreenDelta", () => {
 
   it("divides the screen delta by zoom, so the same screen-space drag moves content less in world space at higher zoom", () => {
     const camera: CameraState = { x: 0, y: 0, zoom: 4 };
-    // 40 screen px at zoom 4 is 10 world units.
     expect(panByScreenDelta(camera, 40, 0).x).toBe(-10);
   });
 
@@ -91,21 +91,12 @@ describe("zoomAtScreenPoint", () => {
   });
 
   it("never produces a computed x/y that is itself non-finite, even from an extreme clamp", () => {
-    // A huge screenPoint divided by the clamped MIN_ZOOM stays finite here, but
-    // this pins the contract (D-027) rather than any specific arithmetic path.
     const result = zoomAtScreenPoint(IDENTITY_CAMERA, { x: 1e6, y: -1e6 }, MIN_ZOOM);
     expect(Number.isFinite(result.x)).toBe(true);
     expect(Number.isFinite(result.y)).toBe(true);
   });
 });
 
-// KNOWN GAP (D-062) — a camera read off a LOADED document is not range-checked.
-// `deserializeDocument` enforces number LEGALITY only (finite, not `-0` — D-027),
-// which a zoom of `0`, of `-5`, or of `1e-300` all satisfy. These tests pin the
-// CURRENT behaviour so the gap is executable rather than a claim in a comment:
-// they are tripwires, not endorsements. The cycle that first loads a document into
-// a live canvas builds the clamp D-062 requires, at the `render/` boundary, and
-// rewrites this block to assert the clamped result instead.
 describe("a loaded camera is not clamped to [MIN_ZOOM, MAX_ZOOM] (D-062, known gap)", () => {
   const loadCameraWithZoom = (zoom: number): CameraState => {
     const result = deserializeDocument({
@@ -144,9 +135,6 @@ describe("clampCamera — D-062's boundary, where a loaded camera enters the ren
   });
 
   it("corrects the zoom deserializeDocument accepts and screenToWorld cannot use", () => {
-    // The three D-062 names by value: all legal numbers (D-027), none a usable
-    // zoom. Probed through `deserializeDocument` below so this is not a claim
-    // about a hand-built camera the loader would have rejected.
     expect(clampCamera({ x: 0, y: 0, zoom: 0 }).zoom).toBe(MIN_ZOOM);
     expect(clampCamera({ x: 0, y: 0, zoom: -5 }).zoom).toBe(MIN_ZOOM);
     expect(clampCamera({ x: 0, y: 0, zoom: 1e-300 }).zoom).toBe(MIN_ZOOM);
@@ -169,9 +157,6 @@ describe("clampCamera — D-062's boundary, where a loaded camera enters the ren
   });
 
   it("falls back to identity zoom for a zoom no bound can correct, and to the world origin for a non-finite pan", () => {
-    // Unreachable through the loader (D-027 rejects non-finite numbers), which is
-    // exactly why it is asserted: this function is total, and is the one place a
-    // camera from anywhere else acquires the range guarantee.
     expect(clampCamera({ x: Number.NaN, y: Infinity, zoom: Number.NaN })).toEqual({ x: 0, y: 0, zoom: IDENTITY_ZOOM });
   });
 });
@@ -184,8 +169,6 @@ describe("clampZoom — the range half, exported for a caller that must place a 
   });
 
   it("returns the fallback for a non-finite request rather than snapping to a bound", () => {
-    // Math.min/Math.max would propagate NaN straight through, which is the bug
-    // this branch exists in front of.
     expect(clampZoom(Number.NaN, 4)).toBe(4);
     expect(clampZoom(Infinity, 4)).toBe(4);
   });
