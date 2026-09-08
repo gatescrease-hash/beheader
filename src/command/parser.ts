@@ -615,9 +615,9 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
 
 export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec.name);
 
-export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
-  "pan",
-];
+// Nothing is on this list today. Keep it, empty, for the next command
+// SPEC.md documents before the code builds it.
+export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [];
 
 /** One line to one command object. It never throws. */
 export function parseCommand(line: string): CommandParseResult {

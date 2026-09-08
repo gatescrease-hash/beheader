@@ -661,7 +661,7 @@ refs intersection_a
 props intersection_a
 list
 select intersection_a
-pan / zoom <factor> / fit
+zoom <factor> / fit
 save / load
 ```
 

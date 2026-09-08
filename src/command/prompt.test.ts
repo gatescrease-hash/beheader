@@ -105,11 +105,9 @@ describe("a line is a sequence of answers, where a space acts as Enter", () => {
     expect(completed(beginCommand("delete intersection_a force"))).toEqual({ kind: "delete", target: "intersection_a", force: true });
   });
 
-  it("still refuses an unknown word and still names a specified command that is not built", () => {
+  it("still refuses an unknown word, routed through the same parser the typed form uses", () => {
     const unknown = beginCommand("frobnicate");
     expect(unknown.status === "failed" && unknown.message).toBe('unknown command "frobnicate"');
-    const unbuilt = beginCommand("pan 10 10");
-    expect(unbuilt.status === "failed" && unbuilt.message).toContain("not built yet");
   });
 });
 

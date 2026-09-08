@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2041 pass, 0 skip, across 38 test files. |
+| Tests | 2040 pass, 0 skip, across 38 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2041 tests
+npm test             # 2040 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -255,7 +255,7 @@ group blocks the acceptance test in `SPEC.md` section 12.
    never closes back to the first vertex. A live polyline can also grow and
    shrink now, through `addvertex` and `delvertex`, and a preset can turn into
    one through `explode` (item 4). Still open: `closed` and style slots
-   (item 7).
+   (item 6).
 2. **Per vertex slots exist, and a mutation can grow or shrink the set.**
    `vertex.0.x` and `vertex.0.y`, as `SPEC.md` section 8 specifies.
    `enumeratePolylineVertexSlotPaths` in `geometry.ts` builds the paths from
@@ -285,38 +285,34 @@ group blocks the acceptance test in `SPEC.md` section 12.
    new schema, so a formula that reads one of those needs no repair. A
    formula that reads a dropped slot follows the same refuse-by-default,
    repair-under-`force` rule as `delvertex`.
-5. **`pan` as a command.** The mouse can pan. The command has no argument
-   grammar yet.
-6. **Path `segments`.** `SPEC.md` section 8 declares arcs and beziers. Only
+5. **Path `segments`.** `SPEC.md` section 8 declares arcs and beziers. Only
    straight lines exist.
-7. **Geometry style slots.** `strokeColor`, `strokeWidth` and `fillColor` are
+6. **Geometry style slots.** `strokeColor`, `strokeWidth` and `fillColor` are
    specified as slots that a formula can drive. No schema declares them. The
    renderer uses fixed colours. A `closed` slot belongs with this group too,
    since a polyline has no way today to become a closed shape.
-8. **`src/engine/index.ts` exists now.** It is the one public engine surface
+7. **`src/engine/index.ts` exists now.** It is the one public engine surface
    the spec names, and it re-exports every other engine file under one name
    each. It resolves the one collision (`evaluate`) to `evaluateGraph` and
    `evaluateFormulaAst`. `command/` and `render/` do not import through it
    yet, all still on deep paths. To move a file, swap its several engine
    imports for one import from `../engine/index.ts`. That is a mechanical
    change, still open because it touches every file in both layers at once.
-9. **`src/engine/graph/dirty.ts`.** Rule 5 says to keep the module even with a
+8. **`src/engine/graph/dirty.ts`.** Rule 5 says to keep the module even with a
    naive body, so the shape of the fast version survives. It was never made.
-10. **Journal replay.** Every mutation appends to the journal. Nothing reads it
-    back. Undo needs a reader.
+9. **Journal replay.** Every mutation appends to the journal. Nothing reads it
+   back. Undo needs a reader.
 
 ### Smaller
 
-11. **Header row for a table.** The spec calls it display only. Nothing shows
-    it.
-12. **`image` opacity** clamps at draw time instead of at write time. That is a
+10. **`image` opacity** clamps at draw time instead of at write time. That is a
     deliberate choice, recorded here so the next reader does not treat it as a
     defect.
-13. **Nothing now cites a document that does not exist.** The audit rewrote 721
+11. **Nothing now cites a document that does not exist.** The audit rewrote 721
     test names and 33 operator facing messages that named the old rulings. A
     grep for the old marks over `src/` and `index.html` returns nothing. Keep
     it that way.
-14. **The package carries the name `graphpaper`. The folder carries the name
+12. **The package carries the name `graphpaper`. The folder carries the name
     `beheader-clean`.** The spec calls the product Graphpaper. Nothing depends
     on the folder name. Pick one name when it starts to matter.
 

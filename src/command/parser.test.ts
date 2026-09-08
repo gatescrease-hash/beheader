@@ -87,10 +87,6 @@ describe("the command registry (table driven, one entry per command)", () => {
     expect(COMMAND_NAMES.filter((name) => COMMANDS_SPECIFIED_BUT_NOT_BUILT.includes(name))).toEqual([]);
   });
 
-  it("reports a specified command that has no entry yet as not built, rather than as unknown", () => {
-    expect(rejected("pan 10 10").message).toBe('"pan" is a specified command that is not built yet');
-  });
-
   it("reports a word the spec does not name at all as an unknown command, at that word's own offset", () => {
     expect(rejected("  frobnicate x=1")).toEqual({ message: 'unknown command "frobnicate"', start: 2 });
   });
