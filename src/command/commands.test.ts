@@ -440,6 +440,141 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
   });
 });
 
+// **D-146**, ruled by the human at 0177-REVIEW after that entry walked Phase 6's ✅
+// line through `submitLine` and found EVERY step refused: §5.8 says *"ports are
+// declared manually in the UI for now"* and §5.10 gave no way to, so D-141's
+// `addPort`/`removePort` operations had no caller outside a test fixture. These
+// tests are the operator's half — every line here is one a person can type.
+describe("addport / removeport — §5.8's ports, declared by an operator (D-146)", () => {
+  /** A document holding one portless `script_1`, as `script x=0 y=0` leaves it. */
+  function withScript(): Document {
+    return committed("script x=0 y=0", createEmptyDocument());
+  }
+
+  it("declares an IN port and writes its slot in the same batch, so the port and the thing it names arrive together", () => {
+    const after = committed("addport script_1.in.factor", withScript());
+    const script = onlyNamed(after, "script_1");
+    expect(script.ports?.in).toEqual(["factor"]);
+    expect(getSlot(script, ["in", "factor"])).toEqual({ kind: "literal", value: null });
+  });
+
+  it("declares an OUT port with BOTH slots it implies — the derived `out.<port>` (D-018) and the `placeholder.<port>` its compute reads", () => {
+    const after = committed("addport script_1.out.result", withScript());
+    const script = onlyNamed(after, "script_1");
+    expect(script.ports?.out).toEqual(["result"]);
+    expect(getSlot(script, ["placeholder", "result"])).toEqual({ kind: "literal", value: null });
+    expect(getSlot(script, ["out", "result"])?.kind).toBe("derived");
+  });
+
+  it("lets an out port be declared FIRST and an in port after, which the raw operations alone cannot do", () => {
+    // Entry 0169's ordering hazard, made unreachable: `out.*` declares every
+    // current `in.*` as a dependency, so an `addPort in` with no companion slot
+    // would dangle the moment an out port existed. Writing both halves in one
+    // batch means no order of typed lines can reach that state.
+    const withOut = committed("addport script_1.out.result", withScript());
+    const both = committed("addport script_1.in.factor", withOut);
+    expect(onlyNamed(both, "script_1").ports).toEqual({ in: ["factor"], out: ["result"] });
+  });
+
+  it("tells the operator what to do next, naming the exact line that fills the port", () => {
+    const outcome = run("addport script_1.out.result", withScript());
+    expect(isCommandFailure(outcome) ? "" : outcome.lines.join("\n")).toContain("set script_1.placeholder.result <value>");
+  });
+
+  it("refuses a port on anything but a script node, naming the type it actually got", () => {
+    const withCircle = committed("circle x=0 y=0 r=5", createEmptyDocument());
+    expect(refused("addport circle_1.in.factor", withCircle)).toContain('is a "circle" object');
+  });
+
+  it("refuses a family that is neither in nor out, and an address that names no port at all", () => {
+    expect(refused("addport script_1.sideways.factor", withScript())).toContain('"sideways" is not a port family');
+    expect(refused("addport script_1.factor", withScript())).toContain("does not name a port");
+  });
+
+  it("refuses a duplicate port, through mutate's own D-141 clause 6 check rather than a second one here", () => {
+    const once = committed("addport script_1.in.factor", withScript());
+    expect(refused("addport script_1.in.factor", once)).not.toBe("");
+    expect(onlyNamed(once, "script_1").ports?.in).toEqual(["factor"]);
+  });
+
+  it("removes a port and its derived `out.<port>` slot, while the placeholder deliberately OUTLIVES it", () => {
+    // `RemovePortOperation` drops `out.result` and not `placeholder.result`,
+    // and that is not an oversight: D-017 part 2 checks only formula/derived
+    // slots, on the stated grounds that "an undeclared literal has no inbound
+    // edges either way". So the stub value survives, legal and inert — which
+    // the next test spends.
+    const added = committed("addport script_1.out.result", withScript());
+    const valued = committed("set script_1.placeholder.result 42", added);
+    const removed = committed("removeport script_1.out.result", valued);
+    const script = onlyNamed(removed, "script_1");
+    expect(script.ports?.out ?? []).toEqual([]);
+    expect(getSlot(script, ["out", "result"])).toBeUndefined();
+    expect(getSlot(script, ["placeholder", "result"])).toEqual({ kind: "literal", value: 42 });
+  });
+
+  it("gives the operator their stub value BACK when a removed port is re-added, rather than silently resetting it to nothing", () => {
+    const added = committed("addport script_1.out.result", withScript());
+    const valued = committed("set script_1.placeholder.result 42", added);
+    const readded = committed("addport script_1.out.result", committed("removeport script_1.out.result", valued));
+    const script = onlyNamed(readded, "script_1");
+    expect(getSlot(script, ["placeholder", "result"])).toEqual({ kind: "literal", value: 42 });
+    expect(getSlot(script, ["out", "result"])?.value).toBe(42);
+  });
+
+  it("REFUSES to remove an out port another object still reads, rather than silently breaking that formula (§5.1.1, D-141 clause 6)", () => {
+    const added = committed("addport script_1.out.result", withScript());
+    const seeded = committed("set script_1.placeholder.result 10", added);
+    const withPolygon = committed("polygon sides=5 x=0 y=0 r=1", seeded);
+    const linked = committed("link polygon_1.radius script_1.out.result", withPolygon);
+    expect(refused("removeport script_1.out.result", linked)).toContain("polygon_1.radius");
+    // The port, its slots and the binding all survive the refusal untouched.
+    expect(getSlot(onlyNamed(linked, "polygon_1"), ["radius"])?.value).toBe(10);
+  });
+
+  it("refuses to remove a port that is not there, naming the family", () => {
+    expect(refused("removeport script_1.in.absent", withScript())).toContain('has no in port named "absent"');
+  });
+
+  it("Phase 6's acceptance criterion, TYPED — every line one a person can enter at the command line (D-146, 0177-REVIEW's finding)", () => {
+    // The sibling of "Phase 6's acceptance criterion, its exact shape" above.
+    // That test proves the ENGINE does it; this one proves an OPERATOR can. It
+    // reaches `mutate` through nothing but parsed command lines — no
+    // `mutateOrThrow`, no hand-built operation, no fixture.
+    let document = createEmptyDocument();
+    for (const line of [
+      "table x=0 y=0 rows=1 cols=1",
+      "set table_1.A1 3",
+      "script x=0 y=0",
+      "addport script_1.in.factor",
+      "link script_1.in.factor table_1.A1",
+      "addport script_1.out.result",
+      "set script_1.placeholder.result 10",
+      "polygon sides=5 x=0 y=0 r=1",
+      "link polygon_1.radius script_1.out.result",
+    ]) {
+      document = committed(line, document);
+    }
+    expect(getSlot(onlyNamed(document, "polygon_1"), ["radius"])?.value).toBe(10);
+
+    // Changing the placeholder moves the polygon — the criterion's own verb.
+    const moved = committed("set script_1.placeholder.result 25", document);
+    expect(getSlot(onlyNamed(moved, "polygon_1"), ["radius"])?.value).toBe(25);
+
+    // And the upstream binding still holds at the same time.
+    const cellChanged = committed("set table_1.A1 7", moved);
+    expect(getSlot(onlyNamed(cellChanged, "script_1"), ["in", "factor"])?.value).toBe(7);
+  });
+
+  it("shows a declared port in `props`, so an operator can see the port they just made (D-146; D-077 still summarises a TABLE's cells)", () => {
+    const added = committed("addport script_1.in.factor", withScript());
+    const outcome = run("props script_1", committed("addport script_1.out.result", added));
+    const lines = isCommandFailure(outcome) ? "" : outcome.lines.join("\n");
+    expect(lines).toContain("in.factor");
+    expect(lines).toContain("placeholder.result");
+    expect(lines).toContain("out.result");
+  });
+});
+
 describe("D-122 — a text object's `content` slot is literal-only (answers Q-023 / F13)", () => {
   function docWithTextObject(): Document {
     return committed('text x=0 y=0 "hello"', createEmptyDocument());
@@ -641,6 +776,8 @@ describe("every registry command reaches a handler", () => {
     "link polygon_1.origin.x table_x.A1",
     "unlink polygon_1.origin.x",
     "clear table_x.A1",
+    "addport script_1.in.factor",
+    "removeport script_1.out.result",
     "rename intersection_a polygon_9",
     "delete intersection_a",
     "refs intersection_a",

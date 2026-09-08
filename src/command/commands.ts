@@ -109,7 +109,7 @@ import { isReferenceNode } from "../engine/formula/ast.ts";
 import { formatFormula } from "../engine/formula/format.ts";
 import { isParseError, parseFormula } from "../engine/formula/parser.ts";
 import { addressKey, type Edge } from "../engine/graph/edge.ts";
-import { getSlot, slotKey, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
+import { getSlot, isLegalPortName, slotKey, SCRIPT_TYPE, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
 import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import {
@@ -136,9 +136,10 @@ import {
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PICTURE_ASPECT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
-import { SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH } from "../engine/script/stub.ts";
+import { SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH, scriptInPortPath, scriptOutPortPath, scriptPlaceholderPath } from "../engine/script/stub.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
+  AddPortCommand,
   ClearCommand,
   Command,
   CreateCircleCommand,
@@ -152,6 +153,7 @@ import type {
   LinkCommand,
   PropsCommand,
   RefsCommand,
+  RemovePortCommand,
   RenameCommand,
   SelectCommand,
   SetFormulaCommand,
@@ -395,6 +397,10 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return unlink(command, document, context);
     case "clear":
       return clearSlotCommand(command, document, context);
+    case "addport":
+      return addPortCommand(command, document, context);
+    case "removeport":
+      return removePortCommand(command, document, context);
     case "rename":
       return renameObject(command, document, context);
     case "delete":
@@ -447,6 +453,8 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "link",
   "unlink",
   "clear",
+  "addport",
+  "removeport",
   "rename",
   "delete",
   "refs",
@@ -1013,6 +1021,173 @@ function clearSlotCommand(command: ClearCommand, document: Document, context: Ev
  * excludes the object being renamed, so it collides with nothing, and §5.2 gives no
  * reason to refuse a display-case change.
  */
+// ---------------------------------------------------------------------------
+// Declaring a script node's ports (§5.8's "ports are declared manually in the
+// UI for now"; D-146, on top of D-141 clause 6's operations)
+// ---------------------------------------------------------------------------
+
+/** A port address that resolved: which script node, which family, which name. Built once so `addport` and `removeport` cannot disagree about what `script_1.in.factor` means. */
+interface PortTarget {
+  readonly object: GraphObject;
+  readonly family: "in" | "out";
+  readonly name: string;
+}
+
+type PortTargetResult = { readonly ok: true; readonly target: PortTarget } | { readonly ok: false; readonly message: string };
+
+/**
+ * Resolves `script_1.in.factor` into the node, the family and the port name.
+ *
+ * Why it exists: `addport` and `removeport` accept the identical argument shape and
+ * must refuse identically, and every refusal here is an IDENTITY failure, which D-069
+ * makes this file's rather than the parser's — the parser hands over the string the
+ * operator typed and checks nothing about it.
+ *
+ * Five refusals, in the order that gives the most specific message: the address does
+ * not parse or names no object (`parseAddress`'s own `#REF` text); the object is not
+ * a `script` node; the path is not exactly two segments; the first is neither `in`
+ * nor `out`; the second is not a legal port name. The LAST of those deliberately
+ * repeats `graph/node.ts`'s `isLegalPortName` rather than trusting `mutate` to
+ * reject it later — `mutate`'s message is about an operation, and this one can name
+ * the grammar the operator has to satisfy.
+ */
+function resolvePortTarget(target: string, document: Document): PortTargetResult {
+  const address = parseAddress(target, document.objects);
+  if (isAddressError(address)) {
+    return { ok: false, message: address.message };
+  }
+  const object = document.objects.find((candidate) => candidate.id === address.objectId);
+  if (object === undefined) {
+    return { ok: false, message: `no object named in "${target}"` };
+  }
+  if (object.type !== SCRIPT_TYPE) {
+    return { ok: false, message: `${object.name} is a "${object.type}" object — only a script node has ports (§5.8)` };
+  }
+  if (address.path.length !== 2) {
+    return { ok: false, message: `"${target}" does not name a port — use <object>.in.<port> or <object>.out.<port>` };
+  }
+  const family = address.path[0];
+  const name = address.path[1] ?? "";
+  if (family !== "in" && family !== "out") {
+    return { ok: false, message: `"${family ?? ""}" is not a port family — use "in" or "out"` };
+  }
+  if (!isLegalPortName(name)) {
+    return { ok: false, message: `"${name}" is not a legal port name — letters, digits and underscores only` };
+  }
+  return { ok: true, target: { object, family, name } };
+}
+
+/**
+ * `addport script_1.in.factor` (§5.8's *"Ports are declared manually in the UI for
+ * now"*, **D-146**).
+ *
+ * **This handler is where §5.8's placeholder reconciliation lives**, which
+ * `mutation.ts`'s `AddPortOperation` doc explicitly defers to "the `script` schema/
+ * command cycle this data-model slice unblocks". `addPort` declares a NAME; the slots
+ * that name implies are written by this command, in the SAME batch, because they are
+ * not optional:
+ *
+ * - an `out` port's `out.<name>` must exist as a `derived` slot (**D-018**), and its
+ *   compute reads `placeholder.<name>`, which `validateIntegrity`'s dangling-reference
+ *   check (§5.1.1) then requires to be a real slot the instant the port exists;
+ * - every `in.<name>` is likewise a declared dependency of every `out.*`, so an `in`
+ *   port with no slot breaks the next `addport ... out.*` rather than itself.
+ *
+ * That ordering hazard is the one entry 0169 discovered and STATUS has carried ever
+ * since ("declaring a port's NAME and giving it a VALUE is load-bearing"). **Doing
+ * both in one batch is what stops the operator ever meeting it** — there is no order
+ * of `addport` lines that can leave a script node in the rejected state.
+ *
+ * A new port's value is `null` — "nothing", not a made-up `0`. §5.8 calls
+ * placeholders "user-editable" stub values, so inventing one would be putting words
+ * in the operator's mouth; the echo names the `set` that fills it instead.
+ *
+ * **An EXISTING `placeholder.<name>` is left exactly as it is**, which is what makes
+ * `removeport` then `addport` on the same name give the operator their stub value
+ * back rather than silently resetting it to nothing. `RemovePortOperation` drops
+ * `out.<name>` and deliberately does NOT drop the placeholder — D-017 part 2 checks
+ * only `formula`/`derived` slots, on the stated grounds that "an undeclared literal
+ * has no inbound edges either way", so the surviving literal is legal, inert and
+ * invisible to `props` until its port comes back. Overwriting it here would throw
+ * that away for nothing.
+ */
+function addPortCommand(command: AddPortCommand, document: Document, context: EvalContext): CommandOutcome {
+  const resolved = resolvePortTarget(command.target, document);
+  if (!resolved.ok) {
+    return { ok: false, message: resolved.message };
+  }
+  const { object, family, name } = resolved.target;
+  const operations: Operation[] =
+    family === "in"
+      ? [
+          { kind: "addPort", objectId: object.id, family, name },
+          { kind: "setSlot", address: { objectId: object.id, path: scriptInPortPath(name) }, slot: { kind: "literal", value: null } },
+        ]
+      : [
+          { kind: "addPort", objectId: object.id, family, name },
+          // Only when there is not one already — see the doc comment: a
+          // placeholder outlives its port on purpose, so re-adding restores it.
+          ...(getSlot(object, scriptPlaceholderPath(name)) === undefined
+            ? [{ kind: "setSlot", address: { objectId: object.id, path: scriptPlaceholderPath(name) }, slot: { kind: "literal", value: null } } as Operation]
+            : []),
+          { kind: "setSlot", address: { objectId: object.id, path: scriptOutPortPath(name) }, slot: { kind: "derived", value: null } },
+        ];
+
+  const result = mutate(document.objects, operations, document.journal, context);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  const address = `${object.name}.${family}.${name}`;
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines:
+      family === "in"
+        ? [`added input port ${address} — bind it with \`link ${address} <address>\``]
+        : [`added output port ${address} — set its stub value with \`set ${object.name}.placeholder.${name} <value>\``],
+  };
+}
+
+/**
+ * `removeport script_1.out.result` (§5.8, **D-146**).
+ *
+ * ONE operation, and deliberately: `RemovePortOperation` drops every slot the port
+ * named — `out.<name>` and, since entry 0178, the `placeholder.<name>` §5.8 keys by
+ * the same port name. That belongs in the operation rather than here because the
+ * command layer cannot express it: `clearSlot` is table-cells-only by D-047, so a
+ * handler that tried to tidy the placeholder itself would be refused.
+ *
+ * **Removing an out port something still references is REJECTED** by no new
+ * mechanism — the dropped `out.<name>` leaves any dependent formula dangling and
+ * §5.1.1's existing check refuses the whole batch, naming every dependent.
+ *
+ * There is no `force`. `delete <object> force` exists because repairing dependents to
+ * `#REF` is §5.1.1's own second path for whole objects; §5.8 asks for no such thing
+ * for a port, and inventing one would be building ahead of the brief.
+ */
+function removePortCommand(command: RemovePortCommand, document: Document, context: EvalContext): CommandOutcome {
+  const resolved = resolvePortTarget(command.target, document);
+  if (!resolved.ok) {
+    return { ok: false, message: resolved.message };
+  }
+  const { object, family, name } = resolved.target;
+  const declared = (family === "in" ? object.ports?.in : object.ports?.out) ?? [];
+  if (!declared.includes(name)) {
+    return { ok: false, message: `${object.name} has no ${family} port named "${name}"` };
+  }
+  const operations: Operation[] = [{ kind: "removePort", objectId: object.id, family, name }];
+
+  const result = mutate(document.objects, operations, document.journal, context);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`removed ${family} port ${object.name}.${family}.${name}`],
+  };
+}
+
 function renameObject(command: RenameCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {

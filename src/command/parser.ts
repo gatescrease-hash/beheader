@@ -186,6 +186,36 @@ export interface UnlinkCommand {
 }
 
 /**
+ * `addport script_1.in.factor` / `removeport script_1.out.result` — §5.8's
+ * *"Ports are declared manually in the UI for now"*, as a command word.
+ *
+ * NOT one of §5.10's command words, and a deliberate extension of its list under
+ * **D-146**: §5.8 requires an operator to declare ports, §5.10's list has no way to,
+ * and D-141's `addPort`/`removePort` operations had no caller outside a test fixture
+ * — so Phase 6's own acceptance criterion could not be performed by a person at all
+ * (0177-REVIEW §2 walked it; every step was refused). The `clear` precedent above is
+ * the same shape: the brief's command list is extended rather than worked around,
+ * under the human's standing leave.
+ *
+ * The argument is the SLOT ADDRESS the port will occupy, not an object plus two
+ * words, so `addport script_1.in.factor` and the `link script_1.in.factor …` that
+ * follows it spell the port identically (D-010) — there is no second way to name one.
+ * `family` and `name` are not split here: D-069 keeps the parser out of address
+ * semantics, so it hands over the string exactly as typed and `commands.ts` decides
+ * whether `in`/`out` is a legal family and whether the name is a legal port name.
+ */
+export interface AddPortCommand {
+  readonly kind: "addport";
+  readonly target: string;
+}
+
+/** `removeport script_1.out.result` — `addport`'s other half. See `AddPortCommand` for why the argument is an address and why nothing is split here. */
+export interface RemovePortCommand {
+  readonly kind: "removeport";
+  readonly target: string;
+}
+
+/**
  * `clear table_1.A1` — empties a table cell by REMOVING its slot, not by
  * writing something empty into it (`mutation.ts`'s `ClearSlotOperation`).
  *
@@ -319,6 +349,8 @@ export type Command =
   | CreateScriptCommand
   | LinkCommand
   | UnlinkCommand
+  | AddPortCommand
+  | RemovePortCommand
   | ClearCommand
   | SetLiteralCommand
   | SetFormulaCommand
@@ -698,6 +730,22 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       args.formula !== undefined
         ? { kind: "set-formula", target: textArgument(args, "target"), source: args.formula }
         : { kind: "set", target: textArgument(args, "target"), value: valueArgument(args, "value") },
+  },
+  {
+    name: "addport",
+    usage: "addport <object>.<in|out>.<port>",
+    positional: [text("target")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "addport", target: textArgument(args, "target") }),
+  },
+  {
+    name: "removeport",
+    usage: "removeport <object>.<in|out>.<port>",
+    positional: [text("target")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "removeport", target: textArgument(args, "target") }),
   },
   {
     name: "rename",

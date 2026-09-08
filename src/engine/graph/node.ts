@@ -216,6 +216,9 @@ export const TEXT_TYPE: ObjectType = "text";
 /** The `image` member of `ObjectType`, exported so `render/handles.ts`'s resize-grabber check and `render/interaction.ts`'s per-type resize plan test `object.type` against this definition instead of a bare `"image"` literal (D-009). A render-layer `switch` over the whole union needs no constant and does not use this. */
 export const IMAGE_TYPE: ObjectType = "image";
 
+/** The `script` member of `ObjectType`, exported so `command/commands.ts`'s `addport`/`removeport` handlers test `object.type` against this definition instead of a bare `"script"` literal (D-009). A render-layer `switch` over the whole union needs no constant and does not use this. */
+export const SCRIPT_TYPE: ObjectType = "script";
+
 // ---------------------------------------------------------------------------
 // The three slot kinds (§5.1's table)
 // ---------------------------------------------------------------------------

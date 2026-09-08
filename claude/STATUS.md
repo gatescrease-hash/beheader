@@ -1,13 +1,14 @@
-# STATUS — as of entry 0177-REVIEW-phase6-scope
+# STATUS — as of entry 0179-script-rendering
 
 **PHASE 6 IS OPEN. THE BATCH IS REVIEWED AND ACCEPTED — the review gate is CLEAR and the next slice
 may start.** The ✅ line passes and has passed since 0171 (re-proved independently at 0172-REVIEW §2
 and §6 — do NOT re-derive it). `image`, which **D-142** made the other half of this gate, is **BUILT
 across entries 0173/0174/0175 and REVIEWED at 0176-REVIEW (ACCEPT WITH EDITS)**. What the gate
-waits on is now TWO things: **the human seeing `image` work**, and **Q-029 — a scope call only they
-can make.**
+waits on is now ONE thing: **the human seeing it work.** Q-029 was ruled (option b, **D-146**) and
+is BUILT — `addport`/`removeport` at entry 0178, §5.8's rendering at 0179.
 
-> **Q-029 (0177-REVIEW), BLOCKING THE GATE.** Phase 6's ✅ line is written as an operator scenario,
+> **Q-029 — ANSWERED (D-146, option b) and BUILT. Kept here because it is the finding worth
+> remembering.** Phase 6's ✅ line is written as an operator scenario,
 > and **not one step of it can be performed by a person in the running app.** `script x=0 y=0`
 > creates a node with four slots and `ports: undefined`; `link script_1.in.factor table_1.A1` is
 > refused; there is no `addport` command; `set script_1.placeholder.result 10` is refused. The
@@ -16,7 +17,8 @@ can make.**
 > clause 3 — this reviewer's own ruling, excluding §5.8's rendering — rests on a misreading:
 > "STUB ONLY" scopes the EXECUTION, and the section's next sentence says the node is to be a
 > "real, first-class graph citizen".** Options (a)/(b)/(c) and a recommendation are in
-> `OPEN_QUESTIONS.md`. **Do not start a script slice before this is ruled.**
+> `OPEN_QUESTIONS.md`. All of it is now built: **every step above is a line an operator can type**
+> (0178's verification pastes the transcript), and §5.8's box is drawn (0179).
 
 **0176-REVIEW's one substantive finding, now fixed:** `commitImagePicture`'s comment and entry
 0174's decision #3 both claimed `executeCommand` REFUSES a `set` on a formula-driven slot. It does
@@ -47,6 +49,15 @@ resize path.
    picture's real shape** (D-144, built at 0176-REVIEW — the newest thing here, look hardest at it).
 5. Panel → `source` row → "📁 choose…" re-picks; the row reads "JPEG picture · about N KB", never
    base64 (0175).
+
+**AND THE SCRIPT HALF (D-146, entries 0178/0179), which has never been on screen at all:**
+6. `script x=0 y=0` → a labelled box appears, and is selectable and draggable. Before 0179 this
+   object was invisible.
+7. `addport script_1.in.factor` then `addport script_1.out.result` → the box grows a row per port,
+   input named on the LEFT edge, output on the RIGHT (§5.8's own sentence).
+8. Walk the ✅ line by hand — 0178's verification block has the exact eight lines — and watch the
+   polygon's radius follow `set script_1.placeholder.result 25`. **Every one of those lines was
+   refused before entry 0178.**
 
 **No entry has claimed the gate**, because D-142 clause 2 says "renders properly" is settled by the
 human seeing it and not by a test asserting a `drawImage` call happened. If all five hold, the next
@@ -83,14 +94,14 @@ proof stands.
 MISREAD THE BRIEF.** It argued from §5.8's **STUB ONLY** title; the section's very next sentence is
 *"Build the node as a **real, first-class graph citizen** whose execution is fake."* **STUB ONLY
 scopes the EXECUTION — no Python runs — not the node's existence as a usable object.** Clause 3 is
-therefore **SUSPENDED pending Q-029, not withdrawn**: the reviewer will not re-rule a scope question
-alone, which is what clause 3's own last sentence and PROCESS_BRIEF §1 both forbid. Until Q-029 is
-answered, treat the SCRIPT half of this gate as UNSETTLED rather than as either in or out. The
+therefore **OVERTURNED by the human at 0177-REVIEW (D-146, option b)**: §5.8's rendering IS in this
+gate, and so is the node being usable by an operator at all. Every OTHER clause of D-142 stands,
+clause 1 included — what is withdrawn is the specific exclusion, not the principle. The
 `image` half is unaffected — §5.7's four sentences are almost entirely about loading and drawing,
 and that half is built and reviewed.
 
-STATE: **GREEN**. Both configs compile, **1932/1932** tests pass, 0 skipped, 0 `.only`.
-**36 test files.** `npx vite build` clean (`index-dcT4s5hZ.js`, 134.51 kB).
+STATE: **GREEN**. Both configs compile, **1955/1955** tests pass, 0 skipped, 0 `.only`.
+**36 test files.** `npx vite build` clean (`index-DglJNPMO.js`, 138.32 kB).
 
 Current phase: 6 — script stub + image (**OPEN — the ✅ line passes; `image` is built AND reviewed,
 but the current state is unseen, and D-142 clause 2 makes the human's look the precondition**)
@@ -103,12 +114,12 @@ forced to `return null` → `expected null to be 10`; (2) the `placeholder.<port
 stronger of the two — it neutralises §5.8's SEAM rather than its dependency plumbing. The "no
 script-specific code in `eval.ts`" clause is grep-clean for the fourth independent time (0169,
 0170-REVIEW, 0171, 0172-REVIEW). **The criterion passing is NOT sufficient for the gate — see D-142.**
-Last review point: **0177-REVIEW-phase6-scope** (no code verdict — a scope FINDING, Q-029 raised,
-no source touched). Before it: **0176-REVIEW-phase6** (**ACCEPT WITH EDITS** — entries 0173/0174/0175; one real
+Last review point: **0177-REVIEW-phase6-scope** (a scope FINDING; Q-029 raised, then ruled by the
+human as D-146 and built at entries 0178/0179 — those two cycles are UNREVIEWED). Before it: **0176-REVIEW-phase6** (**ACCEPT WITH EDITS** — entries 0173/0174/0175; one real
 defect found and fixed, D-143/D-144/D-145 ruled). The previous one was 0172-REVIEW-phase6-gate
 (REVISE — the gate was refused; the ✅ line confirmed).
-Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
-**The review gate is CLEAR — the next slice may start.** For the record of what was reviewed: the
+Cycles since last review: **2/3** · diff since last review: **~600 lines / 12 files** (cap 800/10).
+**D-146's build is complete and is the unreviewed work.** For the record of what was reviewed: the
 0173–0175 batch ran to ~1750 lines / 18 files against §6.3's 800/10, exceeded by cycle 1 alone, and
 continued on the human's routing after they saw 0173 on screen. Entry 0175 disclosed that rather
 than absorbing it, which is the behaviour §6.3 wants when a cap and a human instruction disagree.
@@ -597,18 +608,15 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 `parser.ts` (two) and `commands.ts` (three, two of which were stale COUNTS — "all four handlers",
 "the four types below").
 
-## Next — NOT a recommendation. Three things, in this order
+## Next — NOT a recommendation. Two things, in this order
 
-**1. DONE — 0176-REVIEW.** The 0173–0175 batch is reviewed: ACCEPT WITH EDITS, one real defect fixed
-(§4 of that entry), D-143/D-144/D-145 ruled. The review gate is clear.
+**1. DONE.** The 0173–0175 `image` batch is reviewed (0176-REVIEW: ACCEPT WITH EDITS, one real
+defect fixed, D-143/D-144/D-145 ruled). Q-029 is ruled (**D-146**, option b) and BUILT at entries
+0178/0179 — those two cycles are themselves unreviewed, and a reviewer should read them knowing
+that 0179's own D-016 check caught a test asserting `textAlign` where it meant to assert a
+position.
 
-**2. THE HUMAN ANSWERS Q-029 — a scope call, and the newer of the two blockers.** Phase 6's ✅ line
-cannot be performed by an operator at all (0177-REVIEW §2 walks it and every step is refused).
-Options (a)/(b)/(c) with a recommendation are in `OPEN_QUESTIONS.md`. **No script slice starts
-before this is ruled**, and if the answer is (a) or (b) the port grammar itself needs naming in the
-same ruling — §5.10 has none, and D-094/Q-014 govern whether the panel may write.
-
-**3. THE HUMAN LOOKS AGAIN — the other blocker, unchanged.**
+**2. THE HUMAN LOOKS — the ONLY thing between here and the Phase 6 gate.**
 `npm run dev` → `image x=0 y=0` → choose a picture; the five-step check is at the top of this file.
 Their four notes plus the fifth (D-144) are all built; what is unseen is the result. Worth their
 opinion while looking, none of it settleable by a test:
@@ -628,7 +636,7 @@ opinion while looking, none of it settleable by a test:
   KB"*. Storing the file's NAME instead needs an eighth slot; a file PATH is not obtainable in a
   browser at all. If they want the name, say so — one slot, one small cycle.
 
-**4. THEN re-claim the gate in a NEW entry**, citing 0172-REVIEW §2 and §6 for the ✅ line rather
+**3. THEN re-claim the gate in a NEW entry**, citing 0172-REVIEW §2 and §6 for the ✅ line rather
 than re-deriving it, and the three entries' plus 0176-REVIEW's mutation checks, plus the human's
 confirmation, for the `image` half.
 
@@ -692,8 +700,14 @@ to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-**Nothing.** The 0173–0175 batch was reviewed at 0176-REVIEW and the reviewer's own edits went in
-with it. The next implementer starts a fresh batch at 0/3.
+**Entries 0178 and 0179 — D-146's whole build.** New: nothing. Changed: `engine/graph/node.ts`
+(`SCRIPT_TYPE`), `command/parser.ts` (two registry entries), `command/commands.ts` (the two
+handlers plus `resolvePortTarget`), `command/props.ts` (a dynamic family is enumerated unless it
+is a table's cells), `render/slots.ts` (the script box geometry), `render/extent.ts`
+(`scriptExtent`), `render/hittest.ts`, `render/renderer.ts` (`drawScript`), plus four test files.
+**2/3 cycles, ~600 lines / 12 files against §6.3's 800/10.**
+
+The 0173–0175 `image` batch was reviewed at 0176-REVIEW and the reviewer's edits went in with it.
 
 ## Reviewed but NOT yet seen on screen
 
@@ -704,7 +718,9 @@ with it. The next implementer starts a fresh batch at 0/3.
 `src/main.ts`, `index.html`, plus test files.
 
 **SEEN ONCE: entry 0173's state**, which produced the human's four notes. **UNSEEN: everything
-those notes changed (0174 + 0175) and everything D-144 added (0176-REVIEW).** D-142 clause 2 makes
+those notes changed (0174 + 0175), everything D-144 added (0176-REVIEW), and the ENTIRE script
+half (0178 + 0179) — a `script` object has never been visible on screen in this project's
+history.** D-142 clause 2 makes
 the human's look a precondition of the Phase 6 gate rather than a courtesy — the five-step check is
 at the top of this file.
 
@@ -713,11 +729,8 @@ object draws nothing. Entry 0161's hanging indent was confirmed on screen 2026-0
 
 ## Not started
 
-§5.8's script node's RENDERING (a labelled box with input ports left, output ports right — §5.8's own
-words). The schema/stub/command are BUILT AND REVIEWED as of entry 0169/0170-REVIEW — this item is
-specifically the `render/`/`extent.ts`/`hittest.ts` work, plus a real `addport`/`removeport` UI
-mechanism (§5.10 names no command-line grammar for one, so this may not be "just add a command").
-**D-142 clause 3 keeps this OUT of the Phase 6 gate** — §5.8 is a STUB ONLY section. ·
+(§5.8's script node RENDERING and its `addport`/`removeport` mechanism were here until entry 0179.
+Both are BUILT — D-146 overturned D-142 clause 3 and pulled them into the gate.) ·
 D-090's prompt-sequence preview · §5.9's per-vertex drag path ·
 `polyline`/`explode`/`addvertex`/`delvertex` · `style` slots as authorable · point-in-polygon fill
 hit-testing (D-067) · §5.4's formula bar · D-088 clauses 2–4 · D-089 · D-102 clause 9 ·
@@ -982,12 +995,12 @@ screen at entry 0173: option (b), plus a toggle). Built at 0174/0175, ruled at 0
 **D-144 extends it**: the picture's ratio is remembered in `pictureAspect` and the toggle going back
 on restores a distorted box.
 
-**Q-029 IS OPEN AND BLOCKS THE PHASE 6 GATE — no tag, and there cannot be one:** it decides what
+**Q-029 IS ANSWERED — D-146, option (b), by the human — and BUILT (0178/0179). No tag, and there
+never could be one:** it decides what
 the phase must DELIVER, not how a line of code behaves. Does the gate require the script node's
 ports to be operator-declarable, and does it require §5.8's rendering? Raised at 0177-REVIEW after
-walking the ✅ line through `submitLine` and finding every step refused. **Not reversible; no
-provisional choice taken.** Read 0177-REVIEW §3 before arguing with D-142 clause 3 — it is
-suspended, not withdrawn.
+walking the ✅ line through `submitLine` and finding every step refused. Read 0177-REVIEW §3 before
+arguing with D-142 clause 3 — it is now OVERTURNED, and §3 is the reasoning for why.
 
 **Q-028 IS ANSWERED as D-145 — no `fileName` slot.** It never had a tag and never will: its taken
 option is "add no state". **D-145 says plainly that this is a display preference the human may
@@ -1005,10 +1018,16 @@ load-compatible).
   with raw `addPort`/`setSlot` operations. **When a criterion is worded as something an OPERATOR
   does, walk it through `submitLine` before believing it** — that is a five-minute probe and it is
   the difference between a product and a fixture.
-- **`addPort`/`removePort` HAVE NO OPERATOR SURFACE.** They exist (D-141, entry 0167, reviewed
-  0168-REVIEW) and work, but §5.10 names no grammar and no UI declares a port, so a `script` object
-  an operator creates has `ports: undefined` forever. §5.8 says *"ports are declared manually in the
-  UI for now"*. That gap is **Q-029**.
+- **`addPort`/`removePort` NOW HAVE AN OPERATOR SURFACE: `addport`/`removeport`** (D-146, entry
+  0178). The command takes the SLOT ADDRESS the port will occupy (`addport script_1.in.factor`), so
+  it and the `link` that follows spell the port identically. **`addport` writes the port's slots in
+  the SAME batch as its name** — that is what makes entry 0169's ordering hazard unreachable by any
+  sequence of typed lines, and it is the reconciliation `mutation.ts` explicitly deferred to this
+  cycle. Do not split those writes back apart.
+- **A `placeholder.<port>` DELIBERATELY OUTLIVES ITS PORT** (D-146 clause 4). `removePort` drops
+  `out.<name>` and not the placeholder; D-017 part 2 tolerates that on stated grounds, and it is
+  what lets `removeport` then `addport` give the operator their stub value back. Entry 0178 tried
+  "fixing" it in `mutation.ts` and reverted — an existing test documents this on purpose.
 - **`executeCommand` IS A WRITE SEAM, NOT A GUARD — 0176-REVIEW's finding, and the most expensive
   wrong belief in this codebase's recent history.** A plain `set` on a formula-driven slot
   **REPLACES** the formula with a literal and reports `"replaced formula: = table_1.A1"` as an

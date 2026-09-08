@@ -56,7 +56,7 @@ import {
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
-import { asPointArray, readBoolean, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDTH, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 
 /**
@@ -91,8 +91,9 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return textExtent(object);
     case "image":
       return imageExtent(object);
-    case "polyline":
     case "script":
+      return scriptExtent(object);
+    case "polyline":
     case "value":
     case "add":
       return undefined; // Draws nothing yet (`renderer.ts`'s header) — nothing to bound.
@@ -211,6 +212,35 @@ function imageExtent(object: GraphObject): WorldExtent | undefined {
     return undefined;
   }
   return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
+}
+
+/**
+ * A `script` node's drawn box (§5.8's "labelled box with input ports on the left
+ * and output ports on the right", §5.9's "bounding box for ... scripts"),
+ * positioned from `origin.x`/`origin.y` — the top-left corner, the same meaning
+ * every other positioned object gives `origin`. Never throws.
+ *
+ * Its size is a FIXED width by a port-count height (`slots.ts`'s
+ * `SCRIPT_BOX_WIDTH`/`scriptBoxHeight`), because a script node has no size slots and
+ * nothing here may measure text — see those constants for why that is the design
+ * rather than a shortcut.
+ *
+ * **Every script node has an extent, a PORTLESS one included**, which is what makes
+ * `script x=0 y=0` land as something the operator can see, select and drag rather
+ * than an invisible object only `list` can find. That is the state **D-142** refused
+ * for `image`, and **D-146** refuses here for the same reason.
+ *
+ * `undefined` only for a non-finite `origin` — an infinite box would poison
+ * `documentExtent` and every `fit` after it (`imageExtent`'s own note).
+ */
+function scriptExtent(object: GraphObject): WorldExtent | undefined {
+  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
+  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
+  if (!Number.isFinite(originX) || !Number.isFinite(originY)) {
+    return undefined;
+  }
+  const height = scriptBoxHeight(object.ports?.in.length ?? 0, object.ports?.out.length ?? 0);
+  return { minX: originX, minY: originY, maxX: originX + SCRIPT_BOX_WIDTH, maxY: originY + height };
 }
 
 /**

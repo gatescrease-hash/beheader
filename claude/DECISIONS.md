@@ -5243,3 +5243,65 @@ one `literal` slot written at pick time beside `pictureAspect`, load-compatible 
 (D-126's lesson) — a small cycle, not a redesign. Until they say so, do not build it.
 
 **Reconciliation required.** None — (b) is "add nothing", so entry 0175 tagged nothing.
+
+---
+
+## D-146 — Q-029 ANSWERED (option b): a script node's ports must be declarable BY AN OPERATOR, and §5.8's rendering is part of the Phase 6 gate. D-142 clause 3 is OVERTURNED
+
+Answers: **Q-029**   Ruled: **by the human directly**, at 0177-REVIEW ("Option B")
+Binding on: all future cycles   Overturns: **D-142 clause 3**
+
+**Ruling.** Phase 6's gate covers §5.8's node as a thing an OPERATOR can build and see, not
+only as a thing the engine can evaluate. Concretely:
+
+1. **The ✅ line must be performable at the command line.** A criterion worded as something an
+   operator does — *"`script_1.in.factor` is bound to a cell…"* — is not satisfied by a test that
+   reaches past the command line into `mutate` with hand-built operations. 0177-REVIEW §2 walked
+   it and every step was refused; that state is not gate-passing. **A test that drives the
+   criterion through parsed command lines only is now owed alongside the engine-level one.**
+2. **Ports are declared by `addport` / `removeport`,** taking the SLOT ADDRESS the port will
+   occupy (`addport script_1.in.factor`). This extends §5.10's command list, which names no port
+   grammar — the same deliberate extension `clear` already is, and made under the human's standing
+   leave to overrule the list where the app has to work. §5.8's *"Ports are declared manually in
+   the UI for now"* is the clause being satisfied; the command line is this app's authoring
+   surface (§5.10), so a command word is the UI it means. **The panel is NOT widened to declare
+   ports** — that would collide with Q-014, which stays the human's alone.
+3. **`addport` writes the slots the port implies, in the same batch as the name.** An `out` port
+   gets its `derived` `out.<name>` (D-018) and, if absent, a `placeholder.<name>`; an `in` port
+   gets a `literal` `in.<name>`. This is the reconciliation `mutation.ts`'s `AddPortOperation` doc
+   explicitly defers to "the `script` schema/command cycle". It also makes entry 0169's ordering
+   hazard **unreachable by any sequence of typed lines**, which is the whole reason it belongs in
+   the command rather than in the operator's head.
+4. **A `placeholder.<name>` deliberately OUTLIVES its port.** `RemovePortOperation` drops
+   `out.<name>` and not the placeholder, and D-017 part 2 tolerates that on stated grounds ("an
+   undeclared literal has no inbound edges either way"). So `removeport` then `addport` on the
+   same name gives the operator their stub value back. `addport` must therefore never overwrite an
+   existing placeholder. **`mutation.ts` is not to be changed to drop it** — that was tried at
+   entry 0178 and reverted: it broke a reviewed test that documents this lifetime on purpose.
+5. **§5.8's rendering is IN the gate.** *"Render as a labelled box with input ports on the left
+   and output ports on the right"*, plus the `extent.ts` and `hittest.ts` arms that D-066 makes
+   inseparable from it. A script node is selectable, draggable and nameable by the same generic
+   machinery every other positioned object uses. **Every script node has an extent, a portless one
+   included**, so `script x=0 y=0` lands as something visible — the state D-142 clause 2 refused
+   for `image`, refused here for the same reason.
+6. **The box's geometry is FIXED, not measured** (`render/slots.ts`'s `SCRIPT_BOX_WIDTH`,
+   `SCRIPT_HEADER_HEIGHT`, `SCRIPT_PORT_ROW_HEIGHT`, `scriptBoxHeight`). A script node has no size
+   slots and no measured pair, and giving `extent.ts` a `TextMeasurer` to size one would thread
+   through every caller. Rule 5. A long port name overflows the box; that is the accepted cost.
+7. **D-142 clause 3 is OVERTURNED, and the reasoning that produced it is the thing to learn
+   from.** It excluded §5.8's rendering by arguing from the section's **STUB ONLY** title. The
+   section's very next sentence is *"Build the node as a **real, first-class graph citizen** whose
+   execution is fake."* **STUB ONLY scopes the EXECUTION — no Python runs — not the node's
+   existence as a usable object.** Every other clause of D-142 stands, clause 1 included; what is
+   withdrawn is the specific exclusion, not the principle that a heading's own words bound a gate.
+
+**Rationale.** A criterion no operator can reach is proven in a fixture rather than in the
+product, and the gap was invisible for six consecutive reports precisely because the tests were
+honest — they proved what they claimed, and what they claimed was the engine's half. The human
+owns "is this phase done" (PROCESS_BRIEF §1) and has ruled that it is not done while the node the
+phase is named for cannot be made, seen or used by a person.
+
+**Reconciliation required.** None outstanding — built at entries **0178** (the commands) and
+**0179** (the rendering). Two "no visual definition yet" test lists dropped `script`
+(`render/renderer.test.ts`, `render/hittest.test.ts`) and two registry-completeness lists gained
+the new words; all four are §6.1 trigger 5 and are disclosed in those entries.

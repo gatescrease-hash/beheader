@@ -153,13 +153,14 @@ import {
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
 import { IMAGE_OPACITY_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH } from "../engine/primitives/image.ts";
+import { SCRIPT_LANGUAGE_PATH } from "../engine/script/stub.ts";
 import { formatCellReference, indexToColumnLetters, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
 import type { CameraState } from "../engine/document.ts";
 import { worldToScreen } from "./camera.ts";
 import type { ImageBitmaps } from "./images.ts";
 import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";
 import { layOutText } from "./measure.ts";
-import { asPointArray, readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readBoolean, readNumber, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 // D-066's one extent, reused as the chrome anchor (see `chromeAnchorPoint`).
 // `extent.ts` and `slots.ts` are D-093's split: neither this file nor
@@ -199,6 +200,24 @@ const DEFAULT_TEXT_FILL_STYLE = "#1a1a1a";
 const DEFAULT_TEXT_FONT_FAMILY = "sans-serif";
 const DEFAULT_TEXT_FONT_SIZE = 16;
 const DEFAULT_TEXT_LINE_HEIGHT = 20;
+
+/**
+ * §5.8's `script` node box (**D-146**). Untuned, world-unit values in the same
+ * PROVISIONAL(Q-012) family as every other constant here (Rule 5).
+ *
+ * The body is filled rather than left transparent, unlike every shape above, because
+ * a script node is a NODE — an opaque box you read labels off — rather than an
+ * outline whose interior belongs to whatever is behind it. Its GEOMETRY is
+ * `render/slots.ts`'s, shared with `extent.ts` and `hittest.ts` (D-066/D-010); only
+ * the colours and the two paddings are drawing-only and live here.
+ */
+const SCRIPT_BOX_STROKE_STYLE = "#5b6472";
+const SCRIPT_BODY_FILL_STYLE = "#f4f5f7";
+const SCRIPT_TEXT_STYLE = "#1a1a1a";
+const SCRIPT_PORT_STUB_STYLE = "#5b6472";
+const SCRIPT_FONT = "12px sans-serif";
+const SCRIPT_TEXT_PADDING = 6;
+const SCRIPT_PORT_STUB_SIZE = 6;
 
 /**
  * §5.7's `image` frame — the object's own box, stroked whether or not a picture
@@ -287,6 +306,82 @@ function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: I
   // owns nothing about `ctx` beyond what it sets itself, and leaving a
   // half-transparent context behind would fade whichever object is drawn next.
   ctx.globalAlpha = previousAlpha;
+}
+
+/**
+ * §5.8's `script` node: *"Render as a labelled box with input ports on the left and
+ * output ports on the right"* (**D-146**).
+ *
+ * Four things, and nothing the brief does not ask for: the box, its header band
+ * carrying the language, one left-aligned row per `in` port and one right-aligned
+ * row per `out` port. A port's row shows its NAME and a small square stub on the
+ * edge it belongs to, so which side a port is on is legible at a glance rather than
+ * only from the text alignment.
+ *
+ * The box comes from `extent.ts`'s `objectExtent`, never a second reading of
+ * `origin` plus the constants — D-066 makes the drawn box and the click box one box,
+ * and taking both from one function is what makes that structural rather than a
+ * thing two files must agree about (D-010, `drawImage`'s own posture).
+ *
+ * **Port ORDER is `ports.in`/`ports.out`'s own order**, which D-141 clause 2 makes
+ * ordered state rather than a set — so the rows here are in declaration order, the
+ * same order `props` lists them and `stub.ts` checks inputs in. Nothing sorts.
+ *
+ * Draws no VALUE for a port. §5.8 asks for a labelled box, not a live readout, and a
+ * port's value is one `props` or one properties panel away — putting it on the
+ * canvas would be inventing a display the brief does not specify (§8's last bullet).
+ *
+ * Never throws: a node with no ports draws its header and an empty body, which is
+ * exactly what `script x=0 y=0` should look like before the operator declares one.
+ */
+function drawScript(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+  const box = objectExtent(object);
+  if (box === undefined) {
+    return;
+  }
+  const width = box.maxX - box.minX;
+  const height = box.maxY - box.minY;
+
+  ctx.fillStyle = SCRIPT_BODY_FILL_STYLE;
+  ctx.fillRect(box.minX, box.minY, width, height);
+  ctx.strokeStyle = SCRIPT_BOX_STROKE_STYLE;
+  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
+  ctx.strokeRect(box.minX, box.minY, width, height);
+
+  // The header band, separated by a rule rather than a second fill — one stroke
+  // is cheaper to read than two rectangles that must agree about their shared edge.
+  const headerBottom = box.minY + SCRIPT_HEADER_HEIGHT;
+  ctx.beginPath();
+  ctx.moveTo(box.minX, headerBottom);
+  ctx.lineTo(box.maxX, headerBottom);
+  ctx.stroke();
+
+  ctx.font = SCRIPT_FONT;
+  ctx.fillStyle = SCRIPT_TEXT_STYLE;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  // §5.8 fixes `language` to "python"; read from the slot rather than re-spelled
+  // here, so a document whose language slot says something else shows what it says.
+  ctx.fillText(readText(object, SCRIPT_LANGUAGE_PATH) ?? "", box.minX + SCRIPT_TEXT_PADDING, box.minY + SCRIPT_HEADER_HEIGHT / 2);
+
+  const inPorts = object.ports?.in ?? [];
+  const outPorts = object.ports?.out ?? [];
+  for (let index = 0; index < inPorts.length; index += 1) {
+    const centre = headerBottom + (index + 0.5) * SCRIPT_PORT_ROW_HEIGHT;
+    ctx.fillStyle = SCRIPT_PORT_STUB_STYLE;
+    ctx.fillRect(box.minX - SCRIPT_PORT_STUB_SIZE / 2, centre - SCRIPT_PORT_STUB_SIZE / 2, SCRIPT_PORT_STUB_SIZE, SCRIPT_PORT_STUB_SIZE);
+    ctx.fillStyle = SCRIPT_TEXT_STYLE;
+    ctx.textAlign = "left";
+    ctx.fillText(inPorts[index] ?? "", box.minX + SCRIPT_TEXT_PADDING, centre);
+  }
+  for (let index = 0; index < outPorts.length; index += 1) {
+    const centre = headerBottom + (index + 0.5) * SCRIPT_PORT_ROW_HEIGHT;
+    ctx.fillStyle = SCRIPT_PORT_STUB_STYLE;
+    ctx.fillRect(box.maxX - SCRIPT_PORT_STUB_SIZE / 2, centre - SCRIPT_PORT_STUB_SIZE / 2, SCRIPT_PORT_STUB_SIZE, SCRIPT_PORT_STUB_SIZE);
+    ctx.fillStyle = SCRIPT_TEXT_STYLE;
+    ctx.textAlign = "right";
+    ctx.fillText(outPorts[index] ?? "", box.maxX - SCRIPT_TEXT_PADDING, centre);
+  }
 }
 
 /**
@@ -562,8 +657,10 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
     case "image":
       drawImage(ctx, object, images);
       return;
-    case "polyline":
     case "script":
+      drawScript(ctx, object);
+      return;
+    case "polyline":
     case "value":
     case "add":
       return; // No visual definition yet (see file header's NOT DONE HERE).
@@ -921,7 +1018,8 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       return;
     }
     case "text":
-    case "image": {
+    case "image":
+    case "script": {
       // The SAME box `drawText`/`drawImage` draw into and `hittest.ts` clicks
       // against — `extent.ts`'s `objectExtent` (D-066/D-010), not a second
       // reading.
@@ -935,7 +1033,6 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       return;
     }
     case "polyline":
-    case "script":
     case "value":
     case "add":
       return; // Nothing drawn for these yet (file header) — nothing to highlight.

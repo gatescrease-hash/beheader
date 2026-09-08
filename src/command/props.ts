@@ -123,9 +123,25 @@ export function buildSlotDescriptors(object: GraphObject, objects: readonly Grap
   const descriptors: SlotDescriptor[] = [];
   for (const group of schema.nonDerivedSlotPaths) {
     if (group.kind === "dynamic") {
-      // D-077 / D-094 clause 8: summarise, never enumerate. See file header.
+      // D-077 / D-094 clause 8: a TABLE's `cells.*` is summarised, never
+      // enumerated — see file header for why (an 8x8 table is 64 rows of noise
+      // and the family is sized by `rows`/`cols`, so it has no natural end).
       if (object.type === TABLE_TYPE) {
         descriptors.push(tableCellsSummary(object));
+        continue;
+      }
+      // Every OTHER dynamic family IS enumerated, and a `script` node's ports
+      // are why (D-146). D-077's reasoning is about a cell grid, not about
+      // dynamic-ness: a port is a distinct thing the operator declared BY NAME
+      // with `addport`, there are a handful, and `props` is the only way to see
+      // one from the command line. Summarising them would mean an operator can
+      // declare a port and then not find it.
+      for (const path of group.enumerate(object)) {
+        const dynamicSlot = getSlot(object, path);
+        if (dynamicSlot === undefined) {
+          continue; // Declared but unwritten — `addport` writes both halves (D-146), so this is defensive.
+        }
+        descriptors.push({ ...describeNonDerivedSlot(path, dynamicSlot, objects), ...optionsFor(object, path) });
       }
       continue;
     }

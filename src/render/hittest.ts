@@ -202,9 +202,9 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
       return hitTestTable(object, worldPoint);
     case "text":
     case "image":
+    case "script":
       return hitTestBoundingBox(object, worldPoint);
     case "polyline":
-    case "script":
     case "value":
     case "add":
       return false; // No visual definition yet (file header) — nothing to hit.

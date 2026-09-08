@@ -117,3 +117,39 @@ export function asPointArray(value: Value | undefined): readonly Point[] | undef
  */
 export const TABLE_CELL_WIDTH = 80;
 export const TABLE_CELL_HEIGHT = 24;
+
+/**
+ * §5.8's *"Render as a labelled box with input ports on the left and output ports
+ * on the right"* — that box's FIXED geometry, in the same world units and under
+ * the same PROVISIONAL(Q-012) as the table constants above (**D-146**).
+ *
+ * **Fixed rather than measured, and that is the whole design.** A `script` node has
+ * no `width`/`height` slots for §5.8 to size it by, and no `measuredWidth`/
+ * `measuredHeight` derived pair either — `text` has those because §5.6 asks for
+ * wrapping, and a script node asks for nothing of the sort. Measuring the label
+ * would mean `extent.ts` taking a `TextMeasurer`, which it has never taken and which
+ * would thread through eight call sites (`imageExtent`'s own note makes the same
+ * argument about the bitmap cache). So the box is a constant width and its height
+ * grows one row per port. Rule 5: the dumbest correct implementation the brief
+ * specifies. A long port name overflows the box, and that is the accepted cost.
+ *
+ * Shared here rather than declared in `renderer.ts` so the drawn box
+ * (`renderer.ts`), the click box (`hittest.ts`) and the extent (`extent.ts`) cannot
+ * disagree — D-066 makes them ONE box, and D-010 says declare it once.
+ */
+export const SCRIPT_BOX_WIDTH = 140;
+export const SCRIPT_HEADER_HEIGHT = 24;
+export const SCRIPT_PORT_ROW_HEIGHT = 18;
+
+/**
+ * The height of a script node's box: its header, plus one row per port row.
+ *
+ * The two families sit SIDE BY SIDE (§5.8: inputs left, outputs right), so the row
+ * count is the LONGER of the two, never their sum. A portless node still gets one
+ * row, so a freshly created `script x=0 y=0` is a visible, clickable box rather than
+ * a bare header — the same reasoning that gives an `image` with no picture a frame
+ * (D-142, `extent.ts`'s `imageExtent`).
+ */
+export function scriptBoxHeight(inPortCount: number, outPortCount: number): number {
+  return SCRIPT_HEADER_HEIGHT + Math.max(inPortCount, outPortCount, 1) * SCRIPT_PORT_ROW_HEIGHT;
+}

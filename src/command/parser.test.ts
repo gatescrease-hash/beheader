@@ -60,6 +60,11 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   // `unlink`; the handler is where it narrows to cells.
   { line: "clear table_x.A1", command: { kind: "clear", target: "table_x.A1" } },
   { line: "set polygon_1.radius 42", command: { kind: "set", target: "polygon_1.radius", value: 42 } },
+  // NOT §5.10 command words either — added at 0178 under D-146, because §5.8 says
+  // ports are declared manually and §5.10 gave no way to. Same one-address grammar
+  // as `unlink`; the handler is where the family and the port name are checked.
+  { line: "addport script_1.in.factor", command: { kind: "addport", target: "script_1.in.factor" } },
+  { line: "removeport script_1.out.result", command: { kind: "removeport", target: "script_1.out.result" } },
   { line: "rename polygon_1 intersection_a", command: { kind: "rename", target: "polygon_1", newName: "intersection_a" } },
   { line: "delete intersection_a", command: { kind: "delete", target: "intersection_a", force: false } },
   { line: "refs intersection_a", command: { kind: "refs", target: "intersection_a" } },

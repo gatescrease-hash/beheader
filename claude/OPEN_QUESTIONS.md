@@ -12,12 +12,12 @@ Next free ID: **Q-030**
 
 ---
 
-## Q-029 — Does the Phase 6 gate require the script node's ports to be declarable BY AN OPERATOR, and does it require §5.8's rendering?
+## Q-029 — Does the Phase 6 gate require the script node's ports to be declarable BY AN OPERATOR, and does it require §5.8's rendering? — **ANSWERED → D-146**
 Raised: 0177-REVIEW-phase6-scope (reviewer), on the human's question   Brief section: §5.8, §5.9,
 §6 Phase 6, against **D-142** clause 3 — which is this reviewer's own ruling and is what the
 question challenges.
 
-Status: **OPEN. BLOCKING THE PHASE 6 GATE.** Not reversible by an implementer: it decides what the
+Status: **ANSWERED by the human at 0177-REVIEW → D-146: option (b).** Built at entries 0178 (the `addport`/`removeport` commands) and 0179 (§5.8s rendering). Was: BLOCKING THE PHASE 6 GATE. Not reversible by an implementer: it decides what the
 phase must deliver, which PROCESS_BRIEF §1 makes the human's call and D-142 clause 3's own last
 sentence makes a §6.1 trigger 3 stop.
 

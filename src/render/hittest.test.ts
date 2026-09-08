@@ -156,8 +156,11 @@ describe("hitTest — topmost object wins (§5.9, array order = z-order per rend
 });
 
 describe("hitTest — object types with no visual definition yet never hit (mirrors renderer.ts)", () => {
-  it("never hits a polyline/script/value/add object, regardless of point", () => {
-    for (const type of ["polyline", "script", "value", "add"] as const) {
+  // `script` LEFT this list at entry 0179 (D-146): §5.8's box is drawn now, so a
+  // script node is hittable by the same bounding-box arm `text` and `image` use.
+  // §6.1 trigger 5, and the same change `image` made to this list at 0173.
+  it("never hits a polyline/value/add object, regardless of point", () => {
+    for (const type of ["polyline", "value", "add"] as const) {
       const object: GraphObject = { id: "obj_1", name: `${type}_1`, type, slots: {} };
       expect(hitTest({ x: 0, y: 0 }, [object], CAMERA_IDENTITY)).toBeUndefined();
     }

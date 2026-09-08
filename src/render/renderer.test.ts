@@ -15,6 +15,8 @@ import { getObjectSchema, resolveDerivedSlots } from "../engine/primitives/schem
 import type { CameraState } from "../engine/document.ts";
 import { renderDocument } from "./renderer.ts";
 import type { ImageBitmaps } from "./images.ts";
+import { objectExtent } from "./extent.ts";
+import { SCRIPT_BOX_WIDTH, SCRIPT_PORT_ROW_HEIGHT } from "./slots.ts";
 
 type RecordedCall =
   | { readonly op: "clearRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
@@ -368,8 +370,12 @@ describe("renderDocument — object types with no schema/visual definition yet",
     expect(drawCalls).toEqual([]);
   });
 
-  it("draws nothing for a polyline/script/image fixture object (no visual definition yet)", () => {
-    for (const type of ["polyline", "script", "image"] as const) {
+  // `script` LEFT this list at entry 0179 (D-146) — §5.8's labelled box is drawn
+  // now — as `image` did at 0173. A slotless `image` stays: it has no width or
+  // height, so no extent and no frame (D-066). A slotless SCRIPT does draw, because
+  // its box is sized by constants and its port list, not by slots.
+  it("draws nothing for a polyline/image fixture object (no visual definition, or no extent)", () => {
+    for (const type of ["polyline", "image"] as const) {
       const { ctx, calls } = createFakeContext();
       renderDocument(ctx, 800, 600, [{ id: "obj_1", name: `${type}_1`, type, slots: {} }], CAMERA_IDENTITY);
       const drawCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
@@ -1447,3 +1453,108 @@ describe("renderDocument — image (§5.7)", () => {
     expect(calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text)).toContain("image_1");
   });
 });
+
+// §5.8: *"Render as a labelled box with input ports on the left and output ports
+// on the right."* Built at entry 0179 under **D-146**, which put §5.8's rendering
+// inside the Phase 6 gate — 0177-REVIEW found D-142 clause 3 had excluded it by
+// reading the section's STUB ONLY title as scoping the whole node rather than its
+// EXECUTION ("build the node as a real, first-class graph citizen").
+describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
+  /** A `script` object at (0, 0) with the given ports, as `script x=0 y=0` plus `addport` lines leave one. */
+  function scriptObject(ports?: { in: string[]; out: string[] }): GraphObject {
+    return {
+      id: "obj_1",
+      name: "script_1",
+      type: "script",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        language: { kind: "literal", value: "python" },
+        source: { kind: "literal", value: "" },
+      },
+      ...(ports === undefined ? {} : { ports }),
+    };
+  }
+
+  /** Every text this render drew, in order. */
+  function textsDrawn(object: GraphObject): readonly string[] {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [object], CAMERA_IDENTITY);
+    return calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
+  }
+
+  it("draws a box for a PORTLESS node, so `script x=0 y=0` lands as something the operator can see", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [scriptObject()], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "strokeRect")).toBe(true);
+    expect(calls.some((call) => call.op === "fillRect")).toBe(true);
+  });
+
+  it("labels the box with its language, read from the slot rather than a re-spelled constant", () => {
+    expect(textsDrawn(scriptObject())).toContain("python");
+  });
+
+  it("draws every port's NAME, inputs and outputs alike", () => {
+    const texts = textsDrawn(scriptObject({ in: ["factor", "speed"], out: ["result"] }));
+    expect(texts).toContain("factor");
+    expect(texts).toContain("speed");
+    expect(texts).toContain("result");
+  });
+
+  it("keeps ports in DECLARATION order, because D-141 clause 2 makes the port list ordered state rather than a set", () => {
+    const texts = textsDrawn(scriptObject({ in: ["zebra", "alpha"], out: [] }));
+    expect(texts.indexOf("zebra")).toBeLessThan(texts.indexOf("alpha"));
+  });
+
+  it("puts inputs on the LEFT edge and outputs on the RIGHT edge — §5.8's own words, and the one claim the box's shape cannot fake", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [scriptObject({ in: ["factor"], out: ["result"] })], CAMERA_IDENTITY);
+    // The port stubs are the SMALL `fillRect`s — the body fill is the box-wide one.
+    const stubs = calls.filter((call): call is Extract<RecordedCall, { op: "fillRect" }> => call.op === "fillRect" && call.w < SCRIPT_BOX_WIDTH);
+    expect(stubs).toHaveLength(2);
+    const xs = stubs.map((call) => call.x).sort((left, right) => left - right);
+    // The left stub straddles x=0 (the origin); the right one straddles the far edge.
+    expect(xs[0]).toBeLessThan(SCRIPT_BOX_WIDTH / 2);
+    expect(xs[1]).toBeGreaterThan(SCRIPT_BOX_WIDTH / 2);
+  });
+
+  it("draws an input's label against the LEFT edge and an output's against the RIGHT — the position, not just the alignment", () => {
+    // Written this way after a D-016 check: asserting `align` alone passed while
+    // the output label was drawn at the box's left edge, because `align` is a
+    // separate property from the x it is applied to. The POSITION is the claim.
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [scriptObject({ in: ["factor"], out: ["result"] })], CAMERA_IDENTITY);
+    const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
+    const input = texts.find((call) => call.text === "factor");
+    const output = texts.find((call) => call.text === "result");
+    expect(input?.x).toBeLessThan(SCRIPT_BOX_WIDTH / 2);
+    expect(output?.x).toBeGreaterThan(SCRIPT_BOX_WIDTH / 2);
+    expect(input?.align).toBe("left");
+    expect(output?.align).toBe("right");
+  });
+
+  it("grows one row per port row, taking the LONGER family rather than their sum, because the two sit side by side", () => {
+    const short = objectExtent(scriptObject({ in: ["a"], out: ["b"] }));
+    const tall = objectExtent(scriptObject({ in: ["a", "b", "c"], out: ["d"] }));
+    const shortHeight = (short?.maxY ?? 0) - (short?.minY ?? 0);
+    const tallHeight = (tall?.maxY ?? 0) - (tall?.minY ?? 0);
+    expect(shortHeight).toBeGreaterThan(0);
+    expect(tallHeight).toBe(shortHeight + 2 * SCRIPT_PORT_ROW_HEIGHT);
+  });
+
+  it("draws the box `extent.ts` reports and not a second reading of it, so the drawn box and the click box cannot disagree (D-066)", () => {
+    const object = scriptObject({ in: ["factor"], out: ["result"] });
+    const extent = objectExtent(object);
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [object], CAMERA_IDENTITY);
+    const outline = calls.find((call): call is Extract<RecordedCall, { op: "strokeRect" }> => call.op === "strokeRect");
+    expect(outline).toEqual({
+      op: "strokeRect",
+      x: extent?.minX,
+      y: extent?.minY,
+      w: (extent?.maxX ?? 0) - (extent?.minX ?? 0),
+      h: (extent?.maxY ?? 0) - (extent?.minY ?? 0),
+    });
+  });
+});
+
