@@ -1581,6 +1581,146 @@ describe("mutate — DeleteVertexOperation, behind `delvertex`, refuses by defau
   });
 });
 
+describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an editable path", () => {
+  it("changes only the type, keeping the same id and name, and snapshots vertices into literal per vertex slots", () => {
+    const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
+    const result = mutate([rect], [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.id).toBe("obj_1");
+    expect(object?.name).toBe("rect_1");
+    expect(object?.type).toBe("polyline");
+    expect(object?.vertexCount).toBe(4);
+    expect(object?.slots["vertex.0.x"]).toEqual({ kind: "literal", value: 0 });
+    expect(object?.slots["vertex.1.x"]).toEqual({ kind: "literal", value: 10 });
+  });
+
+  it("keeps vertices, centroid, length and bounds working at the same paths, with no repair needed", () => {
+    const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
+    const result = mutate([rect], [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.slots["vertices"]).toEqual({
+      kind: "derived",
+      value: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 5 },
+        { x: 0, y: 5 },
+      ],
+    });
+    expect(object?.slots["centroid.x"]?.value).toBeCloseTo(5);
+    expect(object?.slots["bounds.maxX"]?.value).toBe(10);
+    expect(object?.slots["area"]).toBeUndefined();
+  });
+
+  it("does not refuse when a live reference reads a path that survives the explode (vertices, centroid, length, bounds)", () => {
+    const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "centroid", "x") }, value: 5 } },
+    };
+    const result = mutate([rect, dependent], [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const survivor = result.objects.find((candidate) => candidate.id === "obj_2");
+    expect(survivor?.slots.value?.value).toBeCloseTo(5);
+  });
+
+  it("REJECTS by default when a live reference reads a parameter slot the explode would remove, leaving prior state unchanged", () => {
+    const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "width") }, value: 10 } },
+    };
+    const snapshotBefore = JSON.parse(JSON.stringify([rect, dependent])) as unknown;
+
+    const result = mutate([rect, dependent], [{ kind: "explode", objectId: "obj_1" }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+    expect([rect, dependent]).toEqual(snapshotBefore);
+  });
+
+  it("REJECTS by default when a live reference reads AREA, which a polyline does not declare", () => {
+    const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "area") }, value: 50 } },
+    };
+    const result = mutate([rect, dependent], [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(false);
+  });
+
+  it("`force: true` repairs a removed parameter reference to #REF, still leaves a surviving reference untouched, and reports the broken slot", () => {
+    const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
+    const removed: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "width") }, value: 10 } },
+    };
+    const survivor: GraphObject = {
+      id: "obj_3",
+      name: "value_2",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "centroid", "x") }, value: 5 } },
+    };
+    const result = mutate([rect, removed, survivor], [{ kind: "explode", objectId: "obj_1", force: true }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const repairedRemoved = result.objects.find((candidate) => candidate.id === "obj_2");
+    expect(repairedRemoved?.slots.value).toMatchObject({ kind: "formula", ast: { type: "error", error: "#REF" } });
+    const repairedSurvivor = result.objects.find((candidate) => candidate.id === "obj_3");
+    expect(repairedSurvivor?.slots.value).toMatchObject({ kind: "formula", ast: { type: "reference", address: addr("obj_1", "centroid", "x") } });
+    expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]);
+    expect(deriveValidateAndEvaluate(result.objects).ok).toBe(true);
+  });
+
+  it("refuses a type that is not a preset, naming its real type", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }]);
+    const result = mutate([polyline], [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('"polyline"');
+    }
+  });
+
+  it("refuses when vertices holds an error, since there is nothing to snapshot", () => {
+    const negativeRadius: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: -5 },
+        ...presetPlaceholders(),
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: negativeRadius }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
+    }
+    const result = mutate(created.objects, [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("nothing to snapshot");
+    }
+  });
+});
+
 describe("mutate — the refusal says which non-finite value it found", () => {
   it("names the offending coordinate inside a Point literal, not [object Object]", () => {
     const initial: GraphObject[] = [
@@ -1775,6 +1915,47 @@ function polylineObject(id: string, name: string, points: readonly { readonly x:
     slots[`vertex.${index}.y`] = { kind: "literal", value: point.y };
   });
   return { id, name, type: "polyline", vertexCount: points.length, slots: { ...slots, ...vertexSlots } };
+}
+
+function presetPlaceholders(): Record<string, Slot> {
+  return {
+    vertices: { kind: "derived", value: null },
+    "centroid.x": { kind: "derived", value: null },
+    "centroid.y": { kind: "derived", value: null },
+    area: { kind: "derived", value: null },
+    length: { kind: "derived", value: null },
+    "bounds.minX": { kind: "derived", value: null },
+    "bounds.minY": { kind: "derived", value: null },
+    "bounds.maxX": { kind: "derived", value: null },
+    "bounds.maxY": { kind: "derived", value: null },
+  };
+}
+
+function rectObject(id: string, name: string, originX: number, originY: number, width: number, height: number): GraphObject {
+  return {
+    id,
+    name,
+    type: "rect",
+    slots: {
+      "origin.x": { kind: "literal", value: originX },
+      "origin.y": { kind: "literal", value: originY },
+      width: { kind: "literal", value: width },
+      height: { kind: "literal", value: height },
+      ...presetPlaceholders(),
+    },
+  };
+}
+
+function createdRect(id: string, name: string, originX: number, originY: number, width: number, height: number): GraphObject {
+  const result = mutate([], [{ kind: "createObject", object: rectObject(id, name, originX, originY, width, height) }], []);
+  if (!result.ok) {
+    throw new Error(`test setup: expected the rect to be created, got: ${result.message}`);
+  }
+  const object = result.objects.find((candidate) => candidate.id === id);
+  if (object === undefined) {
+    throw new Error("test setup: expected the rect to survive creation");
+  }
+  return object;
 }
 
 describe("deriveEdges — table's dynamic cell family", () => {

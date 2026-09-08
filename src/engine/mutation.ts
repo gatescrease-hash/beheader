@@ -34,6 +34,8 @@ import { derivedSlotDependencyAddresses, getObjectSchema, resolveDerivedSlots, r
 import {
   addVertexToObject,
   deleteVertexFromObject,
+  explodeObjectToPolyline,
+  EXPLODABLE_TYPES,
   passThroughVertexRangeForDelete,
   repairVertexAddressForDelete,
   shiftVertexAddressForDelete,
@@ -253,6 +255,12 @@ export interface DeleteVertexOperation {
   readonly force?: boolean;
 }
 
+export interface ExplodeOperation {
+  readonly kind: "explode";
+  readonly objectId: string;
+  readonly force?: boolean;
+}
+
 export type Operation =
   | SetSlotOperation
   | ClearSlotOperation
@@ -264,7 +272,8 @@ export type Operation =
   | AddPortOperation
   | RemovePortOperation
   | AddVertexOperation
-  | DeleteVertexOperation;
+  | DeleteVertexOperation
+  | ExplodeOperation;
 
 function operationTargetId(operation: Operation): string {
   if (operation.kind === "deleteObject") {
@@ -280,7 +289,8 @@ function operationTargetId(operation: Operation): string {
     operation.kind === "addPort" ||
     operation.kind === "removePort" ||
     operation.kind === "addVertex" ||
-    operation.kind === "deleteVertex"
+    operation.kind === "deleteVertex" ||
+    operation.kind === "explode"
   ) {
     return operation.objectId;
   }
@@ -443,6 +453,31 @@ function applyOperation(
     );
     return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
   }
+  if (operation.kind === "explode") {
+    const target = objects.find((object) => object.id === operation.objectId);
+    if (target === undefined) {
+      return { objects, brokenSlots: [] };
+    }
+    const exploded = explodeObjectToPolyline(target, target.name);
+    if (!exploded.ok) {
+      return { objects, brokenSlots: [] };
+    }
+    const newObject = exploded.object;
+    if (operation.force !== true) {
+      return {
+        objects: objects.map((object) => (object.id === operation.objectId ? newObject : object)),
+        brokenSlots: [],
+      };
+    }
+    const removed = removedSlotKeys(target, newObject);
+    const repairReference = (address: Address): Address | "deleted" =>
+      address.objectId === operation.objectId && removed.has(slotKey(address.path)) ? "deleted" : address;
+    const passThroughRange = (start: Address, end: Address): { readonly start: Address; readonly end: Address } => ({ start, end });
+    const repaired = objects.map((object) =>
+      repairObjectFormulaAddresses(object.id === operation.objectId ? newObject : object, repairReference, passThroughRange),
+    );
+    return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
+  }
   return {
     objects: objects.map((object) => {
       if (object.id !== operation.address.objectId) {
@@ -591,6 +626,8 @@ export function mutate(
         detail = `attempts to add a vertex to object id "${targetId}"`;
       } else if (operation.kind === "deleteVertex") {
         detail = `attempts to delete vertex ${operation.index} from object id "${targetId}"`;
+      } else if (operation.kind === "explode") {
+        detail = `attempts to explode object id "${targetId}"`;
       } else {
         detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
       }
@@ -638,6 +675,11 @@ export function mutate(
   const invalidVertexMessages = findInvalidVertexOperations(operations, objects);
   if (invalidVertexMessages.length > 0) {
     return { ok: false, message: invalidVertexMessages.join("; ") };
+  }
+
+  const invalidExplodeMessages = findInvalidExplodeOperations(operations, objects);
+  if (invalidExplodeMessages.length > 0) {
+    return { ok: false, message: invalidExplodeMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -1285,6 +1327,47 @@ function findLiveVertexDependents(objects: readonly GraphObject[], targetObjectI
     }
   }
   return names;
+}
+
+/**
+ * Explode is valid only for a preset type, and only when its vertices slot
+ * holds a real point list right now. explodeObjectToPolyline runs the same
+ * check applyOperation later trusts, so a bad explode never reaches the
+ * stage step.
+ */
+function findInvalidExplodeOperations(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  operations.forEach((operation, index) => {
+    if (operation.kind !== "explode") {
+      return;
+    }
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+    const target = objects.find((candidate) => candidate.id === operation.objectId);
+    if (target === undefined) {
+      return;
+    }
+    if (!EXPLODABLE_TYPES.has(target.type)) {
+      problems.push(`${prefix}: object "${target.name}" is a "${target.type}" — only a circle, a polygon or a rect can be exploded`);
+      return;
+    }
+    const result = explodeObjectToPolyline(target, target.name);
+    if (!result.ok) {
+      problems.push(`${prefix}: ${result.message}`);
+    }
+  });
+  return problems;
+}
+
+/** The slot keys the old object had that the new one drops. Everything else keeps its path. */
+function removedSlotKeys(oldObject: GraphObject, newObject: GraphObject): ReadonlySet<string> {
+  const surviving = new Set(Object.keys(newObject.slots));
+  const removed = new Set<string>();
+  for (const key of Object.keys(oldObject.slots)) {
+    if (!surviving.has(key)) {
+      removed.add(key);
+    }
+  }
+  return removed;
 }
 
 function describeIllegalValue(value: Value): string {

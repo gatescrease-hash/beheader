@@ -13,7 +13,7 @@
  * still draws a true arc.
  */
 import type { Address } from "../address.ts";
-import { getSlot, isErrorValue, slotKey, type ErrorValue, type GraphObject, type Point, type Slot, type Value } from "../graph/node.ts";
+import { getSlot, isErrorValue, slotKey, type ErrorValue, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "../graph/node.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
 export const VERTEX_PATH_PREFIX = "vertex";
@@ -492,4 +492,52 @@ export function verticesDerivedSlots(label: string): readonly DerivedSlotSchema[
     { path: BOUNDS_MAX_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxX`, (v) => computeBounds(v).maxX) },
     { path: BOUNDS_MAX_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxY`, (v) => computeBounds(v).maxY) },
   ];
+}
+
+/** The preset types explode accepts. A polyline is already an editable path. */
+export const EXPLODABLE_TYPES: ReadonlySet<ObjectType> = new Set(["circle", "polygon", "rect"]);
+
+export type ExplodeResult = { readonly ok: true; readonly object: GraphObject } | { readonly ok: false; readonly message: string };
+
+const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
+  VERTICES_PATH,
+  CENTROID_X_PATH,
+  CENTROID_Y_PATH,
+  LENGTH_PATH,
+  BOUNDS_MIN_X_PATH,
+  BOUNDS_MIN_Y_PATH,
+  BOUNDS_MAX_X_PATH,
+  BOUNDS_MAX_Y_PATH,
+];
+
+/**
+ * Snapshots a preset's current vertices into a fresh polyline object, same id
+ * and name. The parameter slots (origin, radius, sides, and so on) and area
+ * are gone. vertices, centroid, length and bounds survive at the same paths.
+ * The new schema declares them too, so a formula that reads one of those
+ * needs no repair.
+ */
+export function explodeObjectToPolyline(object: GraphObject, label: string): ExplodeResult {
+  const value = getSlot(object, VERTICES_PATH)?.value;
+  if (value === undefined) {
+    return { ok: false, message: `${label}: vertices did not resolve to a value, so there is nothing to snapshot` };
+  }
+  if (isErrorValue(value)) {
+    return { ok: false, message: `${label}: vertices holds an error (${value.error}: ${value.message}), so there is nothing to snapshot` };
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    return { ok: false, message: `${label}: vertices is not a point list, so there is nothing to snapshot` };
+  }
+  const vertices = value as readonly Point[];
+
+  const slots: Record<string, Slot> = {};
+  vertices.forEach((vertex, index) => {
+    slots[slotKey(vertexXPath(index))] = { kind: "literal", value: vertex.x };
+    slots[slotKey(vertexYPath(index))] = { kind: "literal", value: vertex.y };
+  });
+  for (const path of POLYLINE_DERIVED_PATHS) {
+    slots[slotKey(path)] = { kind: "derived", value: null };
+  }
+
+  return { ok: true, object: { id: object.id, name: object.name, type: "polyline", vertexCount: vertices.length, slots } };
 }

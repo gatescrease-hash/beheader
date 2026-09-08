@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2017 pass, 0 skip, across 38 test files. |
+| Tests | 2041 pass, 0 skip, across 38 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2017 tests
+npm test             # 2041 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -126,12 +126,12 @@ other suites drive them anyway.
 | `formula/functions.ts` | The built in function registry. It is a table from name to arity to implementation. One line adds a function. Two functions are lazy, because `IF` must not evaluate the branch it does not take. |
 | `formula/format.ts` | AST back to source text. It maps IDs back to current names. This is what lets the properties panel and the `props` command show a formula the way the operator wrote it. |
 | `primitives/schema.ts` | The registry that declares, for each object type, which slots exist and which kind each one has. It is the single source of truth for a slot path. Three sites read it in one pass: edge derivation and two integrity checks. All three must read it through the same resolver, or a dynamic slot family drifts between them. Types with an entry today: `value`, `add`, `table`, `circle`, `polygon`, `polyline`, `rect`, `text`, `image`, `script`. `value` and `add` are test fixtures from the first phase. Keep them. They are the smallest case that exercises a derived slot. |
-| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `openPathDerivedSlots`, the derived set an open path uses instead of `verticesDerivedSlots`. An open path gets no `area` slot. `SPEC.md` section 8 scopes area to a closed path. Its `length` never adds the segment back to the first vertex the way a closed shape's does. Two more functions grow and shrink a polyline's storage: `addVertexToObject` and `deleteVertexFromObject`. Two others give `mutation.ts` the address rewrites `delvertex` needs. One, `shiftVertexAddressForDelete`, moves a vertex that survives down an index. The other, `repairVertexAddressForDelete`, marks the exact deleted one, so `mutation.ts` can turn it into `#REF`. |
+| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `openPathDerivedSlots`, the derived set an open path uses instead of `verticesDerivedSlots`. An open path gets no `area` slot. `SPEC.md` section 8 scopes area to a closed path. Its `length` never adds the segment back to the first vertex the way a closed shape's does. Two more functions grow and shrink a polyline's storage: `addVertexToObject` and `deleteVertexFromObject`. Two others give `mutation.ts` the address rewrites `delvertex` needs. One, `shiftVertexAddressForDelete`, moves a vertex that survives down an index. The other, `repairVertexAddressForDelete`, marks the exact deleted one, so `mutation.ts` can turn it into `#REF`. `explodeObjectToPolyline` snapshots a preset's vertices into a fresh polyline object, same id and name. `EXPLODABLE_TYPES` names the three preset types explode accepts: circle, polygon and rect. |
 | `primitives/table.ts` | Cell address math, range expansion, and the row and column resize passes. A range expands to concrete cells at edge derivation time, from the size the table has now. So an expansion can never go stale. An empty cell inside a range gets no edge, which is why a sparse table works. |
 | `primitives/text.ts` | The block tree parser for `{= }` and `{? }{:}{?}`, the dependency walker over it, and the three compute functions for `resolvedContent`, `measuredHeight` and `measuredWidth`. The dependency walker is the first dynamic dependency resolver in the codebase. It re-parses `content` on every edge derivation, because the set of slots the text names changes with every edit. |
 | `primitives/image.ts` | Slot path constants only. No logic. The image primitive is data plus a renderer arm. |
 | `script/stub.ts` | The script node. Ports are ordinary slots. An `in.<port>` slot is a formula slot. An `out.<port>` slot is a derived slot. The `source` slot is a literal slot that nothing reads, so an edit to it triggers no recompute. The `evaluateScriptOutput` function returns the placeholder value. When Python arrives, only that body changes. |
-| `mutation.ts` | The single channel for state change. It runs the eight step loop: stage, apply, derive edges, check integrity, check cycles, refuse or evaluate, then commit and journal. It is the largest engine file and the most load bearing one. A batch applies many operations to one clone and commits all or nothing. A document load must use a batch. A `deleteVertex` without force refuses through `findLiveVertexDependents`, ahead of the stage step, not through the usual post-apply dangling check. The vertex after a deleted one refills its index at once, so a leftover reference to that exact index reads the wrong vertex in silence. It does not dangle. |
+| `mutation.ts` | The single channel for state change. It runs the eight step loop: stage, apply, derive edges, check integrity, check cycles, refuse or evaluate, then commit and journal. It is the largest engine file and the most load bearing one. A batch applies many operations to one clone and commits all or nothing. A document load must use a batch. A `deleteVertex` without force refuses through `findLiveVertexDependents`, ahead of the stage step, not through the usual post-apply dangling check. The vertex after a deleted one refills its index at once, so a leftover reference to that exact index reads the wrong vertex in silence. It does not dangle. `explode` has no such trap. A slot it drops (`origin`, `radius`, `area`, and so on) is simply gone from the object. The usual post-apply dangling check catches a leftover reference on its own, the same way `deleteObject` already relies on it. |
 | `document.ts` | The versioned JSON format, and save and load. It never stores a derived value. A full evaluation pass on load regenerates them. Load goes through the mutation API, so a bad file fails the same checks a bad command does. It reconstructs `ports` and `vertexCount` by hand, the same as every slot. Both sit outside `GraphObject.slots`, so a generic JSON parse cannot validate their shape. |
 | `index.ts` | The one public surface of the engine. A consumer outside `src/engine` must import from here, not from a deep path. It re-exports every other file in this directory. The one name that collides is `evaluate`. Both `graph/eval.ts` and `formula/eval.ts` export it, for different reasons. This file aliases them to `evaluateGraph` and `evaluateFormulaAst`. `command/` and `render/` do not import through it yet. That migration is mechanical and still open. |
 
@@ -157,9 +157,9 @@ other suites drive them anyway.
 
 | File | What and why |
 | --- | --- |
-| `parser.ts` | One typed line to one command object, through a table of specs. It never throws. A bad line returns a failure that names what is wrong and where. It also holds the list of commands the spec names but the code does not build yet. An operator who types one gets the truth instead of "unknown command". That list and the built registry must stay disjoint. A test pins it. `polyline` and `addvertex` both take a `points` positional kind, which consumes every token left on the line as an `x,y` pair. It is the only positional kind matchArguments lets grow past the declared count. The grammar does not cap `addvertex` at one point. `commands.ts` refuses more than one, the same way it checks `polygon`'s side count. |
+| `parser.ts` | One typed line to one command object, through a table of specs. It never throws. A bad line returns a failure that names what is wrong and where. It also holds the list of commands the spec names but the code does not build yet. An operator who types one gets the truth instead of "unknown command". That list and the built registry must stay disjoint. A test pins it. `polyline` and `addvertex` both take a `points` positional kind, which consumes every token left on the line as an `x,y` pair. It is the only positional kind matchArguments lets grow past the declared count. The grammar does not cap `addvertex` at one point. `commands.ts` refuses more than one, the same way it checks `polygon`'s side count. `explode` and `delete` share one spec shape: a bare target plus an optional `force` flag. |
 | `prompt.ts` | The AutoCAD style prompt sequence. A bare command word starts it. The prompt asks for each argument in turn. This is a state machine on its own, apart from the one shot parser. |
-| `commands.ts` | The handlers. Each one turns a command object into mutation operations and a log line. This is where a refusal message gets written, so this is where the debug story lives. The engine's `deleteVertex` refusal names only the dependents. The handler here appends the `force` suggestion on top. `deleteObject` already uses the same split, since an `Operation` carries no command syntax to quote. |
+| `commands.ts` | The handlers. Each one turns a command object into mutation operations and a log line. This is where a refusal message gets written, so this is where the debug story lives. The engine's `deleteVertex` refusal names only the dependents. The handler here appends the `force` suggestion on top. `deleteObject` already uses the same split, since an `Operation` carries no command syntax to quote. `explode` follows the same pattern, one more time. |
 | `props.ts` | Slot descriptors for the `props` command and for the properties panel. Both surfaces read one list, so they can never disagree about what an object has. |
 
 ### `src/main.ts`
@@ -253,8 +253,9 @@ group blocks the acceptance test in `SPEC.md` section 12.
    is `centroid`, `length` and `bounds`, not the closed shape's set: no `area`,
    because `SPEC.md` section 8 scopes area to a closed path, and `length`
    never closes back to the first vertex. A live polyline can also grow and
-   shrink now, through `addvertex` and `delvertex` (item 4). Still open:
-   `closed`, style slots (item 7), and `explode` (item 4).
+   shrink now, through `addvertex` and `delvertex`, and a preset can turn into
+   one through `explode` (item 4). Still open: `closed` and style slots
+   (item 7).
 2. **Per vertex slots exist, and a mutation can grow or shrink the set.**
    `vertex.0.x` and `vertex.0.y`, as `SPEC.md` section 8 specifies.
    `enumeratePolylineVertexSlotPaths` in `geometry.ts` builds the paths from
@@ -269,17 +270,21 @@ group blocks the acceptance test in `SPEC.md` section 12.
 
 ### Specified and not built
 
-4. **`addvertex` and `delvertex` exist now. `explode` does not.**
-   `addvertex` appends one vertex and cannot break a live reference, because
-   nothing else can name a vertex that does not exist yet. By default,
-   `delvertex` refuses when a live formula, anywhere in the document, names
-   the exact vertex marked for removal. Under `force`, it repairs that
-   reference to `#REF` instead. A reference to a later vertex always shifts
-   down to match, with or without `force`, because the same real vertex
-   survives under a new index, and a shift is never a break. `explode` still
-   needs a new mutation operation kind. It must turn a preset into an editable
-   path: take a snapshot of its derived `vertices` into literal per vertex
-   slots, then delete the preset's parameter slots, per `SPEC.md` section 8.
+4. **`addvertex`, `delvertex` and `explode` all exist now.** `addvertex`
+   appends one vertex and cannot break a live reference, because nothing else
+   can name a vertex that does not exist yet. By default, `delvertex` refuses
+   when a live formula, anywhere in the document, names the exact vertex
+   marked for removal, and repairs that reference to `#REF` under `force`
+   instead. A reference to a later vertex always shifts down to match, with
+   or without `force`, because the same real vertex survives under a new
+   index, and a shift is never a break. `explode` turns a circle, a polygon
+   or a rect into a polyline, same id and name: it snapshots the preset's
+   current `vertices` into literal per vertex slots and drops the parameter
+   slots (`origin`, `radius`, `sides`, and so on) and `area`. `vertices`,
+   `centroid`, `length` and `bounds` stay declared at the same paths on the
+   new schema, so a formula that reads one of those needs no repair. A
+   formula that reads a dropped slot follows the same refuse-by-default,
+   repair-under-`force` rule as `delvertex`.
 5. **`pan` as a command.** The mouse can pan. The command has no argument
    grammar yet.
 6. **Path `segments`.** `SPEC.md` section 8 declares arcs and beziers. Only

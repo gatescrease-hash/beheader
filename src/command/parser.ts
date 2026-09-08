@@ -139,6 +139,12 @@ export interface DeleteVertexCommand {
   readonly force: boolean;
 }
 
+export interface ExplodeCommand {
+  readonly kind: "explode";
+  readonly target: string;
+  readonly force: boolean;
+}
+
 export interface RefsCommand {
   readonly kind: "refs";
   readonly target: string;
@@ -195,6 +201,7 @@ export type Command =
   | DeleteCommand
   | AddVertexCommand
   | DeleteVertexCommand
+  | ExplodeCommand
   | RefsCommand
   | PropsCommand
   | ListCommand
@@ -533,6 +540,14 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     }),
   },
   {
+    name: "explode",
+    usage: "explode <object> [force]",
+    positional: [text("target")],
+    named: [],
+    flags: ["force"],
+    build: (args) => ({ kind: "explode", target: textArgument(args, "target"), force: hasFlag(args, "force") }),
+  },
+  {
     name: "refs",
     usage: "refs <object|address>",
     positional: [text("target")],
@@ -601,7 +616,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
 export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec.name);
 
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
-  "explode",
   "pan",
 ];
 

@@ -29,6 +29,8 @@ import {
   computeRectVerticesSlot,
   computeVertexMean,
   enumeratePolylineVertexSlotPaths,
+  explodeObjectToPolyline,
+  EXPLODABLE_TYPES,
   MIN_POLYGON_SIDES,
   MIN_POLYLINE_VERTICES,
   openPathDerivedSlots,
@@ -622,6 +624,97 @@ describe("polyline wired through the real mutate() pipeline", () => {
       },
     };
     const result = mutate([], [{ kind: "createObject", object: polyline }], []);
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("EXPLODABLE_TYPES — a preset with a parameter driven vertices slot", () => {
+  it("names exactly circle, polygon and rect, not polyline itself", () => {
+    expect([...EXPLODABLE_TYPES].sort()).toEqual(["circle", "polygon", "rect"]);
+  });
+});
+
+describe("explodeObjectToPolyline — snapshots the current vertices, drops the parameter slots", () => {
+  const rect: GraphObject = {
+    id: "obj_1",
+    name: "rect_1",
+    type: "rect",
+    slots: {
+      "origin.x": { kind: "literal", value: 0 },
+      "origin.y": { kind: "literal", value: 0 },
+      width: { kind: "literal", value: 10 },
+      height: { kind: "literal", value: 5 },
+      vertices: {
+        kind: "derived",
+        value: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 5 },
+          { x: 0, y: 5 },
+        ],
+      },
+      "centroid.x": { kind: "derived", value: 5 },
+      "centroid.y": { kind: "derived", value: 2.5 },
+      area: { kind: "derived", value: 50 },
+      length: { kind: "derived", value: 30 },
+      "bounds.minX": { kind: "derived", value: 0 },
+      "bounds.minY": { kind: "derived", value: 0 },
+      "bounds.maxX": { kind: "derived", value: 10 },
+      "bounds.maxY": { kind: "derived", value: 5 },
+    },
+  };
+
+  it("keeps the same id and name, and changes only the type", () => {
+    const result = explodeObjectToPolyline(rect, "rect_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.object.id).toBe("obj_1");
+    expect(result.object.name).toBe("rect_1");
+    expect(result.object.type).toBe("polyline");
+  });
+
+  it("gives one literal vertex.N.x/vertex.N.y pair per vertex, in order, and sets vertexCount to match", () => {
+    const result = explodeObjectToPolyline(rect, "rect_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.object.vertexCount).toBe(4);
+    expect(result.object.slots["vertex.0.x"]).toEqual({ kind: "literal", value: 0 });
+    expect(result.object.slots["vertex.1.x"]).toEqual({ kind: "literal", value: 10 });
+    expect(result.object.slots["vertex.2.y"]).toEqual({ kind: "literal", value: 5 });
+    expect(result.object.slots["vertex.3.x"]).toEqual({ kind: "literal", value: 0 });
+  });
+
+  it("drops origin, width and height, and area, keeping neither as a slot at all", () => {
+    const result = explodeObjectToPolyline(rect, "rect_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.object.slots["origin.x"]).toBeUndefined();
+    expect(result.object.slots["origin.y"]).toBeUndefined();
+    expect(result.object.slots["width"]).toBeUndefined();
+    expect(result.object.slots["height"]).toBeUndefined();
+    expect(result.object.slots["area"]).toBeUndefined();
+  });
+
+  it("leaves vertices, centroid, length and bounds declared as derived placeholders at the same paths", () => {
+    const result = explodeObjectToPolyline(rect, "rect_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const path of ["vertices", "centroid.x", "centroid.y", "length", "bounds.minX", "bounds.minY", "bounds.maxX", "bounds.maxY"]) {
+      expect(result.object.slots[path]).toEqual({ kind: "derived", value: null });
+    }
+  });
+
+  it("refuses when vertices holds an error, since there is nothing to snapshot", () => {
+    const broken: GraphObject = { ...rect, slots: { ...rect.slots, vertices: { kind: "derived", value: { error: "#TYPE", message: "bad" } } } };
+    const result = explodeObjectToPolyline(broken, "rect_1");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toContain("nothing to snapshot");
+  });
+
+  it("refuses when vertices has not resolved at all", () => {
+    const stub: GraphObject = { id: "obj_1", name: "rect_1", type: "rect", slots: {} };
+    const result = explodeObjectToPolyline(stub, "rect_1");
     expect(result.ok).toBe(false);
   });
 });

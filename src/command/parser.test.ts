@@ -56,6 +56,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "delete intersection_a", command: { kind: "delete", target: "intersection_a", force: false } },
   { line: "addvertex polyline_1 100,100", command: { kind: "addvertex", target: "polyline_1", points: [{ x: 100, y: 100 }] } },
   { line: "delvertex polyline_1 2", command: { kind: "delvertex", target: "polyline_1", index: 2, force: false } },
+  { line: "explode polygon_1", command: { kind: "explode", target: "polygon_1", force: false } },
   { line: "refs intersection_a", command: { kind: "refs", target: "intersection_a" } },
   { line: "props intersection_a", command: { kind: "props", target: "intersection_a" } },
   { line: "list", command: { kind: "list" } },
@@ -87,8 +88,7 @@ describe("the command registry (table driven, one entry per command)", () => {
   });
 
   it("reports a specified command that has no entry yet as not built, rather than as unknown", () => {
-    expect(rejected("explode polygon_1").message).toBe('"explode" is a specified command that is not built yet');
-    expect(rejected("pan 10 10").message).toContain("not built yet");
+    expect(rejected("pan 10 10").message).toBe('"pan" is a specified command that is not built yet');
   });
 
   it("reports a word the spec does not name at all as an unknown command, at that word's own offset", () => {

@@ -722,6 +722,7 @@ describe("every registry command reaches a handler", () => {
     "delete intersection_a",
     "addvertex polyline_1 0,0",
     "delvertex polyline_1 0",
+    "explode polygon_1",
     "refs intersection_a",
     "props intersection_a",
     "list",
@@ -1609,6 +1610,68 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
 
   it("refuses an unknown object", () => {
     expect(refused("delvertex nosuch 0", sandbox())).toBe('no object named "nosuch"');
+  });
+});
+
+describe("explode — a preset turned into an editable path", () => {
+  function sandbox(): Document {
+    return committed("rect x=0 y=0 w=10 h=5", createEmptyDocument());
+  }
+
+  it("turns the rect into a polyline holding the same points, and says so", () => {
+    const after = committed("explode rect_1", sandbox());
+    const object = onlyNamed(after, "rect_1");
+    expect(object.type).toBe("polyline");
+    expect(object.vertexCount).toBe(4);
+    expect(literalValue(object, ["vertex", "0", "x"])).toBe(0);
+    expect(literalValue(object, ["vertex", "1", "x"])).toBe(10);
+    const outcome = run("explode rect_1", sandbox());
+    expect(outcome.ok && outcome.lines).toEqual(["exploded rect_1 into an editable path"]);
+  });
+
+  it("leaves vertices, centroid, length and bounds still readable at the same address, with no relink needed", () => {
+    const wired = committed("link circle_1.origin.x rect_1.centroid.x", committed("circle x=0 y=0 r=5", sandbox()));
+    const after = committed("explode rect_1", wired);
+    const circle = onlyNamed(after, "circle_1");
+    const slot = getSlot(circle, ["origin", "x"]);
+    expect(slot?.kind).toBe("formula");
+    expect(slot?.value).toBeCloseTo(5);
+  });
+
+  it("REJECTS while another object's formula still reads a parameter slot the explode would remove, naming it and the force escape", () => {
+    const wired = committed("link circle_1.origin.x rect_1.width", committed("circle x=0 y=0 r=5", sandbox()));
+    expect(refused("explode rect_1", wired)).toContain("circle_1.origin.x");
+    expect(refused("explode rect_1", wired)).toContain('"explode rect_1 force"');
+  });
+
+  it("leaves prior state bit-for-bit unchanged when it rejects", () => {
+    const wired = committed("link circle_1.origin.x rect_1.width", committed("circle x=0 y=0 r=5", sandbox()));
+    const snapshot = JSON.stringify(wired);
+    refused("explode rect_1", wired);
+    expect(JSON.stringify(wired)).toBe(snapshot);
+  });
+
+  it("takes the repair path under force, and reports the formula it broke", () => {
+    const wired = committed("link circle_1.origin.x rect_1.width", committed("circle x=0 y=0 r=5", sandbox()));
+    const outcome = run("explode rect_1 force", wired);
+    expect(outcome.ok && outcome.lines).toEqual([
+      "exploded rect_1 into an editable path",
+      "broke 1 formula: circle_1.origin.x — each now reads #REF where it read rect_1",
+    ]);
+  });
+
+  it("refuses an unknown object", () => {
+    expect(refused("explode nosuch", sandbox())).toBe('no object named "nosuch"');
+  });
+
+  it("refuses a type that is not a preset, naming its real type", () => {
+    const withTable = committed("table x=0 y=0 rows=2 cols=2", sandbox());
+    expect(refused("explode table_1", withTable)).toContain('"table"');
+  });
+
+  it("refuses exploding a polyline a second time", () => {
+    const exploded = committed("explode rect_1", sandbox());
+    expect(refused("explode rect_1", exploded)).toContain('"polyline"');
   });
 });
 

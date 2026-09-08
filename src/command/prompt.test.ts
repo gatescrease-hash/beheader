@@ -108,7 +108,7 @@ describe("a line is a sequence of answers, where a space acts as Enter", () => {
   it("still refuses an unknown word and still names a specified command that is not built", () => {
     const unknown = beginCommand("frobnicate");
     expect(unknown.status === "failed" && unknown.message).toBe('unknown command "frobnicate"');
-    const unbuilt = beginCommand("explode polygon_1");
+    const unbuilt = beginCommand("pan 10 10");
     expect(unbuilt.status === "failed" && unbuilt.message).toContain("not built yet");
   });
 });

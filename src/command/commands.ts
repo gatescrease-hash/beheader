@@ -72,6 +72,7 @@ import type {
   CreateTextCommand,
   DeleteCommand,
   DeleteVertexCommand,
+  ExplodeCommand,
   LinkCommand,
   PropsCommand,
   RefsCommand,
@@ -178,6 +179,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return addVertex(command, document, context);
     case "delvertex":
       return deleteVertex(command, document, context);
+    case "explode":
+      return explodeObject(command, document, context);
     case "refs":
       return refs(command, document);
     case "props":
@@ -221,6 +224,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "delete",
   "addvertex",
   "delvertex",
+  "explode",
   "refs",
   "props",
   "list",
@@ -721,6 +725,28 @@ function deleteVertex(command: DeleteVertexCommand, document: Document, context:
   if (result.brokenSlots.length > 0) {
     const broken = result.brokenSlots.map((address) => formatSlotAddress(address, result.objects));
     lines.push(`broke ${countedNoun(broken.length, "formula")}: ${broken.join(", ")} — each now reads #REF where it read this vertex`);
+  }
+  return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines };
+}
+
+function explodeObject(command: ExplodeCommand, document: Document, context: EvalContext): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+
+  const result = mutate(document.objects, [{ kind: "explode", objectId: object.id, force: command.force }], document.journal, context);
+  if (!result.ok) {
+    return {
+      ok: false,
+      message: command.force ? result.message : `${result.message} — unlink each, or "explode ${object.name} force" to rewrite them to #REF instead`,
+    };
+  }
+
+  const lines = [`exploded ${object.name} into an editable path`];
+  if (result.brokenSlots.length > 0) {
+    const broken = result.brokenSlots.map((address) => formatSlotAddress(address, result.objects));
+    lines.push(`broke ${countedNoun(broken.length, "formula")}: ${broken.join(", ")} — each now reads #REF where it read ${object.name}`);
   }
   return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines };
 }
