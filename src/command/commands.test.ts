@@ -115,6 +115,34 @@ describe("creation — a typed line becomes an object", () => {
     expect(getSlot(object, ["area"])?.value).toBe(20000);
   });
 
+  it("creates a polyline whose vertex slots hold the typed points, in order", () => {
+    const object = onlyObject(committed("polyline 0,0 100,0 100,100", createEmptyDocument()));
+    expect(object.type).toBe("polyline");
+    expect(object.name).toBe("polyline_1");
+    expect(object.vertexCount).toBe(3);
+    expect(literalValue(object, ["vertex", "0", "x"])).toBe(0);
+    expect(literalValue(object, ["vertex", "0", "y"])).toBe(0);
+    expect(literalValue(object, ["vertex", "1", "x"])).toBe(100);
+    expect(literalValue(object, ["vertex", "1", "y"])).toBe(0);
+    expect(literalValue(object, ["vertex", "2", "x"])).toBe(100);
+    expect(literalValue(object, ["vertex", "2", "y"])).toBe(100);
+    expect(verticesOf(object)).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ]);
+  });
+
+  it("gives a polyline a derived length that sums its segments and never closes back to the first point", () => {
+    const object = onlyObject(committed("polyline 0,0 3,4 3,0", createEmptyDocument()));
+    expect(getSlot(object, ["length"])?.value).toBeCloseTo(9);
+    expect(getSlot(object, ["area"])).toBeUndefined();
+  });
+
+  it("refuses a polyline with fewer than two points, naming the count it got", () => {
+    expect(refused("polyline 0,0", createEmptyDocument())).toContain("at least 2");
+  });
+
   it("creates a table carrying its origin and both dimensions, and NO cell slots, because an absent cell is how a table spells empty", () => {
     const object = onlyObject(committed("table x=0 y=0 rows=8 cols=8", createEmptyDocument()));
     expect(object.type).toBe("table");
@@ -678,6 +706,7 @@ describe("every registry command reaches a handler", () => {
     "circle x=0 y=0 r=1",
     "polygon sides=3 x=0 y=0 r=1",
     "rect x=0 y=0 w=1 h=1",
+    "polyline 0,0 1,1",
     'text x=0 y=0 "hi"',
     "table x=0 y=0",
     "image x=0 y=0",

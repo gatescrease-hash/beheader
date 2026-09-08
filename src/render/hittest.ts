@@ -56,6 +56,30 @@ function hitTestVerticesShape(object: GraphObject, worldPoint: WorldPoint, strok
   return distanceToClosedPolyline(worldPoint, vertices) <= strokeToleranceWorld;
 }
 
+function distanceToOpenPolyline(point: Point, vertices: readonly Point[]): number {
+  let minDistance = Infinity;
+  for (let i = 0; i + 1 < vertices.length; i += 1) {
+    const a = vertices[i];
+    const b = vertices[i + 1];
+    if (a === undefined || b === undefined) {
+      continue;
+    }
+    const distance = distanceToSegment(point, a, b);
+    if (distance < minDistance) {
+      minDistance = distance;
+    }
+  }
+  return minDistance;
+}
+
+function hitTestPolyline(object: GraphObject, worldPoint: WorldPoint, strokeToleranceWorld: number): boolean {
+  const vertices = asPointArray(getSlot(object, VERTICES_PATH)?.value);
+  if (vertices === undefined || vertices.length < 2) {
+    return false;
+  }
+  return distanceToOpenPolyline(worldPoint, vertices) <= strokeToleranceWorld;
+}
+
 function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
@@ -89,6 +113,7 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
     case "script":
       return hitTestBoundingBox(object, worldPoint);
     case "polyline":
+      return hitTestPolyline(object, worldPoint, strokeToleranceWorld);
     case "value":
     case "add":
       return false;

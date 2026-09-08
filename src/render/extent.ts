@@ -41,6 +41,7 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
     case "circle":
     case "polygon":
     case "rect":
+    case "polyline":
       return verticesExtent(object);
     case "table":
       return tableExtent(object);
@@ -50,7 +51,6 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return imageExtent(object);
     case "script":
       return scriptExtent(object);
-    case "polyline":
     case "value":
     case "add":
       return undefined;

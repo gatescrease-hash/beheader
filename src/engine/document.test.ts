@@ -597,6 +597,81 @@ describe("deserializeDocument — ports, structural validation only", () => {
   });
 });
 
+describe("deserializeDocument — vertexCount, structural validation only", () => {
+  function documentWithVertexCount(vertexCount: unknown, slots: Record<string, unknown> = {}): unknown {
+    return {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 2,
+      camera: { x: 0, y: 0, zoom: 1 },
+      journal: [],
+      objects: [{ id: "obj_1", name: "polyline_1", type: "polyline", slots, vertexCount }],
+    };
+  }
+
+  it("is ABSENT on a document with no vertexCount field at all — every document saved before polyline existed still loads", () => {
+    const noVertexCount = { formatVersion: FORMAT_VERSION, nextObjectId: 2, camera: { x: 0, y: 0, zoom: 1 }, journal: [], objects: [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } }] };
+    const result = deserializeDocument(noVertexCount);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.objects[0]?.vertexCount).toBeUndefined();
+    }
+  });
+
+  it("round-trips a well-formed vertexCount unchanged", () => {
+    const result = deserializeDocument(
+      documentWithVertexCount(2, {
+        "vertex.0.x": { kind: "literal", value: 0 },
+        "vertex.0.y": { kind: "literal", value: 0 },
+        "vertex.1.x": { kind: "literal", value: 10 },
+        "vertex.1.y": { kind: "literal", value: 0 },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.objects[0]?.vertexCount).toBe(2);
+    }
+  });
+
+  it("rejects a vertexCount that is not a non-negative integer", () => {
+    expect(deserializeDocument(documentWithVertexCount("2")).ok).toBe(false);
+    expect(deserializeDocument(documentWithVertexCount(-1)).ok).toBe(false);
+    expect(deserializeDocument(documentWithVertexCount(1.5)).ok).toBe(false);
+  });
+
+  it("rejects a non-finite or -0 vertexCount, the same illegal number rule every other field follows", () => {
+    expect(deserializeDocument(documentWithVertexCount(Number.POSITIVE_INFINITY)).ok).toBe(false);
+    expect(deserializeDocument(documentWithVertexCount(-0)).ok).toBe(false);
+  });
+
+  it("round-trips through save/load unchanged (saveDocument(loadDocument(json)) === json)", () => {
+    const json = JSON.stringify(
+      documentWithVertexCount(2, {
+        "vertex.0.x": { kind: "literal", value: 0 },
+        "vertex.0.y": { kind: "literal", value: 0 },
+        "vertex.1.x": { kind: "literal", value: 10 },
+        "vertex.1.y": { kind: "literal", value: 0 },
+      }),
+    );
+    const loaded = loadDocument(json);
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      const expected = JSON.parse(json) as { objects: { slots: Record<string, unknown> }[] };
+      const expectedSlots = expected.objects[0]?.slots;
+      if (expectedSlots !== undefined) {
+        expectedSlots["centroid.x"] = { kind: "derived" };
+        expectedSlots["centroid.y"] = { kind: "derived" };
+        expectedSlots["length"] = { kind: "derived" };
+        expectedSlots["bounds.minX"] = { kind: "derived" };
+        expectedSlots["bounds.minY"] = { kind: "derived" };
+        expectedSlots["bounds.maxX"] = { kind: "derived" };
+        expectedSlots["bounds.maxY"] = { kind: "derived" };
+        expectedSlots["vertices"] = { kind: "derived" };
+      }
+      expect(JSON.parse(saveDocument(loaded.document)) as unknown).toEqual(expected);
+    }
+  });
+});
+
 describe("deserializeDocument — the same value rules on the journal, read side", () => {
   it("rejects a document whose JOURNAL holds a raw non-finite number — probe I: the SAME 1e999 that is rejected in the object list must also be rejected here, not silently corrupted on the next save", () => {
     const parsed = JSON.parse(

@@ -29,6 +29,17 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "polygon sides=5 x=0 y=0 r=50", command: { kind: "polygon", sides: 5, x: 0, y: 0, radius: 50 } },
   { line: "rect x=0 y=0 w=200 h=100", command: { kind: "rect", x: 0, y: 0, width: 200, height: 100 } },
   {
+    line: "polyline 0,0 100,0 100,100",
+    command: {
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+      ],
+    },
+  },
+  {
     line: 'text x=0 y=0 "Hello {= table_x.A1 }"',
     command: { kind: "text", x: 0, y: 0, content: "Hello {= table_x.A1 }" },
   },
@@ -90,6 +101,44 @@ describe("the command registry (table driven, one entry per command)", () => {
   it("rejects an empty line rather than returning a command that does nothing", () => {
     expect(rejected("")).toEqual({ message: "empty command", start: 0 });
     expect(rejected("   \t ").message).toBe("empty command");
+  });
+});
+
+describe("polyline — a variadic points list, not a fixed positional count", () => {
+  it("accepts more than three points, unlike every other creation command", () => {
+    expect(parsed("polyline 0,0 10,0 10,10 0,10")).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+        { x: 0, y: 10 },
+      ],
+    });
+  });
+
+  it("parses a single point too — the parser checks only the grammar, not the minimum of two a line needs", () => {
+    expect(parsed("polyline 0,0")).toEqual({ kind: "polyline", points: [{ x: 0, y: 0 }] });
+  });
+
+  it("rejects a point missing its comma, naming the malformed token and its offset", () => {
+    const line = "polyline 0,0 nope 10,10";
+    expect(rejected(line)).toEqual({
+      message: '<points> takes a point as x,y — got "nope" — usage: polyline <x,y> <x,y> [<x,y> ...]',
+      start: line.indexOf("nope"),
+    });
+  });
+
+  it("rejects a point with a non-numeric half", () => {
+    expect(rejected("polyline 0,0 x,10").message).toContain("takes a point as x,y");
+  });
+
+  it("rejects a quoted token in place of a point", () => {
+    expect(rejected('polyline 0,0 "10,10"').message).toContain("does not take the argument");
+  });
+
+  it("rejects the bare command word with no points at all", () => {
+    expect(rejected("polyline").message).toContain("needs <points>");
   });
 });
 

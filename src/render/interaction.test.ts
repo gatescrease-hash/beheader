@@ -314,8 +314,8 @@ describe("a drag works per component, never all or nothing", () => {
   it("names a derived component as never writable rather than trying to move it", () => {
     const derivedOrigin: GraphObject = {
       id: "obj_1",
-      name: "polyline_1",
-      type: "polyline",
+      name: "unbuilt_1",
+      type: "unbuilt" as GraphObject["type"],
       slots: { "origin.x": { kind: "derived", value: 4 }, "origin.y": { kind: "literal", value: 0 } },
     };
     const { objects, journal } = commit([derivedOrigin]);

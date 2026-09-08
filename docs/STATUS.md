@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 1955 pass, 0 skip, across 36 test files. |
+| Tests | 1993 pass, 0 skip, across 38 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 1955 tests
+npm test             # 1993 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -93,9 +93,9 @@ stays a pure function of its arguments, so tests need no browser.
 ## 3. The structure map
 
 Every source file has a test file beside it with the same name plus `.test.ts`.
-The map below names the source file only. Three files have no test of their own:
-`primitives/image.ts`, `render/slots.ts` and `render/extent.ts`. The first two
-are constant tables. The third has no test file, although other suites drive it.
+The map below names the source file only. Two files have no test of their own:
+`primitives/image.ts` and `render/slots.ts`. Both are constant tables, and
+other suites drive them anyway.
 
 ### Root
 
@@ -114,7 +114,7 @@ are constant tables. The third has no test file, although other suites drive it.
 | --- | --- |
 | `address.ts` | The two layer address scheme. An object has a stable ID and a name the operator can change. Formulas resolve a name to an ID at parse time, and a stored AST holds the ID. So a rename needs no formula rewrite. This file also holds the A1 cell reference helpers. A cell reference is an address form, and nothing else needs a second copy of that logic. Load bearing. Everything depends on it. |
 | `eval-context.ts` | The `TextMeasurer` interface and the `EvalContext` that carries it. This file exists so Rule 1 has a shape, not only a prohibition. It has no imports at all, which is the point. |
-| `graph/node.ts` | The data model. `Value`, `ErrorValue`, `Slot` in its three kinds, `GraphObject`, and the `slotKey` function. `slotKey` joins a path into one string key. There is no sanctioned inverse. Code that needs a path must derive it from the schema, never invert a key. |
+| `graph/node.ts` | The data model. `Value`, `ErrorValue`, `Slot` in its three kinds, `GraphObject`, and the `slotKey` function. `slotKey` joins a path into one string key. There is no sanctioned inverse. Code that needs a path must derive it from the schema, never invert a key. `GraphObject.vertexCount` sits beside the slots, not inside them. A polyline's vertex count changes only through `addvertex` or `delvertex`. Ports sit outside the slots for the same reason. |
 | `graph/edge.ts` | The `Edge` record and `addressKey`. Tiny on purpose. An edge is data, and only `mutation.ts` makes one. |
 | `graph/cycles.ts` | Depth first cycle detection over the whole edge set. It names every slot in the cycle it finds, because the message is the whole debug story. It runs from scratch on every mutation, per Rule 5. |
 | `graph/eval.ts` | The topological pass. It sorts every slot and evaluates each one. A literal returns its stored value. A formula evaluates its AST. A derived slot calls its schema compute function. All three kinds go through this one pass, so a derived value is never one step stale. No type specific logic belongs here. The script node must stay one more derived slot. |
@@ -125,14 +125,15 @@ are constant tables. The third has no test file, although other suites drive it.
 | `formula/eval.ts` | AST to value. It is lazy. `IF` evaluates one branch. `AND` and `OR` stop early. The contrast with `deps.ts` is deliberate. |
 | `formula/functions.ts` | The built in function registry. It is a table from name to arity to implementation. One line adds a function. Two functions are lazy, because `IF` must not evaluate the branch it does not take. |
 | `formula/format.ts` | AST back to source text. It maps IDs back to current names. This is what lets the properties panel and the `props` command show a formula the way the operator wrote it. |
-| `primitives/schema.ts` | The registry that declares, for each object type, which slots exist and which kind each one has. It is the single source of truth for a slot path. Three sites read it in one pass: edge derivation and two integrity checks. All three must read it through the same resolver, or a dynamic slot family drifts between them. Types with an entry today: `value`, `add`, `table`, `circle`, `polygon`, `rect`, `text`, `image`, `script`. `value` and `add` are test fixtures from the first phase. Keep them. They are the smallest case that exercises a derived slot. |
-| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. |
+| `primitives/schema.ts` | The registry that declares, for each object type, which slots exist and which kind each one has. It is the single source of truth for a slot path. Three sites read it in one pass: edge derivation and two integrity checks. All three must read it through the same resolver, or a dynamic slot family drifts between them. Types with an entry today: `value`, `add`, `table`, `circle`, `polygon`, `polyline`, `rect`, `text`, `image`, `script`. `value` and `add` are test fixtures from the first phase. Keep them. They are the smallest case that exercises a derived slot. |
+| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `openPathDerivedSlots`, the derived set an open path uses instead of `verticesDerivedSlots`. An open path gets no `area` slot. `SPEC.md` section 8 scopes area to a closed path. Its `length` never adds the segment back to the first vertex the way a closed shape's does. |
 | `primitives/table.ts` | Cell address math, range expansion, and the row and column resize passes. A range expands to concrete cells at edge derivation time, from the size the table has now. So an expansion can never go stale. An empty cell inside a range gets no edge, which is why a sparse table works. |
 | `primitives/text.ts` | The block tree parser for `{= }` and `{? }{:}{?}`, the dependency walker over it, and the three compute functions for `resolvedContent`, `measuredHeight` and `measuredWidth`. The dependency walker is the first dynamic dependency resolver in the codebase. It re-parses `content` on every edge derivation, because the set of slots the text names changes with every edit. |
 | `primitives/image.ts` | Slot path constants only. No logic. The image primitive is data plus a renderer arm. |
 | `script/stub.ts` | The script node. Ports are ordinary slots. An `in.<port>` slot is a formula slot. An `out.<port>` slot is a derived slot. The `source` slot is a literal slot that nothing reads, so an edit to it triggers no recompute. The `evaluateScriptOutput` function returns the placeholder value. When Python arrives, only that body changes. |
 | `mutation.ts` | The single channel for state change. It runs the eight step loop: stage, apply, derive edges, check integrity, check cycles, refuse or evaluate, then commit and journal. It is the largest engine file and the most load bearing one. A batch applies many operations to one clone and commits all or nothing. A document load must use a batch. |
-| `document.ts` | The versioned JSON format, and save and load. It never stores a derived value. A full evaluation pass on load regenerates them. Load goes through the mutation API, so a bad file fails the same checks a bad command does. |
+| `document.ts` | The versioned JSON format, and save and load. It never stores a derived value. A full evaluation pass on load regenerates them. Load goes through the mutation API, so a bad file fails the same checks a bad command does. It reconstructs `ports` and `vertexCount` by hand, the same as every slot. Both sit outside `GraphObject.slots`, so a generic JSON parse cannot validate their shape. |
+| `index.ts` | The one public surface of the engine. A consumer outside `src/engine` must import from here, not from a deep path. It re-exports every other file in this directory. The one name that collides is `evaluate`. Both `graph/eval.ts` and `formula/eval.ts` export it, for different reasons. This file aliases them to `evaluateGraph` and `evaluateFormulaAst`. `command/` and `render/` do not import through it yet. That migration is mechanical and still open. |
 
 ### `src/render/` - the throwaway drawing layer
 
@@ -142,7 +143,7 @@ are constant tables. The third has no test file, although other suites drive it.
 | `extent.ts` | The world space box of an object, and of the whole document. A drawn extent and a clickable extent are one extent. Give a type an arm here and it becomes clickable. Give it a renderer arm in the same change, or it becomes an invisible click target. |
 | `slots.ts` | Small readers that pull a number, a string or a boolean out of a slot value, plus the fixed table and script box sizes. It exists so no drawing file re-invents the same defensive read. |
 | `textbox.ts` | The one rule for how big a text box is. Three files read it. Do not answer the same question in a fourth place. |
-| `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. |
+| `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. A polyline is a stroke test too, but over an open chain of segments. It never tests the gap between the last vertex and the first, unlike the closed shapes' distance test. |
 | `handles.ts` | The resize grabbers on a selected object, and the box math they drive. A resize is absolute, from the extent the drag started with, not a sum of small steps. |
 | `markdown.ts` | The markdown lite parser. Bold, italic, code, headings, list items and paragraph breaks, and nothing else. Its rule for which asterisk opens and which closes is load bearing. A simpler version reintroduces a bug that thirty tests did not catch. |
 | `measure.ts` | The real Canvas2D `TextMeasurer`, and `layOutText`, the line breaker. There are two measurers and they are not the same. The engine one honours markup. The overlay one does not. |
@@ -156,7 +157,7 @@ are constant tables. The third has no test file, although other suites drive it.
 
 | File | What and why |
 | --- | --- |
-| `parser.ts` | One typed line to one command object, through a table of specs. It never throws. A bad line returns a failure that names what is wrong and where. It also holds the list of commands the spec names but the code does not build yet. An operator who types one gets the truth instead of "unknown command". That list and the built registry must stay disjoint. A test pins it. |
+| `parser.ts` | One typed line to one command object, through a table of specs. It never throws. A bad line returns a failure that names what is wrong and where. It also holds the list of commands the spec names but the code does not build yet. An operator who types one gets the truth instead of "unknown command". That list and the built registry must stay disjoint. A test pins it. `polyline` is the one command with a variadic argument. Its `points` positional kind consumes every token left on the line as an `x,y` pair. It is the only positional kind matchArguments lets grow past the declared count. |
 | `prompt.ts` | The AutoCAD style prompt sequence. A bare command word starts it. The prompt asks for each argument in turn. This is a state machine on its own, apart from the one shot parser. |
 | `commands.ts` | The handlers. Each one turns a command object into mutation operations and a log line. This is where a refusal message gets written, so this is where the debug story lives. |
 | `props.ts` | Slot descriptors for the `props` command and for the properties panel. Both surfaces read one list, so they can never disagree about what an object has. |
@@ -218,6 +219,15 @@ These are the traps. Each one cost real time to find.
 14. **The operator cannot see what a test can see.** Ask for a live look before
     you call an authoring surface done. This was the deciding step in six
     cycles in a row, and it is what closed the last phase.
+15. **A polyline's vertex count is a field on `GraphObject`, not a slot.**
+    `vertexCount` sits beside `slots`, the same as `ports` does for a script
+    node. Both change only through a mutation operation, never through `set`,
+    so neither belongs inside the set a formula can write. `document.ts`
+    reconstructs both by hand on load for the same reason.
+16. **Two functions share the name `evaluate`.** `graph/eval.ts` runs the whole
+    graph. `formula/eval.ts` runs one AST. `engine/index.ts` re-exports them as
+    `evaluateGraph` and `evaluateFormulaAst`. Import the aliased name from
+    there, never the bare one from a deep path.
 
 ---
 
@@ -228,29 +238,46 @@ group blocks the acceptance test in `SPEC.md` section 12.
 
 ### Blocks the road network test
 
-1. **`polyline` does not exist.** It has no schema entry, no creation command,
-   no extent, no hit test and no renderer arm. It is the largest single piece
-   of work in the list.
-2. **Per vertex slots do not exist.** `vertex.0.x` and `vertex.0.y` are
-   specified in `SPEC.md` section 8 and nothing builds them. The address
-   parser and the lexer already accept the form. Nothing produces it.
-3. **A drag over an object with no `origin` slot is not built.** That path
-   needs per vertex slots first.
+1. **`polyline` exists now.** It has a schema entry, a creation command
+   (`polyline <x,y> <x,y> [<x,y> ...]`), per vertex slots, a derived
+   `vertices` slot, an extent, a hit test and a renderer arm. Its derived set
+   is `centroid`, `length` and `bounds`, not the closed shape's set: no `area`,
+   because `SPEC.md` section 8 scopes area to a closed path, and `length`
+   never closes back to the first vertex. Still open: `closed`, style slots
+   (item 7), and the mutation operations that grow or shrink it (item 4).
+2. **Per vertex slots exist.** `vertex.0.x` and `vertex.0.y`, as `SPEC.md`
+   section 8 specifies. `enumeratePolylineVertexSlotPaths` in `geometry.ts`
+   builds the paths from `GraphObject.vertexCount`, a field beside the slots
+   rather than a slot itself, because the count changes only through a
+   mutation operation. Only `createObjectFromCommand` writes it today. There
+   is no `addvertex` or `delvertex` yet, so a live polyline cannot grow.
+3. **A drag over an object with no `origin` slot is still not built.** A
+   polyline has vertex slots now, not an `origin` slot, so this path stays
+   open. `interaction.ts` already refuses the drag with a clear notice rather
+   than crashing.
 
 ### Specified and not built
 
 4. **`explode`, `addvertex` and `delvertex`.** The parser names all three as
-   not built. Each one needs a new mutation operation kind.
+   not built. Each one needs a new mutation operation kind. `addvertex` and
+   `delvertex` also need to grow and shrink `GraphObject.vertexCount`, the way
+   `insertTableLine` and `deleteTableLine` grow and shrink a table's `rows`
+   and `cols`.
 5. **`pan` as a command.** The mouse can pan. The command has no argument
    grammar yet.
 6. **Path `segments`.** `SPEC.md` section 8 declares arcs and beziers. Only
    straight lines exist.
 7. **Geometry style slots.** `strokeColor`, `strokeWidth` and `fillColor` are
    specified as slots that a formula can drive. No schema declares them. The
-   renderer uses fixed colours.
-8. **`src/engine/index.ts`.** The spec names one public engine surface. It does
-   not exist, so every consumer imports deep paths. That makes the future Rust
-   port boundary harder to see.
+   renderer uses fixed colours. A `closed` slot belongs with this group too,
+   since a polyline has no way today to become a closed shape.
+8. **`src/engine/index.ts` exists now.** It is the one public engine surface
+   the spec names, and it re-exports every other engine file under one name
+   each. It resolves the one collision (`evaluate`) to `evaluateGraph` and
+   `evaluateFormulaAst`. `command/` and `render/` do not import through it
+   yet, all still on deep paths. To move a file, swap its several engine
+   imports for one import from `../engine/index.ts`. That is a mechanical
+   change, still open because it touches every file in both layers at once.
 9. **`src/engine/graph/dirty.ts`.** Rule 5 says to keep the module even with a
    naive body, so the shape of the fast version survives. It was never made.
 10. **Journal replay.** Every mutation appends to the journal. Nothing reads it

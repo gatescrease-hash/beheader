@@ -102,6 +102,13 @@ export function isLegalPortName(name: string): boolean {
 export interface GraphObject extends AddressableObject {
   readonly slots: Readonly<Record<string, Slot>>;
   readonly ports?: GraphObjectPorts;
+
+  /**
+   * The vertex count of a polyline. It exists only on that type. It changes
+   * only through addvertex or delvertex, never through set, so it sits beside
+   * the slots instead of inside them.
+   */
+  readonly vertexCount?: number;
 }
 
 /**

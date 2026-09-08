@@ -30,6 +30,7 @@ import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import {
   MIN_POLYGON_SIDES,
+  MIN_POLYLINE_VERTICES,
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
   POLYGON_ROTATION_PATH,
@@ -37,6 +38,8 @@ import {
   RADIUS_PATH,
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
+  vertexXPath,
+  vertexYPath,
 } from "../engine/primitives/geometry.ts";
 import { findDerivedSlotSchema, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
 import { MAX_TABLE_LINES, MIN_TABLE_LINES, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
@@ -61,6 +64,7 @@ import type {
   CreateCircleCommand,
   CreateImageCommand,
   CreatePolygonCommand,
+  CreatePolylineCommand,
   CreateRectCommand,
   CreateScriptCommand,
   CreateTableCommand,
@@ -140,6 +144,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return createPolygon(command, document, context);
     case "rect":
       return createRect(command, document, context);
+    case "polyline":
+      return createPolyline(command, document, context);
     case "text":
       return createText(command, document, context);
     case "table":
@@ -194,6 +200,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "circle",
   "polygon",
   "rect",
+  "polyline",
   "text",
   "table",
   "image",
@@ -226,6 +233,7 @@ function createObjectFromCommand(
   type: ObjectType,
   literals: readonly LiteralSlotDeclaration[],
   context: EvalContext,
+  vertexCount?: number,
 ): CommandOutcome {
   const schema = getObjectSchema(type);
   if (schema === undefined) {
@@ -244,7 +252,7 @@ function createObjectFromCommand(
     slots[slotKey(derived.path)] = { kind: "derived", value: null };
   }
 
-  const object: GraphObject = { id: minted.id, name, type, slots };
+  const object: GraphObject = { id: minted.id, name, type, slots, ...(vertexCount === undefined ? {} : { vertexCount }) };
   const operation: Operation = { kind: "createObject", object };
   const result = mutate(document.objects, [operation], document.journal, context);
   if (!result.ok) {
@@ -287,6 +295,18 @@ function createRect(command: CreateRectCommand, document: Document, context: Eva
     { path: RECT_WIDTH_PATH, value: command.width },
     { path: RECT_HEIGHT_PATH, value: command.height },
   ], context);
+}
+
+function createPolyline(command: CreatePolylineCommand, document: Document, context: EvalContext): CommandOutcome {
+  if (command.points.length < MIN_POLYLINE_VERTICES) {
+    return { ok: false, message: `a polyline needs at least ${MIN_POLYLINE_VERTICES} points, got ${command.points.length}` };
+  }
+  const literals: LiteralSlotDeclaration[] = [];
+  command.points.forEach((point, index) => {
+    literals.push({ path: vertexXPath(index), value: point.x });
+    literals.push({ path: vertexYPath(index), value: point.y });
+  });
+  return createObjectFromCommand(document, "polyline", literals, context, command.points.length);
 }
 
 function createTable(command: CreateTableCommand, document: Document, context: EvalContext): CommandOutcome {

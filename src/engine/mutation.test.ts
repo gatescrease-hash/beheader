@@ -98,8 +98,8 @@ describe("deriveEdges — objects of a type with no schema entry yet", () => {
   it("derives no edges for them and does not throw, matching getObjectSchema's own honest 'undefined' stance", () => {
     const noSchemaYet: GraphObject = {
       id: "obj_1",
-      name: "polyline_1",
-      type: "polyline",
+      name: "unbuilt_1",
+      type: "unbuilt" as GraphObject["type"],
       slots: { radius: { kind: "literal", value: 5 } },
     };
 
@@ -235,8 +235,8 @@ describe("validateIntegrity — it refuses an undeclared formula or derived slot
   it("does not flag an object whose type has no schema entry at all, the one permitted exception", () => {
     const noSchemaYet: GraphObject = {
       id: "obj_1",
-      name: "polyline_1",
-      type: "polyline",
+      name: "unbuilt_1",
+      type: "unbuilt" as GraphObject["type"],
       slots: { radius: { kind: "literal", value: 5 } },
     };
     expect(validateIntegrity([noSchemaYet], deriveEdges([noSchemaYet]))).toEqual({ ok: true });

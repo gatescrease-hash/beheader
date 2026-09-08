@@ -54,7 +54,7 @@ describe("getObjectSchema", () => {
   });
 
   it("returns undefined for an ObjectType with no schema entry yet", () => {
-    expect(getObjectSchema("polyline")).toBeUndefined();
+    expect(getObjectSchema("unbuilt" as GraphObject["type"])).toBeUndefined();
   });
 
   it("returns a real entry for 'table', the first dynamic slot family, with no derived slots", () => {
@@ -173,7 +173,7 @@ describe("findDerivedSlotSchema", () => {
   });
 
   it("returns undefined for a type with no schema at all", () => {
-    expect(findDerivedSlotSchema(stubObject("polyline"), ["centroid", "x"])).toBeUndefined();
+    expect(findDerivedSlotSchema(stubObject("unbuilt" as GraphObject["type"]), ["centroid", "x"])).toBeUndefined();
   });
 
   it("returns undefined for 'value', which has no derived slots", () => {

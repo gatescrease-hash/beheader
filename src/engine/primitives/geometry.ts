@@ -16,6 +16,8 @@ import type { Address } from "../address.ts";
 import { isErrorValue, type ErrorValue, type GraphObject, type Point, type Value } from "../graph/node.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
+export const VERTEX_PATH_PREFIX = "vertex";
+
 export const ORIGIN_X_PATH: readonly string[] = ["origin", "x"];
 export const ORIGIN_Y_PATH: readonly string[] = ["origin", "y"];
 export const RADIUS_PATH: readonly string[] = ["radius"];
@@ -37,6 +39,17 @@ export const BOUNDS_MAX_Y_PATH: readonly string[] = ["bounds", "maxY"];
 export const CIRCLE_VERTEX_COUNT = 32;
 
 export const MIN_POLYGON_SIDES = 3;
+
+export const MIN_POLYLINE_VERTICES = 2;
+
+/** The literal slot path of one vertex coordinate, such as vertex.0.x. */
+export function vertexXPath(index: number): readonly string[] {
+  return [VERTEX_PATH_PREFIX, String(index), "x"];
+}
+
+export function vertexYPath(index: number): readonly string[] {
+  return [VERTEX_PATH_PREFIX, String(index), "y"];
+}
 
 export function computePolygonVertices(sides: number, radius: number, origin: Point, rotation: number): readonly Point[] {
   const vertices: Point[] = [];
@@ -101,7 +114,7 @@ export function computeCentroid(vertices: readonly Point[]): Point {
   return { x: weightedX / sixSignedArea, y: weightedY / sixSignedArea };
 }
 
-function computeVertexMean(vertices: readonly Point[]): Point {
+export function computeVertexMean(vertices: readonly Point[]): Point {
   if (vertices.length === 0) {
     return { x: 0, y: 0 };
   }
@@ -117,6 +130,20 @@ function computeVertexMean(vertices: readonly Point[]): Point {
 export function computePerimeterLength(vertices: readonly Point[]): number {
   let total = 0;
   for (const [a, b] of edgePairs(vertices)) {
+    total += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return total;
+}
+
+/** The length of an open path. It sums each segment once and never closes the last gap. */
+export function computeOpenPathLength(vertices: readonly Point[]): number {
+  let total = 0;
+  for (let i = 0; i + 1 < vertices.length; i += 1) {
+    const a = vertices[i];
+    const b = vertices[i + 1];
+    if (a === undefined || b === undefined) {
+      continue;
+    }
     total += Math.hypot(b.x - a.x, b.y - a.y);
   }
   return total;
@@ -247,6 +274,73 @@ export const computeRectVerticesSlot: DerivedSlotCompute = (object, read) => {
   const vertices = computeRectVertices({ x: inputs.originX, y: inputs.originY }, inputs.width, inputs.height);
   return finalizeVertices(vertices, "rect.vertices");
 };
+
+/**
+ * The vertex.N.x and vertex.N.y paths a polyline declares now. The count comes
+ * from vertexCount, a field on the object itself and not a slot, because the
+ * count changes only through addvertex or delvertex.
+ */
+export function enumeratePolylineVertexSlotPaths(object: GraphObject): readonly (readonly string[])[] {
+  const count = object.vertexCount ?? 0;
+  const paths: (readonly string[])[] = [];
+  for (let index = 0; index < count; index += 1) {
+    paths.push(vertexXPath(index));
+    paths.push(vertexYPath(index));
+  }
+  return paths;
+}
+
+export const polylineVerticesDependencies: DerivedSlotDependencies = {
+  kind: "dynamic",
+  resolve: (object) => enumeratePolylineVertexSlotPaths(object).map((path) => ({ objectId: object.id, path })),
+};
+
+/** Gathers a polyline's per vertex slots into the one Point[] every consumer reads. */
+export const computePolylineVerticesSlot: DerivedSlotCompute = (object, read) => {
+  const count = object.vertexCount ?? 0;
+  if (count < MIN_POLYLINE_VERTICES) {
+    return { error: "#TYPE", message: `polyline.vertices: a polyline needs at least ${MIN_POLYLINE_VERTICES} vertices` };
+  }
+  const vertices: Point[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const x = read({ objectId: object.id, path: vertexXPath(index) });
+    const y = read({ objectId: object.id, path: vertexYPath(index) });
+    if (x === undefined || y === undefined) {
+      return { error: "#REF", message: `polyline.vertices: vertex ${index} did not resolve to a value` };
+    }
+    if (isErrorValue(x)) {
+      return x;
+    }
+    if (isErrorValue(y)) {
+      return y;
+    }
+    if (typeof x !== "number" || typeof y !== "number") {
+      return { error: "#TYPE", message: `polyline.vertices: vertex ${index} must be a pair of numbers` };
+    }
+    vertices.push({ x, y });
+  }
+  return finalizeVertices(vertices, "polyline.vertices");
+};
+
+/**
+ * The derived slots of an open path: centroid, length and bounds. Not area,
+ * because SPEC.md section 8 scopes area to a closed path, and a polyline has
+ * no closed slot yet. The centroid is the plain vertex mean, not the area
+ * weighted centroid verticesDerivedSlots uses, because that formula assumes a
+ * closed shape.
+ */
+export function openPathDerivedSlots(label: string): readonly DerivedSlotSchema[] {
+  const dependencies: DerivedSlotDependencies = { kind: "static", paths: [VERTICES_PATH] };
+  return [
+    { path: CENTROID_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.centroid.x`, (v) => computeVertexMean(v).x) },
+    { path: CENTROID_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.centroid.y`, (v) => computeVertexMean(v).y) },
+    { path: LENGTH_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.length`, computeOpenPathLength) },
+    { path: BOUNDS_MIN_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.minX`, (v) => computeBounds(v).minX) },
+    { path: BOUNDS_MIN_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.minY`, (v) => computeBounds(v).minY) },
+    { path: BOUNDS_MAX_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxX`, (v) => computeBounds(v).maxX) },
+    { path: BOUNDS_MAX_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxY`, (v) => computeBounds(v).maxY) },
+  ];
+}
 
 function readVertices(object: GraphObject, read: (address: Address) => Value | undefined, label: string): readonly Point[] | ErrorValue {
   const value = read({ objectId: object.id, path: VERTICES_PATH });

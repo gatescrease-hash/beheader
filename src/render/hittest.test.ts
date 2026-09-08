@@ -129,9 +129,9 @@ describe("hitTest — topmost object wins (array order is z order)", () => {
   });
 });
 
-describe("hitTest — object types with no visual definition yet never hit (mirrors renderer.ts)", () => {
-  it("never hits a polyline/value/add object, regardless of point", () => {
-    for (const type of ["polyline", "value", "add"] as const) {
+describe("hitTest — object types with no visual definition at all never hit (mirrors renderer.ts)", () => {
+  it("never hits a value/add object, regardless of point", () => {
+    for (const type of ["value", "add"] as const) {
       const object: GraphObject = { id: "obj_1", name: `${type}_1`, type, slots: {} };
       expect(hitTest({ x: 0, y: 0 }, [object], CAMERA_IDENTITY)).toBeUndefined();
     }
@@ -140,6 +140,45 @@ describe("hitTest — object types with no visual definition yet never hit (mirr
   it("never hits a slotless image either — it has no width or height, so it draws no frame", () => {
     const object: GraphObject = { id: "obj_1", name: "image_1", type: "image", slots: {} };
     expect(hitTest({ x: 0, y: 0 }, [object], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("never hits a slotless polyline either — no vertexCount means no vertices, so there is no line to hit", () => {
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {} };
+    expect(hitTest({ x: 0, y: 0 }, [object], CAMERA_IDENTITY)).toBeUndefined();
+  });
+});
+
+describe("hitTest — a polyline is an open path, unlike the closed vertex shapes", () => {
+  const elbow: GraphObject = {
+    id: "obj_1",
+    name: "polyline_1",
+    type: "polyline",
+    vertexCount: 3,
+    slots: {
+      "vertex.0.x": { kind: "literal", value: 0 },
+      "vertex.0.y": { kind: "literal", value: 0 },
+      "vertex.1.x": { kind: "literal", value: 100 },
+      "vertex.1.y": { kind: "literal", value: 0 },
+      "vertex.2.x": { kind: "literal", value: 100 },
+      "vertex.2.y": { kind: "literal", value: 100 },
+      vertices: {
+        kind: "derived",
+        value: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 100 },
+        ],
+      },
+    },
+  };
+
+  it("hits a point on one of its two segments", () => {
+    expect(hitTest({ x: 50, y: 0 }, [elbow], CAMERA_IDENTITY)).toBe(elbow);
+    expect(hitTest({ x: 100, y: 50 }, [elbow], CAMERA_IDENTITY)).toBe(elbow);
+  });
+
+  it("never hits the closing gap between the last vertex and the first — that gap does not exist on an open path", () => {
+    expect(hitTest({ x: 50, y: 50 }, [elbow], CAMERA_IDENTITY)).toBeUndefined();
   });
 });
 

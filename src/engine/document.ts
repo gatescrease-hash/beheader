@@ -59,6 +59,7 @@ export interface SerializedGraphObject {
   readonly type: ObjectType;
   readonly slots: Readonly<Record<string, SerializedSlot>>;
   readonly ports?: GraphObjectPorts;
+  readonly vertexCount?: number;
 }
 
 export interface SerializedDocument {
@@ -89,9 +90,14 @@ function serializeObject(object: GraphObject): SerializedGraphObject {
     }
     slots[key] = slot.kind === "derived" ? { kind: "derived" } : slot;
   }
-  return object.ports === undefined
-    ? { id: object.id, name: object.name, type: object.type, slots }
-    : { id: object.id, name: object.name, type: object.type, slots, ports: object.ports };
+  return {
+    id: object.id,
+    name: object.name,
+    type: object.type,
+    slots,
+    ...(object.ports === undefined ? {} : { ports: object.ports }),
+    ...(object.vertexCount === undefined ? {} : { vertexCount: object.vertexCount }),
+  };
 }
 
 export type DocumentLoadResult = { readonly ok: true; readonly document: Document } | { readonly ok: false; readonly message: string };
@@ -210,7 +216,7 @@ function reconstructObject(raw: unknown, index: number): ObjectReconstructionRes
   if (!isPlainObject(raw)) {
     return { ok: false, message: `objects[${index}] must be an object` };
   }
-  const { id, name, type, slots: rawSlots, ports: rawPorts } = raw;
+  const { id, name, type, slots: rawSlots, ports: rawPorts, vertexCount: rawVertexCount } = raw;
   if (typeof id !== "string" || typeof name !== "string" || typeof type !== "string") {
     return { ok: false, message: `objects[${index}] must have a string id, name, and type` };
   }
@@ -231,12 +237,33 @@ function reconstructObject(raw: unknown, index: number): ObjectReconstructionRes
   if (!portsResult.ok) {
     return portsResult;
   }
+  const vertexCountResult = reconstructVertexCount(rawVertexCount, name);
+  if (!vertexCountResult.ok) {
+    return vertexCountResult;
+  }
 
   const objectType = type as ObjectType;
-  const object: GraphObject = portsResult.ports === undefined
-    ? { id, name, type: objectType, slots }
-    : { id, name, type: objectType, slots, ports: portsResult.ports };
+  const object: GraphObject = {
+    id,
+    name,
+    type: objectType,
+    slots,
+    ...(portsResult.ports === undefined ? {} : { ports: portsResult.ports }),
+    ...(vertexCountResult.vertexCount === undefined ? {} : { vertexCount: vertexCountResult.vertexCount }),
+  };
   return { ok: true, object: { ...object, slots: withSchemaDerivedSlots(object) } };
+}
+
+type VertexCountReconstructionResult = { readonly ok: true; readonly vertexCount: number | undefined } | { readonly ok: false; readonly message: string };
+
+function reconstructVertexCount(raw: unknown, objectName: string): VertexCountReconstructionResult {
+  if (raw === undefined) {
+    return { ok: true, vertexCount: undefined };
+  }
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || isIllegalNumber(raw)) {
+    return { ok: false, message: `${objectName}.vertexCount must be a non-negative integer` };
+  }
+  return { ok: true, vertexCount: raw };
 }
 
 type PortsReconstructionResult = { readonly ok: true; readonly ports: GraphObjectPorts | undefined } | { readonly ok: false; readonly message: string };

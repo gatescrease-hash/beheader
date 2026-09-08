@@ -268,6 +268,9 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
     case "rect":
       drawVerticesShape(ctx, object);
       return;
+    case "polyline":
+      drawPolyline(ctx, object);
+      return;
     case "table":
       drawTable(ctx, object, editingCell);
       return;
@@ -280,7 +283,6 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
     case "script":
       drawScript(ctx, object);
       return;
-    case "polyline":
     case "value":
     case "add":
       return;
@@ -334,6 +336,34 @@ function buildVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObject): 
 
 function drawVerticesShape(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   if (!buildVerticesPath(ctx, object)) {
+    return;
+  }
+  ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
+  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
+  ctx.stroke();
+}
+
+/** An open path, unlike buildVerticesPath. It never closes the last gap. */
+function buildOpenVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
+  const vertices = asPointArray(getSlot(object, VERTICES_PATH)?.value);
+  const first = vertices?.[0];
+  if (vertices === undefined || first === undefined) {
+    return false;
+  }
+  ctx.beginPath();
+  ctx.moveTo(first.x, first.y);
+  for (let i = 1; i < vertices.length; i += 1) {
+    const vertex = vertices[i];
+    if (vertex === undefined) {
+      continue;
+    }
+    ctx.lineTo(vertex.x, vertex.y);
+  }
+  return true;
+}
+
+function drawPolyline(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+  if (!buildOpenVerticesPath(ctx, object)) {
     return;
   }
   ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
@@ -497,6 +527,12 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       }
       return;
     }
+    case "polyline": {
+      if (buildOpenVerticesPath(ctx, object)) {
+        strokeHighlight(ctx);
+      }
+      return;
+    }
     case "table": {
       const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
       const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
@@ -523,7 +559,6 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       ctx.strokeRect(extent.minX, extent.minY, extent.maxX - extent.minX, extent.maxY - extent.minY);
       return;
     }
-    case "polyline":
     case "value":
     case "add":
       return;

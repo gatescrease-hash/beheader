@@ -20,12 +20,20 @@ import {
   computeCentroid,
   computeCircleVertices,
   computeCircleVerticesSlot,
+  computeOpenPathLength,
   computePerimeterLength,
   computePolygonVertices,
   computePolygonVerticesSlot,
+  computePolylineVerticesSlot,
   computeRectVertices,
   computeRectVerticesSlot,
+  computeVertexMean,
+  enumeratePolylineVertexSlotPaths,
   MIN_POLYGON_SIDES,
+  MIN_POLYLINE_VERTICES,
+  openPathDerivedSlots,
+  vertexXPath,
+  vertexYPath,
   verticesDerivedSlots,
 } from "./geometry.ts";
 
@@ -334,7 +342,7 @@ describe("verticesDerivedSlots", () => {
   });
 });
 
-function derivedPlaceholders(type: "circle" | "polygon" | "rect"): Record<string, { readonly kind: "derived"; readonly value: null }> {
+function derivedPlaceholders(type: "circle" | "polygon" | "rect" | "polyline"): Record<string, { readonly kind: "derived"; readonly value: null }> {
   const schema = getObjectSchema(type);
   if (schema === undefined) {
     throw new Error(`test setup: expected a schema for ${type}`);
@@ -458,5 +466,162 @@ describe("every preset winds counterclockwise (positive doubled signed area)", (
   it("gives a degenerate shape an EXACTLY zero doubled area, which is neither winding", () => {
     expect(doubledSignedArea(computeRectVertices({ x: 0, y: 0 }, 0, 3))).toBe(0);
     expect(doubledSignedArea(computeCircleVertices(0, { x: 5, y: 5 }))).toBe(0);
+  });
+});
+
+describe("enumeratePolylineVertexSlotPaths — the count comes from vertexCount, a field and not a slot", () => {
+  it("lists vertex.N.x then vertex.N.y for each index, in order", () => {
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 3 };
+    expect(enumeratePolylineVertexSlotPaths(object)).toEqual([
+      ["vertex", "0", "x"],
+      ["vertex", "0", "y"],
+      ["vertex", "1", "x"],
+      ["vertex", "1", "y"],
+      ["vertex", "2", "x"],
+      ["vertex", "2", "y"],
+    ]);
+  });
+
+  it("lists nothing for a polyline with no vertexCount field at all", () => {
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {} };
+    expect(enumeratePolylineVertexSlotPaths(object)).toEqual([]);
+  });
+});
+
+describe("computePolylineVerticesSlot — gathers the per vertex slots into one Point[]", () => {
+  const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 2 };
+
+  it("reads vertex.0 then vertex.1, in index order, not in whatever order the slots were written", () => {
+    const vertices = computePolylineVerticesSlot(object, readFrom({ "vertex.0.x": 0, "vertex.0.y": 0, "vertex.1.x": 10, "vertex.1.y": 20 }));
+    expect(vertices).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 20 },
+    ]);
+  });
+
+  it(`refuses fewer than ${MIN_POLYLINE_VERTICES} vertices with #TYPE, before it reads a single one`, () => {
+    const tooFew: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 1 };
+    expect(computePolylineVerticesSlot(tooFew, readFrom({ "vertex.0.x": 0, "vertex.0.y": 0 }))).toEqual({
+      error: "#TYPE",
+      message: `polyline.vertices: a polyline needs at least ${MIN_POLYLINE_VERTICES} vertices`,
+    });
+  });
+
+  it("gives #REF when a vertex component has not resolved yet", () => {
+    expect(computePolylineVerticesSlot(object, readFrom({ "vertex.0.x": 0, "vertex.0.y": 0 }))).toEqual({
+      error: "#REF",
+      message: "polyline.vertices: vertex 1 did not resolve to a value",
+    });
+  });
+
+  it("gives #TYPE when a vertex component is not a number", () => {
+    expect(computePolylineVerticesSlot(object, readFrom({ "vertex.0.x": 0, "vertex.0.y": 0, "vertex.1.x": "east", "vertex.1.y": 0 }))).toEqual({
+      error: "#TYPE",
+      message: "polyline.vertices: vertex 1 must be a pair of numbers",
+    });
+  });
+});
+
+describe("computeOpenPathLength — an open path, unlike computePerimeterLength, never closes the last gap", () => {
+  it("sums each segment once, and does not add the segment back to the first vertex", () => {
+    const path: readonly Point[] = [
+      { x: 0, y: 0 },
+      { x: 3, y: 4 },
+      { x: 3, y: 0 },
+    ];
+    expect(computeOpenPathLength(path)).toBeCloseTo(5 + 4);
+    expect(computePerimeterLength(path)).toBeCloseTo(5 + 4 + 3);
+  });
+
+  it("gives zero for a single point, where there is no segment to sum", () => {
+    expect(computeOpenPathLength([{ x: 5, y: 5 }])).toBe(0);
+  });
+});
+
+describe("computeVertexMean — the plain average an open path's centroid uses", () => {
+  it("averages three collinear points, where the area weighted centroid computeCentroid uses is undefined", () => {
+    const collinear: readonly Point[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 20, y: 0 },
+    ];
+    expect(computeVertexMean(collinear)).toEqual({ x: 10, y: 0 });
+  });
+});
+
+describe("openPathDerivedSlots — no area, because SPEC.md section 8 scopes area to a closed path", () => {
+  it("declares centroid, length and bounds, and nothing named area", () => {
+    const paths = openPathDerivedSlots("polyline").map((slot) => slot.path.join("."));
+    expect(paths).toEqual(["centroid.x", "centroid.y", "length", "bounds.minX", "bounds.minY", "bounds.maxX", "bounds.maxY"]);
+  });
+});
+
+describe("polyline wired through the real mutate() pipeline", () => {
+  it("a real polyline's derived slots evaluate correctly on creation, and re-evaluate when a vertex moves", () => {
+    const polyline: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      vertexCount: 3,
+      slots: {
+        [vertexXPath(0).join(".")]: { kind: "literal", value: 0 },
+        [vertexYPath(0).join(".")]: { kind: "literal", value: 0 },
+        [vertexXPath(1).join(".")]: { kind: "literal", value: 3 },
+        [vertexYPath(1).join(".")]: { kind: "literal", value: 4 },
+        [vertexXPath(2).join(".")]: { kind: "literal", value: 3 },
+        [vertexYPath(2).join(".")]: { kind: "literal", value: 0 },
+        ...derivedPlaceholders("polyline"),
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: polyline }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
+    }
+    const object = created.objects.find((candidate) => candidate.id === "obj_1");
+    if (object === undefined) {
+      throw new Error("test setup: expected the polyline to survive creation");
+    }
+    expect(object.slots["vertices"]?.value).toEqual([
+      { x: 0, y: 0 },
+      { x: 3, y: 4 },
+      { x: 3, y: 0 },
+    ]);
+    expect(object.slots["length"]?.value).toBeCloseTo(9);
+    expect(object.slots["centroid.x"]?.value).toBeCloseTo(2);
+    expect(object.slots["bounds.maxY"]?.value).toBe(4);
+    expect(object.slots["area"]).toBeUndefined();
+
+    const updated = mutate(
+      created.objects,
+      [{ kind: "setSlot", address: { objectId: "obj_1", path: ["vertex", "2", "x"] }, slot: { kind: "literal", value: 30 } }],
+      created.journal,
+    );
+    if (!updated.ok) {
+      throw new Error(`test setup: expected the vertex edit to succeed, got: ${updated.message}`);
+    }
+    const after = updated.objects.find((candidate) => candidate.id === "obj_1");
+    expect(after?.slots["bounds.maxX"]?.value).toBe(30);
+  });
+
+  it("refuses a formula that names a vertex slot outside the current vertexCount, the same undeclared slot rule every type follows", () => {
+    const polyline: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        [vertexXPath(0).join(".")]: { kind: "literal", value: 0 },
+        [vertexYPath(0).join(".")]: { kind: "literal", value: 0 },
+        [vertexXPath(1).join(".")]: { kind: "literal", value: 1 },
+        [vertexYPath(1).join(".")]: {
+          kind: "formula",
+          ast: { type: "reference", address: { objectId: "obj_1", path: ["vertex", "5", "x"] } },
+          value: null,
+        },
+        ...derivedPlaceholders("polyline"),
+      },
+    };
+    const result = mutate([], [{ kind: "createObject", object: polyline }], []);
+    expect(result.ok).toBe(false);
   });
 });

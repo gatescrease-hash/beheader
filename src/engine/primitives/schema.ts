@@ -26,11 +26,15 @@ import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } 
 import {
   computeCircleVerticesSlot,
   computePolygonVerticesSlot,
+  computePolylineVerticesSlot,
   computeRectVerticesSlot,
+  enumeratePolylineVertexSlotPaths,
+  openPathDerivedSlots,
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
   POLYGON_ROTATION_PATH,
   POLYGON_SIDES_PATH,
+  polylineVerticesDependencies,
   RADIUS_PATH,
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
@@ -261,6 +265,15 @@ const RECT_SCHEMA: ObjectSchema = {
   ] }],
 };
 
+const POLYLINE_SCHEMA: ObjectSchema = {
+  type: "polyline",
+  nonDerivedSlotPaths: [{ kind: "dynamic", enumerate: enumeratePolylineVertexSlotPaths }],
+  derivedSlots: [{ kind: "static", slots: [
+    { path: VERTICES_PATH, dependencies: polylineVerticesDependencies, compute: computePolylineVerticesSlot },
+    ...openPathDerivedSlots("polyline"),
+  ] }],
+};
+
 const TEXT_SCHEMA: ObjectSchema = {
   type: "text",
   nonDerivedSlotPaths: [
@@ -370,6 +383,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   table: TABLE_SCHEMA,
   circle: CIRCLE_SCHEMA,
   polygon: POLYGON_SCHEMA,
+  polyline: POLYLINE_SCHEMA,
   rect: RECT_SCHEMA,
   text: TEXT_SCHEMA,
   image: IMAGE_SCHEMA,

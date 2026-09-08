@@ -39,6 +39,16 @@ export interface CreateRectCommand {
   readonly height: number;
 }
 
+export interface CreatePolylineCommand {
+  readonly kind: "polyline";
+  readonly points: readonly CommandPoint[];
+}
+
+export interface CommandPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface CreateImageCommand {
   readonly kind: "image";
   readonly x: number;
@@ -156,6 +166,7 @@ export type Command =
   | CreateCircleCommand
   | CreatePolygonCommand
   | CreateRectCommand
+  | CreatePolylineCommand
   | CreateTextCommand
   | CreateTableCommand
   | CreateImageCommand
@@ -195,7 +206,7 @@ export function isCommandParseFailure(value: CommandParseResult): value is Comma
   return value.ok === false;
 }
 
-type PositionalKind = "text" | "number" | "literal" | "literal-or-formula";
+type PositionalKind = "text" | "number" | "literal" | "literal-or-formula" | "points";
 
 interface PositionalParameter {
   readonly name: string;
@@ -240,7 +251,7 @@ export interface PromptPoint {
 
 interface MatchedArgument {
   readonly name: string;
-  readonly value: number | string | boolean;
+  readonly value: number | string | boolean | readonly CommandPoint[];
 }
 
 interface MatchedArguments {
@@ -336,6 +347,14 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
         height: Math.abs(opposite.y - corner.y),
       };
     },
+  },
+  {
+    name: "polyline",
+    usage: "polyline <x,y> <x,y> [<x,y> ...]",
+    positional: [{ name: "points", kind: "points" }],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "polyline", points: pointsArgument(args, "points") }),
   },
   {
     name: "text",
@@ -546,7 +565,6 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
 export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec.name);
 
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
-  "polyline",
   "explode",
   "addvertex",
   "delvertex",
@@ -651,6 +669,23 @@ function isWhitespace(character: string | undefined): boolean {
 
 const NUMBER_PATTERN = /^[+-]?[0-9]+(\.[0-9]+)?$/;
 
+function readPointToken(
+  spec: CommandSpec,
+  parameterName: string,
+  token: CommandToken,
+): { readonly ok: true; readonly point: CommandPoint } | CommandParseFailure {
+  const commaIndex = token.quoted ? -1 : token.text.indexOf(",");
+  if (commaIndex < 0) {
+    return failure(`<${parameterName}> takes a point as x,y — got "${token.text}" — usage: ${spec.usage}`, token.start);
+  }
+  const xText = token.text.slice(0, commaIndex);
+  const yText = token.text.slice(commaIndex + 1);
+  if (!NUMBER_PATTERN.test(xText) || !NUMBER_PATTERN.test(yText)) {
+    return failure(`<${parameterName}> takes a point as x,y — got "${token.text}" — usage: ${spec.usage}`, token.start);
+  }
+  return { ok: true, point: { x: Number(xText), y: Number(yText) } };
+}
+
 function matchArguments(
   spec: CommandSpec,
   line: string,
@@ -701,7 +736,8 @@ function matchArguments(
       namedTokens.push(matched.entry);
       continue;
     }
-    if (positionalTokens.length < spec.positional.length) {
+    const lastPositional = spec.positional[spec.positional.length - 1];
+    if (positionalTokens.length < spec.positional.length || (lastPositional?.kind === "points" && !token.quoted)) {
       positionalTokens.push(token);
       continue;
     }
@@ -723,6 +759,22 @@ function matchArguments(
   const positional: MatchedArgument[] = [];
   for (const [index, parameter] of spec.positional.entries()) {
     if (formula !== undefined && index >= formulaAt) {
+      break;
+    }
+    if (parameter.kind === "points") {
+      const pointTokens = positionalTokens.slice(index);
+      if (pointTokens.length === 0) {
+        return failure(`"${spec.name}" needs <${parameter.name}>, given as x,y — usage: ${spec.usage}`, endOffset);
+      }
+      const points: CommandPoint[] = [];
+      for (const pointToken of pointTokens) {
+        const read = readPointToken(spec, parameter.name, pointToken);
+        if (!read.ok) {
+          return read;
+        }
+        points.push(read.point);
+      }
+      positional.push({ name: parameter.name, value: points });
       break;
     }
     const token = positionalTokens[index];
@@ -812,6 +864,8 @@ function readPositionalValue(
         token.start,
       );
     }
+    case "points":
+      return failure(`<${parameter.name}> is a point list — matchArguments must read it before this switch runs`, token.start);
     default: {
       const exhaustive: never = parameter.kind;
       void exhaustive;
@@ -835,7 +889,13 @@ function numberArgument(args: MatchedArguments, name: string): number {
 }
 
 function valueArgument(args: MatchedArguments, name: string): number | string | boolean {
-  return findArgument(args, name)?.value ?? "";
+  const value = findArgument(args, name)?.value ?? "";
+  return typeof value === "number" || typeof value === "string" || typeof value === "boolean" ? value : "";
+}
+
+function pointsArgument(args: MatchedArguments, name: string): readonly CommandPoint[] {
+  const value = findArgument(args, name)?.value;
+  return Array.isArray(value) ? (value as readonly CommandPoint[]) : [];
 }
 
 function hasFlag(args: MatchedArguments, name: string): boolean {

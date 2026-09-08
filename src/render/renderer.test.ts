@@ -334,13 +334,48 @@ describe("renderDocument — object types with no schema/visual definition yet",
     expect(drawCalls).toEqual([]);
   });
 
-  it("draws nothing for a polyline/image fixture object (no visual definition, or no extent)", () => {
-    for (const type of ["polyline", "image"] as const) {
-      const { ctx, calls } = createFakeContext();
-      renderDocument(ctx, 800, 600, [{ id: "obj_1", name: `${type}_1`, type, slots: {} }], CAMERA_IDENTITY);
-      const drawCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
-      expect(drawCalls).toEqual([]);
-    }
+  it("draws nothing for a slotless image fixture object (no extent, since it has no width or height)", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [{ id: "obj_1", name: "image_1", type: "image", slots: {} }], CAMERA_IDENTITY);
+    const drawCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
+    expect(drawCalls).toEqual([]);
+  });
+
+  it("draws nothing for a slotless polyline fixture object either — no vertexCount means no vertices to trace", () => {
+    const { ctx, calls } = createFakeContext();
+    renderDocument(ctx, 800, 600, [{ id: "obj_1", name: "polyline_1", type: "polyline", slots: {} }], CAMERA_IDENTITY);
+    const drawCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
+    expect(drawCalls).toEqual([]);
+  });
+});
+
+describe("renderDocument — a polyline draws an open path, unlike the closed vertex shapes", () => {
+  it("moves to the first vertex, lines to each of the rest, and never closes back to the first", () => {
+    const { ctx, calls } = createFakeContext();
+    const polyline: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      slots: {
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+          ],
+        },
+      },
+    };
+    renderDocument(ctx, 800, 600, [polyline], CAMERA_IDENTITY);
+    const shapeCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect" && call.op !== "fillText");
+    expect(shapeCalls).toEqual([
+      { op: "beginPath" },
+      { op: "moveTo", x: 0, y: 0 },
+      { op: "lineTo", x: 100, y: 0 },
+      { op: "lineTo", x: 100, y: 100 },
+      { op: "stroke" },
+    ]);
   });
 });
 

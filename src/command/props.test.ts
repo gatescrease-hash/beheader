@@ -20,7 +20,7 @@ describe("buildSlotDescriptors — one object's slots, in schema order", () => {
   });
 
   it("returns an empty list for a type with no schema entry, never throwing (`primitives/schema.ts`'s registry)", () => {
-    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {} };
+    const object: GraphObject = { id: "obj_1", name: "unbuilt_1", type: "unbuilt" as GraphObject["type"], slots: {} };
     expect(buildSlotDescriptors(object, [object])).toEqual([]);
   });
 

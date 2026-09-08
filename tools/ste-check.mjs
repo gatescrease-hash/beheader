@@ -88,13 +88,24 @@ const CHAT_STYLE = [
   "canonical",
 ];
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// A word boundary on each side, so a real word such as delvertex does not
+// match delve. A plain substring test cannot tell the two apart.
+const CHAT_STYLE_PATTERNS = CHAT_STYLE.map((phrase) => ({
+  phrase,
+  re: new RegExp("\\b" + escapeRegExp(phrase) + "\\b"),
+}));
+
 /**
  * Words that end in -ing and that the checker accepts. STE rule 3.3 refuses
  * the -ing form of a verb. It accepts an -ing word that is a noun or a
  * technical name.
  */
 const ALLOWED_ING = new Set([
-  "string", "strings", "thing", "things", "nothing", "something", "anything",
+  "string", "strings", "substring", "substrings", "thing", "things", "nothing", "something", "anything",
   "everything", "during", "setting", "settings", "heading", "headings",
   "padding", "encoding", "spacing", "ring", "spring", "wing", "king", "bring",
   "sing", "ping", "morning", "evening", "ceiling", "sibling", "siblings",
@@ -408,8 +419,8 @@ function checkSentence(sentence, record) {
   }
 
   const low = sentence.toLowerCase();
-  for (const phrase of CHAT_STYLE) {
-    if (low.includes(phrase)) {
+  for (const { phrase, re } of CHAT_STYLE_PATTERNS) {
+    if (re.test(low)) {
       add("chat-style", phrase, "Delete it or say the fact plainly.");
     }
   }
