@@ -145,7 +145,7 @@ import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
 import { formatFormula } from "./engine/formula/format.ts";
 import { getSlot, IMAGE_TYPE, slotKey, type GraphObject, type Value } from "./engine/graph/node.ts";
 import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./engine/primitives/image.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_PICTURE_ASPECT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./engine/primitives/image.ts";
 import { DEFAULT_IMAGE_EXTENT, executeCommand, type CommandEffect } from "./command/commands.ts";
 import { parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
@@ -171,8 +171,9 @@ import {
 } from "./render/interaction.ts";
 import { resizeCursor } from "./render/handles.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
-import { renderDocument } from "./render/renderer.ts";
+import { fitBitmapIntoBox, renderDocument } from "./render/renderer.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
+import { readNumber } from "./render/slots.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 
 // ---------------------------------------------------------------------------
@@ -1006,20 +1007,19 @@ function describePanelCommand(command: SetLiteralCommand | SetFormulaCommand | U
  * and none is looked for; a future synthesised command that DID carry one would
  * need this function widened deliberately, not silently ignored.
  *
- * `echo` overrides only the ECHOED TEXT, never the command that runs. Its one
- * caller is `commitImageSource`: §5.7's data URL is hundreds of thousands of
- * characters and clause 7's "echo the synthesised command itself" is unmeetable
- * for it — a line the operator could not read, could not retype, and would have
- * to scroll past for the rest of the session. Every other caller takes
- * `describePanelCommand`'s exact text, unchanged.
+ * Every caller takes `describePanelCommand`'s exact text. The two gestures whose
+ * echo cannot be a command — `commitImagePicture` and `restorePictureAspect`, which
+ * each run several `set`s under one line — do not come through here at all; they
+ * drive `executeCommand` themselves through `commitGestureWrites`. (Entry 0173
+ * added an `echo` override here for a `commitImageSource` that entry 0174 replaced,
+ * leaving the parameter with no caller; removed at 0176-REVIEW.)
  */
 function runPanelCommand(
   state: AppState,
   command: SetLiteralCommand | SetFormulaCommand | UnlinkCommand | ClearCommand | DeleteCommand,
   context: EvalContext,
-  echo: string = describePanelCommand(command),
 ): AppState {
-  const echoed = withLog(state, [`> ${echo}`]);
+  const echoed = withLog(state, [`> ${describePanelCommand(command)}`]);
   const outcome = executeCommand(command, echoed.document, context);
   if (!outcome.ok) {
     return withLog(echoed, [outcome.message]);
@@ -1060,6 +1060,18 @@ export function commitPanelEdit(
  *
  * Same `runPanelCommand` -> `executeCommand` seam as every other panel write
  * (Rule 2, D-102 clause 5) and the same stale-id no-op posture (D-023).
+ *
+ * **The one drop-down that does more than write its slot** is an `image`'s
+ * `preserveAspect` (**D-144**): choosing "keep the picture's proportions" also puts
+ * a distorted box back to them. `restorePictureAspect` holds every condition for
+ * that and returns `state` untouched when any fails, so this function stays generic
+ * — it calls it after every choice rather than testing a type here, and a `text`
+ * box's `autoresize` choice passes through it unchanged.
+ *
+ * A CHOICE is a gesture, not a command, which is why the restore lives here and not
+ * in `executeCommand`: a typed `set image_1.preserveAspect true` writes exactly the
+ * slot it names and moves no box, the same way a typed `set image_1.source` records
+ * no `pictureAspect`. D-144 states that line and its cost.
  */
 export function commitPanelChoice(
   state: AppState,
@@ -1072,7 +1084,8 @@ export function commitPanelChoice(
   if (object === undefined) {
     return state;
   }
-  return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, path), value }, context);
+  const written = runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, path), value }, context);
+  return restorePictureAspect(written, objectId, context);
 }
 
 /** Unlinks one panel row (D-102 clause 4's BLUE paperclip) — `unlink <address>`, run the same way `commitPanelEdit` runs a `set`. Same stale-id no-op posture. */
@@ -1252,10 +1265,16 @@ export function pictureBoxSize(naturalWidth: number, naturalHeight: number): { r
  * store as a data URL in the document", plus the human's Q-027 ruling that the
  * box takes the picture's proportions).
  *
- * THREE literal `set`s — `source`, then `width`, then `height` — each through the
- * same `executeCommand` seam a typed `set` uses (Rule 2, D-069). Three commands
- * rather than one because `executeCommand` takes one `Command` and §5.10 has no
- * multi-slot form; they are three mutations, which Rule 5 says is fine.
+ * FOUR literal `set`s — `source`, then `width`, `height` and `pictureAspect` — each
+ * through the same `executeCommand` seam a typed `set` uses (Rule 2, D-069). Four
+ * commands rather than one because `executeCommand` takes one `Command` and §5.10
+ * has no multi-slot form; they are four mutations, which Rule 5 says is fine.
+ *
+ * `pictureAspect` records the shape the other three writes are derived FROM
+ * (**D-144**), so that turning `preserveAspect` back on after a distortion has
+ * something to restore to — see `restorePictureAspect`. It is written here and
+ * nowhere else, because this is the only moment the decoded natural size exists
+ * outside `render/`.
  * `buildPanelSetCommand` is deliberately NOT reused, for `commitTextContent`'s
  * reason: it routes every non-numeric string to `set-formula`, which would try to
  * PARSE the URL.
@@ -1287,33 +1306,155 @@ export function commitImagePicture(
     return state;
   }
   const box = natural === undefined ? undefined : pictureBoxSize(natural.naturalWidth, natural.naturalHeight);
+  // The shape the box above was derived FROM, kept so it can be restored later
+  // (D-144). `0` for a decode with no usable ratio — the same degenerate case
+  // `pictureBoxSize` answers with the square default, spelled the same way here so
+  // the two cannot disagree about what "no shape" is.
+  const aspect = natural === undefined ? 0 : usableAspect(natural.naturalWidth, natural.naturalHeight);
   const shape =
     natural === undefined
       ? "did not decode, box unchanged"
       : `${natural.naturalWidth}x${natural.naturalHeight}, box ${round(box?.width)}x${round(box?.height)}`;
-  const writes: SetLiteralCommand[] = [
-    { kind: "set", target: panelSlotAddress(object.name, slotKey(IMAGE_SOURCE_PATH)), value: dataUrl },
+  const writes = [
+    { path: IMAGE_SOURCE_PATH, value: dataUrl },
     ...(box === undefined
       ? []
       : [
-          { kind: "set", target: panelSlotAddress(object.name, slotKey(IMAGE_WIDTH_PATH)), value: box.width } as SetLiteralCommand,
-          { kind: "set", target: panelSlotAddress(object.name, slotKey(IMAGE_HEIGHT_PATH)), value: box.height } as SetLiteralCommand,
+          { path: IMAGE_WIDTH_PATH, value: box.width },
+          { path: IMAGE_HEIGHT_PATH, value: box.height },
+          { path: IMAGE_PICTURE_ASPECT_PATH, value: aspect },
         ]),
   ];
-  let next = withLog(state, [`> picture into ${object.name} — ${dataUrl.length} characters, ${shape}`]);
-  for (const write of writes) {
-    const outcome = executeCommand(write, next.document, context);
-    // A refusal reports itself and the rest still run: `source` is the write that
-    // matters, and a `width` refused because it is formula-driven (§5.9's
-    // per-component posture) must not cost the operator the picture.
-    next = outcome.ok ? { ...next, document: outcome.document } : withLog(next, [outcome.message]);
-  }
-  return next;
+  // Each write stands or falls alone (§5.9's per-component posture, via
+  // `commitGestureWrites`): `source` is the write that matters, and a `width` a
+  // formula drives is left alone and said so rather than costing the operator
+  // either their picture or their link.
+  const echoed = withLog(state, [`> picture into ${object.name} — ${dataUrl.length} characters, ${shape}`]);
+  return commitGestureWrites(echoed, object, writes, context);
 }
 
 /** A box dimension for the echo line only — a picture's scaled side is rarely a whole number and the log is not the place for sixteen decimals. `describeSlotValue`'s D-099 rounding is for a slot's VALUE and this is not one. */
 function round(value: number | undefined): string {
   return value === undefined ? "?" : String(Math.round(value * 100) / 100);
+}
+
+/**
+ * Runs a gesture's several slot writes as ONE action: each through
+ * `executeCommand` (Rule 2), each SKIPPED and reported if a formula or a schema
+ * drives that slot, and every message appended under the caller's single echo line.
+ *
+ * **§5.9's per-component posture, which a plain `set` does not give you.** A typed
+ * `set` on a formula-driven slot REPLACES the formula with a literal and says
+ * "replaced formula: = table_1.A1" — correct for a line the operator typed, and
+ * wrong for a gesture they performed on something else entirely: choosing a picture
+ * or straightening a box must not silently unlink a `width` bound to a cell.
+ * `render/interaction.ts`'s `planResize` already refuses exactly this way for a
+ * drag; this is the same rule for the gestures that do not go through a drag plan.
+ * (Entries 0173/0174 documented `executeCommand` as refusing such a write on its
+ * own. It does not, and the notice it does return was being discarded here.
+ * Corrected at 0176-REVIEW.)
+ */
+function commitGestureWrites(
+  state: AppState,
+  object: GraphObject,
+  entries: readonly { readonly path: readonly string[]; readonly value: number | string | boolean }[],
+  context: EvalContext,
+): AppState {
+  let next = state;
+  for (const entry of entries) {
+    const slot = getSlot(object, entry.path);
+    if (slot !== undefined && slot.kind !== "literal") {
+      const driver = slot.kind === "derived" ? "schema" : "formula";
+      next = withLog(next, [`${object.name}.${slotKey(entry.path)} left alone: it is driven by a ${driver} (unlink it first)`]);
+      continue;
+    }
+    const command: SetLiteralCommand = { kind: "set", target: panelSlotAddress(object.name, slotKey(entry.path)), value: entry.value };
+    const outcome = executeCommand(command, next.document, context);
+    next = outcome.ok ? { ...next, document: outcome.document } : withLog(next, [outcome.message]);
+  }
+  return next;
+}
+
+/**
+ * A picture's `naturalWidth / naturalHeight`, or `0` when the pair names no usable
+ * shape (**D-144**) — the ONE screen every reader of `pictureAspect` applies, so
+ * "no picture whose shape is known" has exactly one spelling.
+ *
+ * The same `> 0 && Number.isFinite` test `pictureBoxSize` makes, and deliberately
+ * the same: a natural size `pictureBoxSize` refuses to take a ratio from must not
+ * leave a ratio behind in a slot either, or the box and the restore would disagree
+ * about what the picture's shape is.
+ */
+function usableAspect(naturalWidth: number, naturalHeight: number): number {
+  if (!(naturalWidth > 0) || !(naturalHeight > 0) || !Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) {
+    return 0;
+  }
+  return naturalWidth / naturalHeight;
+}
+
+/**
+ * Puts a distorted `image` back to its picture's own proportions (**D-144**, the
+ * human's instruction at 0176-REVIEW: *"image resizing and distortion can always be
+ * put back to the original aspect ratio ... so it can be regained if 'preserve
+ * aspect ratio' is toggled back on"*).
+ *
+ * The restored box is the rectangle `renderer.ts` would DRAW inside the current one
+ * — `fitBitmapIntoBox`, the very same function, called with the remembered
+ * `pictureAspect` rather than a decoded bitmap. Three consequences follow from that
+ * choice and are the reason for it:
+ *
+ *   - the frame ends up hugging the picture exactly, by construction rather than by
+ *     two files agreeing (D-010), which is the human's own Q-027 words — *"box
+ *     should fit to aspect ratio of image, not hang over it"* — made true again;
+ *   - the object never GROWS. Undoing a distortion cannot push the image over its
+ *     neighbours, which is what "keep the longer side" would do to a box stretched
+ *     wide;
+ *   - it is idempotent: a box already in proportion is its own fitted rectangle, so
+ *     nothing is written and no line appears in the log.
+ *
+ * `origin` is untouched — the top-left corner stays put, so the operator's eye does
+ * not have to follow the object.
+ *
+ * A no-op, `state` returned unchanged, whenever there is nothing to restore: a
+ * stale or non-`image` object, `preserveAspect` off (the operator is asking for the
+ * distortion), no remembered `pictureAspect` (no picture, or a `source` typed by
+ * hand — `primitives/image.ts` names that cost), a box with no positive size, or a
+ * box already in proportion. One `set` per side under ONE echo line, because the
+ * operator made one choice; §5.9's per-component posture governs each write through
+ * `commitGestureWrites`, so a formula-driven side is left alone and says so.
+ */
+export function restorePictureAspect(state: AppState, objectId: string, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined || object.type !== IMAGE_TYPE) {
+    return state;
+  }
+  if (getSlot(object, IMAGE_PRESERVE_ASPECT_PATH)?.value === false) {
+    return state;
+  }
+  const aspect = readNumber(object, IMAGE_PICTURE_ASPECT_PATH) ?? 0;
+  const width = readNumber(object, IMAGE_WIDTH_PATH);
+  const height = readNumber(object, IMAGE_HEIGHT_PATH);
+  if (usableAspect(aspect, 1) === 0 || width === undefined || height === undefined || !(width > 0) || !(height > 0)) {
+    return state;
+  }
+  // `(aspect, 1)` is any pair with the picture's ratio — `fitBitmapIntoBox` reads
+  // only the ratio of the two, so the remembered number is enough and no decode is
+  // needed. See its own doc for why this shares that function rather than
+  // recomputing the fit.
+  const fitted = fitBitmapIntoBox(width, height, aspect, 1);
+  if (fitted.width === width && fitted.height === height) {
+    return state; // Already in proportion — nothing to undo, and no log line for a gesture that changed nothing.
+  }
+  const echoed = withLog(state, [`> ${object.name} back to the picture's proportions — box ${round(fitted.width)}x${round(fitted.height)}`]);
+  return commitGestureWrites(
+    echoed,
+    object,
+    [
+      { path: IMAGE_WIDTH_PATH, value: fitted.width },
+      { path: IMAGE_HEIGHT_PATH, value: fitted.height },
+    ],
+    context,
+  );
 }
 
 /**
@@ -2511,7 +2652,8 @@ function panelClipElement(row: PanelRow): HTMLElement {
  * NO listener is bound here, for the reason every panel control is delegated:
  * this element is rebuilt whole on every paint, so a listener bound to it would
  * die mid-gesture. `start`'s delegated `pointerdown` finds it by class and reads
- * the row's `dataset.path` and the panel's `dataset.objectId`.
+ * the panel's `dataset.objectId` — and not the row's `dataset.path`, because an
+ * object has one picture and `commitImagePicture` names the slot itself.
  */
 function panelPickElement(row: PanelRow): HTMLElement {
   const pick = document.createElement("span");

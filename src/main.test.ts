@@ -1470,6 +1470,36 @@ describe("a chosen picture gives the image its own proportions (Q-027, ruled by 
     expect(objectExtent(objectNamed(after, "image_1"))).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 95 });
   });
 
+  it("remembers the picture's own ratio in `pictureAspect`, so a later distortion has something to be put back to (D-144)", () => {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const after = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 300 });
+    expect(getSlot(objectNamed(after, "image_1"), ["pictureAspect"])).toEqual({ kind: "literal", value: 4 / 3 });
+  });
+
+  // 0176-REVIEW's correction: entries 0173/0174 documented this write as being
+  // "refused" by `executeCommand` when a formula drives the slot. It is not — a
+  // plain `set` REPLACES a formula with a literal and reports "replaced formula",
+  // and this gesture was discarding even that line. §5.9's per-component posture
+  // is now applied here the same way `planResize` applies it to a drag.
+  it("leaves a formula-driven `width` alone when a picture is chosen, instead of silently unlinking it from the cell that drives it", () => {
+    const withTable = typed(opened(), "table x=0 y=0 rows=1 cols=1");
+    const seeded = typed(withTable, "set table_1.A1 250");
+    const created = typed(seeded, "image x=0 y=0");
+    const linked = typed(created, "link image_1.width table_1.A1");
+    const after = commitImagePicture(linked, objectNamed(linked, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 300 });
+    const image = objectNamed(after, "image_1");
+    expect(getSlot(image, ["width"])?.kind).toBe("formula");
+    expect(getSlot(image, ["source"])?.value).toBe(PICTURE);
+    expect(numberAt(image, ["height"])).toBe(75);
+    expect(newLines(linked, after).join("\n")).toContain("image_1.width left alone");
+  });
+
+  it("records NO ratio for a decode with a degenerate natural size, the same case `pictureBoxSize` refuses a shape from", () => {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    const after = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 0, naturalHeight: 100 });
+    expect(getSlot(objectNamed(after, "image_1"), ["pictureAspect"])?.value).toBe(0);
+  });
+
   it("offers `preserveAspect` as a panel drop-down, on by default (§5.7's 'by default', the human's note 3)", () => {
     const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
     const image = objectNamed(created, "image_1");
@@ -1478,6 +1508,110 @@ describe("a chosen picture gives the image its own proportions (Q-027, ruled by 
     expect(row?.choices?.labels).toEqual(["keep the picture's proportions", "stretch to fill the box"]);
     expect(row?.choices?.selectedIndex).toBe(0);
   });
+});
+
+// **D-144**, the human's instruction at 0176-REVIEW: *"image resizing and
+// distortion can always be put back to the original aspect ratio ... so it can be
+// regained if 'preserve aspect ratio' is toggled back on."* The remembered ratio is
+// `pictureAspect` (written at pick time, tested above); this is the gesture that
+// spends it. The restored box is the rectangle `renderer.ts` would DRAW inside the
+// distorted one, which is why it never grows the object.
+describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", () => {
+  const PICTURE = `data:image/jpeg;base64,${"A".repeat(60)}`;
+
+  /** An `image_1` at (10, 20) holding a 2:1 picture — box 100x50, `preserveAspect` on. */
+  function withWidePicture(): AppState {
+    const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
+    return commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 200 });
+  }
+
+  /** The same, stretched to a square 100x100 with the toggle off — the state the operator asks to undo. */
+  function distorted(): AppState {
+    const state = withWidePicture();
+    const off = commitPanelChoice(state, objectNamed(state, "image_1").id, "preserveAspect", false);
+    return typed(off, "set image_1.height 100");
+  }
+
+  it("puts the box back to the picture's proportions when the toggle goes back on", () => {
+    const state = distorted();
+    expect(numberAt(objectNamed(state, "image_1"), ["height"])).toBe(100);
+    const back = commitPanelChoice(state, objectNamed(state, "image_1").id, "preserveAspect", true);
+    const image = objectNamed(back, "image_1");
+    expect(numberAt(image, ["width"])).toBe(100);
+    expect(numberAt(image, ["height"])).toBe(50);
+  });
+
+  it("shrinks rather than grows — the restored box is the rectangle that FITS inside the distorted one, so undoing never pushes the image over its neighbours", () => {
+    const state = withWidePicture();
+    const off = commitPanelChoice(state, objectNamed(state, "image_1").id, "preserveAspect", false);
+    const stretched = typed(off, "set image_1.width 400");
+    const back = commitPanelChoice(stretched, objectNamed(stretched, "image_1").id, "preserveAspect", true);
+    const image = objectNamed(back, "image_1");
+    expect(numberAt(image, ["width"])).toBe(100);
+    expect(numberAt(image, ["height"])).toBe(50);
+  });
+
+  it("leaves the origin alone, so the top-left corner does not move out from under the operator's eye", () => {
+    const back = commitPanelChoice(distorted(), objectNamed(distorted(), "image_1").id, "preserveAspect", true);
+    expect(objectExtent(objectNamed(back, "image_1"))).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 70 });
+  });
+
+  it("echoes ONE line for the two writes, because the operator made one choice", () => {
+    const state = distorted();
+    const back = commitPanelChoice(state, objectNamed(state, "image_1").id, "preserveAspect", true);
+    expect(newLines(state, back).filter((line) => line.startsWith(">"))).toEqual([
+      "> set image_1.preserveAspect TRUE",
+      "> image_1 back to the picture's proportions — box 100x50",
+    ]);
+  });
+
+  it("writes nothing when the box is already in proportion — the restore is idempotent and silent", () => {
+    const state = withWidePicture();
+    const back = commitPanelChoice(state, objectNamed(state, "image_1").id, "preserveAspect", true);
+    expect(newLines(state, back).filter((line) => line.includes("proportions"))).toEqual([]);
+    expect(numberAt(objectNamed(back, "image_1"), ["width"])).toBe(100);
+  });
+
+  it("restores nothing for an image whose `source` was typed by hand, because no gesture ever recorded its shape (D-144's accepted cost)", () => {
+    const created = typed(opened(), "image x=0 y=0");
+    const seeded = typed(created, `set image_1.source "${PICTURE}"`);
+    const stretched = typed(seeded, "set image_1.width 400");
+    const back = commitPanelChoice(stretched, objectNamed(stretched, "image_1").id, "preserveAspect", true);
+    expect(numberAt(objectNamed(back, "image_1"), ["width"])).toBe(400);
+  });
+
+  it("does not fire while the toggle is being turned OFF — the operator is asking for the distortion, not for its undo", () => {
+    const state = withWidePicture();
+    const stretched = typed(state, "set image_1.height 100");
+    const off = commitPanelChoice(stretched, objectNamed(stretched, "image_1").id, "preserveAspect", false);
+    expect(numberAt(objectNamed(off, "image_1"), ["height"])).toBe(100);
+  });
+
+  it("leaves a `text` box's own drop-down untouched — the restore is one condition-guarded call, not a special case in the generic choice path", () => {
+    const state = typed(opened(), 'text x=0 y=0 "hello"');
+    const after = commitPanelChoice(state, objectNamed(state, "text_1").id, "autoresize", false);
+    expect(getSlot(objectNamed(after, "text_1"), ["autoresize"])?.value).toBe(false);
+    expect(newLines(state, after).filter((line) => line.includes("proportions"))).toEqual([]);
+  });
+
+  it("leaves a formula-driven side ALONE and says so, instead of quietly replacing the operator's link with a number (§5.9's per-component posture)", () => {
+    const withTable = typed(opened(), "table x=0 y=0 rows=1 cols=1");
+    const seeded = typed(withTable, "set table_1.A1 120");
+    const linked = typed(distortedIn(seeded), "link image_1.width table_1.A1");
+    const back = commitPanelChoice(linked, objectNamed(linked, "image_1").id, "preserveAspect", true);
+    expect(newLines(linked, back).join("\n")).toContain("image_1.width left alone");
+    // The link survives; the side nothing drives still lands.
+    expect(getSlot(objectNamed(back, "image_1"), ["width"])?.kind).toBe("formula");
+    expect(numberAt(objectNamed(back, "image_1"), ["height"])).toBe(60);
+  });
+
+  /** `distorted()`, but built on top of an existing state so a table can be there too. */
+  function distortedIn(base: AppState): AppState {
+    const created = typed(base, "image x=10 y=20");
+    const withPicture = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 200 });
+    const off = commitPanelChoice(withPicture, objectNamed(withPicture, "image_1").id, "preserveAspect", false);
+    return typed(off, "set image_1.height 100");
+  }
 });
 
 // **D-136** clause 2 — a `text` box whose editor was opened ON CREATION (the

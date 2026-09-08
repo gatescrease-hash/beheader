@@ -13,10 +13,10 @@
  *   default value with no computation over it, so unlike `geometry.ts` and `text.ts`
  *   this file declares no compute function and `IMAGE_SCHEMA` has no `derivedSlots`.
  *
- *   SEVEN slots, of which §5.7 names five: `origin.x`/`origin.y`, `width`/`height`,
- *   `opacity`, plus `source` (D-140) and `preserveAspect` (the human's Q-027 ruling
- *   at entry 0173). Each of the two additions has its own doc comment below saying
- *   why §5.7's five-name list could not hold it.
+ *   EIGHT slots, of which §5.7 names five: `origin.x`/`origin.y`, `width`/`height`,
+ *   `opacity`, plus `source` (D-140), `preserveAspect` (the human's Q-027 ruling at
+ *   entry 0173) and `pictureAspect` (**D-144**). Each of the three additions has its
+ *   own doc comment below saying why §5.7's five-name list could not hold it.
  *
  *   `origin.x`/`origin.y` are NOT declared here. They are `geometry.ts`'s
  *   `ORIGIN_X_PATH`/`ORIGIN_Y_PATH`, the identical spelling every positioned object
@@ -32,7 +32,7 @@
  *   - Paths only. Nothing here reads an object, resolves an address, or computes a
  *     value, so there is nothing that could throw.
  *   - No slot here sizes a slot family, so D-046/D-097 do not reach this type: an
- *     `image` object's slot set is fixed at six for every image, forever (Rule 6),
+ *     `image` object's slot set is fixed at eight for every image, forever (Rule 6),
  *     and `IMAGE_SCHEMA`'s one `static` group is the correct declaration rather than
  *     merely the convenient one.
  *
@@ -91,6 +91,32 @@ export const IMAGE_OPACITY_PATH: readonly string[] = ["opacity"];
  * **D-126**'s lesson, applied to a non-derived slot.
  */
 export const IMAGE_PRESERVE_ASPECT_PATH: readonly string[] = ["preserveAspect"];
+
+/**
+ * The chosen picture's OWN proportions — its decoded `naturalWidth` divided by its
+ * `naturalHeight` — remembered so a box the operator has since distorted can be put
+ * back to them (**D-144**).
+ *
+ * **Why this is stored rather than re-derived.** The ratio is a property of the
+ * picture, and the picture is decoded pixels living in `render/images.ts`'s cache —
+ * outside the document, rebuilt from `source` on every load, and not there at all
+ * until a decode lands. Toggling `preserveAspect` back on just after a document
+ * loads would therefore restore nothing, silently, which is the failure D-127
+ * clause 5 refuses. A number in a slot is available the instant the document is,
+ * needs no decode, and survives save/load like every other slot.
+ *
+ * `0` — and a missing slot, and any non-finite or non-positive value — all mean "no
+ * picture whose shape is known", and every reader applies the same
+ * `> 0 && Number.isFinite` screen `pictureBoxSize` already uses. That is what a
+ * freshly created `image` carries, and what a hand-typed `set image_1.source
+ * "data:…"` leaves behind: `main.ts`'s pick gesture is the only writer, so a source
+ * set by hand records no ratio and offers no restore — D-144's accepted cost.
+ *
+ * Not a DERIVED slot, and it could not be one: a compute function is engine code
+ * (Rule 1) and no engine code may decode a picture. It is an ordinary `literal` a
+ * gesture writes, exactly as `width`/`height` are after a pick.
+ */
+export const IMAGE_PICTURE_ASPECT_PATH: readonly string[] = ["pictureAspect"];
 
 /**
  * The image's own content: §5.7's "store as a data URL in the document".

@@ -5135,3 +5135,111 @@ while the thing the phase is named for cannot be seen.
 **Reconciliation required.** None in source — no `PROVISIONAL` tag and no code depends on the
 overturned reading. Entry 0171 stays in the log unedited (§2's append-only rule); it is superseded
 on this one point, not withdrawn, and its ✅-line proof stands and need not be re-derived.
+
+---
+
+## D-143 — Q-027 ANSWERED: a chosen picture gives its `image` object the box's SHAPE, and `preserveAspect` is the operator's toggle over what happens afterwards
+
+Answers: **Q-027**   Ruled: **by the human directly**, on screen at entry 0173; ratified here at
+0176-REVIEW-phase6   Binding on: all future cycles
+
+**Ruling.** §5.7's "preserve aspect ratio by default" is BOTH of the readings Q-027 offered, and
+the toggle decides which is in force:
+
+1. **A picture chosen through the file picker writes its own proportions into `width`/`height`** —
+   the human's words, *"Box should fit to aspect ratio of image, not hang over it"*, which is
+   Q-027's option (b) and the reading entry 0173 did not take. The decoded natural size therefore
+   DOES reach a slot, scaled so the long side is `DEFAULT_IMAGE_EXTENT` — the same number the empty
+   frame uses, so choosing a picture changes an object's SHAPE and never its SCALE.
+2. **`preserveAspect` is a seventh `image` slot, `true` by default**, offered in the properties
+   panel as a drop-down. *"When toggled, resizing preserves ratio. When untoggled, resizing
+   distorts aspect ratio."* While it is on, `render/renderer.ts` FITS the picture inside its box
+   and `render/interaction.ts` constrains a grabber drag; while it is off, the picture is STRETCHED
+   to fill the box and a drag is free.
+3. **Every read of the flag defaults a MISSING slot to `true`** (`?? true`), which is what §5.7's
+   own "by default" says and what lets a document saved before entry 0174 load and behave
+   unchanged — D-126's lesson, applied to a non-derived slot.
+4. `source` and `preserveAspect` being slots §5.7's five-name list does not carry is the same class
+   of deviation **D-140** already ratified. This ruling extends that ratification to
+   `preserveAspect`.
+
+**Rationale.** The human owns product questions (PROCESS_BRIEF §1). Entry 0173's provisional (a)
+had the defect its own question named: under a drawing-only reading, the first
+`set image_1.width` destroys the ratio the brief asks to preserve, and an image's frame hangs
+around a letterboxed picture forever. Option (b) makes the frame and the picture agree at the
+moment the picture arrives; the toggle is what lets an operator disagree on purpose.
+
+**Reconciliation required.** None outstanding. Entry 0173's `PROVISIONAL(Q-027)` tag at
+`renderer.ts`'s `fitBitmapIntoBox` was removed at entry 0174; verified gone at this review
+(`grep -rn "PROVISIONAL(" src` shows Q-008 and Q-012 only).
+
+---
+
+## D-144 — An `image` remembers its picture's own ratio in a `pictureAspect` slot, and turning `preserve aspect ratio` back on puts a distorted box back to it
+
+Ruled: **by the human directly**, at 0176-REVIEW: *"image resizing and distortion can always be put
+back to the original aspect ratio — so that needs to be saved somewhere so it can be regained if
+'preserve aspect ratio' is toggled back on."*   Binding on: all future cycles   Extends: **D-143**
+
+1. **`pictureAspect` is an EIGHTH `image` slot** — an ordinary `literal` number holding the chosen
+   picture's `naturalWidth / naturalHeight`. `0`, a missing slot, and any non-finite or
+   non-positive value all mean "no picture whose shape is known"; every reader applies the one
+   screen `usableAspect` spells (`> 0 && Number.isFinite`).
+2. **It is STORED, not re-derived.** The decoded bitmap lives in `render/images.ts`'s cache —
+   outside the document, rebuilt from `source` on every load, and absent until a decode lands — so
+   a restore that consulted it would silently do nothing just after a document opens, which D-127
+   clause 5 refuses. A number in a slot is available the instant the document is. It could not be a
+   DERIVED slot: a compute function is engine code and Rule 1 forbids engine code to decode a
+   picture.
+3. **`main.ts`'s pick gesture is its only writer**, beside the `width`/`height` the same decode
+   produces. A `source` set by hand (`set image_1.source "data:…"`) therefore records no ratio and
+   offers no restore. That is the accepted cost of not putting a decoder behind the command line;
+   it is disclosed at the constant and is not a defect to be fixed by widening `set`.
+4. **Turning the panel's `preserve aspect ratio` drop-down to "keep the picture's proportions"
+   restores the box**, to the rectangle `renderer.ts` would DRAW inside the current one —
+   `main.ts`'s `restorePictureAspect`, calling `renderer.ts`'s own `fitBitmapIntoBox`. Sharing that
+   function is the point (D-010): the frame ends up hugging the picture by construction rather than
+   by two files agreeing about a ratio. The restore never GROWS the object, leaves `origin` alone,
+   and is idempotent — a box already in proportion writes nothing and logs nothing.
+5. **The restore is a GESTURE, not a command.** A typed `set image_1.preserveAspect true` writes
+   exactly the slot it names and moves no box, the same way a typed `set image_1.source` records no
+   ratio. The line is the one this codebase already draws: `commitImagePicture` runs several `set`s
+   under one echo because the operator performed one action, and `executeCommand` stays a
+   one-command seam. An operator who wants the box straightened asks for it through the drop-down.
+6. **`constrainBoxToRatio` continues to take the START BOX's ratio, not the picture's** — entry
+   0175's own flagged concern, answered rather than left open. With clause 4 in force the box
+   already carries the picture's shape whenever the toggle has just been turned on, so the two
+   agree in every path an operator reaches by pointing; making the drag consult `pictureAspect`
+   would additionally make a box JUMP at drag start, which is worse than the case it fixes.
+
+**Rationale.** Distortion has to be undoable or the toggle is a one-way door: `preserveAspect` off,
+one grabber drag, and the picture's real shape is gone from the document with nothing left that
+knows it. One number is the smallest thing that makes the door swing both ways, and storing it
+where the document already stores everything else about the object is what makes it survive a save.
+
+**Reconciliation required.** None — the slot is additive and every read defaults, so documents
+saved before this ruling load unchanged and simply offer no restore until a picture is re-picked.
+
+---
+
+## D-145 — Q-028 ANSWERED: an `image` does NOT store the name of the file its picture came from
+
+Answers: **Q-028**   Ruled: 0176-REVIEW-phase6   Binding on: all future cycles
+
+**Ruling.** Option **(b)** stands, as entry 0175 took it: no `fileName` slot. The properties
+panel's `source` row says what the picture IS (`"JPEG picture · about 194 KB"`), and that is the
+whole of what §5.7 owes the operator here.
+
+**Rationale.** The human's note asked for *"the link to the image on the drive that it's pulling
+from"*, and entry 0175 established that neither half of that sentence is available: a browser
+discloses no path (`C:\fakepath\…`), and §5.7 stores the picture IN the document, so nothing is
+pulling from the drive at all — the file is read once and never consulted again. What remains
+buildable is a NAME, which would be a label rather than a link, would go stale silently the moment
+the file moved, and which nothing but the display would read. D-140 ratified `source` because the
+data URL had nowhere else to live; that argument does not reach a decoration.
+
+**This is a display preference and the human may simply overrule it.** If they want the name, it is
+one `literal` slot written at pick time beside `pictureAspect`, load-compatible with a `?? ""` read
+(D-126's lesson) — a small cycle, not a redesign. Until they say so, do not build it.
+
+**Reconciliation required.** None — (b) is "add nothing", so entry 0175 tagged nothing.

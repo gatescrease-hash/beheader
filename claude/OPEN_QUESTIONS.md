@@ -12,9 +12,9 @@ Next free ID: **Q-029**
 
 ---
 
-## Q-028 — May an `image` object store the NAME of the file its picture came from, in a slot §5.7 does not name?
+## Q-028 — May an `image` object store the NAME of the file its picture came from, in a slot §5.7 does not name? — **ANSWERED → D-145**
 Raised: entry 0175-image-grabbers-and-repick (implementer)   Brief section: §5.7, against D-140.
-Status: **OPEN**. Blocking nothing: re-picking works without it, and the row shows what the
+Status: **ANSWERED at 0176-REVIEW → D-145: no, (b) stands.** Blocking nothing: re-picking works without it, and the row shows what the
 picture IS (`"JPEG picture · about 194 KB"`) rather than a run of base64.
 
 Ambiguity: the human asked, at entry 0173 note 4, that the properties panel's `source` row show
@@ -48,7 +48,7 @@ because (b) is "do not add state" there is nothing to tag.
 
 ---
 
-## Q-027 — Does §5.7's "preserve aspect ratio by default" describe how a picture is DRAWN, or the size its `width`/`height` slots are first given?
+## Q-027 — Does §5.7's "preserve aspect ratio by default" describe how a picture is DRAWN, or the size its `width`/`height` slots are first given? — **ANSWERED → D-143**
 Raised: entry 0173-image-load-and-render (implementer)   Brief section: §5.7, against D-066,
 D-140 and Rule 6. Flagged in advance by 0172-REVIEW §8 item 2 as the one part of the `image` slice
 with no ruling behind it.
@@ -71,7 +71,7 @@ drawing honours it) and **0175** (resizing honours it). Concretely:
 The `PROVISIONAL(Q-027)` tag entry 0173 put on `renderer.ts`'s `fitBitmapIntoBox` is REMOVED, and
 that function now serves the flag rather than standing in for the answer.
 
-**This ruling is recorded here, not in `DECISIONS.md`** — an implementer may never write that file
+**RATIFIED at 0176-REVIEW as D-143**, which also rules (as **D-144**) that the picture's ratio is remembered in a `pictureAspect` slot so turning the toggle back on puts a distorted box back to it. What follows was written by the implementer before that ruling existed: **this ruling is recorded here, not in `DECISIONS.md`** — an implementer may never write that file
 (PROCESS_BRIEF §2). It is owed a `D-NNN` from the reviewer, on the 0153/0154/0155 precedent where
 the human overruled directly, the implementer built, and the review ratified afterwards.
 

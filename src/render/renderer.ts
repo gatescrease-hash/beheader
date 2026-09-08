@@ -305,8 +305,16 @@ function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: I
  * A non-positive or non-finite natural size cannot yield a ratio, so the picture
  * simply fills the box — unreachable through `images.ts`, which refuses such a
  * decode, and total rather than assumed away.
+ *
+ * EXPORTED for one other caller, and for a D-010 reason rather than a convenience
+ * one: `main.ts`'s `restorePictureAspect` (**D-144**) snaps a distorted box back to
+ * the picture's proportions, and the box it snaps to must be exactly the rectangle
+ * this function would have drawn inside it. Sharing the function is what makes
+ * "the frame hugs the picture" structural instead of two files agreeing about a
+ * ratio. That caller has an ASPECT rather than a decoded bitmap, so it passes
+ * `(aspect, 1)` — any pair with the right ratio yields the same rectangle.
  */
-function fitBitmapIntoBox(
+export function fitBitmapIntoBox(
   boxWidth: number,
   boxHeight: number,
   naturalWidth: number,

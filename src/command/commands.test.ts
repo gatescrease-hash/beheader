@@ -296,7 +296,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(isCommandFailure(listed) ? undefined : listed.createdObjectId).toBeUndefined();
   });
 
-  it("creates an image with all seven non-derived slots — §5.7's five plus `source` and `preserveAspect` — and no derived ones", () => {
+  it("creates an image with all eight non-derived slots — §5.7's five plus `source`, `preserveAspect` and `pictureAspect` — and no derived ones", () => {
     const object = onlyObject(committed("image x=30 y=40", createEmptyDocument()));
     expect(object.type).toBe("image");
     expect(object.name).toBe("image_1");
@@ -312,7 +312,10 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(literalValue(object, ["source"])).toBe("");
     // §5.7's "preserve aspect ratio BY DEFAULT", read literally (entry 0174).
     expect(literalValue(object, ["preserveAspect"])).toBe(true);
-    expect(Object.keys(object.slots).sort()).toEqual(["height", "opacity", "origin.x", "origin.y", "preserveAspect", "source", "width"]);
+    // D-144's "no picture whose shape is known" — the pick gesture writes the
+    // real ratio beside the width/height it derives from the same decode.
+    expect(literalValue(object, ["pictureAspect"])).toBe(0);
+    expect(Object.keys(object.slots).sort()).toEqual(["height", "opacity", "origin.x", "origin.y", "pictureAspect", "preserveAspect", "source", "width"]);
   });
 
   it("gives an image the SAME origin paths every positioned object uses, so `link image_1.origin.x <cell>` commits (D-017, D-121's reasoning)", () => {

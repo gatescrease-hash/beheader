@@ -135,7 +135,7 @@ import {
   TEXT_STYLE_LINE_HEIGHT_PATH,
   TEXT_WIDTH_PATH,
 } from "../engine/primitives/text.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
+import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PICTURE_ASPECT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH } from "../engine/script/stub.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
@@ -305,7 +305,9 @@ const DEFAULT_TEXT_STYLE_ALIGN = "left";
  *
  * `source` starts EMPTY — §5.10's creation form carries no picture; the file picker
  * `main.ts` opens on creation is what fills it. `preserveAspect` starts TRUE,
- * which is §5.7's "by default" read literally.
+ * which is §5.7's "by default" read literally. `pictureAspect` starts ZERO, which
+ * is D-144's spelling of "no picture whose shape is known" — the pick gesture
+ * writes the real ratio beside the `width`/`height` it takes from the same decode.
  */
 export const DEFAULT_IMAGE_EXTENT = 100;
 const DEFAULT_IMAGE_WIDTH = DEFAULT_IMAGE_EXTENT;
@@ -313,6 +315,7 @@ const DEFAULT_IMAGE_HEIGHT = DEFAULT_IMAGE_EXTENT;
 const DEFAULT_IMAGE_OPACITY = 1;
 const DEFAULT_IMAGE_SOURCE = "";
 const DEFAULT_IMAGE_PRESERVE_ASPECT = true;
+const DEFAULT_IMAGE_PICTURE_ASPECT = 0;
 
 /**
  * §5.8 fixes `language` to `"python"` and gives no creation-time default for
@@ -635,20 +638,22 @@ function createText(command: CreateTextCommand, document: Document, context: Eva
 /**
  * `image x=0 y=0` (§5.10, §5.7).
  *
- * Supplies all SEVEN non-derived slots: `origin.x`/`origin.y` from the command, and
- * `width`/`height`/`opacity`/`source`/`preserveAspect` from the `DEFAULT_IMAGE_*`
- * values above, exactly as `createText` supplies its eight layout/style defaults.
- * `IMAGE_SCHEMA` declares no derived slot, so `createObjectFromCommand` fills none.
+ * Supplies all EIGHT non-derived slots: `origin.x`/`origin.y` from the command, and
+ * `width`/`height`/`opacity`/`source`/`preserveAspect`/`pictureAspect` from the
+ * `DEFAULT_IMAGE_*` values above, exactly as `createText` supplies its eight
+ * layout/style defaults. `IMAGE_SCHEMA` declares no derived slot, so
+ * `createObjectFromCommand` fills none.
  *
  * No count-style refusal, and none is owed: an `image` object allocates a fixed
- * seven slots whatever its arguments say (Rule 6), so unlike `polygon`/`table` there
+ * eight slots whatever its arguments say (Rule 6), so unlike `polygon`/`table` there
  * is no unbounded slot allocation for D-070 to bound. `opacity` is a VALUE, not a
  * count, and is deliberately unbounded here — see `primitives/image.ts`.
  *
  * A freshly created image draws as an EMPTY FRAME at `DEFAULT_IMAGE_EXTENT` square
  * and is immediately selectable: `source` is empty until `main.ts`'s file picker —
  * which this creation asks for, `AppTransition.pickImageFor` — fills it, and the
- * chosen picture's own proportions then replace `width`/`height`.
+ * chosen picture's own proportions then replace `width`/`height` and are recorded
+ * in `pictureAspect` so a later distortion can be undone (D-144).
  */
 function createImage(command: CreateImageCommand, document: Document, context: EvalContext): CommandOutcome {
   return createObjectFromCommand(document, "image", [
@@ -659,6 +664,7 @@ function createImage(command: CreateImageCommand, document: Document, context: E
     { path: IMAGE_OPACITY_PATH, value: DEFAULT_IMAGE_OPACITY },
     { path: IMAGE_SOURCE_PATH, value: DEFAULT_IMAGE_SOURCE },
     { path: IMAGE_PRESERVE_ASPECT_PATH, value: DEFAULT_IMAGE_PRESERVE_ASPECT },
+    { path: IMAGE_PICTURE_ASPECT_PATH, value: DEFAULT_IMAGE_PICTURE_ASPECT },
   ], context);
 }
 

@@ -1,24 +1,44 @@
-# STATUS — as of entry 0175-image-grabbers-and-repick
+# STATUS — as of entry 0176-REVIEW-phase6
 
-**PHASE 6 IS OPEN. THE BATCH IS CLOSED AT 3/3 CYCLES AND FAR OVER THE LINE CAP — A REVIEW IS OWED
-BEFORE ANY FURTHER SLICE.** The ✅ line passes and has passed since 0171 (re-proved independently at
-0172-REVIEW §2 and §6 — do NOT re-derive it). `image`, which **D-142** made the other half of this
-gate, is **BUILT across entries 0173/0174/0175, NOT YET REVIEWED, and SEEN ONCE — at 0173's state,
-which the human then gave four notes on.** Those four notes are built; the result is unseen.
+**PHASE 6 IS OPEN. THE BATCH IS REVIEWED AND ACCEPTED — the review gate is CLEAR and the next slice
+may start.** The ✅ line passes and has passed since 0171 (re-proved independently at 0172-REVIEW §2
+and §6 — do NOT re-derive it). `image`, which **D-142** made the other half of this gate, is **BUILT
+across entries 0173/0174/0175 and REVIEWED at 0176-REVIEW (ACCEPT WITH EDITS)**. What the gate now
+waits on is one thing only: **the human seeing it work.**
+
+**0176-REVIEW's one substantive finding, now fixed:** `commitImagePicture`'s comment and entry
+0174's decision #3 both claimed `executeCommand` REFUSES a `set` on a formula-driven slot. It does
+not — a plain `set` REPLACES a formula with a literal — so choosing a picture for an image whose
+`width` was linked to a cell silently unlinked it, and the `"replaced formula"` notice was being
+discarded too. `main.ts`'s new `commitGestureWrites` now applies `planResize`'s exact per-component
+rule (§5.9) to every multi-write gesture. **The general lesson: `executeCommand` is a WRITE seam,
+not a guard. A gesture that must not overwrite the operator's links has to screen slot kinds
+itself.**
+
+**The human's instruction at 0176-REVIEW is built and ruled as D-144:** an `image` now remembers its
+picture's own ratio in a `pictureAspect` slot, and turning the panel's `preserve aspect ratio`
+drop-down back on puts a distorted box back to it. See "Gotchas" and D-144 before touching the
+resize path.
 
 > **D-142 — a phase's ✅ line is its TEST, not the whole of what the phase must deliver. Where the
 > phase heading names a subsystem the brief specifies elsewhere, that subsystem is part of the
 > gate. Applied to Phase 6: `image` MUST be loadable and MUST render properly — confirmed by the
 > human ON SCREEN — before this gate may be claimed.**
 
-**THE MANUAL CHECK, IN FULL, IS THE NEXT ACTION:** `npm run dev`, type `image x=0 y=0`, choose a
-picture in the file dialog that opens. Confirm: the box now has the PICTURE's shape rather than
-hanging over it (0174); the eight grabbers resize it and keep its proportions while
-`preserveAspect` is on (0175); the panel's `preserveAspect` drop-down turns that off and the
-picture then stretches; and the panel's `source` row says what the picture IS and offers
-"📁 choose…" to replace it (0175). **No entry has claimed the gate**, because D-142 clause 2 says
-"renders properly" is settled by the human seeing it and not by a test asserting a `drawImage` call
-happened.
+**THE MANUAL CHECK, IN FULL, IS THE NEXT ACTION** (0176-REVIEW §10 has the same list):
+`npm run dev`, then —
+1. `image x=0 y=0` → a file dialog opens. Choose a picture. It should appear **in proportion**,
+   inside a frame that HUGS it rather than hanging over it (0174).
+2. Drag it; select it — eight grabbers. A corner drag should SCALE, not distort (0175).
+3. Panel → `preserveAspect` → "stretch to fill the box". A side-grabber drag should now distort.
+4. Panel → `preserveAspect` → "keep the picture's proportions". **The box should SNAP BACK to the
+   picture's real shape** (D-144, built at 0176-REVIEW — the newest thing here, look hardest at it).
+5. Panel → `source` row → "📁 choose…" re-picks; the row reads "JPEG picture · about N KB", never
+   base64 (0175).
+
+**No entry has claimed the gate**, because D-142 clause 2 says "renders properly" is settled by the
+human seeing it and not by a test asserting a `drawImage` call happened. If all five hold, the next
+entry claims the gate, citing 0172-REVIEW §2/§6 for the ✅ line rather than re-deriving it.
 
 **THE HUMAN'S FOUR NOTES AT ENTRY 0173, AND WHERE EACH LANDED:**
 1. *"Box should fit to aspect ratio of image, not hang over it"* — **Q-027 ANSWERED, built at
@@ -29,9 +49,18 @@ happened.
 3. *"A property toggle for 'preserve aspect ratio'"* — **built at 0174 (the slot, the drop-down,
    the drawing) and 0175 (the resize).**
 4. *"Re-picking needs to be possible from the props window… displayed the link to the image on the
-   drive"* — **re-picking built at 0175. The LINK half is not buildable as written and is Q-028:**
-   a browser will not disclose a file's path, and §5.7 embeds the picture in the document, so
-   nothing is "pulling from" the drive. The row shows what the picture IS instead.
+   drive"* — **re-picking built at 0175. The LINK half is not buildable as written: Q-028, ANSWERED
+   as D-145** — a browser will not disclose a file's path, and §5.7 embeds the picture in the
+   document, so nothing is "pulling from" the drive. The row shows what the picture IS instead.
+   **D-145 is a display preference the human may overrule** — if they want the file's NAME, it is
+   one slot and one small cycle.
+
+**AND A FIFTH NOTE, GIVEN AT 0176-REVIEW AND BUILT THERE:** *"image resizing and distortion can
+always be put back to the original aspect ratio — saved somewhere so it can be regained if 'preserve
+aspect ratio' is toggled back on."* → **D-144.** `pictureAspect` is an eighth `image` slot holding
+the picture's own `naturalWidth / naturalHeight`, written by the pick gesture; the panel's toggle
+going back on snaps the box to `fitBitmapIntoBox`'s rectangle. This closes entry 0175's own flagged
+hole (`constrainBoxToRatio` kept the DISTORTED ratio, not the picture's).
 
 Entry 0171's scope call (that Phase 6's heading is descriptive and `image` rendering is therefore
 not a precondition) was **OVERTURNED** by D-142. The entry stays in the log unedited and is not
@@ -43,11 +72,11 @@ the heading's own word is "Script *stub*", and its gate clause is engine-side an
 heading word carries no such narrowing and §5.7's four sentences are almost entirely about loading
 and drawing. Do not fold the two together.
 
-STATE: **GREEN**. Both configs compile, **1920/1920** tests pass, 0 skipped, 0 `.only`.
-**36 test files.** `npx vite build` clean.
+STATE: **GREEN**. Both configs compile, **1932/1932** tests pass, 0 skipped, 0 `.only`.
+**36 test files.** `npx vite build` clean (`index-dcT4s5hZ.js`, 134.51 kB).
 
-Current phase: 6 — script stub + image (**OPEN — the ✅ line passes; `image` is built but the
-current state is unseen, and D-142 clause 2 makes the human's look the precondition**)
+Current phase: 6 — script stub + image (**OPEN — the ✅ line passes; `image` is built AND reviewed,
+but the current state is unseen, and D-142 clause 2 makes the human's look the precondition**)
 Phase 6 acceptance criterion: *"`script_1.in.factor` is bound to a cell, `polygon_1.radius` is bound
 to `script_1.out.result`, and changing the placeholder output value moves the polygon — with no
 script-specific code in `eval.ts`"* — **PASSING, CONFIRMED BY THE REVIEWER** (0172-REVIEW §2 and §6).
@@ -57,12 +86,14 @@ forced to `return null` → `expected null to be 10`; (2) the `placeholder.<port
 stronger of the two — it neutralises §5.8's SEAM rather than its dependency plumbing. The "no
 script-specific code in `eval.ts`" clause is grep-clean for the fourth independent time (0169,
 0170-REVIEW, 0171, 0172-REVIEW). **The criterion passing is NOT sufficient for the gate — see D-142.**
-Last review point: **0172-REVIEW-phase6-gate** (**REVISE** — the gate was refused; the ✅ line is
-confirmed).
-Cycles since last review: **3/3 — THE BATCH IS CLOSED** · diff since last review: **~1750 lines /
-18 files, against §6.3's cap of 800/10.** The cap was already exceeded by cycle 1 alone; cycles 2
-and 3 are the human's four notes, given after they saw 0173 on screen, which is a routing decision
-rather than a cap the implementer waived. **No further slice starts before a review.**
+Last review point: **0176-REVIEW-phase6** (**ACCEPT WITH EDITS** — entries 0173/0174/0175; one real
+defect found and fixed, D-143/D-144/D-145 ruled). The previous one was 0172-REVIEW-phase6-gate
+(REVISE — the gate was refused; the ✅ line confirmed).
+Cycles since last review: **0/3** · diff since last review: **0 lines / 0 files** (cap 800/10).
+**The review gate is CLEAR — the next slice may start.** For the record of what was reviewed: the
+0173–0175 batch ran to ~1750 lines / 18 files against §6.3's 800/10, exceeded by cycle 1 alone, and
+continued on the human's routing after they saw 0173 on screen. Entry 0175 disclosed that rather
+than absorbing it, which is the behaviour §6.3 wants when a cap and a human instruction disagree.
 
 **0168-REVIEW's finding (settled, kept for history):** the ORIGINAL `isLegalPortName`
 (`graph/node.ts`) only checked non-empty/no-dot, LOOSER than `address.ts`'s `PATH_SEGMENT_PATTERN`
@@ -264,17 +295,21 @@ SEPARATE family from `out.*` because `out.*` is `derived` and can never be user-
   group. Disclosed in `props.ts`'s own header now; not fixed. Whoever gives `script` a summary row
   should read that header first.
 
-**0img. AN `image` OBJECT HAS SEVEN SLOTS. IT DRAWS, IS CLICKABLE, RESIZES BY GRABBERS, AND GETS
-ITS PICTURE FROM A FILE PICKER — ALL OF IT UNREVIEWED (0173/0174/0175).** `origin.x`/`origin.y`
+**0img. AN `image` OBJECT HAS EIGHT SLOTS. IT DRAWS, IS CLICKABLE, RESIZES BY GRABBERS, GETS
+ITS PICTURE FROM A FILE PICKER, AND CAN BE PUT BACK TO THAT PICTURE'S PROPORTIONS — ALL OF IT
+BUILT (0173/0174/0175) AND REVIEWED (0176-REVIEW).** `origin.x`/`origin.y`
 (imported from `primitives/geometry.ts`, NOT re-declared — the same identity D-121 gave `text`,
 which is what makes the per-component origin drag reach an image with no image-specific code),
-`width`, `height`, `opacity`, `source`, **`preserveAspect`**. **No derived slots at all.**
+`width`, `height`, `opacity`, `source`, **`preserveAspect`**, **`pictureAspect`** (D-144).
+**No derived slots at all.**
 - **`image x=<n> y=<n>` OPENS THE FILE PICKER ON THE OBJECT IT JUST CREATED**, and so does the
   panel's `source` row. That is `AppTransition.pickImageFor` — **D-124's shape one type over** (a
   creation hands straight to the gesture that gives the new object its content; there the in-place
   editor, here the picker). The chosen file is decoded, then `source`, `width` and `height` are
-  written by `main.ts`'s `commitImagePicture` as three literal `set`s through `executeCommand`
-  (Rule 2), under one echo line.
+  written by `main.ts`'s `commitImagePicture` — with `pictureAspect` (D-144) — as FOUR literal
+  `set`s through `executeCommand` (Rule 2), under one echo line, each screened for a
+  formula-driven slot by `commitGestureWrites` (0176-REVIEW's finding: a plain `set` REPLACES a
+  formula, it does not refuse one).
 - **A CHOSEN PICTURE'S SHAPE BECOMES THE BOX'S SHAPE — the human's Q-027 ruling.** `pictureBoxSize`
   scales the decoded natural size so its LONG side is `DEFAULT_IMAGE_EXTENT` (100, the same number
   the empty frame uses, so the object changes SHAPE and not SCALE). **The decoded natural size
@@ -284,7 +319,16 @@ which is what makes the per-component origin drag reach an image with no image-s
   FITS the picture inside its box, and a grabber drag keeps the box's proportions
   (`handles.ts`'s `constrainBoxToRatio`). Off: the picture STRETCHES to fill, and a drag distorts
   freely. The `?? true` default is what lets a document saved before 0174 load unchanged (D-126's
-  lesson, applied to a non-derived slot) — **do not "tidy" it into a bare read.**
+  lesson, applied to a non-derived slot) — **do not "tidy" it into a bare read.** Turning it back
+  ON through the PANEL also RESTORES the box to the picture's proportions (**D-144**), via
+  `main.ts`'s `restorePictureAspect` and `renderer.ts`'s exported `fitBitmapIntoBox` — the restore
+  shrinks, never grows, leaves `origin` alone, and is idempotent. A TYPED
+  `set image_1.preserveAspect true` writes the slot and moves nothing: a choice is a gesture, a
+  command is a command (D-144 clause 5).
+- **`pictureAspect` IS THE REMEMBERED RATIO AND ONLY THE PICK GESTURE WRITES IT.** `0`/missing/
+  non-finite all mean "no picture whose shape is known" (one screen, `usableAspect`). A `source`
+  set by hand records no ratio and therefore offers no restore — disclosed at the constant, not a
+  defect (D-144 clause 3).
 - **`imageExtent` IS `origin` + `width` x `height` AND DOES NOT READ `source`.** An image's box is
   its size slots whether or not a picture is chosen or decoded, because `drawImage` strokes that box
   as a FRAME either way. That is what keeps drawn extent and clickable extent one extent (D-066) at
@@ -298,7 +342,9 @@ which is what makes the per-component origin drag reach an image with no image-s
   disclosed in entry 0175's "Where I got stuck" and worth a reviewer's opinion.
 - **THERE IS NO FILE PATH AND THERE CANNOT BE ONE.** A browser yields `C:\fakepath\name.jpg` from a
   file input, and §5.7 embeds the picture in the document, so nothing is "pulling from" the drive.
-  Storing the NAME would need an eighth slot — **Q-028**, open, not taken.
+  Storing the NAME would need a further slot — **Q-028, ANSWERED as D-145: no.** The row says what
+  the picture IS instead. D-145 is a display preference the human may overrule; it is one slot and
+  one small cycle if they want it.
 - **THE DECODED-BITMAP CACHE IS `src/render/images.ts` AND MAY NEVER MOVE TO `src/engine/`.** It
   holds a `Map` of live `HTMLImageElement`s — precisely what Rule 1 and §5.5 forbid the engine to
   hold. The document stores the URL STRING; `renderDocument` takes the cache as an INJECTED 9th
@@ -533,14 +579,15 @@ between a doc comment and what it documents.** 0165 obeyed it at `schema.ts` (tw
 `parser.ts` (two) and `commands.ts` (three, two of which were stale COUNTS — "all four handlers",
 "the four types below").
 
-## Next — NOT a recommendation. Three things, in this order
+## Next — NOT a recommendation. Two things, in this order
 
-**1. A REVIEW.** The batch is 3/3 cycles and ~1750 lines against a 800/10 cap. Nothing new should
-start before it. The three entries (0173, 0174, 0175) are the diff.
+**1. DONE — 0176-REVIEW.** The 0173–0175 batch is reviewed: ACCEPT WITH EDITS, one real defect fixed
+(§4 of that entry), D-143/D-144/D-145 ruled. The review gate is clear.
 
-**2. THE HUMAN LOOKS AGAIN.** `npm run dev` → `image x=0 y=0` → choose a picture. Their four notes
-are all built; what is unseen is the result. Worth their opinion while looking, none of it settleable
-by a test:
+**2. THE HUMAN LOOKS AGAIN — the only thing standing between here and the Phase 6 gate.**
+`npm run dev` → `image x=0 y=0` → choose a picture; the five-step check is at the top of this file.
+Their four notes plus the fifth (D-144) are all built; what is unseen is the result. Worth their
+opinion while looking, none of it settleable by a test:
 - **the FRAME.** Every image is stroked with a light grey box, always, picture or not. It is what
   makes an empty image visible and what keeps D-066 true while a decode is in flight — but it is a
   visual choice, one constant and one `strokeRect` to remove.
@@ -549,15 +596,17 @@ by a test:
   is a pick, not a ruling.
 - **the corner-drag rule.** A diagonal drag with `preserveAspect` on follows whichever axis moved
   MORE. The alternative (obey one axis) makes half of every diagonal drag do nothing.
-- **turning `preserveAspect` back ON after distorting** keeps the DISTORTED proportions rather than
-  restoring the picture's — `constrainBoxToRatio` reads the box's ratio, not the bitmap's, because
-  `interaction.ts` has no access to a decoded bitmap. Entry 0175 flags this as a call.
-- **Q-028** — the `source` row says *"JPEG picture · about 194 KB"*. Storing the file's NAME instead
-  needs an eighth slot; a file PATH is not obtainable in a browser at all.
+- **turning `preserveAspect` back ON after distorting NOW RESTORES the picture's proportions**
+  (D-144, 0176-REVIEW — this answers entry 0175's flagged call). The restored box is the rectangle
+  the renderer would DRAW inside the distorted one, so it SHRINKS rather than grows and the origin
+  stays put. Whether shrinking is the right direction is the visual call worth their eye.
+- **Q-028 — ANSWERED as D-145, and reversible.** The `source` row says *"JPEG picture · about 194
+  KB"*. Storing the file's NAME instead needs an eighth slot; a file PATH is not obtainable in a
+  browser at all. If they want the name, say so — one slot, one small cycle.
 
 **3. THEN re-claim the gate in a NEW entry**, citing 0172-REVIEW §2 and §6 for the ✅ line rather
-than re-deriving it, and the three entries' own mutation checks plus the human's confirmation for
-the `image` half.
+than re-deriving it, and the three entries' plus 0176-REVIEW's mutation checks, plus the human's
+confirmation, for the `image` half.
 
 **NOT in either step, explicitly:** `script` rendering (a labelled box with ports) is its OWN
 unscoped future slice — D-142 clause 3 keeps it out of this gate, and nothing in 0169 touches
@@ -619,22 +668,24 @@ to a fresh slice with its own scope statement.
 
 ## Built this batch, not yet reviewed
 
-**Entries 0173, 0174 and 0175 — the whole of §5.7's `image`.** New: `src/render/images.ts`,
-`src/render/images.test.ts`. Changed: `engine/graph/node.ts`, `engine/primitives/image.ts`,
-`engine/primitives/schema.ts`, `command/commands.ts`, `command/props.ts`, `render/extent.ts`,
-`render/hittest.ts`, `render/renderer.ts`, `render/handles.ts`, `render/interaction.ts`,
-`src/main.ts`, `index.html`, plus seven test files. **3/3 cycles, ~1750 lines / 18 files against
-§6.3's 800/10.**
+**Nothing.** The 0173–0175 batch was reviewed at 0176-REVIEW and the reviewer's own edits went in
+with it. The next implementer starts a fresh batch at 0/3.
 
 ## Reviewed but NOT yet seen on screen
 
-Nothing REVIEWED is unseen. Entry 0169 (reviewed at 0170-REVIEW) is unseeable by construction —
-pure engine work, no render file touched, a `script` object draws nothing. Entry 0161's hanging
-indent was confirmed on screen 2026-09-03.
+**The whole of §5.7's `image` — entries 0173/0174/0175 plus 0176-REVIEW's edits.** New:
+`src/render/images.ts` + its test. Changed: `engine/graph/node.ts`, `engine/primitives/image.ts`,
+`engine/primitives/schema.ts`, `command/commands.ts`, `command/props.ts`, `render/extent.ts`,
+`render/hittest.ts`, `render/renderer.ts`, `render/handles.ts`, `render/interaction.ts`,
+`src/main.ts`, `index.html`, plus test files.
 
 **SEEN ONCE: entry 0173's state**, which produced the human's four notes. **UNSEEN: everything
-those notes changed (0174 + 0175).** D-142 clause 2 makes the human's look a precondition of the
-Phase 6 gate rather than a courtesy. See "Next" above for what to look at.
+those notes changed (0174 + 0175) and everything D-144 added (0176-REVIEW).** D-142 clause 2 makes
+the human's look a precondition of the Phase 6 gate rather than a courtesy — the five-step check is
+at the top of this file.
+
+Entry 0169 (reviewed at 0170-REVIEW) is unseeable by construction — pure engine work, a `script`
+object draws nothing. Entry 0161's hanging indent was confirmed on screen 2026-09-03.
 
 ## Not started
 
@@ -694,20 +745,34 @@ Numbering follows 0090-REVIEW §9. Items 2–13, 16–21, 23–24 unchanged and 
 
 ## Known problems (detail lives where the pointer says)
 
+- **`constrainBoxToRatio` BREAKS THE RATIO AT THE FLOOR.** It clamps width and height to
+  `MIN_RESIZE_BOX_SIZE` INDEPENDENTLY, so a very elongated box dragged to its minimum ends up 8x8
+  and square rather than 8-by-its-ratio. Reachable (a 200x20 box dragged fully in), harmless, and
+  noticed at 0176-REVIEW rather than fixed — the fix is to clamp the SCALE instead of the sides,
+  and it belongs to whichever cycle next opens that function. Not worth its own cycle.
 - **RE-PICKING IS THE PANEL'S `source` ROW ONLY.** There is no command word for it (§5.10 names
   none, and inventing one is §8's last bullet), so an image whose panel is dismissed or whose
   `source` is formula-driven cannot be re-picked without re-selecting it or unlinking first.
   Deliberate, and much narrower than the hole entry 0173 left.
-- **`constrainBoxToRatio` KEEPS THE BOX'S RATIO, NOT THE PICTURE'S.** Turning `preserveAspect` back
-  ON after distorting a picture preserves the DISTORTED proportions rather than restoring the
-  bitmap's. `interaction.ts` has no access to a decoded bitmap, so the alternative would mean
-  threading the cache into the gesture layer. A call, flagged at entry 0175.
+- **`constrainBoxToRatio` STILL KEEPS THE BOX'S RATIO, NOT THE PICTURE'S — now deliberately
+  (D-144 clause 6), no longer an open call.** Entry 0175 flagged it; the human ruled the fix at
+  0176-REVIEW and it landed as the TOGGLE's restore rather than as a change to the drag: with
+  D-144 in force the box already carries the picture's shape whenever the toggle has just been
+  turned on. Pointing the drag itself at `pictureAspect` would make a box JUMP at drag start, which
+  is worse than the case it fixes. **The one path that still ends in a distorted box with the flag
+  ON is a typed `set image_1.width`** — the operator asked for it, and re-choosing the drop-down
+  option straightens it.
 - **`props image_1` AND THE PANEL DESCRIBE `source` DIFFERENTLY** — the command line shows the
   elided base64 (`describeSlotValue`), the panel shows `"JPEG picture · about 194 KB"`
   (`main.ts`'s `describePictureSource`). Two readings of one slot, which this codebase usually
   refuses. `describeSlotValue` is generic over `Value` and does not know an object's TYPE, which is
   why the summary lives in `main.ts`; making it type-aware is a bigger change than the note asked
-  for. Worth a reviewer's opinion.
+  for. **0176-REVIEW's opinion, since entry 0175 asked for one: LEAVE IT.** The two readers answer
+  different questions — `props` prints a slot's VALUE for a reader who may be about to retype it,
+  the panel row labels a control the operator is about to CLICK. Making `describeSlotValue`
+  type-aware to unify them would push object-type knowledge into a formatter that is deliberately
+  generic over `Value`, which is a worse split than the one it closes. Not a defect; do not
+  "fix" it.
 - **THE PROPERTIES PANEL BUILDS THE WHOLE DATA URL AS A STRING ON EVERY PAINT** — the `source` row's
   `editSeed`, which must stay unelided (D-107/F3). Only while an image is SELECTED, and only a few
   hundred KB per pointer move; Rule 5 says do not optimise, so 0173 did not. Named here so it is
@@ -888,19 +953,37 @@ either**: they are the same world units `rect`'s already are, and no cycle has q
 
 **`PROVISIONAL(Q-008)` → `src/engine/graph/node.ts`** (×2, `-0`): open, deferred, blocking nothing.
 
-**Q-027's TAG IS GONE — the question is ANSWERED** (by the human, directly, on screen at entry
-0173: option (b), plus a toggle). Built at 0174/0175. **It is owed a `D-NNN` from the reviewer** —
-an implementer may not write `DECISIONS.md` (§2), so the ruling currently lives only in
-`OPEN_QUESTIONS.md`'s Q-027 and in those two entries.
+**Q-027's TAG IS GONE — the question is ANSWERED and RATIFIED as D-143** (the human, directly, on
+screen at entry 0173: option (b), plus a toggle). Built at 0174/0175, ruled at 0176-REVIEW.
+**D-144 extends it**: the picture's ratio is remembered in `pictureAspect` and the toggle going back
+on restores a distorted box.
 
-**Q-028 HAS NO TAG AND WILL NOT GET ONE.** Its taken option is "add no state", so there is no site
-to tag: may an `image` store the NAME of the file its picture came from, in an eighth slot §5.7
-does not name? Open, blocking nothing.
+**Q-028 IS ANSWERED as D-145 — no `fileName` slot.** It never had a tag and never will: its taken
+option is "add no state". **D-145 says plainly that this is a display preference the human may
+overrule**, and what it would cost if they do (one `literal` slot at pick time, `?? ""` read,
+load-compatible).
 
 **No other `PROVISIONAL` tags exist.** `grep -rn "PROVISIONAL(" src` confirms it.
 
 ## Gotchas for the next model
 
+- **`executeCommand` IS A WRITE SEAM, NOT A GUARD — 0176-REVIEW's finding, and the most expensive
+  wrong belief in this codebase's recent history.** A plain `set` on a formula-driven slot
+  **REPLACES** the formula with a literal and reports `"replaced formula: = table_1.A1"` as an
+  ordinary success line. It does NOT refuse. Entries 0173/0174 documented the opposite in a comment
+  and in a decision, and `commitImagePicture` was therefore silently unlinking a `width` bound to a
+  cell whenever a picture was chosen — with the notice discarded on top. **Any gesture that writes
+  several slots must screen `slot.kind !== "literal"` itself**, which is what
+  `render/interaction.ts`'s `planResize` has always done and what `main.ts`'s new
+  `commitGestureWrites` now does for the non-drag gestures. Route a new multi-write gesture through
+  that helper; do not hand-roll the loop again.
+- **D-144: AN IMAGE'S PICTURE RATIO IS DOCUMENT STATE, IN `pictureAspect`.** Written ONLY by
+  `main.ts`'s pick gesture, from the decoded natural size — so a `source` set by hand records no
+  ratio and offers no restore, which is disclosed, not a defect. `0`/missing/non-finite all mean "no
+  shape known", through the one `usableAspect` screen. The restore calls `renderer.ts`'s own
+  `fitBitmapIntoBox` (exported for exactly this) so the box becomes the rectangle the renderer would
+  DRAW — never a second ratio computation. `constrainBoxToRatio` still takes the START BOX's ratio,
+  deliberately (D-144 clause 6): pointing it at `pictureAspect` would make a box jump at drag start.
 - **D-142 IS THE ONE THAT CHANGES WHAT "DONE" MEANS.** A phase's ✅ line is its TEST, not the whole
   of what it must deliver: where the phase HEADING names a subsystem the brief specifies elsewhere,
   that subsystem is part of the gate. Phase 6 is waiting on `image` load + render, confirmed by the
