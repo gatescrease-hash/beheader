@@ -70,6 +70,8 @@ export const TEXT_TYPE: ObjectType = "text";
 
 export const IMAGE_TYPE: ObjectType = "image";
 
+export const POLYLINE_TYPE: ObjectType = "polyline";
+
 export const SCRIPT_TYPE: ObjectType = "script";
 
 export interface LiteralSlot {

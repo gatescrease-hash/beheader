@@ -1440,6 +1440,147 @@ describe("mutate — the `force` flag on DeleteObjectOperation, which turns a re
 
 });
 
+describe("mutate — AddVertexOperation, behind `addvertex`", () => {
+  it("appends a literal vertex pair and grows vertexCount by one, leaving every earlier vertex untouched", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+    const result = mutate([polyline], [{ kind: "addVertex", objectId: "obj_1", point: { x: 10, y: 10 } }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.vertexCount).toBe(3);
+    expect(object?.slots["vertex.2.x"]).toEqual({ kind: "literal", value: 10 });
+    expect(object?.slots["vertex.2.y"]).toEqual({ kind: "literal", value: 10 });
+    expect(object?.slots["vertex.0.x"]).toEqual({ kind: "literal", value: 0 });
+    expect(object?.slots["vertices"]).toEqual({
+      kind: "derived",
+      value: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }],
+    });
+  });
+
+  it("rejects a point holding an illegal number, the same rule every other write follows", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+    const result = mutate([polyline], [{ kind: "addVertex", objectId: "obj_1", point: { x: Number.NaN, y: 0 } }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("not legal document state");
+    }
+  });
+
+  it("rejects addvertex against an object that is not a polyline, naming its real type", () => {
+    const value = valueObject("obj_1", "value_1", 1);
+    const result = mutate([value], [{ kind: "addVertex", objectId: "obj_1", point: { x: 0, y: 0 } }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('"value"');
+    }
+  });
+});
+
+describe("mutate — DeleteVertexOperation, behind `delvertex`, refuses by default and repairs with force", () => {
+  it("removes the target vertex and renumbers every later one down by one, in storage", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }]);
+    const result = mutate([polyline], [{ kind: "deleteVertex", objectId: "obj_1", index: 0 }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.vertexCount).toBe(2);
+    expect(object?.slots["vertex.0.x"]).toEqual({ kind: "literal", value: 5 });
+    expect(object?.slots["vertex.1.x"]).toEqual({ kind: "literal", value: 10 });
+    expect(object?.slots["vertex.2.x"]).toBeUndefined();
+    expect(object?.slots["vertices"]).toEqual({ kind: "derived", value: [{ x: 5, y: 5 }, { x: 10, y: 10 }] });
+  });
+
+  it("shifts a SURVIVING reference elsewhere down to match, without force — it is not a break, the same vertex moved", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }]);
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "2", "x") }, value: 10 } },
+    };
+    const result = mutate([polyline, dependent], [{ kind: "deleteVertex", objectId: "obj_1", index: 0 }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const repaired = result.objects.find((candidate) => candidate.id === "obj_2");
+    expect(repaired?.slots.value).toMatchObject({ kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "1", "x") } });
+    expect(repaired?.slots.value?.value).toBe(10);
+  });
+
+  it("REJECTS by default when a live reference names the exact deleted vertex, leaving prior state unchanged", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }]);
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "1", "x") }, value: 5 } },
+    };
+    const snapshotBefore = JSON.parse(JSON.stringify([polyline, dependent])) as unknown;
+
+    const result = mutate([polyline, dependent], [{ kind: "deleteVertex", objectId: "obj_1", index: 1 }], []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+    expect([polyline, dependent]).toEqual(snapshotBefore);
+  });
+
+  it("`force: true` repairs the exact hit to #REF, still shifts the survivors, and reports the broken slot", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }]);
+    const exactHit: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "1", "x") }, value: 5 } },
+    };
+    const survivor: GraphObject = {
+      id: "obj_3",
+      name: "value_2",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "2", "x") }, value: 10 } },
+    };
+    const result = mutate([polyline, exactHit, survivor], [{ kind: "deleteVertex", objectId: "obj_1", index: 1, force: true }], []);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const repairedExactHit = result.objects.find((candidate) => candidate.id === "obj_2");
+    expect(repairedExactHit?.slots.value).toMatchObject({ kind: "formula", ast: { type: "error", error: "#REF" } });
+    const repairedSurvivor = result.objects.find((candidate) => candidate.id === "obj_3");
+    expect(repairedSurvivor?.slots.value).toMatchObject({ kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "1", "x") } });
+    expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]);
+    expect(deriveValidateAndEvaluate(result.objects).ok).toBe(true);
+  });
+
+  it("rejects an out of range index, naming the current count and the legal range", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }]);
+    const result = mutate([polyline], [{ kind: "deleteVertex", objectId: "obj_1", index: 2 }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("out of range");
+      expect(result.message).toContain("0 to 1");
+    }
+  });
+
+  it("rejects delvertex against an object that is not a polyline, naming its real type", () => {
+    const value = valueObject("obj_1", "value_1", 1);
+    const result = mutate([value], [{ kind: "deleteVertex", objectId: "obj_1", index: 0 }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('"value"');
+    }
+  });
+
+  it("lets a polyline go below two vertices — a degenerate polyline is normal state, evaluated to #TYPE, not a refusal", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }]);
+    const result = mutate([polyline], [{ kind: "deleteVertex", objectId: "obj_1", index: 0 }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.vertexCount).toBe(1);
+    expect(object?.slots["vertices"]).toMatchObject({ kind: "derived", value: { error: "#TYPE" } });
+  });
+});
+
 describe("mutate — the refusal says which non-finite value it found", () => {
   it("names the offending coordinate inside a Point literal, not [object Object]", () => {
     const initial: GraphObject[] = [
@@ -1612,6 +1753,28 @@ function tableObject(id: string, name: string, rows: number, cols: number, cellS
       ...cellSlots,
     },
   };
+}
+
+function polylinePlaceholders(): Record<string, Slot> {
+  return {
+    vertices: { kind: "derived", value: null },
+    "centroid.x": { kind: "derived", value: null },
+    "centroid.y": { kind: "derived", value: null },
+    length: { kind: "derived", value: null },
+    "bounds.minX": { kind: "derived", value: null },
+    "bounds.minY": { kind: "derived", value: null },
+    "bounds.maxX": { kind: "derived", value: null },
+    "bounds.maxY": { kind: "derived", value: null },
+  };
+}
+
+function polylineObject(id: string, name: string, points: readonly { readonly x: number; readonly y: number }[], vertexSlots: Record<string, Slot> = {}): GraphObject {
+  const slots: Record<string, Slot> = { ...polylinePlaceholders() };
+  points.forEach((point, index) => {
+    slots[`vertex.${index}.x`] = { kind: "literal", value: point.x };
+    slots[`vertex.${index}.y`] = { kind: "literal", value: point.y };
+  });
+  return { id, name, type: "polyline", vertexCount: points.length, slots: { ...slots, ...vertexSlots } };
 }
 
 describe("deriveEdges — table's dynamic cell family", () => {

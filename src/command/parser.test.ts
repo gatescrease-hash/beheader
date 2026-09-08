@@ -54,6 +54,8 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "removeport script_1.out.result", command: { kind: "removeport", target: "script_1.out.result" } },
   { line: "rename polygon_1 intersection_a", command: { kind: "rename", target: "polygon_1", newName: "intersection_a" } },
   { line: "delete intersection_a", command: { kind: "delete", target: "intersection_a", force: false } },
+  { line: "addvertex polyline_1 100,100", command: { kind: "addvertex", target: "polyline_1", points: [{ x: 100, y: 100 }] } },
+  { line: "delvertex polyline_1 2", command: { kind: "delvertex", target: "polyline_1", index: 2, force: false } },
   { line: "refs intersection_a", command: { kind: "refs", target: "intersection_a" } },
   { line: "props intersection_a", command: { kind: "props", target: "intersection_a" } },
   { line: "list", command: { kind: "list" } },

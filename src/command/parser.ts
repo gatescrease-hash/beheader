@@ -126,6 +126,19 @@ export interface DeleteCommand {
   readonly force: boolean;
 }
 
+export interface AddVertexCommand {
+  readonly kind: "addvertex";
+  readonly target: string;
+  readonly points: readonly CommandPoint[];
+}
+
+export interface DeleteVertexCommand {
+  readonly kind: "delvertex";
+  readonly target: string;
+  readonly index: number;
+  readonly force: boolean;
+}
+
 export interface RefsCommand {
   readonly kind: "refs";
   readonly target: string;
@@ -180,6 +193,8 @@ export type Command =
   | SetFormulaCommand
   | RenameCommand
   | DeleteCommand
+  | AddVertexCommand
+  | DeleteVertexCommand
   | RefsCommand
   | PropsCommand
   | ListCommand
@@ -497,6 +512,27 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     build: (args) => ({ kind: "delete", target: textArgument(args, "target"), force: hasFlag(args, "force") }),
   },
   {
+    name: "addvertex",
+    usage: "addvertex <object> <x,y>",
+    positional: [text("target"), { name: "points", kind: "points" }],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "addvertex", target: textArgument(args, "target"), points: pointsArgument(args, "points") }),
+  },
+  {
+    name: "delvertex",
+    usage: "delvertex <object> <index> [force]",
+    positional: [text("target"), { name: "index", kind: "number" }],
+    named: [],
+    flags: ["force"],
+    build: (args) => ({
+      kind: "delvertex",
+      target: textArgument(args, "target"),
+      index: numberArgument(args, "index"),
+      force: hasFlag(args, "force"),
+    }),
+  },
+  {
     name: "refs",
     usage: "refs <object|address>",
     positional: [text("target")],
@@ -566,8 +602,6 @@ export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec
 
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [
   "explode",
-  "addvertex",
-  "delvertex",
   "pan",
 ];
 

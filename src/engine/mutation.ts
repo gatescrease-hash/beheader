@@ -32,6 +32,15 @@ import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
 import {
+  addVertexToObject,
+  deleteVertexFromObject,
+  passThroughVertexRangeForDelete,
+  repairVertexAddressForDelete,
+  shiftVertexAddressForDelete,
+  vertexXPath,
+  vertexYPath,
+} from "./primitives/geometry.ts";
+import {
   deleteTableLine,
   enumerateRangeCellAddresses,
   getTableDimensions,
@@ -50,7 +59,7 @@ import {
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasIllegalNumber, isIllegalNumber, isLegalPortName, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, isIllegalNumber, isLegalPortName, POLYLINE_TYPE, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Rebuilds the whole edge set from stored ASTs and from the schema. Step 3.
@@ -231,6 +240,19 @@ export interface RemovePortOperation {
   readonly name: string;
 }
 
+export interface AddVertexOperation {
+  readonly kind: "addVertex";
+  readonly objectId: string;
+  readonly point: Point;
+}
+
+export interface DeleteVertexOperation {
+  readonly kind: "deleteVertex";
+  readonly objectId: string;
+  readonly index: number;
+  readonly force?: boolean;
+}
+
 export type Operation =
   | SetSlotOperation
   | ClearSlotOperation
@@ -240,7 +262,9 @@ export type Operation =
   | DeleteTableLineOperation
   | RenameObjectOperation
   | AddPortOperation
-  | RemovePortOperation;
+  | RemovePortOperation
+  | AddVertexOperation
+  | DeleteVertexOperation;
 
 function operationTargetId(operation: Operation): string {
   if (operation.kind === "deleteObject") {
@@ -254,7 +278,9 @@ function operationTargetId(operation: Operation): string {
     operation.kind === "deleteTableLine" ||
     operation.kind === "renameObject" ||
     operation.kind === "addPort" ||
-    operation.kind === "removePort"
+    operation.kind === "removePort" ||
+    operation.kind === "addVertex" ||
+    operation.kind === "deleteVertex"
   ) {
     return operation.objectId;
   }
@@ -391,6 +417,31 @@ function applyOperation(
       }),
       brokenSlots: [],
     };
+  }
+  if (operation.kind === "addVertex") {
+    return {
+      objects: objects.map((object) => (object.id === operation.objectId ? addVertexToObject(object, operation.point) : object)),
+      brokenSlots: [],
+    };
+  }
+  if (operation.kind === "deleteVertex") {
+    const target = objects.find((object) => object.id === operation.objectId);
+    if (target === undefined) {
+      return { objects, brokenSlots: [] };
+    }
+    const resized = deleteVertexFromObject(target, operation.index);
+    if (operation.force !== true) {
+      const shiftAddress = (address: Address): Address => shiftVertexAddressForDelete(address, operation.objectId, operation.index);
+      return {
+        objects: objects.map((object) => rewriteObjectFormulaAddresses(object.id === operation.objectId ? resized : object, shiftAddress)),
+        brokenSlots: [],
+      };
+    }
+    const repairReference = (address: Address): Address | "deleted" => repairVertexAddressForDelete(address, operation.objectId, operation.index);
+    const repaired = objects.map((object) =>
+      repairObjectFormulaAddresses(object.id === operation.objectId ? resized : object, repairReference, passThroughVertexRangeForDelete),
+    );
+    return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
   }
   return {
     objects: objects.map((object) => {
@@ -536,6 +587,10 @@ export function mutate(
         detail = `attempts to add ${operation.family} port "${operation.name}" to object id "${targetId}"`;
       } else if (operation.kind === "removePort") {
         detail = `attempts to remove ${operation.family} port "${operation.name}" from object id "${targetId}"`;
+      } else if (operation.kind === "addVertex") {
+        detail = `attempts to add a vertex to object id "${targetId}"`;
+      } else if (operation.kind === "deleteVertex") {
+        detail = `attempts to delete vertex ${operation.index} from object id "${targetId}"`;
       } else {
         detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
       }
@@ -578,6 +633,11 @@ export function mutate(
   const invalidPortMessages = findInvalidPortOperations(operations, objects);
   if (invalidPortMessages.length > 0) {
     return { ok: false, message: invalidPortMessages.join("; ") };
+  }
+
+  const invalidVertexMessages = findInvalidVertexOperations(operations, objects);
+  if (invalidVertexMessages.length > 0) {
+    return { ok: false, message: invalidVertexMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -831,6 +891,11 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
       return;
     }
 
+    if (operation.kind === "addVertex" && hasIllegalNumber(operation.point)) {
+      problems.push(
+        `${prefix}: the new vertex would hold an illegal value (${describeIllegalValue(operation.point)}), which is not legal document state`,
+      );
+    }
   });
 
   return problems;
@@ -1115,6 +1180,111 @@ function findInvalidPortOperations(operations: readonly Operation[], objects: re
   });
 
   return problems;
+}
+
+interface TrackedVertexCount {
+  readonly name: string;
+  readonly type: ObjectType;
+  count: number;
+}
+
+/**
+ * Tracks each polyline's vertex count across the batch, in order. This
+ * function checks an addVertex followed by a deleteVertex of the vertex it
+ * just added against the count the batch reaches by then. It never checks
+ * against the count before the batch started.
+ */
+function findInvalidVertexOperations(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  const tracked = new Map<string, TrackedVertexCount>();
+
+  const resolveTracked = (objectId: string): TrackedVertexCount | undefined => {
+    const existing = tracked.get(objectId);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const fromObjects = objects.find((candidate) => candidate.id === objectId);
+    const fromCreate = fromObjects === undefined
+      ? operations.find((candidate): candidate is CreateObjectOperation => candidate.kind === "createObject" && candidate.object.id === objectId)?.object
+      : undefined;
+    const source = fromObjects ?? fromCreate;
+    if (source === undefined) {
+      return undefined;
+    }
+    const state: TrackedVertexCount = { name: source.name, type: source.type, count: source.vertexCount ?? 0 };
+    tracked.set(objectId, state);
+    return state;
+  };
+
+  operations.forEach((operation, index) => {
+    if (operation.kind !== "addVertex" && operation.kind !== "deleteVertex") {
+      return;
+    }
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+    const state = resolveTracked(operation.objectId);
+    if (state === undefined) {
+      return;
+    }
+    if (state.type !== POLYLINE_TYPE) {
+      const verb = operation.kind === "addVertex" ? "add" : "delete";
+      problems.push(`${prefix}: object "${state.name}" is a "${state.type}", not a polyline, so it has no vertices to ${verb}`);
+      return;
+    }
+    if (operation.kind === "addVertex") {
+      state.count += 1;
+      return;
+    }
+    if (!Number.isInteger(operation.index) || operation.index < 0 || operation.index >= state.count) {
+      const bound = state.count === 0 ? "it has no vertices" : `must be an integer from 0 to ${state.count - 1}`;
+      problems.push(`${prefix}: vertex index ${operation.index} is out of range for "${state.name}" (currently ${state.count} vertices; ${bound})`);
+      return;
+    }
+    if (operation.force !== true) {
+      const dependents = findLiveVertexDependents(objects, operation.objectId, operation.index);
+      if (dependents.length > 0) {
+        const verb = dependents.length === 1 ? "references" : "reference";
+        problems.push(`${prefix}: ${dependents.join(", ")} still ${verb} vertex ${operation.index} of "${state.name}"`);
+      }
+    }
+    state.count -= 1;
+  });
+
+  return problems;
+}
+
+/**
+ * Every formula, anywhere in the document as it stands now, that names the
+ * exact vertex a deleteVertex operation names for removal. A shift down the
+ * line is never a break, because the same real vertex survives under a new
+ * index. Only a reference to the exact vertex that leaves counts here.
+ */
+function findLiveVertexDependents(objects: readonly GraphObject[], targetObjectId: string, index: number): readonly string[] {
+  const targetKeys = new Set([slotKey(vertexXPath(index)), slotKey(vertexYPath(index))]);
+  const names: string[] = [];
+  for (const object of objects) {
+    const schema = getObjectSchema(object.type);
+    if (schema === undefined) {
+      continue;
+    }
+    for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
+      const slot = object.slots[slotKey(path)];
+      if (slot === undefined || slot.kind !== "formula") {
+        continue;
+      }
+      const namesThisVertex = extractDependencies(slot.ast).some(
+        (dependency) =>
+          dependency.kind === "reference" &&
+          dependency.address.objectId === targetObjectId &&
+          targetKeys.has(slotKey(dependency.address.path)),
+      );
+      if (!namesThisVertex) {
+        continue;
+      }
+      const formatted = formatAddress({ objectId: object.id, path }, objects);
+      names.push(isAddressError(formatted) ? formatted.message : formatted);
+    }
+  }
+  return names;
 }
 
 function describeIllegalValue(value: Value): string {

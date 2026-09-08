@@ -720,6 +720,8 @@ describe("every registry command reaches a handler", () => {
     "removeport script_1.out.result",
     "rename intersection_a polygon_9",
     "delete intersection_a",
+    "addvertex polyline_1 0,0",
+    "delvertex polyline_1 0",
     "refs intersection_a",
     "props intersection_a",
     "list",
@@ -1524,6 +1526,89 @@ describe("delete, refs, props and list — the object commands that need no new 
       const table = named(recreated, "table_1");
       expect(table?.id).toBe("obj_3");
     });
+  });
+});
+
+describe("addvertex / delvertex — growing and shrinking a polyline", () => {
+  function sandbox(): Document {
+    return committed("polyline 0,0 10,0 10,10", createEmptyDocument());
+  }
+
+  it("appends a new vertex and names its index and point", () => {
+    const after = committed("addvertex polyline_1 20,20", sandbox());
+    const object = onlyNamed(after, "polyline_1");
+    expect(object.vertexCount).toBe(4);
+    expect(literalValue(object, ["vertex", "3", "x"])).toBe(20);
+    expect(literalValue(object, ["vertex", "3", "y"])).toBe(20);
+    const outcome = run("addvertex polyline_1 20,20", sandbox());
+    expect(outcome.ok && outcome.lines).toEqual(["added polyline_1.vertex.3 at 20,20"]);
+  });
+
+  it("refuses addvertex against a non-polyline object, naming its real type", () => {
+    const withCircle = committed("circle x=0 y=0 r=5", sandbox());
+    expect(refused("addvertex circle_1 1,1", withCircle)).toContain("only a polyline has vertices to add");
+  });
+
+  it("refuses addvertex given more than one point", () => {
+    expect(refused("addvertex polyline_1 1,1 2,2", sandbox())).toContain("exactly one point");
+  });
+
+  it("refuses an unknown object", () => {
+    expect(refused("addvertex nosuch 1,1", sandbox())).toBe('no object named "nosuch"');
+  });
+
+  it("removes the target vertex and renumbers the rest down by one", () => {
+    const after = committed("delvertex polyline_1 0", sandbox());
+    const object = onlyNamed(after, "polyline_1");
+    expect(object.vertexCount).toBe(2);
+    expect(literalValue(object, ["vertex", "0", "x"])).toBe(10);
+    expect(literalValue(object, ["vertex", "0", "y"])).toBe(0);
+    const outcome = run("delvertex polyline_1 0", sandbox());
+    expect(outcome.ok && outcome.lines).toEqual(["deleted polyline_1.vertex.0"]);
+  });
+
+  it("REJECTS while another object's formula still reads the exact vertex, naming it and the force escape", () => {
+    const wired = committed("link circle_1.origin.x polyline_1.vertex.1.x", committed("circle x=0 y=0 r=5", sandbox()));
+    expect(refused("delvertex polyline_1 1", wired)).toContain("circle_1.origin.x");
+    expect(refused("delvertex polyline_1 1", wired)).toContain('"delvertex polyline_1 1 force"');
+  });
+
+  it("leaves prior state bit-for-bit unchanged when it rejects", () => {
+    const wired = committed("link circle_1.origin.x polyline_1.vertex.1.x", committed("circle x=0 y=0 r=5", sandbox()));
+    const snapshot = JSON.stringify(wired);
+    refused("delvertex polyline_1 1", wired);
+    expect(JSON.stringify(wired)).toBe(snapshot);
+  });
+
+  it("takes the repair path under force, and reports the formula it broke", () => {
+    const wired = committed("link circle_1.origin.x polyline_1.vertex.1.x", committed("circle x=0 y=0 r=5", sandbox()));
+    const outcome = run("delvertex polyline_1 1 force", wired);
+    expect(outcome.ok && outcome.lines).toEqual([
+      "deleted polyline_1.vertex.1",
+      "broke 1 formula: circle_1.origin.x — each now reads #REF where it read this vertex",
+    ]);
+  });
+
+  it("shifts a reference to a SURVIVING vertex down to match, without breaking it", () => {
+    const wired = committed("link circle_1.origin.x polyline_1.vertex.2.x", committed("circle x=0 y=0 r=5", sandbox()));
+    const after = committed("delvertex polyline_1 0", wired);
+    const circle = onlyNamed(after, "circle_1");
+    const slot = getSlot(circle, ["origin", "x"]);
+    expect(slot?.kind).toBe("formula");
+    expect(slot?.value).toBe(10);
+  });
+
+  it("refuses an out of range vertex index, naming the current count", () => {
+    expect(refused("delvertex polyline_1 99", sandbox())).toContain("out of range");
+  });
+
+  it("refuses delvertex against a non-polyline object, naming its real type", () => {
+    const withCircle = committed("circle x=0 y=0 r=5", sandbox());
+    expect(refused("delvertex circle_1 0", withCircle)).toContain("only a polyline has vertices to delete");
+  });
+
+  it("refuses an unknown object", () => {
+    expect(refused("delvertex nosuch 0", sandbox())).toBe('no object named "nosuch"');
   });
 });
 

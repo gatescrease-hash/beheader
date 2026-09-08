@@ -13,7 +13,7 @@
  * still draws a true arc.
  */
 import type { Address } from "../address.ts";
-import { isErrorValue, type ErrorValue, type GraphObject, type Point, type Value } from "../graph/node.ts";
+import { getSlot, isErrorValue, slotKey, type ErrorValue, type GraphObject, type Point, type Slot, type Value } from "../graph/node.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
 export const VERTEX_PATH_PREFIX = "vertex";
@@ -340,6 +340,116 @@ export function openPathDerivedSlots(label: string): readonly DerivedSlotSchema[
     { path: BOUNDS_MAX_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxX`, (v) => computeBounds(v).maxX) },
     { path: BOUNDS_MAX_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxY`, (v) => computeBounds(v).maxY) },
   ];
+}
+
+/** Appends one vertex at the end. No vertex slot moves, so no reference elsewhere needs a rewrite. */
+export function addVertexToObject(object: GraphObject, point: Point): GraphObject {
+  const count = object.vertexCount ?? 0;
+  return {
+    ...object,
+    vertexCount: count + 1,
+    slots: {
+      ...object.slots,
+      [slotKey(vertexXPath(count))]: { kind: "literal", value: point.x },
+      [slotKey(vertexYPath(count))]: { kind: "literal", value: point.y },
+    },
+  };
+}
+
+/** Removes one vertex and renumbers every later one down by one, in storage. */
+export function deleteVertexFromObject(object: GraphObject, index: number): GraphObject {
+  const count = object.vertexCount ?? 0;
+  const newSlots: Record<string, Slot> = { ...object.slots };
+  for (let i = 0; i < count; i += 1) {
+    delete newSlots[slotKey(vertexXPath(i))];
+    delete newSlots[slotKey(vertexYPath(i))];
+  }
+  for (let i = 0; i < count; i += 1) {
+    if (i === index) {
+      continue;
+    }
+    const x = getSlot(object, vertexXPath(i));
+    const y = getSlot(object, vertexYPath(i));
+    const newIndex = i < index ? i : i - 1;
+    if (x !== undefined) {
+      newSlots[slotKey(vertexXPath(newIndex))] = x;
+    }
+    if (y !== undefined) {
+      newSlots[slotKey(vertexYPath(newIndex))] = y;
+    }
+  }
+  return { ...object, vertexCount: Math.max(0, count - 1), slots: newSlots };
+}
+
+interface VertexAddress {
+  readonly index: number;
+  readonly axis: "x" | "y";
+}
+
+function asVertexAddress(address: Address, objectId: string): VertexAddress | undefined {
+  if (address.objectId !== objectId) {
+    return undefined;
+  }
+  const path = address.path;
+  if (path.length !== 3 || path[0] !== VERTEX_PATH_PREFIX) {
+    return undefined;
+  }
+  const axis = path[2];
+  if (axis !== "x" && axis !== "y") {
+    return undefined;
+  }
+  const indexText = path[1];
+  if (indexText === undefined || String(Number(indexText)) !== indexText) {
+    return undefined;
+  }
+  const index = Number(indexText);
+  return Number.isInteger(index) && index >= 0 ? { index, axis } : undefined;
+}
+
+function vertexAddressAt(objectId: string, index: number, axis: "x" | "y"): Address {
+  return { objectId, path: axis === "x" ? vertexXPath(index) : vertexYPath(index) };
+}
+
+/**
+ * Shifts a reference to a vertex after the deleted one down by one index. A
+ * reference to the deleted vertex itself, or to an earlier one, passes
+ * through unchanged. The refusal for a live reference to the exact vertex
+ * marked for removal happens earlier, in mutation.ts, before this function
+ * ever runs. A call that reaches this function only shifts the survivors.
+ */
+export function shiftVertexAddressForDelete(address: Address, objectId: string, deletedIndex: number): Address {
+  const found = asVertexAddress(address, objectId);
+  if (found === undefined || found.index <= deletedIndex) {
+    return address;
+  }
+  return vertexAddressAt(objectId, found.index - 1, found.axis);
+}
+
+/**
+ * The force path. It shifts every vertex after the deleted one, the same as
+ * shiftVertexAddressForDelete. It also marks a reference to the deleted
+ * vertex itself "deleted", so the caller rewrites it to #REF.
+ */
+export function repairVertexAddressForDelete(address: Address, objectId: string, deletedIndex: number): Address | "deleted" {
+  const found = asVertexAddress(address, objectId);
+  if (found === undefined) {
+    return address;
+  }
+  if (found.index === deletedIndex) {
+    return "deleted";
+  }
+  if (found.index > deletedIndex) {
+    return vertexAddressAt(objectId, found.index - 1, found.axis);
+  }
+  return address;
+}
+
+/** A vertex address never spans a range. The formula language has no range syntax for one. */
+export function passThroughVertexRangeForDelete(
+  start: Address,
+  end: Address,
+): { readonly start: Address; readonly end: Address } {
+  return { start, end };
 }
 
 function readVertices(object: GraphObject, read: (address: Address) => Value | undefined, label: string): readonly Point[] | ErrorValue {

@@ -311,8 +311,11 @@ function stripCode(text) {
 /** Cuts cleaned prose into sentences. */
 function sentences(text) {
   if (!text) return [];
+  // A code placeholder (zc, zr, zn) can open a sentence too. stripCode always
+  // lowercases it, so the plain capital-letter test alone misses it and
+  // merges two real sentences into one.
   return text
-    .split(/(?<=[.!?])\s+(?=[A-Z"(])/)
+    .split(/(?<=[.!?])\s+(?=[A-Z"(]|z[crn]\b)/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }

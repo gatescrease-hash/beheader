@@ -25,7 +25,7 @@ import { isReferenceNode } from "../engine/formula/ast.ts";
 import { formatFormula } from "../engine/formula/format.ts";
 import { isParseError, parseFormula } from "../engine/formula/parser.ts";
 import { addressKey, type Edge } from "../engine/graph/edge.ts";
-import { getSlot, isLegalPortName, slotKey, SCRIPT_TYPE, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
+import { getSlot, isLegalPortName, slotKey, POLYLINE_TYPE, SCRIPT_TYPE, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
 import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import {
@@ -59,6 +59,7 @@ import { SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH, scriptInPortPath, scriptOutPo
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
   AddPortCommand,
+  AddVertexCommand,
   ClearCommand,
   Command,
   CreateCircleCommand,
@@ -70,6 +71,7 @@ import type {
   CreateTableCommand,
   CreateTextCommand,
   DeleteCommand,
+  DeleteVertexCommand,
   LinkCommand,
   PropsCommand,
   RefsCommand,
@@ -172,6 +174,10 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return renameObject(command, document, context);
     case "delete":
       return deleteObject(command, document, context);
+    case "addvertex":
+      return addVertex(command, document, context);
+    case "delvertex":
+      return deleteVertex(command, document, context);
     case "refs":
       return refs(command, document);
     case "props":
@@ -213,6 +219,8 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "removeport",
   "rename",
   "delete",
+  "addvertex",
+  "delvertex",
   "refs",
   "props",
   "list",
@@ -653,6 +661,66 @@ function deleteObject(command: DeleteCommand, document: Document, context: EvalC
   if (result.brokenSlots.length > 0) {
     const broken = result.brokenSlots.map((address) => formatSlotAddress(address, result.objects));
     lines.push(`broke ${countedNoun(broken.length, "formula")}: ${broken.join(", ")} — each now reads #REF where it read ${object.name}`);
+  }
+  return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines };
+}
+
+function addVertex(command: AddVertexCommand, document: Document, context: EvalContext): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+  if (object.type !== POLYLINE_TYPE) {
+    return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has vertices to add` };
+  }
+  if (command.points.length !== 1) {
+    return { ok: false, message: `addvertex takes exactly one point, given as x,y — got ${command.points.length}` };
+  }
+  const point = command.points[0];
+  if (point === undefined) {
+    return { ok: false, message: "addvertex needs a point, given as x,y" };
+  }
+
+  const newIndex = object.vertexCount ?? 0;
+  const result = mutate(document.objects, [{ kind: "addVertex", objectId: object.id, point }], document.journal, context);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`added ${object.name}.vertex.${newIndex} at ${describeSlotValue(point)}`],
+  };
+}
+
+function deleteVertex(command: DeleteVertexCommand, document: Document, context: EvalContext): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+  if (object.type !== POLYLINE_TYPE) {
+    return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has vertices to delete` };
+  }
+
+  const result = mutate(
+    document.objects,
+    [{ kind: "deleteVertex", objectId: object.id, index: command.index, force: command.force }],
+    document.journal,
+    context,
+  );
+  if (!result.ok) {
+    return {
+      ok: false,
+      message: command.force
+        ? result.message
+        : `${result.message} — unlink each, or "delvertex ${object.name} ${command.index} force" to rewrite them to #REF instead`,
+    };
+  }
+
+  const lines = [`deleted ${object.name}.vertex.${command.index}`];
+  if (result.brokenSlots.length > 0) {
+    const broken = result.brokenSlots.map((address) => formatSlotAddress(address, result.objects));
+    lines.push(`broke ${countedNoun(broken.length, "formula")}: ${broken.join(", ")} — each now reads #REF where it read this vertex`);
   }
   return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines };
 }
