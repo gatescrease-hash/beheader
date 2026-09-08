@@ -8,7 +8,69 @@ provisional choice if one exists (tag it `// PROVISIONAL(Q-NNN)` at every affect
 the cycle if the choice is not reversible. Answered questions are marked `ANSWERED → D-NNN` in
 place here and are never deleted.
 
-Next free ID: **Q-029**
+Next free ID: **Q-030**
+
+---
+
+## Q-029 — Does the Phase 6 gate require the script node's ports to be declarable BY AN OPERATOR, and does it require §5.8's rendering?
+Raised: 0177-REVIEW-phase6-scope (reviewer), on the human's question   Brief section: §5.8, §5.9,
+§6 Phase 6, against **D-142** clause 3 — which is this reviewer's own ruling and is what the
+question challenges.
+
+Status: **OPEN. BLOCKING THE PHASE 6 GATE.** Not reversible by an implementer: it decides what the
+phase must deliver, which PROCESS_BRIEF §1 makes the human's call and D-142 clause 3's own last
+sentence makes a §6.1 trigger 3 stop.
+
+**The fact that raised it.** Phase 6's ✅ line describes an operator scenario. **Not one step of it
+can be performed by a person in the running app.** Walked through `submitLine` at 0177-REVIEW,
+verbatim:
+
+```
+$ script x=0 y=0                             -> created script_1
+  SCRIPT SLOTS: ["origin.x","origin.y","language","source"]   SCRIPT PORTS: undefined
+$ link script_1.in.factor table_1.A1         -> script_1 has no slot at "script_1.in.factor"
+$ addport script_1 in factor                 -> unknown command "addport"
+$ set script_1.placeholder.result 10         -> script_1 has no slot at "script_1.placeholder.result"
+$ link polygon_1.radius script_1.out.result  -> polygon_1.radius references a slot that does not exist
+```
+
+The criterion passes only from a test fixture that calls `mutate` directly with `addPort`/`setSlot`
+operations (`commands.test.ts:395-440`). §5.10 names no port grammar and no UI declares one, so
+`addPort`/`removePort` (D-141) have no operator-facing surface at all.
+
+**What §5.8 actually says, and where D-142 clause 3 went wrong.** Clause 3 excluded §5.8's
+rendering from the gate on the grounds that the section is titled **STUB ONLY** and the heading's
+word is "Script *stub*". The section's very next sentence is *"Build the node as a **real,
+first-class graph citizen** whose execution is fake."* **STUB ONLY scopes the EXECUTION — no Python
+runs — not the node's existence as a usable object.** Two §5.8 clauses are unbuilt on any reading:
+
+1. *"Ports are declared manually in the UI for now."* — no UI, no command, nothing.
+2. *"Render as a labelled box with input ports on the left and output ports on the right."*
+
+and §5.9 separately lists *"bounding box for text/tables/images/**scripts**"* among the hit tests it
+expects.
+
+Options:
+- **(a) Ports must be operator-declarable; rendering stays out.** The gate additionally requires
+  that the ✅ line's scenario be walkable by hand at the command line. Smallest slice that makes the
+  criterion real rather than fixture-only.
+- **(b) (a) plus §5.8's rendering and hit-testing.** The labelled box with ports, an `extent.ts` arm
+  and a `hittest.ts` arm — shipped together per D-066, the same shape the `image` slice took.
+- **(c) D-142 clause 3 stands unchanged.** The engine-side ✅ line suffices; ports-in-UI and
+  rendering are a later slice, and Phase 6 closes on the tests already passing plus the human's look
+  at `image`.
+
+Recommendation: **(a)**, with (b) a close second and defensible. A phase criterion no operator can
+reach is proven in a fixture rather than in the product, and *"declared manually in the UI for now"*
+is an explicit, unambiguous, unbuilt clause of the section the phase is named for — exactly what
+D-142 clause 1 puts inside a gate. Rendering is the weaker half of the case: the ✅ line does not
+need it, and one sentence of §5.8 plus one word of §5.9 is thinner evidence than clause 1's. But an
+invisible, unselectable node is a strained reading of *"real, first-class graph citizen"*, so (b)
+is not wrong — it is a bigger slice, and the human may prefer to see `script` on screen before
+Phase 7 rather than after.
+
+Reversible? **No.** It decides the gate. No provisional choice taken and nothing tagged; the gate
+simply stays open until it is ruled.
 
 ---
 
