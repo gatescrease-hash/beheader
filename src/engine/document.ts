@@ -145,7 +145,7 @@ export function deserializeDocument(raw: unknown, context: EvalContext = NULL_EV
     raw.nextObjectId < 0 ||
     isIllegalNumber(raw.nextObjectId)
   ) {
-    return { ok: false, message: "nextObjectId must be a non-negative integer, and not -0 (D-002/D-027)" };
+    return { ok: false, message: "nextObjectId must be a non-negative integer, and not -0" };
   }
   if (!Array.isArray(raw.objects)) {
     return { ok: false, message: "objects must be an array" };
@@ -154,7 +154,7 @@ export function deserializeDocument(raw: unknown, context: EvalContext = NULL_EV
     return { ok: false, message: "journal must be an array" };
   }
   if (rawContainsIllegalNumber(raw.journal)) {
-    return { ok: false, message: "journal contains an illegal number (non-finite, or -0), which is not legal document state (D-025/Q-008)" };
+    return { ok: false, message: "journal contains an illegal number (non-finite, or -0), which is not legal document state" };
   }
   const cameraResult = reconstructCamera(raw.camera);
   if (!cameraResult.ok) {
@@ -198,7 +198,7 @@ function reconstructCamera(raw: unknown): CameraReconstructionResult {
   if (isIllegalNumber(raw.x) || isIllegalNumber(raw.y) || isIllegalNumber(raw.zoom)) {
     return {
       ok: false,
-      message: "camera holds an illegal number (non-finite, or -0), which is not legal document state (D-025/Q-008/D-027)",
+      message: "camera holds an illegal number (non-finite, or -0), which is not legal document state",
     };
   }
   return { ok: true, camera: { x: raw.x, y: raw.y, zoom: raw.zoom } };

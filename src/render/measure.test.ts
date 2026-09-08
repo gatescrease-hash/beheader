@@ -82,7 +82,7 @@ describe("createCanvas2dTextMeasurer — an empty string measures a zero box (ma
   });
 });
 
-describe("createCanvas2dTextMeasurer — line-breaking lives here (D-120), and only when maxWidth is given", () => {
+describe("createCanvas2dTextMeasurer — line-breaking lives here, and only when maxWidth is given", () => {
   it("does NOT wrap when maxWidth is undefined — a long line stays one line", () => {
     const measurer = createCanvas2dTextMeasurer(fakeContext().ctx);
     const result = measurer.measure("one two three four five", STYLE);
@@ -177,7 +177,7 @@ describe("createCanvas2dTextMeasurer — the eval-context.ts contract: never thr
   });
 });
 
-describe("layOutText / cssFont — exported for renderer.ts to draw the SAME lines this file measures (entry 0138)", () => {
+describe("layOutText / cssFont — exported for renderer.ts to draw the SAME lines this file measures", () => {
   const width = (line: string): number => line.length * CHAR;
 
   it("splits on hard newlines and does not wrap when wrapWidth is undefined", () => {
@@ -215,7 +215,7 @@ describe("layOutText / cssFont — exported for renderer.ts to draw the SAME lin
   });
 });
 
-describe("layOutText — markup:true honours §5.6's markdown-lite; markup:false takes every character at face value", () => {
+describe("layOutText — markup:true honours the markdown lite rules; markup:false takes every character at face value", () => {
   const width = (line: string): number => line.length * CHAR;
 
   function markupLayout(text: string, wrapWidth?: number) {
@@ -231,7 +231,7 @@ describe("layOutText — markup:true honours §5.6's markdown-lite; markup:false
     expect(markupLayout("**bold**").lines[0]?.runs.map((run) => run.text)).toEqual(["bold"]);
   });
 
-  it("keeps every character when markup is NOT honoured — the overlay measures what is actually typed (Q-025 (a))", () => {
+  it("keeps every character when markup is NOT honoured — the overlay measures what the operator actually typed", () => {
     expect(plainLines("**bold**", undefined, width)).toEqual(["**bold**"]);
     expect(
       layOutText({ text: "**bold**", style: STYLE, wrapWidth: undefined, markup: false, measureRun: (runText) => width(runText) }).width,
@@ -292,7 +292,7 @@ describe("layOutText — markup:true honours §5.6's markdown-lite; markup:false
   });
 });
 
-describe("createSourceTextMeasurer — the overlay's measurer (Q-025 (a), provisional)", () => {
+describe("createSourceTextMeasurer — the measurer for the overlay", () => {
   it("measures markup verbatim where the canvas measurer measures it rendered", () => {
     const source = createSourceTextMeasurer(fakeContext().ctx);
     const canvas = createCanvas2dTextMeasurer(fakeContext().ctx);
@@ -312,7 +312,7 @@ describe("createSourceTextMeasurer — the overlay's measurer (Q-025 (a), provis
   });
 });
 
-describe("layOutText — a wrapped list item hangs its continuation lines under its text (entry 0161)", () => {
+describe("layOutText — a wrapped list item hangs its continuation lines under its text", () => {
   const width = (line: string): number => line.length * CHAR;
 
   function listLayout(text: string, wrapWidth?: number) {

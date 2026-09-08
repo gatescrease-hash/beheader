@@ -104,7 +104,7 @@ describe("renderDocument — clear and camera transform", () => {
     expect(calls[1]).toEqual({ op: "clearRect", x: 0, y: 0, w: 800, h: 600 });
   });
 
-  it("applies the camera transform via the SAME formula render/camera.ts's worldToScreen uses (D-010)", () => {
+  it("applies the camera transform via the SAME formula render/camera.ts's worldToScreen uses", () => {
     const { ctx, calls } = createFakeContext();
     const camera: CameraState = { x: 10, y: 20, zoom: 2 };
     renderDocument(ctx, 800, 600, [], camera);
@@ -245,7 +245,7 @@ describe("renderDocument — polygon/rect: the closed path vertices describes", 
   });
 });
 
-describe("renderDocument — table: fixed-size grid, alignment per §5.4", () => {
+describe("renderDocument — table: fixed-size grid, alignment", () => {
   function tableObject(slots: Readonly<Record<string, Slot>>): GraphObject {
     return { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 1 }, cols: { kind: "literal", value: 3 }, ...slots } };
   }
@@ -371,7 +371,7 @@ function bodyText(calls: readonly RecordedCall[]): readonly Extract<RecordedCall
   );
 }
 
-describe("renderDocument — text (§5.6, entry 0138)", () => {
+describe("renderDocument — text", () => {
   it("draws each hard line of resolvedContent from origin, stepping down by lineHeight", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [textObject("first\nsecond", 10, 20)], CAMERA_IDENTITY);
@@ -546,7 +546,7 @@ describe("renderDocument — text (§5.6, entry 0138)", () => {
   });
 });
 
-describe("renderDocument — wired through the real mutate() pipeline (D-016 discipline)", () => {
+describe("renderDocument — driven through the real mutate() pipeline", () => {
   it("draws a real, evaluated pentagon's actual vertices, not a hand-fed fixture", () => {
     const schema = getObjectSchema("polygon");
     if (schema === undefined) {
@@ -608,7 +608,7 @@ function circleObject(id: string, name: string, slots: Readonly<Record<string, S
 
 const CIRCLE_CHROME_BASELINE = -11;
 
-describe("renderDocument — name label (D-092 clause 1)", () => {
+describe("renderDocument — name label", () => {
   it("draws every object's name in the SCREEN-space pass, centred above the TOP of its extent, converted through the SAME worldToScreen the camera transform uses", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_7");
@@ -617,7 +617,7 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
     expect(textCalls).toEqual([{ op: "fillText", text: "circle_7", x: 0, y: -16, align: "center" }]);
   });
 
-  it("anchors a CIRCLE above its top edge, not at its centre — origin means different things per type, so the extent is what chrome hangs from (entry 0094)", () => {
+  it("anchors a CIRCLE above its top edge, not at its centre — origin means different things per type, so the extent is what chrome hangs from", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
@@ -645,7 +645,7 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
     expect(calls.some((call) => call.op === "fillText")).toBe(false);
   });
 
-  it("draws no label for a shape with no vertices slot — chrome appears exactly when a drawn extent does (entry 0094's stated consequence)", () => {
+  it("draws no label for a shape with no vertices slot — furniture appears exactly when a drawn extent does", () => {
     const { ctx, calls } = createFakeContext();
     const circle: GraphObject = { id: "obj_1", name: "circle_1", type: "circle", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, radius: { kind: "literal", value: 5 } } };
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
@@ -663,7 +663,7 @@ describe("renderDocument — name label (D-092 clause 1)", () => {
   });
 });
 
-describe("renderDocument — selection highlight (D-068)", () => {
+describe("renderDocument — selection highlight", () => {
   it("re-strokes the selected circle's own path, in addition to the ordinary draw", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
@@ -686,7 +686,7 @@ describe("renderDocument — selection highlight (D-068)", () => {
     expect(calls.filter((call) => call.op === "arc")).toHaveLength(1);
   });
 
-  it("highlights EVERY selected object, not only one (D-100 clause 8)", () => {
+  it("highlights EVERY selected object, not only one", () => {
     const { ctx, calls } = createFakeContext();
     const circleA = circleObject("obj_1", "circle_a");
     const circleB = circleObject("obj_2", "circle_b");
@@ -721,7 +721,7 @@ describe("renderDocument — selection highlight (D-068)", () => {
   });
 });
 
-describe("renderDocument — error badge (D-068)", () => {
+describe("renderDocument — error badge", () => {
   it("badges an object holding an ErrorValue in ANY slot, not only the ones this file draws from", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
@@ -753,7 +753,7 @@ describe("renderDocument — error badge (D-068)", () => {
   });
 });
 
-describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
+describe("renderDocument — formula-driven indicator", () => {
   function boundToCellSlot(): Slot {
     return { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 0 };
   }
@@ -797,7 +797,7 @@ describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
     expect(tickCall(calls)).toBeUndefined();
   });
 
-  it("draws the ticks ABOVE the shape, on the name's baseline — never inside it, which is where entry 0093 put them", () => {
+  it("draws the ticks ABOVE the shape, on the name's baseline — never inside it", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1", { "origin.x": boundToCellSlot() });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
@@ -806,7 +806,7 @@ describe("renderDocument — formula-driven indicator (§5.9, D-068)", () => {
   });
 });
 
-describe("renderDocument — the selected object's name label is suppressed (D-094 clause 3, D-100 clause 8)", () => {
+describe("renderDocument — the selected object's name label is suppressed", () => {
   function boundToCellSlot(): Slot {
     return { kind: "formula", ast: { type: "reference", address: { objectId: "obj_9", path: ["cells", "A1"] } }, value: 0 };
   }
@@ -840,7 +840,7 @@ describe("renderDocument — the selected object's name label is suppressed (D-0
     expect(texts).toEqual(["circle_b"]);
   });
 
-  it("suppresses BOTH names when both objects are selected (D-100 clause 8)", () => {
+  it("suppresses BOTH names when both objects are selected", () => {
     const { ctx, calls } = createFakeContext();
     const circleA = circleObject("obj_1", "circle_a");
     const circleB = circleObject("obj_2", "circle_b");
@@ -850,7 +850,7 @@ describe("renderDocument — the selected object's name label is suppressed (D-0
     expect(texts).not.toContain("circle_b");
   });
 
-  it("suppresses no label when the selection is a stale id (D-023-shaped)", () => {
+  it("suppresses no label when the selection is a stale id", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_missing"]);
@@ -858,8 +858,8 @@ describe("renderDocument — the selected object's name label is suppressed (D-0
   });
 });
 
-describe("renderDocument — panelledObjectIds is a SEPARATE list from selectedObjectIds (D-106 clause 5)", () => {
-  it("defaults panelledObjectIds to selectedObjectIds when the 7th argument is omitted, so every pre-D-106 call site is unchanged", () => {
+describe("renderDocument — panelledObjectIds is a SEPARATE list from selectedObjectIds", () => {
+  it("defaults panelledObjectIds to selectedObjectIds when the 7th argument is omitted, so every older call site is unchanged", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"]);
@@ -873,14 +873,14 @@ describe("renderDocument — panelledObjectIds is a SEPARATE list from selectedO
     expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(false);
   });
 
-  it("does NOT suppress a selected object's name once its panel is dismissed (panelledObjectIds excludes it) — the name comes back (D-106 clause 4)", () => {
+  it("does NOT suppress a selected object's name once its panel is dismissed (panelledObjectIds excludes it) — the name comes back", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"], []);
     expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
   });
 
-  it("still highlights a selected object whose panel was dismissed — dismissal is about screen space, not the selection (D-106 clause 3)", () => {
+  it("still highlights a selected object whose panel was dismissed — dismissal is about screen space, not the selection", () => {
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1");
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"], []);
@@ -940,7 +940,7 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
     expect(squares.some((call) => call.x + call.w / 2 === 2000 && call.y + call.h / 2 === 400)).toBe(true);
   });
 
-  it("draws none on a selected text box with no drawn extent — there is no box to hang them on (D-066)", () => {
+  it("draws none on a selected text box with no drawn extent — there is no box to hang them on", () => {
     const { ctx, calls } = createFakeContext();
     const empty: GraphObject = { ...sizedText(), slots: { ...sizedText().slots, resolvedContent: { kind: "derived", value: null } } };
     renderDocument(ctx, 800, 600, [empty], CAMERA_IDENTITY, ["obj_text"]);
@@ -1186,8 +1186,8 @@ function strokeRects(calls: readonly RecordedCall[]): readonly Extract<RecordedC
   return calls.filter((call): call is Extract<RecordedCall, { op: "strokeRect" }> => call.op === "strokeRect");
 }
 
-describe("renderDocument — image (§5.7)", () => {
-  it("strokes the object's width x height box from origin even with no picture chosen, so a created image is visible and selectable rather than invisible (D-142)", () => {
+describe("renderDocument — image", () => {
+  it("strokes the object's width x height box from origin even with no picture chosen, so a created image is visible and selectable rather than invisible", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [imageObject()], CAMERA_IDENTITY);
     expect(strokeRects(calls)).toContainEqual({ op: "strokeRect", x: 10, y: 20, w: 100, h: 100 });
@@ -1216,13 +1216,13 @@ describe("renderDocument — image (§5.7)", () => {
     expect(pictures(calls)[0]).toMatchObject({ x: 10, y: 20, w: 100, h: 100 });
   });
 
-  it("preserves a WIDE picture's aspect ratio inside its box and centres it vertically (§5.7)", () => {
+  it("preserves a WIDE picture's aspect ratio inside its box and centres it vertically", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(200, 100));
     expect(pictures(calls)[0]).toMatchObject({ x: 10, y: 45, w: 100, h: 50 });
   });
 
-  it("preserves a TALL picture's aspect ratio inside its box and centres it horizontally (§5.7)", () => {
+  it("preserves a TALL picture's aspect ratio inside its box and centres it horizontally", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [imageObject({ source: A_DATA_URL })], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 400));
     expect(pictures(calls)[0]).toMatchObject({ x: 47.5, y: 20, w: 25, h: 100 });
@@ -1235,7 +1235,7 @@ describe("renderDocument — image (§5.7)", () => {
     expect(pictures(calls)[0]).toMatchObject({ x: 160, y: 20, w: 100, h: 100 });
   });
 
-  it("STRETCHES the picture to fill the box once `preserveAspect` is turned off (the human's note 3, entry 0174)", () => {
+  it("STRETCHES the picture to fill the box once `preserveAspect` is turned off", () => {
     const { ctx, calls } = createFakeContext();
     const stretched = imageObject({
       source: A_DATA_URL,
@@ -1246,7 +1246,7 @@ describe("renderDocument — image (§5.7)", () => {
     expect(pictures(calls)[0]).toMatchObject({ x: 10, y: 20, w: 400, h: 100 });
   });
 
-  it("preserves the ratio when the slot is MISSING, which is what lets a document saved before it existed keep §5.7's default (D-126's lesson)", () => {
+  it("preserves the ratio when the slot is MISSING, which is what lets a document saved before it existed keep the default", () => {
     const { ctx, calls } = createFakeContext();
     const old = imageObject({ source: A_DATA_URL, width: { kind: "literal", value: 400 } });
     delete (old.slots as Record<string, Slot | undefined>)["preserveAspect"];
@@ -1262,7 +1262,7 @@ describe("renderDocument — image (§5.7)", () => {
     expect(ctx.globalAlpha).toBe(1);
   });
 
-  it("CLAMPS an out-of-range opacity when it paints rather than refusing the value, which D-140 clause 3 keeps as legitimate document state", () => {
+  it("CLAMPS an out-of-range opacity when it paints rather than refusing the value, because an out of range value is still legal document state", () => {
     for (const [stored, painted] of [[4, 1], [-2, 0]] as const) {
       const { ctx, calls } = createFakeContext();
       const image = imageObject({ source: A_DATA_URL, opacity: { kind: "literal", value: stored } });
@@ -1278,7 +1278,7 @@ describe("renderDocument — image (§5.7)", () => {
     expect(pictures(calls)[0]?.alpha).toBe(1);
   });
 
-  it("draws nothing at all — no frame, no picture — for a non-positive box, matching the extent that refuses to bound one (D-066)", () => {
+  it("draws nothing at all — no frame, no picture — for a non-positive box, matching the extent that refuses to bound one", () => {
     const { ctx, calls } = createFakeContext();
     const flat = imageObject({ source: A_DATA_URL, width: { kind: "literal", value: 0 } });
     renderDocument(ctx, 800, 600, [flat], CAMERA_IDENTITY, [], [], undefined, readyBitmaps(100, 100));
@@ -1286,20 +1286,20 @@ describe("renderDocument — image (§5.7)", () => {
     expect(strokeRects(calls)).toEqual([]);
   });
 
-  it("highlights a selected image as its own drawn box, the same box hittest.ts clicks against (D-066/D-010)", () => {
+  it("highlights a selected image as its own drawn box, the same box hittest.ts clicks against", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [imageObject()], CAMERA_IDENTITY, ["obj_1"]);
     expect(strokeRects(calls).filter((call) => call.x === 10 && call.y === 20 && call.w === 100 && call.h === 100)).toHaveLength(2);
   });
 
-  it("labels an image with its name, because it now has an extent to hang chrome from (D-092 clause 1)", () => {
+  it("labels an image with its name, because it now has an extent to hang chrome from", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [imageObject()], CAMERA_IDENTITY);
     expect(calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text)).toContain("image_1");
   });
 });
 
-describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
+describe("drawScript — the labelled box with ports", () => {
   function scriptObject(ports?: { in: string[]; out: string[] }): GraphObject {
     return {
       id: "obj_1",
@@ -1339,12 +1339,12 @@ describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
     expect(texts).toContain("result");
   });
 
-  it("keeps ports in DECLARATION order, because D-141 clause 2 makes the port list ordered state rather than a set", () => {
+  it("keeps ports in DECLARATION order, because the port list is ordered state, not a set", () => {
     const texts = textsDrawn(scriptObject({ in: ["zebra", "alpha"], out: [] }));
     expect(texts.indexOf("zebra")).toBeLessThan(texts.indexOf("alpha"));
   });
 
-  it("puts inputs on the LEFT edge and outputs on the RIGHT edge — §5.8's own words, and the one claim the box's shape cannot fake", () => {
+  it("puts inputs on the LEFT edge and outputs on the right edge, which is the one claim the shape of the box cannot fake", () => {
     const { ctx, calls } = createFakeContext();
     renderDocument(ctx, 800, 600, [scriptObject({ in: ["factor"], out: ["result"] })], CAMERA_IDENTITY);
     const stubs = calls.filter((call): call is Extract<RecordedCall, { op: "fillRect" }> => call.op === "fillRect" && call.w < SCRIPT_BOX_WIDTH);
@@ -1376,7 +1376,7 @@ describe("drawScript — §5.8's labelled box with ports (D-146)", () => {
     expect(height({ in: [], out: [] })).toBe(SCRIPT_HEADER_HEIGHT + SCRIPT_PORT_ROW_HEIGHT);
   });
 
-  it("draws the box `extent.ts` reports and not a second reading of it, so the drawn box and the click box cannot disagree (D-066)", () => {
+  it("draws the box `extent.ts` reports and not a second reading of it, so the drawn box and the click box cannot disagree", () => {
     const object = scriptObject({ in: ["factor"], out: ["result"] });
     const extent = objectExtent(object);
     const { ctx, calls } = createFakeContext();

@@ -71,7 +71,7 @@ describe("parseFormula — literals", () => {
 });
 
 describe("parseFormula — references", () => {
-  it("resolves a dotted name.path reference to a stored Address (§5.2 — IDs, not names)", () => {
+  it("resolves a dotted name.path reference to a stored Address (IDs, not names)", () => {
     const docObjects = objects(["obj_7", "polygon_1"]);
     expect(parseOk("polygon_1.origin.x", docObjects)).toEqual({
       type: "reference",
@@ -92,7 +92,7 @@ describe("parseFormula — references", () => {
     expect(error.message).toContain('no object named "nonexistent_object"');
   });
 
-  it("rejects a bare single word with no table context (Bare refs in text formulas are a parse error, §5.3)", () => {
+  it("rejects a bare single word with no table context, because a bare reference in a text formula is a parse error", () => {
     const error = parseFail("A1", []);
     expect(error.error).toBe("#PARSE");
   });
@@ -105,7 +105,7 @@ describe("parseFormula — references", () => {
     });
   });
 
-  it("treats a lowercase cell-shaped word as a bare cell ref too, normalised to uppercase (D-039, inherited from address.ts's isCellReferenceForm)", () => {
+  it("treats a lowercase cell-shaped word as a bare cell ref too, normalised to uppercase, inherited from isCellReferenceForm in address.ts", () => {
     const docObjects = objects(["obj_5", "table_x", "table"]);
     expect(parseOk("a1", docObjects, "obj_5")).toEqual({
       type: "reference",
@@ -126,7 +126,7 @@ const refA: FormulaAst = { type: "reference", address: { objectId: "obj_1", path
 const refB: FormulaAst = { type: "reference", address: { objectId: "obj_2", path: ["v"] } };
 const refC: FormulaAst = { type: "reference", address: { objectId: "obj_3", path: ["v"] } };
 
-describe("parseFormula — operator precedence (§5.3: OR -> AND -> comparison -> + - -> * / % -> ^ -> unary/NOT -> primary)", () => {
+describe("parseFormula — operator precedence (OR -> AND -> comparison -> + - -> * / % -> ^ -> unary/NOT -> primary)", () => {
   it("* binds tighter than +", () => {
     expect(parseOk("1 + 2 * 3")).toEqual({
       type: "binaryOp",
@@ -168,7 +168,7 @@ describe("parseFormula — operator precedence (§5.3: OR -> AND -> comparison -
     });
   });
 
-  it("unary NOT binds tighter than comparison — 'NOT a.v = b.v' parses as '(NOT a.v) = b.v', per §5.3's own precedence chain", () => {
+  it("unary NOT binds tighter than comparison — 'NOT a.v = b.v' parses as '(NOT a.v) = b.v', per the precedence chain", () => {
     const docObjects = objects(["obj_1", "a"], ["obj_2", "b"]);
     expect(parseOk("NOT a.v = b.v", docObjects)).toEqual({
       type: "binaryOp",
@@ -206,7 +206,7 @@ describe("parseFormula — operator precedence (§5.3: OR -> AND -> comparison -
 });
 
 describe("parseFormula — function calls", () => {
-  it("parses a nested IF as an ordinary FunctionCallNode (no ConditionalNode — §5.3/D-029)", () => {
+  it("parses a nested IF as an ordinary FunctionCallNode (there is no ConditionalNode)", () => {
     const docObjects = objects(["obj_1", "a"]);
     expect(parseOk('IF(a.v > 0, "pos", IF(a.v < 0, "neg", "zero"))', docObjects)).toEqual({
       type: "functionCall",
@@ -231,13 +231,13 @@ describe("parseFormula — function calls", () => {
     expect(parseOk("PI()")).toEqual({ type: "functionCall", name: "PI", args: [] });
   });
 
-  it("rejects an unrecognised function name at parse time (D-038), naming it and pointing at its position", () => {
+  it("rejects an unrecognised function name at parse time, naming it and pointing at its position", () => {
     const error = parseFail("FOO(1, 2, 3)");
     expect(error.message).toContain('"FOO"');
     expect(error.start).toBe(0);
   });
 
-  it("rejects a known function called with the wrong argument count (D-038)", () => {
+  it("rejects a known function called with the wrong argument count", () => {
     const error = parseFail("ROUND(1)");
     expect(error.message).toContain("ROUND");
     expect(error.start).toBe(0);
@@ -249,7 +249,7 @@ describe("parseFormula — function calls", () => {
     expect(error.start).toBe(4);
   });
 
-  it("still parses a known function with a correct argument count, including AND/OR's at-least-one arity (D-035)", () => {
+  it("still parses a known function with a correct argument count, including AND/OR's at-least-one arity", () => {
     const docObjects = objects(["obj_1", "a"]);
     expect(parseOk("ROUND(1.5, 0)")).toEqual({
       type: "functionCall",
@@ -265,7 +265,7 @@ describe("parseFormula — function calls", () => {
   });
 });
 
-describe("parseFormula — D-029: AND/OR/NOT are both operators and functions, meaning the same thing", () => {
+describe("parseFormula — AND, OR and NOT are both operators and functions, meaning the same thing", () => {
   it("parses AND(a.v, b.v) as a FunctionCallNode named AND, not a BinaryOpNode", () => {
     const docObjects = objects(["obj_1", "a"], ["obj_2", "b"]);
     expect(parseOk("AND(a.v, b.v)", docObjects)).toEqual({ type: "functionCall", name: "AND", args: [refA, refB] });
@@ -297,7 +297,7 @@ describe("parseFormula — D-029: AND/OR/NOT are both operators and functions, m
   });
 });
 
-describe("parseFormula — ranges (§5.3: only as a direct argument to SUM/MIN/MAX/AVG)", () => {
+describe("parseFormula — ranges — only as a direct argument to SUM, MIN, MAX or AVG", () => {
   it("parses A1:B4 as a RangeNode when it is SUM's direct argument", () => {
     const docObjects = objects(["obj_5", "table_x", "table"]);
     expect(parseOk("SUM(A1:B4)", docObjects, "obj_5")).toEqual({
@@ -330,7 +330,7 @@ describe("parseFormula — ranges (§5.3: only as a direct argument to SUM/MIN/M
     expect(error.message).toContain("aggregate function");
   });
 
-  it("rejects a bare range as a whole formula (not first-class — §5.3)", () => {
+  it("rejects a bare range as a whole formula, because a range is not a value", () => {
     const docObjects = objects(["obj_5", "table_x", "table"]);
     const error = parseFail("A1:B4", docObjects, "obj_5");
     expect(error.error).toBe("#PARSE");
@@ -356,7 +356,7 @@ describe("parseFormula — ranges (§5.3: only as a direct argument to SUM/MIN/M
     });
   });
 
-  it("a self-inclusive range is still just a RangeNode here — cycle-ness is a graph-time concern, not this file's (§5.3: 'do not special-case it')", () => {
+  it("a self-inclusive range is still just a RangeNode here — cycle-ness is a graph-time concern, not the concern of this file", () => {
     const docObjects = objects(["obj_5", "table_x", "table"]);
     expect(parseOk("SUM(A6:A6)", docObjects, "obj_5")).toEqual({
       type: "functionCall",
@@ -375,7 +375,7 @@ describe("parseFormula — ranges (§5.3: only as a direct argument to SUM/MIN/M
   });
 });
 
-describe("parseFormula — D-045: a range whose endpoints name different objects is rejected at PARSE time", () => {
+describe("parseFormula — a range whose endpoints name different objects is refused at parse time", () => {
   it("rejects SUM(table_x.A1:table_y.B4) — two DIFFERENT tables — with a #PARSE naming the problem", () => {
     const docObjects = objects(["obj_5", "table_x", "table"], ["obj_6", "table_y", "table"]);
     const error = parseFail("SUM(table_x.A1:table_y.B4)", docObjects);
@@ -440,12 +440,12 @@ describe("parseFormula — malformed input never throws, returns a #PARSE ParseE
   });
 });
 
-describe("isParseError (0032-REVIEW-phase1, D-032)", () => {
+describe("isParseError", () => {
   it("is true for a real ParseError", () => {
     expect(isParseError({ error: "#PARSE", message: "x", start: 0 })).toBe(true);
   });
 
-  it("is FALSE for ast.ts's ErrorNode, which is a FormulaAst that also has an 'error' field (D-028)", () => {
+  it("is FALSE for ast.ts's ErrorNode, which is a FormulaAst that also has an 'error' field", () => {
     const repairedRoot: FormulaAst = { type: "error", error: "#REF" };
     expect(isParseError(repairedRoot)).toBe(false);
   });
@@ -474,7 +474,7 @@ describe("parseFormulaTokens — the lower-level, already-lexed entry point", ()
   });
 });
 
-describe("the two depth limits — D-079's fixed constants, not a measured band", () => {
+describe("the two depth limits — fixed constants, not a measured band", () => {
   it("MAX_FORMULA_PARSE_DEPTH is 256 nesting steps and MAX_FORMULA_AST_DEPTH is 1000 levels", () => {
     expect(MAX_FORMULA_PARSE_DEPTH).toBe(256);
     expect(MAX_FORMULA_AST_DEPTH).toBe(1000);

@@ -50,7 +50,7 @@ function objectById(objects: readonly GraphObject[], id: string): GraphObject {
   return found;
 }
 
-describe("evaluate — PROJECT_BRIEF §6's value/add fixture", () => {
+describe("evaluate — the value and add fixture", () => {
   it("propagates a literal through two formula bindings into a derived slot", () => {
     const objects = [
       valueObject("obj_1", "value_1", 10),
@@ -151,7 +151,7 @@ describe("evaluate — dangling formula reference", () => {
   });
 });
 
-describe("evaluate — D-013: a derived slot's compute function may read ONLY its declared dependencies", () => {
+describe("evaluate — a compute function reads only its declared dependencies", () => {
   it("gets #REF, not the real value, for an address the given edges do not declare as a dependency of that slot", () => {
     const objects = [
       valueObject("obj_1", "value_1", 10),
@@ -188,7 +188,7 @@ describe("evaluate — a derived-kind slot with no matching schema entry", () =>
 });
 
 describe("evaluate — L-13: a stale edge whose dependentSlot has no corresponding slot on the object", () => {
-  it("skips it rather than throwing, for the exact shape D-018 makes mutation.ts's validateIntegrity reject before this file ever sees it", () => {
+  it("skips it rather than throwing, for the exact shape that validateIntegrity refuses before this file sees it", () => {
     const missingDerivedSlot: GraphObject = {
       id: "obj_3",
       name: "add_1",
@@ -212,7 +212,7 @@ describe("evaluate — L-13: a stale edge whose dependentSlot has no correspondi
   });
 });
 
-describe("evaluate — a formula slot whose AST is not a ReferenceNode (Q-005's widening; wired for real THIS cycle, D-036)", () => {
+describe("evaluate — a formula slot whose AST is not a ReferenceNode", () => {
   it("evaluates a LiteralNode formula for real — no #PARSE placeholder any more", () => {
     const literalFormula: GraphObject = {
       id: "obj_1",
@@ -278,7 +278,7 @@ describe("evaluate — a formula slot whose AST is not a ReferenceNode (Q-005's 
     expect(objectById(result, "obj_3").slots.value).toMatchObject({ value: 3 });
   });
 
-  it("an ErrorNode (D-028) evaluates to its #REF ErrorValue, still never throwing", () => {
+  it("an ErrorNode evaluates to its #REF ErrorValue, still never throwing", () => {
     const errorFormula: GraphObject = {
       id: "obj_1",
       name: "value_1",
@@ -290,7 +290,7 @@ describe("evaluate — a formula slot whose AST is not a ReferenceNode (Q-005's 
   });
 });
 
-describe("evaluate — a range inside an aggregate call, expanded through the readRange wiring THIS cycle built (D-036/D-044)", () => {
+describe("evaluate — a range inside an aggregate call, expanded through the readRange wiring THIS cycle built", () => {
   function tableObject(id: string, name: string, rows: number, cols: number, cellValues: Record<string, number>): GraphObject {
     const slots: Record<string, Slot> = {
       rows: { kind: "literal", value: rows },
@@ -327,7 +327,7 @@ describe("evaluate — a range inside an aggregate call, expanded through the re
     expect(objectById(result, "obj_2").slots.value).toMatchObject({ value: 10 });
   });
 
-  it("D-044: a range extending past the table's current extent sums only the cells that exist", () => {
+  it("a range extending past the table's current extent sums only the cells that exist", () => {
     const table = tableObject("obj_1", "table_x", 1, 1, { A1: 7 });
     const sumFormula: GraphObject = {
       id: "obj_2",
@@ -366,7 +366,7 @@ describe("evaluate — a range inside an aggregate call, expanded through the re
   });
 });
 
-describe("evaluate — the injected EvalContext (§5.1)", () => {
+describe("evaluate — the injected EvalContext", () => {
   const objects = [
     valueObject("obj_1", "value_1", 10),
     valueObject("obj_2", "value_2", 5),
@@ -417,7 +417,7 @@ function addObjectDeclaredBackwards(id: string, name: string, aRef: Address, bRe
 }
 
 describe("evaluate — the evaluation ORDER comes from the edges, not from the input's own order", () => {
-  it("propagates correctly with every object AND every slot declared in reverse dependency order (§6: 'in correct topological order')", () => {
+  it("propagates correctly with every object AND every slot declared in reverse dependency order, in correct topological order", () => {
     const objects = [
       addObjectDeclaredBackwards("obj_5", "add_2", addr("obj_3", "out", "result"), addr("obj_4", "value")),
       valueObject("obj_4", "value_3", 1),
@@ -438,7 +438,7 @@ describe("evaluate — the evaluation ORDER comes from the edges, not from the i
   });
 });
 
-describe("evaluate — a derived slot's compute evaluating an embedded formula AST (D-114, §5.6's text.resolvedContent)", () => {
+describe("evaluate — a derived slot's compute evaluating an embedded formula AST, as text.resolvedContent does", () => {
 
   function textTable(id: string, name: string, rows: number, cols: number, cellValues: Record<string, Value>): GraphObject {
     const slots: Record<string, Slot> = { rows: { kind: "literal", value: rows }, cols: { kind: "literal", value: cols } };
@@ -471,33 +471,33 @@ describe("evaluate — a derived slot's compute evaluating an embedded formula A
     expect(resolvedContentOf([table, text], textEdges("obj_x", addr("obj_t", "cells", "A1")), "obj_x")).toBe("cell says 42");
   });
 
-  it("D-114 clause 3: an EMPTY in-extent cell reads as 0 — coercion BEFORE the D-013 membership check", () => {
+  it("an empty in-extent cell reads as 0, and the coercion happens before the membership check", () => {
     const table = textTable("obj_t", "table_1", 4, 4, { A1: 5 });
     const text = textObject("obj_x", "text_1", "sum: {= table_1.A1 + table_1.A2 }");
     expect(resolvedContentOf([table, text], textEdges("obj_x", addr("obj_t", "cells", "A1")), "obj_x")).toBe("sum: 5");
   });
 
-  it("D-110 clause 2: a cell that HAS a slot holding `null`, in-extent, also reads as 0", () => {
+  it("a cell that HAS a slot holding `null`, in-extent, also reads as 0", () => {
     const table = textTable("obj_t", "table_1", 4, 4, { A1: null });
     const text = textObject("obj_x", "text_1", "value {= table_1.A1 + 1 }");
     expect(resolvedContentOf([table, text], textEdges("obj_x", addr("obj_t", "cells", "A1")), "obj_x")).toBe("value 1");
   });
 
-  it("D-013 still bites: an address the block tree names but the edge set does NOT declare resolves to #REF", () => {
+  it("an address the block tree names but the edge set does not declare resolves to #REF", () => {
     const other = { id: "obj_v", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 99 } } } satisfies GraphObject;
     const text = textObject("obj_x", "text_1", "reads {= value_1.value }");
     expect(resolvedContentOf([other, text], textEdges("obj_x"), "obj_x")).toBe("reads !#REF");
     expect(resolvedContentOf([other, text], textEdges("obj_x", addr("obj_v", "value")), "obj_x")).toBe("reads 99");
   });
 
-  it("evaluates an embedded aggregate over a range, through the shared buildRangeReader (D-114 clause 1)", () => {
+  it("evaluates an embedded aggregate over a range, through the shared buildRangeReader", () => {
     const table = textTable("obj_t", "table_1", 4, 4, { A1: 1, A2: 2, A3: 3, A4: 4 });
     const text = textObject("obj_x", "text_1", "total {= SUM(table_1.A1:table_1.A4) }");
     const cells = (["A1", "A2", "A3", "A4"] as const).map((ref) => addr("obj_t", "cells", ref));
     expect(resolvedContentOf([table, text], textEdges("obj_x", ...cells), "obj_x")).toBe("total 10");
   });
 
-  it("a broken embedded span is marked in place, the rest of resolvedContent still resolves (D-116)", () => {
+  it("a broken embedded span is marked in place, the rest of resolvedContent still resolves", () => {
     const text = textObject("obj_x", "text_1", "ok {= 1 + } and {= 6 * 7 }");
     expect(resolvedContentOf([text], textEdges("obj_x"), "obj_x")).toBe("ok !{= 1 + } and 42");
   });
@@ -510,7 +510,7 @@ describe("evaluate — a derived slot's compute evaluating an embedded formula A
   });
 });
 
-describe("evaluate — §5.6's measuredHeight derived slot (D-118, D-120 — entry 0129)", () => {
+describe("evaluate — the measuredHeight derived slot", () => {
 
   function textObject(id: string, name: string, content: string, width: Value = "auto", fontSizeSlot?: Slot): GraphObject {
     return {
@@ -552,12 +552,12 @@ describe("evaluate — §5.6's measuredHeight derived slot (D-118, D-120 — ent
     return objectById(evaluate([object], textEdges(object.id), context), object.id).slots.measuredHeight?.value ?? null;
   }
 
-  it("D-118: evaluated with NULL_EVAL_CONTEXT, a real text object's measuredHeight is #MEASURE — never height 0", () => {
+  it("evaluated with NULL_EVAL_CONTEXT, a real text object's measuredHeight is #MEASURE — never height 0", () => {
     const height = measuredHeightOf(textObject("obj_x", "text_1", "some text here"), NULL_EVAL_CONTEXT);
     expect(height).toEqual({ error: "#MEASURE", message: expect.stringContaining("text_1") });
   });
 
-  it("D-118: the same is true with NO context passed (evaluate's own default is NULL_EVAL_CONTEXT)", () => {
+  it("the same is true with NO context passed (evaluate's own default is NULL_EVAL_CONTEXT)", () => {
     expect(measuredHeightOf(textObject("obj_x", "text_1", "x"))).toMatchObject({ error: "#MEASURE" });
   });
 
@@ -565,7 +565,7 @@ describe("evaluate — §5.6's measuredHeight derived slot (D-118, D-120 — ent
     expect(measuredHeightOf(textObject("obj_x", "text_1", "hello"), fakeMeasurer())).toBe(10);
   });
 
-  it("D-120: a numeric `width` slot reaches the measurer as maxWidth; \"auto\" does not", () => {
+  it("a numeric `width` slot reaches the measurer as maxWidth; \"auto\" does not", () => {
     expect(measuredHeightOf(textObject("obj_x", "text_1", "hello", 120), fakeMeasurer())).toBe(20);
     expect(measuredHeightOf(textObject("obj_x", "text_1", "hello", "auto"), fakeMeasurer())).toBe(10);
   });
@@ -577,7 +577,7 @@ describe("evaluate — §5.6's measuredHeight derived slot (D-118, D-120 — ent
     expect(result.slots.measuredHeight?.value).toBe(10);
   });
 
-  it("propagates an ErrorValue from a formula-driven style slot (§5.1: errors propagate)", () => {
+  it("propagates an ErrorValue from a formula-driven style slot, because an error propagates", () => {
     const object = textObject("obj_x", "text_1", "x", "auto", {
       kind: "formula",
       ast: { type: "reference", address: addr("gone", "v") },

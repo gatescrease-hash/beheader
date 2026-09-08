@@ -75,7 +75,7 @@ function dragFromOrigin(objectId: string): InteractionState {
   return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] }, resize: undefined };
 }
 
-describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", () => {
+describe("pointerDown — click to select, over a list of objects", () => {
   it("selects the object under the pointer and arms a drag from that world point", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
@@ -95,14 +95,14 @@ describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", 
     expect(pointerDown(INITIAL_INTERACTION_STATE, { x: 500, y: 500 }, objects, CAMERA_IDENTITY)).toEqual(INITIAL_INTERACTION_STATE);
   });
 
-  it("replaces a prior selection with whatever is under the pointer, empty canvas included (D-100 clause 2)", () => {
+  it("replaces a prior selection with whatever is under the pointer, empty canvas included", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const selected = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     expect(selected.selectedObjectIds).toEqual(["obj_1"]);
     expect(pointerDown(selected, { x: 500, y: 500 }, objects, CAMERA_IDENTITY).selectedObjectIds).toEqual([]);
   });
 
-  it("a shift-click ADDS the object hit to the selection (D-100 clause 3)", () => {
+  it("a shift-click ADDS the object hit to the selection", () => {
     const rectB: GraphObject = { ...rectObject(30, 0), id: "obj_3", name: "rect_2" };
     const { objects } = commit([rectObject(0, 0), rectB]);
     const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
@@ -110,21 +110,21 @@ describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", 
     expect(second.selectedObjectIds).toEqual(["obj_1", "obj_3"]);
   });
 
-  it("a shift-click on an ALREADY-SELECTED object REMOVES it — the conventional toggle (D-100 clause 4, ruled final at 0105-REVIEW)", () => {
+  it("a shift-click on an ALREADY-SELECTED object REMOVES it — the conventional toggle", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const toggled = pointerDown(first, { x: 10, y: 0 }, objects, CAMERA_IDENTITY, true);
     expect(toggled.selectedObjectIds).toEqual([]);
   });
 
-  it("a shift-click on empty canvas leaves the SELECTION alone — neither clears nor adds (D-100 clause 3)", () => {
+  it("a shift-click on empty canvas leaves the SELECTION alone — neither clears nor adds", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const selected = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const missed = pointerDown(selected, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true);
     expect(missed.selectedObjectIds).toEqual(selected.selectedObjectIds);
   });
 
-  it("a shift-click on empty canvas still ENDS a drag armed before it (0105-REVIEW)", () => {
+  it("a shift-click on empty canvas still ENDS a drag armed before it", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const armed = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     expect(armed.drag?.objectId).toBe("obj_1");
@@ -137,7 +137,7 @@ describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", 
     expect(pointerDown(idle, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true)).toBe(idle);
   });
 
-  it("arms a drag on the object under THIS press even when the shift-click just removed it from the selection (D-100 clause 6)", () => {
+  it("arms a drag on the object under THIS press even when the shift-click just removed it from the selection", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     const toggled = pointerDown(first, { x: 10, y: 0 }, objects, CAMERA_IDENTITY, true);
@@ -147,7 +147,7 @@ describe("pointerDown — §5.9 'click to select', widened by D-100 to a list", 
 });
 
 describe("pointerUp and deselect", () => {
-  it("pointerUp ends the drag and keeps the selection — §5.9 separates selecting from moving", () => {
+  it("pointerUp ends the drag and keeps the selection, because a select and a move are separate", () => {
     const state = pointerUp(dragFromOrigin("obj_1"));
     expect(state.selectedObjectIds).toEqual(["obj_1"]);
     expect(state.drag).toBeUndefined();
@@ -163,12 +163,12 @@ describe("pointerUp and deselect", () => {
     expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined });
   });
 
-  it("deselect clears the selection AND a drag in progress, so no gesture survives Escape (§5.9)", () => {
+  it("deselect clears the selection AND a drag in progress, so no gesture survives Escape", () => {
     expect(deselect()).toEqual(INITIAL_INTERACTION_STATE);
   });
 });
 
-describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () => {
+describe("pointerMove — a drag calls the mutation API", () => {
   it("moves a literal origin by the world delta and re-evaluates the derived slots that read it", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
     const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
@@ -239,7 +239,7 @@ describe("pointerMove — dragging calls the mutation API (§5.9, Rule 2)", () =
   });
 });
 
-describe("per-component dragging — §5.9 'not all-or-nothing'", () => {
+describe("a drag works per component, never all or nothing", () => {
   it("slides in Y only when origin.x is driven, and the notice names what drives it", () => {
     const rect: GraphObject = {
       ...rectObject(0, 0),
@@ -283,7 +283,7 @@ describe("per-component dragging — §5.9 'not all-or-nothing'", () => {
     expect(moved.state.drag?.lastWorldPoint).toEqual({ x: 25, y: 5 });
   });
 
-  it("names EVERY slot a branching formula could read, because extractDependencies is eager and total (§5.3)", () => {
+  it("names EVERY slot a branching formula could read, because extractDependencies is eager and total", () => {
     const branching: GraphObject = {
       ...rectObject(0, 0),
       slots: {
@@ -352,7 +352,7 @@ describe("per-component dragging — §5.9 'not all-or-nothing'", () => {
   });
 });
 
-describe("per-gesture notice dedup (D-098)", () => {
+describe("per-gesture notice dedup", () => {
   function xDrivenRect(): GraphObject {
     return {
       ...rectObject(0, 0),
@@ -466,7 +466,7 @@ describe("pointerMove — failure paths", () => {
   });
 });
 
-describe("pointerMove forwards §5.1's EvalContext to mutate (entry 0132, D-118)", () => {
+describe("pointerMove forwards the EvalContext to mutate", () => {
 
   function textObject(): GraphObject {
     return {
@@ -627,7 +627,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
     expect(slotValue(second.objects, "obj_t", "width")).toBe(400);
   });
 
-  it("skips a component whose slot is driven and says what drives it — §5.9's per-component rule, unchanged", () => {
+  it("skips a component whose slot is driven and says what drives it, under the per component rule", () => {
     const { state, objects, journal } = boundBox();
     const pressed = pointerDown(state, { x: 0, y: 0 }, objects, CAMERA_IDENTITY);
     const moved = pointerMove(pressed, { x: -30, y: -10 }, objects, journal, CAMERA_IDENTITY, MEASURER);
@@ -636,7 +636,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
     expect(slotValue(moved.objects, "obj_t", "origin.y")).toBe(-10);
   });
 
-  it("says the same thing only once across a gesture, like a drag's notices (D-098)", () => {
+  it("says the same thing only once across a gesture, like a drag's notices", () => {
     const { state, objects, journal } = boundBox();
     const pressed = pointerDown(state, { x: 0, y: 0 }, objects, CAMERA_IDENTITY);
     const first = pointerMove(pressed, { x: -30, y: -10 }, objects, journal, CAMERA_IDENTITY, MEASURER);
@@ -666,7 +666,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
   });
 });
 
-describe("resize — an image's grabbers write its own width/height slots (entry 0175)", () => {
+describe("resize — an image's grabbers write its own width/height slots", () => {
   function selectedImage(preserveAspect: boolean): { state: InteractionState; objects: readonly GraphObject[]; journal: readonly MutationJournalEntry[] } {
     const image: GraphObject = {
       id: "obj_i",
@@ -732,7 +732,7 @@ describe("resize — an image's grabbers write its own width/height slots (entry
     expect(getSlot(image!, ["autoresize"])).toBeUndefined();
   });
 
-  it("keeps the ratio when the slot is MISSING, so a document saved before it existed still resizes as §5.7's default says", () => {
+  it("keeps the ratio when the slot is MISSING, so a document saved before it existed still resizes the way the default says", () => {
     const image: GraphObject = {
       id: "obj_i",
       name: "image_1",
@@ -757,7 +757,7 @@ describe("resize — an image's grabbers write its own width/height slots (entry
     expect(getSlot(resized!, ["height"])?.value).toBe(150);
   });
 
-  it("still applies §5.9's per-component rule to a ratio-kept drag: a bound width refuses on its own and says what drives it", () => {
+  it("still applies the per component rule to a drag that keeps the ratio: a bound width refuses on its own and says what drives it", () => {
     const bound: GraphObject = {
       id: "obj_i",
       name: "image_1",

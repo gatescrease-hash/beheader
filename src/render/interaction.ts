@@ -378,7 +378,7 @@ function planComponent(object: GraphObject, path: readonly string[], delta: numb
 function describeSlotDriver(slot: FormulaSlot | DerivedSlot, objects: readonly GraphObject[]): string {
   switch (slot.kind) {
     case "derived":
-      return "it is a derived slot, computed by its object's schema and never writable (§5.1)";
+      return "it is a derived slot, computed by its object's schema and never writable";
     case "formula": {
       const sources = [
         ...new Set(

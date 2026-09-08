@@ -13,7 +13,7 @@ function valueObject(id: string, name: string, value: number): GraphObject {
   return { id, name, type: "value", slots: { value: { kind: "literal", value } } };
 }
 
-describe("buildSlotDescriptors — one object's slots, in schema order (D-094 clause 7)", () => {
+describe("buildSlotDescriptors — one object's slots, in schema order", () => {
   it("describes a literal slot: its path, its kind, and its value", () => {
     const object = valueObject("obj_1", "value_1", 42);
     expect(buildSlotDescriptors(object, [object])).toEqual([{ path: ["value"], kind: "literal", value: 42 }]);
@@ -42,7 +42,7 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
     ]);
   });
 
-  it("reconstructs a formula slot's source against CURRENT names (§5.2), without a leading '='", () => {
+  it("reconstructs a formula slot's source against CURRENT names, without a leading '='", () => {
     const source = valueObject("obj_1", "value_1", 42);
     const other = valueObject("obj_2", "value_2", 0);
     const objects = [source, other];
@@ -56,7 +56,7 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
     ]);
   });
 
-  it("renames the formula's source when the object it points at is renamed, because a stored AST holds an ID, not a name (§5.2)", () => {
+  it("renames the formula's source when the object it points at is renamed, because a stored AST holds an ID, not a name", () => {
     const source = valueObject("obj_1", "value_1", 42);
     const ast = parseFormula("value_1.value", [source]);
     if (isParseError(ast)) {
@@ -67,7 +67,7 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
     expect(buildSlotDescriptors(holder, [renamed, holder])[0]).toEqual({ path: ["value"], kind: "formula", value: 42, formulaSource: "intersection_a.value" });
   });
 
-  describe("a table's `cells.*` family — D-077, D-094 clause 8", () => {
+  describe("a table's `cells.*` family", () => {
     function table(rows: number, cols: number, cellSlots: Record<string, number>): GraphObject {
       const cellEntries = Object.fromEntries(Object.entries(cellSlots).map(([cell, value]) => [`cells.${cell}`, { kind: "literal" as const, value }]));
       return {
@@ -90,13 +90,13 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
       expect(descriptors.filter((descriptor) => descriptor.path[0] === "cells")).toHaveLength(1);
     });
 
-    it("names the grid shape and how many cells are WRITTEN, never the declared extent (D-047's absent-is-empty)", () => {
+    it("names the grid shape and how many cells are WRITTEN, never the declared extent", () => {
       const object = table(4, 4, { A1: 1, B2: 2 });
       const summary = buildSlotDescriptors(object, [object]).find((descriptor) => descriptor.path[0] === "cells");
       expect(summary).toEqual({ path: ["cells"], kind: "literal", value: "4×4 grid — 2 of 16 cells written", synthetic: true });
     });
 
-    it("reports zero written cells honestly for a freshly created table (D-047: creation makes no cell slots)", () => {
+    it("reports zero written cells honestly for a freshly created table, because creation makes no cell slots", () => {
       const object = table(8, 8, {});
       const summary = buildSlotDescriptors(object, [object]).find((descriptor) => descriptor.path[0] === "cells");
       expect(summary?.value).toBe("8×8 grid — 0 of 64 cells written");
@@ -109,7 +109,7 @@ describe("buildSlotDescriptors — one object's slots, in schema order (D-094 cl
   });
 });
 
-describe("describeSlotValue — every Value variant (§5.1), moved here at D-094 clause 9", () => {
+describe("describeSlotValue — every Value variant", () => {
   it("renders null as 'nothing', because a blank cell should not print an empty string", () => {
     expect(describeSlotValue(null)).toBe("nothing");
   });
@@ -136,8 +136,8 @@ describe("describeSlotValue — every Value variant (§5.1), moved here at D-094
   });
 });
 
-describe("describeSlotValue — maxDecimals (D-099): panel-only display rounding", () => {
-  it("with no options at all, a number renders exactly as before D-099 — byte-identical", () => {
+describe("describeSlotValue — maxDecimals: panel-only display rounding", () => {
+  it("with no options at all, a number renders exactly as it did before options existed", () => {
     expect(describeSlotValue(10.000000000000002)).toBe("10.000000000000002");
     expect(describeSlotValue(152.95081246064453)).toBe("152.95081246064453");
   });
@@ -161,7 +161,7 @@ describe("describeSlotValue — maxDecimals (D-099): panel-only display rounding
     expect(describeSlotValue({ x: 10.000000000000002, y: 1.2246467991473532e-16 }, { maxDecimals: 4 })).toBe("10,1.2246e-16");
   });
 
-  it("leaves every other Value variant untouched by maxDecimals (D-099 clause 4)", () => {
+  it("leaves every other Value variant untouched by maxDecimals", () => {
     expect(describeSlotValue("42", { maxDecimals: 4 })).toBe('"42"');
     expect(describeSlotValue(true, { maxDecimals: 4 })).toBe("true");
     expect(describeSlotValue(null, { maxDecimals: 4 })).toBe("nothing");
@@ -170,7 +170,7 @@ describe("describeSlotValue — maxDecimals (D-099): panel-only display rounding
   });
 });
 
-describe("describeSlotValue — a very long string is elided, so §5.7's data URL cannot flood a log line or a panel row", () => {
+describe("describeSlotValue — a very long string is elided, so an image data URL cannot flood a log line or a panel row", () => {
   const LONG = `data:image/png;base64,${"A".repeat(178)}`;
 
   it("shows the head of a long string and its true length, never the whole of it", () => {
@@ -183,7 +183,7 @@ describe("describeSlotValue — a very long string is elided, so §5.7's data UR
     expect(describeSlotValue("sans-serif")).toBe('"sans-serif"');
   });
 
-  it("renders a long string whole when the caller asks for it, which is how an edit seed stays typeable back (D-107)", () => {
+  it("renders a long string whole when the caller asks for it, which is how an edit seed stays typeable back", () => {
     expect(describeSlotValue(LONG, { fullStrings: true })).toBe(`"${LONG}"`);
   });
 

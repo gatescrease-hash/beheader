@@ -50,7 +50,7 @@ function expectSameEdges(actual: readonly Edge[], expected: readonly Edge[]): vo
   expect(actual).toHaveLength(expected.length);
 }
 
-describe("deriveEdges — PROJECT_BRIEF §6's value/add fixture", () => {
+describe("deriveEdges — the value and add fixture", () => {
   it("derives the binding edges (in.a/in.b) and the derived-slot dependency edges (out.result), and nothing else", () => {
     const objects = [
       valueObject("obj_1", "value_1", 10),
@@ -157,7 +157,7 @@ describe("deriveEdges — a schema-declared path missing from the object's actua
 });
 
 describe("deriveEdges — a formula referencing an address with no corresponding object at all", () => {
-  it("still derives the edge verbatim — an address's VALIDITY is step 4's job (§5.1.1), not edge derivation's", () => {
+  it("still derives the edge verbatim — an address's VALIDITY is step 4's job, not edge derivation's", () => {
     const objects = [
       valueObject("obj_2", "value_2", 5),
       addObject("obj_3", "add_1", addr("obj_999", "value"), addr("obj_2", "value")),
@@ -185,8 +185,8 @@ function addWithUndeclaredSlot(inCRef: Address): GraphObject {
   };
 }
 
-describe("deriveEdges — a formula slot the object carries but its schema does not declare (D-017)", () => {
-  it("still derives NO edge for it — deriveEdges itself is unchanged by D-017 part 2, see mutation.ts's header", () => {
+describe("deriveEdges — a formula slot the object carries but its schema does not declare", () => {
+  it("still derives NO edge for it, because the check that catches this lives in validateIntegrity", () => {
     const objects = [addWithUndeclaredSlot(addr("obj_1", "value")), valueObject("obj_1", "value_1", 42)];
 
     expect(deriveEdges(objects)).not.toContainEqual({
@@ -196,7 +196,7 @@ describe("deriveEdges — a formula slot the object carries but its schema does 
   });
 });
 
-describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot is rejected", () => {
+describe("validateIntegrity — it refuses an undeclared formula or derived slot", () => {
   it("rejects an object carrying a formula slot its own schema does not declare, naming it", () => {
     const objects = [addWithUndeclaredSlot(addr("obj_1", "value")), valueObject("obj_1", "value_1", 42)];
     const edges = deriveEdges(objects);
@@ -209,7 +209,7 @@ describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot
     }
   });
 
-  it("was previously a KNOWN GAP (0014-REVIEW-phase0): the same cyclic document that hid a real cycle from detectCycle is now rejected before detectCycle is ever reached", () => {
+  it("was previously a KNOWN GAP: the same cyclic document that hid a real cycle from detectCycle is now rejected before detectCycle is ever reached", () => {
     const cyclic: GraphObject = {
       id: "obj_9",
       name: "add_9",
@@ -232,7 +232,7 @@ describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot
     }
   });
 
-  it("does not flag an object whose type has no schema entry at all (D-017's one permitted exception)", () => {
+  it("does not flag an object whose type has no schema entry at all, the one permitted exception", () => {
     const noSchemaYet: GraphObject = {
       id: "obj_1",
       name: "polyline_1",
@@ -243,7 +243,7 @@ describe("validateIntegrity — D-017 part 2: an undeclared formula/derived slot
   });
 });
 
-describe("deriveEdges/validateIntegrity — every FormulaAst shape is genuinely supported (D-036 constraint 3: the ReferenceNode-only narrowing and its findUnsupportedFormulaAsts shield are BOTH deleted this cycle)", () => {
+describe("deriveEdges and validateIntegrity — every FormulaAst shape is supported", () => {
   it("accepts a formula slot holding a bare LiteralNode — no edges needed, no rejection", () => {
     const objects: GraphObject[] = [
       { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: 42 }, value: null } } },
@@ -270,7 +270,7 @@ describe("deriveEdges/validateIntegrity — every FormulaAst shape is genuinely 
     }
   });
 
-  it("an ErrorNode (D-028) is accepted as legitimate, already-repaired state, not rejected", () => {
+  it("an ErrorNode is accepted as legitimate, already-repaired state, not rejected", () => {
     const objects: GraphObject[] = [
       { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "error", error: "#REF" }, value: null } } },
     ];
@@ -307,7 +307,7 @@ describe("deriveEdges/validateIntegrity — every FormulaAst shape is genuinely 
     }
   });
 
-  it("committed via the real mutate() entry point — a formula containing a range is storable, per D-036 constraint 4", () => {
+  it("committed via the real mutate() entry point — a formula that holds a range is storable", () => {
     const table = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 42 } });
     const sumCell = tableObject("obj_2", "table_y", 1, 1, {
       "cells.A1": {
@@ -334,7 +334,7 @@ describe("deriveEdges/validateIntegrity — every FormulaAst shape is genuinely 
   });
 });
 
-describe("validateIntegrity — D-031: an illegal number LITERAL inside a stored formula AST is rejected, the same way an illegal slot VALUE already is", () => {
+describe("validateIntegrity — it refuses an illegal number literal inside a stored AST, as it already refuses an illegal slot value", () => {
   it("rejects a formula slot whose AST holds a non-finite LiteralNode, naming the slot", () => {
     const objects: GraphObject[] = [
       { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast: { type: "literal", value: Infinity }, value: null } } },
@@ -417,7 +417,7 @@ describe("validateIntegrity — D-031: an illegal number LITERAL inside a stored
   });
 });
 
-describe("validateIntegrity — §5.1.1: a formula referencing a slot that does not exist", () => {
+describe("validateIntegrity — a formula that names a slot which does not exist", () => {
   it("rejects a formula whose reference resolves to no object at all, naming the DEPENDENT slot", () => {
     const objects = [
       valueObject("obj_2", "value_2", 5),
@@ -449,7 +449,7 @@ describe("validateIntegrity — §5.1.1: a formula referencing a slot that does 
     }
   });
 
-  it("passes PROJECT_BRIEF §6's well-formed value/add fixture", () => {
+  it("passes the well formed value and add fixture", () => {
     const objects = [
       valueObject("obj_1", "value_1", 10),
       valueObject("obj_2", "value_2", 5),
@@ -458,7 +458,7 @@ describe("validateIntegrity — §5.1.1: a formula referencing a slot that does 
     expect(validateIntegrity(objects, deriveEdges(objects))).toEqual({ ok: true });
   });
 
-  it("runs the D-017 check before the dangling-reference check, on a document with both problems", () => {
+  it("runs the undeclared slot check before the dangling reference check, on a document with both problems", () => {
     const objects = [
       addWithUndeclaredSlot(addr("obj_1", "value")),
       valueObject("obj_1", "value_1", 42),
@@ -483,7 +483,7 @@ describe("validateIntegrity — §5.1.1: a formula referencing a slot that does 
 });
 
 describe("deriveValidateAndEvaluate — composing deriveEdges -> validateIntegrity -> detectCycle -> evaluate", () => {
-  it("evaluates PROJECT_BRIEF §6's fixture end-to-end, including through a derived slot, with no hand-built edges anywhere", () => {
+  it("evaluates the fixture end to end, including through a derived slot, with no hand-built edges anywhere", () => {
     const objects = [
       valueObject("obj_1", "value_1", 3),
       valueObject("obj_2", "value_2", 4),
@@ -524,7 +524,7 @@ describe("deriveValidateAndEvaluate — composing deriveEdges -> validateIntegri
     }
   });
 
-  it("runs validateIntegrity before detectCycle: when a document has BOTH an undeclared slot AND an unrelated genuine cycle, only the D-017 message is reported", () => {
+  it("runs validateIntegrity before detectCycle: when a document has BOTH an undeclared slot AND an unrelated genuine cycle, only the undeclared slot message is reported", () => {
     const bothProblems: GraphObject = {
       id: "obj_1",
       name: "add_1",
@@ -572,7 +572,7 @@ describe("deriveValidateAndEvaluate — composing deriveEdges -> validateIntegri
     expect(deriveValidateAndEvaluate([])).toEqual({ ok: true, objects: [] });
   });
 
-  it("forwards a caller-supplied EvalContext (§5.1) to step 7 untouched, without changing a context-ignoring result", () => {
+  it("forwards a caller-supplied EvalContext to step 7 untouched, without changing a context-ignoring result", () => {
     const objects = [
       valueObject("obj_1", "value_1", 10),
       valueObject("obj_2", "value_2", 5),
@@ -596,8 +596,8 @@ describe("deriveValidateAndEvaluate — composing deriveEdges -> validateIntegri
   });
 });
 
-describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, commit+journal)", () => {
-  it("mutates a value's literal and watches it propagate through a derived slot, appending one journal entry (PROJECT_BRIEF §6)", () => {
+describe("mutate — the full loop: stage, apply, validate, detect, evaluate, commit and journal", () => {
+  it("mutates a value's literal and watches it propagate through a derived slot, and appends one journal entry", () => {
     const initial = [
       valueObject("obj_1", "value_1", 3),
       valueObject("obj_2", "value_2", 4),
@@ -619,7 +619,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     }
   });
 
-  it("accepts an optional EvalContext (§5.1) as its fourth argument and forwards it to evaluation", () => {
+  it("accepts an optional EvalContext as its fourth argument and forwards it to evaluation", () => {
     const initial = [
       valueObject("obj_1", "value_1", 3),
       valueObject("obj_2", "value_2", 4),
@@ -646,7 +646,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     expect(measureCalls).toBe(0);
   });
 
-  it("rejects a mutation that would introduce a cycle, naming every slot in it (PROJECT_BRIEF §6)", () => {
+  it("rejects a mutation that would introduce a cycle, naming every slot in it", () => {
     const initial: GraphObject[] = [
       {
         id: "obj_1",
@@ -674,7 +674,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     }
   });
 
-  it("leaves the caller's objects and journal provably unchanged when a mutation is rejected (PROJECT_BRIEF §6, D-016)", () => {
+  it("leaves the caller's objects and journal provably unchanged when a mutation is rejected", () => {
     const initial: GraphObject[] = [
       {
         id: "obj_1",
@@ -737,7 +737,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
     expect(() => mutate(initial, [noOtherObjectOp], [])).not.toThrow();
   });
 
-  it("rejects an operation naming a nonexistent object, rather than applying nothing and journalling a false record (D-021)", () => {
+  it("rejects an operation naming a nonexistent object, rather than applying nothing and journalling a false record", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const priorJournal: MutationJournalEntry[] = [];
     const snapshotObjectsBefore = JSON.parse(JSON.stringify(initial)) as unknown;
@@ -755,7 +755,7 @@ describe("mutate — §5.1's full loop (stage, apply, validate/detect/evaluate, 
   });
 });
 
-describe("mutate — D-020: the batch form (0018-REVIEW-phase0, fix 5)", () => {
+describe("mutate — the batch form", () => {
   it("applies every operation in the batch to the SAME clone, in order, appending exactly ONE journal entry holding the whole list", () => {
     const initial = [valueObject("obj_1", "value_1", 3), valueObject("obj_2", "value_2", 4), addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value"))];
     const firstOp: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 10 } };
@@ -815,7 +815,7 @@ describe("mutate — D-020: the batch form (0018-REVIEW-phase0, fix 5)", () => {
     expect(initial).toEqual(snapshotBefore);
   });
 
-  it("rejects the whole batch, naming EVERY operation with a nonexistent target, not just the first (D-021 across a batch)", () => {
+  it("rejects the whole batch, naming EVERY operation with a nonexistent target, not only the first, across the whole batch", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const firstMissing: Operation = { kind: "setSlot", address: addr("obj_404", "value"), slot: { kind: "literal", value: 1 } };
     const fine: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 2 } };
@@ -836,8 +836,8 @@ describe("mutate — D-020: the batch form (0018-REVIEW-phase0, fix 5)", () => {
   });
 });
 
-describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (0018-REVIEW-phase0)", () => {
-  it("rejects an object MISSING its schema-declared derived slot, naming it (D-018 part 1)", () => {
+describe("validateIntegrity — the schema and the slots must agree in both directions", () => {
+  it("rejects an object MISSING its schema-declared derived slot, naming it", () => {
     const missingDerivedSlot: GraphObject = {
       id: "obj_3",
       name: "add_1",
@@ -859,7 +859,7 @@ describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (00
     expect(deriveValidateAndEvaluate(objects).ok).toBe(false);
   });
 
-  it("rejects a slot whose kind disagrees with its schema-declared position: non-derived at a derived path (D-018 part 2)", () => {
+  it("rejects a slot whose kind disagrees with the position the schema declares: non-derived at a derived path", () => {
     const objects: GraphObject[] = [
       {
         id: "obj_3",
@@ -882,7 +882,7 @@ describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (00
     }
   });
 
-  it("rejects a slot whose kind disagrees with its schema-declared position: derived at a non-derived path (D-018 part 2)", () => {
+  it("rejects a slot whose kind disagrees with the position the schema declares: derived at a non-derived path", () => {
     const objects: GraphObject[] = [
       {
         id: "obj_3",
@@ -905,7 +905,7 @@ describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (00
     }
   });
 
-  it("rejects, via the real mutate() entry point, a setSlot that would overwrite a DERIVED slot with a literal (D-018 part 2)", () => {
+  it("rejects, via the real mutate() entry point, a setSlot that would overwrite a derived slot with a literal", () => {
     const objects = [
       valueObject("obj_1", "value_1", 3),
       valueObject("obj_2", "value_2", 4),
@@ -928,7 +928,7 @@ describe("validateIntegrity — D-018: schema/slot reconciliation is two-way (00
   });
 });
 
-describe("mutate — D-019: the step-1 clone preserves every member of Value, not just what JSON can represent (0018-REVIEW-phase0)", () => {
+describe("mutate — the clone at step 1 keeps every member of Value, not only what JSON can hold", () => {
   it("commits null, a Point, a Point[], and an ErrorValue unchanged through an UNRELATED mutation — everything JSON cannot round-trip faithfully EXCEPT a non-finite number", () => {
     const fidelityObject: GraphObject = {
       id: "obj_1",
@@ -969,7 +969,7 @@ describe("mutate — D-019: the step-1 clone preserves every member of Value, no
   });
 });
 
-describe("mutate — D-025: non-finite numbers are not legal document state (Q-006, ruled by the human directly, cycle 0023)", () => {
+describe("mutate — a non-finite number is not legal document state", () => {
   it("rejects a setSlot writing a non-finite literal (NaN, +Infinity, -Infinity in turn), naming the slot, prior state unchanged", () => {
     for (const nonFinite of [NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
       const initial = [valueObject("obj_1", "value_1", 1)];
@@ -981,7 +981,7 @@ describe("mutate — D-025: non-finite numbers are not legal document state (Q-0
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.message).toContain("value_1.value");
-        expect(result.message).toContain("D-025");
+        expect(result.message).toContain("not legal document state");
       }
       expect(initial).toEqual(snapshotBefore);
     }
@@ -1051,7 +1051,7 @@ describe("mutate — D-025: non-finite numbers are not legal document state (Q-0
     }
   });
 
-  it("(correctness link to D-019) a lossy clone would have hidden the illegal value from this check entirely", () => {
+  it("a lossy clone hides the illegal value from this check entirely", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: NaN } };
 
@@ -1061,7 +1061,7 @@ describe("mutate — D-025: non-finite numbers are not legal document state (Q-0
   });
 });
 
-describe("mutate — CreateObjectOperation (§5.11's loader primitive, cycle 0024)", () => {
+describe("mutate — CreateObjectOperation, which the loader uses", () => {
   it("creates a brand-new object into an EMPTY graph, appending one journal entry", () => {
     const newObject: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 42 } } };
     const operation: Operation = { kind: "createObject", object: newObject };
@@ -1091,7 +1091,7 @@ describe("mutate — CreateObjectOperation (§5.11's loader primitive, cycle 002
     expect(result.objects.find((object) => object.id === "obj_3")?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
   });
 
-  it("rejects creating an object whose id ALREADY exists, leaving prior state unchanged (D-002/D-021)", () => {
+  it("rejects creating an object whose id ALREADY exists, leaving prior state unchanged", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
     const duplicate: GraphObject = { id: "obj_1", name: "value_1_again", type: "value", slots: { value: { kind: "literal", value: 2 } } };
@@ -1120,7 +1120,7 @@ describe("mutate — CreateObjectOperation (§5.11's loader primitive, cycle 002
     }
   });
 
-  it("clones the created object into committed state (D-024) — the caller's own payload is not aliased", () => {
+  it("clones the created object into committed state — the caller's own payload is not aliased", () => {
     const payload: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } };
     const operation: Operation = { kind: "createObject", object: payload };
 
@@ -1145,7 +1145,7 @@ describe("mutate — CreateObjectOperation (§5.11's loader primitive, cycle 002
   });
 });
 
-describe("mutate — D-024: nothing the caller hands mutate enters committed state or the journal by reference", () => {
+describe("mutate — nothing the caller hands in enters committed state or the journal by reference", () => {
   it("clones the operation's own Slot into committed state, so two operations sharing one payload do not share one committed slot", () => {
     const initial = [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
     const sharedPayload: Slot = { kind: "literal", value: 7 };
@@ -1179,7 +1179,7 @@ describe("mutate — D-024: nothing the caller hands mutate enters committed sta
   });
 });
 
-describe("mutate — DeleteObjectOperation (§5.1.1's `delete <object>`, closes Phase 0 acceptance clause 3, cycle 0022)", () => {
+describe("mutate — DeleteObjectOperation, behind `delete <object>`", () => {
   it("deletes an object with no dependents, removing it from the result and appending one journal entry", () => {
     const initial = [valueObject("obj_1", "value_1", 10), valueObject("obj_2", "value_2", 20)];
     const operation: Operation = { kind: "deleteObject", objectId: "obj_2" };
@@ -1192,7 +1192,7 @@ describe("mutate — DeleteObjectOperation (§5.1.1's `delete <object>`, closes 
     expect(result.journal).toEqual([{ operations: [operation] }]);
   });
 
-  it("rejects deleting an object a formula elsewhere still depends on, naming the dependent and leaving prior state unchanged (PROJECT_BRIEF §6 clause 3, D-016)", () => {
+  it("rejects deleting an object a formula elsewhere still depends on, naming the dependent and leaving prior state unchanged", () => {
     const initial = [
       valueObject("obj_1", "value_1", 3),
       valueObject("obj_2", "value_2", 4),
@@ -1226,7 +1226,7 @@ describe("mutate — DeleteObjectOperation (§5.1.1's `delete <object>`, closes 
     expect(result.objects.map((object) => object.id)).toEqual(["obj_2"]);
   });
 
-  it("rejects deleting an object that does not exist, naming the id as an id (D-021/D-023, deleteObject variant)", () => {
+  it("rejects deleting an object that does not exist, naming the id as an id", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const operation: Operation = { kind: "deleteObject", objectId: "obj_404" };
 
@@ -1282,7 +1282,7 @@ describe("mutate — DeleteObjectOperation (§5.1.1's `delete <object>`, closes 
   });
 });
 
-describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing Phase 2's LAST acceptance clause: `delete <table>` rejected-until-force)", () => {
+describe("mutate — the `force` flag on DeleteObjectOperation, which turns a refusal into a repair", () => {
   it("rejects `delete <table>` BY DEFAULT (force absent) when a live formula depends on one of its cells — the REJECT half, unchanged since cycle 0022", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, { "cells.A1": { kind: "literal", value: 10 } });
     const dependent: GraphObject = {
@@ -1302,7 +1302,7 @@ describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing P
     expect([table, dependent]).toEqual(snapshotBefore);
   });
 
-  it("`force: true` REPAIRS a live REFERENCE dependent to #REF instead of rejecting, removes the table, and reports the broken slot in `brokenSlots` (D-056/D-057) — the force half, closing the clause", () => {
+  it("`force: true` REPAIRS a live REFERENCE dependent to #REF instead of rejecting, removes the table, and reports the broken slot in `brokenSlots` — the force half, closing the clause", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, { "cells.A1": { kind: "literal", value: 10 } });
     const dependent: GraphObject = {
       id: "obj_2",
@@ -1326,7 +1326,7 @@ describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing P
     expect(deriveValidateAndEvaluate(result.objects).ok).toBe(true);
   });
 
-  it("`force: true` repairs a RANGE dependent with an endpoint on the deleted table to #REF ENTIRELY, per D-056/0051-REVIEW §9 answer 3 — no remaining extent to clamp to", () => {
+  it("`force: true` repairs a RANGE dependent with an endpoint on the deleted table to #REF in full, because no extent remains to clamp to", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 2 },
@@ -1392,7 +1392,7 @@ describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing P
     expect(result.brokenSlots).toEqual([{ objectId: "obj_2", path: ["value"] }]);
   });
 
-  it("does NOT report a slot broken by an EARLIER operation when a LATER operation in the SAME batch deletes the object carrying it (D-059)", () => {
+  it("does NOT report a slot broken by an EARLIER operation when a LATER operation in the SAME batch deletes the object carrying it", () => {
     const table = tableObject("obj_1", "table_x", 1, 1, { "cells.A1": { kind: "literal", value: 1 } });
     const dependent: GraphObject = {
       id: "obj_2",
@@ -1416,7 +1416,7 @@ describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing P
     expect(result.brokenSlots).toEqual([]);
   });
 
-  it("does NOT report a cell broken by a row deletion when the SAME batch then force-deletes that whole table (D-059)", () => {
+  it("does NOT report a cell broken by a row deletion when the SAME batch then force-deletes that whole table", () => {
     const table = tableObject("obj_1", "table_x", 3, 2, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 2 },
@@ -1440,7 +1440,7 @@ describe("mutate — DeleteObjectOperation's `force` flag (entry 0053, closing P
 
 });
 
-describe("mutate — D-025's rejection says WHICH non-finite value it found (reviewer edit, 0025-REVIEW-phase0)", () => {
+describe("mutate — the refusal says which non-finite value it found", () => {
   it("names the offending coordinate inside a Point literal, not [object Object]", () => {
     const initial: GraphObject[] = [
       { id: "obj_1", name: "value_1", type: "value", slots: { origin: { kind: "literal", value: { x: Number.NEGATIVE_INFINITY, y: 2 } } } },
@@ -1472,7 +1472,7 @@ describe("mutate — D-025's rejection says WHICH non-finite value it found (rev
   });
 });
 
-describe("mutate — Q-008: -0 is not legal document state (PROVISIONAL, recommendation (a), 0025-REVIEW-phase0, enforced cycle 0026)", () => {
+describe("mutate — a negative zero is not legal document state", () => {
   it("rejects a setSlot writing a bare -0 literal, naming the slot, prior state unchanged, distinguishing it from legal 0", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
@@ -1483,13 +1483,13 @@ describe("mutate — Q-008: -0 is not legal document state (PROVISIONAL, recomme
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("value_1.value");
-      expect(result.message).toContain("D-025/Q-008");
+      expect(result.message).toContain("not legal document state");
       expect(result.message).toContain("-0");
     }
     expect(initial).toEqual(snapshotBefore);
   });
 
-  it("accepts a setSlot writing plain 0 — Q-008 is specifically about the SIGN, not zero itself", () => {
+  it("accepts a setSlot writing plain 0, because the rule is about the sign, not about zero", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const operation: Operation = { kind: "setSlot", address: addr("obj_1", "value"), slot: { kind: "literal", value: 0 } };
 
@@ -1511,7 +1511,7 @@ describe("mutate — Q-008: -0 is not legal document state (PROVISIONAL, recomme
   });
 });
 
-describe("mutate — D-025/Q-008 on the OPERATION PAYLOAD, before staging, closing 0025-REVIEW-phase0 finding 1's write side (cycle 0026)", () => {
+describe("mutate — the same value rules on the operation payload, before the stage step", () => {
   it("(probe A) rejects a batch where an EARLIER setSlot carries an illegal value even though a LATER setSlot in the SAME batch overwrites it — nothing partially commits, nothing is journalled", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
@@ -1524,7 +1524,7 @@ describe("mutate — D-025/Q-008 on the OPERATION PAYLOAD, before staging, closi
     if (!result.ok) {
       expect(result.message).toContain("operation 1 of 2");
       expect(result.message).toContain("value_1.value");
-      expect(result.message).toContain("D-025/Q-008");
+      expect(result.message).toContain("not legal document state");
     }
     expect(initial).toEqual(snapshotBefore);
   });
@@ -1540,7 +1540,7 @@ describe("mutate — D-025/Q-008 on the OPERATION PAYLOAD, before staging, closi
     if (!result.ok) {
       expect(result.message).toContain("operation 1 of 2");
       expect(result.message).toContain("value_2.value");
-      expect(result.message).toContain("D-025/Q-008");
+      expect(result.message).toContain("not legal document state");
     }
   });
 
@@ -1614,7 +1614,7 @@ function tableObject(id: string, name: string, rows: number, cols: number, cellS
   };
 }
 
-describe("deriveEdges — table's dynamic cell family (D-017/0041-REVIEW-phase2 §9)", () => {
+describe("deriveEdges — table's dynamic cell family", () => {
   it("derives a binding edge for a formula cell within the table's current rows/cols, and none for a literal cell", () => {
     const objects = [
       valueObject("obj_1", "value_1", 42),
@@ -1645,7 +1645,7 @@ describe("deriveEdges — table's dynamic cell family (D-017/0041-REVIEW-phase2 
     ]);
   });
 
-  it("derives no edge for a formula cell OUTSIDE the table's current rows/cols — the dynamic-family analogue of D-017's fixed-list gap", () => {
+  it("derives no edge for a formula cell OUTSIDE the table's current rows/cols, which is the dynamic family version of the same gap", () => {
     const objects = [
       valueObject("obj_1", "value_1", 9),
       tableObject("obj_2", "table_x", 1, 1, {
@@ -1659,7 +1659,7 @@ describe("deriveEdges — table's dynamic cell family (D-017/0041-REVIEW-phase2 
     });
   });
 
-  it("a formula cell in one table may reference a cell in a DIFFERENT table (§5.4: tables are self-contained but may reference each other)", () => {
+  it("a formula cell in one table may reference a cell in a DIFFERENT table, because a table is self contained and can still read another one", () => {
     const objects = [
       tableObject("obj_1", "table_a", 1, 1, { "cells.A1": { kind: "literal", value: 3 } }),
       tableObject("obj_2", "table_b", 1, 1, {
@@ -1673,7 +1673,7 @@ describe("deriveEdges — table's dynamic cell family (D-017/0041-REVIEW-phase2 
   });
 });
 
-describe("validateIntegrity — D-017 rejects a table's stray out-of-extent formula cell", () => {
+describe("validateIntegrity — it refuses a stray formula cell outside the extent of a table", () => {
   it("rejects a formula cell the object carries but the table's current rows/cols do not declare, naming it", () => {
     const objects = [
       valueObject("obj_1", "value_1", 9),
@@ -1703,7 +1703,7 @@ describe("validateIntegrity — D-017 rejects a table's stray out-of-extent form
     expect(validateIntegrity(objects, edges)).toEqual({ ok: true });
   });
 
-  it("D-018's other direction still applies: a cell WITHIN the declared extent that is 'derived'-kind is rejected (tables declare no derived slots)", () => {
+  it("the other direction still applies: a cell inside the extent with a derived kind is refused, because a table declares no derived slots", () => {
     const objects: GraphObject[] = [
       tableObject("obj_1", "table_x", 1, 1, {
         "cells.A1": { kind: "derived", value: 5 },
@@ -1720,7 +1720,7 @@ describe("validateIntegrity — D-017 rejects a table's stray out-of-extent form
     }
   });
 
-  it("D-022's bounded-correctness claim (describeUndeclaredSlot matches formatAddress) no longer holds for table — disclosed, not fixed", () => {
+  it("describeUndeclaredSlot no longer matches formatAddress for a table, which is disclosed and not fixed", () => {
     const objects = [tableObject("obj_2", "table_x", 1, 1, {})];
     const rawKeyNaming = "table_x.cells.C5";
     const surfaceForm = formatAddress(addr("obj_2", "cells", "C5"), objects);
@@ -1729,7 +1729,7 @@ describe("validateIntegrity — D-017 rejects a table's stray out-of-extent form
   });
 });
 
-describe("mutate — end-to-end through a real table object (D-017/0041-REVIEW-phase2 §9)", () => {
+describe("mutate — end-to-end through a real table object", () => {
   it("creates a table and a value, binds a cell to the value by formula, and evaluates it live", () => {
     const value = valueObject("obj_1", "value_1", 42);
     const table = tableObject("obj_2", "table_x", 1, 1, {
@@ -1772,7 +1772,7 @@ describe("mutate — end-to-end through a real table object (D-017/0041-REVIEW-p
   });
 });
 
-describe("table dimensions are literal-only — Rule 6 (D-046)", () => {
+describe("table dimensions are literal-only — Rule 6", () => {
   function tableWithFormulaRows(cachedRows: number, cellSlots: Record<string, Slot>): GraphObject {
     return {
       id: "obj_2",
@@ -1837,14 +1837,14 @@ describe("mutate — ClearSlotOperation: emptying a table cell by REMOVING its s
     }
   });
 
-  it("does not mutate the caller's own object (step 6 / D-024)", () => {
+  it("does not mutate the caller's own object (step 6)", () => {
     const table = tableObject("obj_1", "table_x", 2, 2, { "cells.A1": { kind: "literal", value: "hello" } });
     const snapshotBefore = JSON.parse(JSON.stringify([table])) as unknown;
     mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
     expect([table]).toEqual(snapshotBefore);
   });
 
-  it("journals the clear like any other operation (D-020: one entry holding the whole batch)", () => {
+  it("journals the clear like any other operation as one entry that holds the whole batch", () => {
     const table = tableObject("obj_1", "table_x", 2, 2, { "cells.A1": { kind: "literal", value: "hello" } });
     const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_1", "cells", "A1") }], []);
     expect(result.ok).toBe(true);
@@ -1853,7 +1853,7 @@ describe("mutate — ClearSlotOperation: emptying a table cell by REMOVING its s
     }
   });
 
-  it("clearing a cell a formula elsewhere READS is legal — an empty in-extent cell reads 0 and contributes no edge (D-110 clause 4), so nothing dangles", () => {
+  it("clearing a cell a formula elsewhere READS is legal — an empty in-extent cell reads 0 and contributes no edge, so nothing dangles", () => {
     const table = tableObject("obj_1", "table_x", 2, 2, {
       "cells.A1": { kind: "literal", value: 10 },
       "cells.B1": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: 10 },
@@ -1871,13 +1871,13 @@ describe("mutate — ClearSlotOperation: emptying a table cell by REMOVING its s
     expect(result.ok).toBe(true);
   });
 
-  it("REFUSES a clear at anything but a table cell — only D-047 settles what an absent slot means", () => {
+  it("REFUSES a clear at anything but a table cell, because only a table cell has a settled meaning for an absent slot", () => {
     const objects = [valueObject("obj_1", "value_a", 5)];
     const result = mutate(objects, [{ kind: "clearSlot", address: addr("obj_1", "in", "value") }], []);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("cannot be cleared");
-      expect(result.message).toContain("D-047");
+      expect(result.message).toContain("only a table cell may be emptied");
     }
   });
 
@@ -1890,17 +1890,17 @@ describe("mutate — ClearSlotOperation: emptying a table cell by REMOVING its s
     }
   });
 
-  it("REFUSES a clear naming an object that does not exist, through the SAME existence check every other operation uses (D-021)", () => {
+  it("REFUSES a clear naming an object that does not exist, through the SAME existence check every other operation uses", () => {
     const table = tableObject("obj_1", "table_x", 2, 2, {});
     const result = mutate([table], [{ kind: "clearSlot", address: addr("obj_404", "cells", "A1") }], []);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain("D-021");
+      expect(result.message).toContain("does not exist in this document");
     }
   });
 });
 
-describe("mutate — findInvalidDimensionWrites (D-097): a setSlot bounding table rows/cols at write time", () => {
+describe("mutate — findInvalidDimensionWrites: a setSlot bounding table rows/cols at write time", () => {
   const REJECTED_ROWS_WRITES: readonly { readonly label: string; readonly slot: Slot }[] = [
     { label: "a formula (evaluation could resize the table, Rule 6)", slot: { kind: "formula", ast: { type: "literal", value: 5 }, value: 5 } },
     { label: "zero", slot: { kind: "literal", value: 0 } },
@@ -1964,7 +1964,7 @@ describe("mutate — findInvalidDimensionWrites (D-097): a setSlot bounding tabl
     }
   });
 
-  it("leaves a NON-table object's own 'rows'-named literal slot alone — an undeclared literal is ordinary legal state (D-017)", () => {
+  it("leaves a NON-table object's own 'rows'-named literal slot alone — an undeclared literal is ordinary legal state", () => {
     const notATable = valueObject("obj_1", "value_1", 1);
     const result = mutate([notATable], [{ kind: "setSlot", address: addr("obj_1", "rows"), slot: { kind: "literal", value: -1 } }], []);
     expect(result.ok).toBe(true);
@@ -2022,7 +2022,7 @@ describe("mutate — a circular reference between two tables, running through a 
     }
   });
 
-  it("a self-inclusive range (A6 = SUM(A1:A6)) is a genuine self-edge and is correctly rejected as a cycle — §5.3: 'do not special-case it'", () => {
+  it("a self-inclusive range (A6 = SUM(A1:A6)) is a genuine self-edge and is correctly rejected as a cycle, with no special case", () => {
     const table = tableObject("obj_1", "table_x", 6, 1, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 1 },
@@ -2074,7 +2074,7 @@ describe("mutate — SUM(A1:A5) recomputes correctly as cell values change (Phas
   });
 });
 
-describe("deriveEdges/mutate — D-044: range expansion is bounded by the table's CURRENT extent, re-derived every call, never cached", () => {
+describe("deriveEdges and mutate — range expansion is bounded by the current extent, re-derived every call and never cached", () => {
   it("SUM(A1:Z99) over a small table only sums the cells that actually exist", () => {
     const table = tableObject("obj_1", "table_x", 2, 2, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -2126,7 +2126,7 @@ describe("deriveEdges/mutate — D-044: range expansion is bounded by the table'
   });
 });
 
-describe("deriveEdges — a range naming a table that does not resolve falls back to ONE edge from its own start address, so the dangling-reference check still catches and names it (the defensive arm; D-045 rejects the reachable authored case at parse time)", () => {
+describe("deriveEdges — a range naming a table that does not resolve falls back to ONE edge from its own start address, so the dangling-reference check still catches and names it (a defensive arm, because the parser already refuses the case a person can type)", () => {
   it("a range dependency whose table id does not exist in objects still produces a dangling edge, not a silently-dropped dependency", () => {
     const consumer: GraphObject = {
       id: "obj_1",
@@ -2177,7 +2177,7 @@ describe("deriveEdges — a range naming a table that does not resolve falls bac
   });
 });
 
-describe("deriveEdges/mutate — D-047: an EMPTY cell inside a range is skipped, not an error, so an aggregate over a PARTIALLY populated table commits (0045-REVIEW Finding 1's fix)", () => {
+describe("deriveEdges and mutate — an empty cell inside a range is skipped and is not an error, so an aggregate over a part filled table commits", () => {
   it("SUM(A1:A5) over a table with genuinely ABSENT cells (no slot at all) commits and sums only the cells that exist", () => {
     const table = tableObject("obj_1", "table_x", 5, 1, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -2205,7 +2205,7 @@ describe("deriveEdges/mutate — D-047: an EMPTY cell inside a range is skipped,
     }
   });
 
-  it("the SAME sum, with the gaps holding an explicit `null` literal instead of no slot at all — both representations of empty must agree (D-047 item 3)", () => {
+  it("the SAME sum, with the gaps holding an explicit `null` literal instead of no slot at all — both spellings of empty must agree", () => {
     const table = tableObject("obj_1", "table_x", 5, 1, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: null },
@@ -2284,7 +2284,7 @@ describe("deriveEdges/mutate — D-047: an EMPTY cell inside a range is skipped,
     }
   });
 
-  it("a plain ReferenceNode (not a range) to an ABSENT slot OUTSIDE a table (or to an unknown object) is STILL rejected as a dangling reference — D-110 clause 6's boundary, formerly D-047 item 4's", () => {
+  it("a plain ReferenceNode (not a range) to an ABSENT slot OUTSIDE a table (or to an unknown object) is STILL rejected as a dangling reference, which is the boundary", () => {
     const nowhere: GraphObject = {
       id: "obj_2",
       name: "value_1",
@@ -2303,7 +2303,7 @@ describe("deriveEdges/mutate — D-047: an EMPTY cell inside a range is skipped,
   });
 });
 
-describe("mutate — D-110: a bare reference to an EMPTY IN-EXTENT table cell reads as 0, and gets no edge, instead of being refused", () => {
+describe("mutate — a bare reference to an empty in-extent cell reads as 0 and gets no edge, instead of a refusal", () => {
   it("clause 1: accepts a formula referencing an in-extent cell with NO SLOT AT ALL, and it reads as 0", () => {
     const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } });
     const consumer: GraphObject = {
@@ -2405,7 +2405,7 @@ describe("mutate — D-110: a bare reference to an EMPTY IN-EXTENT table cell re
     expectSameEdges(deriveEdges(objects), []);
   });
 
-  it("clause 6's other boundary: a cell OUTSIDE the table's extent is STILL a dangling reference — D-044 gives it no bound to be legal within", () => {
+  it("the other boundary: a cell outside the extent is still a dangling reference, because no bound makes it legal", () => {
     const table = tableObject("obj_1", "table_x", 2, 1, { "cells.A1": { kind: "literal", value: 1 } });
     const consumer: GraphObject = {
       id: "obj_2",
@@ -2424,7 +2424,7 @@ describe("mutate — D-110: a bare reference to an EMPTY IN-EXTENT table cell re
     }
   });
 
-  it("clause 5 (D-111 clause 3's own pin): a cycle that only exists once the empty cell is populated is accepted while empty and caught at the mutation that populates it — prior state left bit-for-bit unchanged by the refusal", () => {
+  it("a cycle that only exists once the empty cell is populated is accepted while empty and caught at the mutation that populates it — prior state left bit-for-bit unchanged by the refusal", () => {
     const table = tableObject("obj_1", "table_x", 2, 1, {
       "cells.A2": { kind: "formula", ast: { type: "reference", address: addr("obj_1", "cells", "A1") }, value: null },
     });
@@ -2461,7 +2461,7 @@ describe("mutate — D-110: a bare reference to an EMPTY IN-EXTENT table cell re
   });
 });
 
-describe("mutate — D-048: `findIllegalOperationPayloads` walks a payload's stored formula AST, the same as `findIllegalSlotValues` does post-fold (0045-REVIEW Finding 3, closing entry 0044's reviewer question 1)", () => {
+describe("mutate — `findIllegalOperationPayloads` walks the stored AST of a payload, as `findIllegalSlotValues` does after the fold", () => {
   it("rejects a batch where an EARLIER setSlot's FORMULA payload holds an illegal AST literal even though a LATER setSlot in the SAME batch overwrites it", () => {
     const initial = [valueObject("obj_1", "value_1", 1)];
     const snapshotBefore = JSON.parse(JSON.stringify(initial)) as unknown;
@@ -2478,7 +2478,7 @@ describe("mutate — D-048: `findIllegalOperationPayloads` walks a payload's sto
     if (!result.ok) {
       expect(result.message).toContain("operation 1 of 2");
       expect(result.message).toContain("value_1.value");
-      expect(result.message).toContain("D-048");
+      expect(result.message).toContain("not legal document state");
     }
     expect(initial).toEqual(snapshotBefore);
   });
@@ -2499,7 +2499,7 @@ describe("mutate — D-048: `findIllegalOperationPayloads` walks a payload's sto
     if (!result.ok) {
       expect(result.message).toContain("operation 1 of 2");
       expect(result.message).toContain("value_2.value");
-      expect(result.message).toContain("D-048");
+      expect(result.message).toContain("not legal document state");
     }
   });
 
@@ -2535,7 +2535,7 @@ describe("mutate — D-048: `findIllegalOperationPayloads` walks a payload's sto
   });
 });
 
-describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry 0047)", () => {
+describe("mutate — InsertTableLineOperation, the row and column insert", () => {
   it("grows the extent and shifts every populated cell at or after the index down by one row", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -2555,7 +2555,7 @@ describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry
     expect(resized?.slots["cells.A4"]).toMatchObject({ value: 3 });
   });
 
-  it("§5.4: a reference from ANOTHER object into the resized table shifts too — the WHOLE document, not just the table's own formulas", () => {
+  it("a reference from ANOTHER object into the resized table shifts too — the WHOLE document, not just the table's own formulas", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 2 },
@@ -2666,7 +2666,7 @@ describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry
     }
   });
 
-  it("rejects an insertion targeting an object id that does not exist (D-021)", () => {
+  it("rejects an insertion targeting an object id that does not exist", () => {
     const result = mutate([], [{ kind: "insertTableLine", objectId: "obj_missing", axis: "row", index: 1 }], []);
 
     expect(result.ok).toBe(false);
@@ -2700,8 +2700,8 @@ describe("mutate — InsertTableLineOperation: §5.4 row/column insertion (entry
   });
 });
 
-describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 2 (D-050): simulates the batch LEFT-TO-RIGHT", () => {
-  it("two inserts on the SAME table in one batch both commit — the false-reject D-050 closes", () => {
+describe("mutate — findInvalidTableResizes simulates the batch from left to right", () => {
+  it("two inserts on the SAME table in one batch both commit, which closes a false refusal", () => {
     const table = tableObject("obj_1", "table_x", 2, 1, {});
 
     const result = mutate(
@@ -2778,8 +2778,8 @@ describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 2 (D-050): 
   });
 });
 
-describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 3: rejects an insert whose dimension is not literal (D-046)", () => {
-  it("rejects an insert whose ROWS slot is formula-kind, naming D-046, leaving prior state bit-for-bit unchanged", () => {
+describe("mutate — findInvalidTableResizes refuses an insert whose dimension is not literal", () => {
+  it("rejects an insert whose ROWS slot is formula-kind, naming the rule, and leaving prior state unchanged", () => {
     const table: GraphObject = {
       id: "obj_1",
       name: "table_x",
@@ -2797,7 +2797,7 @@ describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 3: rejects 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("not \"literal\"");
-      expect(result.message).toContain("D-046");
+      expect(result.message).toContain("its extent cannot be coherently resized");
     }
     expect([table]).toEqual(snapshotBefore);
   });
@@ -2827,7 +2827,7 @@ describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 3: rejects 
     expect(result.ok).toBe(true);
   });
 
-  it("rejects a ROW insert whose UNTOUCHED cols slot is formula-kind (D-053 — a resize checks the WHOLE extent, not only its own axis), leaving prior state bit-for-bit unchanged", () => {
+  it("rejects a ROW insert whose UNTOUCHED cols slot is formula-kind, because a resize checks the whole extent and not only its own axis, and prior state stays unchanged", () => {
     const source: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 0 } } };
     const table: GraphObject = {
       id: "obj_1",
@@ -2847,7 +2847,7 @@ describe("mutate — findInvalidTableResizes, 0048-REVIEW-phase2 fix 3: rejects 
     if (!result.ok) {
       expect(result.message).toContain("cols");
       expect(result.message).toContain("not \"literal\"");
-      expect(result.message).toContain("D-046");
+      expect(result.message).toContain("its extent cannot be coherently resized");
     }
     expect([source, table]).toEqual(snapshotBefore);
   });
@@ -2898,7 +2898,7 @@ describe("mutate — Phase 2 acceptance criterion clause 3, completed: SUM(A1:A5
   });
 });
 
-describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FIRST §5.1.1 REPAIR-path operation (entry 0050)", () => {
+describe("mutate — DeleteTableLineOperation, the row and column delete, and the first user of the repair path", () => {
   it("shrinks the extent, drops the cell AT the deleted index, and shifts every populated cell AFTER it back by one row", () => {
     const table = tableObject("obj_1", "table_x", 4, 1, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -2919,7 +2919,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     expect(resized?.slots["cells.A4"]).toBeUndefined();
   });
 
-  it("§5.1.1 REPAIR: a reference from ANOTHER object into the DELETED cell becomes #REF, live — never a dangling edge, never a rejection", () => {
+  it("the repair path: a reference from another object into the deleted cell becomes #REF, live — never a dangling edge, never a rejection", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 2 },
@@ -2941,7 +2941,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     expect((repaired?.slots.value as { value: unknown })?.value).toMatchObject({ error: "#REF" });
   });
 
-  it("§5.4: a reference from ANOTHER object into a row AFTER the deleted one shifts back — the WHOLE document, not just the table's own formulas", () => {
+  it("a reference from ANOTHER object into a row AFTER the deleted one shifts back — the WHOLE document, not just the table's own formulas", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 2 },
@@ -3021,7 +3021,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     expect(resized?.slots["cells.D1"]).toBeUndefined();
   });
 
-  it("a RANGE spanning the deleted row narrows (clamps) and keeps computing correctly — §5.4's other repair clause", () => {
+  it("a RANGE spanning the deleted row narrows (clamps) and keeps computing correctly, the other repair clause", () => {
     const table = tableObject("obj_1", "table_x", 5, 1, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 2 },
@@ -3052,7 +3052,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     expect(result.objects.find((o) => o.id === "obj_2")?.slots.value).toMatchObject({ value: 12 });
   });
 
-  it("a range naming ONLY the deleted line becomes #REF entirely (§5.4: \"a range deleted entirely becomes #REF\")", () => {
+  it("a range naming ONLY the deleted line becomes #REF entirely, because a range deleted in full becomes #REF", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, { "cells.A2": { kind: "literal", value: 2 } });
     const consumer: GraphObject = {
       id: "obj_2",
@@ -3115,7 +3115,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     }
   });
 
-  it("rejects a deletion targeting an object id that does not exist (D-021)", () => {
+  it("rejects a deletion targeting an object id that does not exist", () => {
     const result = mutate([], [{ kind: "deleteTableLine", objectId: "obj_missing", axis: "row", index: 1 }], []);
 
     expect(result.ok).toBe(false);
@@ -3124,7 +3124,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     }
   });
 
-  it("rejects a deletion whose dimension is not literal (D-046), same guard as insertion", () => {
+  it("rejects a deletion whose dimension is not literal, same guard as insertion", () => {
     const table: GraphObject = {
       id: "obj_1",
       name: "table_x",
@@ -3135,11 +3135,11 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain("D-046");
+      expect(result.message).toContain("its extent cannot be coherently resized");
     }
   });
 
-  it("rejects a ROW delete whose UNTOUCHED cols slot is formula-kind (D-053 — a resize checks the WHOLE extent, not only its own axis), leaving prior state bit-for-bit unchanged", () => {
+  it("rejects a ROW delete whose UNTOUCHED cols slot is formula-kind, because a resize checks the whole extent and not only its own axis, and prior state stays unchanged", () => {
     const source: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 0 } } };
     const table: GraphObject = {
       id: "obj_1",
@@ -3159,7 +3159,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
     if (!result.ok) {
       expect(result.message).toContain("cols");
       expect(result.message).toContain("not \"literal\"");
-      expect(result.message).toContain("D-046");
+      expect(result.message).toContain("its extent cannot be coherently resized");
     }
     expect([source, table]).toEqual(snapshotBefore);
   });
@@ -3189,7 +3189,7 @@ describe("mutate — DeleteTableLineOperation: §5.4 row/column deletion, the FI
   });
 });
 
-describe("mutate — findInvalidTableResizes widened for deleteTableLine (D-050, entry 0050): one simulation covers insert AND delete together", () => {
+describe("mutate — findInvalidTableResizes widened for deleteTableLine: one simulation covers insert AND delete together", () => {
   it("two deletes on the same table in one batch both commit, each validated against the state as of its own position", () => {
     const table = tableObject("obj_1", "table_x", 4, 1, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -3291,8 +3291,8 @@ describe("mutate — findInvalidTableResizes widened for deleteTableLine (D-050,
   });
 });
 
-describe("mutate — Phase 2 acceptance criterion clause 4, DELETE half: row/column DELETE with #REF repair (entry 0050)", () => {
-  it("§5.4/§5.1.1: deleting a row whose cells have external dependents rewrites those references to #REF (repair path) rather than leaving a dangling edge, and NEVER rejects", () => {
+describe("mutate — Phase 2 acceptance criterion clause 4, DELETE half: row/column DELETE with #REF repair", () => {
+  it("a row delete whose cells have external dependents rewrites those references to #REF, takes the repair path rather than a dangling edge, and never refuses", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 10 },
       "cells.A2": { kind: "literal", value: 20 },
@@ -3321,8 +3321,8 @@ describe("mutate — Phase 2 acceptance criterion clause 4, DELETE half: row/col
   });
 });
 
-describe("mutate — KNOWN INCOHERENCE (pinned, not fixed): row/column deletion CAN still reject, contradicting §5.4's unconditional repair (0051-REVIEW-phase2 §5)", () => {
-  it("rejects a row deletion when an OUT-OF-EXTENT cell slot has an external dependent, because the address-repair pass is unbounded while the cell-slot walk is extent-bounded (D-049) — the repaired reference points at a shifted position with no slot, dangling. Reachable only via the carried dimension/cell coherence gap (a raw setSlot; the eventual command line's extent-bounded resolution would refuse to write an out-of-extent cell). Do NOT patch this on the delete side alone — D-053's companion ruling forbids it until insertion's identical divergence (accepted at 0048-REVIEW as case 4) closes with it", () => {
+describe("mutate — a known incoherence, pinned and not fixed: a row or column delete can still refuse, against the rule that it must always repair", () => {
+  it("rejects a row deletion when an OUT-OF-EXTENT cell slot has an external dependent, because the address repair pass is unbounded while the cell slot walk is bounded by the extent, so the repaired reference points at a shifted position with no slot, dangling. Only a raw setSlot reaches it, because the command line refuses to write a cell outside the extent. Do not patch this on the delete side alone. The same divergence exists on the insert side, and the two must close together", () => {
     const table: GraphObject = {
       id: "obj_1",
       name: "table_x",
@@ -3349,7 +3349,7 @@ describe("mutate — KNOWN INCOHERENCE (pinned, not fixed): row/column deletion 
   });
 });
 
-describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)", () => {
+describe("mutate — RenameObjectOperation, behind `rename`", () => {
   function wired(): readonly GraphObject[] {
     return [
       valueObject("obj_1", "value_1", 10),
@@ -3370,7 +3370,7 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
     expect(result.objects.map((object) => object.id)).toEqual(["obj_1", "obj_2", "obj_3"]);
   });
 
-  it("breaks no reference at all — the dependent still evaluates, and brokenSlots is empty (§5.3's whole reason for storing ids)", () => {
+  it("breaks no reference at all — the dependent still evaluates, and brokenSlots is empty, which is the whole reason for storing ids", () => {
     const before = deriveValidateAndEvaluate(wired());
     const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }], []);
     expect(result.ok && result.brokenSlots).toEqual([]);
@@ -3389,20 +3389,20 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
     expect(result.ok && result.journal).toEqual([{ operations: [{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }] }]);
   });
 
-  it("rejects a rename of an id that does not exist, with D-021's own message shape", () => {
+  it("rejects a rename of an id that does not exist, in the usual message shape", () => {
     const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_99", name: "whatever" }], []);
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.message).toBe(
-      'operation 1 of 1 attempts to rename object id "obj_99" to "whatever", which does not exist in this document (D-021)',
+      'operation 1 of 1 attempts to rename object id "obj_99" to "whatever", which does not exist in this document',
     );
   });
 
-  it("rejects a name another object already holds, case-insensitively (§5.2), through checkNameAvailable's own message", () => {
+  it("rejects a name another object already holds, case-insensitively, through checkNameAvailable's own message", () => {
     const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "VALUE_2" }], []);
     expect(result.ok === false && result.message).toBe('operation 1 of 1 cannot rename: the name "VALUE_2" is already in use');
   });
 
-  it("rejects a name that fails §5.2's grammar", () => {
+  it("refuses a name that fails the name grammar", () => {
     const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "3bad" }], []);
     expect(result.ok === false && result.message).toBe(
       'operation 1 of 1 cannot rename: "3bad" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*',
@@ -3414,7 +3414,7 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
     expect(result.ok && result.objects[0]?.name).toBe("VALUE_1");
   });
 
-  it("leaves the caller's objects and journal untouched on a rejection (§5.1 step 6)", () => {
+  it("leaves the caller's objects and journal untouched on a rejection", () => {
     const objects = wired();
     const snapshot = JSON.stringify(objects);
     const journal: readonly MutationJournalEntry[] = [];
@@ -3423,15 +3423,15 @@ describe("mutate — RenameObjectOperation (§5.2/§5.10's `rename`, entry 0083)
     expect(journal).toEqual([]);
   });
 
-  it("rejects a name §5.3 lexes as a formula keyword, in ANY case — D-080, reviewer edit at 0084-REVIEW", () => {
+  it("refuses a name the formula lexer treats as a keyword, in any case", () => {
     const result = mutate(wired(), [{ kind: "renameObject", objectId: "obj_1", name: "or" }], []);
     expect(result.ok === false && result.message).toBe(
-      'operation 1 of 1 cannot rename: "or" is a reserved word — §5.3 reads AND, OR, NOT, TRUE, FALSE as formula keywords in any case, so no formula could reference this object; choose another name',
+      'operation 1 of 1 cannot rename: "or" is a reserved word — the formula language reads AND, OR, NOT, TRUE, FALSE as formula keywords in any case, so no formula could reference this object; choose another name',
     );
   });
 });
 
-describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () => {
+describe("mutate — AddPortOperation/RemovePortOperation", () => {
   function scriptObject(id: string, name: string, ports?: { readonly in: readonly string[]; readonly out: readonly string[] }): GraphObject {
     return ports === undefined ? { id, name, type: "script", slots: {} } : { id, name, type: "script", slots: {}, ports };
   }
@@ -3467,13 +3467,13 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
     expect(result.ok && result.objects[0]?.ports).toEqual({ in: ["factor", "speed"], out: ["result"] });
   });
 
-  it("rejects an empty or dotted port name (D-141 clause 2), touching nothing", () => {
+  it("rejects an empty or dotted port name, touching nothing", () => {
     const objects = [scriptObject("obj_1", "script_1")];
     expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "" }], []).ok).toBe(false);
     expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "a.b" }], []).ok).toBe(false);
   });
 
-  it("rejects a port name outside address.ts's path-segment grammar even with no dot — REVIEWER EDIT, 0168-REVIEW", () => {
+  it("refuses a port name outside the path segment grammar in address.ts, even with no dot", () => {
     const objects = [scriptObject("obj_1", "script_1")];
     expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "my-port" }], []).ok).toBe(false);
     expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "my port" }], []).ok).toBe(false);
@@ -3517,7 +3517,7 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
     expect(mutate(objects, [{ kind: "removePort", objectId: "obj_1", family: "in", name: "result" }], []).ok).toBe(false);
   });
 
-  it("REJECTS removing an out port some OTHER object's formula still references — D-141 clause 6, no new mechanism beyond the existing dangling-reference check", () => {
+  it("REJECTS removing an out port some OTHER object's formula still references, through the existing dangling reference check and no new mechanism", () => {
     const scriptWithOut: GraphObject = {
       id: "obj_1",
       name: "script_1",
@@ -3535,7 +3535,7 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
     expect(result.ok).toBe(false);
   });
 
-  it("a batch that removes then re-adds the same name in one call is legal — simulated left-to-right (D-050's reasoning)", () => {
+  it("a batch that removes then re-adds the same name in one call is legal, because the batch simulates from left to right", () => {
     const objects: readonly GraphObject[] = [
       {
         id: "obj_1",
@@ -3558,7 +3558,7 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
     expect(result.ok && result.objects[0]?.ports).toEqual({ in: [], out: ["result"] });
   });
 
-  it("leaves the caller's objects untouched on a rejection (§5.1 step 6)", () => {
+  it("leaves the caller's objects untouched on a rejection", () => {
     const objects = [scriptObject("obj_1", "script_1")];
     const snapshot = JSON.stringify(objects);
     expect(mutate(objects, [{ kind: "addPort", objectId: "obj_1", family: "in", name: "a.b" }], []).ok).toBe(false);
@@ -3566,7 +3566,7 @@ describe("mutate — AddPortOperation/RemovePortOperation (D-141 clause 6)", () 
   });
 });
 
-describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the same way findInvalidTableResizes does (D-050's reasoning)", () => {
+describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the same way findInvalidTableResizes does", () => {
   function pair(): readonly GraphObject[] {
     return [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "value_2", 2)];
   }
@@ -3634,24 +3634,24 @@ describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the sam
     );
   });
 
-  it("D-081, now built: createObject's OWN name is checked, so a duplicate name is REJECTED rather than committed (this test used to pin the KNOWN GAP; it now pins the fix)", () => {
+  it("createObject checks its own name, so a duplicate name is refused rather than committed", () => {
     const result = mutate(pair(), [{ kind: "createObject", object: valueObject("obj_3", "value_1", 3) }], []);
     expect(result.ok === false && result.message).toBe('operation 1 of 1 cannot create: the name "value_1" is already in use');
   });
 
-  it("D-081: rejects a createObject whose name fails §5.2's grammar", () => {
+  it("refuses a createObject whose name fails the name grammar", () => {
     const result = mutate(pair(), [{ kind: "createObject", object: valueObject("obj_3", "3bad", 3) }], []);
     expect(result.ok === false && result.message).toBe(
       'operation 1 of 1 cannot create: "3bad" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*',
     );
   });
 
-  it("D-081/D-080: rejects a createObject whose name is a formula keyword, in any case", () => {
+  it("refuses a createObject whose name is a formula keyword, in any case", () => {
     const result = mutate(pair(), [{ kind: "createObject", object: valueObject("obj_3", "true", 3) }], []);
     expect(result.ok === false && (result.message.includes("reserved word") && result.message.includes('"true"'))).toBe(true);
   });
 
-  it("D-081: two createObjects in ONE batch claiming the SAME name — the SECOND is rejected, the simulation catches what the pre-batch document could not", () => {
+  it("two createObjects in ONE batch claiming the SAME name — the SECOND is rejected, the simulation catches what the pre-batch document could not", () => {
     const result = mutate(
       [],
       [
@@ -3663,7 +3663,7 @@ describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the sam
     expect(result.ok === false && result.message).toBe('operation 2 of 2 cannot create: the name "TWIN" is already in use');
   });
 
-  it("D-081: ACCEPTS a createObject onto a name an EARLIER delete in the same batch just freed — symmetric with the rename case above", () => {
+  it("ACCEPTS a createObject onto a name an EARLIER delete in the same batch just freed — symmetric with the rename case above", () => {
     const result = mutate(
       pair(),
       [
@@ -3675,7 +3675,7 @@ describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the sam
     expect(result.ok && result.objects.map((object) => object.name)).toEqual(["value_2", "value_1"]);
   });
 
-  it("D-081: a REFUSED createObject claims no name for the simulation — a later operation still sees the name as taken", () => {
+  it("a REFUSED createObject claims no name for the simulation — a later operation still sees the name as taken", () => {
     const result = mutate(
       pair(),
       [
@@ -3691,7 +3691,7 @@ describe("mutate — findInvalidNames simulates the batch LEFT-TO-RIGHT, the sam
   });
 });
 
-describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry 0127)", () => {
+describe("text.resolvedContent end to end through mutate", () => {
 
   function textObject(id: string, name: string, content: string): GraphObject {
     return {
@@ -3720,7 +3720,7 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
     return created.objects.find((o) => o.id === textId)?.slots.resolvedContent?.value;
   }
 
-  it("derives one edge per referenced cell plus the content self-edge, and no edge for an empty in-extent cell (D-110 clause 4)", () => {
+  it("derives one edge per referenced cell plus the content self-edge, and no edge for an empty in-extent cell", () => {
     const table = tableObject("obj_t", "table_1", 4, 4, { "cells.A1": { kind: "literal", value: 3 } });
     const text = textObject("obj_x", "text_1", "{= table_1.A1 } vs empty {= table_1.C3 }");
     expectSameEdges(deriveEdges([table, text]), [
@@ -3774,7 +3774,7 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
     expect(resolvedContentOf([table, text], "obj_x")).toBe("sum 3");
   });
 
-  it("a cycle through resolvedContent is rejected, naming the slots (§5.1 step 5)", () => {
+  it("a cycle through resolvedContent is rejected, naming the slots", () => {
     const table = tableObject("obj_t", "table_1", 4, 4, {
       "cells.A1": { kind: "formula", ast: { type: "reference", address: addr("obj_x", "resolvedContent") }, value: null },
     });
@@ -3785,7 +3785,7 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
     expect(result.ok === false && result.message).toContain("resolvedContent");
   });
 
-  it("an embedding of an OUT-OF-extent cell is a dangling reference and the whole mutation is refused (D-110 clause 6)", () => {
+  it("an embedding of an OUT-OF-extent cell is a dangling reference and the whole mutation is refused", () => {
     const table = tableObject("obj_t", "table_1", 2, 2, {});
     const text = textObject("obj_x", "text_1", "{= table_1.D4 }");
     const result = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: text }], []);
@@ -3794,7 +3794,7 @@ describe("text.resolvedContent end-to-end through mutate (§5.6, D-114 — entry
   });
 });
 
-describe("text.measuredHeight end-to-end through mutate (§5.6, D-118 — entry 0129)", () => {
+describe("text.measuredHeight end to end through mutate", () => {
   const WELL_FORMED_TEXT_SLOTS: Record<string, Slot> = {
     content: { kind: "literal", value: "hello world" },
     width: { kind: "literal", value: "auto" },
@@ -3825,7 +3825,7 @@ describe("text.measuredHeight end-to-end through mutate (§5.6, D-118 — entry 
     return found;
   }
 
-  it("D-118: a real text object created through mutate (which passes NULL_EVAL_CONTEXT) gets measuredHeight = #MEASURE, and the mutation still commits", () => {
+  it("a real text object created through mutate (which passes NULL_EVAL_CONTEXT) gets measuredHeight = #MEASURE, and the mutation still commits", () => {
     const created = createAndGet(textObject("obj_x", "text_1"));
     expect(created.slots.measuredHeight?.value).toMatchObject({ error: "#MEASURE" });
     expect(created.slots.resolvedContent?.value).toBe("hello world");
@@ -3850,24 +3850,24 @@ describe("text.measuredHeight end-to-end through mutate (§5.6, D-118 — entry 
     );
   });
 
-  it("a text object missing a measuredHeight input slot (style.font) is REFUSED — the static dep would be a dangling edge (§5.1.1)", () => {
+  it("a text object missing a measuredHeight input slot (style.font) is REFUSED — the static dep would be a dangling edge", () => {
     const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["style.font"]) }], []);
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.message).toContain("does not exist");
   });
 
-  it("a text object with NO measuredHeight derived-slot placeholder is REFUSED (D-018)", () => {
+  it("a text object with NO measuredHeight derived-slot placeholder is REFUSED", () => {
     const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["measuredHeight"]) }], []);
     expect(r.ok).toBe(false);
   });
 
-  it("D-123: measuredWidth is #MEASURE under NULL_EVAL_CONTEXT too — the pair fails together, never one and not the other", () => {
+  it("measuredWidth is #MEASURE under NULL_EVAL_CONTEXT too — the pair fails together, never one and not the other", () => {
     const created = createAndGet(textObject("obj_x", "text_1"));
     expect(created.slots.measuredWidth?.value).toMatchObject({ error: "#MEASURE" });
     expect(created.slots.measuredHeight?.value).toMatchObject({ error: "#MEASURE" });
   });
 
-  it("D-123 clause 1: measuredWidth subscribes to the SAME five sources measuredHeight does", () => {
+  it("measuredWidth subscribes to the SAME five sources measuredHeight does", () => {
     const edges = deriveEdges([textObject("obj_x", "text_1")]);
     const sourcesInto = (path: readonly string[]): readonly string[] =>
       edges
@@ -3878,7 +3878,7 @@ describe("text.measuredHeight end-to-end through mutate (§5.6, D-118 — entry 
     expect(sourcesInto(["measuredWidth"])).toHaveLength(5);
   });
 
-  it("a text object with NO measuredWidth derived-slot placeholder is REFUSED (D-018, D-123)", () => {
+  it("a text object with NO measuredWidth derived-slot placeholder is REFUSED", () => {
     const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["measuredWidth"]) }], []);
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.message).toContain("measuredWidth");

@@ -69,7 +69,7 @@ describe("detectCycle — acyclic graphs report hasCycle: false", () => {
 });
 
 describe("detectCycle — cyclic graphs report hasCycle: true, naming every slot in the cycle", () => {
-  it("detects a self-referencing edge as a genuine one-slot cycle (§5.3: not special-cased)", () => {
+  it("detects a self-referencing edge as a genuine one-slot cycle, with no special case", () => {
     const a = slot("obj_1", "cells", "A6");
     const edges = [edge(a, a)];
     const result = detectCycle(edges);

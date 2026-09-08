@@ -43,7 +43,7 @@ const EQUIVALENT_FORMS: readonly { readonly name: string; readonly typedLine: st
   { name: "text", typedLine: 'text x=0 y=0 ""', responses: [picked(0, 0)] },
 ];
 
-describe("a command word alone starts a sequence (D-072: the AutoCAD gesture)", () => {
+describe("a command word alone starts a sequence, the AutoCAD gesture", () => {
   it("prompts for a centre point instead of failing, which is the whole point of the ruling", () => {
     expect(prompting(beginCommand("circle")).message).toBe("specify center point:");
   });
@@ -54,7 +54,7 @@ describe("a command word alone starts a sequence (D-072: the AutoCAD gesture)", 
     expect(afterCenter.pending.stepIndex).toBe(1);
   });
 
-  it("turns a pick at the radius prompt into the distance from the centre already given (D-072 clause 5)", () => {
+  it("turns a pick at the radius prompt into the distance from the centre already given", () => {
     expect(walk("circle", picked(100, 100), picked(120, 100))).toEqual({
       status: "complete",
       command: { kind: "circle", x: 100, y: 100, radius: 20 },
@@ -74,7 +74,7 @@ describe("a command word alone starts a sequence (D-072: the AutoCAD gesture)", 
   });
 });
 
-describe("a line is a sequence of answers (D-072 clause 3: AutoCAD's space-is-Enter)", () => {
+describe("a line is a sequence of answers, where a space acts as Enter", () => {
   it("finishes on one line when the line says enough", () => {
     expect(completed(beginCommand("circle 100,100 20"))).toEqual({ kind: "circle", x: 100, y: 100, radius: 20 });
   });
@@ -85,11 +85,11 @@ describe("a line is a sequence of answers (D-072 clause 3: AutoCAD's space-is-En
     expect(partial.pending.answers).toEqual({ center: { x: 100, y: 100 } });
   });
 
-  it("routes §5.10's key=value form to the parser untouched, so the documented form is unaffected", () => {
+  it("routes the key=value form to the parser untouched, so the documented form is unaffected", () => {
     expect(completed(beginCommand("circle x=100 y=100 r=20"))).toEqual({ kind: "circle", x: 100, y: 100, radius: 20 });
   });
 
-  it("names the SURPLUS token, not the first one the sequence already read correctly (0071-REVIEW F2)", () => {
+  it("names the SURPLUS token, not the first one the sequence already read correctly", () => {
     const line = "circle 100,100 20 extra";
     const session = beginCommand(line);
     expect(session).toEqual({
@@ -105,7 +105,7 @@ describe("a line is a sequence of answers (D-072 clause 3: AutoCAD's space-is-En
     expect(completed(beginCommand("delete intersection_a force"))).toEqual({ kind: "delete", target: "intersection_a", force: true });
   });
 
-  it("still refuses an unknown word and still names a §5.10 command that is not built", () => {
+  it("still refuses an unknown word and still names a specified command that is not built", () => {
     const unknown = beginCommand("frobnicate");
     expect(unknown.status === "failed" && unknown.message).toBe('unknown command "frobnicate"');
     const unbuilt = beginCommand("explode polygon_1");
@@ -113,7 +113,7 @@ describe("a line is a sequence of answers (D-072 clause 3: AutoCAD's space-is-En
   });
 });
 
-describe("both forms of every prompting command produce the identical Command (D-072 clause 3)", () => {
+describe("both forms of every prompting command produce the identical Command", () => {
   for (const form of EQUIVALENT_FORMS) {
     it(`agrees between "${form.typedLine}" and its prompt sequence`, () => {
       expect(completed(walk(form.name, ...form.responses))).toEqual(completed(beginCommand(form.typedLine)));
@@ -132,7 +132,7 @@ describe("both forms of every prompting command produce the identical Command (D
     }
   });
 
-  it("gives no prompting command a `literal-or-formula` position, which is what lets beginCommand tokenize the rest of its line at all (D-073)", () => {
+  it("gives no prompting command a `literal-or-formula` position, which is what lets beginCommand tokenize the rest of its line at all", () => {
     for (const name of COMMAND_NAMES) {
       const spec = findCommandSpec(name);
       const carriesFormula = spec?.positional.some((parameter) => parameter.kind === "literal-or-formula") === true;
@@ -141,7 +141,7 @@ describe("both forms of every prompting command produce the identical Command (D
   });
 });
 
-describe("a refused answer re-prompts the same step and keeps what was gathered (D-072 clause 7)", () => {
+describe("a refused answer re-prompts the same step and keeps what was gathered", () => {
   it("does not abandon the command when an answer cannot be read", () => {
     const afterCenter = prompting(respond(prompting(beginCommand("circle")).pending, picked(100, 100)));
     const refused = prompting(respond(afterCenter.pending, typed("wide")));
@@ -173,13 +173,13 @@ describe("a refused answer re-prompts the same step and keeps what was gathered 
   });
 });
 
-describe("defaults (D-072 clause 6: AutoCAD's <8>)", () => {
+describe("defaults, shown the AutoCAD way in angle brackets", () => {
   it("shows the default in the prompt so the operator knows a bare Enter is enough", () => {
     const afterOrigin = prompting(respond(prompting(beginCommand("table")).pending, picked(0, 0)));
     expect(afterOrigin.message).toBe(`specify rows <${DEFAULT_TABLE_ROWS}>:`);
   });
 
-  it("takes §5.4's 8x8 from an empty answer, reading it from primitives/table.ts rather than a second copy", () => {
+  it("takes the 8 by 8 default from an empty answer, reading it from primitives/table.ts rather than a second copy", () => {
     expect(completed(walk("table", picked(0, 0), typed(""), typed("")))).toEqual({
       kind: "table",
       x: 0,
@@ -200,7 +200,7 @@ describe("defaults (D-072 clause 6: AutoCAD's <8>)", () => {
   });
 });
 
-describe("rect prompts for two corners and normalises them (D-072 clause 8)", () => {
+describe("rect prompts for two corners and normalises them", () => {
   it("builds the same rectangle whichever corner is picked first, because a negative extent is a #TYPE the preset would reject", () => {
     const downRight = completed(walk("rect", picked(0, 50), picked(100, 100)));
     const upLeft = completed(walk("rect", picked(100, 100), picked(0, 50)));
@@ -226,21 +226,21 @@ describe("polygon walks sides, then centre, then radius (AutoCAD's POLYGON order
   });
 });
 
-describe("text is placed by pointing — one step, no content step (D-124)", () => {
+describe("text is placed by pointing — one step, no content step", () => {
   it("a bare `text` word prompts for a position instead of failing", () => {
     expect(prompting(beginCommand("text")).message).toBe("specify text position:");
   });
 
-  it("the pick completes the command with empty content — the box is filled in D-125's editor, not here", () => {
+  it("the pick completes the command with empty content — the operator fills the box in the editor, not here", () => {
     expect(completed(walk("text", picked(30, 40)))).toEqual({ kind: "text", x: 30, y: 40, content: "" });
   });
 
-  it('still takes §5.10\'s quoted-content typed form, routed to parseCommand whole (D-124 clause 3)', () => {
+  it('still takes the quoted content typed form, routed to parseCommand whole', () => {
     expect(completed(beginCommand('text "hello world"'))).toEqual({ kind: "text", x: 0, y: 0, content: "hello world" });
     expect(completed(beginCommand('text x=5 y=6 "hi"'))).toEqual({ kind: "text", x: 5, y: 6, content: "hi" });
   });
 
-  it("an unquoted single word still falls through to parseCommand as content (D-124 clause 3)", () => {
+  it("an unquoted single word still falls through to parseCommand as content", () => {
     expect(completed(beginCommand("text hello"))).toEqual({ kind: "text", x: 0, y: 0, content: "hello" });
   });
 
@@ -250,7 +250,7 @@ describe("text is placed by pointing — one step, no content step (D-124)", () 
   });
 });
 
-describe("a quoted token is refused as a prompt answer, not silently reinterpreted (0071-REVIEW F4)", () => {
+describe("a quoted token is refused as a prompt answer, not silently reinterpreted", () => {
   it("refuses a quoted point, deferring to parseCommand's own grammar rather than accepting it", () => {
     const line = 'circle "100,100" "20"';
     expect(beginCommand(line)).toEqual({
@@ -270,8 +270,8 @@ describe("a quoted token is refused as a prompt answer, not silently reinterpret
   });
 });
 
-describe("a typed formula reaches parseCommand without this file tokenizing it first (D-073, one layer up from parser.ts's own fix)", () => {
-  it("completes a `set ... = <formula>` line whose formula contains quoted strings, which `set` has no prompt sequence for", () => {
+describe("a typed formula reaches parseCommand without this file tokenizing it first, one layer up from the same rule in parser.ts", () => {
+  it("completes a `set... = <formula>` line whose formula contains quoted strings, which `set` has no prompt sequence for", () => {
     expect(completed(beginCommand('set a.b = CONCAT("a", "b")'))).toEqual({
       kind: "set-formula",
       target: "a.b",
@@ -287,7 +287,7 @@ describe("cancelling", () => {
 });
 
 describe("what the prompt machine deliberately does not decide", () => {
-  it("passes a fractional or negative count straight through, because D-070 makes bounds the handler's", () => {
+  it("passes a fractional or negative count straight through, because the handler owns the bounds", () => {
     expect(completed(walk("polygon", typed("2.5"), picked(0, 0), typed("-5")))).toEqual({
       kind: "polygon",
       sides: 2.5,

@@ -9,7 +9,7 @@ import type { Address } from "../address.ts";
 import { addressKey, type Edge } from "./edge.ts";
 
 describe("Edge", () => {
-  it("is sourceSlot -> dependentSlot, matching §5.1's definition exactly", () => {
+  it("is sourceSlot -> dependentSlot", () => {
     const sourceSlot: Address = { objectId: "obj_1", path: ["value"] };
     const dependentSlot: Address = { objectId: "obj_2", path: ["in", "a"] };
     const edge: Edge = { sourceSlot, dependentSlot };

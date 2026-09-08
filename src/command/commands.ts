@@ -364,7 +364,7 @@ function resolveWritableSlot(target: string, document: Document): SlotTargetResu
   const displayName = formatSlotName(address, document.objects, target);
 
   if (findDerivedSlotSchema(object, address.path) !== undefined) {
-    return { ok: false, message: `${displayName} is a derived slot — its value is computed by its object's schema and can never be set or linked (§5.1)` };
+    return { ok: false, message: `${displayName} is a derived slot — its value is computed by its object's schema and can never be set or linked` };
   }
 
   const schema = getObjectSchema(object.type);
@@ -423,7 +423,7 @@ function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Docum
       if (isTextContentTarget(target)) {
         return {
           ok: false,
-          message: `${target.displayName} is read as raw source only — a text object's content cannot be a formula or a link (D-122). Write it with: set ${target.displayName} "..."`,
+          message: `${target.displayName} is read as raw source only — a text object's content cannot be a formula or a link. Write it with: set ${target.displayName} "..."`,
         };
       }
       const source = write.source.trim();
@@ -490,7 +490,7 @@ function clearSlotCommand(command: ClearCommand, document: Document, context: Ev
   if (cellHostObjectId(resolved.target) === undefined) {
     return {
       ok: false,
-      message: `${displayName} is not a table cell — "clear" empties a cell by removing it (D-047), and only a cell has an empty state. Use "set ${displayName} <value>" instead`,
+      message: `${displayName} is not a table cell — "clear" empties a cell by removing it, and only a cell has an empty state. Use "set ${displayName} <value>" instead`,
     };
   }
   if (existing === undefined) {
@@ -524,7 +524,7 @@ function resolvePortTarget(target: string, document: Document): PortTargetResult
     return { ok: false, message: `no object named in "${target}"` };
   }
   if (object.type !== SCRIPT_TYPE) {
-    return { ok: false, message: `${object.name} is a "${object.type}" object — only a script node has ports (§5.8)` };
+    return { ok: false, message: `${object.name} is a "${object.type}" object — only a script node has ports` };
   }
   if (address.path.length !== 2) {
     return { ok: false, message: `"${target}" does not name a port — use <object>.in.<port> or <object>.out.<port>` };
@@ -625,7 +625,7 @@ function deleteObject(command: DeleteCommand, document: Document, context: EvalC
   if (!result.ok) {
     return {
       ok: false,
-      message: command.force ? result.message : `${result.message} — unlink each, or "delete ${object.name} force" to rewrite them to #REF instead (§5.1.1)`,
+      message: command.force ? result.message : `${result.message} — unlink each, or "delete ${object.name} force" to rewrite them to #REF instead`,
     };
   }
 

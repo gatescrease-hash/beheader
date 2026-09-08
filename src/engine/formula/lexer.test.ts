@@ -79,7 +79,7 @@ describe("lex — numbers", () => {
     ]);
   });
 
-  it("a long digit run lexes to a numeric value that may not be finite — this file makes no legality claim (D-025/D-027 is mutate's job)", () => {
+  it("a long digit run lexes to a numeric value that may not be finite — this file makes no legality claim, because that is the job of mutate", () => {
     const huge = "1" + "0".repeat(400);
     const result = lex(huge) as Token[];
     expect(Array.isArray(result)).toBe(true);
@@ -139,7 +139,7 @@ describe("lex — strings", () => {
   });
 });
 
-describe("lex — booleans and keywords (case-sensitive, exact uppercase — file header, D-008's precedent)", () => {
+describe("lex — booleans and keywords (case sensitive, exact uppercase)", () => {
   it("lexes TRUE and FALSE as boolean tokens", () => {
     expect(lex("TRUE")).toEqual([
       { type: "boolean", text: "TRUE", start: 0, value: true },

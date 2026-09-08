@@ -91,7 +91,7 @@ export function checkNameAvailable(
   if (RESERVED_WORDS.has(name.toUpperCase())) {
     return {
       ok: false,
-      message: `"${name}" is a reserved word — §5.3 reads ${[...RESERVED_WORDS].join(", ")} as formula keywords in any case, so no formula could reference this object; choose another name`,
+      message: `"${name}" is a reserved word — the formula language reads ${[...RESERVED_WORDS].join(", ")} as formula keywords in any case, so no formula could reference this object; choose another name`,
     };
   }
   if (isNameTaken(name, objects, excludeId)) {

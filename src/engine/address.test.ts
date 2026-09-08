@@ -65,7 +65,7 @@ describe("isValidName", () => {
 });
 
 describe("findObjectByName", () => {
-  it("looks up a name case-insensitively, per §5.2", () => {
+  it("looks up a name case-insensitively", () => {
     const docObjects = objects(["obj_1", "table_x"]);
     expect(findObjectByName("Table_X", docObjects)?.id).toBe("obj_1");
     expect(findObjectByName("TABLE_X", docObjects)?.id).toBe("obj_1");
@@ -104,16 +104,16 @@ describe("isNameTaken / checkNameAvailable", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("checkNameAvailable rejects every word §5.3 lexes as a formula keyword (D-080)", () => {
+  it("checkNameAvailable rejects every word the formula lexer treats as a keyword", () => {
     for (const reserved of RESERVED_WORDS) {
       expect(checkNameAvailable(reserved, objects()).ok).toBe(false);
     }
   });
 
-  it("checkNameAvailable rejects a reserved word in ANY case, not just the uppercase the lexer matches (D-080)", () => {
+  it("checkNameAvailable rejects a reserved word in ANY case, not just the uppercase the lexer matches", () => {
     const result = checkNameAvailable("True", objects());
     expect(result.ok === false && result.message).toBe(
-      '"True" is a reserved word — §5.3 reads AND, OR, NOT, TRUE, FALSE as formula keywords in any case, so no formula could reference this object; choose another name',
+      '"True" is a reserved word — the formula language reads AND, OR, NOT, TRUE, FALSE as formula keywords in any case, so no formula could reference this object; choose another name',
     );
   });
 
@@ -122,7 +122,7 @@ describe("isNameTaken / checkNameAvailable", () => {
     expect(checkNameAvailable("not_1", objects()).ok).toBe(true);
   });
 
-  it("pins the reserved set itself, so growing the lexer's keyword table is a visible diff here (D-080)", () => {
+  it("pins the reserved set itself, so growing the lexer's keyword table is a visible diff here", () => {
     expect([...RESERVED_WORDS].sort()).toEqual(["AND", "FALSE", "NOT", "OR", "TRUE"]);
   });
 });
@@ -149,7 +149,7 @@ describe("generateDefaultName", () => {
 });
 
 describe("parseAddress", () => {
-  it("resolves a simple table-cell address to {objectId, path: ['cells', ref]} (D-005, §5.4)", () => {
+  it("resolves a simple table-cell address to {objectId, path: ['cells', ref]}", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     const result = parseAddress("table_x.A1", docObjects);
     expect(result).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
@@ -166,13 +166,13 @@ describe("parseAddress", () => {
     expect(parseAddress("TABLE_X.A1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
   });
 
-  it("bareCellAddress agrees with parseAddress: two spellings of one cell resolve to ONE slot (0032-REVIEW-phase1)", () => {
+  it("bareCellAddress agrees with parseAddress: two spellings of one cell resolve to ONE slot", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(bareCellAddress("obj_3", "A1")).toEqual(parseAddress("table_x.A1", docObjects));
     expect(bareCellAddress("obj_3", "AB12")).toEqual(parseAddress("table_x.AB12", docObjects));
   });
 
-  it("bareCellAddress normalises a lowercase bare ref the same way parseAddress does (D-039)", () => {
+  it("bareCellAddress normalises a lowercase bare ref the same way parseAddress does", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(bareCellAddress("obj_3", "a1")).toEqual(parseAddress("table_x.A1", docObjects));
     expect(bareCellAddress("obj_3", "a1")).toEqual(parseAddress("table_x.a1", docObjects));
@@ -199,36 +199,36 @@ describe("parseAddress", () => {
     },
   );
 
-  it("maps a lowercase cell ref, normalised to uppercase (D-039)", () => {
+  it("maps a lowercase cell ref, normalised to uppercase", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("table_x.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
   });
 
-  it("a lowercase and an uppercase spelling of the same cell resolve to the IDENTICAL stored Address (D-039)", () => {
+  it("a lowercase and an uppercase spelling of the same cell resolve to the IDENTICAL stored Address", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("table_x.a1", docObjects)).toEqual(parseAddress("table_x.A1", docObjects));
     expect(parseAddress("table_x.aB12", docObjects)).toEqual(parseAddress("table_x.AB12", docObjects));
   });
 
-  it("the written-out stored form is normalised too: table_x.cells.a1 is the SAME slot as table_x.a1 (D-043)", () => {
+  it("the written-out stored form is normalised too: table_x.cells.a1 is the SAME slot as table_x.a1", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(parseAddress("table_x.cells.a1", docObjects)).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
     expect(parseAddress("table_x.cells.a1", docObjects)).toEqual(parseAddress("table_x.A1", docObjects));
   });
 
-  it("a row with leading zeros is NOT a cell reference, so A007 never becomes a second slot beside A7 (D-043)", () => {
+  it("a row with leading zeros is NOT a cell reference, so A007 never becomes a second slot beside A7", () => {
     const docObjects = objects(["obj_3", "table_x", "table"]);
     expect(isCellReferenceForm("A007")).toBe(false);
     expect(isCellReferenceForm("A7")).toBe(true);
     expect(parseAddress("table_x.A007", docObjects)).toEqual({ objectId: "obj_3", path: ["A007"] });
   });
 
-  it("row 0 is not a cell reference — A1 notation has no row 0 (D-043)", () => {
+  it("row 0 is not a cell reference — A1 notation has no row 0", () => {
     expect(isCellReferenceForm("A0")).toBe(false);
     expect(parseCellReference("A0")).toBeUndefined();
   });
 
-  it("parseCellReference and isCellReferenceForm agree on every shape, because they share one pattern (D-043)", () => {
+  it("parseCellReference and isCellReferenceForm agree on every shape, because they share one pattern", () => {
     for (const candidate of ["A1", "a1", "AB12", "Z99", "A007", "A0", "A", "1", "A1B", "", "AA0"]) {
       expect(parseCellReference(candidate) !== undefined).toBe(isCellReferenceForm(candidate));
     }
@@ -242,7 +242,7 @@ describe("parseAddress", () => {
     });
   });
 
-  it("accepts a numeric path segment, for per-vertex slots like vertex.0.x (§5.5)", () => {
+  it("accepts a numeric path segment, for per-vertex slots like vertex.0.x", () => {
     const docObjects = objects(["obj_5", "polyline_1"]);
     expect(parseAddress("polyline_1.vertex.0.x", docObjects)).toEqual({
       objectId: "obj_5",
@@ -319,7 +319,7 @@ describe("formatAddress", () => {
   });
 });
 
-describe("parseAddress / formatAddress round-trip every address form in §5.2's table", () => {
+describe("parseAddress / formatAddress round-trip every address form", () => {
   const docObjects = objects(
     ["obj_3", "table_x", "table"],
     ["obj_7", "polygon_1", "polygon"],
@@ -345,7 +345,7 @@ describe("parseAddress / formatAddress round-trip every address form in §5.2's 
   });
 });
 
-describe("columnLettersToIndex / indexToColumnLetters — bijective base-26 (§5.4, cycle 0040)", () => {
+describe("columnLettersToIndex / indexToColumnLetters — bijective base 26", () => {
   it.each<[letters: string, index: number]>([
     ["A", 1],
     ["B", 2],
@@ -361,12 +361,12 @@ describe("columnLettersToIndex / indexToColumnLetters — bijective base-26 (§5
     expect(indexToColumnLetters(index)).toBe(letters);
   });
 
-  it("columnLettersToIndex accepts either case, per D-039", () => {
+  it("columnLettersToIndex accepts either case", () => {
     expect(columnLettersToIndex("ab")).toBe(28);
     expect(columnLettersToIndex("Ab")).toBe(28);
   });
 
-  it("indexToColumnLetters always produces uppercase, per D-039", () => {
+  it("indexToColumnLetters always produces uppercase", () => {
     expect(indexToColumnLetters(28)).toBe("AB");
   });
 
@@ -381,7 +381,7 @@ describe("columnLettersToIndex / indexToColumnLetters — bijective base-26 (§5
   });
 });
 
-describe("parseCellReference / formatCellReference (§5.4, cycle 0040)", () => {
+describe("parseCellReference / formatCellReference", () => {
   it.each<[reference: string, column: number, row: number]>([
     ["A1", 1, 1],
     ["Z9", 26, 9],
@@ -392,7 +392,7 @@ describe("parseCellReference / formatCellReference (§5.4, cycle 0040)", () => {
     expect(formatCellReference({ column, row })).toBe(reference);
   });
 
-  it("parseCellReference accepts either case and formatCellReference always answers uppercase (D-039)", () => {
+  it("parseCellReference accepts either case and formatCellReference always answers uppercase", () => {
     expect(parseCellReference("ab12")).toEqual({ column: 28, row: 12 });
     expect(formatCellReference({ column: 28, row: 12 })).toBe("AB12");
   });

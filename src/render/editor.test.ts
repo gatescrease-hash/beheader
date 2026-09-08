@@ -103,7 +103,7 @@ function circleObject(): GraphObject {
   };
 }
 
-describe("editorTargetAt — which receiver a double-click names (D-125 clause 4)", () => {
+describe("editorTargetAt — which receiver a double-click names", () => {
   it("names a `text` object as a whole when the point is inside its drawn box", () => {
     const text = textObject(10, 20, 100, 40);
     expect(editorTargetAt({ x: 50, y: 40 }, [text], CAMERA_IDENTITY)).toEqual({ kind: "text", objectId: "obj_text" });
@@ -129,7 +129,7 @@ describe("editorTargetAt — which receiver a double-click names (D-125 clause 4
     expect(editorTargetAt({ x: 500, y: 500 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("returns undefined for an empty `text` object — it has no hittable extent (D-125 clause 6's case, reached only via D-124)", () => {
+  it("returns undefined for an empty `text` object — it has no hittable extent, which only a freshly created box reaches", () => {
     expect(editorTargetAt({ x: 5, y: 5 }, [emptyTextObject(0, 0)], CAMERA_IDENTITY)).toBeUndefined();
   });
 
@@ -166,7 +166,7 @@ describe("editorPlacement — where the overlay floats, and at what scale", () =
     expect(placement).toEqual({ left: 10, top: 30, width: 100, height: 40, scale: 2 });
   });
 
-  it("divides the position AND the scale by the backing/CSS ratio (D-086 clause 3)", () => {
+  it("divides the position AND the scale by the backing/CSS ratio", () => {
     const text = textObject(0, 0, 100, 40);
     const camera: CameraState = { x: 0, y: 0, zoom: 2 };
     const placement = editorPlacement({ kind: "text", objectId: "obj_text" }, text, camera, 2);
@@ -182,7 +182,7 @@ describe("editorPlacement — where the overlay floats, and at what scale", () =
     expect(placement).toMatchObject({ left: 10, top: 20, width: 260, height: 95 });
   });
 
-  it("falls back to a positive box at `origin` for an empty `text` object — the editor draws its own, extent.ts is not loosened (D-125 clause 6)", () => {
+  it("falls back to a positive box at `origin` for an empty `text` object — the editor draws its own, extent.ts is not loosened", () => {
     const empty = emptyTextObject(30, 40);
     const placement = editorPlacement({ kind: "text", objectId: "obj_empty" }, empty, CAMERA_IDENTITY, 1);
     expect(placement.left).toBe(30);
@@ -198,7 +198,7 @@ describe("editorPlacement — where the overlay floats, and at what scale", () =
   });
 });
 
-describe("editorTextStyle — the overlay lays text out the way the canvas draws it (D-129, entry 0147)", () => {
+describe("editorTextStyle — the overlay lays text out the way the canvas draws it", () => {
   const TEXT_TARGET = { kind: "text", objectId: "obj_text" } as const;
   const CELL_TARGET = { kind: "cell", objectId: "obj_table", cell: "B3" } as const;
 
@@ -236,12 +236,12 @@ describe("editorTextStyle — the overlay lays text out the way the canvas draws
     expect(editorTextStyle(TEXT_TARGET, text, CAMERA_IDENTITY, 1).fontFamily).toBe("sans-serif");
   });
 
-  it("treats a BLANK `style.font` as absent too — `cssFont` falls the canvas back to sans-serif for it, so the overlay must fall back identically or it inherits the page's monospace (0148-REVIEW)", () => {
+  it("treats a BLANK `style.font` as absent too — `cssFont` falls the canvas back to sans-serif for it, so the overlay must fall back identically or it inherits the page's monospace", () => {
     const text = textObject(0, 0, 100, 40, { font: "   " });
     expect(editorTextStyle(TEXT_TARGET, text, CAMERA_IDENTITY, 1).fontFamily).toBe("sans-serif");
   });
 
-  it("does NOT wrap an auto-width `text` object — §5.6's 'auto width means no wrapping', which is what the canvas draws", () => {
+  it("does NOT wrap an auto-width `text` object — an auto width means no wrap, which is what the canvas draws", () => {
     const text = textObject(0, 0, 100, 40, { widthSlot: "auto" });
     expect(editorTextStyle(TEXT_TARGET, text, CAMERA_IDENTITY, 1).wraps).toBe(false);
   });
@@ -288,7 +288,7 @@ describe("editorTextStyle — the overlay lays text out the way the canvas draws
     expect(editorTextStyle(TEXT_TARGET, text, CAMERA_IDENTITY, Number.NaN).fontSize).toBe(16);
   });
 
-  it("gives an empty `text` object a positive, usable type style — D-124 hands the editor exactly this", () => {
+  it("gives an empty `text` object a positive, usable type style, because a fresh box arrives in exactly this state", () => {
     const style = editorTextStyle({ kind: "text", objectId: "obj_empty" }, emptyTextObject(0, 0), CAMERA_IDENTITY, 1);
     expect(style.fontSize).toBeGreaterThan(0);
     expect(style.lineHeight).toBeGreaterThan(0);
@@ -371,7 +371,7 @@ describe("editorTextBoxSize — the overlay's box follows what is being typed", 
     expect(editorTextBoxSize(text, "hi", styleOf(text), fixed(80, 20)).height).toBe(20);
   });
 
-  it("gives an EMPTY editor a positive box — D-124 hands the editor exactly this, and a zero box would be unclickable and invisible", () => {
+  it("gives an EMPTY editor a positive box, because a zero box is invisible and takes no click", () => {
     const empty = emptyTextObject(0, 0);
     const box = editorTextBoxSize(empty, "", editorTextStyle({ kind: "text", objectId: "obj_empty" }, empty, CAMERA_IDENTITY, 1), fixed(0, 0));
     expect(box.width).toBeGreaterThan(0);

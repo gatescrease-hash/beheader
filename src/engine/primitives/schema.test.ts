@@ -22,7 +22,7 @@ function stubObject(type: GraphObject["type"]): GraphObject {
 }
 
 describe("getObjectSchema", () => {
-  it("returns a real entry for 'value', with no derived slots (§6: one literal numeric slot)", () => {
+  it("returns a real entry for 'value', with no derived slots, which has one literal numeric slot", () => {
     const schema = getObjectSchema("value");
     expect(schema).toBeDefined();
     expect(resolveDerivedSlots(stubObject("value"), schema?.derivedSlots ?? [])).toEqual([]);
@@ -57,7 +57,7 @@ describe("getObjectSchema", () => {
     expect(getObjectSchema("polyline")).toBeUndefined();
   });
 
-  it("returns a real entry for 'table' (D-017's dynamic-slot-family mechanism), with no derived slots", () => {
+  it("returns a real entry for 'table', the first dynamic slot family, with no derived slots", () => {
     const schema = getObjectSchema("table");
     expect(schema).toBeDefined();
     expect(resolveDerivedSlots(stubObject("table"), schema?.derivedSlots ?? [])).toEqual([]);
@@ -88,7 +88,7 @@ describe("getObjectSchema", () => {
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type, slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual(paths);
   });
 
-  it("returns a real entry for 'text' (§5.6 + D-123), with eleven static non-derived paths (origin.x/y at front per D-121, `autoresize` in place of the removed `overflow` per the 2026-09-02 rework) and three derived slots (resolvedContent, measuredHeight, measuredWidth)", () => {
+  it("returns a real entry for 'text', with eleven static non-derived paths (origin.x and origin.y at the front, and `autoresize` where `overflow` used to be) and three derived slots (resolvedContent, measuredHeight, measuredWidth)", () => {
     const schema = getObjectSchema("text");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -114,7 +114,7 @@ describe("getObjectSchema", () => {
     expect(textDerivedSlots[2]?.dependencies).toEqual(textDerivedSlots[1]?.dependencies);
   });
 
-  it("returns a real entry for 'image' (§5.7), with eight static non-derived paths and NO derived slots", () => {
+  it("returns a real entry for 'image', with eight static non-derived paths and NO derived slots", () => {
     const schema = getObjectSchema("image");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "image_1", type: "image", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -131,7 +131,7 @@ describe("getObjectSchema", () => {
     expect(schema?.nonDerivedSlotPaths.every((group) => group.kind === "static")).toBe(true);
   });
 
-  it("returns a real entry for 'script' (§5.8), with two static + two dynamic non-derived groups and one dynamic derived group", () => {
+  it("returns a real entry for 'script', with two static + two dynamic non-derived groups and one dynamic derived group", () => {
     const schema = getObjectSchema("script");
     expect(schema).toBeDefined();
     const portless: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {} };
@@ -161,7 +161,7 @@ describe("getObjectSchema", () => {
 });
 
 describe("findDerivedSlotSchema", () => {
-  it("finds 'add's out.result by path, matching structurally rather than by array reference (D-010)", () => {
+  it("finds 'add's out.result by path, matching structurally rather than by array reference", () => {
     const freshlyBuiltPath = ["out", "result"];
     const entry = findDerivedSlotSchema(stubObject("add"), freshlyBuiltPath);
     expect(entry).toBeDefined();
@@ -193,7 +193,7 @@ function tableObject(id: string, name: string, rows: Value, cols: Value): GraphO
   };
 }
 
-describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-017/0041-REVIEW-phase2 §9)", () => {
+describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism", () => {
   it("resolves a single static group to exactly its fixed paths, ignoring the object entirely ('value')", () => {
     const groups = getObjectSchema("value")?.nonDerivedSlotPaths;
     if (groups === undefined) {
@@ -263,7 +263,7 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
     expect(resolveNonDerivedSlotPaths(malformed, groups)).toEqual([["origin", "x"], ["origin", "y"], ["rows"], ["cols"]]);
   });
 
-  it("does not throw for the 200,004 paths a rows=1000 cols=200 table declares — both counts inside D-070's range (D-077)", () => {
+  it("does not throw for the 200,004 paths a rows=1000 cols=200 table declares — both counts inside the allowed range", () => {
     const groups = getObjectSchema("table")?.nonDerivedSlotPaths;
     if (groups === undefined) {
       throw new Error("test setup: expected table's schema to exist");
@@ -274,7 +274,7 @@ describe("resolveNonDerivedSlotPaths — the dynamic-slot-family mechanism (D-01
   });
 });
 
-describe("resolveDerivedSlots — the D-141 dynamic-derived-slot-family mechanism", () => {
+describe("resolveDerivedSlots — a derived slot family that resolves per object", () => {
   const noopCompute = () => null;
 
   it("resolves a single static group to exactly its fixed DerivedSlotSchemas, ignoring the object entirely", () => {
@@ -294,7 +294,7 @@ describe("resolveDerivedSlots — the D-141 dynamic-derived-slot-family mechanis
     expect(resolved.map((slot) => slot.path)).toEqual([["fixed"], ["dyn", "obj_7"]]);
   });
 
-  it("resolves a dynamic group against the object's OWN structural state (ports.out), not against Object.keys(object.slots) (D-010)", () => {
+  it("resolves a dynamic group against the object's OWN structural state (ports.out), not against Object.keys(object.slots)", () => {
     const groups = [
       {
         kind: "dynamic" as const,
@@ -323,7 +323,7 @@ describe("derivedSlotDependencyAddresses", () => {
     },
   };
 
-  it("pairs each static dependency path with the object's own id (§5.1: 'within the same object')", () => {
+  it("pairs each static dependency path with the object's own id, because a static dependency stays within the same object", () => {
     const outResult = resolveDerivedSlots(stubObject("add"), getObjectSchema("add")?.derivedSlots ?? [])[0];
     if (outResult === undefined) {
       throw new Error("test setup: expected add's out.result schema entry to exist");
@@ -385,7 +385,7 @@ describe("add's out.result compute function", () => {
     expect(result).toBe(15);
   });
 
-  it("propagates an ErrorValue from in.a unchanged, rather than manufacturing a new error (§5.1: errors propagate)", () => {
+  it("propagates an ErrorValue from in.a unchanged, rather than manufacturing a new error, because an error propagates", () => {
     const upstreamError = { error: "#DIV0", message: "upstream division by zero" } as const;
     const result = computeAdd(addObject, readFrom({ "in.a": upstreamError, "in.b": 5 }));
     expect(result).toEqual(upstreamError);
@@ -422,7 +422,7 @@ describe("add's out.result compute function", () => {
     expect(() => computeAdd(addObject, readFrom({ "in.a": null, "in.b": null }))).not.toThrow();
   });
 
-  it("returns #TYPE, never a raw Infinity, when two finite inputs sum to a non-finite result (D-025)", () => {
+  it("returns #TYPE, never a raw Infinity, when two finite inputs sum to a non-finite result", () => {
     const result = computeAdd(addObject, readFrom({ "in.a": Number.MAX_VALUE, "in.b": Number.MAX_VALUE }));
     expect(result).toMatchObject({ error: "#TYPE" });
     expect(result).not.toBe(Number.POSITIVE_INFINITY);

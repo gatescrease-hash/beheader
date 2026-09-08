@@ -65,7 +65,7 @@ describe("createEmptyDocument", () => {
   });
 });
 
-describe("serializeDocument — drops every derived slot's value (§5.11)", () => {
+describe("serializeDocument — drops every derived slot's value", () => {
   it("omits `value` from a derived slot, but keeps literal/formula slots (including their cached value) unchanged", () => {
     const document: Document = { ...createEmptyDocument(), objects: consistentFixture() };
 
@@ -78,8 +78,8 @@ describe("serializeDocument — drops every derived slot's value (§5.11)", () =
   });
 });
 
-describe("saveDocument / loadDocument — round-trips to JSON and back identically (PROJECT_BRIEF §6 clause 4)", () => {
-  it("round-trips PROJECT_BRIEF §6's value/add fixture — objects, nextObjectId, journal, and camera all identical", () => {
+describe("saveDocument / loadDocument — round-trips to JSON and back identically", () => {
+  it("round-trips the value and add fixture — objects, nextObjectId, journal, and camera all identical", () => {
     const document: Document = {
       formatVersion: FORMAT_VERSION,
       nextObjectId: 4,
@@ -97,7 +97,7 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
     }
   });
 
-  it("round-trips a JOURNAL carrying the SAME value vocabulary the object list does (0025-REVIEW-phase0 finding 1 / REVISE item 4) — including the literal saveDocument(loaded) === json text equality that catches this whole class", () => {
+  it("round-trips a JOURNAL carrying the SAME value vocabulary the object list does, including the saveDocument(loaded) === json text equality that catches this whole class", () => {
     const document: Document = {
       formatVersion: FORMAT_VERSION,
       nextObjectId: 3,
@@ -166,7 +166,7 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
     expect(reloadedAdd1?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
   });
 
-  it("round-trips an `image` object — six literal slots, no derived ones, and now a SCHEMA to be reconciled against (§5.7, entry 0165)", () => {
+  it("round-trips an `image` object — six literal slots, no derived ones, and now a SCHEMA to be reconciled against", () => {
     const image: GraphObject = {
       id: "obj_1",
       name: "image_1",
@@ -252,7 +252,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
     expect(deserializeDocument(missingAst).ok).toBe(false);
   });
 
-  it("routes a formula slot at an undeclared path (D-017) through mutate's own rejection — the shape a hand-edited file could carry today, since document.ts trusts a slot's content unchecked", () => {
+  it("routes a formula slot at an undeclared path through mutate's own rejection — the shape a hand-edited file could carry today, since document.ts trusts a slot's content unchecked", () => {
     const objects: readonly GraphObject[] = [
       {
         id: "obj_1",
@@ -274,7 +274,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
     }
   });
 
-  it("routes a genuinely broken graph (dangling reference) through mutate's own rejection — proving §5.11's 'applies objects through the mutation API' end-to-end", () => {
+  it("routes a genuinely broken graph (dangling reference) through mutate's own rejection, which proves that a load applies objects through the mutation API", () => {
     const objects = [valueObject("obj_2", "value_2", 5), addObject("obj_3", "add_1", addr("obj_999", "value"), addr("obj_2", "value"))];
     const serialized = serializeDocument({ ...createEmptyDocument(), objects });
 
@@ -286,7 +286,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
     }
   });
 
-  it("rejects a document whose objects share a duplicate id, via mutate's own D-002/D-021 check", () => {
+  it("rejects a document whose objects share a duplicate id, via the duplicate id check in mutate", () => {
     const serialized = serializeDocument({
       ...createEmptyDocument(),
       objects: [valueObject("obj_1", "value_1", 1), valueObject("obj_1", "value_1_dup", 2)],
@@ -300,7 +300,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
     }
   });
 
-  it("rejects a document whose objects share a duplicate NAME (case-insensitively), via mutate's own D-081 check — the loader path D-081 was ruled for", () => {
+  it("rejects a document whose objects share a duplicate NAME (case-insensitively), via the duplicate name check in mutate", () => {
     const serialized = serializeDocument({
       ...createEmptyDocument(),
       objects: [valueObject("obj_1", "value_1", 1), valueObject("obj_2", "VALUE_1", 2)],
@@ -315,7 +315,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
     }
   });
 
-  it("rejects a document whose object name fails §5.2's grammar, via mutate's own D-081 check", () => {
+  it("rejects a document whose object name fails the name grammar, via the name check in mutate", () => {
     const serialized = serializeDocument({ ...createEmptyDocument(), objects: [valueObject("obj_1", "3bad", 1)] });
 
     const result = deserializeDocument(serialized);
@@ -333,7 +333,7 @@ describe("deserializeDocument — malformed input, never throws", () => {
   });
 });
 
-describe("deserializeDocument — a loaded formula AST's SHAPE is validated at the boundary (D-108 clause 2, owner D-127)", () => {
+describe("deserializeDocument — a loaded formula AST's SHAPE is validated at the boundary", () => {
   function documentWithRawAst(ast: unknown): unknown {
     return {
       formatVersion: FORMAT_VERSION,
@@ -353,8 +353,8 @@ describe("deserializeDocument — a loaded formula AST's SHAPE is validated at t
     { label: "an ast that is an array", ast: [{ type: "literal", value: 1 }] },
     { label: "a node with an unrecognised type", ast: { type: "conditional", cond: null } },
     { label: "a literal whose value is null", ast: { type: "literal", value: null } },
-    { label: "a binaryOp with an operator §5.3 does not have", ast: { type: "binaryOp", operator: "**", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } } },
-    { label: "a unaryOp with an operator §5.3 does not have", ast: { type: "unaryOp", operator: "~", operand: { type: "literal", value: 1 } } },
+    { label: "a binaryOp with an operator the language does not have", ast: { type: "binaryOp", operator: "**", left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } } },
+    { label: "a unaryOp with an operator the language does not have", ast: { type: "unaryOp", operator: "~", operand: { type: "literal", value: 1 } } },
     { label: "a reference whose address is missing objectId", ast: { type: "reference", address: { path: ["value"] } } },
     { label: "a reference whose path holds a non-string", ast: { type: "reference", address: { objectId: "obj_1", path: [1] } } },
     { label: "a range with one bad endpoint", ast: { type: "range", start: { objectId: "obj_1", path: ["cells", "A1"] }, end: null } },
@@ -424,7 +424,7 @@ describe("deserializeDocument — a loaded formula AST's SHAPE is validated at t
   });
 });
 
-describe("deserializeDocument — the SCHEMA says which derived slots exist, not the file (D-126)", () => {
+describe("deserializeDocument — the SCHEMA says which derived slots exist, not the file", () => {
   function documentMissingADerivedSlot(): unknown {
     return {
       formatVersion: FORMAT_VERSION,
@@ -455,7 +455,7 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
     }
   });
 
-  it("rebuilds that slot as a real derived slot, and EVALUATES it — the value comes back from the compute, per §5.11", () => {
+  it("rebuilds that slot as a real derived slot, and EVALUATES it — the value comes back from the compute", () => {
     const result = deserializeDocument(documentMissingADerivedSlot());
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -466,7 +466,7 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
     expect(added?.slots["out.result"]?.value).toBe(7);
   });
 
-  it("DROPS a derived slot the file carries that this build's schema no longer declares (§5.1: `derived` is fixed by schema)", () => {
+  it("DROPS a derived slot the file carries that this build's schema no longer declares, because the schema fixes every derived slot", () => {
     const stale = documentMissingADerivedSlot() as { objects: { slots: Record<string, unknown> }[] };
     stale.objects[2]!.slots["out.legacyResult"] = { kind: "derived" };
     const result = deserializeDocument(stale);
@@ -477,7 +477,7 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
     }
   });
 
-  it("does NOT overwrite a LITERAL sitting at a declared derived path — D-018 case 2 still refuses it (clause 3: that check is not weakened)", () => {
+  it("does NOT overwrite a LITERAL sitting at a declared derived path, because the schema kind check still refuses it", () => {
     const wrongKind = documentMissingADerivedSlot() as { objects: { slots: Record<string, unknown> }[] };
     wrongKind.objects[2]!.slots["out.result"] = { kind: "literal", value: 99 };
     const result = deserializeDocument(wrongKind);
@@ -512,7 +512,7 @@ describe("deserializeDocument — the SCHEMA says which derived slots exist, not
   });
 });
 
-describe("deserializeDocument — ports (D-141), structural validation only", () => {
+describe("deserializeDocument — ports, structural validation only", () => {
   function documentWithPorts(ports: unknown, slots: Record<string, unknown> = {}): unknown {
     return {
       formatVersion: FORMAT_VERSION,
@@ -523,7 +523,7 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
     };
   }
 
-  it("is ABSENT on a document with no ports field at all — every document saved before D-141 still loads", () => {
+  it("is ABSENT on a document with no ports field at all — every document saved before ports existed still loads", () => {
     const noPorts = { formatVersion: FORMAT_VERSION, nextObjectId: 2, camera: { x: 0, y: 0, zoom: 1 }, journal: [], objects: [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } }] };
     const result = deserializeDocument(noPorts);
     expect(result.ok).toBe(true);
@@ -555,12 +555,12 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
     expect(deserializeDocument(documentWithPorts({ in: [] })).ok).toBe(false);
   });
 
-  it("rejects an illegal port name — empty or containing '.' (D-141 clause 2)", () => {
+  it("rejects an illegal port name — empty or containing '.'", () => {
     expect(deserializeDocument(documentWithPorts({ in: [""], out: [] })).ok).toBe(false);
     expect(deserializeDocument(documentWithPorts({ in: ["a.b"], out: [] })).ok).toBe(false);
   });
 
-  it("rejects a dot-free port name outside address.ts's path-segment grammar — REVIEWER EDIT, 0168-REVIEW", () => {
+  it("rejects a dot-free port name outside address.ts's path-segment grammar", () => {
     expect(deserializeDocument(documentWithPorts({ in: ["my-port"], out: [] })).ok).toBe(false);
     expect(deserializeDocument(documentWithPorts({ in: ["my port"], out: [] })).ok).toBe(false);
   });
@@ -597,7 +597,7 @@ describe("deserializeDocument — ports (D-141), structural validation only", ()
   });
 });
 
-describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-REVIEW-phase0 finding 1, closed cycle 0026)", () => {
+describe("deserializeDocument — the same value rules on the journal, read side", () => {
   it("rejects a document whose JOURNAL holds a raw non-finite number — probe I: the SAME 1e999 that is rejected in the object list must also be rejected here, not silently corrupted on the next save", () => {
     const parsed = JSON.parse(
       `{"formatVersion":${FORMAT_VERSION},"nextObjectId":1,"objects":[],"journal":[{"operations":[{"kind":"setSlot","address":{"objectId":"obj_1","path":["value"]},"slot":{"kind":"literal","value":1e999}}]}],"camera":{"x":0,"y":0,"zoom":1}}`,
@@ -608,11 +608,11 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("journal");
-      expect(result.message).toContain("D-025/Q-008");
+      expect(result.message).toContain("not legal document state");
     }
   });
 
-  it("rejects a document whose journal holds -0 (Q-008), nested inside a Point", () => {
+  it("rejects a document whose journal holds -0, nested inside a Point", () => {
     const document = {
       formatVersion: FORMAT_VERSION,
       nextObjectId: 1,
@@ -625,7 +625,7 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain("D-025/Q-008");
+      expect(result.message).toContain("not legal document state");
     }
   });
 
@@ -649,7 +649,7 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain("D-025/Q-008");
+      expect(result.message).toContain("not legal document state");
     }
   });
 
@@ -668,7 +668,7 @@ describe("deserializeDocument — D-025/Q-008 on the JOURNAL, read side (0025-RE
   });
 });
 
-describe("deserializeDocument — D-027: the same value rule over the document's OTHER numeric fields (reviewer edit, 0027-REVIEW-phase0)", () => {
+describe("deserializeDocument — the same value rule over the other numeric fields", () => {
   const legal = { formatVersion: FORMAT_VERSION, nextObjectId: 1, objects: [], journal: [], camera: { x: 0, y: 0, zoom: 1 } };
 
   it("rejects a camera whose zoom is non-finite (a file written as 1e999 parses to Infinity)", () => {
@@ -679,11 +679,11 @@ describe("deserializeDocument — D-027: the same value rule over the document's
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("camera");
-      expect(result.message).toContain("D-027");
+      expect(result.message).toContain("not legal document state");
     }
   });
 
-  it("rejects a camera coordinate of -0, which JSON writes back as 0 (Q-008)", () => {
+  it("rejects a camera coordinate of -0, which JSON writes back as 0", () => {
     const result = deserializeDocument({ ...legal, camera: { x: -0, y: 0, zoom: 1 } });
 
     expect(result.ok).toBe(false);
@@ -708,7 +708,7 @@ describe("deserializeDocument — D-027: the same value rule over the document's
   });
 });
 
-describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth is checked ONCE, at the load boundary", () => {
+describe("deserializeDocument — a loaded AST has its depth checked once, at the load boundary", () => {
   function ladder(levels: number): FormulaAst {
     let ast: FormulaAst = { type: "literal", value: 1 };
     for (let index = 0; index < levels; index += 1) {
@@ -749,7 +749,7 @@ describe("deserializeDocument — D-083 clause 4: a loaded formula's AST depth i
   });
 });
 
-describe("deserializeDocument / loadDocument forward §5.1's EvalContext to the load batch (entry 0132, D-118)", () => {
+describe("deserializeDocument / loadDocument forward the EvalContext to the load batch", () => {
   function textObject(width: number | "auto" = "auto"): GraphObject {
     return {
       id: "obj_1",
@@ -781,7 +781,7 @@ describe("deserializeDocument / loadDocument forward §5.1's EvalContext to the 
 
   const realMeasurer: EvalContext = { measurer: { measure: () => ({ width: 4, height: 55 }) } };
 
-  it("regenerates measuredHeight as #MEASURE with no context (D-118) and as a real height once a measurer is threaded", () => {
+  it("regenerates measuredHeight as #MEASURE with no context and as a real height once a measurer is threaded", () => {
     const json = savedDocumentWithText();
     expect(measuredHeightOf(loadDocument(json))).toMatchObject({ error: "#MEASURE" });
     expect(measuredHeightOf(loadDocument(json, realMeasurer))).toBe(55);
@@ -792,7 +792,7 @@ describe("deserializeDocument / loadDocument forward §5.1's EvalContext to the 
     expect(measuredHeightOf(deserializeDocument(raw, realMeasurer))).toBe(55);
   });
 
-  it("passes a numeric `width` through as maxWidth on load (D-120)", () => {
+  it("passes a numeric `width` through as maxWidth on load", () => {
     const wrapAware: EvalContext = {
       measurer: { measure: (_text, _style, maxWidth) => ({ width: 0, height: maxWidth === undefined ? 10 : 20 }) },
     };

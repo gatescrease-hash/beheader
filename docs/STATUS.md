@@ -8,7 +8,9 @@ Last full audit: 2026-09-08.
 
 That audit replaced the old set of process documents with this file and
 `SPEC.md`. It cut the comments in `src/` from 14436 lines to 851, and it
-removed 4346 references to documents that no longer exist. It changed no code.
+removed every reference to a document that no longer exists: 4346 in
+comments, 721 in test names, and 33 in messages the operator reads. It changed
+no logic.
 The reasons that used to sit in a file header now sit in section 3 below. An
 untouched copy of the repository as it was before the audit sits beside this
 one, in `beheader-clean-alpha-archive`.
@@ -261,13 +263,10 @@ group blocks the acceptance test in `SPEC.md` section 12.
 12. **`image` opacity** clamps at draw time instead of at write time. That is a
     deliberate choice, recorded here so the next reader does not treat it as a
     defect.
-13. **721 test names still cite documents that no longer exist.** A name such
-    as "an absent cell is D-047's other spelling of empty" points at a ruling
-    file that the audit of 2026-09-08 deleted. About 420 of them carry the
-    citation in brackets, and a small pass can drop it. The other 301 use the
-    citation as part of the sentence, so each one needs a human rewrite. The
-    audit left them alone, because a test name is code and the audit changed no
-    code. Treat this as the last piece of the old process language.
+13. **Nothing now cites a document that does not exist.** The audit rewrote 721
+    test names and 33 operator facing messages that named the old rulings. A
+    grep for the old marks over `src/` and `index.html` returns nothing. Keep
+    it that way.
 14. **The package carries the name `graphpaper`. The folder carries the name
     `beheader-clean`.** The spec calls the product Graphpaper. Nothing depends
     on the folder name. Pick one name when it starts to matter.

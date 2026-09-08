@@ -198,7 +198,7 @@ function evaluateDerivedSlot(
     if (!declaredDependencyKeys.has(addressAsKey)) {
       return {
         error: "#REF",
-        message: "derived slot's compute function read an address outside its declared dependencies (D-013)",
+        message: "derived slot's compute function read an address outside its declared dependencies",
       };
     }
     return rawValue;

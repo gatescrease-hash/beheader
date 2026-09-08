@@ -22,7 +22,7 @@ function scriptObject(ports?: { readonly in: readonly string[]; readonly out: re
 }
 
 describe("scriptInPortPath / scriptOutPortPath / scriptPlaceholderPath", () => {
-  it("builds the three port-family paths by name, never by index (D-141 clause 2)", () => {
+  it("builds the three port-family paths by name, never by index", () => {
     expect(scriptInPortPath("factor")).toEqual(["in", "factor"]);
     expect(scriptOutPortPath("result")).toEqual(["out", "result"]);
     expect(scriptPlaceholderPath("result")).toEqual(["placeholder", "result"]);
@@ -47,7 +47,7 @@ describe("enumerateScriptInPaths / enumerateScriptPlaceholderPaths", () => {
   });
 });
 
-describe("evaluateScriptOutput — §5.8's one-function seam", () => {
+describe("evaluateScriptOutput — the one function seam", () => {
   const node = (placeholders: Readonly<Record<string, Value>>): ScriptNode => ({
     language: "python",
     source: "print('unused')",
@@ -64,7 +64,7 @@ describe("evaluateScriptOutput — §5.8's one-function seam", () => {
     expect(evaluateScriptOutput(node({}), "result", {})).toBeNull();
   });
 
-  it("ignores `source` and `inputs` entirely — the stub never executes and never reads its inputs (§5.8)", () => {
+  it("ignores `source` and `inputs` entirely — the stub never executes and never reads its inputs", () => {
     expect(evaluateScriptOutput(node({ result: "unaffected" }), "result", { anything: 999 })).toBe("unaffected");
   });
 });
@@ -130,7 +130,7 @@ describe("out.<port>'s compute function", () => {
     expect(result).toBe(7);
   });
 
-  it("propagates an ErrorValue from an in.* input unchanged, in PORT-DECLARATION ORDER (§5.1: errors propagate)", () => {
+  it("propagates an ErrorValue from an in.* input unchanged, in PORT-DECLARATION ORDER, because an error propagates", () => {
     const object = scriptObject({ in: ["factor", "speed"], out: ["result"] });
     const upstreamError = { error: "#DIV0", message: "upstream division by zero" } as const;
     const result = computeFor(object, "result")(object, readFrom({ "in.factor": upstreamError, "in.speed": 1, "placeholder.result": 5 }));

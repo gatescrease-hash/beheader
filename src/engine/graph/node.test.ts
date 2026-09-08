@@ -67,14 +67,14 @@ describe("getSlot / resolveSlot", () => {
   });
 });
 
-describe("the three slot kinds (§5.1's table)", () => {
+describe("the three slot kinds", () => {
   it("a literal slot holds a user-writable stored value", () => {
     const slot: LiteralSlot = { kind: "literal", value: 42 };
     expect(slot.kind).toBe("literal");
     expect(slot.value).toBe(42);
   });
 
-  it("a formula slot's AST can be a bare reference — the degenerate binding case (§5.1)", () => {
+  it("a formula slot's AST can be a bare reference — the degenerate binding case", () => {
     const bindingAst: ReferenceNode = {
       type: "reference",
       address: { objectId: "obj_2", path: ["value"] },
@@ -90,7 +90,7 @@ describe("the three slot kinds (§5.1's table)", () => {
     expect(Object.keys(slot).sort()).toEqual(["kind", "value"]);
   });
 
-  it("An ErrorValue is legitimate slot state, not a reason to reject it (§5.1)", () => {
+  it("An ErrorValue is legitimate slot state, not a reason to reject it", () => {
     const errorValue: ErrorValue = { error: "#DIV0", message: "division by zero" };
     const slot: LiteralSlot = { kind: "literal", value: errorValue };
     expect(slot.value).toEqual({ error: "#DIV0", message: "division by zero" });
@@ -124,7 +124,7 @@ describe("isErrorValue", () => {
   });
 });
 
-describe("isIllegalNumber (D-025/Q-006 + Q-008, cycle 0026)", () => {
+describe("isIllegalNumber", () => {
   it("is true for NaN, +Infinity, -Infinity, and -0", () => {
     expect(isIllegalNumber(NaN)).toBe(true);
     expect(isIllegalNumber(Number.POSITIVE_INFINITY)).toBe(true);
@@ -139,7 +139,7 @@ describe("isIllegalNumber (D-025/Q-006 + Q-008, cycle 0026)", () => {
   });
 });
 
-describe("hasIllegalNumber (D-025/Q-006 + Q-008, cycle 0026)", () => {
+describe("hasIllegalNumber", () => {
   it("is true for a bare NaN, +Infinity, -Infinity, or -0", () => {
     expect(hasIllegalNumber(NaN)).toBe(true);
     expect(hasIllegalNumber(Number.POSITIVE_INFINITY)).toBe(true);
@@ -179,7 +179,7 @@ describe("hasIllegalNumber (D-025/Q-006 + Q-008, cycle 0026)", () => {
   });
 });
 
-describe("ObjectType / TABLE_TYPE (D-009)", () => {
+describe("ObjectType / TABLE_TYPE", () => {
   it("TABLE_TYPE is the literal 'table', usable anywhere ObjectType is", () => {
     expect(TABLE_TYPE).toBe("table");
     const type: ObjectType = TABLE_TYPE;
@@ -239,7 +239,7 @@ describe("GraphObject satisfies address.ts's AddressableObject", () => {
   });
 });
 
-describe("object type is mutable across mutations, not fixed per object (D-007)", () => {
+describe("object type is mutable across mutations, not fixed per object", () => {
   it("two GraphObject snapshots may share id and name while differing only in type", () => {
     const beforeExplode: GraphObject = {
       id: "obj_4",
@@ -267,7 +267,7 @@ describe("object type is mutable across mutations, not fixed per object (D-007)"
   });
 });
 
-describe("isLegalPortName (D-141 clause 2)", () => {
+describe("isLegalPortName", () => {
   it("accepts an ordinary, non-empty, dot-free name", () => {
     expect(isLegalPortName("factor")).toBe(true);
     expect(isLegalPortName("speed_2")).toBe(true);
@@ -282,14 +282,14 @@ describe("isLegalPortName (D-141 clause 2)", () => {
     expect(isLegalPortName(".")).toBe(false);
   });
 
-  it("rejects a name legal address.ts's PATH_SEGMENT_PATTERN would still reject — REVIEWER EDIT, 0168-REVIEW", () => {
+  it("rejects a port name that the path segment pattern in address.ts also rejects", () => {
     expect(isLegalPortName("my-port")).toBe(false);
     expect(isLegalPortName("my port")).toBe(false);
     expect(isLegalPortName("café")).toBe(false);
   });
 });
 
-describe("GraphObject.ports (D-141)", () => {
+describe("GraphObject.ports", () => {
   it("is optional — every type but 'script' simply has no ports field", () => {
     const rect: GraphObject = { id: "obj_1", name: "rect_1", type: "rect", slots: {} };
     expect(rect.ports).toBeUndefined();

@@ -70,7 +70,7 @@ function newLines(before: AppState, after: AppState): readonly string[] {
   return after.log.slice(before.log.length);
 }
 
-describe("submitLine — a typed line reaches a handler and its result is echoed (§5.10)", () => {
+describe("submitLine — a typed line reaches a handler and its result is echoed", () => {
   it("creates an object from a complete line and echoes what the handler said", () => {
     const state = typed(opened(), "polygon sides=5 x=10 y=20 r=50");
     expect(state.document.objects).toHaveLength(1);
@@ -105,7 +105,7 @@ describe("submitLine — a typed line reaches a handler and its result is echoed
   });
 });
 
-describe("submitLine — a command word alone enters its prompt sequence (D-072)", () => {
+describe("submitLine — a command word alone enters its prompt sequence", () => {
   it("holds the pending command and echoes the first step's message", () => {
     const before = opened();
     const after = typed(before, "circle");
@@ -123,7 +123,7 @@ describe("submitLine — a command word alone enters its prompt sequence (D-072)
     expect(numberAt(objectNamed(state, "circle_1"), ["radius"])).toBe(20);
   });
 
-  it("re-asks the same step with the sequence's own refusal when an answer is refused, keeping the answers already gathered (D-072 clause 7, D-074)", () => {
+  it("re-asks the same step with the sequence's own refusal when an answer is refused, keeping the answers already gathered", () => {
     let state = typed(opened(), "circle");
     state = typed(state, "100,100");
     const before = state;
@@ -133,7 +133,7 @@ describe("submitLine — a command word alone enters its prompt sequence (D-072)
     expect(newLines(before, state).length).toBeGreaterThan(2);
   });
 
-  it("escape abandons the sequence and clears the selection — one key, §5.9's deselect and D-072's cancel", () => {
+  it("escape abandons the sequence and clears the selection — one key does both the deselect and the cancel", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "select polygon_1");
     state = typed(state, "circle");
@@ -145,7 +145,7 @@ describe("submitLine — a command word alone enters its prompt sequence (D-072)
   });
 });
 
-describe("submitLine — the returned AppTransition reports whether the line was REFUSED (D-109 clause 3)", () => {
+describe("submitLine — the returned AppTransition reports whether the line was REFUSED", () => {
   it("is NOT refused for an accepted complete command", () => {
     expect(submitLine(opened(), "polygon sides=5 x=0 y=0 r=50", VIEWPORT).refused).toBe(false);
   });
@@ -169,7 +169,7 @@ describe("submitLine — the returned AppTransition reports whether the line was
     expect(outcome.state.pending?.stepIndex).toBe(1);
   });
 
-  it("IS refused when a prompt step's own answer is refused, so the same step re-asks (D-072 clause 7)", () => {
+  it("IS refused when a prompt step's own answer is refused, so the same step re-asks", () => {
     const midSequence = typed(typed(opened(), "circle"), "100,100");
     const outcome = submitLine(midSequence, "not-a-radius", VIEWPORT);
     expect(outcome.refused).toBe(true);
@@ -183,7 +183,7 @@ describe("submitLine — the returned AppTransition reports whether the line was
   });
 });
 
-describe("performEffect — select (D-075, D-082)", () => {
+describe("performEffect — select", () => {
   it("selects the ID the effect carried, resolving no name of its own", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const id = objectNamed(state, "polygon_1").id;
@@ -206,7 +206,7 @@ describe("performEffect — select (D-075, D-082)", () => {
     expect(state.interaction.drag).toBeUndefined();
   });
 
-  it("refuses an unknown name in `commands.ts`, which is why no arm here has to (D-075 clause 1)", () => {
+  it("refuses an unknown name in `commands.ts`, which is why no arm here has to", () => {
     const before = opened();
     const after = typed(before, "select nothing_here");
     expect(after.interaction.selectedObjectIds).toEqual([]);
@@ -214,7 +214,7 @@ describe("performEffect — select (D-075, D-082)", () => {
   });
 });
 
-describe("performEffect — zoom and fit write the camera directly (D-027 clause 2, D-075 clause 5)", () => {
+describe("performEffect — zoom and fit write the camera directly", () => {
   it("multiplies the current zoom by the factor and never reaches `mutate`", () => {
     const before = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const after = typed(before, "zoom 2");
@@ -231,7 +231,7 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
     expect(screenToWorld(zoomed.document.camera, centre)).toEqual(worldBefore);
   });
 
-  it("clamps to render/'s range and reports the CLAMPED value, which commands.ts could not have predicted (D-082 clause 5)", () => {
+  it("clamps to render/'s range and reports the CLAMPED value, which commands.ts could not have predicted", () => {
     const before = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const after = typed(before, "zoom 1000000");
     expect(after.document.camera.zoom).toBe(MAX_ZOOM);
@@ -239,7 +239,7 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
     expect(newLines(before, after).join("\n")).toContain("clamped");
   });
 
-  it("refuses a zoom factor of 0 in `commands.ts` rather than absorbing it into MIN_ZOOM here (D-082 clauses 1-2)", () => {
+  it("refuses a zoom factor of 0 in `commands.ts` rather than absorbing it into MIN_ZOOM here", () => {
     const before = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const after = typed(before, "zoom 0");
     expect(after.document.camera).toEqual(before.document.camera);
@@ -266,7 +266,7 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
     expect(newLines(before, after).length).toBe(2);
   });
 
-  it("centres a DEGENERATE single-point extent at the current zoom instead of dividing by it (D-066)", () => {
+  it("centres a DEGENERATE single-point extent at the current zoom instead of dividing by it", () => {
     let state = typed(opened(), "circle x=100 y=100 r=0");
     const zoomBefore = state.document.camera.zoom;
     state = typed(state, "fit");
@@ -276,7 +276,7 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
     expect(state.log[state.log.length - 1]).toContain("single point");
   });
 
-  it("fits a FLAT extent to its one real axis instead of calling it a point (0090-REVIEW F2)", () => {
+  it("fits a FLAT extent to its one real axis instead of calling it a point", () => {
     let state = typed(opened(), "rect x=0 y=0 w=200 h=0");
     const zoomBefore = state.document.camera.zoom;
     state = typed(state, "fit");
@@ -295,7 +295,7 @@ describe("performEffect — zoom and fit write the camera directly (D-027 clause
   });
 });
 
-describe("performEffect — save and load are the two this file cannot finish alone (§5.11)", () => {
+describe("performEffect — save and load are the two this file cannot finish alone", () => {
   it("asks the DOM half for a save and changes no state", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const transition = performEffect({ kind: "save" }, state, VIEWPORT);
@@ -310,7 +310,7 @@ describe("performEffect — save and load are the two this file cannot finish al
     expect(transition.state).toBe(state);
   });
 
-  it("reaches those requests from the typed lines §5.10 names", () => {
+  it("reaches those requests from the typed lines the spec names", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     expect(submitLine(state, "save", VIEWPORT).fileRequest).toBe("save");
     expect(submitLine(state, "load", VIEWPORT).fileRequest).toBe("load");
@@ -331,7 +331,7 @@ describe("performEffect — save and load are the two this file cannot finish al
   });
 });
 
-describe("the camera in AppState is always usable (D-062)", () => {
+describe("the camera in AppState is always usable", () => {
   it("clamps a loaded camera at the boundary, so hit-testing and drawing never see zoom 0", () => {
     const raw = { formatVersion: 1, nextObjectId: 1, objects: [], journal: [], camera: { x: 5, y: 6, zoom: 0 } };
     const loaded = deserializeDocument(raw);
@@ -348,7 +348,7 @@ describe("the camera in AppState is always usable (D-062)", () => {
   });
 });
 
-describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)", () => {
+describe("buildPanelModel — the rows of the properties panel", () => {
   it("splits an object's slots into modifiable and derived groups, in schema declaration order", () => {
     const state = typed(opened(), "circle x=10 y=20 r=5");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
@@ -365,7 +365,7 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     expect(originX).toEqual({ path: "origin.x", value: "10", editSeed: "10", formulaSource: undefined, kind: "literal", synthetic: false, picker: false });
   });
 
-  it("seeds a row's editor with the value the command line would accept back, not the D-099-rounded display value (D-107, F3)", () => {
+  it("seeds a row's editor with the value the command line would accept back, not the rounded display value", () => {
     const state = typed(opened(), "circle x=0.123456789 y=20 r=5");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     const originX = model.modifiable.find((row) => row.path === "origin.x");
@@ -377,7 +377,7 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     expect(numberAt(objectNamed(after, "circle_1"), ["origin", "x"])).toBe(0.123456789);
   });
 
-  it("carries a formula slot's reconstructed source and keeps it in the modifiable group (D-094 clause 6)", () => {
+  it("carries a formula slot's reconstructed source and keeps it in the modifiable group", () => {
     let state = typed(opened(), "circle x=0 y=0 r=5");
     state = typed(state, "table x=200 y=0 rows=2 cols=2");
     state = typed(state, "set table_1.A1 7");
@@ -389,7 +389,7 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     expect(originX?.kind).toBe("formula");
   });
 
-  it("summarises a table's cells as ONE modifiable row, never one per cell (D-077, D-094 clause 8)", () => {
+  it("summarises a table's cells as ONE modifiable row, never one per cell", () => {
     const state = typed(opened(), "table x=0 y=0 rows=3 cols=3");
     const model = buildPanelModel(objectNamed(state, "table_1"), state.document.objects);
     expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
@@ -398,7 +398,7 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
     expect(model.modifiable.find((row) => row.path === "origin.x")?.synthetic).toBe(false);
   });
 
-  it("rounds a derived number's float dust to 4 decimals (D-099), while `props` keeps full precision — the two formatters disagree on purpose", () => {
+  it("rounds a derived number's float dust to 4 decimals, while `props` keeps full precision — the two formatters disagree on purpose", () => {
     const state = typed(opened(), "circle x=10 y=20 r=7");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     const centroidX = model.derived.find((row) => row.path === "centroid.x");
@@ -410,7 +410,7 @@ describe("buildPanelModel — the properties panel's rows (D-094 clauses 3, 5-9)
   });
 });
 
-describe("commitPanelEdit / unlinkPanelSlot — writing through the panel (D-102)", () => {
+describe("commitPanelEdit / unlinkPanelSlot — writing through the panel", () => {
   it("a bare number is a LITERAL write, echoed as the synthesised command the operator would have typed (clauses 5-7)", () => {
     const state = typed(opened(), "circle x=10 y=20 r=5");
     const circleId = objectNamed(state, "circle_1").id;
@@ -449,13 +449,13 @@ describe("commitPanelEdit / unlinkPanelSlot — writing through the panel (D-102
     expect(newLines(state, after).some((line) => line.includes("derived slot"))).toBe(true);
   });
 
-  it("is a no-op for an object id the document no longer has — nothing to name (D-023's posture)", () => {
+  it("is a no-op for an object id the document no longer has — nothing to name", () => {
     const state = typed(opened(), "circle x=10 y=20 r=5");
     expect(commitPanelEdit(state, "obj_404", "origin.x", "5")).toBe(state);
     expect(unlinkPanelSlot(state, "obj_404", "origin.x")).toBe(state);
   });
 
-  it("unlink reverts a formula slot to a literal holding the last computed value (D-041), echoed the same way", () => {
+  it("unlink reverts a formula slot to a literal holding the last computed value, echoed the same way", () => {
     let state = typed(opened(), "table x=200 y=0 rows=2 cols=2");
     state = typed(state, "set table_1.A1 7");
     state = typed(state, "circle x=0 y=0 r=5");
@@ -470,7 +470,7 @@ describe("commitPanelEdit / unlinkPanelSlot — writing through the panel (D-102
   });
 });
 
-describe("pointer and wheel (§5.9)", () => {
+describe("pointer and wheel", () => {
   it("selects what is under the pointer and arms a drag", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const pressed = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
@@ -483,7 +483,7 @@ describe("pointer and wheel (§5.9)", () => {
     expect(pointerDownAt(state, { x: 9999, y: 9999 }, VIEWPORT).state.interaction.selectedObjectIds).toEqual([]);
   });
 
-  it("a shift-click (the `additive` flag) ADDS to the selection instead of replacing it (D-100 clauses 3-4)", () => {
+  it("a shift-click (the `additive` flag) adds to the selection instead of replacing it", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "circle x=200 y=0 r=20");
     const polygonId = objectNamed(state, "polygon_1").id;
@@ -499,7 +499,7 @@ describe("pointer and wheel (§5.9)", () => {
     expect(third.interaction.selectedObjectIds).toEqual([polygonId]);
   });
 
-  it("answers a live prompt step with a PICKED world point instead of selecting (D-072)", () => {
+  it("answers a live prompt step with a PICKED world point instead of selecting", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "circle");
     const picked = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
@@ -512,7 +512,7 @@ describe("pointer and wheel (§5.9)", () => {
     expect(respondToPrompt(state, { kind: "picked", point: { x: 1, y: 2 } }, VIEWPORT).state).toBe(state);
   });
 
-  it("converts a pick to WORLD space with the current camera before it reaches command/ (D-069)", () => {
+  it("converts a pick to WORLD space with the current camera before it reaches command/", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "zoom 2");
     state = typed(state, "circle");
@@ -524,7 +524,7 @@ describe("pointer and wheel (§5.9)", () => {
     expect(numberAt(circle, ["origin", "y"])).toBeCloseTo(world.y, 9);
   });
 
-  it("zooms to the CURSOR on the wheel, keeping the world point under it fixed (§5.9)", () => {
+  it("zooms to the CURSOR on the wheel, keeping the world point under it fixed", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const cursor = { x: 700, y: 100 };
     const worldBefore = screenToWorld(state.document.camera, cursor);
@@ -536,14 +536,14 @@ describe("pointer and wheel (§5.9)", () => {
   });
 });
 
-describe("panel UI state — dismissal and manual position (D-101, D-106)", () => {
+describe("panel UI state — dismissal and manual position", () => {
   it("starts with no panel UI state for a freshly selected object — shown, auto-placed, is the default", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const selected = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
     expect(selected.panels).toEqual({});
   });
 
-  it("dismissPanel hides one selected object's panel without touching the selection (D-106 clauses 2-3)", () => {
+  it("dismissPanel hides one selected object's panel without touching the selection", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const selected = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
     const id = objectNamed(selected, "polygon_1").id;
@@ -558,7 +558,7 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     expect(dismissPanel(state, id)).toBe(state);
   });
 
-  it("movePanel records a manual CSS position for a selected object's panel (D-101 clause 5)", () => {
+  it("movePanel records a manual CSS position for a selected object's panel", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const selected = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
     const id = objectNamed(selected, "polygon_1").id;
@@ -572,7 +572,7 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     expect(movePanel(state, id, { left: 1, top: 1 })).toBe(state);
   });
 
-  it("discards a dismissed panel's state when its object leaves the selection, and re-selecting shows it again (D-101 clause 6, D-106 clause 6)", () => {
+  it("discards a dismissed panel's state when its object leaves the selection, and re-selecting shows it again", () => {
     const opening = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     let state = pointerDownAt(opening, { x: 50, y: 0 }, VIEWPORT).state;
     const id = objectNamed(state, "polygon_1").id;
@@ -586,7 +586,7 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     expect(state.panels[id]).toBeUndefined();
   });
 
-  it("discards a manual position the same way, when a plain click REPLACES the selection (D-100 clause 2, D-101 clause 6)", () => {
+  it("discards a manual position the same way, when a plain click REPLACES the selection", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "circle x=200 y=0 r=20");
     const polygonId = objectNamed(state, "polygon_1").id;
@@ -598,7 +598,7 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     expect(state.panels[polygonId]).toBeUndefined();
   });
 
-  it("keeps an object's panel state when a shift-click ADDS another object — nothing left the selection (D-100 clause 3)", () => {
+  it("keeps an object's panel state when a shift-click ADDS another object — nothing left the selection", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "circle x=200 y=0 r=20");
     const polygonId = objectNamed(state, "polygon_1").id;
@@ -608,7 +608,7 @@ describe("panel UI state — dismissal and manual position (D-101, D-106)", () =
     expect(state.panels[polygonId]?.dismissed).toBe(true);
   });
 
-  it("`select <name>` from the input bar prunes panel state the same way a plain click does — it too REPLACES the selection (D-100 clause 7)", () => {
+  it("`select <name>` from the input bar prunes panel state the same way a plain click does — it too REPLACES the selection", () => {
     let state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     state = typed(state, "circle x=200 y=0 r=20");
     const polygonId = objectNamed(state, "polygon_1").id;
@@ -696,7 +696,7 @@ describe("Phase 3's acceptance criterion, end to end", () => {
     expect(second.calls.filter((call) => call.op === "stroke").length).toBeGreaterThan(0);
   });
 
-  it("drags a polygon whose origin.x is a formula along Y only, with §5.9's non-blocking feedback in the log", () => {
+  it("drags a polygon whose origin.x is a formula along Y only, and says so in the log without blocking", () => {
     let state = typed(opened(), "table x=0 y=0 rows=2 cols=2");
     state = typed(state, "set table_1.A1 500");
     state = typed(state, "polygon sides=5 x=100 y=100 r=50");
@@ -827,7 +827,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     expect(outcome.state.document).toBe(state.document);
   });
 
-  it("no false cycle in §5.1's OWN shape either — ONE object driven BY the table and driving it back", () => {
+  it("no false cycle in the hardest shape either: one object driven by the table and driving it back", () => {
     let state = typed(gateDocument(), "set table_1.C1 = polygon_1.centroid.x");
 
     expect(state.log.join("\n")).not.toContain("cyclic");
@@ -841,7 +841,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   });
 });
 
-describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-118)", () => {
+describe("submitLine / pointerMoveTo forward the EvalContext", () => {
   function textObject(): GraphObject {
     return {
       id: "obj_t",
@@ -895,7 +895,7 @@ describe("submitLine / pointerMoveTo forward §5.1's EvalContext (entry 0132, D-
   });
 });
 
-describe("commitTextContent — a `text` object's content is ALWAYS a literal `set` (D-125 clause 3, D-122)", () => {
+describe("commitTextContent — a `text` object's content is ALWAYS a literal `set`", () => {
   function withText(content: string): { state: AppState; id: string } {
     const state = typed(opened(), `text x=0 y=0 "${content}"`);
     return { state, id: objectNamed(state, "text_1").id };
@@ -913,7 +913,7 @@ describe("commitTextContent — a `text` object's content is ALWAYS a literal `s
     expect(getSlot(objectNamed(after, "text_1"), ["content"])).toEqual({ kind: "literal", value: "=Hello world" });
   });
 
-  it("stores §5.6 markup verbatim, newlines included", () => {
+  it("stores markup word for word, newlines included", () => {
     const { state, id } = withText("old");
     const raw = "# Title\n\n**bold** and {= table_x.A1 }";
     const after = commitTextContent(state, id, raw);
@@ -932,7 +932,7 @@ describe("commitTextContent — a `text` object's content is ALWAYS a literal `s
   });
 });
 
-describe("commitTableCell — Excel-style: `=` is a formula, a number is a number, else a string (D-125 clause 3)", () => {
+describe("commitTableCell — Excel-style: `=` is a formula, a number is a number, else a string", () => {
   function withTable(): { state: AppState; id: string } {
     const state = typed(opened(), "table x=0 y=0");
     return { state, id: objectNamed(state, "table_1").id };
@@ -977,7 +977,7 @@ describe("commitTableCell — Excel-style: `=` is a formula, a number is a numbe
       expect(getSlot(objectNamed(after, "table_1"), ["cells", "A1"])).toBeUndefined();
     });
 
-    it("does not journal anything for that no-op — nothing happened, so §5.11's history says nothing happened", () => {
+    it("does not journal anything for that no-op — nothing happened, so the history says nothing happened", () => {
       const { state, id } = withTable();
       const after = commitTableCell(state, id, "A1", "");
       expect(after.document.journal.length).toBe(state.document.journal.length);
@@ -1055,7 +1055,7 @@ describe("editorSeed round-trips a cell exactly — an untouched commit changes 
   });
 });
 
-describe("editorSeed — the text the in-place editor opens showing (D-125)", () => {
+describe("editorSeed — the text the in-place editor opens showing", () => {
   it("a `text` object's raw content, verbatim", () => {
     const state = typed(opened(), 'text x=0 y=0 "Radius is {= table_x.A1 }"');
     const id = objectNamed(state, "text_1").id;
@@ -1076,7 +1076,7 @@ describe("editorSeed — the text the in-place editor opens showing (D-125)", ()
     expect(editorSeed(state, { kind: "cell", objectId: id, cell: "A1" })).toBe("=1 + 2");
   });
 
-  it("shows a same-table cell reference in bare Excel form, not fully qualified (D-131)", () => {
+  it("shows a same-table cell reference in bare Excel form, not fully qualified", () => {
     let state = typed(opened(), "table x=0 y=0");
     const id = objectNamed(state, "table_1").id;
     state = commitTableCell(state, id, "A2", "10");
@@ -1084,7 +1084,7 @@ describe("editorSeed — the text the in-place editor opens showing (D-125)", ()
     expect(editorSeed(state, { kind: "cell", objectId: id, cell: "A1" })).toBe("=A2 * 2");
   });
 
-  it("round-trips a same-table cell formula: seed -> commit unchanged -> same stored AST (D-131)", () => {
+  it("round-trips a same-table cell formula: seed -> commit unchanged -> same stored AST", () => {
     let state = typed(opened(), "table x=0 y=0");
     const id = objectNamed(state, "table_1").id;
     state = commitTableCell(state, id, "A1", "=SUM(A2:A5) + B1");
@@ -1095,7 +1095,7 @@ describe("editorSeed — the text the in-place editor opens showing (D-125)", ()
     expect(getSlot(objectNamed(after, "table_1"), ["cells", "A1"])).toEqual(before);
   });
 
-  it("keeps a cross-table reference fully qualified in the cell editor (D-131 clause 3)", () => {
+  it("keeps a cross-table reference fully qualified in the cell editor", () => {
     let state = typed(opened(), "table x=0 y=0");
     state = typed(state, "table x=500 y=0");
     const id = objectNamed(state, "table_1").id;
@@ -1115,7 +1115,7 @@ describe("editorSeed — the text the in-place editor opens showing (D-125)", ()
   });
 });
 
-describe("text placed by pointing opens the in-place editor on the new box (D-124)", () => {
+describe("text placed by pointing opens the in-place editor on the new box", () => {
   it("a bare `text` word enters the position prompt, not a refusal", () => {
     const before = opened();
     const outcome = submitLine(before, "text", VIEWPORT);
@@ -1135,7 +1135,7 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
     expect(editorSeed(outcome.state, outcome.openEditor!)).toBe("");
   });
 
-  it("a content-bearing typed form does NOT open the editor (D-136 clause 1, overrules entry 0149 Decision 2)", () => {
+  it("a content-bearing typed form does not open the editor", () => {
     const outcome = submitLine(opened(), 'text x=5 y=6 "hi"', VIEWPORT);
     const created = objectNamed(outcome.state, "text_1");
     expect(getSlot(created, ["content"])).toEqual({ kind: "literal", value: "hi" });
@@ -1161,7 +1161,7 @@ describe("text placed by pointing opens the in-place editor on the new box (D-12
   });
 });
 
-describe("image creation asks for a picture, and the chosen one is written to `source` (§5.7, D-142)", () => {
+describe("image creation asks for a picture, and the chosen one is written to `source`", () => {
   const PICTURE = `data:image/png;base64,${"A".repeat(300)}`;
   const WIDE = { naturalWidth: 200, naturalHeight: 100 };
 
@@ -1203,7 +1203,7 @@ describe("image creation asks for a picture, and the chosen one is written to `s
     expect(echoed).not.toContain(PICTURE);
   });
 
-  it("is a no-op for a stale object id — the image was deleted while the picker was open (D-023's posture)", () => {
+  it("is a no-op for a stale object id — the image was deleted while the picker was open", () => {
     const state = typed(opened(), "image x=10 y=20");
     expect(commitImagePicture(state, "obj_404", PICTURE, WIDE)).toBe(state);
   });
@@ -1213,7 +1213,7 @@ describe("image creation asks for a picture, and the chosen one is written to `s
     expect(commitImagePicture(state, objectNamed(state, "image_1").id, "", WIDE)).toBe(state);
   });
 
-  it("describes the source row by what the picture IS, and keeps an UNELIDED edit seed so a row committed untouched writes it back whole (D-107)", () => {
+  it("describes the source row by what the picture IS, and keeps an UNELIDED edit seed so a row committed untouched writes it back whole", () => {
     const outcome = submitLine(opened(), "image x=10 y=20", VIEWPORT);
     const withPicture = commitImagePicture(outcome.state, objectNamed(outcome.state, "image_1").id, PICTURE, WIDE);
     const image = objectNamed(withPicture, "image_1");
@@ -1237,7 +1237,7 @@ describe("image creation asks for a picture, and the chosen one is written to `s
     expect(row?.value).toBe("no picture chosen");
   });
 
-  it("leaves a FORMULA-driven source with its ordinary paperclip, because the meaningful gesture on a driven slot is unlink (D-102 clause 3)", () => {
+  it("leaves a FORMULA-driven source with its ordinary paperclip, because the meaningful gesture on a driven slot is unlink", () => {
     const withTable = typed(opened(), "table x=0 y=0 rows=1 cols=1");
     const seeded = typed(withTable, 'set table_1.A1 "data:image/png;base64,AAAA"');
     const withImage = typed(seeded, "image x=0 y=0");
@@ -1249,7 +1249,7 @@ describe("image creation asks for a picture, and the chosen one is written to `s
   });
 });
 
-describe("a chosen picture gives the image its own proportions (Q-027, ruled by the human)", () => {
+describe("a chosen picture gives the image its own proportions", () => {
   const PICTURE = `data:image/jpeg;base64,${"A".repeat(60)}`;
 
   function boxAfterChoosing(naturalWidth: number, naturalHeight: number): { width: unknown; height: unknown } {
@@ -1295,7 +1295,7 @@ describe("a chosen picture gives the image its own proportions (Q-027, ruled by 
     expect(objectExtent(objectNamed(after, "image_1"))).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 95 });
   });
 
-  it("remembers the picture's own ratio in `pictureAspect`, so a later distortion has something to be put back to (D-144)", () => {
+  it("remembers the picture's own ratio in `pictureAspect`, so a later distortion has something to be put back to", () => {
     const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
     const after = commitImagePicture(created, objectNamed(created, "image_1").id, PICTURE, { naturalWidth: 400, naturalHeight: 300 });
     expect(getSlot(objectNamed(after, "image_1"), ["pictureAspect"])).toEqual({ kind: "literal", value: 4 / 3 });
@@ -1320,7 +1320,7 @@ describe("a chosen picture gives the image its own proportions (Q-027, ruled by 
     expect(getSlot(objectNamed(after, "image_1"), ["pictureAspect"])?.value).toBe(0);
   });
 
-  it("offers `preserveAspect` as a panel drop-down, on by default (§5.7's 'by default', the human's note 3)", () => {
+  it("offers `preserveAspect` as a panel drop-down, on by default", () => {
     const created = submitLine(opened(), "image x=10 y=20", VIEWPORT).state;
     const image = objectNamed(created, "image_1");
     expect(getSlot(image, ["preserveAspect"])).toEqual({ kind: "literal", value: true });
@@ -1330,7 +1330,7 @@ describe("a chosen picture gives the image its own proportions (Q-027, ruled by 
   });
 });
 
-describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", () => {
+describe("turning `preserve aspect ratio` back on undoes a distortion", () => {
   const PICTURE = `data:image/jpeg;base64,${"A".repeat(60)}`;
 
   function withWidePicture(): AppState {
@@ -1384,7 +1384,7 @@ describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", 
     expect(numberAt(objectNamed(back, "image_1"), ["width"])).toBe(100);
   });
 
-  it("restores nothing for an image whose `source` was typed by hand, because no gesture ever recorded its shape (D-144's accepted cost)", () => {
+  it("restores nothing for an image whose `source` was typed by hand, because no gesture ever recorded its shape, which is an accepted cost", () => {
     const created = typed(opened(), "image x=0 y=0");
     const seeded = typed(created, `set image_1.source "${PICTURE}"`);
     const stretched = typed(seeded, "set image_1.width 400");
@@ -1406,7 +1406,7 @@ describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", 
     expect(newLines(state, after).filter((line) => line.includes("proportions"))).toEqual([]);
   });
 
-  it("leaves a formula-driven side ALONE and says so, instead of quietly replacing the operator's link with a number (§5.9's per-component posture)", () => {
+  it("leaves a formula-driven side ALONE and says so, instead of quietly replacing the link of the operator with a number, under the per component rule", () => {
     const withTable = typed(opened(), "table x=0 y=0 rows=1 cols=1");
     const seeded = typed(withTable, "set table_1.A1 120");
     const linked = typed(distortedIn(seeded), "link image_1.width table_1.A1");
@@ -1424,7 +1424,7 @@ describe("turning `preserve aspect ratio` back on undoes a distortion (D-144)", 
   }
 });
 
-describe("abandonCreatedTextBox — an abandoned just-created empty text box is removed (D-136 clause 2)", () => {
+describe("abandonCreatedTextBox — an abandoned just-created empty text box is removed", () => {
   function withEmptyTextBox(): { state: AppState; id: string } {
     const state = pointerDownAt(typed(opened(), "text"), { x: 50, y: 50 }, VIEWPORT).state;
     return { state, id: objectNamed(state, "text_1").id };
@@ -1497,7 +1497,7 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
     expect(rowOf(state, "style.align").choices?.selectedIndex).toBe(-1);
   });
 
-  it("offers NO drop-down on a FORMULA row — it is driven, and a choice that silently overwrote the formula is what D-040 forbids a gesture from doing", () => {
+  it("offers NO drop-down on a FORMULA row — it is driven, and a choice that silently overwrote the formula is what no gesture can do", () => {
     let state = typed(withText(), "table x=500 y=0");
     state = typed(state, 'set table_1.A1 "center"');
     state = typed(state, "link text_1.style.align table_1.A1");
@@ -1524,7 +1524,7 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
     expect(newLines(state, after)[0]).toBe("> set text_1.style.align right");
   });
 
-  it("echoes a BOOLEAN choice in §5.3's uppercase spelling, so the echoed line retypes to the same boolean (0157-REVIEW)", () => {
+  it("echoes a BOOLEAN choice in the uppercase spelling, so the echoed line retypes to the same boolean", () => {
     const state = withText();
     const after = commitPanelChoice(state, objectNamed(state, "text_1").id, "autoresize", false);
     expect(newLines(state, after)[0]).toBe("> set text_1.autoresize FALSE");
@@ -1544,7 +1544,7 @@ describe("a text box's size follows its text (2026-09-02)", () => {
     expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: true });
   });
 
-  it("`set text_1.autoresize FALSE` is an ordinary literal write — the slot is authorable from the command line too, in §5.3's own uppercase boolean spelling", () => {
+  it("`set text_1.autoresize FALSE` is an ordinary literal write — the slot is authorable from the command line too, in the uppercase boolean spelling", () => {
     let state = typed(opened(), 'text x=0 y=0 "hello"');
     state = typed(state, "set text_1.autoresize FALSE");
     expect(getSlot(objectNamed(state, "text_1"), ["autoresize"])).toEqual({ kind: "literal", value: false });
@@ -1660,7 +1660,7 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
     return state;
   }
 
-  it("resolves the number and the currently-taken FALSE branch inside the creating mutation (D-114)", () => {
+  it("resolves the number and the currently-taken FALSE branch inside the creating mutation", () => {
     expect(resolvedContentOf(gateDocument())).toBe("Radius: 30 — small (min 5)");
   });
 
@@ -1669,7 +1669,7 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
     expect(resolvedContentOf(raised)).toBe("Radius: 80 — **LARGE** (max 999)");
   });
 
-  it("a value referenced ONLY inside the currently non-taken branch is still a real, discoverable dependency (§5.3's eager/total extraction, proved end to end via `refs`)", () => {
+  it("a value referenced ONLY inside the currently non-taken branch is still a real, discoverable dependency, which eager and total extraction gives, proved end to end through `refs`", () => {
     const before = gateDocument();
     const after = typedWith(before, "refs table_1.B1", realMeasurerContext());
     expect(newLines(before, after)).toContain("table_1.B1 → text_1.resolvedContent");

@@ -19,7 +19,7 @@ describe("NULL_EVAL_CONTEXT — the documented default for callers with no text"
     expect(NULL_EVAL_CONTEXT.measurer.measure("", STYLE)).toEqual({ width: 0, height: 0 });
   });
 
-  it("ignores the D-120 maxWidth argument — it never wraps, so it never needs one", () => {
+  it("ignores the maxWidth argument — it never wraps, so it never needs one", () => {
     expect(NULL_EVAL_CONTEXT.measurer.measure("anything", STYLE, 120)).toEqual({ width: 0, height: 0 });
   });
 
@@ -68,7 +68,7 @@ describe("DerivedSlotCompute — a compute function receives the injected EvalCo
   });
 });
 
-describe("hasRealMeasurer — D-118's null-measurer detector", () => {
+describe("hasRealMeasurer — it detects the null measurer", () => {
   it("is false for NULL_EVAL_CONTEXT and for undefined; true for an injected measurer", () => {
     expect(hasRealMeasurer(NULL_EVAL_CONTEXT)).toBe(false);
     expect(hasRealMeasurer(undefined)).toBe(false);

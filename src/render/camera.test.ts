@@ -19,7 +19,7 @@ describe("worldToScreen", () => {
     expect(worldToScreen(camera, { x: 10, y: 5 })).toEqual({ x: 20, y: 10 });
   });
 
-  it("treats camera.x/camera.y as the world point at the screen origin (§5.9's own vocabulary)", () => {
+  it("treats camera.x/camera.y as the world point at the screen origin", () => {
     const camera: CameraState = { x: 100, y: 50, zoom: 1 };
     expect(worldToScreen(camera, { x: 100, y: 50 })).toEqual({ x: 0, y: 0 });
     expect(worldToScreen(camera, { x: 110, y: 50 })).toEqual({ x: 10, y: 0 });
@@ -54,7 +54,7 @@ describe("panByScreenDelta", () => {
     expect(panByScreenDelta(camera, 40, 0).x).toBe(-10);
   });
 
-  it("ignores a non-finite delta component and leaves that component of the camera unchanged (D-027)", () => {
+  it("ignores a non-finite delta component and leaves that component of the camera unchanged", () => {
     const camera: CameraState = { x: 5, y: -5, zoom: 1 };
     expect(panByScreenDelta(camera, Number.NaN, Number.POSITIVE_INFINITY)).toEqual(camera);
   });
@@ -84,7 +84,7 @@ describe("zoomAtScreenPoint", () => {
     expect(zoomAtScreenPoint(IDENTITY_CAMERA, { x: 0, y: 0 }, -0).zoom).toBe(MIN_ZOOM);
   });
 
-  it("keeps the current zoom when the request is non-finite, rather than snapping to a bound (D-027)", () => {
+  it("keeps the current zoom when the request is non-finite, rather than snapping to a bound", () => {
     const camera: CameraState = { x: 1, y: 2, zoom: 5 };
     expect(zoomAtScreenPoint(camera, { x: 0, y: 0 }, Number.NaN).zoom).toBe(5);
     expect(zoomAtScreenPoint(camera, { x: 0, y: 0 }, Number.POSITIVE_INFINITY).zoom).toBe(5);
@@ -97,7 +97,7 @@ describe("zoomAtScreenPoint", () => {
   });
 });
 
-describe("a loaded camera is not clamped to [MIN_ZOOM, MAX_ZOOM] (D-062, known gap)", () => {
+describe("a loaded camera is not clamped to [MIN_ZOOM, MAX_ZOOM], a known gap", () => {
   const loadCameraWithZoom = (zoom: number): CameraState => {
     const result = deserializeDocument({
       formatVersion: 1,
@@ -129,7 +129,7 @@ describe("a loaded camera is not clamped to [MIN_ZOOM, MAX_ZOOM] (D-062, known g
   });
 });
 
-describe("clampCamera — D-062's boundary, where a loaded camera enters the render layer", () => {
+describe("clampCamera — the boundary where a loaded camera enters the render layer", () => {
   it("leaves a camera already inside the zoom range bit-for-bit alone", () => {
     expect(clampCamera({ x: 37, y: -19, zoom: 3.5 })).toEqual({ x: 37, y: -19, zoom: 3.5 });
   });
@@ -151,7 +151,7 @@ describe("clampCamera — D-062's boundary, where a loaded camera enters the ren
     const raw = { formatVersion: 1, nextObjectId: 1, objects: [], journal: [], camera: { x: 5, y: 6, zoom: 0 } };
     const loaded = deserializeDocument(raw);
     if (!loaded.ok) {
-      throw new Error(`expected the zero-zoom camera to LOAD (that is D-062's whole point), got: ${loaded.message}`);
+      throw new Error(`expected the zero-zoom camera to load, which is the whole point, got: ${loaded.message}`);
     }
     expect(clampCamera(loaded.document.camera)).toEqual({ x: 5, y: 6, zoom: MIN_ZOOM });
   });

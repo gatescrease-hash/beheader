@@ -35,29 +35,29 @@ function expectRoundTrip(source: string, docObjects: readonly AddressableObject[
   return text;
 }
 
-describe("names, not ids (§5.2)", () => {
+describe("names, not ids", () => {
   it("prints an object's CURRENT name, which is why renaming rewrites no formula", () => {
     const ast = parseOk("polygon_1.origin.x + 1");
     const renamed = objects(["obj_1", "intersection_a"], ["obj_3", "table_x", "table"]);
     expect(formatFormula(ast, renamed)).toBe("intersection_a.origin.x + 1");
   });
 
-  it("prints a bare cell ref in the short form it was typed in, because formatAddress strips the stored cells prefix (D-005/D-008)", () => {
+  it("prints a bare cell ref in the short form it was typed in, because formatAddress strips the stored cells prefix", () => {
     expect(formatted("A1 + 1", DOCUMENT, "obj_3")).toBe("table_x.A1 + 1");
   });
 
-  it("prints a lowercase cell ref uppercased, because exactly one spelling is ever stored (D-039)", () => {
+  it("prints a lowercase cell ref uppercased, because exactly one spelling is ever stored", () => {
     expect(formatted("a1", DOCUMENT, "obj_3")).toBe("table_x.A1");
   });
 
-  it("reports an address whose object is gone as the AddressError's own message rather than throwing (§5.1: errors never throw)", () => {
+  it("reports an address whose object is gone as the AddressError's own message rather than throwing, because an error never throws", () => {
     const ast = parseOk("polygon_1.radius");
     expect(() => formatFormula(ast, [])).not.toThrow();
     expect(formatFormula(ast, [])).toContain('no object with id "obj_1"');
   });
 });
 
-describe("literals (§5.3)", () => {
+describe("literals", () => {
   it("round-trips a number, a string, and both booleans", () => {
     expect(expectRoundTrip("42")).toBe("42");
     expect(expectRoundTrip("1.5")).toBe("1.5");
@@ -66,7 +66,7 @@ describe("literals (§5.3)", () => {
     expect(expectRoundTrip("FALSE")).toBe("FALSE");
   });
 
-  it("re-escapes an embedded quote with §5.3's one escape, so the string re-parses to the same value", () => {
+  it("re-escapes an embedded quote with the one escape the language has, so the string re-parses to the same value", () => {
     expect(expectRoundTrip('"say \\"hi\\""')).toBe('"say \\"hi\\""');
   });
 
@@ -78,7 +78,7 @@ describe("literals (§5.3)", () => {
   });
 });
 
-describe("precedence — parentheses are re-inserted from §5.3's chain, never remembered", () => {
+describe("precedence — parentheses are re-inserted from the precedence chain, never remembered", () => {
   it("omits a parenthesis the precedence chain already implies", () => {
     expect(formatted("1 + 2 * 3")).toBe("1 + 2 * 3");
     expect(formatted("(1 + 2) * 3")).toBe("(1 + 2) * 3");
@@ -93,12 +93,12 @@ describe("precedence — parentheses are re-inserted from §5.3's chain, never r
     expect(expectRoundTrip("1 - 2 - 3")).toBe("1 - 2 - 3");
   });
 
-  it("treats ^ as left-associative too (D-030), so its right operand parenthesises the same way", () => {
+  it("treats ^ as left-associative too, so its right operand parenthesises the same way", () => {
     expect(expectRoundTrip("2 ^ (3 ^ 2)")).toBe("2 ^ (3 ^ 2)");
     expect(expectRoundTrip("2 ^ 3 ^ 2")).toBe("2 ^ 3 ^ 2");
   });
 
-  it("round-trips every step of §5.3's chain from OR down to ^", () => {
+  it("round-trips every step of the precedence chain from OR down to ^", () => {
     for (const source of [
       "TRUE OR FALSE AND TRUE",
       "1 < 2 OR 3 >= 4",
@@ -122,7 +122,7 @@ describe("precedence — parentheses are re-inserted from §5.3's chain, never r
 });
 
 describe("references, ranges and calls", () => {
-  it("round-trips a function call, including a nested IF (§5.3's own example shape)", () => {
+  it("round-trips a function call, including a nested IF", () => {
     expect(expectRoundTrip("IF(polygon_1.radius > 10, 1, IF(TRUE, 2, 3))")).toBe("IF(polygon_1.radius > 10, 1, IF(TRUE, 2, 3))");
   });
 
@@ -140,13 +140,13 @@ describe("references, ranges and calls", () => {
 });
 
 describe("the one node that is displayable but was never typed", () => {
-  it("prints a repaired reference as #REF, which §5.3 has no syntax for (D-028)", () => {
+  it("prints a repaired reference as #REF, which the language has no syntax for", () => {
     const ast: FormulaAst = { type: "binaryOp", operator: "+", left: { type: "error", error: "#REF" }, right: { type: "literal", value: 1 } };
     expect(formatFormula(ast, DOCUMENT)).toBe("#REF + 1");
   });
 });
 
-describe("relativeToObjectId — the in-place cell editor's bare Excel form (D-131)", () => {
+describe("relativeToObjectId — the in-place cell editor's bare Excel form", () => {
   it("prints a same-table cell reference bare when its table is the relative object", () => {
     const ast = parseOk("A1 * 2", DOCUMENT, "obj_3");
     expect(formatFormula(ast, DOCUMENT, "obj_3")).toBe("A1 * 2");
@@ -167,7 +167,7 @@ describe("relativeToObjectId — the in-place cell editor's bare Excel form (D-1
     expect(formatFormula(ast, DOCUMENT, "obj_1")).toBe("table_x.A1 * 2");
   });
 
-  it("keeps a NON-CELL slot of the relative object itself qualified — only a `cells.*` slot has a bare form that re-parses (0148-REVIEW)", () => {
+  it("keeps a NON-CELL slot of the relative object itself qualified — only a `cells.*` slot has a bare form that re-parses", () => {
     const ast = parseOk("table_x.rows + A1", DOCUMENT, "obj_3");
     expect(formatFormula(ast, DOCUMENT, "obj_3")).toBe("table_x.rows + A1");
   });
@@ -190,7 +190,7 @@ describe("relativeToObjectId — the in-place cell editor's bare Excel form (D-1
   });
 });
 
-describe("the depth guard — a saved AST deeper than any parse could build (D-079)", () => {
+describe("the depth guard — a saved AST deeper than any parse could build", () => {
   function ladder(levels: number): FormulaAst {
     let ast: FormulaAst = { type: "literal", value: 1 };
     for (let index = 0; index < levels; index += 1) {

@@ -53,9 +53,9 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "load", command: { kind: "load" } },
 ];
 
-describe("the command registry (§5.10: table-driven, one entry per command)", () => {
+describe("the command registry (table driven, one entry per command)", () => {
   for (const example of DOCUMENTED_EXAMPLES) {
-    it(`parses §5.10's own "${example.line}" into its command object`, () => {
+    it(`parses the documented "${example.line}" into its command object`, () => {
       expect(parsed(example.line)).toEqual(example.command);
     });
   }
@@ -73,16 +73,16 @@ describe("the command registry (§5.10: table-driven, one entry per command)", (
     expect(COMMAND_NAMES.filter((name) => COMMANDS_SPECIFIED_BUT_NOT_BUILT.includes(name))).toEqual([]);
   });
 
-  it("reports a §5.10 command that has no entry yet as not built, rather than as unknown", () => {
-    expect(rejected("explode polygon_1").message).toBe('"explode" is a §5.10 command that is not built yet');
+  it("reports a specified command that has no entry yet as not built, rather than as unknown", () => {
+    expect(rejected("explode polygon_1").message).toBe('"explode" is a specified command that is not built yet');
     expect(rejected("pan 10 10").message).toContain("not built yet");
   });
 
-  it("reports a word §5.10 does not name at all as an unknown command, at that word's own offset", () => {
+  it("reports a word the spec does not name at all as an unknown command, at that word's own offset", () => {
     expect(rejected("  frobnicate x=1")).toEqual({ message: 'unknown command "frobnicate"', start: 2 });
   });
 
-  it("matches the command word case-insensitively, the way §5.2 already matches object names", () => {
+  it("matches the command word case-insensitively, the way object name lookup already does", () => {
     expect(parsed("LIST")).toEqual({ kind: "list" });
     expect(parsed("Delete intersection_a FORCE")).toEqual({ kind: "delete", target: "intersection_a", force: true });
   });
@@ -102,7 +102,7 @@ describe("tokenising", () => {
     expect(parsed('set text_1.content "hello there"')).toEqual({ kind: "set", target: "text_1.content", value: "hello there" });
   });
 
-  it('unescapes \\" and \\\\ inside a quoted argument, matching §5.3\'s own string escapes', () => {
+  it('unescapes \\" and \\\\ inside a quoted argument, matching the string escapes of the formula language', () => {
     expect(parsed('set text_1.content "say \\"hi\\""')).toEqual({ kind: "set", target: "text_1.content", value: 'say "hi"' });
     expect(parsed('set text_1.content "a\\\\b"')).toEqual({ kind: "set", target: "text_1.content", value: "a\\b" });
   });
@@ -120,7 +120,7 @@ describe("tokenising", () => {
     expect(rejected('set a"b 1').message).toContain("a quote must open an argument");
   });
 
-  it("rejects a bare word running on from a closing quote, so `delete \"a\"force` cannot silently select §5.1.1's repair path", () => {
+  it("rejects a bare word running on from a closing quote, so `delete \"a\"force` cannot silently select the repair path", () => {
     expect(rejected('delete "a"force')).toEqual({
       message: "a quoted argument ends at its closing quote — separate arguments with a space",
       start: 10,
@@ -134,7 +134,7 @@ describe("tokenising", () => {
 });
 
 describe("named arguments (the creation commands)", () => {
-  it("applies §5.4's 8x8 default when rows and cols are omitted, reading it from primitives/table.ts rather than a second copy", () => {
+  it("applies the 8 by 8 default when rows and cols are omitted, reading it from primitives/table.ts rather than a second copy", () => {
     expect(parsed("table x=0 y=0")).toEqual({ kind: "table", x: 0, y: 0, rows: DEFAULT_TABLE_ROWS, cols: DEFAULT_TABLE_COLS });
   });
 
@@ -195,7 +195,7 @@ describe("positional arguments", () => {
     expect(parsed("set v.x FALSE")).toEqual({ kind: "set", target: "v.x", value: false });
   });
 
-  it("requires a boolean in the exact uppercase §5.3's lexer requires, so one spelling serves both surfaces", () => {
+  it("requires a boolean in the exact uppercase the formula lexer requires, so one spelling serves both surfaces", () => {
     expect(rejected("set v.x true").message).toContain("must be a number, a quoted string, TRUE, or FALSE");
   });
 
@@ -218,13 +218,13 @@ describe("positional arguments", () => {
     expect(rejected("list extra").message).toBe('"list" does not take the argument "extra" — usage: list');
   });
 
-  it("passes a name or address through exactly as typed, folding no case (§5.2 folds case in its own lookup, D-043 owns the cell form)", () => {
+  it("passes a name or address through exactly as typed, folding no case (the lookup folds case, and the cell form has its own rule)", () => {
     expect(parsed("select Table_X")).toEqual({ kind: "select", target: "Table_X" });
     expect(parsed("rename polygon_1 Intersection_A")).toEqual({ kind: "rename", target: "polygon_1", newName: "Intersection_A" });
     expect(parsed("refs table_x.A1")).toEqual({ kind: "refs", target: "table_x.A1" });
   });
 
-  it("makes text's x and y optional, defaulting to 0 (D-121 clause 3) — unlike the geometry presets", () => {
+  it("makes text's x and y optional, defaulting to 0 — unlike the geometry presets", () => {
     expect(parsed('text "hello"')).toEqual({ kind: "text", x: 0, y: 0, content: "hello" });
     expect(parsed('text x=5 "hi"')).toEqual({ kind: "text", x: 5, y: 0, content: "hi" });
   });
@@ -233,12 +233,12 @@ describe("positional arguments", () => {
     expect(rejected("text x=0 y=0").message).toContain("needs <content>");
   });
 
-  it("keeps a text content argument's {= }/{? } markup verbatim — the parser resolves nothing (§5.6)", () => {
+  it("keeps a text content argument's {= }/{? } markup verbatim — the parser resolves nothing", () => {
     expect(parsed('text "{? a }x{:}y{?} { brace"')).toEqual({ kind: "text", x: 0, y: 0, content: "{? a }x{:}y{?} { brace" });
   });
 });
 
-describe("the force flag (§5.1.1's repair path, selected by the operator)", () => {
+describe("the force flag — the repair path, chosen by the operator", () => {
   it("is absent by default", () => {
     expect(parsed("delete intersection_a")).toEqual({ kind: "delete", target: "intersection_a", force: false });
   });
@@ -262,28 +262,28 @@ describe("what this parser deliberately leaves to command/commands.ts", () => {
     expect(parsed("delete nothing_is_named_this")).toEqual({ kind: "delete", target: "nothing_is_named_this", force: false });
   });
 
-  it("parses an address-shaped argument without checking it is an address, so address.ts stays the one definition of that form (D-043)", () => {
+  it("parses an address-shaped argument without checking it is an address, so address.ts stays the one definition of that form", () => {
     expect(parsed("set polygon_1 42")).toEqual({ kind: "set", target: "polygon_1", value: 42 });
     expect(parsed("link .. ..")).toEqual({ kind: "link", target: "..", source: ".." });
   });
 
-  it("parses a name that §5.2's grammar forbids, leaving checkNameAvailable to reject it with one message rather than two", () => {
+  it("parses a name that the name grammar forbids, leaving checkNameAvailable to reject it with one message rather than two", () => {
     expect(parsed("rename polygon_1 3bad")).toEqual({ kind: "rename", target: "polygon_1", newName: "3bad" });
   });
 
-  it("produces a non-finite number from an overflowing digit run rather than refusing it here — D-031 clause 3 keeps document-state policy in mutate (D-025)", () => {
+  it("produces a non-finite number from an overflowing digit run rather than refusing it here, because mutate owns document state policy", () => {
     const command = parsed(`set v.x ${"1".repeat(400)}`);
     expect(command).toEqual({ kind: "set", target: "v.x", value: Number.POSITIVE_INFINITY });
   });
 
-  it("produces a negative zero rather than normalising it, for the same reason (Q-008 option (a) lives in mutate)", () => {
+  it("produces a negative zero rather than normalising it, for the same reason, because mutate owns that rule", () => {
     const command = parsed("set v.x -0");
     expect(command.kind).toBe("set");
     expect(Object.is(command.kind === "set" ? command.value : undefined, -0)).toBe(true);
   });
 });
 
-describe("formula syntax on the command line (D-071 — Q-013 answered by the human: option (a))", () => {
+describe("formula syntax on the command line", () => {
   it("makes `set <address> = <formula>` a formula command rather than a literal one", () => {
     expect(parsed("set table_x.B1 = polygon_b.origin.x * 2")).toEqual({
       kind: "set-formula",
@@ -292,7 +292,7 @@ describe("formula syntax on the command line (D-071 — Q-013 answered by the hu
     });
   });
 
-  it("carries the RAW substring of the line, spacing and all, because re-joining tokens would discard what a #PARSE message points at (D-071 clause 1, D-038 clause 4)", () => {
+  it("carries the RAW substring of the line, spacing and all, because re-joining tokens would discard what a #PARSE message points at", () => {
     expect(parsed("set a.b =   SUM(A1:A5)  *  2  ")).toEqual({
       kind: "set-formula",
       target: "a.b",
@@ -308,7 +308,7 @@ describe("formula syntax on the command line (D-071 — Q-013 answered by the hu
     });
   });
 
-  it("parses nothing in the source — commands.ts calls parseFormula, so a syntactically broken formula still reaches it (D-069, D-071 clause 2)", () => {
+  it("parses nothing in the source — commands.ts calls parseFormula, so a syntactically broken formula still reaches it", () => {
     expect(parsed("set a.b = ((( not a formula")).toEqual({
       kind: "set-formula",
       target: "a.b",
@@ -316,7 +316,7 @@ describe("formula syntax on the command line (D-071 — Q-013 answered by the hu
     });
   });
 
-  it("keeps an equals sign inside a quoted value a string, because quoting decides type everywhere on this line (D-071 clause 3)", () => {
+  it("keeps an equals sign inside a quoted value a string, because quoting decides type everywhere on this line", () => {
     expect(parsed('set text_1.content "= not a formula"')).toEqual({ kind: "set", target: "text_1.content", value: "= not a formula" });
   });
 
@@ -326,7 +326,7 @@ describe("formula syntax on the command line (D-071 — Q-013 answered by the hu
   });
 
   it("refuses a formula to a command that takes none, naming the one command that does", () => {
-    expect(rejected("rename polygon_1 =other").message).toBe('"rename" takes no formula — only "set <address> = <formula>" does (D-071)');
+    expect(rejected("rename polygon_1 =other").message).toBe('"rename" takes no formula — only "set <address> = <formula>" does');
     expect(rejected("link a.b =c.d").message).toContain("takes no formula");
   });
 
@@ -335,7 +335,7 @@ describe("formula syntax on the command line (D-071 — Q-013 answered by the hu
   });
 });
 
-describe("the command lexer stops at a formula's `=` (D-073) — §5.3's string literals are typeable", () => {
+describe("the command lexer stops at the `=` of a formula, so a string literal stays typeable", () => {
   it("carries a formula containing a quoted string argument, spaced around its parens the way an operator naturally would", () => {
     expect(parsed('set a.b = CONCAT("a", "b")')).toEqual({
       kind: "set-formula",

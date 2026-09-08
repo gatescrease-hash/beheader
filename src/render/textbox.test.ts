@@ -16,7 +16,7 @@ describe("textBoxSize — no set size: the box hugs its text", () => {
     expect(textBoxSize(measured(137, 60))).toEqual({ width: 137, height: 60 });
   });
 
-  it("falls back to a fixed box when there is no usable measurement either — the no-real-measurer case (#MEASURE, D-118), where nothing better is knowable", () => {
+  it("falls back to a fixed box when there is no usable measurement either — the case with no real measurer, where nothing better is knowable", () => {
     expect(textBoxSize(measured(0, 0))).toEqual({ width: TEXT_FALLBACK_BOX_WIDTH, height: TEXT_FALLBACK_BOX_HEIGHT });
   });
 });

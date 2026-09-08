@@ -23,7 +23,7 @@ function texts(runs: readonly MarkdownRun[]): readonly string[] {
 
 const PLAIN = { bold: false, italic: false, code: false };
 
-describe("parseMarkdownLite — hard lines and §5.6's blank-line paragraph break", () => {
+describe("parseMarkdownLite — hard lines and the blank line paragraph break", () => {
   it("returns one line per hard line, so the line count is markup-independent", () => {
     expect(parseMarkdownLite("a\nb\nc")).toHaveLength(3);
   });
@@ -32,7 +32,7 @@ describe("parseMarkdownLite — hard lines and §5.6's blank-line paragraph brea
     expect(parseMarkdownLite("a\r\nb")).toHaveLength(2);
   });
 
-  it("keeps a blank line as a line with no runs — §5.6's paragraph break is that line's own height", () => {
+  it("keeps a blank line as a line with no runs, because a paragraph break is that line's own height", () => {
     const lines = parseMarkdownLite("a\n\nb");
     expect(lines).toHaveLength(3);
     expect(lines[1]).toEqual({ kind: "paragraph", level: 0, runs: [] });
@@ -43,14 +43,14 @@ describe("parseMarkdownLite — hard lines and §5.6's blank-line paragraph brea
   });
 });
 
-describe("parseMarkdownLite — headings, levels 1-3 and no further (§5.6)", () => {
+describe("parseMarkdownLite — headings, levels 1-3 and no further", () => {
   it("reads `# `, `## ` and `### ` as levels 1, 2 and 3 with the marker removed", () => {
     expect(onlyLine("# Title")).toEqual({ kind: "heading", level: 1, runs: [{ text: "Title", ...PLAIN }] });
     expect(onlyLine("## Title")).toEqual({ kind: "heading", level: 2, runs: [{ text: "Title", ...PLAIN }] });
     expect(onlyLine("### Title")).toEqual({ kind: "heading", level: 3, runs: [{ text: "Title", ...PLAIN }] });
   });
 
-  it("draws a FOURTH level verbatim, because §5.6 says levels 1-3 and nothing more", () => {
+  it("draws a FOURTH level verbatim, because the parser takes levels 1 to 3 and nothing more", () => {
     expect(onlyLine("#### Title")).toEqual({ kind: "paragraph", level: 0, runs: [{ text: "#### Title", ...PLAIN }] });
   });
 
@@ -70,7 +70,7 @@ describe("parseMarkdownLite — headings, levels 1-3 and no further (§5.6)", ()
   });
 });
 
-describe("parseMarkdownLite — list items (§5.6), marked with a bullet", () => {
+describe("parseMarkdownLite — list items, marked with a bullet", () => {
   it("replaces `- ` with the bullet run and keeps the rest as the item's text", () => {
     expect(onlyLine("- milk")).toEqual({
       kind: "list",
@@ -86,7 +86,7 @@ describe("parseMarkdownLite — list items (§5.6), marked with a bullet", () =>
     expect(onlyLine("-5 degrees").kind).toBe("paragraph");
   });
 
-  it("does not recognise an INDENTED item — §5.6 forbids nested lists, and indentation is what they are made of", () => {
+  it("does not recognise an INDENTED item, because there are no nested lists, and indentation is what makes one", () => {
     expect(onlyLine("  - nested").kind).toBe("paragraph");
   });
 
@@ -95,7 +95,7 @@ describe("parseMarkdownLite — list items (§5.6), marked with a bullet", () =>
   });
 });
 
-describe("parseMarkdownLite — bold, italic and code (§5.6), markers removed", () => {
+describe("parseMarkdownLite — bold, italic and code, markers removed", () => {
   it("reads `**bold**` as one bold run with the four marker characters gone", () => {
     expect(onlyLine("**loud**").runs).toEqual([{ text: "loud", bold: true, italic: false, code: false }]);
   });
@@ -157,7 +157,7 @@ describe("parseMarkdownLite — an UNMATCHED marker is literal text, never a run
   });
 });
 
-describe("parseMarkdownLite — §5.6's list is exact: nothing else is markup", () => {
+describe("parseMarkdownLite — the list of markup is exact, and nothing else counts", () => {
   it("draws a link, an image, a blockquote and a table row verbatim", () => {
     expect(texts(onlyLine("[text](url)").runs)).toEqual(["[text](url)"]);
     expect(texts(onlyLine("![alt](src)").runs)).toEqual(["![alt](src)"]);
@@ -165,7 +165,7 @@ describe("parseMarkdownLite — §5.6's list is exact: nothing else is markup", 
     expect(texts(onlyLine("| a | b |").runs)).toEqual(["| a | b |"]);
   });
 
-  it("draws an underscore emphasis verbatim — §5.6 names the asterisk forms only", () => {
+  it("draws an underscore emphasis verbatim, because the parser takes the asterisk forms only", () => {
     expect(texts(onlyLine("_soft_").runs)).toEqual(["_soft_"]);
   });
 
@@ -215,7 +215,7 @@ describe("parseMarkdownLite — CommonMark's flanking rule, reduced: a marker be
   });
 });
 
-describe("verbatimLines — the same hard lines with no markup honoured (Q-025 (a))", () => {
+describe("verbatimLines — the same hard lines with no markup honoured", () => {
   it("splits exactly where parseMarkdownLite splits, so the line COUNT never depends on markup", () => {
     for (const text of ["a\nb\nc", "a\r\n\r\nb", "", "# h\n- l\n**b**"]) {
       expect(verbatimLines(text)).toHaveLength(parseMarkdownLite(text).length);

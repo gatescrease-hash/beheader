@@ -271,7 +271,7 @@ describe("verticesDerivedSlots", () => {
     return entry;
   };
 
-  it("declares exactly the eight slots §5.5 names, each statically depending on vertices alone", () => {
+  it("declares exactly eight slots, each statically depending on vertices alone", () => {
     expect(slots).toHaveLength(8);
     for (const slot of slots) {
       expect(slot.dependencies).toEqual({ kind: "static", paths: [["vertices"]] });
@@ -320,7 +320,7 @@ describe("verticesDerivedSlots", () => {
     });
   });
 
-  it("normalises a computed -0 centroid.x to +0 (D-033) — a REAL -0, not a hypothetical one", () => {
+  it("normalises a computed -0 centroid.x to +0 — a REAL -0, not a hypothetical one", () => {
     const clockwiseSquare: readonly Point[] = [
       { x: -1, y: -1 },
       { x: -1, y: 1 },
@@ -425,7 +425,7 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
   });
 });
 
-describe("D-064 — every preset winds counterclockwise (positive doubled signed area)", () => {
+describe("every preset winds counterclockwise (positive doubled signed area)", () => {
   function doubledSignedArea(vertices: readonly Point[]): number {
     let sum = 0;
     for (let i = 0; i < vertices.length; i += 1) {

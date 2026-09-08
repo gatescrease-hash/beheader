@@ -108,7 +108,7 @@ describe("createImageBitmapCache — asking for a picture", () => {
 });
 
 describe("createImageBitmapCache — a decode that lands", () => {
-  it("returns the decoded picture with the natural size §5.7's aspect-ratio clause needs, once onload has fired", () => {
+  it("returns the decoded picture with the natural size the aspect ratio needs, once onload has fired", () => {
     const { create, made } = fakeElements();
     const cache = createImageBitmapCache(() => undefined, create);
     cache.bitmapFor(SOURCE);

@@ -567,7 +567,7 @@ export function parseCommand(line: string): CommandParseResult {
   const spec = COMMAND_SPECS.find((candidate) => candidate.name === name);
   if (spec === undefined) {
     if (COMMANDS_SPECIFIED_BUT_NOT_BUILT.includes(name)) {
-      return failure(`"${head.text}" is a §5.10 command that is not built yet`, head.start);
+      return failure(`"${head.text}" is a specified command that is not built yet`, head.start);
     }
     return failure(`unknown command "${head.text}"`, head.start);
   }
@@ -690,7 +690,7 @@ function matchArguments(
     cursor = scanned.next;
 
     if (spec.named.length === 0 && !token.quoted && token.text.startsWith("=")) {
-      return failure(`"${spec.name}" takes no formula — only "set <address> = <formula>" does (D-071)`, token.start);
+      return failure(`"${spec.name}" takes no formula — only "set <address> = <formula>" does`, token.start);
     }
 
     if (spec.named.length > 0 && !token.quoted && token.text.includes("=")) {

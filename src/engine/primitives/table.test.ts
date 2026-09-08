@@ -55,14 +55,14 @@ function tableWithFormulaDimensions(rows: number, cols: number): GraphObject {
 
 const TABLE_8X8 = tableWithDimensions(DEFAULT_TABLE_ROWS, DEFAULT_TABLE_COLS);
 
-describe("default dimensions (§5.4: \"Default 8×8\")", () => {
+describe("default dimensions, 8 by 8", () => {
   it("is 8x8", () => {
     expect(DEFAULT_TABLE_ROWS).toBe(8);
     expect(DEFAULT_TABLE_COLS).toBe(8);
   });
 });
 
-describe("enumerateRangeCellAddresses — the rectangle between two same-table endpoints, bounded by current extent (D-036/D-044)", () => {
+describe("enumerateRangeCellAddresses — the rectangle between two same-table endpoints, bounded by current extent", () => {
   it("a single-cell range yields exactly that one address", () => {
     const result = enumerateRangeCellAddresses(cell("obj_1", "A1"), cell("obj_1", "A1"), TABLE_8X8);
     expect(result).toEqual([cell("obj_1", "A1")]);
@@ -95,31 +95,31 @@ describe("enumerateRangeCellAddresses — the rectangle between two same-table e
     expect(result).toEqual([cell("obj_1", "Z1"), cell("obj_1", "AA1"), cell("obj_1", "AB1")]);
   });
 
-  it("D-044: a range extending past the table's current extent is CLAMPED, not #REF — SUM(A1:Z99) over an 8x8 table enumerates only the 8x8 rectangle", () => {
+  it("a range extending past the table's current extent is CLAMPED, not #REF — SUM(A1:Z99) over an 8x8 table enumerates only the 8x8 rectangle", () => {
     const result = enumerateRangeCellAddresses(cell("obj_1", "A1"), cell("obj_1", "Z99"), TABLE_8X8);
     expect(isRangeEnumerationError(result)).toBe(false);
     expect((result as readonly Address[])).toHaveLength(8 * 8);
     expect((result as readonly Address[])[(result as readonly Address[]).length - 1]).toEqual(cell("obj_1", "H8"));
   });
 
-  it("D-044: a range entirely beyond the table's extent clamps to EMPTY, not an error", () => {
+  it("a range entirely beyond the table's extent clamps to EMPTY, not an error", () => {
     const result = enumerateRangeCellAddresses(cell("obj_1", "J1"), cell("obj_1", "J1"), TABLE_8X8);
     expect(isRangeEnumerationError(result)).toBe(false);
     expect(result).toEqual([]);
   });
 
-  it("D-044: a range with no bound on the far side (e.g. reversed past the extent) still clamps correctly", () => {
+  it("a range with no bound on the far side (e.g. reversed past the extent) still clamps correctly", () => {
     const result = enumerateRangeCellAddresses(cell("obj_1", "Z99"), cell("obj_1", "A1"), TABLE_8X8);
     expect(result).toEqual((enumerateRangeCellAddresses(cell("obj_1", "A1"), cell("obj_1", "Z99"), TABLE_8X8)));
   });
 
-  it("D-046: a formula-kind rows/cols slot is treated as 0 regardless of its cached value — the same Rule 6 guard enumerateTableCellSlotPaths uses", () => {
+  it("a formula-kind rows/cols slot is treated as 0 regardless of its cached value — the same Rule 6 guard enumerateTableCellSlotPaths uses", () => {
     const formulaDriven = tableWithFormulaDimensions(8, 8);
     const result = enumerateRangeCellAddresses(cell("obj_1", "A1"), cell("obj_1", "B2"), formulaDriven);
     expect(result).toEqual([]);
   });
 
-  it("rejects a range whose two endpoints name DIFFERENT objects (disclosed decision, file header; defensive arm post-D-045)", () => {
+  it("rejects a range whose two endpoints name DIFFERENT objects, a defensive arm, because the parser already refuses this", () => {
     const result = enumerateRangeCellAddresses(cell("obj_1", "A1"), cell("obj_2", "B4"), TABLE_8X8);
     expect(isRangeEnumerationError(result)).toBe(true);
     expect((result as RangeEnumerationError).error).toBe("#REF");
@@ -143,7 +143,7 @@ describe("enumerateRangeCellAddresses — the rectangle between two same-table e
     expect(isRangeEnumerationError(result)).toBe(true);
   });
 
-  it("is robust to a lowercase cell reference in a hand-built Address, though a real Address never carries one post-D-039 normalisation", () => {
+  it("is robust to a lowercase cell reference in a hand-built Address, although a real Address never carries one after normalisation", () => {
     const lowercase: Address = { objectId: "obj_1", path: ["cells", "a1"] };
     const result = enumerateRangeCellAddresses(lowercase, cell("obj_1", "A1"), TABLE_8X8);
     expect(result).toEqual([cell("obj_1", "A1")]);
@@ -157,7 +157,7 @@ describe("isRangeEnumerationError", () => {
   });
 });
 
-describe("enumerateTableCellSlotPaths — the dynamic slot family (D-017/0041-REVIEW-phase2 §9)", () => {
+describe("enumerateTableCellSlotPaths — the dynamic slot family", () => {
   it("enumerates every cell path for a 2x3 table, row-major (every column of one row before the next)", () => {
     expect(enumerateTableCellSlotPaths(tableWithDimensions(2, 3))).toEqual([
       ["cells", "A1"],
@@ -203,7 +203,7 @@ describe("enumerateTableCellSlotPaths — the dynamic slot family (D-017/0041-RE
     expect(paths).toEqual([["cells", "A1"]]);
   });
 
-  it("D-046: a formula-kind dimension slot is treated as 0, the SAME guard enumerateRangeCellAddresses now shares", () => {
+  it("a formula-kind dimension slot is treated as 0, the SAME guard enumerateRangeCellAddresses now shares", () => {
     expect(enumerateTableCellSlotPaths(tableWithFormulaDimensions(8, 8))).toEqual([]);
   });
 });
@@ -219,7 +219,7 @@ function tableWithCells(rows: number, cols: number, cells: Record<string, Value>
   return { id: "obj_1", name: "table_x", type: "table", slots };
 }
 
-describe("getTableDimensions — entry 0047, the public reader `insertTableLine`/mutation.ts share", () => {
+describe("getTableDimensions — the reader that insertTableLine and mutation.ts share", () => {
   it("reads rows/cols off a literal-dimensioned table", () => {
     expect(getTableDimensions(tableWithDimensions(5, 3))).toEqual({ rows: 5, cols: 3 });
   });
@@ -229,7 +229,7 @@ describe("getTableDimensions — entry 0047, the public reader `insertTableLine`
   });
 });
 
-describe("isTableDimensionResizable — 0048-REVIEW-phase2 fix 3, naming D-046", () => {
+describe("isTableDimensionResizable — a dimension slot must stay literal", () => {
   it("is true for a literal dimension", () => {
     const table = tableWithDimensions(3, 3);
     expect(isTableDimensionResizable(table, "row")).toBe(true);
@@ -263,7 +263,7 @@ describe("isTableDimensionResizable — 0048-REVIEW-phase2 fix 3, naming D-046",
   });
 });
 
-describe("shiftCellAddressForInsert — entry 0047, §5.4's per-address reference-adjustment arithmetic", () => {
+describe("shiftCellAddressForInsert — the reference adjustment arithmetic for one address", () => {
   it("shifts a row at or after the insertion index by one", () => {
     expect(shiftCellAddressForInsert(cell("obj_1", "A3"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A4"));
     expect(shiftCellAddressForInsert(cell("obj_1", "A5"), "obj_1", "row", 3)).toEqual(cell("obj_1", "A6"));
@@ -289,7 +289,7 @@ describe("shiftCellAddressForInsert — entry 0047, §5.4's per-address referenc
   });
 });
 
-describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive", () => {
+describe("insertTableLine — the row and column insert", () => {
   it("increments rows and shifts every populated cell at or after the index down by one row", () => {
     const table = tableWithCells(3, 1, { A1: 1, A2: 2, A3: 3 });
     const result = insertTableLine(table, "row", 2);
@@ -333,7 +333,7 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
     expect(tooLow.slots["cells.A2"]).toEqual({ kind: "literal", value: 1 });
   });
 
-  it("re-asserts rows as literal even if it was some other kind before (D-046) — and, per THAT SAME guard, a formula-kind rows/cols already read as 0, so inserting a row on a table read this way starts from 0, not the formula's cached value", () => {
+  it("re-asserts rows as literal even if it was some other kind before — and, per THAT SAME guard, a formula-kind rows/cols already read as 0, so inserting a row on a table read this way starts from 0, not the formula's cached value", () => {
     const result = insertTableLine(tableWithFormulaDimensions(2, 2), "row", 1);
     expect(result.slots[TABLE_ROWS_PATH.join(".")]).toEqual({ kind: "literal", value: 1 });
   });
@@ -344,7 +344,7 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
     expect(getTableDimensions(insertTableLine(bare, "row", 1))).toEqual({ rows: 1, cols: 0 });
   });
 
-  describe("D-049 (0048-REVIEW-phase2 fix 1) — a slot this function does not own survives a resize", () => {
+  describe("a slot this function does not own survives a resize", () => {
     it("a literal slot at an UNRECOGNISED path (not rows/cols/a cell) survives an insert", () => {
       const table = tableWithCells(1, 1, { A1: 1 });
       const withNote: GraphObject = { ...table, slots: { ...table.slots, note: { kind: "literal", value: "hello" } } };
@@ -376,7 +376,7 @@ describe("insertTableLine — entry 0047, §5.4's row/column insertion primitive
   });
 });
 
-describe("repairCellAddressForDelete — entry 0050, §5.4's per-address DELETE-side reference-adjustment arithmetic", () => {
+describe("repairCellAddressForDelete — the same arithmetic for a delete", () => {
   it("reports \"deleted\" for a cell whose own row is the one being removed", () => {
     expect(repairCellAddressForDelete(cell("obj_1", "A3"), "obj_1", "row", 3)).toBe("deleted");
   });
@@ -408,7 +408,7 @@ describe("repairCellAddressForDelete — entry 0050, §5.4's per-address DELETE-
   });
 });
 
-describe("repairRangeEndpointsForDelete — entry 0050, §5.4's \"clamps to the remaining extent\" / \"deleted entirely becomes #REF\"", () => {
+describe("repairRangeEndpointsForDelete — it clamps to the extent that remains, or gives #REF", () => {
   it("leaves both endpoints unchanged when the deleted row is entirely AFTER the range", () => {
     const result = repairRangeEndpointsForDelete(cell("obj_1", "A1"), cell("obj_1", "A5"), "obj_1", "row", 8);
     expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A5") });
@@ -434,7 +434,7 @@ describe("repairRangeEndpointsForDelete — entry 0050, §5.4's \"clamps to the 
     expect(result).toEqual({ start: cell("obj_1", "A1"), end: cell("obj_1", "A4") });
   });
 
-  it("returns \"deleted\" for a single-cell range that names only the deleted line (§5.4: deleted entirely becomes #REF)", () => {
+  it("returns \"deleted\" for a single-cell range that names only the deleted line, because a range deleted in full becomes #REF", () => {
     expect(repairRangeEndpointsForDelete(cell("obj_1", "A3"), cell("obj_1", "A3"), "obj_1", "row", 3)).toBe("deleted");
   });
 
@@ -461,7 +461,7 @@ describe("repairRangeEndpointsForDelete — entry 0050, §5.4's \"clamps to the 
   });
 });
 
-describe("deleteTableLine — entry 0050, §5.4's row/column deletion primitive (the FIRST §5.1.1 REPAIR-path primitive)", () => {
+describe("deleteTableLine — the row and column delete, and the first user of the repair path", () => {
   it("decrements rows, drops the cell AT the deleted index, and shifts every cell after it back by one row", () => {
     const table = tableWithCells(4, 1, { A1: 1, A2: 2, A3: 3, A4: 4 });
     const result = deleteTableLine(table, "row", 2);
@@ -491,7 +491,7 @@ describe("deleteTableLine — entry 0050, §5.4's row/column deletion primitive 
     expect(result.slots["cells.A1"]).toBeUndefined();
   });
 
-  it("re-asserts rows/cols as literal even if it was some other kind before (D-046), same posture as insertTableLine", () => {
+  it("re-asserts rows/cols as literal even if it was some other kind before, same posture as insertTableLine", () => {
     const result = deleteTableLine(tableWithFormulaDimensions(2, 2), "row", 1);
     expect(result.slots[TABLE_ROWS_PATH.join(".")]).toEqual({ kind: "literal", value: 0 });
   });
@@ -502,7 +502,7 @@ describe("deleteTableLine — entry 0050, §5.4's row/column deletion primitive 
     expect(getTableDimensions(deleteTableLine(bare, "row", 1))).toEqual({ rows: 0, cols: 0 });
   });
 
-  describe("D-049 parity — a slot this function does not own survives a deletion", () => {
+  describe("a slot this function does not own survives a deletion", () => {
     it("a literal slot at an UNRECOGNISED path survives a delete", () => {
       const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
       const withNote: GraphObject = { ...table, slots: { ...table.slots, note: { kind: "literal", value: "hello" } } };

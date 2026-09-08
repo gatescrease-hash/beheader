@@ -107,7 +107,7 @@ export function validateFormulaAstShape(raw: unknown, depth = 1): FormulaAstShap
     case "binaryOp": {
       const operator = node["operator"];
       if (!isBinaryOperator(operator)) {
-        return { ok: false, reason: `${describeRaw(operator)} is not one of §5.3's binary operators` };
+        return { ok: false, reason: `${describeRaw(operator)} is not one of the binary operators` };
       }
       const left = validateFormulaAstShape(node["left"], depth + 1);
       if (!left.ok) {
@@ -122,7 +122,7 @@ export function validateFormulaAstShape(raw: unknown, depth = 1): FormulaAstShap
     case "unaryOp": {
       const operator = node["operator"];
       if (!isUnaryOperator(operator)) {
-        return { ok: false, reason: `${describeRaw(operator)} is not one of §5.3's prefix operators` };
+        return { ok: false, reason: `${describeRaw(operator)} is not one of the prefix operators` };
       }
       const operand = validateFormulaAstShape(node["operand"], depth + 1);
       return operand.ok ? { ok: true, ast: { type: "unaryOp", operator, operand: operand.ast } } : operand;

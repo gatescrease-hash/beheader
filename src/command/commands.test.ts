@@ -80,8 +80,8 @@ function verticesOf(object: GraphObject): readonly Point[] {
   return slot.value;
 }
 
-describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", () => {
-  it("creates a circle with its three parameter slots literal, at §5.10's own example line", () => {
+describe("creation — a typed line becomes an object", () => {
+  it("creates a circle with its three parameter slots literal, at the documented example line", () => {
     const object = onlyObject(committed("circle x=100 y=100 r=20", createEmptyDocument()));
     expect(object.type).toBe("circle");
     expect(object.name).toBe("circle_1");
@@ -101,7 +101,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(getSlot(object, ["area"])?.value).toBeCloseTo(0.5 * 32 * 100 * Math.sin((2 * Math.PI) / 32), 6);
   });
 
-  it("creates a polygon with the number of vertices its sides argument asked for, and rotation defaulted to 0 (§5.10's form gives no rotation)", () => {
+  it("creates a polygon with the number of vertices its sides argument asked for, and rotation defaulted to 0, because the command form gives no rotation", () => {
     const object = onlyObject(committed("polygon sides=5 x=0 y=0 r=50", createEmptyDocument()));
     expect(object.name).toBe("polygon_1");
     expect(literalValue(object, ["rotation"])).toBe(0);
@@ -115,7 +115,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(getSlot(object, ["area"])?.value).toBe(20000);
   });
 
-  it("creates a table carrying its origin and both dimensions, and NO cell slots — an absent cell is D-047's other spelling of empty", () => {
+  it("creates a table carrying its origin and both dimensions, and NO cell slots, because an absent cell is how a table spells empty", () => {
     const object = onlyObject(committed("table x=0 y=0 rows=8 cols=8", createEmptyDocument()));
     expect(object.type).toBe("table");
     expect(object.name).toBe("table_1");
@@ -126,7 +126,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(Object.keys(object.slots).filter((key) => key.startsWith("cells."))).toEqual([]);
   });
 
-  it("gives a table an origin its SCHEMA declares, so its position may be DRIVEN by a formula the way a polygon's already is (D-017)", () => {
+  it("gives a table an origin its SCHEMA declares, so its position may be DRIVEN by a formula the way a polygon's already is", () => {
     const seeded: Document = {
       ...createEmptyDocument(),
       objects: [{ id: "obj_9", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 42 } } }],
@@ -158,19 +158,19 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(getSlot(boundTable, ["origin", "x"])?.value).toBe(42);
   });
 
-  it("takes §5.4's 8x8 default when rows and cols are omitted, because the parser supplied them", () => {
+  it("takes the 8 by 8 default when rows and cols are omitted, because the parser supplied them", () => {
     const object = onlyObject(committed("table x=0 y=0", createEmptyDocument()));
     expect(literalValue(object, ["rows"])).toBe(8);
     expect(literalValue(object, ["cols"])).toBe(8);
   });
 
-  it("accepts a negative radius and stores it — a value that computes to #TYPE is legitimate state (§5.1), not a rejection", () => {
+  it("accepts a negative radius and stores it — a value that computes to #TYPE is legitimate state, not a rejection", () => {
     const object = onlyObject(committed("circle x=0 y=0 r=-5", createEmptyDocument()));
     expect(literalValue(object, ["radius"])).toBe(-5);
     expect(getSlot(object, ["vertices"])?.value).toEqual({ error: "#TYPE", message: "circle.vertices: radius must not be negative" });
   });
 
-  it("creates a text object with all eleven non-derived slots (origin.x/y per D-121, content, and eight layout/style defaults) plus all three derived placeholders (§5.6 + D-123, entry 0136)", () => {
+  it("creates a text object with all eleven non-derived slots (origin.x, origin.y, content, and eight layout and style defaults) plus all three derived placeholders", () => {
     const object = onlyObject(committed('text x=10 y=20 "Radius is {= table_x.A1 }"', createEmptyDocument()));
     expect(object.type).toBe("text");
     expect(object.name).toBe("text_1");
@@ -191,29 +191,29 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(getSlot(object, ["measuredWidth"])?.kind).toBe("derived");
   });
 
-  it("defaults a text object's x and y to 0 when omitted (D-121 clause 3) — the geometry presets require theirs", () => {
+  it("defaults a text object's x and y to 0 when omitted — the geometry presets require theirs", () => {
     const object = onlyObject(committed('text "just text"', createEmptyDocument()));
     expect(literalValue(object, ["origin", "x"])).toBe(0);
     expect(literalValue(object, ["origin", "y"])).toBe(0);
   });
 
-  it("stores a text object's content verbatim — markup and stray braces are not parsed at the command line (§5.6)", () => {
+  it("stores a text object's content verbatim — markup and stray braces are not parsed at the command line", () => {
     const object = onlyObject(committed('text x=0 y=0 "{? x }a{:}b{?} literal { brace"', createEmptyDocument()));
     expect(literalValue(object, ["content"])).toBe("{? x }a{:}b{?} literal { brace");
   });
 
-  it("evaluates a text object's resolvedContent inside the creating mutation — a plain string resolves to itself (D-114)", () => {
+  it("evaluates a text object's resolvedContent inside the creating mutation — a plain string resolves to itself", () => {
     const object = onlyObject(committed('text x=0 y=0 "hello"', createEmptyDocument()));
     expect(getSlot(object, ["resolvedContent"])?.value).toBe("hello");
   });
 
-  it("leaves a fresh text object's measuredHeight as #MEASURE under the default null EvalContext (D-118) — legitimate state, not a refused creation", () => {
+  it("leaves a fresh text object's measuredHeight as #MEASURE under the default null EvalContext — legitimate state, not a refused creation", () => {
     const object = onlyObject(committed('text x=0 y=0 "hello"', createEmptyDocument()));
     expect(getSlot(object, ["measuredHeight"])?.value).toMatchObject({ error: "#MEASURE" });
     expect(getSlot(object, ["measuredWidth"])?.value).toMatchObject({ error: "#MEASURE" });
   });
 
-  it("D-123: a text object created with a real measurer threaded carries a measured WIDTH as well as a height — the default DEFAULT_TEXT_WIDTH is \"auto\", so this is the normal path", () => {
+  it("a text object created with a real measurer threaded carries a measured WIDTH as well as a height — the default DEFAULT_TEXT_WIDTH is \"auto\", so this is the normal path", () => {
     const measurer: EvalContext = { measurer: { measure: (text) => ({ width: text.length * 7, height: 20 }) } };
     const outcome = executeCommand(parsed('text x=0 y=0 "hello"'), createEmptyDocument(), measurer);
     if (isCommandFailure(outcome)) {
@@ -224,12 +224,12 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(getSlot(object, ["measuredHeight"])?.value).toBe(20);
   });
 
-  it("names text objects from their own sequence — text_1, text_2 (§5.2)", () => {
+  it("names text objects from their own sequence — text_1, text_2", () => {
     const document = committed('text x=0 y=0 "b"', committed('text x=0 y=0 "a"', createEmptyDocument()));
     expect(document.objects.map((object) => object.name)).toEqual(["text_1", "text_2"]);
   });
 
-  it("D-124: a successful creation names the object it made in `createdObjectId`, so main.ts can open D-125's editor on a fresh text box without resolving anything", () => {
+  it("a successful creation names the object it made in `createdObjectId`, so main.ts can open the editor on a fresh text box with no lookup", () => {
     const outcome = executeCommand(parsed('text x=1 y=2 ""'), createEmptyDocument());
     if (isCommandFailure(outcome)) {
       throw new Error(outcome.message);
@@ -237,7 +237,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(outcome.createdObjectId).toBe(onlyObject(outcome.document).id);
   });
 
-  it("D-124: the point-placed form (buildFromPrompts) creates the box with empty content, ready for the in-place editor", () => {
+  it("the point-placed form (buildFromPrompts) creates the box with empty content, ready for the in-place editor", () => {
     const started = beginCommand("text");
     if (started.status !== "prompting") {
       throw new Error(`expected a prompt, got ${started.status}`);
@@ -268,7 +268,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(isCommandFailure(listed) ? undefined : listed.createdObjectId).toBeUndefined();
   });
 
-  it("creates an image with all eight non-derived slots — §5.7's five plus `source`, `preserveAspect` and `pictureAspect` — and no derived ones", () => {
+  it("creates an image with all eight non-derived slots — the five the spec names plus `source`, `preserveAspect` and `pictureAspect` — and no derived ones", () => {
     const object = onlyObject(committed("image x=30 y=40", createEmptyDocument()));
     expect(object.type).toBe("image");
     expect(object.name).toBe("image_1");
@@ -283,7 +283,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(Object.keys(object.slots).sort()).toEqual(["height", "opacity", "origin.x", "origin.y", "pictureAspect", "preserveAspect", "source", "width"]);
   });
 
-  it("gives an image the SAME origin paths every positioned object uses, so `link image_1.origin.x <cell>` commits (D-017, D-121's reasoning)", () => {
+  it("gives an image the SAME origin paths every positioned object uses, so `link image_1.origin.x <cell>` commits", () => {
     const withTable = committed("table x=0 y=0 rows=1 cols=1", createEmptyDocument());
     const seeded = committed("set table_1.A1 42", withTable);
     const withImage = committed("image x=0 y=0", seeded);
@@ -293,17 +293,17 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(image === undefined ? undefined : getSlot(image, ["origin", "x"])?.value).toBe(42);
   });
 
-  it("accepts an opacity outside 0..1 — it sizes no slot family, so D-070's count bound does not reach it and the renderer clamps what it paints", () => {
+  it("accepts an opacity outside 0..1 — it sizes no slot family, so the count bound does not reach it, and the renderer clamps what it paints", () => {
     const document = committed("set image_1.opacity 4", committed("image x=0 y=0", createEmptyDocument()));
     expect(literalValue(onlyObject(document), ["opacity"])).toBe(4);
   });
 
-  it("takes no size arguments — §5.10's form is `image x= y=` and nothing else, so a stray w= is a parse failure rather than a silent default", () => {
+  it("takes no size arguments — the form is `image x= y=` and nothing else, so a stray w= is a parse failure rather than a silent default", () => {
     const result = parseCommand("image x=0 y=0 w=50");
     expect(isCommandParseFailure(result) && result.message).toContain('"w"');
   });
 
-  it("creates a script with its four static slots and no ports — D-141 clause 7's own next slice", () => {
+  it("creates a script with its four static slots and no ports, which the next slice adds", () => {
     const object = onlyObject(committed("script x=30 y=40", createEmptyDocument()));
     expect(object.type).toBe("script");
     expect(object.name).toBe("script_1");
@@ -315,7 +315,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(Object.keys(object.slots).sort()).toEqual(["language", "origin.x", "origin.y", "source"]);
   });
 
-  it("gives a script the SAME origin paths every positioned object uses, so `link script_1.origin.x <cell>` commits (D-017, D-121's reasoning)", () => {
+  it("gives a script the SAME origin paths every positioned object uses, so `link script_1.origin.x <cell>` commits", () => {
     const withTable = committed("table x=0 y=0 rows=1 cols=1", createEmptyDocument());
     const seeded = committed("set table_1.A1 42", withTable);
     const withScript = committed("script x=0 y=0", seeded);
@@ -325,12 +325,12 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
     expect(script === undefined ? undefined : getSlot(script, ["origin", "x"])?.value).toBe(42);
   });
 
-  it("takes no other arguments — §5.10's form is `script x= y=` and nothing else", () => {
+  it("takes no other arguments — the form is `script x= y=` and nothing else", () => {
     const result = parseCommand("script x=0 y=0 language=python");
     expect(isCommandParseFailure(result) && result.message).toContain('"language"');
   });
 
-  it("declares an in/out port through the existing addPort mutation, then reads/writes it exactly like any other declared slot — the phase's own acceptance shape, at the mutation layer (§6's Phase 6 criterion)", () => {
+  it("declares an in/out port through the existing addPort mutation, then reads/writes it exactly like any other declared slot, which is the acceptance shape at the mutation layer", () => {
     const withScript = committed("script x=0 y=0", createEmptyDocument());
     const script = onlyNamed(withScript, "script_1");
 
@@ -379,7 +379,7 @@ describe("creation — a typed line becomes an object (§5.5, §5.4, §5.10)", (
   });
 });
 
-describe("addport / removeport — §5.8's ports, declared by an operator (D-146)", () => {
+describe("addport / removeport — ports that the operator declares", () => {
   function withScript(): Document {
     return committed("script x=0 y=0", createEmptyDocument());
   }
@@ -391,7 +391,7 @@ describe("addport / removeport — §5.8's ports, declared by an operator (D-146
     expect(getSlot(script, ["in", "factor"])).toEqual({ kind: "literal", value: null });
   });
 
-  it("declares an OUT port with BOTH slots it implies — the derived `out.<port>` (D-018) and the `placeholder.<port>` its compute reads", () => {
+  it("declares an OUT port with BOTH slots it implies — the derived `out.<port>` and the `placeholder.<port>` its compute reads", () => {
     const after = committed("addport script_1.out.result", withScript());
     const script = onlyNamed(after, "script_1");
     expect(script.ports?.out).toEqual(["result"]);
@@ -420,7 +420,7 @@ describe("addport / removeport — §5.8's ports, declared by an operator (D-146
     expect(refused("addport script_1.factor", withScript())).toContain("does not name a port");
   });
 
-  it("refuses a duplicate port, through mutate's own D-141 clause 6 check rather than a second one here", () => {
+  it("refuses a duplicate port, through the check in mutate rather than a second one here", () => {
     const once = committed("addport script_1.in.factor", withScript());
     expect(refused("addport script_1.in.factor", once)).not.toBe("");
     expect(onlyNamed(once, "script_1").ports?.in).toEqual(["factor"]);
@@ -445,7 +445,7 @@ describe("addport / removeport — §5.8's ports, declared by an operator (D-146
     expect(getSlot(script, ["out", "result"])?.value).toBe(42);
   });
 
-  it("REFUSES to remove an out port another object still reads, rather than silently breaking that formula (§5.1.1, D-141 clause 6)", () => {
+  it("REFUSES to remove an out port another object still reads, rather than silently breaking that formula", () => {
     const added = committed("addport script_1.out.result", withScript());
     const seeded = committed("set script_1.placeholder.result 10", added);
     const withPolygon = committed("polygon sides=5 x=0 y=0 r=1", seeded);
@@ -458,7 +458,7 @@ describe("addport / removeport — §5.8's ports, declared by an operator (D-146
     expect(refused("removeport script_1.in.absent", withScript())).toContain('has no in port named "absent"');
   });
 
-  it("Phase 6's acceptance criterion, TYPED — every line one a person can enter at the command line (D-146, 0177-REVIEW's finding)", () => {
+  it("the acceptance criterion for the script node, typed the way a person enters it", () => {
     let document = createEmptyDocument();
     for (const line of [
       "table x=0 y=0 rows=1 cols=1",
@@ -482,7 +482,7 @@ describe("addport / removeport — §5.8's ports, declared by an operator (D-146
     expect(getSlot(onlyNamed(cellChanged, "script_1"), ["in", "factor"])?.value).toBe(7);
   });
 
-  it("shows a declared port in `props`, so an operator can see the port they just made (D-146; D-077 still summarises a TABLE's cells)", () => {
+  it("shows a declared port in `props`, so an operator can see the port they just made, while a table still shows a summary of its cells", () => {
     const added = committed("addport script_1.in.factor", withScript());
     const outcome = run("props script_1", committed("addport script_1.out.result", added));
     const lines = isCommandFailure(outcome) ? "" : outcome.lines.join("\n");
@@ -492,7 +492,7 @@ describe("addport / removeport — §5.8's ports, declared by an operator (D-146
   });
 });
 
-describe("D-122 — a text object's `content` slot is literal-only (answers Q-023 / F13)", () => {
+describe("the `content` slot of a text object takes a literal only", () => {
   function docWithTextObject(): Document {
     return committed('text x=0 y=0 "hello"', createEmptyDocument());
   }
@@ -500,19 +500,19 @@ describe("D-122 — a text object's `content` slot is literal-only (answers Q-02
   it("refuses `link text_1.content <address>` — content is read as raw source before any formula value exists, so its embedded references could not be tracked", () => {
     const message = refused("link text_1.content some.slot", docWithTextObject());
     expect(message).toContain("raw source only");
-    expect(message).toContain("D-122");
+    expect(message).toContain("cannot be a formula or a link");
   });
 
-  it("refuses `set text_1.content = <formula>` for the same reason (à la D-046 for a table dimension)", () => {
+  it("refuses `set text_1.content = <formula>` for the same reason a table dimension does", () => {
     const message = refused("set text_1.content = 1 + 1", docWithTextObject());
-    expect(message).toContain("D-122");
+    expect(message).toContain("cannot be a formula or a link");
   });
 
-  it("the refusal fires before the formula is even parsed — an unresolvable source in the link still gets the D-122 message, not a #PARSE", () => {
-    expect(refused("link text_1.content nonexistent.slot", docWithTextObject())).toContain("D-122");
+  it("the refusal fires before the formula is even parsed — an unresolvable source in the link still gets the literal only message, not a #PARSE", () => {
+    expect(refused("link text_1.content nonexistent.slot", docWithTextObject())).toContain("cannot be a formula or a link");
   });
 
-  it("still accepts a plain literal `set text_1.content \"...\"` — that is how content is authored (§5.6)", () => {
+  it("still accepts a plain literal `set text_1.content \"...\"` — that is how content is authored", () => {
     const document = committed('set text_1.content "brand new"', docWithTextObject());
     expect(literalValue(onlyNamed(document, "text_1"), ["content"])).toBe("brand new");
   });
@@ -522,7 +522,7 @@ describe("D-122 — a text object's `content` slot is literal-only (answers Q-02
     expect(literalValue(onlyNamed(document, "text_1"), ["content"])).toBe("= not a formula");
   });
 
-  it("does not constrain a text object's other slots — style.fontSize can still be linked to a cell (§5.6)", () => {
+  it("does not constrain a text object's other slots — style.fontSize can still be linked to a cell", () => {
     const withTable = committed("table x=0 y=0 rows=1 cols=1", docWithTextObject());
     const seeded = committed("set table_1.A1 18", withTable);
     const linked = committed("link text_1.style.fontSize table_1.A1", seeded);
@@ -530,7 +530,7 @@ describe("D-122 — a text object's `content` slot is literal-only (answers Q-02
   });
 });
 
-describe("identity — ids and names (D-002, §5.2)", () => {
+describe("identity — ids and names", () => {
   it("mints a fresh id per object and advances the document's own counter, never reusing one", () => {
     const first = committed("circle x=0 y=0 r=1", createEmptyDocument());
     const second = committed("circle x=1 y=1 r=1", first);
@@ -538,7 +538,7 @@ describe("identity — ids and names (D-002, §5.2)", () => {
     expect(second.nextObjectId).toBe(3);
   });
 
-  it("counts default names up per type, so two circles are circle_1 and circle_2 (§5.2)", () => {
+  it("counts default names up per type, so two circles are circle_1 and circle_2", () => {
     const second = committed("circle x=1 y=1 r=1", committed("circle x=0 y=0 r=1", createEmptyDocument()));
     expect(second.objects.map((object) => object.name)).toEqual(["circle_1", "circle_2"]);
   });
@@ -579,7 +579,7 @@ describe("identity — ids and names (D-002, §5.2)", () => {
   });
 });
 
-describe("D-070 — a creation count is bounded by the HANDLER, and out of range REJECTS", () => {
+describe("a creation count is bounded by the HANDLER, and out of range REJECTS", () => {
   it("refuses sides below the minimum, naming the argument and the range", () => {
     expect(refused("polygon sides=2 x=0 y=0 r=1", createEmptyDocument())).toBe(`sides must be a whole number from 3 to ${MAX_POLYGON_SIDES}, got 2`);
   });
@@ -615,7 +615,7 @@ describe("D-070 — a creation count is bounded by the HANDLER, and out of range
   });
 });
 
-describe("D-097 — a table's rows/cols are bounded at every WRITE, not only at creation (the vanishing table, 0100-REVIEW-phase4)", () => {
+describe("the rows and cols of a table are bounded at every write, not only at creation", () => {
   function seeded(): Document {
     return committed("table x=0 y=0 rows=3 cols=3", createEmptyDocument());
   }
@@ -660,7 +660,7 @@ describe("D-097 — a table's rows/cols are bounded at every WRITE, not only at 
 });
 
 describe("a mutate rejection reaches the operator as a message, never as a throw", () => {
-  it("reports a coordinate that overflowed to a non-finite number, and commits nothing (D-025)", () => {
+  it("reports a coordinate that overflowed to a non-finite number, and commits nothing", () => {
     const document = createEmptyDocument();
     const overflowing = `circle x=${"1".repeat(400)} y=0 r=1`;
     const message = refused(overflowing, document);
@@ -713,7 +713,7 @@ describe("every registry command reaches a handler", () => {
   });
 });
 
-describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)", () => {
+describe("the effect commands — select, zoom, fit, save, load", () => {
   function sandbox(): Document {
     return committed("table x=0 y=0 rows=2 cols=2", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
   }
@@ -727,14 +727,14 @@ describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)"
   }
 
   describe("select", () => {
-    it("resolves the name HERE and returns the ID, because a name is mutable and main.ts must not resolve one (D-075 clause 1)", () => {
+    it("resolves the name HERE and returns the ID, because a name is mutable and main.ts must not resolve one", () => {
       const document = sandbox();
       const outcome = succeeded("select polygon_1", document);
       expect(outcome.effect).toEqual({ kind: "select", objectId: onlyNamed(document, "polygon_1").id });
       expect(outcome.lines).toEqual(["selected polygon_1"]);
     });
 
-    it("resolves case-insensitively, the same §5.2 lookup delete and rename use", () => {
+    it("resolves case-insensitively, the same lookup that delete and rename use", () => {
       const document = sandbox();
       expect(succeeded("select POLYGON_1", document).effect).toEqual({ kind: "select", objectId: onlyNamed(document, "polygon_1").id });
     });
@@ -750,7 +750,7 @@ describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)"
   });
 
   describe("zoom", () => {
-    it("passes the factor through untouched, because the clamp to [MIN_ZOOM, MAX_ZOOM] is render/camera.ts's (D-062, D-075 clause 5)", () => {
+    it("passes the factor through untouched, because the clamp to [MIN_ZOOM, MAX_ZOOM] is render/camera.ts's", () => {
       const outcome = succeeded("zoom 2", createEmptyDocument());
       expect(outcome.effect).toEqual({ kind: "zoom", factor: 2 });
       expect(outcome.lines).toEqual(["zoom by 2"]);
@@ -775,7 +775,7 @@ describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)"
       });
     }
 
-    it("names the offending factor in the refusal, per §5.10's every-rejection-names-the-specifics rule", () => {
+    it("names the offending factor in the refusal, because every refusal names what it is about", () => {
       expect(refused("zoom -2", createEmptyDocument())).toBe("factor must be a positive number, got -2");
     });
   });
@@ -814,13 +814,13 @@ describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)"
       expect(outcome.lines).toEqual(["loading document"]);
     });
 
-    it("save is allowed on an empty document — an empty document is a document (§5.11)", () => {
+    it("save is allowed on an empty document — an empty document is a document", () => {
       expect(succeeded("save", createEmptyDocument()).effect).toEqual({ kind: "save" });
     });
   });
 
   describe("who carries an effect at all", () => {
-    it("gives list and refs NONE, because their answer is lines (D-075 clause 4)", () => {
+    it("gives list and refs NONE, because their answer is lines", () => {
       const document = sandbox();
       expect(succeeded("list", document).effect).toBeUndefined();
       expect(succeeded("refs polygon_1", document).effect).toBeUndefined();
@@ -831,7 +831,7 @@ describe("the effect commands — select, zoom, fit, save, load (§5.10, D-075)"
       expect(succeeded("set polygon_1.radius 9", sandbox()).effect).toBeUndefined();
     });
 
-    it("is plain, serializable data — no function survives a JSON round trip, so this pins D-075 clause 2 mechanically", () => {
+    it("is plain, serializable data — no function survives a JSON round trip, so this pins the rule mechanically", () => {
       const document = sandbox();
       for (const line of ["select polygon_1", "zoom 2", "fit", "save", "load"]) {
         const effect = succeeded(line, document).effect;
@@ -856,7 +856,7 @@ describe("end to end — a typed line, and a picked one, reach the same object",
     expect(hitTest({ x: 39, y: 19 }, outcome.document.objects, camera)).toBeUndefined();
   });
 
-  it("makes a command-created table draggable, because its origin slots are the ones §5.9's per-component rule writes", () => {
+  it("makes a command-created table draggable, because its origin slots are the ones the per component rule writes", () => {
     const document = committed("table x=40 y=20 rows=2 cols=3", createEmptyDocument());
     const camera = { x: 0, y: 0, zoom: 1 };
     const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 41, y: 21 }, document.objects, camera);
@@ -868,7 +868,7 @@ describe("end to end — a typed line, and a picked one, reach the same object",
     expect(dragged === undefined ? undefined : literalValue(dragged, ["origin", "y"])).toBe(25);
   });
 
-  it("produces the same circle from D-072's prompt sequence as from §5.10's key=value form, because both build one Command", () => {
+  it("produces the same circle from the prompt sequence as from the key=value form, because both build one Command", () => {
     const typed = committed("circle x=100 y=100 r=20", createEmptyDocument());
 
     const started = beginCommand("circle");
@@ -891,7 +891,7 @@ describe("end to end — a typed line, and a picked one, reach the same object",
   });
 });
 
-describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)", () => {
+describe("the slot commands — set, link, unlink", () => {
   function sandbox(): Document {
     return committed("table x=0 y=0 rows=4 cols=4", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
   }
@@ -904,20 +904,20 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     return getSlot(object, path);
   }
 
-  describe("set writes a literal (§5.10)", () => {
+  describe("set writes a literal", () => {
     it("replaces a literal slot's value and echoes what it wrote", () => {
       const outcome = run("set polygon_1.radius 42", sandbox());
       expect(outcome.ok && outcome.lines).toEqual(["polygon_1.radius = 42"]);
       expect(slotOf(committed("set polygon_1.radius 42", sandbox()), "polygon_1", ["radius"])).toEqual({ kind: "literal", value: 42 });
     });
 
-    it("CREATES a table cell slot that did not exist, which is how an absent cell gets written at all (D-047)", () => {
+    it("CREATES a table cell slot that did not exist, which is how an absent cell gets written at all", () => {
       const before = sandbox();
       expect(slotOf(before, "table_1", ["cells", "A1"])).toBeUndefined();
       expect(slotOf(committed("set table_1.A1 5", before), "table_1", ["cells", "A1"])).toEqual({ kind: "literal", value: 5 });
     });
 
-    it("accepts a lowercase cell reference and writes the SAME slot as the uppercase one (D-039)", () => {
+    it("accepts a lowercase cell reference and writes the SAME slot as the uppercase one", () => {
       expect(slotOf(committed("set table_1.a1 5", sandbox()), "table_1", ["cells", "A1"])).toEqual({ kind: "literal", value: 5 });
     });
 
@@ -928,12 +928,12 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     });
   });
 
-  describe("what a slot command refuses (identity failures are the handler's — D-069)", () => {
+  describe("what a slot command refuses (the handler owns an identity failure)", () => {
     it("refuses an unknown object name with parseAddress's own message", () => {
       expect(refused("set nosuch.radius 1", sandbox())).toBe('no object named "nosuch"');
     });
 
-    it("refuses a DERIVED slot, naming it — §5.1's 'derived is fixed by schema and can never be converted', which D-040 leaves untouched", () => {
+    it("refuses a DERIVED slot, naming it, because the schema fixes a derived slot and nothing converts it", () => {
       expect(refused("set polygon_1.area 1", sandbox())).toContain("polygon_1.area is a derived slot");
       expect(refused("link polygon_1.area table_1.A1", sandbox())).toContain("polygon_1.area is a derived slot");
     });
@@ -955,7 +955,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     });
   });
 
-  describe("set writes a FORMULA when the value position begins with = (D-071)", () => {
+  describe("set writes a FORMULA when the value position begins with =", () => {
     it("stores a formula slot and lets step 7 of the same mutation evaluate it — no caller ever sees the null", () => {
       const document = committed("set table_1.A1 = 2 + 3 * 4", sandbox());
       const slot = slotOf(document, "table_1", ["cells", "A1"]);
@@ -963,37 +963,37 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(slot?.value).toBe(14);
     });
 
-    it("echoes the formula back through the CURRENT names, which is the only form of its source that exists (§5.2)", () => {
+    it("echoes the formula back through the CURRENT names, which is the only form of its source that exists", () => {
       const outcome = run("set table_1.A1 = polygon_1.origin.x * 2", sandbox());
       expect(outcome.ok && outcome.lines).toEqual(["table_1.A1 = polygon_1.origin.x * 2"]);
     });
 
-    it("resolves a BARE cell ref when the target is a cell of that table, and refuses one when it is not (§5.3)", () => {
+    it("resolves a BARE cell ref when the target is a cell of that table, and refuses one when it is not", () => {
       const seeded = committed("set table_1.A1 7", sandbox());
       expect(slotOf(committed("set table_1.B1 = A1 + 1", seeded), "table_1", ["cells", "B1"])?.value).toBe(8);
       expect(refused("set polygon_1.radius = A1", seeded)).toContain("A1");
     });
 
-    it("accepts a formula containing a quoted string, because the command lexer stops at the = (D-073)", () => {
+    it("accepts a formula containing a quoted string, because the command lexer stops at the =", () => {
       expect(slotOf(committed('set table_1.A1 = CONCAT("a", "b")', sandbox()), "table_1", ["cells", "A1"])?.value).toBe("ab");
     });
 
-    it("rejects a cycle at mutation time and never stores it (§5.1 step 5)", () => {
+    it("rejects a cycle at mutation time and never stores it", () => {
       const seeded = committed("set table_1.A1 = table_1.B1", committed("set table_1.B1 1", sandbox()));
       expect(refused("set table_1.B1 = table_1.A1", seeded)).toContain("cyclic dependency");
       expect(slotOf(seeded, "table_1", ["cells", "B1"])).toEqual({ kind: "literal", value: 1 });
     });
 
-    it("a bare reference to an EMPTY cell WITHIN the table's extent reads as 0 rather than being refused (D-110, reversing this test's own former D-047 clause 4 reading)", () => {
+    it("a bare reference to an EMPTY cell WITHIN the table's extent reads as 0 rather than a refusal", () => {
       expect(slotOf(committed("set table_1.A1 = table_1.B1", sandbox()), "table_1", ["cells", "A1"])?.value).toBe(0);
       expect(slotOf(committed("set table_1.A1 = SUM(B1:B4)", sandbox()), "table_1", ["cells", "A1"])?.value).toBe(0);
     });
 
-    it("a bare reference to a cell OUTSIDE the table's extent is STILL a dangling reference — D-110 clause 6's boundary: there is no extent to make it legal", () => {
+    it("a bare reference to a cell OUTSIDE the table's extent is STILL a dangling reference, because there is no extent to make it legal", () => {
       expect(refused("set table_1.A1 = table_1.B9", sandbox())).toContain("references a slot that does not exist");
     });
 
-    it("D-110 clause 5 AT THE COMMAND LINE: the cycle that only closes once the empty cell is populated is refused at THAT line, naming both cells (0119-REVIEW)", () => {
+    it("at the command line, a cycle that only closes once the empty cell is filled is refused at that line, naming both cells", () => {
       const acceptedWhileEmpty = committed("set table_1.A2 = table_1.A1", sandbox());
       expect(slotOf(acceptedWhileEmpty, "table_1", ["cells", "A2"])?.value).toBe(0);
 
@@ -1004,7 +1004,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     });
   });
 
-  describe("D-038 — a formula that cannot be valid is refused when it is ENTERED, and its source is not discarded", () => {
+  describe("a formula that cannot be valid is refused when it is ENTERED, and its source is not discarded", () => {
     it("refuses an unknown function name, carrying the offending name and its position", () => {
       const message = refused("set table_1.A1 = NOSUCH(1)", sandbox());
       expect(message).toContain('unknown function "NOSUCH"');
@@ -1012,7 +1012,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(message).toContain("NOSUCH(1)");
     });
 
-    it("measures that position against the source it quotes, however much space follows the = (0080-REVIEW E1)", () => {
+    it("measures that position against the source it quotes, however much space follows the =", () => {
       expect(refused("set table_1.A1 =    1 + NOSUCH(1)", sandbox())).toBe('unknown function "NOSUCH" (at position 4 of "1 + NOSUCH(1)")');
     });
 
@@ -1020,7 +1020,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(refused("set table_1.A1 = ROUND(1)", sandbox())).toContain("ROUND");
     });
 
-    it("refuses an unresolvable reference at parse time, regardless of which IF branch it sits in (§5.3)", () => {
+    it("refuses an unresolvable reference at parse time, regardless of which IF branch it sits in", () => {
       expect(refused("set table_1.A1 = IF(TRUE, 1, nosuch.value)", sandbox())).toContain('no object named "nosuch"');
     });
 
@@ -1029,7 +1029,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     });
   });
 
-  describe("D-040 — an explicit write to a formula slot REPLACES it, and is not silent", () => {
+  describe("an explicit write to a formula slot REPLACES it, and is not silent", () => {
     it("turns a formula slot back into a literal and reports the formula source it replaced", () => {
       const bound = committed("set table_1.A1 = polygon_1.radius + 1", sandbox());
       const outcome = run("set table_1.A1 9", bound);
@@ -1037,7 +1037,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(slotOf(committed("set table_1.A1 9", bound), "table_1", ["cells", "A1"])).toEqual({ kind: "literal", value: 9 });
     });
 
-    it("reports a replacement identically whether the new slot is a literal, a formula, or a link — one path writes all three (D-071 clause 4)", () => {
+    it("reports a replacement identically whether the new slot is a literal, a formula, or a link — one path writes all three", () => {
       const bound = committed("set table_1.A1 = 1 + 1", sandbox());
       for (const line of ["set table_1.A1 9", "set table_1.A1 = 2 + 2", "link table_1.A1 polygon_1.radius"]) {
         const outcome = run(line, bound);
@@ -1052,12 +1052,12 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(slotOf(committed("set polygon_1.radius 7", overwritten), "table_1", ["cells", "A1"])?.value).toBe(9);
     });
 
-    it("still refuses a DERIVED slot — D-040's bound 3", () => {
+    it("still refuses a derived slot", () => {
       expect(refused("set polygon_1.vertices 1", sandbox())).toContain("is a derived slot");
     });
   });
 
-  describe("link — §5.1's degenerate formula, through the same path (D-071 clause 4)", () => {
+  describe("link — a binding is a degenerate formula, down the same path", () => {
     it("makes the target read the source live, so writing the source moves the target", () => {
       const linked = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox()));
       expect(slotOf(linked, "polygon_1", ["origin", "x"])?.value).toBe(5);
@@ -1071,7 +1071,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(viaLink).toEqual(viaSet);
     });
 
-    it("refuses a source that is not an address, because §5.10 declares link <address> <address>", () => {
+    it("refuses a source that is not an address, because the form is link <address> <address>", () => {
       expect(refused("link polygon_1.radius 42", sandbox())).toContain('"link" takes an address as its source');
     });
 
@@ -1080,7 +1080,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     });
   });
 
-  describe("unlink — D-041, the value last displayed is the value kept", () => {
+  describe("unlink — the value last shown is the value kept", () => {
     it("freezes the formula's last value into a literal and names the formula it removed", () => {
       const bound = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox()));
       const outcome = run("unlink polygon_1.origin.x", bound);
@@ -1094,7 +1094,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(slotOf(committed("set table_1.A1 99", freed), "polygon_1", ["origin", "x"])?.value).toBe(5);
     });
 
-    it("keeps an ERROR value rather than refusing or substituting a default — errors included, D-041 exactly", () => {
+    it("keeps an ERROR value rather than refusing or substituting a default, errors included", () => {
       const erroring = committed("set table_1.A1 = 1 / 0", sandbox());
       const freed = committed("unlink table_1.A1", erroring);
       const kept = slotOf(freed, "table_1", ["cells", "A1"]);
@@ -1102,7 +1102,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(kept?.value).toEqual({ error: "#DIV0", message: "division by zero" });
     });
 
-    it("lets the operator type over that frozen error, which is what makes D-041 safe (D-040)", () => {
+    it("lets the operator type over that frozen error, which is what makes that safe", () => {
       const frozen = committed("unlink table_1.A1", committed("set table_1.A1 = 1 / 0", sandbox()));
       expect(slotOf(committed("set table_1.A1 3", frozen), "table_1", ["cells", "A1"])?.value).toBe(3);
     });
@@ -1114,7 +1114,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
     });
   });
 
-  describe("clear — empties a table cell by REMOVING its slot (D-047)", () => {
+  describe("clear — empties a table cell by REMOVING its slot", () => {
     it("removes the slot and names what was there", () => {
       const filled = committed("set table_1.A1 5", sandbox());
       const outcome = run("clear table_1.A1", filled);
@@ -1122,7 +1122,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(slotOf(committed("clear table_1.A1", filled), "table_1", ["cells", "A1"])).toBeUndefined();
     });
 
-    it("names a removed FORMULA by its source, not by its last value — the same courtesy `unlink` gives (D-040's not-silent bound)", () => {
+    it("names a removed FORMULA by its source, not by its last value, the same courtesy `unlink` gives", () => {
       const bound = committed("set table_1.B1 = table_1.A1 * 2", committed("set table_1.A1 5", sandbox()));
       const outcome = run("clear table_1.B1", bound);
       expect(outcome.ok && outcome.lines).toEqual(["cleared table_1.B1 — was = table_1.A1 * 2"]);
@@ -1153,7 +1153,7 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
       expect(refused("clear nosuch_1.A1", sandbox())).toBe('no object named "nosuch_1"');
     });
 
-    it("a cell a formula READS can be cleared, and the dependent re-reads it as empty rather than breaking (D-110 clause 4)", () => {
+    it("a cell a formula READS can be cleared, and the dependent re-reads it as empty rather than breaking", () => {
       const wired = committed("set table_1.B1 = table_1.A1 * 2", committed("set table_1.A1 5", sandbox()));
       expect(slotOf(wired, "table_1", ["cells", "B1"])?.value).toBe(10);
       expect(slotOf(committed("clear table_1.A1", wired), "table_1", ["cells", "B1"])?.value).toBe(0);
@@ -1166,14 +1166,14 @@ describe("the slot commands — set, link, unlink (§5.10, D-040, D-041, D-071)"
   });
 
   describe("the loop these four commands close", () => {
-    it("propagates a cell edit through a link to the geometry it drives, in one topological pass (§5.1)", () => {
+    it("propagates a cell edit through a link to the geometry it drives, in one topological pass", () => {
       const wired = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 100", sandbox()));
       expect(slotOf(wired, "polygon_1", ["centroid", "x"])?.value).toBeCloseTo(100, 6);
       const moved = committed("set table_1.A1 250", wired);
       expect(slotOf(moved, "polygon_1", ["centroid", "x"])?.value).toBeCloseTo(250, 6);
     });
 
-    it("reads geometry back out into a cell, the other direction of §5.1's example chain", () => {
+    it("reads geometry back out into a cell, the other direction of the example chain", () => {
       const document = committed("set table_1.B1 = polygon_1.origin.y * 2", sandbox());
       expect(slotOf(document, "table_1", ["cells", "B1"])?.value).toBe(40);
       expect(slotOf(committed("set polygon_1.origin.y 5", document), "table_1", ["cells", "B1"])?.value).toBe(10);
@@ -1208,7 +1208,7 @@ describe("delete, refs, props and list — the object commands that need no new 
     return document.objects.find((candidate) => candidate.name === objectName);
   }
 
-  describe("list — §5.10's dump all objects and names", () => {
+  describe("list — a dump of all objects and names", () => {
     it("says so plainly on an empty document rather than returning no lines at all", () => {
       expect(lines("list", createEmptyDocument())).toEqual(["no objects"]);
     });
@@ -1217,14 +1217,14 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(lines("list", sandbox())).toEqual(["polygon_1 — polygon", "table_1 — table"]);
     });
 
-    it("never prints an object id, because §5.2 makes the id the layer the operator never writes", () => {
+    it("never prints an object id, because the id is the layer the operator never writes", () => {
       const listed = lines("list", sandbox()).join("\n");
       for (const object of sandbox().objects) {
         expect(listed).not.toContain(object.id);
       }
     });
 
-    it("returns the document it was given, unchanged and unjournalled — D-075 clause 4's reason for giving it no effect", () => {
+    it("returns the document it was given, unchanged and unjournalled, which is why it carries no effect", () => {
       const before = sandbox();
       const outcome = run("list", before);
       expect(outcome.ok && outcome.document).toBe(before);
@@ -1232,12 +1232,12 @@ describe("delete, refs, props and list — the object commands that need no new 
     });
   });
 
-  describe("refs — §5.1.1's look before you delete", () => {
+  describe("refs — look before you delete", () => {
     it("names the slot on another object that reads the target, in the edge's own source → dependent direction", () => {
       expect(lines("refs table_1", wired())[0]).toBe("table_1.A1 → polygon_1.origin.x");
     });
 
-    it("counts other objects' dependents apart from the target's own, because only the first kind can block a delete (§5.1.1)", () => {
+    it("counts other objects' dependents apart from the target's own, because only the first kind can block a delete", () => {
       const reported = lines("refs table_1", wired());
       expect(reported[reported.length - 1]).toBe("1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself");
     });
@@ -1256,7 +1256,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       ]);
     });
 
-    it("accepts a DERIVED slot as a target — reading who depends on a computed value is not an attempt to write it (§5.1)", () => {
+    it("accepts a DERIVED slot as a target — reading who depends on a computed value is not an attempt to write it", () => {
       const reported = lines("refs polygon_1.vertices", sandbox());
       expect(reported[reported.length - 1]).toBe("8 inbound edges from 8 dependent slots: 0 on other objects, 8 on polygon_1 itself");
     });
@@ -1266,11 +1266,11 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(lines("refs table_1.A1", sandbox())).toEqual(["nothing references table_1.A1"]);
     });
 
-    it("accepts a cell path the table declares but nobody has written, because D-047 makes an absent cell ordinary state", () => {
+    it("accepts a cell path the table declares but nobody has written, because an absent cell is ordinary state", () => {
       expect(lines("refs table_1.D4", sandbox())).toEqual(["nothing references table_1.D4"]);
     });
 
-    it("D-110's disclosed consequence: does NOT report a formula that reads an EMPTY in-extent cell as one of its dependents, because clause 4 gives that reference no edge — until the cell is populated, which makes the edge (and the report) appear on its own", () => {
+    it("a disclosed consequence: it does not report a formula that reads an EMPTY in-extent cell as one of its dependents, because that reference has no edge, until the cell is populated, which makes the edge (and the report) appear on its own", () => {
       const linkedToEmptyCell = committed("link polygon_1.origin.x table_1.D4", sandbox());
       expect(lines("refs table_1.D4", linkedToEmptyCell)).toEqual(["nothing references table_1.D4"]);
 
@@ -1281,7 +1281,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       ]);
     });
 
-    it("but `refs <object>` DOES report that same dependent, and agrees with the refused `delete` — the two forms answer different questions (D-112, 0119-REVIEW)", () => {
+    it("but `refs <object>` DOES report that same dependent, and agrees with the refused `delete` — the two forms answer different questions", () => {
       const linkedToEmptyCell = committed("link polygon_1.origin.x table_1.D4", sandbox());
 
       expect(lines("refs table_1.D4", linkedToEmptyCell)).toEqual(["nothing references table_1.D4"]);
@@ -1300,7 +1300,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       ]);
     });
 
-    it("counts EDGES and SLOTS apart where one slot reads two slots of the target, because only the slot count says how much unlinking a delete needs (§5.1.1)", () => {
+    it("counts EDGES and SLOTS apart where one slot reads two slots of the target, because only the slot count says how much unlinking a delete needs", () => {
       const both = committed(
         "set polygon_1.origin.x = table_1.A1 + table_1.A2",
         committed("set table_1.A2 7", committed("set table_1.A1 5", sandbox())),
@@ -1321,7 +1321,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(refused("refs table_1.E1", sandbox())).toContain("does not declare one");
     });
 
-    it("returns the document it was given, unchanged and unjournalled (D-075 clause 4)", () => {
+    it("returns the document it was given, unchanged and unjournalled", () => {
       const before = wired();
       const outcome = run("refs table_1", before);
       expect(outcome.ok && outcome.document).toBe(before);
@@ -1358,12 +1358,12 @@ describe("delete, refs, props and list — the object commands that need no new 
     });
   });
 
-  describe("props — D-092 clause 4's slot enumeration, D-094 clause 9's shared reading of it", () => {
+  describe("props — the slot list, read the way the panel reads it", () => {
     it("headers the report with the object's name and type, the same pair list uses", () => {
       expect(lines("props polygon_1", sandbox())[0]).toBe("polygon_1 — polygon");
     });
 
-    it("lists every slot in SCHEMA order — non-derived first, then derived (D-094 clause 7)", () => {
+    it("lists every slot in SCHEMA order — non-derived first, then derived", () => {
       const paths = lines("props polygon_1", sandbox())
         .slice(1)
         .map((line) => line.split(" = ")[0]);
@@ -1389,24 +1389,24 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(lines("props polygon_1", sandbox())).toContain("radius = 50 (literal)");
     });
 
-    it("marks a derived slot as derived, never as something §5.1 lets the operator set or link", () => {
+    it("marks a derived slot as derived, never as something the operator can set or link", () => {
       const reported = lines("props polygon_1", sandbox());
       expect(reported.some((line) => line.startsWith("vertices = ") && line.endsWith("(derived)"))).toBe(true);
     });
 
-    it("shows a formula slot's reconstructed SOURCE alongside its current value (D-092 clause 4)", () => {
+    it("shows a formula slot's reconstructed SOURCE alongside its current value", () => {
       const document = committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 7", sandbox()));
       expect(lines("props polygon_1", document)).toContain("origin.x = 7 (formula, = table_1.A1)");
     });
 
-    it("gives a table's cell family ONE row naming the grid and how many cells are WRITTEN, never one row per cell (D-077, D-094 clause 8)", () => {
+    it("gives a table's cell family ONE row naming the grid and how many cells are WRITTEN, never one row per cell", () => {
       const document = committed("set table_1.B2 2", committed("set table_1.A1 5", sandbox()));
       const reported = lines("props table_1", document);
       expect(reported).toContain('cells = "4×4 grid — 2 of 16 cells written" (literal)');
       expect(reported.filter((line) => line.startsWith("cells"))).toHaveLength(1);
     });
 
-    it("counts a table's WRITTEN cells, not its declared extent — an absent cell is D-047's ordinary empty", () => {
+    it("counts a table's WRITTEN cells, not its declared extent, because an absent cell is ordinary empty", () => {
       expect(lines("props table_1", sandbox())).toContain('cells = "4×4 grid — 0 of 16 cells written" (literal)');
     });
 
@@ -1421,14 +1421,14 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(refused("props nosuch", sandbox())).toBe('no object named "nosuch"');
     });
 
-    it("returns the document it was given, unchanged and unjournalled (D-075 clause 4, D-092 clause 6)", () => {
+    it("returns the document it was given, unchanged and unjournalled", () => {
       const before = sandbox();
       const outcome = run("props polygon_1", before);
       expect(outcome.ok && outcome.document).toBe(before);
     });
   });
 
-  describe("delete — §5.1.1's two paths, chosen by the operator's force flag", () => {
+  describe("delete — the two paths, chosen by the force flag", () => {
     it("removes an object nothing reads, and says which one it removed", () => {
       const after = committed("delete table_1", sandbox());
       expect(lines("delete table_1", sandbox())).toEqual(["deleted table_1"]);
@@ -1436,7 +1436,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(named(after, "polygon_1")).toBeDefined();
     });
 
-    it("REJECTS while another object still reads it, naming every dependent (§5.1.1 clause 1)", () => {
+    it("REJECTS while another object still reads it, naming every dependent", () => {
       expect(refused("delete table_1", wired())).toContain("polygon_1.origin.x references a slot that does not exist");
     });
 
@@ -1444,14 +1444,14 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(refused("delete table_1", wired())).toContain('unlink each, or "delete table_1 force" to rewrite them to #REF instead');
     });
 
-    it("leaves prior state bit-for-bit unchanged when it rejects (§5.1 step 6)", () => {
+    it("leaves prior state bit-for-bit unchanged when it rejects", () => {
       const before = wired();
       const snapshot = JSON.stringify(before);
       refused("delete table_1", before);
       expect(JSON.stringify(before)).toBe(snapshot);
     });
 
-    it("takes §5.1.1's REPAIR path under force, and reports every slot it broke (D-057's first reader)", () => {
+    it("takes the repair path under force, and reports every slot it broke", () => {
       const outcome = run("delete table_1 force", wired());
       expect(outcome.ok && outcome.lines).toEqual([
         "deleted table_1",
@@ -1459,7 +1459,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       ]);
     });
 
-    it("leaves the broken formula holding a #REF value rather than a dangling edge (§5.1.1's whole reason for the repair path)", () => {
+    it("leaves the broken formula holding a #REF value rather than a dangling edge, which is the whole reason for the repair path", () => {
       const repaired = committed("delete table_1 force", wired());
       const polygon = named(repaired, "polygon_1");
       const slot = polygon === undefined ? undefined : getSlot(polygon, ["origin", "x"]);
@@ -1475,7 +1475,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(refused("delete nosuch", sandbox())).toBe('no object named "nosuch"');
     });
 
-    it("treats an EXTERNAL formula reading a DERIVED slot exactly like any other reference — refused, then repaired under force (entry 0081's disclosed gap, pinned at 0082-REVIEW)", () => {
+    it("treats an EXTERNAL formula reading a DERIVED slot exactly like any other reference: refused, then repaired under force", () => {
       const readsDerived = committed("set table_1.A1 = polygon_1.area", sandbox());
       expect(lines("refs polygon_1", readsDerived)[0]).toBe("polygon_1.area → table_1.A1");
       expect(refused("delete polygon_1", readsDerived)).toContain("table_1.A1 references a slot that does not exist");
@@ -1490,7 +1490,7 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(after.journal[2]?.operations).toEqual([{ kind: "deleteObject", objectId: "obj_2", force: false }]);
     });
 
-    it("frees the deleted name for reuse while never reusing its id (D-002)", () => {
+    it("frees the deleted name for reuse while never reusing its id", () => {
       const recreated = committed("table x=0 y=0 rows=2 cols=2", committed("delete table_1", sandbox()));
       const table = named(recreated, "table_1");
       expect(table?.id).toBe("obj_3");
@@ -1498,7 +1498,7 @@ describe("delete, refs, props and list — the object commands that need no new 
   });
 });
 
-describe("rename — §5.10's one object command that needed a new Operation kind (§5.2, §5.3)", () => {
+describe("rename — the one object command that needed a new Operation kind", () => {
   function wired(): Document {
     const sandbox = committed("table x=0 y=0 rows=4 cols=4", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
     return committed("link polygon_1.origin.x table_1.A1", committed("set table_1.A1 5", sandbox));
@@ -1508,24 +1508,24 @@ describe("rename — §5.10's one object command that needed a new Operation kin
     return document.objects.find((candidate) => candidate.name === objectName);
   }
 
-  it("writes the new name and echoes both, at §5.10's own example line", () => {
+  it("writes the new name and echoes both, at the documented example line", () => {
     const outcome = run("rename polygon_1 intersection_a", wired());
     expect(outcome.ok && outcome.lines).toEqual(["renamed polygon_1 to intersection_a"]);
     expect(outcome.ok && named(outcome.document, "intersection_a")?.id).toBe("obj_1");
     expect(outcome.ok && named(outcome.document, "polygon_1")).toBeUndefined();
   });
 
-  it("resolves the OLD name case-insensitively, the same resolver delete uses (§5.2)", () => {
+  it("resolves the OLD name case-insensitively, the same resolver delete uses", () => {
     expect(committed("rename POLYGON_1 intersection_a", wired()).objects[0]?.name).toBe("intersection_a");
   });
 
-  it("leaves every formula pointing at the renamed object working — §5.3's whole reason for storing ids", () => {
+  it("leaves every formula pointing at the renamed object working, which is the whole reason for storing ids", () => {
     const renamed = committed("rename table_1 grid", wired());
     const driven = committed("set grid.A1 42", renamed);
     expect(getSlot(named(driven, "polygon_1") as GraphObject, ["origin", "x"])?.value).toBe(42);
   });
 
-  it("makes the NEW name the one an address is printed with, because formatAddress resolves a name from the id (§5.3)", () => {
+  it("makes the NEW name the one an address is printed with, because formatAddress resolves a name from the id", () => {
     const renamed = committed("rename table_1 grid", wired());
     const outcome = run("refs grid", renamed);
     expect(outcome.ok && outcome.lines[0]).toBe("grid.A1 → polygon_1.origin.x");
@@ -1548,12 +1548,12 @@ describe("rename — §5.10's one object command that needed a new Operation kin
     expect(refused("rename nosuch whatever", wired())).toBe('no object named "nosuch"');
   });
 
-  it("refuses a new name another object already holds, in mutate's words — §5.2's uniqueness has ONE gate, not a copy here", () => {
+  it("refuses a new name another object already holds, in the words of mutate, because uniqueness has one gate and not a copy here", () => {
     expect(refused("rename polygon_1 table_1", wired())).toBe('operation 1 of 1 cannot rename: the name "table_1" is already in use');
     expect(refused("rename polygon_1 TABLE_1", wired())).toContain("already in use");
   });
 
-  it("refuses a new name that fails §5.2's grammar — the parser deliberately let it through (D-043)", () => {
+  it("refuses a new name that fails the grammar, which the parser let through on purpose", () => {
     expect(refused("rename polygon_1 3bad", wired())).toBe(
       'operation 1 of 1 cannot rename: "3bad" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*',
     );
@@ -1563,7 +1563,7 @@ describe("rename — §5.10's one object command that needed a new Operation kin
     expect(committed("rename polygon_1 POLYGON_1", wired()).objects[0]?.name).toBe("POLYGON_1");
   });
 
-  it("leaves prior state bit-for-bit unchanged when it refuses (§5.1 step 6)", () => {
+  it("leaves prior state bit-for-bit unchanged when it refuses", () => {
     const before = wired();
     const snapshot = JSON.stringify(before);
     refused("rename polygon_1 table_1", before);
@@ -1576,12 +1576,12 @@ describe("rename — §5.10's one object command that needed a new Operation kin
     expect(after.journal[4]?.operations).toEqual([{ kind: "renameObject", objectId: "obj_1", name: "intersection_a" }]);
   });
 
-  it("takes no id and moves no counter — a rename is not a create (D-002)", () => {
+  it("takes no id and moves no counter — a rename is not a create", () => {
     const before = wired();
     expect(committed("rename polygon_1 intersection_a", before).nextObjectId).toBe(before.nextObjectId);
   });
 
-  it("refuses a new name §5.3 lexes as a formula keyword, naming all five and what to do (D-080)", () => {
+  it("refuses a new name the formula lexer treats as a keyword, naming all five and what to do", () => {
     const message = refused("rename table_1 TRUE", wired());
     expect(message).toContain("is a reserved word");
     expect(message).toContain("AND, OR, NOT, TRUE, FALSE");
@@ -1595,14 +1595,14 @@ describe("rename — §5.10's one object command that needed a new Operation kin
     expect(JSON.stringify(before)).toBe(snapshot);
   });
 
-  it("leaves every ACCEPTED new name referenceable by a formula, which is the property D-080 protects", () => {
+  it("leaves every ACCEPTED new name referenceable by a formula, which is the property that rule protects", () => {
     const renamed = committed("rename table_1 grid", wired());
     const driven = committed("set polygon_1.radius = grid.A1 + 1", renamed);
     expect(getSlot(named(driven, "polygon_1") as GraphObject, ["radius"])?.value).toBe(6);
   });
 });
 
-describe("a formula too deep to walk is refused, not thrown (D-079)", () => {
+describe("a formula too deep to walk is refused, not thrown", () => {
   function sandbox(): Document {
     return committed("table x=0 y=0 rows=4 cols=4", createEmptyDocument());
   }
@@ -1643,14 +1643,14 @@ describe("a formula too deep to walk is refused, not thrown (D-079)", () => {
     expect(getSlot(named(committed1000, "table_1") as GraphObject, ["cells", "A1"])?.value).toBe(1000);
   });
 
-  it("reports the replaced deep formula rather than throwing while formatting it (D-040)", () => {
+  it("reports the replaced deep formula rather than throwing while formatting it", () => {
     const withDeep = committed(`set table_1.A1 = ${chain(1000)}`, sandbox());
     const outcome = run("set table_1.A1 7", withDeep);
     expect(outcome.ok && outcome.lines.join("\n")).toContain("1 + 1");
   });
 });
 
-describe("executeCommand forwards §5.1's EvalContext to mutate's evaluation (entry 0132, D-118)", () => {
+describe("executeCommand forwards the EvalContext to the evaluation in mutate", () => {
   function textObject(): GraphObject {
     return {
       id: "obj_t",
@@ -1698,7 +1698,7 @@ describe("executeCommand forwards §5.1's EvalContext to mutate's evaluation (en
     expect(measuredHeightOf(outcome.document)).toBe(40);
   });
 
-  it("hands the numeric `width` slot to the measurer as maxWidth through the command seam (D-120)", () => {
+  it("hands the numeric `width` slot to the measurer as maxWidth through the command seam", () => {
     const wrapAware: EvalContext = {
       measurer: { measure: (_text, _style, maxWidth) => ({ width: 0, height: maxWidth === undefined ? 10 : 20 }) },
     };

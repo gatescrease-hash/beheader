@@ -16,7 +16,7 @@ function extent(minX: number, minY: number, maxX: number, maxY: number): WorldEx
   return { minX, minY, maxX, maxY };
 }
 
-describe("placePropertiesPanel — anchoring (D-094 clause 11)", () => {
+describe("placePropertiesPanel — anchoring", () => {
   it("puts the panel's right edge one gap to the LEFT of the extent, top edges aligned, when there is room", () => {
     expect(placePropertiesPanel(extent(300, 50, 400, 150), IDENTITY, 1, VIEWPORT, PANEL)).toEqual({ left: 172, top: 50 });
   });
@@ -33,7 +33,7 @@ describe("placePropertiesPanel — anchoring (D-094 clause 11)", () => {
   });
 });
 
-describe("placePropertiesPanel — clamping to the canvas (D-094 clause 11)", () => {
+describe("placePropertiesPanel — clamping to the canvas", () => {
   it("clamps the panel to the top edge when the extent is above the canvas", () => {
     expect(placePropertiesPanel(extent(300, -100, 400, -20), IDENTITY, 1, VIEWPORT, PANEL)).toEqual({ left: 172, top: 0 });
   });
@@ -47,7 +47,7 @@ describe("placePropertiesPanel — clamping to the canvas (D-094 clause 11)", ()
   });
 });
 
-describe("placePropertiesPanel — CSS vs backing pixels (D-094 clause 12)", () => {
+describe("placePropertiesPanel — CSS vs backing pixels", () => {
   it("divides worldToScreen's backing pixels down by the ratio the canvas actually has", () => {
     expect(placePropertiesPanel(extent(600, 100, 800, 300), IDENTITY, 2, VIEWPORT, PANEL)).toEqual({ left: 172, top: 50 });
   });
@@ -60,7 +60,7 @@ describe("placePropertiesPanel — CSS vs backing pixels (D-094 clause 12)", () 
   });
 });
 
-describe("placePropertiesPanel — the anchor is a world point (D-094 clause 13)", () => {
+describe("placePropertiesPanel — the anchor is a world point", () => {
   it("follows the camera's pan and zoom", () => {
     const camera: CameraState = { x: 50, y: 20, zoom: 2 };
     expect(placePropertiesPanel(extent(100, 60, 200, 160), camera, 1, VIEWPORT, PANEL)).toEqual({ left: 308, top: 80 });

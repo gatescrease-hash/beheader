@@ -515,7 +515,7 @@ export function mutate(
     if (operation.kind === "createObject") {
       if (survivingIds.has(targetId)) {
         missingTargetMessages.push(
-          `${prefix} attempts to create object id "${targetId}", which ALREADY exists in this document (D-002/D-021)`,
+          `${prefix} attempts to create object id "${targetId}", which ALREADY exists in this document`,
         );
         return;
       }
@@ -539,7 +539,7 @@ export function mutate(
       } else {
         detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
       }
-      missingTargetMessages.push(`${prefix} ${detail}, which does not exist in this document (D-021)`);
+      missingTargetMessages.push(`${prefix} ${detail}, which does not exist in this document`);
       return;
     }
     if (operation.kind === "deleteObject") {
@@ -641,7 +641,7 @@ function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): r
       if ((slot.kind === "formula" || slot.kind === "derived") && !declaredKeys.has(key)) {
         problems.push(
           `${describeUndeclaredSlot(object, key)} is a "${slot.kind}" slot that object type ` +
-            `"${object.type}"'s schema does not declare (D-017) — its edges were silently omitted`,
+            `"${object.type}"'s schema does not declare — its edges were silently omitted`,
         );
       }
     }
@@ -671,8 +671,8 @@ function findSchemaSlotKindMismatches(objects: readonly GraphObject[]): readonly
       const name = formatSchemaAddress({ objectId: object.id, path: derivedSlotEntry.path }, objects);
       const reason =
         slot === undefined
-          ? "is missing — deriveEdges still emits an edge into it, pointing at a slot that does not exist (D-018)"
-          : `is a "${slot.kind}" slot where its schema declares "derived" (D-018) — derived slots can never be converted (§5.1)`;
+          ? "is missing — deriveEdges still emits an edge into it, pointing at a slot that does not exist"
+          : `is a "${slot.kind}" slot where its schema declares "derived" — derived slots can never be converted`;
       problems.push(`${name} ${reason}`);
     }
 
@@ -682,7 +682,7 @@ function findSchemaSlotKindMismatches(objects: readonly GraphObject[]): readonly
         continue;
       }
       const name = formatSchemaAddress({ objectId: object.id, path }, objects);
-      problems.push(`${name} is a "derived" slot at a path its schema declares non-derived (D-018) — derived slots can never be converted (§5.1)`);
+      problems.push(`${name} is a "derived" slot at a path its schema declares non-derived — derived slots can never be converted`);
     }
   }
 
@@ -732,14 +732,14 @@ function findIllegalSlotValues(objects: readonly GraphObject[]): readonly string
         continue;
       }
       if (hasIllegalNumber(slot.value)) {
-        problems.push(`${describeUndeclaredSlot(object, key)} holds an illegal value (${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`);
+        problems.push(`${describeUndeclaredSlot(object, key)} holds an illegal value (${describeIllegalValue(slot.value)}), which is not legal document state`);
       }
       if (slot.kind === "formula") {
         const illegalLiterals = collectIllegalAstLiterals(slot.ast);
         if (illegalLiterals.length > 0) {
           problems.push(
             `${describeUndeclaredSlot(object, key)}'s stored formula holds illegal number literal(s) ` +
-              `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state (D-025/D-031)`,
+              `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state`,
           );
         }
       }
@@ -791,7 +791,7 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
       const name = isAddressError(formatted) ? formatted.message : formatted;
       if (hasIllegalNumber(operation.slot.value)) {
         problems.push(
-          `${prefix}: ${name} would hold an illegal value (${describeIllegalValue(operation.slot.value)}), which is not legal document state (D-025/Q-008)`,
+          `${prefix}: ${name} would hold an illegal value (${describeIllegalValue(operation.slot.value)}), which is not legal document state`,
         );
       }
       if (operation.slot.kind === "formula") {
@@ -799,7 +799,7 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
         if (illegalLiterals.length > 0) {
           problems.push(
             `${prefix}: ${name}'s formula would hold illegal number literal(s) ` +
-              `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state (D-025/D-031/D-048)`,
+              `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state`,
           );
         }
       }
@@ -815,7 +815,7 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
         if (hasIllegalNumber(slot.value)) {
           problems.push(
             `${prefix}: ${describeUndeclaredSlot(operation.object, key)} would hold an illegal value ` +
-              `(${describeIllegalValue(slot.value)}), which is not legal document state (D-025/Q-008)`,
+              `(${describeIllegalValue(slot.value)}), which is not legal document state`,
           );
         }
         if (slot.kind === "formula") {
@@ -823,7 +823,7 @@ function findIllegalOperationPayloads(operations: readonly Operation[], objects:
           if (illegalLiterals.length > 0) {
             problems.push(
               `${prefix}: ${describeUndeclaredSlot(operation.object, key)}'s formula would hold illegal number literal(s) ` +
-                `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state (D-025/D-031/D-048)`,
+                `(${illegalLiterals.map(formatIllegalNumber).join(", ")}), which is not legal document state`,
             );
           }
         }
@@ -896,7 +896,7 @@ function findInvalidTableResizes(operations: readonly Operation[], objects: read
     if (badDimensions.length > 0) {
       const verbAgreement = badDimensions.length > 1 ? "slots are" : "slot is";
       problems.push(
-        `${prefix}: "${state.name}"'s ${badDimensions.join(" and ")} ${verbAgreement} not "literal" (D-046) — ` +
+        `${prefix}: "${state.name}"'s ${badDimensions.join(" and ")} ${verbAgreement} not "literal" — ` +
           "its extent cannot be coherently resized on any axis",
       );
       return;
@@ -990,7 +990,7 @@ function findIllegalSlotClears(operations: readonly Operation[], objects: readon
     }
     problems.push(
       `operation ${index + 1} of ${operations.length}: ${target.name}.${slotKey(path)} cannot be cleared — ` +
-        `only a table cell may be emptied by removing its slot (D-047). Every other slot is schema-declared, ` +
+        `only a table cell may be emptied by removing its slot. Every other slot is schema-declared, ` +
         `and what an absent one means is not settled; write a value there instead`,
     );
   });
@@ -1097,18 +1097,18 @@ function findInvalidPortOperations(operations: readonly Operation[], objects: re
     const family = ports[operation.family];
     if (operation.kind === "addPort") {
       if (!isLegalPortName(operation.name)) {
-        problems.push(`${prefix} attempts to add a port named "${operation.name}", which is not a legal port name (D-141: letters, digits, underscore only)`);
+        problems.push(`${prefix} attempts to add a port named "${operation.name}", which is not a legal port name (letters, digits and underscore only)`);
         return;
       }
       if (family.has(operation.name)) {
-        problems.push(`${prefix} attempts to add ${operation.family} port "${operation.name}", which already exists (D-141)`);
+        problems.push(`${prefix} attempts to add ${operation.family} port "${operation.name}", which already exists`);
         return;
       }
       family.add(operation.name);
       return;
     }
     if (!family.has(operation.name)) {
-      problems.push(`${prefix} attempts to remove ${operation.family} port "${operation.name}", which does not exist (D-141)`);
+      problems.push(`${prefix} attempts to remove ${operation.family} port "${operation.name}", which does not exist`);
       return;
     }
     family.delete(operation.name);

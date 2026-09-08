@@ -75,8 +75,8 @@ describe("evaluate — literals and references", () => {
   });
 });
 
-describe("evaluate — D-028: an ErrorNode evaluates to its ErrorValue, never #PARSE", () => {
-  it("evaluates to {error: '#REF', ...}", () => {
+describe("evaluate — an ErrorNode evaluates to its ErrorValue, never #PARSE", () => {
+  it("evaluates to {error: '#REF',...}", () => {
     const node: ErrorNode = { type: "error", error: "#REF" };
     const result = evaluate(node, EMPTY_READ);
     expectError(result, "#REF");
@@ -91,7 +91,7 @@ describe("evaluate — range: a bare (misplaced) RangeNode stays a defensive #PA
   });
 });
 
-describe("evaluate — range: the documented fallback when readRange is OMITTED (D-036, wired THIS cycle)", () => {
+describe("evaluate — range: the fallback when readRange is omitted", () => {
   it("SUM over a correctly-placed range evaluates to #PARSE when no readRange callback is supplied — the documented fallback for a caller with no range-enumeration capability, not a silent gap", () => {
     const call: FunctionCallNode = {
       type: "functionCall",
@@ -102,7 +102,7 @@ describe("evaluate — range: the documented fallback when readRange is OMITTED 
   });
 });
 
-describe("evaluate — range: real expansion via readRange (D-036, wired THIS cycle)", () => {
+describe("evaluate — range: real expansion via readRange", () => {
   function rangeReader(answers: Record<string, readonly Value[] | ErrorValue>): ReadRange {
     return (start, end) => {
       const key = `${start.objectId}.${start.path.join(".")}:${end.objectId}.${end.path.join(".")}`;
@@ -144,7 +144,7 @@ describe("evaluate — range: real expansion via readRange (D-036, wired THIS cy
     expect(evaluate(call, EMPTY_READ, readRange)).toEqual(cellErr);
   });
 
-  it("D-044: a clamped-to-empty range (readRange answers with []) reaches MIN/MAX's own zero-argument #TYPE, not a crash", () => {
+  it("a clamped-to-empty range (readRange answers with []) reaches MIN/MAX's own zero-argument #TYPE, not a crash", () => {
     const readRange = rangeReader({ [RANGE_KEY]: [] });
     expectError(evaluate({ type: "functionCall", name: "MIN", args: [rangeArg] }, EMPTY_READ, readRange), "#TYPE");
     expect(evaluate({ type: "functionCall", name: "SUM", args: [rangeArg] }, EMPTY_READ, readRange)).toBe(0);
@@ -176,14 +176,14 @@ describe("evaluate — arithmetic (+ - * / % ^)", () => {
     expect(evaluate(binary("^", num(2), num(10)), EMPTY_READ)).toBe(1024);
   });
 
-  it("% takes the DIVISOR's sign, matching Excel's MOD rather than JavaScript's remainder (D-037)", () => {
+  it("% takes the DIVISOR's sign, matching Excel's MOD rather than JavaScript's remainder", () => {
     expect(evaluate(binary("%", num(-5), num(3)), EMPTY_READ)).toBe(1);
     expect(evaluate(binary("%", num(5), num(-3)), EMPTY_READ)).toBe(-1);
     expect(evaluate(binary("%", num(-5), num(-3)), EMPTY_READ)).toBe(-2);
     expect(evaluate(binary("%", num(10), num(3)), EMPTY_READ)).toBe(1);
   });
 
-  it("a % that lands exactly on zero is +0, never -0 (D-033 guard still applies)", () => {
+  it("a % that lands exactly on zero is +0, never -0, and the guard still applies", () => {
     const result = evaluate(binary("%", num(-6), num(3)), EMPTY_READ);
     expect(result).toBe(0);
     expect(Object.is(result, -0)).toBe(false);
@@ -194,7 +194,7 @@ describe("evaluate — arithmetic (+ - * / % ^)", () => {
     expectError(evaluate(binary("%", num(1), num(0)), EMPTY_READ), "#DIV0");
   });
 
-  it("D-033: a -0 result normalises to +0 via the shared finiteResult guard", () => {
+  it("a -0 result normalises to +0 via the shared finiteResult guard", () => {
     const result = evaluate(binary("*", num(0), num(-1)), EMPTY_READ);
     expect(result).toBe(0);
     expect(Object.is(result, -0)).toBe(false);
@@ -214,7 +214,7 @@ describe("evaluate — arithmetic (+ - * / % ^)", () => {
     expectError(evaluate(binary("+", num(1), str("x")), EMPTY_READ), "#TYPE");
   });
 
-  it("unary minus negates and routes through the same D-033 guard", () => {
+  it("unary minus negates and routes through the same guard", () => {
     const node: UnaryOpNode = { type: "unaryOp", operator: "-", operand: num(5) };
     expect(evaluate(node, EMPTY_READ)).toBe(-5);
     const zero: UnaryOpNode = { type: "unaryOp", operator: "-", operand: num(0) };
@@ -266,7 +266,7 @@ describe("evaluate — NOT, both syntactic forms, delegate to the same functions
   });
 });
 
-describe("evaluate — D-029 laziness: the centerpiece. An error in an untaken branch NEVER surfaces", () => {
+describe("evaluate — laziness, the centrepiece. An error in an untaken branch NEVER surfaces", () => {
   it("IF evaluates ONLY the taken branch — the untaken branch's error never surfaces", () => {
     const whenTrue: FunctionCallNode = { type: "functionCall", name: "IF", args: [bool(true), num(42), POISON] };
     const whenFalse: FunctionCallNode = { type: "functionCall", name: "IF", args: [bool(false), POISON, num(42)] };
@@ -326,13 +326,13 @@ describe("evaluate — D-029 laziness: the centerpiece. An error in an untaken b
   });
 });
 
-describe("evaluate — D-029 dispatch order: arity is checked before laziness matters", () => {
-  it("IF called with the wrong number of arguments is #TYPE (checkArity, D-035's EXACTLY(3))", () => {
+describe("evaluate — dispatch order: arity is checked before laziness matters", () => {
+  it("IF called with the wrong number of arguments is #TYPE (checkArity, exactly three)", () => {
     const node: FunctionCallNode = { type: "functionCall", name: "IF", args: [bool(true), num(1)] };
     expectError(evaluate(node, EMPTY_READ), "#TYPE");
   });
 
-  it("AND called with zero arguments is #TYPE (checkArity, D-035's AT_LEAST(1))", () => {
+  it("AND called with zero arguments is #TYPE (checkArity, at least one)", () => {
     const node: FunctionCallNode = { type: "functionCall", name: "AND", args: [] };
     expectError(evaluate(node, EMPTY_READ), "#TYPE");
   });
@@ -359,12 +359,12 @@ describe("evaluate — ordinary (eager) function calls", () => {
     expect(evaluate(concat, EMPTY_READ)).toBe("ab");
   });
 
-  it("an unknown function name is #TYPE, never a crash — defensive only, unreachable from typed input since D-038 (D-034)", () => {
+  it("an unknown function name is #TYPE, never a crash — defensive only, unreachable from typed input", () => {
     const node: FunctionCallNode = { type: "functionCall", name: "toString", args: [num(1)] };
     expectError(evaluate(node, EMPTY_READ), "#TYPE");
   });
 
-  it("a wrong argument count is #TYPE — defensive only, unreachable from typed input since D-038 (checkArity)", () => {
+  it("a wrong argument count is #TYPE — defensive only, unreachable from typed input (checkArity)", () => {
     const node: FunctionCallNode = { type: "functionCall", name: "ROUND", args: [num(1)] };
     expectError(evaluate(node, EMPTY_READ), "#TYPE");
   });
@@ -381,7 +381,7 @@ describe("evaluate — ordinary (eager) function calls", () => {
   });
 });
 
-describe("evaluate — every §5.3 built-in is reachable through the full dispatch path (not just functions.ts's direct call)", () => {
+describe("evaluate — every built in function is reachable through the full dispatch path (not just functions.ts's direct call)", () => {
   const validArgsByName: Record<string, readonly FormulaAst[]> = {
     NOT: [bool(true)],
     SUM: [num(1), num(2)],

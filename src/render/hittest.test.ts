@@ -46,14 +46,14 @@ describe("hitTest — circle/polygon/rect: stroke distance-to-segment via vertic
     expect(hitTest({ x: 10, y: 10 }, [square], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("applies the same test to circle/polygon/rect alike, since all three read `vertices` (§5.5)", () => {
+  it("applies the same test to circle/polygon/rect alike, since all three read `vertices`", () => {
     for (const type of ["circle", "polygon", "rect"] as const) {
       const square = squareObject("obj_1", `${type}_1`, type);
       expect(hitTest({ x: 5, y: -4 }, [square], CAMERA_IDENTITY)).toBe(square);
     }
   });
 
-  it("converts the pixel tolerance into world units via camera.zoom (§5.9: 'pixel tolerance')", () => {
+  it("converts the pixel tolerance into world units via camera.zoom", () => {
     const square = squareObject("obj_1", "rect_1", "rect");
     expect(hitTest({ x: 5, y: -4 }, [square], CAMERA_IDENTITY)).toBe(square);
     const zoomedCamera: CameraState = { x: 0, y: 0, zoom: 2 };
@@ -100,19 +100,19 @@ describe("hitTest — table: bounding box", () => {
     expect(hitTest({ x: 150, y: 210 }, [table], CAMERA_IDENTITY)).toBe(table);
   });
 
-  it("does not hit a 0-row table anywhere on its degenerate box, because nothing is drawn (D-066)", () => {
+  it("does not hit a 0-row table anywhere on its degenerate box, because nothing is drawn", () => {
     const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 0 }, cols: { kind: "literal", value: 3 } } };
     expect(hitTest({ x: 120, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
     expect(hitTest({ x: 0, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("does not hit a table with no rows/cols slots at its origin corner, the point its zero-area box contains (D-066)", () => {
+  it("does not hit a table with no rows/cols slots at its origin corner, the point its zero-area box contains", () => {
     const table: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: {} };
     expect(hitTest({ x: 0, y: 0 }, [table], CAMERA_IDENTITY)).toBeUndefined();
   });
 });
 
-describe("hitTest — topmost object wins (§5.9, array order = z-order per renderer.ts)", () => {
+describe("hitTest — topmost object wins (array order is z order)", () => {
   it("returns the LAST object of two overlapping tables", () => {
     const bottom = { id: "obj_1", name: "table_a", type: "table" as const, slots: { rows: { kind: "literal" as const, value: 5 }, cols: { kind: "literal" as const, value: 5 } } };
     const top = { id: "obj_2", name: "table_b", type: "table" as const, slots: { rows: { kind: "literal" as const, value: 5 }, cols: { kind: "literal" as const, value: 5 } } };
@@ -137,13 +137,13 @@ describe("hitTest — object types with no visual definition yet never hit (mirr
     }
   });
 
-  it("never hits a slotless image either — it has no width or height, so it draws no frame (D-066)", () => {
+  it("never hits a slotless image either — it has no width or height, so it draws no frame", () => {
     const object: GraphObject = { id: "obj_1", name: "image_1", type: "image", slots: {} };
     expect(hitTest({ x: 0, y: 0 }, [object], CAMERA_IDENTITY)).toBeUndefined();
   });
 });
 
-describe("hitTest — image bounding box (§5.9, D-142) — the same extent renderer.ts frames", () => {
+describe("hitTest — image bounding box — the same extent renderer.ts frames", () => {
   function imageObject(originX: number, originY: number, overrides: GraphObject["slots"] = {}): GraphObject {
     return {
       id: "obj_1",
@@ -174,12 +174,12 @@ describe("hitTest — image bounding box (§5.9, D-142) — the same extent rend
     expect(hitTest({ x: 50, y: 19 }, [image], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("hits an image with NO picture chosen, because its frame is drawn from the moment it is created (D-142 — the invisible-object state is what was refused)", () => {
+  it("hits an image with NO picture chosen, because its frame is drawn from the moment it is created, because an invisible object is the state to avoid", () => {
     const empty = imageObject(0, 0, { source: { kind: "literal", value: "" } });
     expect(hitTest({ x: 50, y: 30 }, [empty], CAMERA_IDENTITY)).toBe(empty);
   });
 
-  it("does not hit an image with a non-positive or non-finite box, which draws nothing (D-066)", () => {
+  it("does not hit an image with a non-positive or non-finite box, which draws nothing", () => {
     for (const width of [0, -10, Number.POSITIVE_INFINITY, Number.NaN]) {
       const degenerate = imageObject(0, 0, { width: { kind: "literal", value: width } });
       expect(hitTest({ x: 0, y: 0 }, [degenerate], CAMERA_IDENTITY)).toBeUndefined();
@@ -187,7 +187,7 @@ describe("hitTest — image bounding box (§5.9, D-142) — the same extent rend
   });
 });
 
-describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent renderer.ts draws into", () => {
+describe("hitTest — text bounding box — the same extent renderer.ts draws into", () => {
   function textObject(resolved: string | undefined, originX: number, originY: number, overrides: GraphObject["slots"] = {}): GraphObject {
     return {
       id: "obj_1",
@@ -219,13 +219,13 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
     expect(hitTest({ x: 40, y: 100 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("falls back to a fixed box only when NOTHING measured the object — no measurer wired, so measuredWidth/Height are absent (D-123 clause 3)", () => {
+  it("falls back to a fixed box only when NOTHING measured the object — no measurer wired, so measuredWidth/Height are absent", () => {
     const text = textObject("label", 0, 0);
     expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
     expect(hitTest({ x: 300, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("D-123: an auto-width text object's click box is its MEASURED width, not the fallback — a short label no longer swallows its neighbours' clicks", () => {
+  it("an auto-width text object's click box is its MEASURED width, not the fallback — a short label no longer swallows its neighbours' clicks", () => {
     const text = textObject("label", 0, 0, {
       measuredWidth: { kind: "derived", value: 30 },
       measuredHeight: { kind: "derived", value: 20 },
@@ -234,7 +234,7 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
     expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("D-123: a measured width WIDER than the old fallback is clickable to its far edge — a long label is no longer unclickable past 240", () => {
+  it("a measured width WIDER than the old fallback is clickable to its far edge — a long label is no longer unclickable past 240", () => {
     const text = textObject("a very long label indeed", 0, 0, {
       measuredWidth: { kind: "derived", value: 400 },
       measuredHeight: { kind: "derived", value: 20 },
@@ -263,14 +263,14 @@ describe("hitTest — text bounding box (§5.9, entry 0138) — the same extent 
     expect(hitTest({ x: 420, y: 10 }, [text], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("D-123: a #MEASURE measuredWidth (no measurer, D-118) is not a number, so the fallback still applies", () => {
+  it("a #MEASURE measuredWidth, from a run with no measurer, is not a number, so the fallback still applies", () => {
     const text = textObject("label", 0, 0, {
       measuredWidth: { kind: "derived", value: { error: "#MEASURE", message: "no measurer" } },
     });
     expect(hitTest({ x: 100, y: 10 }, [text], CAMERA_IDENTITY)).toBe(text);
   });
 
-  it("never hits a text object with no resolved content — nothing is drawn to click (D-066)", () => {
+  it("never hits a text object with no resolved content — nothing is drawn to click", () => {
     expect(hitTest({ x: 0, y: 0 }, [textObject(undefined, 0, 0)], CAMERA_IDENTITY)).toBeUndefined();
     expect(hitTest({ x: 0, y: 0 }, [textObject("", 0, 0)], CAMERA_IDENTITY)).toBeUndefined();
     expect(hitTest({ x: 0, y: 0 }, [{ id: "obj_1", name: "text_1", type: "text", slots: {} }], CAMERA_IDENTITY)).toBeUndefined();
@@ -289,7 +289,7 @@ describe("hitTest — tolerance constant", () => {
   });
 });
 
-describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts)", () => {
+describe("documentExtent — the box that `fit` fits to, which main.ts performs", () => {
   function tableFixture(id: string, originX: number, originY: number): GraphObject {
     return {
       id,
@@ -313,7 +313,7 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
     expect(documentExtent([unrendered])).toBeUndefined();
   });
 
-  it("bounds a shape by its vertices — §5.5's own instruction that `vertices` is what bounds a circle", () => {
+  it("bounds a shape by its vertices, because `vertices` is what bounds a circle", () => {
     expect(documentExtent([squareObject("obj_1", "polygon_1", "polygon")])).toEqual({ minX: 0, minY: 0, maxX: 20, maxY: 20 });
   });
 
@@ -321,7 +321,7 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
     expect(documentExtent([tableFixture("obj_1", 100, 200)])).toEqual({ minX: 100, minY: 200, maxX: 340, maxY: 248 });
   });
 
-  it("bounds a text object by its origin + fixed width + measuredHeight (entry 0138)", () => {
+  it("bounds a text object by its origin + fixed width + measuredHeight", () => {
     const text: GraphObject = {
       id: "obj_1",
       name: "text_1",
@@ -337,7 +337,7 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
     expect(documentExtent([text])).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 60 });
   });
 
-  it("bounds an auto-width text object by measuredWidth + measuredHeight, so `fit` frames the text and not a fixed guess (D-123)", () => {
+  it("bounds an auto-width text object by measuredWidth + measuredHeight, so `fit` frames the text and not a fixed guess", () => {
     const text: GraphObject = {
       id: "obj_1",
       name: "text_1",
@@ -359,7 +359,7 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
     expect(documentExtent([empty])).toBeUndefined();
   });
 
-  it("bounds an image by its origin + width + height, whether or not a picture has been chosen (D-142)", () => {
+  it("bounds an image by its origin + width + height, whether or not a picture has been chosen", () => {
     const image: GraphObject = {
       id: "obj_1",
       name: "image_1",
@@ -375,7 +375,7 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
     expect(documentExtent([image])).toEqual({ minX: 10, minY: 20, maxX: 110, maxY: 80 });
   });
 
-  it("is undefined for an image with a missing, non-positive or non-finite width/height — a box nothing is drawn in (D-066)", () => {
+  it("is undefined for an image with a missing, non-positive or non-finite width/height — a box nothing is drawn in", () => {
     const base = { id: "obj_1", name: "image_1", type: "image" } as const;
     const noSize: GraphObject = { ...base, slots: { "origin.x": { kind: "literal", value: 1 } } };
     const zero: GraphObject = { ...base, slots: { width: { kind: "literal", value: 0 }, height: { kind: "literal", value: 60 } } };
@@ -391,7 +391,7 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
     expect(extent).toEqual({ minX: 0, minY: 0, maxX: 340, maxY: 248 });
   });
 
-  it("skips a table with a degenerate extent, exactly as the hit test does (D-066)", () => {
+  it("skips a table with a degenerate extent, exactly as the hit test does", () => {
     const degenerate: GraphObject = { id: "obj_1", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 0 }, cols: { kind: "literal", value: 3 } } };
     expect(documentExtent([degenerate, squareObject("obj_2", "polygon_1", "polygon")])).toEqual({ minX: 0, minY: 0, maxX: 20, maxY: 20 });
   });
@@ -403,7 +403,7 @@ describe("documentExtent — the box `fit` fits to (§5.10, performed in main.ts
     expect(documentExtent([noVertices, wrongType, errored])).toBeUndefined();
   });
 
-  it("gives a single point a real, degenerate extent rather than undefined — the caller decides what to do with it (D-066)", () => {
+  it("gives a single point a real, degenerate extent rather than undefined — the caller decides what to do with it", () => {
     const point: GraphObject = {
       id: "obj_1",
       name: "circle_1",

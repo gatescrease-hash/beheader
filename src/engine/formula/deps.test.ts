@@ -29,7 +29,7 @@ describe("extractDependencies — literals and references", () => {
     expect(extractDependencies(refA)).toEqual([{ kind: "reference", address: addrA }]);
   });
 
-  it("yields nothing for an ErrorNode (D-028: absence of a dependency, made explicit)", () => {
+  it("yields nothing for an ErrorNode, which makes the absence of a dependency explicit", () => {
     const errorNode: ErrorNode = { type: "error", error: "#REF" };
     expect(extractDependencies(errorNode)).toEqual([]);
   });
@@ -103,7 +103,7 @@ describe("extractDependencies — function calls", () => {
     ]);
   });
 
-  it("IF: is EAGER and TOTAL across BOTH the taken-looking and untaken-looking branch (§5.3)", () => {
+  it("IF: is EAGER and TOTAL across BOTH the taken-looking and untaken-looking branch", () => {
     const ifCall: FunctionCallNode = {
       type: "functionCall",
       name: "IF",
@@ -129,7 +129,7 @@ describe("extractDependencies — function calls", () => {
   });
 });
 
-describe("extractDependencies — D-029: AND/OR/NOT's two syntactic forms are IDENTICAL", () => {
+describe("extractDependencies — the two forms of AND, OR and NOT are identical", () => {
   it("AND: infix BinaryOpNode and call-form FunctionCallNode produce the same dependency list", () => {
     const infix: BinaryOpNode = { type: "binaryOp", operator: "AND", left: refA, right: refB };
     const call: FunctionCallNode = { type: "functionCall", name: "AND", args: [refA, refB] };
@@ -220,7 +220,7 @@ describe("extractDependencies — integration: real ASTs from parseFormula", () 
   });
 });
 
-describe("rewriteAddressesInAst — entry 0047, §5.4's reference-adjustment building block", () => {
+describe("rewriteAddressesInAst — the reference adjustment step for a table insert", () => {
   const bump = (address: Address): Address => ({ objectId: address.objectId, path: [...address.path, "bumped"] });
 
   it("returns a literal/error node completely unchanged (no address to rewrite)", () => {
@@ -271,7 +271,7 @@ describe("rewriteAddressesInAst — entry 0047, §5.4's reference-adjustment bui
   });
 });
 
-describe("repairAddressesInAst — entry 0050, §5.4's DELETE-side reference-adjustment/REPAIR building block (D-052's node-level walk)", () => {
+describe("repairAddressesInAst — the repair step for a table delete, walked node by node", () => {
   const identityReference = (address: Address): Address => address;
   const identityRange = (start: Address, end: Address): { readonly start: Address; readonly end: Address } => ({ start, end });
 
@@ -287,7 +287,7 @@ describe("repairAddressesInAst — entry 0050, §5.4's DELETE-side reference-adj
     expect(repairAddressesInAst(refA, bump, identityRange)).toEqual({ type: "reference", address: { objectId: "obj_1", path: ["v", "bumped"] } });
   });
 
-  it("turns a reference into a fresh ErrorNode (D-028) when repairReference reports \"deleted\" — never a widened LiteralNode", () => {
+  it("turns a reference into a fresh ErrorNode when repairReference reports \"deleted\" — never a widened LiteralNode", () => {
     const deleteA = (address: Address): Address | "deleted" => (address.objectId === "obj_1" ? "deleted" : address);
     expect(repairAddressesInAst(refA, deleteA, identityRange)).toEqual({ type: "error", error: "#REF" });
   });
@@ -309,7 +309,7 @@ describe("repairAddressesInAst — entry 0050, §5.4's DELETE-side reference-adj
     });
   });
 
-  it("turns a whole RangeNode into a fresh ErrorNode when repairRange reports \"deleted\" (§5.4: a range deleted entirely becomes #REF)", () => {
+  it("turns a whole RangeNode into a fresh ErrorNode when repairRange reports \"deleted\", because a range deleted in full becomes #REF", () => {
     const range: RangeNode = { type: "range", start: addrA, end: addrB };
     const deleteWhole = (): "deleted" => "deleted";
     expect(repairAddressesInAst(range, identityReference, deleteWhole)).toEqual({ type: "error", error: "#REF" });

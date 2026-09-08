@@ -24,7 +24,7 @@ function addr(objectId: string, ...path: readonly string[]): Address {
 }
 
 describe("LiteralNode", () => {
-  it("holds a number, a string, or a boolean — one node type for all three (§5.3)", () => {
+  it("holds a number, a string, or a boolean — one node type for all three", () => {
     const numberLiteral: LiteralNode = { type: "literal", value: 3 };
     const stringLiteral: LiteralNode = { type: "literal", value: "hello" };
     const booleanLiteral: LiteralNode = { type: "literal", value: true };
@@ -34,7 +34,7 @@ describe("LiteralNode", () => {
   });
 });
 
-describe("ReferenceNode — UNCHANGED from Phase 0 (Q-005's binding constraint)", () => {
+describe("ReferenceNode — a binding is one of these", () => {
   it("is exactly { type: \"reference\", address } — the same shape a binding parsed to before this cycle", () => {
     const node: ReferenceNode = { type: "reference", address: addr("obj_1", "value") };
     expect(node.type).toBe("reference");
@@ -49,7 +49,7 @@ describe("ReferenceNode — UNCHANGED from Phase 0 (Q-005's binding constraint)"
 });
 
 describe("RangeNode", () => {
-  it("holds an endpoint pair, never a pre-expanded cell list (§5.3)", () => {
+  it("holds an endpoint pair, never a pre-expanded cell list", () => {
     const range: RangeNode = { type: "range", start: addr("obj_3", "cells", "A1"), end: addr("obj_3", "cells", "B4") };
     expect(range.start).toEqual({ objectId: "obj_3", path: ["cells", "A1"] });
     expect(range.end).toEqual({ objectId: "obj_3", path: ["cells", "B4"] });
@@ -58,7 +58,7 @@ describe("RangeNode", () => {
 });
 
 describe("BinaryOpNode", () => {
-  it("spans the WHOLE §5.3 precedence chain through one operator field, not one node per tier", () => {
+  it("spans the whole precedence chain through one operator field, not one node per tier", () => {
     const operators: BinaryOpNode["operator"][] = ["OR", "AND", "=", "<>", "<", ">", "<=", ">=", "+", "-", "*", "/", "%", "^"];
     for (const operator of operators) {
       const node: BinaryOpNode = { type: "binaryOp", operator, left: { type: "literal", value: 1 }, right: { type: "literal", value: 2 } };
@@ -78,7 +78,7 @@ describe("BinaryOpNode", () => {
 });
 
 describe("UnaryOpNode", () => {
-  it("holds §5.3's two prefix operators: numeric negation and boolean NOT", () => {
+  it("holds the two prefix operators: numeric negation and boolean NOT", () => {
     const negation: UnaryOpNode = { type: "unaryOp", operator: "-", operand: { type: "literal", value: 5 } };
     const notNode: UnaryOpNode = { type: "unaryOp", operator: "NOT", operand: { type: "literal", value: true } };
     expect(negation.operator).toBe("-");
@@ -100,7 +100,7 @@ describe("FunctionCallNode", () => {
     expect(call.args).toHaveLength(2);
   });
 
-  it("represents IF as an ordinary function call, not a dedicated ConditionalNode (§5.3: IF is a built-in)", () => {
+  it("represents IF as an ordinary function call, not a dedicated ConditionalNode, because IF is a built in function", () => {
     const ifCall: FunctionCallNode = {
       type: "functionCall",
       name: "IF",
@@ -124,8 +124,8 @@ describe("FunctionCallNode", () => {
   });
 });
 
-describe("ErrorNode (0029-REVIEW-phase1, D-028)", () => {
-  it("replaces ONE reference inside a surviving formula, not the whole formula — §5.1.1's repair path rewrites \"every inbound reference into a #REF error node in the referring AST\"", () => {
+describe("ErrorNode", () => {
+  it("replaces ONE reference inside a surviving formula, not the whole formula — the repair path rewrites \"every inbound reference into a #REF error node in the AST that refers to it\"", () => {
     const repaired: BinaryOpNode = {
       type: "binaryOp",
       operator: "+",
@@ -136,7 +136,7 @@ describe("ErrorNode (0029-REVIEW-phase1, D-028)", () => {
     expect(repaired.right).toEqual({ type: "error", error: "#REF" });
   });
 
-  it("carries the code alone — a stored AST holds no ErrorValue message (D-028)", () => {
+  it("carries the code alone — a stored AST holds no ErrorValue message", () => {
     const node: ErrorNode = { type: "error", error: "#REF" };
     expect(Object.keys(node).sort()).toEqual(["error", "type"]);
   });
@@ -158,7 +158,7 @@ describe("isReferenceNode", () => {
   });
 });
 
-describe("exceedsMaxFormulaAstDepth — D-083 clause 4's load-boundary check", () => {
+describe("exceedsMaxFormulaAstDepth — the check at the load boundary", () => {
   function ladder(levels: number): FormulaAst {
     let ast: FormulaAst = { type: "literal", value: 1 };
     for (let index = 0; index < levels; index += 1) {

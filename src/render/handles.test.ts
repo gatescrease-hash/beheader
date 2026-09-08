@@ -26,7 +26,7 @@ function objectOfType(type: GraphObject["type"]): GraphObject {
   return { id: "obj_1", name: "thing_1", type, slots: {} };
 }
 
-describe("constrainBoxToRatio — a resize that keeps the object's proportions (§5.7's `preserveAspect`)", () => {
+describe("constrainBoxToRatio — a resize that keeps the object's proportions", () => {
   const START: WorldExtent = { minX: 0, minY: 0, maxX: 200, maxY: 100 };
 
   it("derives the height from a SIDE grabber's width, so dragging one edge scales the whole box", () => {
@@ -74,7 +74,7 @@ describe("hasResizeHandles — which objects get grabbers", () => {
     expect(hasResizeHandles(objectOfType("text"))).toBe(true);
   });
 
-  it("an `image` object does too — its size is two ordinary literal slots, exactly like a text box's (entry 0175)", () => {
+  it("an `image` object does too — its size is two ordinary literal slots, exactly like a text box's", () => {
     expect(hasResizeHandles(objectOfType("image"))).toBe(true);
   });
 

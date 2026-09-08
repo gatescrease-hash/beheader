@@ -34,7 +34,7 @@ function expectError(value: Value, code: string): void {
 }
 
 describe("FUNCTION_REGISTRY — completeness", () => {
-  it("has exactly one entry per §5.3 built-in name, no more, no fewer", () => {
+  it("has exactly one entry per built in name, no more, no fewer", () => {
     expect(Object.keys(FUNCTION_REGISTRY).sort()).toEqual([...ALL_BUILTIN_NAMES].sort());
   });
 
@@ -54,14 +54,14 @@ describe("FUNCTION_REGISTRY — completeness", () => {
     expect(getFunctionEntry("FOO")).toBeUndefined();
   });
 
-  it("returns undefined for an Object.prototype member name, which a bare index would resolve (D-034)", () => {
+  it("returns undefined for an Object.prototype member name, which a bare index would resolve", () => {
     for (const inherited of ["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"]) {
       expect(getFunctionEntry(inherited)).toBeUndefined();
     }
   });
 });
 
-describe("D-029 — IF/AND/OR are lazy (no implementation); NOT is the one eager exception", () => {
+describe("IF/AND/OR are lazy (no implementation); NOT is the one eager exception", () => {
   it("IF, AND, OR are registered with evaluationMode 'lazy' and no implementation field", () => {
     for (const name of ["IF", "AND", "OR"]) {
       const entry = getFunctionEntry(name);
@@ -182,12 +182,12 @@ describe("SUM / MIN / MAX / AVG", () => {
     expect((result as ErrorValue).message).toContain("argument 2");
   });
 
-  it("MIN/MAX with ZERO arguments (unreachable via checkArity for a literal call, but reachable once a range clamps to empty, D-044 point 2) match Math.min()/Math.max()'s own documented answer — #TYPE, not a crash", () => {
+  it("MIN/MAX with ZERO arguments (unreachable for a literal call, but reachable once a range clamps to empty) match Math.min()/Math.max()'s own documented answer — #TYPE, not a crash", () => {
     expectError(call("MIN", []), "#TYPE");
     expectError(call("MAX", []), "#TYPE");
   });
 
-  it("D-036 constraint 5: MIN/MAX over a very large argument list do not throw a RangeError — the Math.min(...)/Math.max(...) spread this replaced would have", () => {
+  it("MIN/MAX over a very large argument list do not throw a RangeError, although the spread call they replaced did", () => {
     const many = Array.from({ length: 200_000 }, (_, i) => i);
     expect(() => call("MIN", many)).not.toThrow();
     expect(() => call("MAX", many)).not.toThrow();
@@ -204,7 +204,7 @@ describe("ABS / FLOOR / CEIL / SQRT", () => {
     expect(call("SQRT", [9])).toBe(3);
   });
 
-  it("CEIL of a small negative number is +0, not an error (D-033)", () => {
+  it("CEIL of a small negative number is +0, not an error", () => {
     const result = call("CEIL", [-0.5]);
     expect(result).toBe(0);
     expect(Object.is(result, -0)).toBe(false);
@@ -225,13 +225,13 @@ describe("ROUND(n, digits)", () => {
     expect(call("ROUND", [3.14159, 0])).toBe(3);
   });
 
-  it("a result of -0 is normalised to +0, NOT reported as an error (D-033)", () => {
+  it("a result of -0 is normalised to +0, NOT reported as an error", () => {
     const result = call("ROUND", [-0.4, 0]);
     expect(result).toBe(0);
     expect(Object.is(result, -0)).toBe(false);
   });
 
-  it("still reports a genuinely unrepresentable result as #TYPE (D-033's other half)", () => {
+  it("still reports a genuinely unrepresentable result as #TYPE", () => {
     expectError(call("ROUND", [1, 400]), "#TYPE");
   });
 
