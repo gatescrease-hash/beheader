@@ -12,12 +12,12 @@
  * Array order is z order. This file walks it backward.
  */
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent } from "./extent.ts";
-import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readBoolean, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 export const STROKE_HIT_TOLERANCE_SCREEN_PIXELS = 5;
 
@@ -77,7 +77,10 @@ function hitTestPolyline(object: GraphObject, worldPoint: WorldPoint, strokeTole
   if (vertices === undefined || vertices.length < 2) {
     return false;
   }
-  return distanceToOpenPolyline(worldPoint, vertices) <= strokeToleranceWorld;
+  const distance = readBoolean(object, CLOSED_PATH) === true
+    ? distanceToClosedPolyline(worldPoint, vertices)
+    : distanceToOpenPolyline(worldPoint, vertices);
+  return distance <= strokeToleranceWorld;
 }
 
 function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {

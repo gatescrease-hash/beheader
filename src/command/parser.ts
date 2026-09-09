@@ -42,6 +42,7 @@ export interface CreateRectCommand {
 export interface CreatePolylineCommand {
   readonly kind: "polyline";
   readonly points: readonly CommandPoint[];
+  readonly closed: boolean;
 }
 
 export interface CommandPoint {
@@ -372,11 +373,11 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   },
   {
     name: "polyline",
-    usage: "polyline <x,y> <x,y> [<x,y> ...]",
+    usage: "polyline <x,y> <x,y> [<x,y> ...] [closed]",
     positional: [{ name: "points", kind: "points" }],
     named: [],
-    flags: [],
-    build: (args) => ({ kind: "polyline", points: pointsArgument(args, "points") }),
+    flags: ["closed"],
+    build: (args) => ({ kind: "polyline", points: pointsArgument(args, "points"), closed: hasFlag(args, "closed") }),
   },
   {
     name: "text",
@@ -785,11 +786,13 @@ function matchArguments(
       continue;
     }
     const lastPositional = spec.positional[spec.positional.length - 1];
-    if (positionalTokens.length < spec.positional.length || (lastPositional?.kind === "points" && !token.quoted)) {
+    const flag = token.quoted ? undefined : spec.flags.find((candidate) => candidate === token.text.toLowerCase());
+    // A points list takes every token after it. A flag name is the one exception.
+    const takesMorePoints = lastPositional?.kind === "points" && !token.quoted && flag === undefined;
+    if (positionalTokens.length < spec.positional.length || takesMorePoints) {
       positionalTokens.push(token);
       continue;
     }
-    const flag = token.quoted ? undefined : spec.flags.find((candidate) => candidate === token.text.toLowerCase());
     if (flag !== undefined) {
       if (flags.includes(flag)) {
         return failure(`"${flag}" is given more than once — usage: ${spec.usage}`, token.start);

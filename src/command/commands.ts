@@ -29,6 +29,7 @@ import { getSlot, isLegalPortName, slotKey, POLYLINE_TYPE, SCRIPT_TYPE, TABLE_TY
 import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
 import {
+  CLOSED_PATH,
   MIN_POLYGON_SIDES,
   MIN_POLYLINE_VERTICES,
   ORIGIN_X_PATH,
@@ -313,7 +314,7 @@ function createPolyline(command: CreatePolylineCommand, document: Document, cont
   if (command.points.length < MIN_POLYLINE_VERTICES) {
     return { ok: false, message: `a polyline needs at least ${MIN_POLYLINE_VERTICES} points, got ${command.points.length}` };
   }
-  const literals: LiteralSlotDeclaration[] = [];
+  const literals: LiteralSlotDeclaration[] = [{ path: CLOSED_PATH, value: command.closed }];
   command.points.forEach((point, index) => {
     literals.push({ path: vertexXPath(index), value: point.x });
     literals.push({ path: vertexYPath(index), value: point.y });

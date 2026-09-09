@@ -638,7 +638,7 @@ line stays the main way to author a document.
 ```
 circle x=100 y=100 r=20
 polygon sides=5 x=0 y=0 r=50
-polyline 0,0 100,0 100,100
+polyline 0,0 100,0 100,100 [closed]
 rect x=0 y=0 w=200 h=100
 text x=0 y=0 "Hello {= table_x.A1 }"
 table x=0 y=0 rows=8 cols=8

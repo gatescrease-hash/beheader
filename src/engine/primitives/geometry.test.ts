@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
-import { mutate } from "../mutation.ts";
-import type { GraphObject, Point, Value } from "../graph/node.ts";
+import { mutate, type Operation } from "../mutation.ts";
+import type { GraphObject, Point, Slot, Value } from "../graph/node.ts";
 import { getObjectSchema, resolveDerivedSlots } from "./schema.ts";
 import {
   BOUNDS_MAX_X_PATH,
@@ -33,7 +33,8 @@ import {
   EXPLODABLE_TYPES,
   MIN_POLYGON_SIDES,
   MIN_POLYLINE_VERTICES,
-  openPathDerivedSlots,
+  pathDerivedSlots,
+  readClosedFlag,
   vertexXPath,
   vertexYPath,
   verticesDerivedSlots,
@@ -551,10 +552,41 @@ describe("computeVertexMean — the plain average an open path's centroid uses",
   });
 });
 
-describe("openPathDerivedSlots — no area, because SPEC.md section 8 scopes area to a closed path", () => {
-  it("declares centroid, length and bounds, and nothing named area", () => {
-    const paths = openPathDerivedSlots("polyline").map((slot) => slot.path.join("."));
-    expect(paths).toEqual(["centroid.x", "centroid.y", "length", "bounds.minX", "bounds.minY", "bounds.maxX", "bounds.maxY"]);
+describe("pathDerivedSlots — one slot set, and the closed slot picks the math", () => {
+  it("declares the same paths a closed preset declares, area included", () => {
+    const paths = pathDerivedSlots("polyline").map((slot) => slot.path.join("."));
+    expect(paths).toEqual(["centroid.x", "centroid.y", "area", "length", "bounds.minX", "bounds.minY", "bounds.maxX", "bounds.maxY"]);
+    expect(paths).toEqual(verticesDerivedSlots("polygon").map((slot) => slot.path.join(".")));
+  });
+
+  it("every slot depends on closed as well as on vertices, once the object has a closed slot", () => {
+    const open: GraphObject = { id: "obj_1", name: "path_1", type: "polyline", slots: {} };
+    const closed: GraphObject = { ...open, slots: { closed: { kind: "literal", value: true } } };
+    for (const slot of pathDerivedSlots("polyline")) {
+      if (slot.dependencies.kind !== "dynamic") {
+        throw new Error("test setup: expected a dynamic dependency list");
+      }
+      expect(slot.dependencies.resolve(open, []).map((address) => address.path.join("."))).toEqual(["vertices"]);
+      expect(slot.dependencies.resolve(closed, []).map((address) => address.path.join("."))).toEqual(["vertices", "closed"]);
+    }
+  });
+
+  it("reads an absent closed slot as an open path", () => {
+    const object: GraphObject = { id: "obj_1", name: "path_1", type: "polyline", slots: {} };
+    expect(readClosedFlag(object, () => undefined, "polyline")).toBe(false);
+  });
+
+  it("refuses a closed slot that is not a boolean", () => {
+    const object: GraphObject = {
+      id: "obj_1",
+      name: "path_1",
+      type: "polyline",
+      slots: { closed: { kind: "literal", value: "yes" } },
+    };
+    expect(readClosedFlag(object, () => "yes", "polyline")).toEqual({
+      error: "#TYPE",
+      message: "polyline: closed must be true or false",
+    });
   });
 });
 
@@ -591,7 +623,10 @@ describe("polyline wired through the real mutate() pipeline", () => {
     expect(object.slots["length"]?.value).toBeCloseTo(9);
     expect(object.slots["centroid.x"]?.value).toBeCloseTo(2);
     expect(object.slots["bounds.maxY"]?.value).toBe(4);
-    expect(object.slots["area"]).toBeUndefined();
+    expect(object.slots["area"]?.value).toEqual({
+      error: "#TYPE",
+      message: "polyline.area: an open path has no area. Set closed to true first",
+    });
 
     const updated = mutate(
       created.objects,
@@ -603,6 +638,81 @@ describe("polyline wired through the real mutate() pipeline", () => {
     }
     const after = updated.objects.find((candidate) => candidate.id === "obj_1");
     expect(after?.slots["bounds.maxX"]?.value).toBe(30);
+  });
+
+  function triangle(closed?: boolean): GraphObject {
+    const slots: Record<string, Slot> = {
+      [vertexXPath(0).join(".")]: { kind: "literal", value: 0 },
+      [vertexYPath(0).join(".")]: { kind: "literal", value: 0 },
+      [vertexXPath(1).join(".")]: { kind: "literal", value: 3 },
+      [vertexYPath(1).join(".")]: { kind: "literal", value: 4 },
+      [vertexXPath(2).join(".")]: { kind: "literal", value: 3 },
+      [vertexYPath(2).join(".")]: { kind: "literal", value: 0 },
+      ...derivedPlaceholders("polyline"),
+    };
+    if (closed !== undefined) {
+      slots["closed"] = { kind: "literal", value: closed };
+    }
+    return { id: "obj_1", name: "polyline_1", type: "polyline", vertexCount: 3, slots };
+  }
+
+  function committed(objects: readonly GraphObject[], operations: readonly Operation[]): readonly GraphObject[] {
+    const result = mutate(objects, operations, []);
+    if (!result.ok) {
+      throw new Error(`test setup: expected the mutation to succeed, got: ${result.message}`);
+    }
+    return result.objects;
+  }
+
+  it("a write to closed changes every derived value, and never the slot set — Rule 4 holds", () => {
+    const open = committed([], [{ kind: "createObject", object: triangle(false) }]);
+    const before = open.find((candidate) => candidate.id === "obj_1");
+    expect(before?.slots["length"]?.value).toBeCloseTo(9);
+    expect(before?.slots["area"]?.value).toEqual({
+      error: "#TYPE",
+      message: "polyline.area: an open path has no area. Set closed to true first",
+    });
+
+    const closed = committed(open, [
+      { kind: "setSlot", address: { objectId: "obj_1", path: ["closed"] }, slot: { kind: "literal", value: true } },
+    ]);
+    const after = closed.find((candidate) => candidate.id === "obj_1");
+    expect(after?.slots["length"]?.value).toBeCloseTo(12);
+    expect(after?.slots["area"]?.value).toBeCloseTo(6);
+    expect(after?.slots["centroid.x"]?.value).toBeCloseTo(2);
+    expect(Object.keys(after?.slots ?? {}).sort()).toEqual(Object.keys(before?.slots ?? {}).sort());
+  });
+
+  it("lets a formula drive closed, because the slot set never moves when the value does", () => {
+    const flag: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: true } } };
+    const path = triangle(false);
+    const objects = committed([], [
+      { kind: "createObject", object: flag },
+      { kind: "createObject", object: path },
+      {
+        kind: "setSlot",
+        address: { objectId: "obj_1", path: ["closed"] },
+        slot: { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["value"] } }, value: null },
+      },
+    ]);
+    expect(objects.find((candidate) => candidate.id === "obj_1")?.slots["area"]?.value).toBeCloseTo(6);
+
+    const reopened = committed(objects, [
+      { kind: "setSlot", address: { objectId: "obj_2", path: ["value"] }, slot: { kind: "literal", value: false } },
+    ]);
+    expect(reopened.find((candidate) => candidate.id === "obj_1")?.slots["length"]?.value).toBeCloseTo(9);
+  });
+
+  it("evaluates a polyline that carries no closed slot at all as open — a document saved before closed existed still works", () => {
+    const objects = committed([], [{ kind: "createObject", object: triangle() }]);
+    const object = objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.slots["closed"]).toBeUndefined();
+    expect(object?.slots["length"]?.value).toBeCloseTo(9);
+
+    const closed = committed(objects, [
+      { kind: "setSlot", address: { objectId: "obj_1", path: ["closed"] }, slot: { kind: "literal", value: true } },
+    ]);
+    expect(closed.find((candidate) => candidate.id === "obj_1")?.slots["area"]?.value).toBeCloseTo(6);
   });
 
   it("refuses a formula that names a vertex slot outside the current vertexCount, the same undeclared slot rule every type follows", () => {
@@ -684,7 +794,7 @@ describe("explodeObjectToPolyline — snapshots the current vertices, drops the 
     expect(result.object.slots["vertex.3.x"]).toEqual({ kind: "literal", value: 0 });
   });
 
-  it("drops origin, width and height, and area, keeping neither as a slot at all", () => {
+  it("drops origin, width and height, keeping none of them as a slot at all", () => {
     const result = explodeObjectToPolyline(rect, "rect_1");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -692,7 +802,14 @@ describe("explodeObjectToPolyline — snapshots the current vertices, drops the 
     expect(result.object.slots["origin.y"]).toBeUndefined();
     expect(result.object.slots["width"]).toBeUndefined();
     expect(result.object.slots["height"]).toBeUndefined();
-    expect(result.object.slots["area"]).toBeUndefined();
+  });
+
+  it("closes the new path, because every preset it accepts is a closed shape", () => {
+    const result = explodeObjectToPolyline(rect, "rect_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.object.slots["closed"]).toEqual({ kind: "literal", value: true });
+    expect(result.object.slots["area"]).toEqual({ kind: "derived", value: null });
   });
 
   it("leaves vertices, centroid, length and bounds declared as derived placeholders at the same paths", () => {

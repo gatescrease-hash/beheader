@@ -20,7 +20,7 @@
  */
 import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
 import type { EditorTarget } from "./editor.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
   TEXT_AUTORESIZE_PATH,
@@ -362,8 +362,13 @@ function buildOpenVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObjec
   return true;
 }
 
+/** A polyline draws closed or open, as its closed slot says. */
+function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
+  return readBoolean(object, CLOSED_PATH) === true ? buildVerticesPath(ctx, object) : buildOpenVerticesPath(ctx, object);
+}
+
 function drawPolyline(ctx: CanvasRenderingContext2D, object: GraphObject): void {
-  if (!buildOpenVerticesPath(ctx, object)) {
+  if (!buildPolylinePath(ctx, object)) {
     return;
   }
   ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
@@ -528,7 +533,7 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       return;
     }
     case "polyline": {
-      if (buildOpenVerticesPath(ctx, object)) {
+      if (buildPolylinePath(ctx, object)) {
         strokeHighlight(ctx);
       }
       return;

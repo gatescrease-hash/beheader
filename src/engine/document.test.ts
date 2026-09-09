@@ -660,6 +660,7 @@ describe("deserializeDocument — vertexCount, structural validation only", () =
       if (expectedSlots !== undefined) {
         expectedSlots["centroid.x"] = { kind: "derived" };
         expectedSlots["centroid.y"] = { kind: "derived" };
+        expectedSlots["area"] = { kind: "derived" };
         expectedSlots["length"] = { kind: "derived" };
         expectedSlots["bounds.minX"] = { kind: "derived" };
         expectedSlots["bounds.minY"] = { kind: "derived" };

@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2040 pass, 0 skip, across 38 test files. |
+| Tests | 2053 pass, 0 skip, across 38 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2040 tests
+npm test             # 2053 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -126,7 +126,7 @@ other suites drive them anyway.
 | `formula/functions.ts` | The built in function registry. It is a table from name to arity to implementation. One line adds a function. Two functions are lazy, because `IF` must not evaluate the branch it does not take. |
 | `formula/format.ts` | AST back to source text. It maps IDs back to current names. This is what lets the properties panel and the `props` command show a formula the way the operator wrote it. |
 | `primitives/schema.ts` | The registry that declares, for each object type, which slots exist and which kind each one has. It is the single source of truth for a slot path. Three sites read it in one pass: edge derivation and two integrity checks. All three must read it through the same resolver, or a dynamic slot family drifts between them. Types with an entry today: `value`, `add`, `table`, `circle`, `polygon`, `polyline`, `rect`, `text`, `image`, `script`. `value` and `add` are test fixtures from the first phase. Keep them. They are the smallest case that exercises a derived slot. |
-| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `openPathDerivedSlots`, the derived set an open path uses instead of `verticesDerivedSlots`. An open path gets no `area` slot. `SPEC.md` section 8 scopes area to a closed path. Its `length` never adds the segment back to the first vertex the way a closed shape's does. Two more functions grow and shrink a polyline's storage: `addVertexToObject` and `deleteVertexFromObject`. Two others give `mutation.ts` the address rewrites `delvertex` needs. One, `shiftVertexAddressForDelete`, moves a vertex that survives down an index. The other, `repairVertexAddressForDelete`, marks the exact deleted one, so `mutation.ts` can turn it into `#REF`. `explodeObjectToPolyline` snapshots a preset's vertices into a fresh polyline object, same id and name. `EXPLODABLE_TYPES` names the three preset types explode accepts: circle, polygon and rect. |
+| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `pathDerivedSlots`, the derived set a polyline uses instead of `verticesDerivedSlots`. Both sets sit at the same nine paths, area included, so a polygon is a closed polyline at the schema layer too. The `closed` literal slot picks the math for each one. A closed path gets the shoelace area, the area weighted centroid and the full perimeter. An open path gets the plain vertex mean, the length of the segments it has, and a `#TYPE` error at `area`. `hasClosedSlot` answers one question for two readers: `pathDependencies`, which lists the addresses each derived slot depends on, and `readClosedFlag`, which reads the value. A polyline built before the `closed` slot existed carries none, and both readers must agree that it does not. Two more functions grow and shrink a polyline's storage: `addVertexToObject` and `deleteVertexFromObject`. Two others give `mutation.ts` the address rewrites `delvertex` needs. One, `shiftVertexAddressForDelete`, moves a vertex that survives down an index. The other, `repairVertexAddressForDelete`, marks the exact deleted one, so `mutation.ts` can turn it into `#REF`. `explodeObjectToPolyline` snapshots a preset's vertices into a fresh polyline object, same id and name, and closes it. Every preset it accepts is a closed shape, so `area` survives the explode with the same value. `EXPLODABLE_TYPES` names the three preset types explode accepts: circle, polygon and rect. |
 | `primitives/table.ts` | Cell address math, range expansion, and the row and column resize passes. A range expands to concrete cells at edge derivation time, from the size the table has now. So an expansion can never go stale. An empty cell inside a range gets no edge, which is why a sparse table works. |
 | `primitives/text.ts` | The block tree parser for `{= }` and `{? }{:}{?}`, the dependency walker over it, and the three compute functions for `resolvedContent`, `measuredHeight` and `measuredWidth`. The dependency walker is the first dynamic dependency resolver in the codebase. It re-parses `content` on every edge derivation, because the set of slots the text names changes with every edit. |
 | `primitives/image.ts` | Slot path constants only. No logic. The image primitive is data plus a renderer arm. |
@@ -143,7 +143,7 @@ other suites drive them anyway.
 | `extent.ts` | The world space box of an object, and of the whole document. A drawn extent and a clickable extent are one extent. Give a type an arm here and it becomes clickable. Give it a renderer arm in the same change, or it becomes an invisible click target. |
 | `slots.ts` | Small readers that pull a number, a string or a boolean out of a slot value, plus the fixed table and script box sizes. It exists so no drawing file re-invents the same defensive read. |
 | `textbox.ts` | The one rule for how big a text box is. Three files read it. Do not answer the same question in a fourth place. |
-| `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. A polyline is a stroke test too, but over an open chain of segments. It never tests the gap between the last vertex and the first, unlike the closed shapes' distance test. |
+| `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. A polyline is a stroke test too. Its `closed` slot says whether the gap between the last vertex and the first is a real edge. |
 | `handles.ts` | The resize grabbers on a selected object, and the box math they drive. A resize is absolute, from the extent the drag started with, not a sum of small steps. |
 | `markdown.ts` | The markdown lite parser. Bold, italic, code, headings, list items and paragraph breaks, and nothing else. Its rule for which asterisk opens and which closes is load bearing. A simpler version reintroduces a bug that thirty tests did not catch. |
 | `measure.ts` | The real Canvas2D `TextMeasurer`, and `layOutText`, the line breaker. There are two measurers and they are not the same. The engine one honours markup. The overlay one does not. |
@@ -157,7 +157,7 @@ other suites drive them anyway.
 
 | File | What and why |
 | --- | --- |
-| `parser.ts` | One typed line to one command object, through a table of specs. It never throws. A bad line returns a failure that names what is wrong and where. It also holds the list of commands the spec names but the code does not build yet. An operator who types one gets the truth instead of "unknown command". That list and the built registry must stay disjoint. A test pins it. `polyline` and `addvertex` both take a `points` positional kind, which consumes every token left on the line as an `x,y` pair. It is the only positional kind matchArguments lets grow past the declared count. The grammar does not cap `addvertex` at one point. `commands.ts` refuses more than one, the same way it checks `polygon`'s side count. `explode` and `delete` share one spec shape: a bare target plus an optional `force` flag. |
+| `parser.ts` | One typed line to one command object, through a table of specs. It never throws. A bad line returns a failure that names what is wrong and where. It also holds the list of commands the spec names but the code does not build yet. An operator who types one gets the truth instead of "unknown command". That list and the built registry must stay disjoint. A test pins it. `polyline` and `addvertex` both take a `points` positional kind, which consumes every token left on the line as an `x,y` pair. It is the only positional kind matchArguments lets grow past the declared count. The grammar does not cap `addvertex` at one point. `commands.ts` refuses more than one, the same way it checks `polygon`'s side count. `explode` and `delete` share one spec shape: a bare target plus an optional `force` flag. A `points` list stops at a flag name. That one exception lets `polyline` end with `closed`, and it is why matchArguments looks for a flag before it grows the list. |
 | `prompt.ts` | The AutoCAD style prompt sequence. A bare command word starts it. The prompt asks for each argument in turn. This is a state machine on its own, apart from the one shot parser. |
 | `commands.ts` | The handlers. Each one turns a command object into mutation operations and a log line. This is where a refusal message gets written, so this is where the debug story lives. The engine's `deleteVertex` refusal names only the dependents. The handler here appends the `force` suggestion on top. `deleteObject` already uses the same split, since an `Operation` carries no command syntax to quote. `explode` follows the same pattern, one more time. |
 | `props.ts` | Slot descriptors for the `props` command and for the properties panel. Both surfaces read one list, so they can never disagree about what an object has. |
@@ -238,6 +238,13 @@ These are the traps. Each one cost real time to find.
     `mutation.ts` refuses BEFORE staging, through `findLiveVertexDependents`,
     rather than after.
 
+18. **A polyline declares `area` at every value of `closed`.** The `closed`
+    slot picks the math, and never the slot set. An open path holds a `#TYPE`
+    error at `area` instead of holding no slot. Two things follow. A formula
+    can drive `closed`, because evaluation then changes values only, and
+    Rule 4 holds. And `explode` breaks no reference to `area`, because the
+    path it makes is closed and the slot stays at the same address.
+
 ---
 
 ## 5. Gaps. This is the beta backlog.
@@ -247,15 +254,16 @@ group blocks the acceptance test in `SPEC.md` section 12.
 
 ### Blocks the road network test
 
-1. **`polyline` exists now.** It has a schema entry, a creation command
-   (`polyline <x,y> <x,y> [<x,y> ...]`), per vertex slots, a derived
-   `vertices` slot, an extent, a hit test and a renderer arm. Its derived set
-   is `centroid`, `length` and `bounds`, not the closed shape's set: no `area`,
-   because `SPEC.md` section 8 scopes area to a closed path, and `length`
-   never closes back to the first vertex. A live polyline can also grow and
-   shrink now, through `addvertex` and `delvertex`, and a preset can turn into
-   one through `explode` (item 4). Still open: `closed` and style slots
-   (item 6).
+1. **`polyline` exists now, and it can close.** It has a schema entry, a
+   creation command (`polyline <x,y> <x,y> [<x,y> ...] [closed]`), per vertex
+   slots, a derived `vertices` slot, an extent, a hit test and a renderer arm.
+   It declares the same nine derived paths a preset declares, `area` included.
+   Its `closed` slot picks the math for each one, and never the slot set. So a
+   closed polyline reports the same area, centroid and length as the polygon
+   over the same corners, and a polygon is a closed polyline at the schema
+   layer, not only in the math. A live polyline can also grow and shrink now,
+   through `addvertex` and `delvertex`, and a preset can turn into one through
+   `explode` (item 4). Still open: the style slots of item 6.
 2. **Per vertex slots exist, and a mutation can grow or shrink the set.**
    `vertex.0.x` and `vertex.0.y`, as `SPEC.md` section 8 specifies.
    `enumeratePolylineVertexSlotPaths` in `geometry.ts` builds the paths from
@@ -279,18 +287,20 @@ group blocks the acceptance test in `SPEC.md` section 12.
    or without `force`, because the same real vertex survives under a new
    index, and a shift is never a break. `explode` turns a circle, a polygon
    or a rect into a polyline, same id and name: it snapshots the preset's
-   current `vertices` into literal per vertex slots and drops the parameter
-   slots (`origin`, `radius`, `sides`, and so on) and `area`. `vertices`,
-   `centroid`, `length` and `bounds` stay declared at the same paths on the
-   new schema, so a formula that reads one of those needs no repair. A
+   current `vertices` into literal per vertex slots, closes the new path, and
+   drops the parameter slots (`origin`, `radius`, `sides`, and so on).
+   `vertices`, `centroid`, `area`, `length` and `bounds` all stay declared at
+   the same paths on the new schema, so a formula that reads one of those
+   needs no repair. A
    formula that reads a dropped slot follows the same refuse-by-default,
    repair-under-`force` rule as `delvertex`.
 5. **Path `segments`.** `SPEC.md` section 8 declares arcs and beziers. Only
    straight lines exist.
 6. **Geometry style slots.** `strokeColor`, `strokeWidth` and `fillColor` are
    specified as slots that a formula can drive. No schema declares them. The
-   renderer uses fixed colours. A `closed` slot belongs with this group too,
-   since a polyline has no way today to become a closed shape.
+   renderer uses fixed colours. A closed polyline draws the edge back to its
+   first vertex now, but no shape can fill, because no schema declares
+   `fillColor` yet.
 7. **`src/engine/index.ts` exists now.** It is the one public engine surface
    the spec names, and it re-exports every other engine file under one name
    each. It resolves the one collision (`evaluate`) to `evaluateGraph` and

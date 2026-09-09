@@ -25,6 +25,7 @@ export const POLYGON_SIDES_PATH: readonly string[] = ["sides"];
 export const POLYGON_ROTATION_PATH: readonly string[] = ["rotation"];
 export const RECT_WIDTH_PATH: readonly string[] = ["width"];
 export const RECT_HEIGHT_PATH: readonly string[] = ["height"];
+export const CLOSED_PATH: readonly string[] = ["closed"];
 
 export const VERTICES_PATH: readonly string[] = ["vertices"];
 export const CENTROID_X_PATH: readonly string[] = ["centroid", "x"];
@@ -323,22 +324,89 @@ export const computePolylineVerticesSlot: DerivedSlotCompute = (object, read) =>
 };
 
 /**
- * The derived slots of an open path: centroid, length and bounds. Not area,
- * because SPEC.md section 8 scopes area to a closed path, and a polyline has
- * no closed slot yet. The centroid is the plain vertex mean, not the area
- * weighted centroid verticesDerivedSlots uses, because that formula assumes a
- * closed shape.
+ * True when the object carries a closed slot. A path built before the closed
+ * slot existed carries none. The dependency list and readClosedFlag must ask
+ * this one question. Two answers that drift produce a #REF at every derived
+ * slot of the path.
  */
-export function openPathDerivedSlots(label: string): readonly DerivedSlotSchema[] {
-  const dependencies: DerivedSlotDependencies = { kind: "static", paths: [VERTICES_PATH] };
+function hasClosedSlot(object: GraphObject): boolean {
+  return getSlot(object, CLOSED_PATH) !== undefined;
+}
+
+/** The vertices slot, and the closed slot when the object carries one. */
+export const pathDependencies: DerivedSlotDependencies = {
+  kind: "dynamic",
+  resolve: (object) => {
+    const addresses: Address[] = [{ objectId: object.id, path: VERTICES_PATH }];
+    if (hasClosedSlot(object)) {
+      addresses.push({ objectId: object.id, path: CLOSED_PATH });
+    }
+    return addresses;
+  },
+};
+
+/** One measurement of a path. It returns a number, or the reason it cannot. */
+export type PathMeasure = (vertices: readonly Point[]) => number | ErrorValue;
+
+/**
+ * True when the path closes back to its first vertex. An absent slot reads as
+ * an open path, so a document written before the closed slot still loads.
+ */
+export function readClosedFlag(
+  object: GraphObject,
+  read: (address: Address) => Value | undefined,
+  label: string,
+): boolean | ErrorValue {
+  if (!hasClosedSlot(object)) {
+    return false;
+  }
+  const value = read({ objectId: object.id, path: CLOSED_PATH });
+  if (value === undefined || value === null) {
+    return false;
+  }
+  if (isErrorValue(value)) {
+    return value;
+  }
+  if (typeof value !== "boolean") {
+    return { error: "#TYPE", message: `${label}: closed must be true or false` };
+  }
+  return value;
+}
+
+function derivePathNumber(label: string, whenClosed: PathMeasure, whenOpen: PathMeasure): DerivedSlotCompute {
+  return (object, read) => {
+    const closed = readClosedFlag(object, read, label);
+    if (isErrorValue(closed)) {
+      return closed;
+    }
+    const vertices = readVertices(object, read, label);
+    if (isErrorValue(vertices)) {
+      return vertices;
+    }
+    const measured = closed ? whenClosed(vertices) : whenOpen(vertices);
+    return isErrorValue(measured) ? measured : finiteOrTypeError(measured, label);
+  };
+}
+
+/**
+ * The derived slots of a path. The closed slot picks the math for each one. A
+ * closed path gets the shoelace area, the area weighted centroid and the full
+ * perimeter. An open path gets the plain vertex mean, the length of the
+ * segments it has, and an error at area. Both sets sit at the same paths. So a
+ * write to closed changes values, and never the slot set.
+ */
+export function pathDerivedSlots(label: string): readonly DerivedSlotSchema[] {
+  const dependencies = pathDependencies;
+  const noArea: PathMeasure = () => ({ error: "#TYPE", message: `${label}.area: an open path has no area. Set closed to true first` });
   return [
-    { path: CENTROID_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.centroid.x`, (v) => computeVertexMean(v).x) },
-    { path: CENTROID_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.centroid.y`, (v) => computeVertexMean(v).y) },
-    { path: LENGTH_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.length`, computeOpenPathLength) },
-    { path: BOUNDS_MIN_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.minX`, (v) => computeBounds(v).minX) },
-    { path: BOUNDS_MIN_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.minY`, (v) => computeBounds(v).minY) },
-    { path: BOUNDS_MAX_X_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxX`, (v) => computeBounds(v).maxX) },
-    { path: BOUNDS_MAX_Y_PATH, dependencies, compute: deriveNumberFromVertices(`${label}.bounds.maxY`, (v) => computeBounds(v).maxY) },
+    { path: CENTROID_X_PATH, dependencies, compute: derivePathNumber(`${label}.centroid.x`, (v) => computeCentroid(v).x, (v) => computeVertexMean(v).x) },
+    { path: CENTROID_Y_PATH, dependencies, compute: derivePathNumber(`${label}.centroid.y`, (v) => computeCentroid(v).y, (v) => computeVertexMean(v).y) },
+    { path: AREA_PATH, dependencies, compute: derivePathNumber(`${label}.area`, computeArea, noArea) },
+    { path: LENGTH_PATH, dependencies, compute: derivePathNumber(`${label}.length`, computePerimeterLength, computeOpenPathLength) },
+    { path: BOUNDS_MIN_X_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.minX`, (v) => computeBounds(v).minX, (v) => computeBounds(v).minX) },
+    { path: BOUNDS_MIN_Y_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.minY`, (v) => computeBounds(v).minY, (v) => computeBounds(v).minY) },
+    { path: BOUNDS_MAX_X_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.maxX`, (v) => computeBounds(v).maxX, (v) => computeBounds(v).maxX) },
+    { path: BOUNDS_MAX_Y_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.maxY`, (v) => computeBounds(v).maxY, (v) => computeBounds(v).maxY) },
   ];
 }
 
@@ -503,6 +571,7 @@ const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
   VERTICES_PATH,
   CENTROID_X_PATH,
   CENTROID_Y_PATH,
+  AREA_PATH,
   LENGTH_PATH,
   BOUNDS_MIN_X_PATH,
   BOUNDS_MIN_Y_PATH,
@@ -512,10 +581,10 @@ const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
 
 /**
  * Snapshots a preset's current vertices into a fresh polyline object, same id
- * and name. The parameter slots (origin, radius, sides, and so on) and area
- * are gone. vertices, centroid, length and bounds survive at the same paths.
- * The new schema declares them too, so a formula that reads one of those
- * needs no repair.
+ * and name. The parameter slots (origin, radius, sides, and so on) are gone.
+ * The new path closes, because every preset it accepts is a closed shape. So
+ * vertices, centroid, area, length and bounds all survive at the same paths.
+ * A formula that reads one of them needs no repair.
  */
 export function explodeObjectToPolyline(object: GraphObject, label: string): ExplodeResult {
   const value = getSlot(object, VERTICES_PATH)?.value;
@@ -535,6 +604,7 @@ export function explodeObjectToPolyline(object: GraphObject, label: string): Exp
     slots[slotKey(vertexXPath(index))] = { kind: "literal", value: vertex.x };
     slots[slotKey(vertexYPath(index))] = { kind: "literal", value: vertex.y };
   });
+  slots[slotKey(CLOSED_PATH)] = { kind: "literal", value: true };
   for (const path of POLYLINE_DERIVED_PATHS) {
     slots[slotKey(path)] = { kind: "derived", value: null };
   }

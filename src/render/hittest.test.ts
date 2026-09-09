@@ -180,6 +180,18 @@ describe("hitTest — a polyline is an open path, unlike the closed vertex shape
   it("never hits the closing gap between the last vertex and the first — that gap does not exist on an open path", () => {
     expect(hitTest({ x: 50, y: 50 }, [elbow], CAMERA_IDENTITY)).toBeUndefined();
   });
+
+  it("hits that same gap once closed is true — the closing edge is a real edge then", () => {
+    const closed: GraphObject = { ...elbow, slots: { ...elbow.slots, closed: { kind: "literal", value: true } } };
+    expect(hitTest({ x: 50, y: 50 }, [closed], CAMERA_IDENTITY)).toBe(closed);
+  });
+
+  it("stays open when closed holds false, and when it holds a value that is not a boolean", () => {
+    const open: GraphObject = { ...elbow, slots: { ...elbow.slots, closed: { kind: "literal", value: false } } };
+    const wrong: GraphObject = { ...elbow, slots: { ...elbow.slots, closed: { kind: "literal", value: "yes" } } };
+    expect(hitTest({ x: 50, y: 50 }, [open], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 50, y: 50 }, [wrong], CAMERA_IDENTITY)).toBeUndefined();
+  });
 });
 
 describe("hitTest — image bounding box — the same extent renderer.ts frames", () => {

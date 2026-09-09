@@ -37,6 +37,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
         { x: 100, y: 0 },
         { x: 100, y: 100 },
       ],
+      closed: false,
     },
   },
   {
@@ -112,17 +113,29 @@ describe("polyline — a variadic points list, not a fixed positional count", ()
         { x: 10, y: 10 },
         { x: 0, y: 10 },
       ],
+      closed: false,
+    });
+  });
+
+  it("reads a trailing closed flag as a flag, and never as one more point", () => {
+    expect(parsed("polyline 0,0 10,0 closed")).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      closed: true,
     });
   });
 
   it("parses a single point too — the parser checks only the grammar, not the minimum of two a line needs", () => {
-    expect(parsed("polyline 0,0")).toEqual({ kind: "polyline", points: [{ x: 0, y: 0 }] });
+    expect(parsed("polyline 0,0")).toEqual({ kind: "polyline", points: [{ x: 0, y: 0 }], closed: false });
   });
 
   it("rejects a point missing its comma, naming the malformed token and its offset", () => {
     const line = "polyline 0,0 nope 10,10";
     expect(rejected(line)).toEqual({
-      message: '<points> takes a point as x,y — got "nope" — usage: polyline <x,y> <x,y> [<x,y> ...]',
+      message: '<points> takes a point as x,y — got "nope" — usage: polyline <x,y> <x,y> [<x,y> ...] [closed]',
       start: line.indexOf("nope"),
     });
   });

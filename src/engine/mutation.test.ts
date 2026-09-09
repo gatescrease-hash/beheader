@@ -1596,7 +1596,7 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
     expect(object?.slots["vertex.1.x"]).toEqual({ kind: "literal", value: 10 });
   });
 
-  it("keeps vertices, centroid, length and bounds working at the same paths, with no repair needed", () => {
+  it("keeps vertices, centroid, area, length and bounds working at the same paths, with no repair needed", () => {
     const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
     const result = mutate([rect], [{ kind: "explode", objectId: "obj_1" }], []);
     expect(result.ok).toBe(true);
@@ -1613,7 +1613,8 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
     });
     expect(object?.slots["centroid.x"]?.value).toBeCloseTo(5);
     expect(object?.slots["bounds.maxX"]?.value).toBe(10);
-    expect(object?.slots["area"]).toBeUndefined();
+    expect(object?.slots["closed"]).toEqual({ kind: "literal", value: true });
+    expect(object?.slots["area"]?.value).toBeCloseTo(50);
   });
 
   it("does not refuse when a live reference reads a path that survives the explode (vertices, centroid, length, bounds)", () => {
@@ -1650,7 +1651,7 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
     expect([rect, dependent]).toEqual(snapshotBefore);
   });
 
-  it("REJECTS by default when a live reference reads AREA, which a polyline does not declare", () => {
+  it("does not refuse a live reference to AREA either — the exploded path is closed, so area survives with the same value", () => {
     const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
     const dependent: GraphObject = {
       id: "obj_2",
@@ -1659,7 +1660,9 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
       slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "area") }, value: 50 } },
     };
     const result = mutate([rect, dependent], [{ kind: "explode", objectId: "obj_1" }], []);
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.find((candidate) => candidate.id === "obj_2")?.slots["value"]?.value).toBeCloseTo(50);
   });
 
   it("`force: true` repairs a removed parameter reference to #REF, still leaves a surviving reference untouched, and reports the broken slot", () => {
@@ -1900,6 +1903,7 @@ function polylinePlaceholders(): Record<string, Slot> {
     vertices: { kind: "derived", value: null },
     "centroid.x": { kind: "derived", value: null },
     "centroid.y": { kind: "derived", value: null },
+    area: { kind: "derived", value: null },
     length: { kind: "derived", value: null },
     "bounds.minX": { kind: "derived", value: null },
     "bounds.minY": { kind: "derived", value: null },
@@ -1909,7 +1913,7 @@ function polylinePlaceholders(): Record<string, Slot> {
 }
 
 function polylineObject(id: string, name: string, points: readonly { readonly x: number; readonly y: number }[], vertexSlots: Record<string, Slot> = {}): GraphObject {
-  const slots: Record<string, Slot> = { ...polylinePlaceholders() };
+  const slots: Record<string, Slot> = { closed: { kind: "literal", value: false }, ...polylinePlaceholders() };
   points.forEach((point, index) => {
     slots[`vertex.${index}.x`] = { kind: "literal", value: point.x };
     slots[`vertex.${index}.y`] = { kind: "literal", value: point.y };

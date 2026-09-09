@@ -377,6 +377,36 @@ describe("renderDocument — a polyline draws an open path, unlike the closed ve
       { op: "stroke" },
     ]);
   });
+
+  it("closes the path once closed is true, which is the one call that separates it from a polygon", () => {
+    const { ctx, calls } = createFakeContext();
+    const polyline: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      slots: {
+        closed: { kind: "literal", value: true },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+          ],
+        },
+      },
+    };
+    renderDocument(ctx, 800, 600, [polyline], CAMERA_IDENTITY);
+    const shapeCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect" && call.op !== "fillText");
+    expect(shapeCalls).toEqual([
+      { op: "beginPath" },
+      { op: "moveTo", x: 0, y: 0 },
+      { op: "lineTo", x: 100, y: 0 },
+      { op: "lineTo", x: 100, y: 100 },
+      { op: "closePath" },
+      { op: "stroke" },
+    ]);
+  });
 });
 
 function textObject(resolved: string, originX: number, originY: number, overrides: Record<string, Slot> = {}): GraphObject {

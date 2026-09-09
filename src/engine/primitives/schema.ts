@@ -24,14 +24,15 @@ import type { EvalContext } from "../eval-context.ts";
 import type { ReadRange } from "../formula/eval.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 import {
+  CLOSED_PATH,
   computeCircleVerticesSlot,
   computePolygonVerticesSlot,
   computePolylineVerticesSlot,
   computeRectVerticesSlot,
   enumeratePolylineVertexSlotPaths,
-  openPathDerivedSlots,
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
+  pathDerivedSlots,
   POLYGON_ROTATION_PATH,
   POLYGON_SIDES_PATH,
   polylineVerticesDependencies,
@@ -267,10 +268,13 @@ const RECT_SCHEMA: ObjectSchema = {
 
 const POLYLINE_SCHEMA: ObjectSchema = {
   type: "polyline",
-  nonDerivedSlotPaths: [{ kind: "dynamic", enumerate: enumeratePolylineVertexSlotPaths }],
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [CLOSED_PATH] },
+    { kind: "dynamic", enumerate: enumeratePolylineVertexSlotPaths },
+  ],
   derivedSlots: [{ kind: "static", slots: [
     { path: VERTICES_PATH, dependencies: polylineVerticesDependencies, compute: computePolylineVerticesSlot },
-    ...openPathDerivedSlots("polyline"),
+    ...pathDerivedSlots("polyline"),
   ] }],
 };
 

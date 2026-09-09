@@ -136,7 +136,26 @@ describe("creation — a typed line becomes an object", () => {
   it("gives a polyline a derived length that sums its segments and never closes back to the first point", () => {
     const object = onlyObject(committed("polyline 0,0 3,4 3,0", createEmptyDocument()));
     expect(getSlot(object, ["length"])?.value).toBeCloseTo(9);
-    expect(getSlot(object, ["area"])).toBeUndefined();
+    expect(getSlot(object, ["closed"])?.value).toBe(false);
+    expect(getSlot(object, ["area"])?.value).toEqual({
+      error: "#TYPE",
+      message: "polyline.area: an open path has no area. Set closed to true first",
+    });
+  });
+
+  it("closes a polyline on the same line, and then length walks the last edge home and area is real", () => {
+    const object = onlyObject(committed("polyline 0,0 4,0 4,3 0,3 closed", createEmptyDocument()));
+    expect(getSlot(object, ["closed"])?.value).toBe(true);
+    expect(getSlot(object, ["length"])?.value).toBeCloseTo(14);
+    expect(getSlot(object, ["area"])?.value).toBeCloseTo(12);
+  });
+
+  it("a closed polyline reports the same area, centroid and length as the rect covering the same four corners", () => {
+    const path = onlyObject(committed("polyline 0,0 4,0 4,3 0,3 closed", createEmptyDocument()));
+    const box = onlyObject(committed("rect x=0 y=0 w=4 h=3", createEmptyDocument()));
+    for (const key of ["area", "length", "centroid.x", "centroid.y", "bounds.maxX"]) {
+      expect(getSlot(path, key.split("."))?.value).toEqual(getSlot(box, key.split("."))?.value);
+    }
   });
 
   it("refuses a polyline with fewer than two points, naming the count it got", () => {
