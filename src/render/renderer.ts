@@ -44,11 +44,12 @@ import { worldToScreen } from "./camera.ts";
 import type { ImageBitmaps } from "./images.ts";
 import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";
 import { layOutText } from "./measure.ts";
-import { asPointArray, readBoolean, readNumber, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 import { objectExtent } from "./extent.ts";
 
 const DEFAULT_SHAPE_STROKE_STYLE = "#1a1a1a";
+const TRANSPARENT = "transparent";
 const DEFAULT_SHAPE_STROKE_WIDTH = 1;
 
 const TABLE_CELL_TEXT_PADDING = 4;
@@ -308,12 +309,7 @@ function buildCirclePath(ctx: CanvasRenderingContext2D, object: GraphObject): bo
 }
 
 function drawCircle(ctx: CanvasRenderingContext2D, object: GraphObject): void {
-  if (!buildCirclePath(ctx, object)) {
-    return;
-  }
-  ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
-  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
-  ctx.stroke();
+  paintShape(ctx, object, buildCirclePath(ctx, object), true);
 }
 
 function buildVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
@@ -336,11 +332,29 @@ function buildVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObject): 
 }
 
 function drawVerticesShape(ctx: CanvasRenderingContext2D, object: GraphObject): void {
-  if (!buildVerticesPath(ctx, object)) {
+  paintShape(ctx, object, buildVerticesPath(ctx, object), true);
+}
+
+/**
+ * Fills the path, then strokes it, in the colours the style slots hold. Only a
+ * closed shape fills. Each colour goes on twice: the default first, then the
+ * slot value. A canvas ignores a colour string it cannot read, so the first
+ * write is what an unreadable second write falls back to. With one write only,
+ * the shape takes the colour of whatever drew before it.
+ */
+function paintShape(ctx: CanvasRenderingContext2D, object: GraphObject, built: boolean, closed: boolean): void {
+  if (!built) {
     return;
   }
+  const style = readShapeStyle(object);
+  if (closed && style.fillColor !== undefined) {
+    ctx.fillStyle = TRANSPARENT;
+    ctx.fillStyle = style.fillColor;
+    ctx.fill();
+  }
   ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
-  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
+  ctx.strokeStyle = style.strokeColor;
+  ctx.lineWidth = style.strokeWidth;
   ctx.stroke();
 }
 
@@ -396,12 +410,7 @@ function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): 
 }
 
 function drawPolyline(ctx: CanvasRenderingContext2D, object: GraphObject): void {
-  if (!buildPolylinePath(ctx, object)) {
-    return;
-  }
-  ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
-  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
-  ctx.stroke();
+  paintShape(ctx, object, buildPolylinePath(ctx, object), readBoolean(object, CLOSED_PATH) === true);
 }
 
 function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject, editingCell: string | undefined): void {

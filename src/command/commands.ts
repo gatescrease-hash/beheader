@@ -39,6 +39,7 @@ import {
   RADIUS_PATH,
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
+  GEOMETRY_STYLE_DEFAULTS,
   splitPolylineEdge,
   vertexBulgePath,
   vertexHandleInPaths,
@@ -287,12 +288,17 @@ function createObjectFromCommand(
   };
 }
 
+/** Every shape starts with the same outline and no fill. A formula can drive each slot later. */
+function withGeometryStyle(literals: readonly LiteralSlotDeclaration[]): LiteralSlotDeclaration[] {
+  return [...literals, ...GEOMETRY_STYLE_DEFAULTS.map((entry) => ({ path: entry.path, value: entry.value }))];
+}
+
 function createCircle(command: CreateCircleCommand, document: Document, context: EvalContext): CommandOutcome {
-  return createObjectFromCommand(document, "circle", [
+  return createObjectFromCommand(document, "circle", withGeometryStyle([
     { path: ORIGIN_X_PATH, value: command.x },
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: RADIUS_PATH, value: command.radius },
-  ], context);
+  ]), context);
 }
 
 function createPolygon(command: CreatePolygonCommand, document: Document, context: EvalContext): CommandOutcome {
@@ -300,22 +306,22 @@ function createPolygon(command: CreatePolygonCommand, document: Document, contex
   if (refusal !== undefined) {
     return { ok: false, message: refusal };
   }
-  return createObjectFromCommand(document, "polygon", [
+  return createObjectFromCommand(document, "polygon", withGeometryStyle([
     { path: POLYGON_SIDES_PATH, value: command.sides },
     { path: RADIUS_PATH, value: command.radius },
     { path: ORIGIN_X_PATH, value: command.x },
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: POLYGON_ROTATION_PATH, value: DEFAULT_POLYGON_ROTATION },
-  ], context);
+  ]), context);
 }
 
 function createRect(command: CreateRectCommand, document: Document, context: EvalContext): CommandOutcome {
-  return createObjectFromCommand(document, "rect", [
+  return createObjectFromCommand(document, "rect", withGeometryStyle([
     { path: ORIGIN_X_PATH, value: command.x },
     { path: ORIGIN_Y_PATH, value: command.y },
     { path: RECT_WIDTH_PATH, value: command.width },
     { path: RECT_HEIGHT_PATH, value: command.height },
-  ], context);
+  ]), context);
 }
 
 function createPolyline(command: CreatePolylineCommand, document: Document, context: EvalContext): CommandOutcome {
@@ -334,7 +340,7 @@ function createPolyline(command: CreatePolylineCommand, document: Document, cont
     literals.push({ path: handleOut.x, value: 0 });
     literals.push({ path: handleOut.y, value: 0 });
   });
-  return createObjectFromCommand(document, "polyline", literals, context, command.points.length);
+  return createObjectFromCommand(document, "polyline", withGeometryStyle(literals), context, command.points.length);
 }
 
 function createTable(command: CreateTableCommand, document: Document, context: EvalContext): CommandOutcome {

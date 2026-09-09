@@ -353,7 +353,14 @@ describe("buildPanelModel — the rows of the properties panel", () => {
     const state = typed(opened(), "circle x=10 y=20 r=5");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     expect(model.header).toBe("circle_1");
-    expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "radius"]);
+    expect(model.modifiable.map((row) => row.path)).toEqual([
+      "origin.x",
+      "origin.y",
+      "radius",
+      "style.strokeColor",
+      "style.strokeWidth",
+      "style.fillColor",
+    ]);
     expect(model.derived[0]?.path).toBe("centroid.x");
     expect(model.derived.map((row) => row.path)).not.toContain("vertices");
   });

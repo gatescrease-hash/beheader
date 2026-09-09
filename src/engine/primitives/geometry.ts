@@ -57,6 +57,31 @@ export const RECT_WIDTH_PATH: readonly string[] = ["width"];
 export const RECT_HEIGHT_PATH: readonly string[] = ["height"];
 export const CLOSED_PATH: readonly string[] = ["closed"];
 
+export const STYLE_STROKE_COLOR_PATH: readonly string[] = ["style", "strokeColor"];
+export const STYLE_STROKE_WIDTH_PATH: readonly string[] = ["style", "strokeWidth"];
+export const STYLE_FILL_COLOR_PATH: readonly string[] = ["style", "fillColor"];
+
+/**
+ * The three style slots every shape carries. A formula can drive each one, so
+ * a table cell can colour a shape. They hold plain data here. The render layer
+ * decides what a colour string means, because the engine knows no canvas.
+ */
+export const GEOMETRY_STYLE_PATHS: readonly (readonly string[])[] = [
+  STYLE_STROKE_COLOR_PATH,
+  STYLE_STROKE_WIDTH_PATH,
+  STYLE_FILL_COLOR_PATH,
+];
+
+export const DEFAULT_STROKE_COLOR = "#1a1a1a";
+export const DEFAULT_STROKE_WIDTH = 1;
+
+/** A new shape draws its outline and fills nothing. Null is a fill an operator can see is off. */
+export const GEOMETRY_STYLE_DEFAULTS: readonly { readonly path: readonly string[]; readonly value: string | number | null }[] = [
+  { path: STYLE_STROKE_COLOR_PATH, value: DEFAULT_STROKE_COLOR },
+  { path: STYLE_STROKE_WIDTH_PATH, value: DEFAULT_STROKE_WIDTH },
+  { path: STYLE_FILL_COLOR_PATH, value: null },
+];
+
 export const VERTICES_PATH: readonly string[] = ["vertices"];
 export const CENTROID_X_PATH: readonly string[] = ["centroid", "x"];
 export const CENTROID_Y_PATH: readonly string[] = ["centroid", "y"];

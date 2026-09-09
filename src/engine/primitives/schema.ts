@@ -26,6 +26,7 @@ import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } 
 import {
   circleDerivedSlots,
   CLOSED_PATH,
+  GEOMETRY_STYLE_PATHS,
   computePolygonVerticesSlot,
   computePolylineVerticesSlot,
   computeRectVerticesSlot,
@@ -233,13 +234,15 @@ const TABLE_SCHEMA: ObjectSchema = {
 
 const CIRCLE_SCHEMA: ObjectSchema = {
   type: "circle",
-  nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] }],
+  nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, ...GEOMETRY_STYLE_PATHS] }],
   derivedSlots: [{ kind: "static", slots: [...circleDerivedSlots("circle")] }],
 };
 
 const POLYGON_SCHEMA: ObjectSchema = {
   type: "polygon",
-  nonDerivedSlotPaths: [{ kind: "static", paths: [POLYGON_SIDES_PATH, RADIUS_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, POLYGON_ROTATION_PATH] }],
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [POLYGON_SIDES_PATH, RADIUS_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, POLYGON_ROTATION_PATH, ...GEOMETRY_STYLE_PATHS] },
+  ],
   derivedSlots: [{ kind: "static", slots: [
     {
       path: VERTICES_PATH,
@@ -252,7 +255,9 @@ const POLYGON_SCHEMA: ObjectSchema = {
 
 const RECT_SCHEMA: ObjectSchema = {
   type: "rect",
-  nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RECT_WIDTH_PATH, RECT_HEIGHT_PATH] }],
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RECT_WIDTH_PATH, RECT_HEIGHT_PATH, ...GEOMETRY_STYLE_PATHS] },
+  ],
   derivedSlots: [{ kind: "static", slots: [
     {
       path: VERTICES_PATH,
@@ -266,7 +271,7 @@ const RECT_SCHEMA: ObjectSchema = {
 const POLYLINE_SCHEMA: ObjectSchema = {
   type: "polyline",
   nonDerivedSlotPaths: [
-    { kind: "static", paths: [CLOSED_PATH] },
+    { kind: "static", paths: [CLOSED_PATH, ...GEOMETRY_STYLE_PATHS] },
     { kind: "dynamic", enumerate: enumeratePolylineVertexSlotPaths },
   ],
   derivedSlots: [{ kind: "static", slots: [

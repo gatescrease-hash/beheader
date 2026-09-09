@@ -6,44 +6,40 @@
  *
  * A screen point to the topmost object.
  *
- * A fill uses point in polygon. A stroke uses distance to segment with a pixel
- * tolerance. Text, a table, an image and a script node use a box.
+ * A shape that paints its inside answers to a click anywhere inside it, by the
+ * same nonzero rule a canvas fills with. A shape with no fill is a hollow
+ * outline, and answers only near its edge, within a pixel tolerance.
+ * Text, a table, an image and a script node use a box.
  *
  * Array order is z order. This file walks it backward.
  */
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
-import { distanceToPath, distanceToSegment } from "../engine/primitives/edge.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { buildPathEdges, distanceToPath, pathContains } from "../engine/primitives/edge.ts";
+import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent } from "./extent.ts";
-import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readBoolean, readNumber, readShapeStyle, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 export const STROKE_HIT_TOLERANCE_SCREEN_PIXELS = 5;
 
-function distanceToClosedPolyline(point: Point, vertices: readonly Point[]): number {
-  let minDistance = Infinity;
-  for (let i = 0; i < vertices.length; i += 1) {
-    const a = vertices[i];
-    const b = vertices[(i + 1) % vertices.length];
-    if (a === undefined || b === undefined) {
-      continue;
-    }
-    const distance = distanceToSegment(point, a, b);
-    if (distance < minDistance) {
-      minDistance = distance;
-    }
-  }
-  return minDistance;
+/** True when the shape paints its inside. A shape with no fill is a hollow outline to a click. */
+function fillsItsInside(object: GraphObject): boolean {
+  return readShapeStyle(object).fillColor !== undefined;
 }
 
+/** A preset is a closed run of straight edges. Its vertices say everything about its shape. */
 function hitTestVerticesShape(object: GraphObject, worldPoint: WorldPoint, strokeToleranceWorld: number): boolean {
   const vertices = asPointArray(getSlot(object, VERTICES_PATH)?.value);
   if (vertices === undefined || vertices.length === 0) {
     return false;
   }
-  return distanceToClosedPolyline(worldPoint, vertices) <= strokeToleranceWorld;
+  const edges = buildPathEdges(vertices, [], true);
+  if (fillsItsInside(object) && pathContains(worldPoint, edges)) {
+    return true;
+  }
+  return distanceToPath(worldPoint, edges) <= strokeToleranceWorld;
 }
 
 /** A circle hits on its true ring. It measures to the circle the renderer draws. */
@@ -54,7 +50,11 @@ function hitTestCircle(object: GraphObject, worldPoint: WorldPoint, strokeTolera
   if (originX === undefined || originY === undefined || radius === undefined || radius < 0) {
     return false;
   }
-  return Math.abs(Math.hypot(worldPoint.x - originX, worldPoint.y - originY) - radius) <= strokeToleranceWorld;
+  const distance = Math.hypot(worldPoint.x - originX, worldPoint.y - originY);
+  if (fillsItsInside(object) && distance <= radius) {
+    return true;
+  }
+  return Math.abs(distance - radius) <= strokeToleranceWorld;
 }
 
 /**
@@ -65,6 +65,10 @@ function hitTestPolyline(object: GraphObject, worldPoint: WorldPoint, strokeTole
   const edges = pathEdgesOfObject(object);
   if (edges.length === 0) {
     return false;
+  }
+  const closed = readBoolean(object, CLOSED_PATH) === true;
+  if (closed && fillsItsInside(object) && pathContains(worldPoint, edges)) {
+    return true;
   }
   return distanceToPath(worldPoint, edges) <= strokeToleranceWorld;
 }

@@ -651,6 +651,125 @@ export function splitEdgeAt(edge: PathEdge, near: Point): EdgeSplit {
   };
 }
 
+/** How many times bisection halves a bracket before it takes the middle. */
+const ROOT_STEPS = 60;
+
+/**
+ * True when a closed path encloses the point, by the nonzero rule a canvas
+ * fills with. It casts one ray along positive x and counts the edges that
+ * cross it, each with the direction it crosses. An arc crosses where the ray
+ * meets its circle. A cubic crosses at the roots of its own y, on each stretch
+ * where that y only rises or only falls.
+ *
+ * An edge counts where the ray meets its start, and not where the ray meets
+ * its end. So a vertex two edges share counts once.
+ *
+ * It answers for the edges it gets. An open list winds as though a straight
+ * edge closed it, which is what ctx.fill does too. Whether an open path fills
+ * at all is the decision of the caller.
+ */
+export function pathContains(point: Point, edges: readonly PathEdge[]): boolean {
+  let winding = 0;
+  for (const edge of edges) {
+    winding += edgeCrossings(point, edge);
+  }
+  return winding !== 0;
+}
+
+function edgeCrossings(point: Point, edge: PathEdge): number {
+  const curve = bezierOfEdge(edge);
+  if (curve !== undefined) {
+    return cubicCrossings(point, curve);
+  }
+  const arc = arcOfEdge(edge);
+  if (arc === undefined) {
+    return straightCrossings(point, edge);
+  }
+  return arcCrossings(point, arc);
+}
+
+function straightCrossings(point: Point, edge: PathEdge): number {
+  const rise = edge.end.y - edge.start.y;
+  if (rise === 0) {
+    return 0;
+  }
+  const t = (point.y - edge.start.y) / rise;
+  if (t < 0 || t >= 1) {
+    return 0;
+  }
+  const x = edge.start.x + t * (edge.end.x - edge.start.x);
+  return x > point.x ? Math.sign(rise) : 0;
+}
+
+function arcCrossings(point: Point, arc: ArcGeometry): number {
+  const rise = point.y - arc.center.y;
+  const half = arc.radius * arc.radius - rise * rise;
+  if (half <= 0) {
+    return 0;
+  }
+  const reach = Math.sqrt(half);
+  let winding = 0;
+  for (const x of [arc.center.x - reach, arc.center.x + reach]) {
+    if (x <= point.x) {
+      continue;
+    }
+    const angle = Math.atan2(rise, x - arc.center.x);
+    let delta = (angle - arc.startAngle) % FULL_TURN;
+    if (delta < 0) {
+      delta += FULL_TURN;
+    }
+    const along = arc.sweep > 0 ? delta / arc.sweep : (delta === 0 ? 0 : (delta - FULL_TURN) / arc.sweep);
+    if (along < 0 || along >= 1) {
+      continue;
+    }
+    winding += Math.sign(Math.cos(angle) * arc.sweep);
+  }
+  return winding;
+}
+
+function cubicCrossings(point: Point, curve: CubicBezier): number {
+  const heightAt = (t: number): number => bezierPointAt(curve, t).y - point.y;
+  const edges = [0, ...turningPoints(curve.p0.y, curve.p1.y, curve.p2.y, curve.p3.y).slice().sort((a, b) => a - b), 1];
+  let winding = 0;
+  for (let piece = 0; piece + 1 < edges.length; piece += 1) {
+    const low = edges[piece] ?? 0;
+    const high = edges[piece + 1] ?? 1;
+    const t = rootBetween(heightAt, low, high);
+    if (t === undefined || t < 0 || t >= 1) {
+      continue;
+    }
+    if (bezierPointAt(curve, t).x <= point.x) {
+      continue;
+    }
+    winding += Math.sign(bezierSlopeAt(curve, t).y);
+  }
+  return winding;
+}
+
+/** The one root of a function that only rises or only falls between low and high. */
+function rootBetween(heightAt: (t: number) => number, low: number, high: number): number | undefined {
+  let start = low;
+  let end = high;
+  const atStart = heightAt(start);
+  const atEnd = heightAt(end);
+  if (atStart === 0) {
+    return start;
+  }
+  if (atStart > 0 === atEnd > 0) {
+    return undefined;
+  }
+  const startIsBelow = atStart < 0;
+  for (let step = 0; step < ROOT_STEPS; step += 1) {
+    const middle = (start + end) / 2;
+    if (heightAt(middle) < 0 === startIsBelow) {
+      start = middle;
+    } else {
+      end = middle;
+    }
+  }
+  return (start + end) / 2;
+}
+
 /** The shortest distance from a point to any edge of a path. */
 export function distanceToPath(point: Point, edges: readonly PathEdge[]): number {
   let shortest = Infinity;

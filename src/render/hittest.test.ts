@@ -41,9 +41,79 @@ describe("hitTest — circle/polygon/rect: stroke distance-to-segment via vertic
     expect(hitTest({ x: 5, y: -6 }, [square], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("does not hit a point deep INSIDE the shape — there is no fill yet (file header)", () => {
+  it("does not hit a point deep INSIDE a shape that paints no fill — it is a hollow outline", () => {
     const square = squareObject("obj_1", "rect_1", "rect");
     expect(hitTest({ x: 10, y: 10 }, [square], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("DOES hit that same point once the shape carries a fill colour", () => {
+    const filled = { ...squareObject("obj_1", "rect_1", "rect") };
+    const painted: GraphObject = { ...filled, slots: { ...filled.slots, "style.fillColor": { kind: "literal", value: "#00ff00" } } };
+    expect(hitTest({ x: 10, y: 10 }, [painted], CAMERA_IDENTITY)).toBe(painted);
+    expect(hitTest({ x: 200, y: 200 }, [painted], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("hits inside a filled circle, from its origin and radius alone", () => {
+    const circle: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: 100 },
+        "style.fillColor": { kind: "literal", value: "#00ff00" },
+      },
+    };
+    expect(hitTest({ x: 10, y: 10 }, [circle], CAMERA_IDENTITY)).toBe(circle);
+    expect(hitTest({ x: 200, y: 0 }, [circle], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("hits inside the bulge of a filled closed path, which sits well outside its chords", () => {
+    const lens: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        closed: { kind: "literal", value: true },
+        "vertex.0.bulge": { kind: "literal", value: 1 },
+        "vertex.1.bulge": { kind: "literal", value: 1 },
+        "style.fillColor": { kind: "literal", value: "#00ff00" },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 200, y: 0 },
+          ],
+        },
+      },
+    };
+    // The two vertices sit on one line, so no chord polygon holds any of this.
+    expect(hitTest({ x: 100, y: 60 }, [lens], CAMERA_IDENTITY)).toBe(lens);
+    expect(hitTest({ x: 100, y: -60 }, [lens], CAMERA_IDENTITY)).toBe(lens);
+    expect(hitTest({ x: 100, y: 140 }, [lens], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("never fills an open path, however its fill colour reads", () => {
+    const open: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      vertexCount: 3,
+      slots: {
+        "style.fillColor": { kind: "literal", value: "#00ff00" },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 200, y: 0 },
+            { x: 200, y: 200 },
+          ],
+        },
+      },
+    };
+    expect(hitTest({ x: 150, y: 100 }, [open], CAMERA_IDENTITY)).toBeUndefined();
   });
 
   it("applies the same test to polygon and rect alike, since both read `vertices`", () => {

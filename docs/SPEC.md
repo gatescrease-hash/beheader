@@ -419,6 +419,11 @@ Path {
 }
 ```
 
+Every shape carries `style.strokeColor`, `style.strokeWidth` and
+`style.fillColor`. Each one is an ordinary slot, so a formula can drive it and
+a table cell can colour a shape. A `fillColor` of null paints no fill, which is
+what a new shape carries. Only a closed shape fills.
+
 An edge is straight, an arc, or a cubic bezier. Two handles make it a cubic:
 one pulls out of the vertex it leaves, the other pulls into the vertex it
 reaches, and each is an offset from its own vertex. With both handles at 0, a

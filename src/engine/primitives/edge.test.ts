@@ -17,6 +17,7 @@ import {
   pathArea,
   pathBounds,
   pathCentroid,
+  pathContains,
   pathLength,
   splitEdgeAt,
   type PathBounds,
@@ -337,6 +338,60 @@ describe("distanceToEdge on a cubic — measured to the curve, not to its contro
 
   it("never reaches the control points, which the curve itself does not pass through", () => {
     expect(distanceToEdge({ x: 0, y: 1 }, archEdge())).toBeGreaterThan(0.1);
+  });
+});
+
+describe("pathContains — the nonzero winding rule, over true curves", () => {
+  const square = [
+    { x: 0, y: 0 },
+    { x: 2, y: 0 },
+    { x: 2, y: 2 },
+    { x: 0, y: 2 },
+  ];
+
+  it("holds a point inside a square and lets go of one outside", () => {
+    const edges = buildPathEdges(square, [], true);
+    expect(pathContains({ x: 1, y: 1 }, edges)).toBe(true);
+    expect(pathContains({ x: 3, y: 1 }, edges)).toBe(false);
+    expect(pathContains({ x: -1, y: 1 }, edges)).toBe(false);
+    expect(pathContains({ x: 1, y: 3 }, edges)).toBe(false);
+  });
+
+  it("gives the same answer whichever way the shape winds", () => {
+    const backwards = buildPathEdges(square.slice().reverse(), [], true);
+    expect(pathContains({ x: 1, y: 1 }, backwards)).toBe(true);
+    expect(pathContains({ x: 3, y: 1 }, backwards)).toBe(false);
+  });
+
+  it("counts a vertex the ray runs straight through exactly once", () => {
+    const diamond = buildPathEdges([{ x: 1, y: 0 }, { x: 2, y: 1 }, { x: 1, y: 2 }, { x: 0, y: 1 }], [], true);
+    expect(pathContains({ x: 1, y: 1 }, diamond)).toBe(true);
+    expect(pathContains({ x: 3, y: 1 }, diamond)).toBe(false);
+  });
+
+  it("winds an open list as though a straight edge closed it, the same way ctx.fill does", () => {
+    // Three sides of the square. The caller decides whether an open path fills
+    // at all, so this function answers only for the edges it gets.
+    expect(pathContains({ x: 1, y: 1 }, buildPathEdges(square, [], false))).toBe(true);
+  });
+
+  it("holds the whole disc of a two vertex circle, which no chord polygon covers", () => {
+    const circle = unitCircleEdges();
+    expect(pathContains({ x: 1, y: 0 }, circle)).toBe(true);
+    expect(pathContains({ x: 1, y: 0.9 }, circle)).toBe(true);
+    expect(pathContains({ x: 1, y: -0.9 }, circle)).toBe(true);
+    expect(pathContains({ x: 1, y: 1.1 }, circle)).toBe(false);
+    expect(pathContains({ x: 2.5, y: 0 }, circle)).toBe(false);
+  });
+
+  it("follows a cubic, so the space under an arch counts and the space over it does not", () => {
+    const arch = archEdges(true);
+    expect(pathContains({ x: 0.5, y: 0.4 }, arch)).toBe(true);
+    expect(pathContains({ x: 0.5, y: 0.74 }, arch)).toBe(true);
+    expect(pathContains({ x: 0.5, y: 0.9 }, arch)).toBe(false);
+    expect(pathContains({ x: 0.5, y: -0.1 }, arch)).toBe(false);
+    // The handles reach y of 1, and the curve never does.
+    expect(pathContains({ x: 0.05, y: 0.9 }, arch)).toBe(false);
   });
 });
 

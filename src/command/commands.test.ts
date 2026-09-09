@@ -1436,6 +1436,9 @@ describe("delete, refs, props and list — the object commands that need no new 
         "origin.x",
         "origin.y",
         "rotation",
+        "style.strokeColor",
+        "style.strokeWidth",
+        "style.fillColor",
         "vertices",
         "centroid.x",
         "centroid.y",
@@ -1641,6 +1644,35 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
 
   it("refuses an unknown object", () => {
     expect(refused("delvertex nosuch 0", sandbox())).toBe('no object named "nosuch"');
+  });
+});
+
+describe("geometry style slots — an outline a formula can drive", () => {
+  it("gives every new shape a stroke colour, a stroke width and no fill", () => {
+    for (const line of ["circle x=0 y=0 r=5", "polygon sides=5 x=0 y=0 r=50", "rect x=0 y=0 w=4 h=3", "polyline 0,0 4,0"]) {
+      const object = onlyObject(committed(line, createEmptyDocument()));
+      expect(getSlot(object, ["style", "strokeColor"])).toEqual({ kind: "literal", value: "#1a1a1a" });
+      expect(getSlot(object, ["style", "strokeWidth"])).toEqual({ kind: "literal", value: 1 });
+      expect(getSlot(object, ["style", "fillColor"])).toEqual({ kind: "literal", value: null });
+    }
+  });
+
+  it("takes a new colour from the command line", () => {
+    const document = committed("rect x=0 y=0 w=4 h=3", createEmptyDocument());
+    const painted = onlyObject(committed('set rect_1.style.fillColor "#ff8800"', document));
+    expect(getSlot(painted, ["style", "fillColor"])?.value).toBe("#ff8800");
+  });
+
+  it("lets a table cell drive a stroke width, the whole point of a slot over a setting", () => {
+    let document = committed("table x=0 y=0 rows=1 cols=1", createEmptyDocument());
+    document = committed("set table_1.A1 6", document);
+    document = committed("rect x=0 y=0 w=4 h=3", document);
+    document = committed("link rect_1.style.strokeWidth table_1.A1", document);
+    const rect = onlyNamed(document, "rect_1");
+    expect(getSlot(rect, ["style", "strokeWidth"])?.value).toBe(6);
+
+    const widened = committed("set table_1.A1 9", document);
+    expect(getSlot(onlyNamed(widened, "rect_1"), ["style", "strokeWidth"])?.value).toBe(9);
   });
 });
 

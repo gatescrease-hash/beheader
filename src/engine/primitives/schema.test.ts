@@ -21,6 +21,9 @@ function stubObject(type: GraphObject["type"]): GraphObject {
   return { id: "stub", name: "stub", type, slots: {} };
 }
 
+/** Every shape declares these three, after its own parameters. */
+const STYLE_PATHS = [["style", "strokeColor"], ["style", "strokeWidth"], ["style", "fillColor"]] as const;
+
 describe("getObjectSchema", () => {
   it("returns a real entry for 'value', with no derived slots, which has one literal numeric slot", () => {
     const schema = getObjectSchema("value");
@@ -64,8 +67,8 @@ describe("getObjectSchema", () => {
   });
 
   it.each([
-    ["polygon", [["sides"], ["radius"], ["origin", "x"], ["origin", "y"], ["rotation"]]],
-    ["rect", [["origin", "x"], ["origin", "y"], ["width"], ["height"]]],
+    ["polygon", [["sides"], ["radius"], ["origin", "x"], ["origin", "y"], ["rotation"], ...STYLE_PATHS]],
+    ["rect", [["origin", "x"], ["origin", "y"], ["width"], ["height"], ...STYLE_PATHS]],
   ] as const)("returns a real entry for '%s', with vertices + the eight shared derived slots, and its own %s parameter paths", (type, paths) => {
     const schema = getObjectSchema(type);
     expect(schema).toBeDefined();
@@ -105,6 +108,7 @@ describe("getObjectSchema", () => {
       ["origin", "x"],
       ["origin", "y"],
       ["radius"],
+      ...STYLE_PATHS,
     ]);
   });
 

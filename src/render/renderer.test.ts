@@ -23,6 +23,7 @@ type RecordedCall =
   | { readonly op: "lineTo"; readonly x: number; readonly y: number }
   | { readonly op: "closePath" }
   | { readonly op: "stroke" }
+  | { readonly op: "fill" }
   | { readonly op: "arc"; readonly x: number; readonly y: number; readonly radius: number; readonly startAngle: number; readonly endAngle: number }
   | { readonly op: "bezierCurveTo"; readonly c1x: number; readonly c1y: number; readonly c2x: number; readonly c2y: number; readonly x: number; readonly y: number }
   | { readonly op: "strokeRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
@@ -32,12 +33,34 @@ type RecordedCall =
 
 const FAKE_CHAR_WIDTH = 7;
 
-function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly calls: readonly RecordedCall[]; readonly fonts: readonly string[] } {
+/** What the context held at the moment it painted. It records colour, which `calls` does not. */
+interface RecordedPaint {
+  readonly op: "fill" | "stroke";
+  readonly color: string;
+  readonly lineWidth: number;
+}
+
+function createFakeContext(): {
+  readonly ctx: CanvasRenderingContext2D;
+  readonly calls: readonly RecordedCall[];
+  readonly fonts: readonly string[];
+  readonly paints: readonly RecordedPaint[];
+  readonly strokeColors: readonly string[];
+} {
   const calls: RecordedCall[] = [];
   const fonts: string[] = [];
+  const paints: RecordedPaint[] = [];
+  const strokeColors: string[] = [];
+  let strokeStyle = "";
   const ctx = {
     fillStyle: "",
-    strokeStyle: "",
+    get strokeStyle() {
+      return strokeStyle;
+    },
+    set strokeStyle(value: string) {
+      strokeStyle = value;
+      strokeColors.push(value);
+    },
     lineWidth: 1,
     textAlign: "left",
     textBaseline: "alphabetic",
@@ -67,6 +90,11 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
     },
     stroke() {
       calls.push({ op: "stroke" });
+      paints.push({ op: "stroke", color: ctx.strokeStyle as string, lineWidth: ctx.lineWidth });
+    },
+    fill() {
+      calls.push({ op: "fill" });
+      paints.push({ op: "fill", color: ctx.fillStyle as string, lineWidth: ctx.lineWidth });
     },
     arc(x: number, y: number, radius: number, startAngle: number, endAngle: number) {
       calls.push({ op: "arc", x, y, radius, startAngle, endAngle });
@@ -91,7 +119,7 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
       return { width: text.length * FAKE_CHAR_WIDTH };
     },
   };
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, calls, fonts };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, calls, fonts, paints, strokeColors };
 }
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
@@ -350,6 +378,111 @@ describe("renderDocument — object types with no schema/visual definition yet",
     renderDocument(ctx, 800, 600, [{ id: "obj_1", name: "polyline_1", type: "polyline", slots: {} }], CAMERA_IDENTITY);
     const drawCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect");
     expect(drawCalls).toEqual([]);
+  });
+});
+
+describe("renderDocument — the style slots a formula can drive", () => {
+  function styledRect(style: Record<string, Slot>): GraphObject {
+    return {
+      id: "obj_1",
+      name: "rect_1",
+      type: "rect",
+      slots: {
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 10, y: 0 },
+            { x: 10, y: 5 },
+            { x: 0, y: 5 },
+          ],
+        },
+        ...style,
+      },
+    };
+  }
+
+  it("strokes in the colour and the width the slots hold", () => {
+    const { ctx, paints } = createFakeContext();
+    renderDocument(ctx, 800, 600, [styledRect({
+      "style.strokeColor": { kind: "literal", value: "#ff0000" },
+      "style.strokeWidth": { kind: "literal", value: 4 },
+    })], CAMERA_IDENTITY);
+    expect(paints).toEqual([{ op: "stroke", color: "#ff0000", lineWidth: 4 }]);
+  });
+
+  it("falls back to the default outline when a slot holds nothing, a wrong type or an error", () => {
+    const { ctx, paints } = createFakeContext();
+    renderDocument(ctx, 800, 600, [styledRect({
+      "style.strokeColor": { kind: "derived", value: { error: "#TYPE", message: "bad" } },
+      "style.strokeWidth": { kind: "literal", value: -3 },
+    })], CAMERA_IDENTITY);
+    expect(paints).toEqual([{ op: "stroke", color: "#1a1a1a", lineWidth: 1 }]);
+  });
+
+  it("writes the default colour just before the slot colour, so an unreadable one never inherits the last shape", () => {
+    const { ctx, strokeColors } = createFakeContext();
+    renderDocument(ctx, 800, 600, [styledRect({ "style.strokeColor": { kind: "literal", value: "rebeccapurple" } })], CAMERA_IDENTITY);
+    expect(strokeColors.slice(0, 2)).toEqual(["#1a1a1a", "rebeccapurple"]);
+  });
+
+  it("fills before it strokes, so the outline sits on top of its own fill", () => {
+    const { ctx, paints } = createFakeContext();
+    renderDocument(ctx, 800, 600, [styledRect({ "style.fillColor": { kind: "literal", value: "#00ff00" } })], CAMERA_IDENTITY);
+    expect(paints.map((paint) => paint.op)).toEqual(["fill", "stroke"]);
+    expect(paints[0]?.color).toBe("#00ff00");
+  });
+
+  it("fills nothing while fillColor holds null, which is what a new shape carries", () => {
+    const { ctx, paints } = createFakeContext();
+    renderDocument(ctx, 800, 600, [styledRect({ "style.fillColor": { kind: "literal", value: null } })], CAMERA_IDENTITY);
+    expect(paints.map((paint) => paint.op)).toEqual(["stroke"]);
+  });
+
+  it("fills a closed polyline and never an open one, because an open path bounds no region", () => {
+    const vertices = {
+      kind: "derived" as const,
+      value: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 5 },
+      ],
+    };
+    const fill = { kind: "literal" as const, value: "#00ff00" };
+    const open = createFakeContext();
+    renderDocument(open.ctx, 800, 600, [{ id: "obj_1", name: "polyline_1", type: "polyline", slots: { vertices, "style.fillColor": fill } }], CAMERA_IDENTITY);
+    expect(open.paints.map((paint) => paint.op)).toEqual(["stroke"]);
+
+    const closed = createFakeContext();
+    renderDocument(
+      closed.ctx,
+      800,
+      600,
+      [{ id: "obj_1", name: "polyline_1", type: "polyline", slots: { vertices, "style.fillColor": fill, closed: { kind: "literal", value: true } } }],
+      CAMERA_IDENTITY,
+    );
+    expect(closed.paints.map((paint) => paint.op)).toEqual(["fill", "stroke"]);
+  });
+
+  it("styles a circle the same way, which draws through ctx.arc and not through a point list", () => {
+    const { ctx, paints } = createFakeContext();
+    const circle: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: 5 },
+        "style.strokeColor": { kind: "literal", value: "#0000ff" },
+        "style.fillColor": { kind: "literal", value: "#ccccff" },
+      },
+    };
+    renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
+    expect(paints).toEqual([
+      { op: "fill", color: "#ccccff", lineWidth: 1 },
+      { op: "stroke", color: "#0000ff", lineWidth: 1 },
+    ]);
   });
 });
 

@@ -12,6 +12,34 @@
  * defensive read again.
  */
 import { getSlot, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
+import {
+  DEFAULT_STROKE_COLOR,
+  DEFAULT_STROKE_WIDTH,
+  STYLE_FILL_COLOR_PATH,
+  STYLE_STROKE_COLOR_PATH,
+  STYLE_STROKE_WIDTH_PATH,
+} from "../engine/primitives/geometry.ts";
+
+/** What a shape draws with. A fill of undefined means the shape draws its outline only. */
+export interface ShapeStyle {
+  readonly strokeColor: string;
+  readonly strokeWidth: number;
+  readonly fillColor: string | undefined;
+}
+
+/**
+ * The three style slots of a shape, each with a safe answer. A slot that holds
+ * an error, a wrong type or nothing falls back to a default. The canvas judges
+ * the colour string itself, so nothing here tries to parse one.
+ */
+export function readShapeStyle(object: GraphObject): ShapeStyle {
+  const width = readNumber(object, STYLE_STROKE_WIDTH_PATH);
+  return {
+    strokeColor: readText(object, STYLE_STROKE_COLOR_PATH) ?? DEFAULT_STROKE_COLOR,
+    strokeWidth: width !== undefined && Number.isFinite(width) && width > 0 ? width : DEFAULT_STROKE_WIDTH,
+    fillColor: readText(object, STYLE_FILL_COLOR_PATH),
+  };
+}
 
 export function readNumber(object: GraphObject, path: readonly string[]): number | undefined {
   const value = getSlot(object, path)?.value;
