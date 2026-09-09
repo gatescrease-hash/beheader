@@ -34,6 +34,7 @@ export type { ReadSlot, ReadRange } from "./formula/eval.ts";
 export { evaluate as evaluateFormulaAst } from "./formula/eval.ts";
 
 export * from "./primitives/schema.ts";
+export * from "./primitives/edge.ts";
 export * from "./primitives/geometry.ts";
 export * from "./primitives/table.ts";
 export * from "./primitives/text.ts";

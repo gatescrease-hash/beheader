@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 /**
  * index.test.ts
  *
@@ -6,6 +7,7 @@
  * from index.ts alone, the way a consumer outside src/engine must import it.
  */
 import { describe, expect, it } from "vitest";
+import * as engineSurface from "./index.ts";
 import {
   createEmptyDocument,
   evaluateFormulaAst,
@@ -63,6 +65,35 @@ describe("engine/index.ts — the one public surface", () => {
     expect(roundTripped?.slots["vertices"]).toBeUndefined();
     expect(roundTripped?.slots["area"]?.value).toBeCloseTo(Math.PI * 25);
     expect(roundTripped?.slots["bounds.maxX"]?.value).toBe(5);
+  });
+
+  /**
+   * Every engine file, found by the bundler and not by a list anybody keeps by
+   * hand. A list goes stale the moment somebody adds a file, and that is the
+   * one thing this test exists to catch. The pattern must exclude a test file.
+   * An eager import of one registers its tests inside this file as well.
+   */
+  const ENGINE_MODULES = import.meta.glob(["./**/*.ts", "!./**/*.test.ts", "!./index.ts"], { eager: true }) as Record<
+    string,
+    Record<string, unknown>
+  >;
+
+  /** index.ts gives this name two clearer ones, so it never appears under the old one. */
+  const RENAMED_ON_PURPOSE = new Set(["evaluate"]);
+
+  it("re-exports every runtime name of every engine file, so a new file cannot hide from the surface", () => {
+    const surface = engineSurface as Record<string, unknown>;
+    const missing: string[] = [];
+    expect(Object.keys(ENGINE_MODULES).length).toBeGreaterThan(10);
+    for (const [path, module] of Object.entries(ENGINE_MODULES)) {
+      for (const name of Object.keys(module)) {
+        if (RENAMED_ON_PURPOSE.has(name) || name in surface) {
+          continue;
+        }
+        missing.push(`${path} exports "${name}", which index.ts does not re-export`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 
   it("re-exports evaluateFormulaAst and evaluateGraph as two distinct functions, not the same name colliding", () => {
