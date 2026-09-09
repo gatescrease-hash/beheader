@@ -5,9 +5,16 @@
  * browser.
  */
 import { describe, expect, it } from "vitest";
-import { createEmptyDocument, deserializeDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
-import type { EvalContext } from "./engine/eval-context.ts";
-import { getSlot, type GraphObject } from "./engine/graph/node.ts";
+import {
+  type CameraState,
+  createEmptyDocument,
+  deserializeDocument,
+  type Document,
+  type EvalContext,
+  getSlot,
+  type GraphObject,
+  saveDocument,
+} from "./engine/index.ts";
 import { objectExtent } from "./render/extent.ts";
 import { createCanvas2dTextMeasurer, type MeasurementContext } from "./render/measure.ts";
 import { renderDocument } from "./render/renderer.ts";

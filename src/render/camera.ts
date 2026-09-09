@@ -9,8 +9,7 @@
  * This is the only file that knows about screen space. Every other file must
  * read the transform from here. A second copy of the formula will drift.
  */
-import type { CameraState } from "../engine/document.ts";
-import type { Point } from "../engine/graph/node.ts";
+import type { CameraState, Point } from "../engine/index.ts";
 
 export type WorldPoint = Point;
 

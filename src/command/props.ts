@@ -9,11 +9,22 @@
  * Both surfaces read one list, so they can never disagree about what an object
  * has.
  */
-import { formatFormula } from "../engine/formula/format.ts";
-import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Slot, type Value } from "../engine/graph/node.ts";
-import { findSlotOptions, getObjectSchema, resolveDerivedSlots, type SlotOptionSet } from "../engine/primitives/schema.ts";
-import { getTableDimensions } from "../engine/primitives/table.ts";
-import { TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
+import {
+  findSlotOptions,
+  formatFormula,
+  getObjectSchema,
+  getSlot,
+  getTableDimensions,
+  type GraphObject,
+  isErrorValue,
+  type Point,
+  resolveDerivedSlots,
+  type Slot,
+  type SlotOptionSet,
+  TABLE_CELL_PATH_PREFIX,
+  TABLE_TYPE,
+  type Value,
+} from "../engine/index.ts";
 
 export interface SlotDescriptor {
   readonly path: readonly string[];

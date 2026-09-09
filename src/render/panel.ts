@@ -8,7 +8,7 @@
  *
  * Placement only. main.ts builds the rows and owns the DOM.
  */
-import type { CameraState } from "../engine/document.ts";
+import type { CameraState } from "../engine/index.ts";
 import { worldToScreen } from "./camera.ts";
 import type { WorldExtent } from "./extent.ts";
 

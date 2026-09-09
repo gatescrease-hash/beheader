@@ -6,10 +6,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { mutate } from "../engine/mutation.ts";
-import type { GraphObject, Slot } from "../engine/graph/node.ts";
-import { getObjectSchema, resolveDerivedSlots } from "../engine/primitives/schema.ts";
-import type { CameraState } from "../engine/document.ts";
+import {
+  type CameraState,
+  getObjectSchema,
+  type GraphObject,
+  mutate,
+  resolveDerivedSlots,
+  type Slot,
+} from "../engine/index.ts";
 import { renderDocument } from "./renderer.ts";
 import type { ImageBitmaps } from "./images.ts";
 import { objectExtent } from "./extent.ts";

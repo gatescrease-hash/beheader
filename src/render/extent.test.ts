@@ -6,7 +6,7 @@
  * read objectExtent. Neither one measures a type of its own.
  */
 import { describe, expect, it } from "vitest";
-import type { GraphObject } from "../engine/graph/node.ts";
+import type { GraphObject } from "../engine/index.ts";
 import { documentExtent, objectExtent } from "./extent.ts";
 
 describe("objectExtent — polyline reads the same derived vertices slot the closed shapes read", () => {

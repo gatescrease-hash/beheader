@@ -13,7 +13,7 @@
  * This file and renderer.ts must change together. One layout function with two
  * readers is what keeps the drawn text and the measured height in agreement.
  */
-import type { TextMeasurement, TextMeasurer, TextStyle } from "../engine/eval-context.ts";
+import type { TextMeasurement, TextMeasurer, TextStyle } from "../engine/index.ts";
 import { LIST_BULLET, parseMarkdownLite, verbatimLines, type MarkdownLine, type MarkdownRun } from "./markdown.ts";
 
 export interface MeasurementContext {

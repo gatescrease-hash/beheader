@@ -11,45 +11,67 @@
  * Every refusal must name the slots it is about.
  */
 import {
+  type Address,
+  addressKey,
+  CLOSED_PATH,
+  deriveEdges,
+  type Document,
+  type Edge,
+  type EvalContext,
+  findDerivedSlotSchema,
   findObjectByName,
   formatAddress,
+  formatFormula,
   generateDefaultName,
+  GEOMETRY_STYLE_DEFAULTS,
+  getObjectSchema,
+  getSlot,
+  type GraphObject,
+  IMAGE_HEIGHT_PATH,
+  IMAGE_OPACITY_PATH,
+  IMAGE_PICTURE_ASPECT_PATH,
+  IMAGE_PRESERVE_ASPECT_PATH,
+  IMAGE_SOURCE_PATH,
+  IMAGE_WIDTH_PATH,
   isAddressError,
+  isLegalPortName,
+  isParseError,
+  isReferenceNode,
   isValidName,
-  parseAddress,
-  TABLE_CELL_PATH_PREFIX,
-  type Address,
-} from "../engine/address.ts";
-import { mintObjectId, type Document } from "../engine/document.ts";
-import { isReferenceNode } from "../engine/formula/ast.ts";
-import { formatFormula } from "../engine/formula/format.ts";
-import { isParseError, parseFormula } from "../engine/formula/parser.ts";
-import { addressKey, type Edge } from "../engine/graph/edge.ts";
-import { getSlot, isLegalPortName, slotKey, POLYLINE_TYPE, SCRIPT_TYPE, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Slot, type Value } from "../engine/graph/node.ts";
-import { deriveEdges, mutate, type Operation } from "../engine/mutation.ts";
-import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
-import {
-  CLOSED_PATH,
+  MAX_TABLE_LINES,
   MIN_POLYGON_SIDES,
   MIN_POLYLINE_VERTICES,
+  MIN_TABLE_LINES,
+  mintObjectId,
+  mutate,
+  NULL_EVAL_CONTEXT,
+  type ObjectType,
+  type Operation,
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
+  parseAddress,
+  parseFormula,
   POLYGON_ROTATION_PATH,
   POLYGON_SIDES_PATH,
+  POLYLINE_TYPE,
   RADIUS_PATH,
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
-  GEOMETRY_STYLE_DEFAULTS,
+  resolveDerivedSlots,
+  resolveNonDerivedSlotPaths,
+  SCRIPT_LANGUAGE_PATH,
+  SCRIPT_SOURCE_PATH,
+  SCRIPT_TYPE,
+  scriptInPortPath,
+  scriptOutPortPath,
+  scriptPlaceholderPath,
+  type Slot,
+  slotKey,
   splitPolylineEdge,
-  vertexBulgePath,
-  vertexHandleInPaths,
-  vertexHandleOutPaths,
-  vertexXPath,
-  vertexYPath,
-} from "../engine/primitives/geometry.ts";
-import { findDerivedSlotSchema, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "../engine/primitives/schema.ts";
-import { MAX_TABLE_LINES, MIN_TABLE_LINES, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "../engine/primitives/table.ts";
-import {
+  TABLE_CELL_PATH_PREFIX,
+  TABLE_COLS_PATH,
+  TABLE_ROWS_PATH,
+  TABLE_TYPE,
   TEXT_AUTORESIZE_PATH,
   TEXT_CONTENT_PATH,
   TEXT_HEIGHT_PATH,
@@ -58,10 +80,15 @@ import {
   TEXT_STYLE_FONT_PATH,
   TEXT_STYLE_FONT_SIZE_PATH,
   TEXT_STYLE_LINE_HEIGHT_PATH,
+  TEXT_TYPE,
   TEXT_WIDTH_PATH,
-} from "../engine/primitives/text.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PICTURE_ASPECT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
-import { SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH, scriptInPortPath, scriptOutPortPath, scriptPlaceholderPath } from "../engine/script/stub.ts";
+  type Value,
+  vertexBulgePath,
+  vertexHandleInPaths,
+  vertexHandleOutPaths,
+  vertexXPath,
+  vertexYPath,
+} from "../engine/index.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import type {
   AddPortCommand,

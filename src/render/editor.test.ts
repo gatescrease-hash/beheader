@@ -4,9 +4,13 @@
  * Editor placement and style for a text box and a table cell.
  */
 import { describe, expect, it } from "vitest";
-import type { CameraState } from "../engine/document.ts";
-import type { TextMeasurer, TextStyle } from "../engine/eval-context.ts";
-import type { GraphObject, Slot } from "../engine/graph/node.ts";
+import type {
+  CameraState,
+  GraphObject,
+  Slot,
+  TextMeasurer,
+  TextStyle,
+} from "../engine/index.ts";
 import { editorPlacement, editorTargetAt, editorTextBoxSize, editorTextStyle } from "./editor.ts";
 import { TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 

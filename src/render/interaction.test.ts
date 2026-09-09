@@ -5,11 +5,16 @@
  * bound axis fixed.
  */
 import { describe, expect, it } from "vitest";
-import type { CameraState } from "../engine/document.ts";
-import type { EvalContext } from "../engine/eval-context.ts";
-import { getSlot, type GraphObject } from "../engine/graph/node.ts";
-import { mutate, type MutationJournalEntry } from "../engine/mutation.ts";
-import { getObjectSchema, resolveDerivedSlots } from "../engine/primitives/schema.ts";
+import {
+  type CameraState,
+  type EvalContext,
+  getObjectSchema,
+  getSlot,
+  type GraphObject,
+  mutate,
+  type MutationJournalEntry,
+  resolveDerivedSlots,
+} from "../engine/index.ts";
 import { deselect, INITIAL_INTERACTION_STATE, pointerDown, pointerMove, pointerUp, type InteractionState } from "./interaction.ts";
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };

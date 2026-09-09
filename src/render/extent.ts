@@ -10,19 +10,25 @@
  * here and it becomes clickable. Give it a renderer arm in the same change, or
  * it becomes an invisible click target.
  */
-import { getSlot, type GraphObject } from "../engine/graph/node.ts";
-import { pathBounds } from "../engine/primitives/edge.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
-import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
+  getSlot,
+  getTableDimensions,
+  type GraphObject,
+  IMAGE_HEIGHT_PATH,
+  IMAGE_WIDTH_PATH,
+  ORIGIN_X_PATH,
+  ORIGIN_Y_PATH,
+  pathBounds,
+  pathEdgesOfObject,
+  RADIUS_PATH,
   TEXT_AUTORESIZE_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
   TEXT_MEASURED_WIDTH_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_WIDTH_PATH,
-} from "../engine/primitives/text.ts";
+  VERTICES_PATH,
+} from "../engine/index.ts";
 import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDTH, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 

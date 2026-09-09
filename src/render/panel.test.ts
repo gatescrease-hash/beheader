@@ -4,7 +4,7 @@
  * Panel placement beside its object.
  */
 import { describe, expect, it } from "vitest";
-import type { CameraState } from "../engine/document.ts";
+import type { CameraState } from "../engine/index.ts";
 import type { WorldExtent } from "./extent.ts";
 import { PANEL_OBJECT_GAP_CSS, placePropertiesPanel } from "./panel.ts";
 

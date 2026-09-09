@@ -4,7 +4,7 @@
  * The line breaker and the two measurers.
  */
 import { describe, expect, it } from "vitest";
-import type { TextStyle } from "../engine/eval-context.ts";
+import type { TextStyle } from "../engine/index.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer, cssFont, layOutText, type MeasurementContext } from "./measure.ts";
 
 const CHAR = 10;

@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2163 pass, 0 skip, across 39 test files. |
+| Tests | 2164 pass, 0 skip, across 39 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2163 tests
+npm test             # 2164 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -134,7 +134,7 @@ other suites drive them anyway.
 | `script/stub.ts` | The script node. Ports are ordinary slots. An `in.<port>` slot is a formula slot. An `out.<port>` slot is a derived slot. The `source` slot is a literal slot that nothing reads, so an edit to it triggers no recompute. The `evaluateScriptOutput` function returns the placeholder value. When Python arrives, only that body changes. |
 | `mutation.ts` | The single channel for state change. It runs the eight step loop: stage, apply, derive edges, check integrity, check cycles, refuse or evaluate, then commit and journal. It is the largest engine file and the most load bearing one. A batch applies many operations to one clone and commits all or nothing. A document load must use a batch. A `deleteVertex` without force refuses through `findLiveVertexDependents`, ahead of the stage step, not through the usual post-apply dangling check. The vertex after a deleted one refills its index at once, so a leftover reference to that exact index reads the wrong vertex in silence. It does not dangle. `explode` has no such trap. A slot it drops (`origin`, `radius`, `area`, and so on) is simply gone from the object. The usual post-apply dangling check catches a leftover reference on its own, the same way `deleteObject` already relies on it. |
 | `document.ts` | The versioned JSON format, and save and load. It never stores a derived value. A full evaluation pass on load regenerates them. Load goes through the mutation API, so a bad file fails the same checks a bad command does. It reconstructs `ports` and `vertexCount` by hand, the same as every slot. Both sit outside `GraphObject.slots`, so a generic JSON parse cannot validate their shape. |
-| `index.ts` | The one public surface of the engine. A consumer outside `src/engine` must import from here, not from a deep path. It re-exports every other file in this directory. The one name that collides is `evaluate`. Both `graph/eval.ts` and `formula/eval.ts` export it, for different reasons. This file aliases them to `evaluateGraph` and `evaluateFormulaAst`. `command/` and `render/` do not import through it yet. That migration is mechanical and still open. |
+| `index.ts` | The one public surface of the engine. A consumer outside `src/engine` imports from here, and never from a deep path. It re-exports every other file in this directory. The one name that collides is `evaluate`. Both `graph/eval.ts` and `formula/eval.ts` export it, for different reasons. This file aliases them to `evaluateGraph` and `evaluateFormulaAst`. Two tests in `index.test.ts` hold the boundary. One finds every engine file through the bundler and names each export this file leaves out. The other reads the source of every file outside the engine and names each deep import. Neither reads a list anybody keeps by hand. |
 
 ### `src/render/` - the throwaway drawing layer
 
@@ -327,13 +327,17 @@ group blocks the acceptance test in `SPEC.md` section 12.
    a shape. A new shape gets the old fixed colours as its defaults, and a
    `fillColor` of null. Only a closed shape fills. A shape that paints a fill
    also answers to a click anywhere inside it, through `pathContains`.
-7. **`src/engine/index.ts` exists now.** It is the one public engine surface
-   the spec names, and it re-exports every other engine file under one name
-   each. It resolves the one collision (`evaluate`) to `evaluateGraph` and
-   `evaluateFormulaAst`. `command/` and `render/` do not import through it
-   yet, all still on deep paths. To move a file, swap its several engine
-   imports for one import from `../engine/index.ts`. That is a mechanical
-   change, still open because it touches every file in both layers at once.
+7. **`src/engine/index.ts` is the only engine path anything outside the engine
+   imports.** It re-exports every other engine file under one name each, and
+   resolves the one collision (`evaluate`) to `evaluateGraph` and
+   `evaluateFormulaAst`. The 28 files of `command/`, `render/` and `main.ts`
+   each hold one import from it now, in place of the 103 deep imports they
+   held before. The build output did not change by one byte, which is the
+   proof that this moved no logic. Two tests in `index.test.ts` keep it that
+   way. A later question stays open, and this change does not settle it: the
+   surface re-exports 311 names, and the layers outside use 114. A curated
+   list of named re-exports is a separate decision, cheaper to make now that
+   the real usage sits in one file for each layer.
 8. **`src/engine/graph/dirty.ts`.** Rule 5 says to keep the module even with a
    naive body, so the shape of the fast version survives. It was never made.
 9. **Journal replay.** Every mutation appends to the journal. Nothing reads it

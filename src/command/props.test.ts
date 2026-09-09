@@ -5,8 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { GraphObject } from "../engine/graph/node.ts";
-import { isParseError, parseFormula } from "../engine/formula/parser.ts";
+import { type GraphObject, isParseError, parseFormula } from "../engine/index.ts";
 import { buildSlotDescriptors, describeSlotValue } from "./props.ts";
 
 function valueObject(id: string, name: string, value: number): GraphObject {

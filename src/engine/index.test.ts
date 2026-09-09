@@ -96,6 +96,32 @@ describe("engine/index.ts — the one public surface", () => {
     expect(missing).toEqual([]);
   });
 
+  /**
+   * The source of every file outside the engine, read as text and never run.
+   * A raw import stops a render file before it reaches for a canvas here.
+   */
+  const OUTER_SOURCES = import.meta.glob(["../command/**/*.ts", "../render/**/*.ts", "../*.ts"], {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
+
+  const ENGINE_IMPORT = /from\s*"([^"]*\/engine\/[^"]*)"/g;
+
+  it("is the only engine path any file outside the engine imports, so an engine rename stays inside the engine", () => {
+    expect(Object.keys(OUTER_SOURCES).length).toBeGreaterThan(20);
+    const deep: string[] = [];
+    for (const [path, source] of Object.entries(OUTER_SOURCES)) {
+      for (const match of source.matchAll(ENGINE_IMPORT)) {
+        const specifier = match[1] ?? "";
+        if (!specifier.endsWith("/engine/index.ts")) {
+          deep.push(`${path} imports "${specifier}" instead of the index`);
+        }
+      }
+    }
+    expect(deep).toEqual([]);
+  });
+
   it("re-exports evaluateFormulaAst and evaluateGraph as two distinct functions, not the same name colliding", () => {
     expect(typeof evaluateFormulaAst).toBe("function");
     expect(typeof evaluateGraph).toBe("function");

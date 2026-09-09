@@ -4,7 +4,7 @@
  * The prompt state machine, one argument at a time.
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
+import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/index.ts";
 import { COMMAND_NAMES, findCommandSpec, type Command } from "./parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./prompt.ts";
 

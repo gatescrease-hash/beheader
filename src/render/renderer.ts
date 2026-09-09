@@ -18,12 +18,28 @@
  * The camera transform comes from camera.ts, never from a second copy of the
  * formula written here.
  */
-import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
-import type { EditorTarget } from "./editor.ts";
-import { arcOfEdge, bezierOfEdge } from "../engine/primitives/edge.ts";
-import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
-import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
+  arcOfEdge,
+  bezierOfEdge,
+  type CameraState,
+  CLOSED_PATH,
+  formatCellReference,
+  getSlot,
+  getTableDimensions,
+  type GraphObject,
+  IMAGE_OPACITY_PATH,
+  IMAGE_PRESERVE_ASPECT_PATH,
+  IMAGE_SOURCE_PATH,
+  indexToColumnLetters,
+  isErrorValue,
+  ORIGIN_X_PATH,
+  ORIGIN_Y_PATH,
+  pathEdgesOfObject,
+  type Point,
+  RADIUS_PATH,
+  SCRIPT_LANGUAGE_PATH,
+  TABLE_CELL_PATH_PREFIX,
+  TABLE_TYPE,
   TEXT_AUTORESIZE_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
@@ -35,11 +51,10 @@ import {
   TEXT_STYLE_FONT_SIZE_PATH,
   TEXT_STYLE_LINE_HEIGHT_PATH,
   TEXT_WIDTH_PATH,
-} from "../engine/primitives/text.ts";
-import { IMAGE_OPACITY_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH } from "../engine/primitives/image.ts";
-import { SCRIPT_LANGUAGE_PATH } from "../engine/script/stub.ts";
-import { formatCellReference, indexToColumnLetters, TABLE_CELL_PATH_PREFIX } from "../engine/address.ts";
-import type { CameraState } from "../engine/document.ts";
+  type Value,
+  VERTICES_PATH,
+} from "../engine/index.ts";
+import type { EditorTarget } from "./editor.ts";
 import { worldToScreen } from "./camera.ts";
 import type { ImageBitmaps } from "./images.ts";
 import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";

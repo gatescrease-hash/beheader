@@ -10,12 +10,27 @@
  *
  * The in place editor mounts in #stage, not in #panels.
  */
-import { createEmptyDocument, loadDocument, saveDocument, type CameraState, type Document } from "./engine/document.ts";
-import { NULL_EVAL_CONTEXT, type EvalContext } from "./engine/eval-context.ts";
-import { formatFormula } from "./engine/formula/format.ts";
-import { getSlot, IMAGE_TYPE, slotKey, type GraphObject, type Value } from "./engine/graph/node.ts";
-import { TEXT_CONTENT_PATH } from "./engine/primitives/text.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_PICTURE_ASPECT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./engine/primitives/image.ts";
+import {
+  type CameraState,
+  createEmptyDocument,
+  type Document,
+  type EvalContext,
+  formatFormula,
+  getSlot,
+  type GraphObject,
+  IMAGE_HEIGHT_PATH,
+  IMAGE_PICTURE_ASPECT_PATH,
+  IMAGE_PRESERVE_ASPECT_PATH,
+  IMAGE_SOURCE_PATH,
+  IMAGE_TYPE,
+  IMAGE_WIDTH_PATH,
+  loadDocument,
+  NULL_EVAL_CONTEXT,
+  saveDocument,
+  slotKey,
+  TEXT_CONTENT_PATH,
+  type Value,
+} from "./engine/index.ts";
 import { DEFAULT_IMAGE_EXTENT, executeCommand, type CommandEffect } from "./command/commands.ts";
 import { parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";

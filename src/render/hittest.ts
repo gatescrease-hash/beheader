@@ -13,11 +13,22 @@
  *
  * Array order is z order. This file walks it backward.
  */
-import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
-import { buildPathEdges, distanceToPath, pathContains } from "../engine/primitives/edge.ts";
-import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
-import { getTableDimensions } from "../engine/primitives/table.ts";
-import type { CameraState } from "../engine/document.ts";
+import {
+  buildPathEdges,
+  type CameraState,
+  CLOSED_PATH,
+  distanceToPath,
+  getSlot,
+  getTableDimensions,
+  type GraphObject,
+  ORIGIN_X_PATH,
+  ORIGIN_Y_PATH,
+  pathContains,
+  pathEdgesOfObject,
+  type Point,
+  RADIUS_PATH,
+  VERTICES_PATH,
+} from "../engine/index.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent } from "./extent.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";

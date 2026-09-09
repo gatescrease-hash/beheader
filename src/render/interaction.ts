@@ -14,15 +14,32 @@
  * A drag never writes object state. It calls the mutation API like everything
  * else.
  */
-import { formatAddress, isAddressError, type Address } from "../engine/address.ts";
-import { extractDependencies } from "../engine/formula/deps.ts";
-import { getSlot, IMAGE_TYPE, TEXT_TYPE, type DerivedSlot, type FormulaSlot, type GraphObject } from "../engine/graph/node.ts";
-import { mutate, type MutationJournalEntry, type Operation } from "../engine/mutation.ts";
-import { NULL_EVAL_CONTEXT, type EvalContext } from "../engine/eval-context.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
-import { IMAGE_HEIGHT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
-import { TEXT_AUTORESIZE_PATH, TEXT_HEIGHT_PATH, TEXT_WIDTH_PATH } from "../engine/primitives/text.ts";
-import type { CameraState } from "../engine/document.ts";
+import {
+  type Address,
+  type CameraState,
+  type DerivedSlot,
+  type EvalContext,
+  extractDependencies,
+  formatAddress,
+  type FormulaSlot,
+  getSlot,
+  type GraphObject,
+  IMAGE_HEIGHT_PATH,
+  IMAGE_PRESERVE_ASPECT_PATH,
+  IMAGE_TYPE,
+  IMAGE_WIDTH_PATH,
+  isAddressError,
+  mutate,
+  type MutationJournalEntry,
+  NULL_EVAL_CONTEXT,
+  type Operation,
+  ORIGIN_X_PATH,
+  ORIGIN_Y_PATH,
+  TEXT_AUTORESIZE_PATH,
+  TEXT_HEIGHT_PATH,
+  TEXT_TYPE,
+  TEXT_WIDTH_PATH,
+} from "../engine/index.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";

@@ -10,8 +10,7 @@
  * never a sum of small steps, because a sum drifts.
  */
 
-import type { CameraState } from "../engine/document.ts";
-import { IMAGE_TYPE, TEXT_TYPE, type GraphObject } from "../engine/graph/node.ts";
+import { type CameraState, type GraphObject, IMAGE_TYPE, TEXT_TYPE } from "../engine/index.ts";
 import { worldToScreen, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import type { WorldExtent } from "./extent.ts";
 

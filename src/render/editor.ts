@@ -12,13 +12,15 @@
  * The overlay lays out in world units and one transform scales it. Do not
  * multiply the zoom into its width or its font size a second time.
  */
-import type { CameraState } from "../engine/document.ts";
-import { formatCellReference, parseCellReference } from "../engine/address.ts";
-import type { TextMeasurer } from "../engine/eval-context.ts";
-import { TABLE_TYPE, TEXT_TYPE, type GraphObject } from "../engine/graph/node.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "../engine/primitives/geometry.ts";
-import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
+  type CameraState,
+  formatCellReference,
+  getTableDimensions,
+  type GraphObject,
+  ORIGIN_X_PATH,
+  ORIGIN_Y_PATH,
+  parseCellReference,
+  TABLE_TYPE,
   TEXT_AUTORESIZE_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_STYLE_ALIGN_PATH,
@@ -26,8 +28,10 @@ import {
   TEXT_STYLE_FONT_PATH,
   TEXT_STYLE_FONT_SIZE_PATH,
   TEXT_STYLE_LINE_HEIGHT_PATH,
+  TEXT_TYPE,
   TEXT_WIDTH_PATH,
-} from "../engine/primitives/text.ts";
+  type TextMeasurer,
+} from "../engine/index.ts";
 import { screenToWorld, worldToScreen, type ScreenPoint } from "./camera.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { hitTest } from "./hittest.ts";

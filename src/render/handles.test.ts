@@ -4,8 +4,7 @@
  * Grabber placement and the absolute resize math.
  */
 import { describe, expect, it } from "vitest";
-import type { CameraState } from "../engine/document.ts";
-import type { GraphObject } from "../engine/graph/node.ts";
+import type { CameraState, GraphObject } from "../engine/index.ts";
 import type { WorldExtent } from "./extent.ts";
 import {
   constrainBoxToRatio,

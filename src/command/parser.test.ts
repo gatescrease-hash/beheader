@@ -5,7 +5,7 @@
  * built registry and the not built list stay disjoint.
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
+import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/index.ts";
 import { COMMAND_NAMES, COMMANDS_SPECIFIED_BUT_NOT_BUILT, isCommandParseFailure, parseCommand, type Command } from "./parser.ts";
 
 function parsed(line: string): Command {

@@ -14,7 +14,7 @@
  * command error. That list and the built registry must stay disjoint, and a
  * test pins it.
  */
-import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/primitives/table.ts";
+import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/index.ts";
 
 export interface CreateCircleCommand {
   readonly kind: "circle";

@@ -4,11 +4,17 @@
  * Every handler, and the refusal message each one produces.
  */
 import { describe, expect, it } from "vitest";
-import { createEmptyDocument, type Document } from "../engine/document.ts";
-import type { EvalContext } from "../engine/eval-context.ts";
-import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
-import { mutate, type Operation } from "../engine/mutation.ts";
-import { MAX_TABLE_LINES } from "../engine/primitives/table.ts";
+import {
+  createEmptyDocument,
+  type Document,
+  type EvalContext,
+  getSlot,
+  type GraphObject,
+  MAX_TABLE_LINES,
+  mutate,
+  type Operation,
+  type Point,
+} from "../engine/index.ts";
 import { hitTest } from "../render/hittest.ts";
 import { INITIAL_INTERACTION_STATE, pointerDown, pointerMove } from "../render/interaction.ts";
 import { COMMAND_NAMES, isCommandParseFailure, parseCommand, type Command } from "./parser.ts";

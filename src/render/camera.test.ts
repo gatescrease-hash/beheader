@@ -4,7 +4,7 @@
  * World to screen and back, pan, zoom to a point, and the clamps.
  */
 import { describe, expect, it } from "vitest";
-import { deserializeDocument, type CameraState } from "../engine/document.ts";
+import { type CameraState, deserializeDocument } from "../engine/index.ts";
 import { clampCamera, clampZoom, IDENTITY_ZOOM, MAX_ZOOM, MIN_ZOOM, panByScreenDelta, screenToWorld, worldToScreen, zoomAtScreenPoint } from "./camera.ts";
 
 const IDENTITY_CAMERA: CameraState = { x: 0, y: 0, zoom: 1 };
