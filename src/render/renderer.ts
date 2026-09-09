@@ -20,7 +20,8 @@
  */
 import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
 import type { EditorTarget } from "./editor.ts";
-import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { arcOfEdge } from "../engine/primitives/arc.ts";
+import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
   TEXT_AUTORESIZE_PATH,
@@ -362,9 +363,31 @@ function buildOpenVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObjec
   return true;
 }
 
-/** A polyline draws closed or open, as its closed slot says. */
+/**
+ * A polyline draws its edges, straight or curved. It draws a true arc through
+ * ctx.arc, the same call a circle uses. Nothing here reads a sample point,
+ * because a curved edge never becomes one.
+ */
 function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
-  return readBoolean(object, CLOSED_PATH) === true ? buildVerticesPath(ctx, object) : buildOpenVerticesPath(ctx, object);
+  const edges = pathEdgesOfObject(object);
+  const first = edges[0];
+  if (first === undefined) {
+    return false;
+  }
+  ctx.beginPath();
+  ctx.moveTo(first.start.x, first.start.y);
+  for (const edge of edges) {
+    const arc = arcOfEdge(edge);
+    if (arc === undefined) {
+      ctx.lineTo(edge.end.x, edge.end.y);
+      continue;
+    }
+    ctx.arc(arc.center.x, arc.center.y, arc.radius, arc.startAngle, arc.startAngle + arc.sweep, arc.sweep < 0);
+  }
+  if (readBoolean(object, CLOSED_PATH) === true) {
+    ctx.closePath();
+  }
+  return true;
 }
 
 function drawPolyline(ctx: CanvasRenderingContext2D, object: GraphObject): void {

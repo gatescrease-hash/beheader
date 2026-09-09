@@ -11,7 +11,8 @@
  * it becomes an invisible click target.
  */
 import { getSlot, type GraphObject } from "../engine/graph/node.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { pathBounds } from "../engine/primitives/arc.ts";
+import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
@@ -41,8 +42,9 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
     case "circle":
     case "polygon":
     case "rect":
-    case "polyline":
       return verticesExtent(object);
+    case "polyline":
+      return polylineExtent(object);
     case "table":
       return tableExtent(object);
     case "text":
@@ -81,6 +83,23 @@ function verticesExtent(object: GraphObject): WorldExtent | undefined {
     return undefined;
   }
   return { minX, minY, maxX, maxY };
+}
+
+/**
+ * A polyline can carry arcs, so its box comes from its edges and not from its
+ * vertices. An arc leaves the chord between its two ends, and the exact box
+ * needs the quarter points of the circle the arc reaches.
+ */
+function polylineExtent(object: GraphObject): WorldExtent | undefined {
+  const edges = pathEdgesOfObject(object);
+  if (edges.length === 0) {
+    return undefined;
+  }
+  const bounds = pathBounds(edges);
+  if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) {
+    return undefined;
+  }
+  return bounds;
 }
 
 function tableExtent(object: GraphObject): WorldExtent | undefined {

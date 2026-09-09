@@ -1477,6 +1477,21 @@ describe("mutate — AddVertexOperation, behind `addvertex`", () => {
 });
 
 describe("mutate — DeleteVertexOperation, behind `delvertex`, refuses by default and repairs with force", () => {
+  it("gives an appended vertex a straight edge, and leaves every bulge already drawn alone", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }], {
+      "vertex.0.bulge": { kind: "literal", value: 0.4 },
+      "vertex.1.bulge": { kind: "literal", value: 0.5 },
+    });
+    const result = mutate([polyline], [{ kind: "addVertex", objectId: "obj_1", point: { x: 9, y: 9 } }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.vertexCount).toBe(3);
+    expect(object?.slots["vertex.0.bulge"]?.value).toBe(0.4);
+    expect(object?.slots["vertex.1.bulge"]?.value).toBe(0.5);
+    expect(object?.slots["vertex.2.bulge"]).toEqual({ kind: "literal", value: 0 });
+  });
+
   it("removes the target vertex and renumbers every later one down by one, in storage", () => {
     const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }]);
     const result = mutate([polyline], [{ kind: "deleteVertex", objectId: "obj_1", index: 0 }], []);
@@ -1488,6 +1503,57 @@ describe("mutate — DeleteVertexOperation, behind `delvertex`, refuses by defau
     expect(object?.slots["vertex.1.x"]).toEqual({ kind: "literal", value: 10 });
     expect(object?.slots["vertex.2.x"]).toBeUndefined();
     expect(object?.slots["vertices"]).toEqual({ kind: "derived", value: [{ x: 5, y: 5 }, { x: 10, y: 10 }] });
+  });
+
+  it("carries the bulge of each surviving vertex down with it, and never leaves one behind", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }], {
+      "vertex.0.bulge": { kind: "literal", value: 0.1 },
+      "vertex.1.bulge": { kind: "literal", value: 0.2 },
+      "vertex.2.bulge": { kind: "literal", value: 0.3 },
+    });
+    const result = mutate([polyline], [{ kind: "deleteVertex", objectId: "obj_1", index: 0 }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.slots["vertex.0.bulge"]?.value).toBe(0.2);
+    expect(object?.slots["vertex.1.bulge"]?.value).toBe(0.3);
+    expect(object?.slots["vertex.2.bulge"]).toBeUndefined();
+  });
+
+  it("REFUSES a live reference to the bulge of the deleted vertex, the same trap the coordinates carry", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }], {
+      "vertex.1.bulge": { kind: "literal", value: 0.2 },
+    });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "1", "bulge") }, value: 0.2 } },
+    };
+    const result = mutate([polyline, dependent], [{ kind: "deleteVertex", objectId: "obj_1", index: 1 }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("value_1.value");
+    }
+  });
+
+  it("shifts a reference to a LATER bulge down one, the same as a reference to a later coordinate", () => {
+    const polyline = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }], {
+      "vertex.2.bulge": { kind: "literal", value: 0.3 },
+    });
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "2", "bulge") }, value: 0.3 } },
+    };
+    const result = mutate([polyline, dependent], [{ kind: "deleteVertex", objectId: "obj_1", index: 0 }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.find((candidate) => candidate.id === "obj_2")?.slots.value).toMatchObject({
+      kind: "formula",
+      ast: { type: "reference", address: addr("obj_1", "vertex", "1", "bulge") },
+    });
   });
 
   it("shifts a SURVIVING reference elsewhere down to match, without force — it is not a break, the same vertex moved", () => {

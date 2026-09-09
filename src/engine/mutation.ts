@@ -39,6 +39,7 @@ import {
   passThroughVertexRangeForDelete,
   repairVertexAddressForDelete,
   shiftVertexAddressForDelete,
+  vertexPartPaths,
   vertexXPath,
   vertexYPath,
 } from "./primitives/geometry.ts";
@@ -1301,7 +1302,7 @@ function findInvalidVertexOperations(operations: readonly Operation[], objects: 
  * index. Only a reference to the exact vertex that leaves counts here.
  */
 function findLiveVertexDependents(objects: readonly GraphObject[], targetObjectId: string, index: number): readonly string[] {
-  const targetKeys = new Set([slotKey(vertexXPath(index)), slotKey(vertexYPath(index))]);
+  const targetKeys = new Set(vertexPartPaths(index).map((path) => slotKey(path)));
   const names: string[] = [];
   for (const object of objects) {
     const schema = getObjectSchema(object.type);

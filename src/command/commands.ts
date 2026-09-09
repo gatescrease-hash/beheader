@@ -39,6 +39,7 @@ import {
   RADIUS_PATH,
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
+  vertexBulgePath,
   vertexXPath,
   vertexYPath,
 } from "../engine/primitives/geometry.ts";
@@ -318,6 +319,7 @@ function createPolyline(command: CreatePolylineCommand, document: Document, cont
   command.points.forEach((point, index) => {
     literals.push({ path: vertexXPath(index), value: point.x });
     literals.push({ path: vertexYPath(index), value: point.y });
+    literals.push({ path: vertexBulgePath(index), value: 0 });
   });
   return createObjectFromCommand(document, "polyline", literals, context, command.points.length);
 }

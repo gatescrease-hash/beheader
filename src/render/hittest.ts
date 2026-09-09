@@ -12,25 +12,15 @@
  * Array order is z order. This file walks it backward.
  */
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
-import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { distanceToPath, distanceToSegment } from "../engine/primitives/arc.ts";
+import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent } from "./extent.ts";
-import { asPointArray, readBoolean, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { asPointArray, readNumber, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 export const STROKE_HIT_TOLERANCE_SCREEN_PIXELS = 5;
-
-function distanceToSegment(point: Point, a: Point, b: Point): number {
-  const abx = b.x - a.x;
-  const aby = b.y - a.y;
-  const lengthSquared = abx * abx + aby * aby;
-  if (lengthSquared === 0) {
-    return Math.hypot(point.x - a.x, point.y - a.y);
-  }
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * abx + (point.y - a.y) * aby) / lengthSquared));
-  return Math.hypot(point.x - (a.x + t * abx), point.y - (a.y + t * aby));
-}
 
 function distanceToClosedPolyline(point: Point, vertices: readonly Point[]): number {
   let minDistance = Infinity;
@@ -56,31 +46,16 @@ function hitTestVerticesShape(object: GraphObject, worldPoint: WorldPoint, strok
   return distanceToClosedPolyline(worldPoint, vertices) <= strokeToleranceWorld;
 }
 
-function distanceToOpenPolyline(point: Point, vertices: readonly Point[]): number {
-  let minDistance = Infinity;
-  for (let i = 0; i + 1 < vertices.length; i += 1) {
-    const a = vertices[i];
-    const b = vertices[i + 1];
-    if (a === undefined || b === undefined) {
-      continue;
-    }
-    const distance = distanceToSegment(point, a, b);
-    if (distance < minDistance) {
-      minDistance = distance;
-    }
-  }
-  return minDistance;
-}
-
+/**
+ * A polyline hits on its true edges. An arc measures to the circle it rides
+ * on, not to the chord across it, so a click follows what the screen draws.
+ */
 function hitTestPolyline(object: GraphObject, worldPoint: WorldPoint, strokeToleranceWorld: number): boolean {
-  const vertices = asPointArray(getSlot(object, VERTICES_PATH)?.value);
-  if (vertices === undefined || vertices.length < 2) {
+  const edges = pathEdgesOfObject(object);
+  if (edges.length === 0) {
     return false;
   }
-  const distance = readBoolean(object, CLOSED_PATH) === true
-    ? distanceToClosedPolyline(worldPoint, vertices)
-    : distanceToOpenPolyline(worldPoint, vertices);
-  return distance <= strokeToleranceWorld;
+  return distanceToPath(worldPoint, edges) <= strokeToleranceWorld;
 }
 
 function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {

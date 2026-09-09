@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2053 pass, 0 skip, across 38 test files. |
+| Tests | 2091 pass, 0 skip, across 39 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2053 tests
+npm test             # 2091 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -125,8 +125,9 @@ other suites drive them anyway.
 | `formula/eval.ts` | AST to value. It is lazy. `IF` evaluates one branch. `AND` and `OR` stop early. The contrast with `deps.ts` is deliberate. |
 | `formula/functions.ts` | The built in function registry. It is a table from name to arity to implementation. One line adds a function. Two functions are lazy, because `IF` must not evaluate the branch it does not take. |
 | `formula/format.ts` | AST back to source text. It maps IDs back to current names. This is what lets the properties panel and the `props` command show a formula the way the operator wrote it. |
+| `primitives/arc.ts` | The math of one path edge, straight or curved. A bulge is the tangent of a quarter of the included angle, the number a DXF vertex record carries. Zero makes a straight line, 1 makes a half circle, and the sign gives the direction. Every answer is exact and closed form. Length is radius times angle. Area adds one circular segment to the shoelace over the chords. The box takes the quarter points of the circle the arc reaches. Nothing here cuts a curve into sample points, so `vertices` never grows a point an operator did not place. The two vertex circle is the case that proves it, and `arc.test.ts` pins its area, length, centroid and box. |
 | `primitives/schema.ts` | The registry that declares, for each object type, which slots exist and which kind each one has. It is the single source of truth for a slot path. Three sites read it in one pass: edge derivation and two integrity checks. All three must read it through the same resolver, or a dynamic slot family drifts between them. Types with an entry today: `value`, `add`, `table`, `circle`, `polygon`, `polyline`, `rect`, `text`, `image`, `script`. `value` and `add` are test fixtures from the first phase. Keep them. They are the smallest case that exercises a derived slot. |
-| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `pathDerivedSlots`, the derived set a polyline uses instead of `verticesDerivedSlots`. Both sets sit at the same nine paths, area included, so a polygon is a closed polyline at the schema layer too. The `closed` literal slot picks the math for each one. A closed path gets the shoelace area, the area weighted centroid and the full perimeter. An open path gets the plain vertex mean, the length of the segments it has, and a `#TYPE` error at `area`. `hasClosedSlot` answers one question for two readers: `pathDependencies`, which lists the addresses each derived slot depends on, and `readClosedFlag`, which reads the value. A polyline built before the `closed` slot existed carries none, and both readers must agree that it does not. Two more functions grow and shrink a polyline's storage: `addVertexToObject` and `deleteVertexFromObject`. Two others give `mutation.ts` the address rewrites `delvertex` needs. One, `shiftVertexAddressForDelete`, moves a vertex that survives down an index. The other, `repairVertexAddressForDelete`, marks the exact deleted one, so `mutation.ts` can turn it into `#REF`. `explodeObjectToPolyline` snapshots a preset's vertices into a fresh polyline object, same id and name, and closes it. Every preset it accepts is a closed shape, so `area` survives the explode with the same value. `EXPLODABLE_TYPES` names the three preset types explode accepts: circle, polygon and rect. |
+| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle gets a polygon approximation for bounds and hit tests. The renderer still draws a true arc. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `pathDerivedSlots`, the derived set a polyline uses instead of `verticesDerivedSlots`. Both sets sit at the same nine paths, area included, so a polygon is a closed polyline at the schema layer too. The `closed` literal slot picks the math for each one. A closed path gets the shoelace area, the area weighted centroid and the full perimeter. An open path gets the plain vertex mean, the length of the segments it has, and a `#TYPE` error at `area`. `hasClosedSlot` answers one question for two readers: `pathDependencies`, which lists the addresses each derived slot depends on, and `readClosedFlag`, which reads the value. A polyline built before the `closed` slot existed carries none, and both readers must agree that it does not. `existingBulgePaths` and `readBulges` carry the same duty for the bulge slots. Note the two vertex enumerations. `enumeratePolylineVertexSlotPaths` lists all three slots of each vertex and declares the schema. `enumeratePolylineCoordinateSlotPaths` lists only x and y, and the `vertices` slot depends on that one, because a change to a bulge moves no point. `pathEdgesOfObject` builds the edge list the render layer draws and hit tests.| Two more functions grow and shrink a polyline's storage: `addVertexToObject` and `deleteVertexFromObject`. Two others give `mutation.ts` the address rewrites `delvertex` needs. One, `shiftVertexAddressForDelete`, moves a vertex that survives down an index. The other, `repairVertexAddressForDelete`, marks the exact deleted one, so `mutation.ts` can turn it into `#REF`. `explodeObjectToPolyline` snapshots a preset's vertices into a fresh polyline object, same id and name, and closes it. Every preset it accepts is a closed shape, so `area` survives the explode with the same value. `EXPLODABLE_TYPES` names the three preset types explode accepts: circle, polygon and rect. |
 | `primitives/table.ts` | Cell address math, range expansion, and the row and column resize passes. A range expands to concrete cells at edge derivation time, from the size the table has now. So an expansion can never go stale. An empty cell inside a range gets no edge, which is why a sparse table works. |
 | `primitives/text.ts` | The block tree parser for `{= }` and `{? }{:}{?}`, the dependency walker over it, and the three compute functions for `resolvedContent`, `measuredHeight` and `measuredWidth`. The dependency walker is the first dynamic dependency resolver in the codebase. It re-parses `content` on every edge derivation, because the set of slots the text names changes with every edit. |
 | `primitives/image.ts` | Slot path constants only. No logic. The image primitive is data plus a renderer arm. |
@@ -143,7 +144,7 @@ other suites drive them anyway.
 | `extent.ts` | The world space box of an object, and of the whole document. A drawn extent and a clickable extent are one extent. Give a type an arm here and it becomes clickable. Give it a renderer arm in the same change, or it becomes an invisible click target. |
 | `slots.ts` | Small readers that pull a number, a string or a boolean out of a slot value, plus the fixed table and script box sizes. It exists so no drawing file re-invents the same defensive read. |
 | `textbox.ts` | The one rule for how big a text box is. Three files read it. Do not answer the same question in a fourth place. |
-| `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. A polyline is a stroke test too. Its `closed` slot says whether the gap between the last vertex and the first is a real edge. |
+| `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. A polyline is a stroke test too, over its edges rather than its vertices. So a click on an arc measures to the circle and not to the chord. Its `closed` slot says whether the gap between the last vertex and the first is a real edge. |
 | `handles.ts` | The resize grabbers on a selected object, and the box math they drive. A resize is absolute, from the extent the drag started with, not a sum of small steps. |
 | `markdown.ts` | The markdown lite parser. Bold, italic, code, headings, list items and paragraph breaks, and nothing else. Its rule for which asterisk opens and which closes is load bearing. A simpler version reintroduces a bug that thirty tests did not catch. |
 | `measure.ts` | The real Canvas2D `TextMeasurer`, and `layOutText`, the line breaker. There are two measurers and they are not the same. The engine one honours markup. The overlay one does not. |
@@ -245,6 +246,13 @@ These are the traps. Each one cost real time to find.
     Rule 4 holds. And `explode` breaks no reference to `area`, because the
     path it makes is closed and the slot stays at the same address.
 
+19. **`vertices` holds only the points an operator placed.** A curve never
+    becomes a run of sample points, at any layer. The renderer draws an arc
+    with `ctx.arc`, the hit test measures to the circle, and area, length and
+    bounds each have a closed form. So the count of vertices is never a
+    quality setting, and a vertex arrives on a curve only when an operator
+    splits an edge at a point they pick.
+
 ---
 
 ## 5. Gaps. This is the beta backlog.
@@ -294,8 +302,15 @@ group blocks the acceptance test in `SPEC.md` section 12.
    needs no repair. A
    formula that reads a dropped slot follows the same refuse-by-default,
    repair-under-`force` rule as `delvertex`.
-5. **Path `segments`.** `SPEC.md` section 8 declares arcs and beziers. Only
-   straight lines exist.
+5. **Arcs exist now. Beziers do not.** A `vertex.N.bulge` slot bends the edge
+   that leaves vertex N. Area, length, centroid, bounds, the hit test and the
+   renderer all treat that edge as a true arc, and each answer is exact.
+   `arc.ts` holds that math. Two things stay open. A `split` operation must cut
+   one edge at a point an operator picks, which turns one arc into two arcs of
+   the same shape. That is the only way to put a vertex on a curve, because
+   nothing subdivides a curve on its own. And a circle can then drop its
+   `vertices` slot, since two vertices and two bulges of 1 describe a circle
+   exactly, and the 32 point approximation then earns no place.
 6. **Geometry style slots.** `strokeColor`, `strokeWidth` and `fillColor` are
    specified as slots that a formula can drive. No schema declares them. The
    renderer uses fixed colours. A closed polyline draws the edge back to its

@@ -28,6 +28,7 @@ import {
   computeRectVertices,
   computeRectVerticesSlot,
   computeVertexMean,
+  enumeratePolylineCoordinateSlotPaths,
   enumeratePolylineVertexSlotPaths,
   explodeObjectToPolyline,
   EXPLODABLE_TYPES,
@@ -35,6 +36,7 @@ import {
   MIN_POLYLINE_VERTICES,
   pathDerivedSlots,
   readClosedFlag,
+  vertexBulgePath,
   vertexXPath,
   vertexYPath,
   verticesDerivedSlots,
@@ -473,15 +475,28 @@ describe("every preset winds counterclockwise (positive doubled signed area)", (
 });
 
 describe("enumeratePolylineVertexSlotPaths — the count comes from vertexCount, a field and not a slot", () => {
-  it("lists vertex.N.x then vertex.N.y for each index, in order", () => {
+  it("lists x, y then bulge for each index, in order", () => {
     const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 3 };
     expect(enumeratePolylineVertexSlotPaths(object)).toEqual([
       ["vertex", "0", "x"],
       ["vertex", "0", "y"],
+      ["vertex", "0", "bulge"],
       ["vertex", "1", "x"],
       ["vertex", "1", "y"],
+      ["vertex", "1", "bulge"],
       ["vertex", "2", "x"],
       ["vertex", "2", "y"],
+      ["vertex", "2", "bulge"],
+    ]);
+  });
+
+  it("leaves the bulge out of the coordinate list the vertices slot depends on", () => {
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 2 };
+    expect(enumeratePolylineCoordinateSlotPaths(object)).toEqual([
+      ["vertex", "0", "x"],
+      ["vertex", "0", "y"],
+      ["vertex", "1", "x"],
+      ["vertex", "1", "y"],
     ]);
   });
 
@@ -703,6 +718,81 @@ describe("polyline wired through the real mutate() pipeline", () => {
     expect(reopened.find((candidate) => candidate.id === "obj_1")?.slots["length"]?.value).toBeCloseTo(9);
   });
 
+  function pathObject(
+    points: readonly { readonly x: number; readonly y: number }[],
+    bulges: readonly number[],
+    closed: boolean,
+  ): GraphObject {
+    const slots: Record<string, Slot> = {
+      closed: { kind: "literal", value: closed },
+      ...derivedPlaceholders("polyline"),
+    };
+    points.forEach((point, index) => {
+      slots[vertexXPath(index).join(".")] = { kind: "literal", value: point.x };
+      slots[vertexYPath(index).join(".")] = { kind: "literal", value: point.y };
+      const bulge = bulges[index];
+      if (bulge !== undefined) {
+        slots[vertexBulgePath(index).join(".")] = { kind: "literal", value: bulge };
+      }
+    });
+    return { id: "obj_1", name: "polyline_1", type: "polyline", vertexCount: points.length, slots };
+  }
+
+  const CHORD = [
+    { x: 0, y: 0 },
+    { x: 2, y: 0 },
+  ];
+
+  it("turns one edge into a true arc, so length and bounds leave the chord behind", () => {
+    const objects = committed([], [{ kind: "createObject", object: pathObject(CHORD, [1, 0], false) }]);
+    const object = objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.slots["length"]?.value).toBeCloseTo(Math.PI);
+    expect(object?.slots["bounds.minY"]?.value).toBeCloseTo(-1);
+    expect(object?.slots["bounds.maxY"]?.value).toBeCloseTo(0);
+  });
+
+  it("keeps vertices to the two points an operator placed, however curved the edge is", () => {
+    const objects = committed([], [{ kind: "createObject", object: pathObject(CHORD, [1, 0], false) }]);
+    expect(objects.find((candidate) => candidate.id === "obj_1")?.slots["vertices"]?.value).toEqual(CHORD);
+  });
+
+  it("makes a true circle out of two vertices and two half circles, area, centroid and box alike", () => {
+    const objects = committed([], [{ kind: "createObject", object: pathObject(CHORD, [1, 1], true) }]);
+    const object = objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.slots["area"]?.value).toBeCloseTo(Math.PI);
+    expect(object?.slots["length"]?.value).toBeCloseTo(2 * Math.PI);
+    expect(object?.slots["centroid.x"]?.value).toBeCloseTo(1);
+    expect(object?.slots["centroid.y"]?.value).toBeCloseTo(0);
+    expect(object?.slots["bounds.minY"]?.value).toBeCloseTo(-1);
+    expect(object?.slots["bounds.maxY"]?.value).toBeCloseTo(1);
+  });
+
+  it("re-evaluates every derived slot when a bulge changes, so the edge into it is live", () => {
+    const straight = committed([], [{ kind: "createObject", object: pathObject(CHORD, [0, 0], false) }]);
+    expect(straight.find((candidate) => candidate.id === "obj_1")?.slots["length"]?.value).toBeCloseTo(2);
+
+    const curved = committed(straight, [
+      { kind: "setSlot", address: { objectId: "obj_1", path: ["vertex", "0", "bulge"] }, slot: { kind: "literal", value: 1 } },
+    ]);
+    expect(curved.find((candidate) => candidate.id === "obj_1")?.slots["length"]?.value).toBeCloseTo(Math.PI);
+  });
+
+  it("refuses a bulge that is not a number, naming the vertex", () => {
+    const objects = committed([], [{ kind: "createObject", object: pathObject(CHORD, [0, 0], false) }]);
+    const wrong = committed(objects, [
+      { kind: "setSlot", address: { objectId: "obj_1", path: ["vertex", "0", "bulge"] }, slot: { kind: "literal", value: "bendy" } },
+    ]);
+    expect(wrong.find((candidate) => candidate.id === "obj_1")?.slots["length"]?.value).toEqual({
+      error: "#TYPE",
+      message: "polyline.length: the bulge of vertex 0 must be a number",
+    });
+  });
+
+  it("measures a polyline with no bulge slot at all as a chain of straight edges", () => {
+    const objects = committed([], [{ kind: "createObject", object: pathObject(CHORD, [], false) }]);
+    expect(objects.find((candidate) => candidate.id === "obj_1")?.slots["length"]?.value).toBeCloseTo(2);
+  });
+
   it("evaluates a polyline that carries no closed slot at all as open — a document saved before closed existed still works", () => {
     const objects = committed([], [{ kind: "createObject", object: triangle() }]);
     const object = objects.find((candidate) => candidate.id === "obj_1");
@@ -802,6 +892,14 @@ describe("explodeObjectToPolyline — snapshots the current vertices, drops the 
     expect(result.object.slots["origin.y"]).toBeUndefined();
     expect(result.object.slots["width"]).toBeUndefined();
     expect(result.object.slots["height"]).toBeUndefined();
+  });
+
+  it("gives every vertex a straight edge to start with, so an exploded preset keeps its shape", () => {
+    const result = explodeObjectToPolyline(rect, "rect_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.object.slots["vertex.0.bulge"]).toEqual({ kind: "literal", value: 0 });
+    expect(result.object.slots["vertex.3.bulge"]).toEqual({ kind: "literal", value: 0 });
   });
 
   it("closes the new path, because every preset it accepts is a closed shape", () => {

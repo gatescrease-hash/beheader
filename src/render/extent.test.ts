@@ -29,6 +29,30 @@ describe("objectExtent — polyline reads the same derived vertices slot the clo
     expect(objectExtent(polyline)).toEqual({ minX: 0, minY: -5, maxX: 40, maxY: 20 });
   });
 
+  it("grows the box to hold a curved edge, which leaves the chord between its two vertices", () => {
+    const bowed: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        "vertex.0.bulge": { kind: "literal", value: 1 },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 200, y: 0 },
+          ],
+        },
+      },
+    };
+    const extent = objectExtent(bowed);
+    expect(extent?.minX).toBeCloseTo(0);
+    expect(extent?.maxX).toBeCloseTo(200);
+    expect(extent?.minY).toBeCloseTo(-100);
+    expect(extent?.maxY).toBeCloseTo(0);
+  });
+
   it("gives undefined for a polyline with no vertices slot at all, matching every other empty vertex shape", () => {
     const polyline: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {} };
     expect(objectExtent(polyline)).toBeUndefined();

@@ -13,10 +13,21 @@
  * still draws a true arc.
  */
 import type { Address } from "../address.ts";
+import {
+  buildPathEdges,
+  pathArea,
+  pathBounds,
+  pathCentroid,
+  pathLength,
+  type PathEdge,
+} from "./arc.ts";
 import { getSlot, isErrorValue, slotKey, type ErrorValue, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "../graph/node.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
 export const VERTEX_PATH_PREFIX = "vertex";
+
+/** The three slots of one vertex: two coordinates, and the bulge of the edge after it. */
+export const VERTEX_PARTS: readonly ("x" | "y" | "bulge")[] = ["x", "y", "bulge"];
 
 export const ORIGIN_X_PATH: readonly string[] = ["origin", "x"];
 export const ORIGIN_Y_PATH: readonly string[] = ["origin", "y"];
@@ -50,6 +61,17 @@ export function vertexXPath(index: number): readonly string[] {
 
 export function vertexYPath(index: number): readonly string[] {
   return [VERTEX_PATH_PREFIX, String(index), "y"];
+}
+
+/**
+ * The curvature of the edge that leaves this vertex, as a DXF file states it.
+ * A DXF vertex record carries the bulge of the edge after it, and so does this
+ * one. So a path with N vertices carries N bulges, and the last one belongs to
+ * the edge home to vertex 0. That edge draws only when closed is true, and the
+ * slot exists at every value of closed, which keeps Rule 4 safe.
+ */
+export function vertexBulgePath(index: number): readonly string[] {
+  return [VERTEX_PATH_PREFIX, String(index), "bulge"];
 }
 
 export function computePolygonVertices(sides: number, radius: number, origin: Point, rotation: number): readonly Point[] {
@@ -287,13 +309,42 @@ export function enumeratePolylineVertexSlotPaths(object: GraphObject): readonly 
   for (let index = 0; index < count; index += 1) {
     paths.push(vertexXPath(index));
     paths.push(vertexYPath(index));
+    paths.push(vertexBulgePath(index));
+  }
+  return paths;
+}
+
+/** The bulge slots this object carries now. A path built before bulges existed carries none. */
+function existingBulgePaths(object: GraphObject): readonly (readonly string[])[] {
+  const count = object.vertexCount ?? 0;
+  const paths: (readonly string[])[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const path = vertexBulgePath(index);
+    if (getSlot(object, path) !== undefined) {
+      paths.push(path);
+    }
+  }
+  return paths;
+}
+
+/**
+ * The two coordinate slots of every vertex, and no bulge. The vertices slot
+ * holds the points an operator placed, so a change to the curvature of an
+ * edge leaves it alone.
+ */
+export function enumeratePolylineCoordinateSlotPaths(object: GraphObject): readonly (readonly string[])[] {
+  const count = object.vertexCount ?? 0;
+  const paths: (readonly string[])[] = [];
+  for (let index = 0; index < count; index += 1) {
+    paths.push(vertexXPath(index));
+    paths.push(vertexYPath(index));
   }
   return paths;
 }
 
 export const polylineVerticesDependencies: DerivedSlotDependencies = {
   kind: "dynamic",
-  resolve: (object) => enumeratePolylineVertexSlotPaths(object).map((path) => ({ objectId: object.id, path })),
+  resolve: (object) => enumeratePolylineCoordinateSlotPaths(object).map((path) => ({ objectId: object.id, path })),
 };
 
 /** Gathers a polyline's per vertex slots into the one Point[] every consumer reads. */
@@ -341,12 +392,22 @@ export const pathDependencies: DerivedSlotDependencies = {
     if (hasClosedSlot(object)) {
       addresses.push({ objectId: object.id, path: CLOSED_PATH });
     }
+    for (const path of existingBulgePaths(object)) {
+      addresses.push({ objectId: object.id, path });
+    }
     return addresses;
   },
 };
 
+/** A path as its slots describe it now: the placed points, the edges and the closed flag. */
+export interface PathShape {
+  readonly vertices: readonly Point[];
+  readonly edges: readonly PathEdge[];
+  readonly closed: boolean;
+}
+
 /** One measurement of a path. It returns a number, or the reason it cannot. */
-export type PathMeasure = (vertices: readonly Point[]) => number | ErrorValue;
+export type PathMeasure = (shape: PathShape) => number | ErrorValue;
 
 /**
  * True when the path closes back to its first vertex. An absent slot reads as
@@ -373,7 +434,45 @@ export function readClosedFlag(
   return value;
 }
 
-function derivePathNumber(label: string, whenClosed: PathMeasure, whenOpen: PathMeasure): DerivedSlotCompute {
+/**
+ * The bulge of every vertex, in order. An absent slot reads as 0, a straight
+ * edge, so a path built before bulges existed still measures. This test for an
+ * absent slot must match the one existingBulgePaths uses.
+ */
+type BulgeReading =
+  | { readonly ok: true; readonly bulges: readonly number[] }
+  | { readonly ok: false; readonly error: ErrorValue };
+
+function readBulges(
+  object: GraphObject,
+  read: (address: Address) => Value | undefined,
+  count: number,
+  label: string,
+): BulgeReading {
+  const bulges: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const path = vertexBulgePath(index);
+    if (getSlot(object, path) === undefined) {
+      bulges.push(0);
+      continue;
+    }
+    const value = read({ objectId: object.id, path });
+    if (value === undefined || value === null) {
+      bulges.push(0);
+      continue;
+    }
+    if (isErrorValue(value)) {
+      return { ok: false, error: value };
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return { ok: false, error: { error: "#TYPE", message: `${label}: the bulge of vertex ${index} must be a number` } };
+    }
+    bulges.push(value);
+  }
+  return { ok: true, bulges };
+}
+
+function derivePathNumber(label: string, measure: PathMeasure): DerivedSlotCompute {
   return (object, read) => {
     const closed = readClosedFlag(object, read, label);
     if (isErrorValue(closed)) {
@@ -383,7 +482,11 @@ function derivePathNumber(label: string, whenClosed: PathMeasure, whenOpen: Path
     if (isErrorValue(vertices)) {
       return vertices;
     }
-    const measured = closed ? whenClosed(vertices) : whenOpen(vertices);
+    const bulges = readBulges(object, read, vertices.length, label);
+    if (!bulges.ok) {
+      return bulges.error;
+    }
+    const measured = measure({ vertices, edges: buildPathEdges(vertices, bulges.bulges, closed), closed });
     return isErrorValue(measured) ? measured : finiteOrTypeError(measured, label);
   };
 }
@@ -399,18 +502,42 @@ export function pathDerivedSlots(label: string): readonly DerivedSlotSchema[] {
   const dependencies = pathDependencies;
   const noArea: PathMeasure = () => ({ error: "#TYPE", message: `${label}.area: an open path has no area. Set closed to true first` });
   return [
-    { path: CENTROID_X_PATH, dependencies, compute: derivePathNumber(`${label}.centroid.x`, (v) => computeCentroid(v).x, (v) => computeVertexMean(v).x) },
-    { path: CENTROID_Y_PATH, dependencies, compute: derivePathNumber(`${label}.centroid.y`, (v) => computeCentroid(v).y, (v) => computeVertexMean(v).y) },
-    { path: AREA_PATH, dependencies, compute: derivePathNumber(`${label}.area`, computeArea, noArea) },
-    { path: LENGTH_PATH, dependencies, compute: derivePathNumber(`${label}.length`, computePerimeterLength, computeOpenPathLength) },
-    { path: BOUNDS_MIN_X_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.minX`, (v) => computeBounds(v).minX, (v) => computeBounds(v).minX) },
-    { path: BOUNDS_MIN_Y_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.minY`, (v) => computeBounds(v).minY, (v) => computeBounds(v).minY) },
-    { path: BOUNDS_MAX_X_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.maxX`, (v) => computeBounds(v).maxX, (v) => computeBounds(v).maxX) },
-    { path: BOUNDS_MAX_Y_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.maxY`, (v) => computeBounds(v).maxY, (v) => computeBounds(v).maxY) },
+    { path: CENTROID_X_PATH, dependencies, compute: derivePathNumber(`${label}.centroid.x`, (s) => (s.closed ? pathCentroid(s.edges).x : computeVertexMean(s.vertices).x)) },
+    { path: CENTROID_Y_PATH, dependencies, compute: derivePathNumber(`${label}.centroid.y`, (s) => (s.closed ? pathCentroid(s.edges).y : computeVertexMean(s.vertices).y)) },
+    { path: AREA_PATH, dependencies, compute: derivePathNumber(`${label}.area`, (s) => (s.closed ? pathArea(s.edges) : noArea(s))) },
+    { path: LENGTH_PATH, dependencies, compute: derivePathNumber(`${label}.length`, (s) => pathLength(s.edges)) },
+    { path: BOUNDS_MIN_X_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.minX`, (s) => pathBounds(s.edges).minX) },
+    { path: BOUNDS_MIN_Y_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.minY`, (s) => pathBounds(s.edges).minY) },
+    { path: BOUNDS_MAX_X_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.maxX`, (s) => pathBounds(s.edges).maxX) },
+    { path: BOUNDS_MAX_Y_PATH, dependencies, compute: derivePathNumber(`${label}.bounds.maxY`, (s) => pathBounds(s.edges).maxY) },
   ];
 }
 
-/** Appends one vertex at the end. No vertex slot moves, so no reference elsewhere needs a rewrite. */
+/**
+ * The edges of a path, read straight off its slots. The render layer builds a
+ * canvas path and a hit test from these. It never reads a sample point,
+ * because none exists.
+ */
+export function pathEdgesOfObject(object: GraphObject): readonly PathEdge[] {
+  const value = getSlot(object, VERTICES_PATH)?.value;
+  if (!Array.isArray(value) || value.length === 0) {
+    return [];
+  }
+  const vertices = value as readonly Point[];
+  const bulges: number[] = [];
+  for (let index = 0; index < vertices.length; index += 1) {
+    const bulge = getSlot(object, vertexBulgePath(index))?.value;
+    bulges.push(typeof bulge === "number" && Number.isFinite(bulge) ? bulge : 0);
+  }
+  return buildPathEdges(vertices, bulges, getSlot(object, CLOSED_PATH)?.value === true);
+}
+
+/**
+ * Appends one vertex at the end. No vertex slot moves, so no reference
+ * elsewhere needs a rewrite. The new vertex gets a straight edge. No bulge
+ * already on the path moves. So a curve an operator drew keeps its shape, and
+ * only the edge home to vertex 0 becomes straight.
+ */
 export function addVertexToObject(object: GraphObject, point: Point): GraphObject {
   const count = object.vertexCount ?? 0;
   return {
@@ -420,6 +547,7 @@ export function addVertexToObject(object: GraphObject, point: Point): GraphObjec
       ...object.slots,
       [slotKey(vertexXPath(count))]: { kind: "literal", value: point.x },
       [slotKey(vertexYPath(count))]: { kind: "literal", value: point.y },
+      [slotKey(vertexBulgePath(count))]: { kind: "literal", value: 0 },
     },
   };
 }
@@ -429,29 +557,30 @@ export function deleteVertexFromObject(object: GraphObject, index: number): Grap
   const count = object.vertexCount ?? 0;
   const newSlots: Record<string, Slot> = { ...object.slots };
   for (let i = 0; i < count; i += 1) {
-    delete newSlots[slotKey(vertexXPath(i))];
-    delete newSlots[slotKey(vertexYPath(i))];
+    for (const path of vertexPartPaths(i)) {
+      delete newSlots[slotKey(path)];
+    }
   }
   for (let i = 0; i < count; i += 1) {
     if (i === index) {
       continue;
     }
-    const x = getSlot(object, vertexXPath(i));
-    const y = getSlot(object, vertexYPath(i));
     const newIndex = i < index ? i : i - 1;
-    if (x !== undefined) {
-      newSlots[slotKey(vertexXPath(newIndex))] = x;
-    }
-    if (y !== undefined) {
-      newSlots[slotKey(vertexYPath(newIndex))] = y;
+    for (const axis of VERTEX_PARTS) {
+      const slot = getSlot(object, vertexPartPath(i, axis));
+      if (slot !== undefined) {
+        newSlots[slotKey(vertexPartPath(newIndex, axis))] = slot;
+      }
     }
   }
   return { ...object, vertexCount: Math.max(0, count - 1), slots: newSlots };
 }
 
+type VertexPart = "x" | "y" | "bulge";
+
 interface VertexAddress {
   readonly index: number;
-  readonly axis: "x" | "y";
+  readonly axis: VertexPart;
 }
 
 function asVertexAddress(address: Address, objectId: string): VertexAddress | undefined {
@@ -463,7 +592,7 @@ function asVertexAddress(address: Address, objectId: string): VertexAddress | un
     return undefined;
   }
   const axis = path[2];
-  if (axis !== "x" && axis !== "y") {
+  if (axis !== "x" && axis !== "y" && axis !== "bulge") {
     return undefined;
   }
   const indexText = path[1];
@@ -474,8 +603,21 @@ function asVertexAddress(address: Address, objectId: string): VertexAddress | un
   return Number.isInteger(index) && index >= 0 ? { index, axis } : undefined;
 }
 
-function vertexAddressAt(objectId: string, index: number, axis: "x" | "y"): Address {
-  return { objectId, path: axis === "x" ? vertexXPath(index) : vertexYPath(index) };
+function vertexAddressAt(objectId: string, index: number, axis: VertexPart): Address {
+  return { objectId, path: vertexPartPath(index, axis) };
+}
+
+/** The slot path of one part of one vertex: its x, its y, or the bulge of the edge after it. */
+export function vertexPartPath(index: number, axis: VertexPart): readonly string[] {
+  if (axis === "x") {
+    return vertexXPath(index);
+  }
+  return axis === "y" ? vertexYPath(index) : vertexBulgePath(index);
+}
+
+/** Every slot path of one vertex. delvertex must move or break all three together. */
+export function vertexPartPaths(index: number): readonly (readonly string[])[] {
+  return [vertexXPath(index), vertexYPath(index), vertexBulgePath(index)];
 }
 
 /**
@@ -603,6 +745,7 @@ export function explodeObjectToPolyline(object: GraphObject, label: string): Exp
   vertices.forEach((vertex, index) => {
     slots[slotKey(vertexXPath(index))] = { kind: "literal", value: vertex.x };
     slots[slotKey(vertexYPath(index))] = { kind: "literal", value: vertex.y };
+    slots[slotKey(vertexBulgePath(index))] = { kind: "literal", value: 0 };
   });
   slots[slotKey(CLOSED_PATH)] = { kind: "literal", value: true };
   for (const path of POLYLINE_DERIVED_PATHS) {

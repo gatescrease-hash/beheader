@@ -412,11 +412,21 @@ operator can decompose a preset at any time.
 ```
 Path {
   vertices: Point[]
-  segments: Segment[]
+  bulges: number[]     // one for each vertex, for the edge that leaves it
   closed: boolean
   style: { strokeColor, strokeWidth, fillColor | null }
 }
 ```
+
+A bulge is the tangent of a quarter of the included angle, the number a DXF
+file carries on a vertex record. Zero makes a straight edge, 1 makes a half
+circle, and the sign gives the direction. So a curve needs no extra vertex,
+and `vertices` holds only the points an operator placed.
+
+Every measurement of a curved path is exact. Area comes from the shoelace over
+the chords plus one circular segment for each arc. Length is radius times
+angle. The box takes the quarter points of the circle the arc reaches. The
+renderer draws a true arc. Nothing anywhere cuts a curve into sample points.
 
 ### How vertices become slots
 
@@ -427,9 +437,13 @@ A variable length vertex list must never change size during evaluation. So:
   per vertex slots. A change to `sides` from 5 to 6 changes a value, not the
   slot set. Rule 6 holds.
 - **An editable path** (a polyline, or a preset after `explode`) has per vertex
-  literal slots `vertex.0.x`, `vertex.0.y` and so on. It also has a derived
-  `vertices` slot that gathers them. The count changes only through an explicit
-  `addvertex` or `delvertex` mutation.
+  literal slots `vertex.0.x`, `vertex.0.y`, `vertex.0.bulge` and so on. It also
+  has a derived `vertices` slot that gathers the coordinates. The count changes
+  only through an explicit `addvertex` or `delvertex` mutation.
+- **A path with N vertices carries N bulges.** The last one belongs to the edge
+  home to vertex 0. That edge draws only when `closed` is true, and the slot
+  exists at every value of `closed`. So a formula can drive `closed` without a
+  change to the slot set.
 - **A consumer always reads `vertices`.** Both cases look the same from
   downstream.
 

@@ -186,6 +186,47 @@ describe("hitTest — a polyline is an open path, unlike the closed vertex shape
     expect(hitTest({ x: 50, y: 50 }, [closed], CAMERA_IDENTITY)).toBe(closed);
   });
 
+  it("hits the arc a bulge draws, and misses the chord the arc left behind", () => {
+    const bowed: GraphObject = {
+      id: "obj_2",
+      name: "polyline_2",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        "vertex.0.bulge": { kind: "literal", value: 1 },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 200, y: 0 },
+          ],
+        },
+      },
+    };
+    expect(hitTest({ x: 100, y: -100 }, [bowed], CAMERA_IDENTITY)).toBe(bowed);
+    expect(hitTest({ x: 100, y: 0 }, [bowed], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
+  it("swaps those two answers when the same two vertices carry no bulge", () => {
+    const straight: GraphObject = {
+      id: "obj_2",
+      name: "polyline_2",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 200, y: 0 },
+          ],
+        },
+      },
+    };
+    expect(hitTest({ x: 100, y: 0 }, [straight], CAMERA_IDENTITY)).toBe(straight);
+    expect(hitTest({ x: 100, y: -100 }, [straight], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
   it("stays open when closed holds false, and when it holds a value that is not a boolean", () => {
     const open: GraphObject = { ...elbow, slots: { ...elbow.slots, closed: { kind: "literal", value: false } } };
     const wrong: GraphObject = { ...elbow, slots: { ...elbow.slots, closed: { kind: "literal", value: "yes" } } };

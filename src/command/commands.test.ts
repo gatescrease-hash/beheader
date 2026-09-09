@@ -150,6 +150,15 @@ describe("creation — a typed line becomes an object", () => {
     expect(getSlot(object, ["area"])?.value).toBeCloseTo(12);
   });
 
+  it("bends one edge of a closed path into a half circle, and the area grows by that half disc", () => {
+    const created = committed("polyline 0,0 4,0 4,3 0,3 closed", createEmptyDocument());
+    const object = onlyObject(created);
+    expect(getSlot(object, ["vertex", "0", "bulge"])).toEqual({ kind: "literal", value: 0 });
+    const bowed = onlyObject(committed(`set ${object.name}.vertex.0.bulge 1`, created));
+    expect(getSlot(bowed, ["area"])?.value).toBeCloseTo(12 + (Math.PI * 2 * 2) / 2);
+    expect(getSlot(bowed, ["bounds.minY"])?.value).toBeCloseTo(-2);
+  });
+
   it("a closed polyline reports the same area, centroid and length as the rect covering the same four corners", () => {
     const path = onlyObject(committed("polyline 0,0 4,0 4,3 0,3 closed", createEmptyDocument()));
     const box = onlyObject(committed("rect x=0 y=0 w=4 h=3", createEmptyDocument()));

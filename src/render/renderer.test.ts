@@ -378,7 +378,7 @@ describe("renderDocument — a polyline draws an open path, unlike the closed ve
     ]);
   });
 
-  it("closes the path once closed is true, which is the one call that separates it from a polygon", () => {
+  it("walks the edge home to the first vertex once closed is true, and then closes the path", () => {
     const { ctx, calls } = createFakeContext();
     const polyline: GraphObject = {
       id: "obj_1",
@@ -403,9 +403,47 @@ describe("renderDocument — a polyline draws an open path, unlike the closed ve
       { op: "moveTo", x: 0, y: 0 },
       { op: "lineTo", x: 100, y: 0 },
       { op: "lineTo", x: 100, y: 100 },
+      { op: "lineTo", x: 0, y: 0 },
       { op: "closePath" },
       { op: "stroke" },
     ]);
+  });
+
+  it("draws a curved edge as a true arc, the same call a circle uses, and never as a run of short lines", () => {
+    const { ctx, calls } = createFakeContext();
+    const polyline: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        "vertex.0.bulge": { kind: "literal", value: 1 },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 2, y: 0 },
+          ],
+        },
+      },
+    };
+    renderDocument(ctx, 800, 600, [polyline], CAMERA_IDENTITY);
+    const shapeCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect" && call.op !== "fillText");
+    expect(shapeCalls.map((call) => call.op)).toEqual(["beginPath", "moveTo", "arc", "stroke"]);
+    const drawn = shapeCalls[2];
+    if (drawn === undefined || drawn.op !== "arc") {
+      throw new Error("test setup: expected the second call to be an arc");
+    }
+    expect(drawn.x).toBeCloseTo(1);
+    expect(drawn.y).toBeCloseTo(0);
+    expect(drawn.radius).toBeCloseTo(1);
+    // The two angles are one turn apart in either sign, so read them as points.
+    const at = (angle: number) => ({ x: drawn.x + Math.cos(angle) * drawn.radius, y: drawn.y + Math.sin(angle) * drawn.radius });
+    expect(at(drawn.startAngle).x).toBeCloseTo(0);
+    expect(at(drawn.startAngle).y).toBeCloseTo(0);
+    expect(at(drawn.endAngle).x).toBeCloseTo(2);
+    expect(at(drawn.endAngle).y).toBeCloseTo(0);
+    expect(at((drawn.startAngle + drawn.endAngle) / 2).y).toBeCloseTo(-1);
   });
 });
 
