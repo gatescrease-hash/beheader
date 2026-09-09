@@ -12,7 +12,7 @@
  * Array order is z order. This file walks it backward.
  */
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
-import { distanceToPath, distanceToSegment } from "../engine/primitives/arc.ts";
+import { distanceToPath, distanceToSegment } from "../engine/primitives/edge.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import type { CameraState } from "../engine/document.ts";

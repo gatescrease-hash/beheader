@@ -8,8 +8,10 @@
 import { describe, expect, it } from "vitest";
 import {
   arcOfEdge,
+  bezierOfEdge,
   buildPathEdges,
   distanceToEdge,
+  edgeDoubledAreaOverChord,
   edgeLength,
   HALF_CIRCLE_BULGE,
   pathArea,
@@ -19,7 +21,7 @@ import {
   splitEdgeAt,
   type PathBounds,
   type PathEdge,
-} from "./arc.ts";
+} from "./edge.ts";
 
 const LEFT = { x: 0, y: 0 };
 const RIGHT = { x: 2, y: 0 };
@@ -181,6 +183,160 @@ describe("splitEdgeAt — a cut where the operator points, never an even subdivi
   it("reports a fraction at an end when the point sits past the end of the edge", () => {
     expect(splitEdgeAt({ start: LEFT, end: RIGHT, bulge: 0 }, { x: -9, y: 0 }).fraction).toBe(0);
     expect(splitEdgeAt({ start: LEFT, end: RIGHT, bulge: 0 }, { x: 9, y: 0 }).fraction).toBe(1);
+  });
+});
+
+/**
+ * One cubic with hand computed answers. Its control points are (0,1) and
+ * (1,1) over the chord from (0,0) to (1,0). The integral of x y' minus y x'
+ * gives an area of 0.6 over the chord, and a centroid of (0.5, 9/28). The high
+ * point of the curve is 0.75, well under the height of either handle.
+ */
+const ARCH_START = { x: 0, y: 0 };
+const ARCH_END = { x: 1, y: 0 };
+const ARCH_HANDLES_OUT = [{ x: 0, y: 1 }, { x: 0, y: 0 }];
+const ARCH_HANDLES_IN = [{ x: 0, y: 0 }, { x: 0, y: 1 }];
+
+function archEdges(closed: boolean): readonly PathEdge[] {
+  return buildPathEdges([ARCH_START, ARCH_END], [0, 0], closed, ARCH_HANDLES_IN, ARCH_HANDLES_OUT);
+}
+
+function archEdge(): PathEdge {
+  const edge = archEdges(false)[0];
+  if (edge === undefined) {
+    throw new Error("test setup: expected one edge");
+  }
+  return edge;
+}
+
+describe("bezierOfEdge — two control points make an edge a cubic", () => {
+  it("finds no cubic on an edge that carries no control points", () => {
+    expect(bezierOfEdge({ start: LEFT, end: RIGHT, bulge: 0 })).toBeUndefined();
+    expect(bezierOfEdge({ start: LEFT, end: RIGHT, bulge: HALF_CIRCLE_BULGE })).toBeUndefined();
+  });
+
+  it("reads the two ends and the two controls, in order", () => {
+    expect(bezierOfEdge(archEdge())).toEqual({
+      p0: { x: 0, y: 0 },
+      p1: { x: 0, y: 1 },
+      p2: { x: 1, y: 1 },
+      p3: { x: 1, y: 0 },
+    });
+  });
+
+  it("lets control points win over a bulge, so one edge is never both a cubic and an arc", () => {
+    const both = buildPathEdges([ARCH_START, ARCH_END], [HALF_CIRCLE_BULGE, 0], false, ARCH_HANDLES_IN, ARCH_HANDLES_OUT);
+    expect(bezierOfEdge(both[0] as PathEdge)).toBeDefined();
+    expect(arcOfEdge(both[0] as PathEdge)).toBeUndefined();
+  });
+
+  it("reads two zero handles as no cubic at all, which leaves the edge to its bulge", () => {
+    const zeroed = buildPathEdges([LEFT, RIGHT], [HALF_CIRCLE_BULGE], false, [{ x: 0, y: 0 }, { x: 0, y: 0 }], [{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+    expect(bezierOfEdge(zeroed[0] as PathEdge)).toBeUndefined();
+    expect(arcOfEdge(zeroed[0] as PathEdge)).toBeDefined();
+  });
+});
+
+describe("a cubic measured against answers worked out by hand", () => {
+  it("gives the area between the curve and its chord, which no control point sits on", () => {
+    expect(pathArea(archEdges(true))).toBeCloseTo(0.6, 10);
+  });
+
+  it("puts the centroid at the exact fraction the integral gives, not at the mean of four points", () => {
+    const centroid = pathCentroid(archEdges(true));
+    expect(centroid.x).toBeCloseTo(0.5, 10);
+    expect(centroid.y).toBeCloseTo(9 / 28, 10);
+  });
+
+  it("boxes the curve at its true high point of 0.75, not at the height of its handles", () => {
+    expectBoundsCloseTo(pathBounds(archEdges(false)), { minX: 0, minY: 0, maxX: 1, maxY: 0.75 });
+  });
+
+  it("measures a length between the chord and the control polygon, the two bounds any curve sits inside", () => {
+    const length = edgeLength(archEdge());
+    expect(length).toBeGreaterThan(1);
+    expect(length).toBeLessThan(3);
+  });
+});
+
+describe("a cubic whose controls sit on its own chord is a straight edge in every answer", () => {
+  const flat = buildPathEdges([LEFT, RIGHT], [0], false, [{ x: 0, y: 0 }, { x: -2 / 3, y: 0 }], [{ x: 2 / 3, y: 0 }, { x: 0, y: 0 }]);
+  const flatEdge = flat[0] as PathEdge;
+
+  it("is a cubic, and not by accident a straight edge", () => {
+    expect(bezierOfEdge(flatEdge)).toBeDefined();
+  });
+
+  it("measures its chord for a length", () => {
+    expect(edgeLength(flatEdge)).toBeCloseTo(2, 9);
+  });
+
+  it("adds no area over its chord", () => {
+    expect(edgeDoubledAreaOverChord(flatEdge)).toBeCloseTo(0, 9);
+  });
+
+  it("boxes to its two ends", () => {
+    expectBoundsCloseTo(pathBounds(flat), { minX: 0, minY: 0, maxX: 2, maxY: 0 });
+  });
+});
+
+describe("splitEdgeAt on a cubic — De Casteljau, so the shape does not move", () => {
+  const split = splitEdgeAt(archEdge(), { x: 0.5, y: 5 });
+
+  function halvesOfArch(): readonly PathEdge[] {
+    return buildPathEdges(
+      [ARCH_START, split.point, ARCH_END],
+      [0, 0, 0],
+      false,
+      [{ x: 0, y: 0 }, split.newInHandle, split.endInHandle],
+      [split.startOutHandle, split.newOutHandle, { x: 0, y: 0 }],
+    );
+  }
+
+  it("lands on the curve, at the high point nearest the point given", () => {
+    expect(split.fraction).toBeCloseTo(0.5);
+    expect(split.point.x).toBeCloseTo(0.5);
+    expect(split.point.y).toBeCloseTo(0.75);
+  });
+
+  it("makes two cubics, and gives the new vertex a handle on each side", () => {
+    const halves = halvesOfArch();
+    expect(halves).toHaveLength(2);
+    expect(bezierOfEdge(halves[0] as PathEdge)).toBeDefined();
+    expect(bezierOfEdge(halves[1] as PathEdge)).toBeDefined();
+    expect(split.newInHandle).not.toEqual({ x: 0, y: 0 });
+    expect(split.newOutHandle).not.toEqual({ x: 0, y: 0 });
+  });
+
+  it("holds the length, the box and the area of the one curve it replaced", () => {
+    const halves = halvesOfArch();
+    expect(pathLength(halves)).toBeCloseTo(edgeLength(archEdge()), 9);
+    expectBoundsCloseTo(pathBounds(halves), pathBounds(archEdges(false)));
+    const before = edgeDoubledAreaOverChord(archEdge()) + (ARCH_START.x * ARCH_END.y - ARCH_END.x * ARCH_START.y);
+    let after = 0;
+    for (const edge of halves) {
+      after += edgeDoubledAreaOverChord(edge) + (edge.start.x * edge.end.y - edge.end.x * edge.start.y);
+    }
+    expect(after).toBeCloseTo(before, 9);
+  });
+
+  it("leaves both bulges at 0, because a cubic carries its shape in its handles", () => {
+    expect(split.firstBulge).toBe(0);
+    expect(split.secondBulge).toBe(0);
+  });
+});
+
+describe("distanceToEdge on a cubic — measured to the curve, not to its control polygon", () => {
+  it("gives zero at the high point of the curve", () => {
+    expect(distanceToEdge({ x: 0.5, y: 0.75 }, archEdge())).toBeCloseTo(0, 6);
+  });
+
+  it("gives the gap to the high point for a point directly above it", () => {
+    expect(distanceToEdge({ x: 0.5, y: 5 }, archEdge())).toBeCloseTo(5 - 0.75, 6);
+  });
+
+  it("never reaches the control points, which the curve itself does not pass through", () => {
+    expect(distanceToEdge({ x: 0, y: 1 }, archEdge())).toBeGreaterThan(0.1);
   });
 });
 

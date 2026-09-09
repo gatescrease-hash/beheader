@@ -482,7 +482,7 @@ function applyOperation(
       return { objects, brokenSlots: [] };
     }
     const insertedIndex = operation.index + 1;
-    const grown = insertVertexIntoObject(target, insertedIndex, split.point, split.firstBulge, split.secondBulge);
+    const grown = insertVertexIntoObject(target, operation.index, split);
     const shiftAddress = (address: Address): Address => shiftVertexAddressForInsert(address, operation.objectId, insertedIndex);
     return {
       objects: objects.map((object) => rewriteObjectFormulaAddresses(object.id === operation.objectId ? grown : object, shiftAddress)),

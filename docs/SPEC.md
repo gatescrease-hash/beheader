@@ -413,20 +413,27 @@ operator can decompose a preset at any time.
 Path {
   vertices: Point[]
   bulges: number[]     // one for each vertex, for the edge that leaves it
+  handles: Point[][]   // two for each vertex, one pulling each way
   closed: boolean
   style: { strokeColor, strokeWidth, fillColor | null }
 }
 ```
 
-A bulge is the tangent of a quarter of the included angle, the number a DXF
-file carries on a vertex record. Zero makes a straight edge, 1 makes a half
-circle, and the sign gives the direction. So a curve needs no extra vertex,
-and `vertices` holds only the points an operator placed.
+An edge is straight, an arc, or a cubic bezier. Two handles make it a cubic:
+one pulls out of the vertex it leaves, the other pulls into the vertex it
+reaches, and each is an offset from its own vertex. With both handles at 0, a
+bulge makes the edge an arc. A bulge is the tangent of a quarter of the
+included angle, the number a DXF file carries on a vertex record. Zero makes a
+straight edge, 1 makes a half circle, and the sign gives the direction.
 
-Every measurement of a curved path is exact. Area comes from the shoelace over
-the chords plus one circular segment for each arc. Length is radius times
-angle. The box takes the quarter points of the circle the arc reaches. The
-renderer draws a true arc. Nothing anywhere cuts a curve into sample points.
+So a curve needs no extra vertex, and `vertices` holds only the points an
+operator placed. Nothing anywhere cuts a curve into sample points.
+
+An arc answers every measurement in closed form. A bezier answers its area,
+its centroid and its box in closed form as well. Two answers about a bezier
+have no closed form for anybody: its length, and the distance from a point to
+it. Each of those refines one number until the number holds still. Neither
+makes a vertex. The renderer draws a true arc and a true cubic.
 
 ### How vertices become slots
 

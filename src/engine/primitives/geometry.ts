@@ -24,14 +24,29 @@ import {
   splitEdgeAt,
   type EdgeSplit,
   type PathEdge,
-} from "./arc.ts";
+} from "./edge.ts";
 import { getSlot, isErrorValue, slotKey, type ErrorValue, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "../graph/node.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
 export const VERTEX_PATH_PREFIX = "vertex";
 
-/** The three slots of one vertex: two coordinates, and the bulge of the edge after it. */
-export const VERTEX_PARTS: readonly ("x" | "y" | "bulge")[] = ["x", "y", "bulge"];
+/**
+ * The seven slots of one vertex. Two coordinates, the bulge of the edge after
+ * it, and one handle for each direction. delvertex and split must move all
+ * seven together.
+ */
+export const VERTEX_PART_SUFFIXES: readonly (readonly string[])[] = [
+  ["x"],
+  ["y"],
+  ["bulge"],
+  ["handle", "in", "x"],
+  ["handle", "in", "y"],
+  ["handle", "out", "x"],
+  ["handle", "out", "y"],
+];
+
+/** The bulge and handle slots. A change to one of these bends an edge and moves no point. */
+const CURVE_PART_SUFFIXES: readonly (readonly string[])[] = VERTEX_PART_SUFFIXES.slice(2);
 
 export const ORIGIN_X_PATH: readonly string[] = ["origin", "x"];
 export const ORIGIN_Y_PATH: readonly string[] = ["origin", "y"];
@@ -74,6 +89,20 @@ export function vertexYPath(index: number): readonly string[] {
  */
 export function vertexBulgePath(index: number): readonly string[] {
   return [VERTEX_PATH_PREFIX, String(index), "bulge"];
+}
+
+/**
+ * The handle that pulls the edge which arrives at this vertex, as an offset
+ * from it. The handle of the vertex before it pulls the same edge, from the
+ * other end.
+ */
+export function vertexHandleInPaths(index: number): { readonly x: readonly string[]; readonly y: readonly string[] } {
+  return { x: vertexPartPath(index, ["handle", "in", "x"]), y: vertexPartPath(index, ["handle", "in", "y"]) };
+}
+
+/** The handle that pulls the edge which leaves this vertex, as an offset from it. */
+export function vertexHandleOutPaths(index: number): { readonly x: readonly string[]; readonly y: readonly string[] } {
+  return { x: vertexPartPath(index, ["handle", "out", "x"]), y: vertexPartPath(index, ["handle", "out", "y"]) };
 }
 
 export function computePolygonVertices(sides: number, radius: number, origin: Point, rotation: number): readonly Point[] {
@@ -290,21 +319,26 @@ export function enumeratePolylineVertexSlotPaths(object: GraphObject): readonly 
   const count = object.vertexCount ?? 0;
   const paths: (readonly string[])[] = [];
   for (let index = 0; index < count; index += 1) {
-    paths.push(vertexXPath(index));
-    paths.push(vertexYPath(index));
-    paths.push(vertexBulgePath(index));
+    for (const suffix of VERTEX_PART_SUFFIXES) {
+      paths.push(vertexPartPath(index, suffix));
+    }
   }
   return paths;
 }
 
-/** The bulge slots this object carries now. A path built before bulges existed carries none. */
-function existingBulgePaths(object: GraphObject): readonly (readonly string[])[] {
+/**
+ * The bulge and handle slots this object carries now. A path built before one
+ * of them existed carries none, and reads as 0 there.
+ */
+function existingCurvePaths(object: GraphObject): readonly (readonly string[])[] {
   const count = object.vertexCount ?? 0;
   const paths: (readonly string[])[] = [];
   for (let index = 0; index < count; index += 1) {
-    const path = vertexBulgePath(index);
-    if (getSlot(object, path) !== undefined) {
-      paths.push(path);
+    for (const suffix of CURVE_PART_SUFFIXES) {
+      const path = vertexPartPath(index, suffix);
+      if (getSlot(object, path) !== undefined) {
+        paths.push(path);
+      }
     }
   }
   return paths;
@@ -375,7 +409,7 @@ export const pathDependencies: DerivedSlotDependencies = {
     if (hasClosedSlot(object)) {
       addresses.push({ objectId: object.id, path: CLOSED_PATH });
     }
-    for (const path of existingBulgePaths(object)) {
+    for (const path of existingCurvePaths(object)) {
       addresses.push({ objectId: object.id, path });
     }
     return addresses;
@@ -422,37 +456,68 @@ export function readClosedFlag(
  * edge, so a path built before bulges existed still measures. This test for an
  * absent slot must match the one existingBulgePaths uses.
  */
-type BulgeReading =
-  | { readonly ok: true; readonly bulges: readonly number[] }
+interface CurveParts {
+  readonly bulges: readonly number[];
+  readonly handlesIn: readonly Point[];
+  readonly handlesOut: readonly Point[];
+}
+
+type CurveReading =
+  | { readonly ok: true; readonly parts: CurveParts }
   | { readonly ok: false; readonly error: ErrorValue };
 
-function readBulges(
+/**
+ * The bulge and the two handles of every vertex, in order. An absent slot
+ * reads as 0, which leaves the edge straight. So a path built before one of
+ * these slots existed still measures. This test for an absent slot must match
+ * the one existingCurvePaths uses.
+ */
+function readCurveParts(
   object: GraphObject,
   read: (address: Address) => Value | undefined,
   count: number,
   label: string,
-): BulgeReading {
+): CurveReading {
   const bulges: number[] = [];
+  const handlesIn: Point[] = [];
+  const handlesOut: Point[] = [];
   for (let index = 0; index < count; index += 1) {
-    const path = vertexBulgePath(index);
-    if (getSlot(object, path) === undefined) {
-      bulges.push(0);
-      continue;
+    const readAt = (path: readonly string[], what: string): number | ErrorValue => {
+      if (getSlot(object, path) === undefined) {
+        return 0;
+      }
+      const value = read({ objectId: object.id, path });
+      if (value === undefined || value === null) {
+        return 0;
+      }
+      if (isErrorValue(value)) {
+        return value;
+      }
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return { error: "#TYPE", message: `${label}: ${what} of vertex ${index} must be a number` };
+      }
+      return value;
+    };
+    const handleIn = vertexHandleInPaths(index);
+    const handleOut = vertexHandleOutPaths(index);
+    const numbers = [
+      readAt(vertexBulgePath(index), "the bulge"),
+      readAt(handleIn.x, "the incoming handle"),
+      readAt(handleIn.y, "the incoming handle"),
+      readAt(handleOut.x, "the outgoing handle"),
+      readAt(handleOut.y, "the outgoing handle"),
+    ];
+    for (const number of numbers) {
+      if (isErrorValue(number)) {
+        return { ok: false, error: number };
+      }
     }
-    const value = read({ objectId: object.id, path });
-    if (value === undefined || value === null) {
-      bulges.push(0);
-      continue;
-    }
-    if (isErrorValue(value)) {
-      return { ok: false, error: value };
-    }
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      return { ok: false, error: { error: "#TYPE", message: `${label}: the bulge of vertex ${index} must be a number` } };
-    }
-    bulges.push(value);
+    const [bulge, inX, inY, outX, outY] = numbers as readonly number[];
+    bulges.push(bulge ?? 0);
+    handlesIn.push({ x: inX ?? 0, y: inY ?? 0 });
+    handlesOut.push({ x: outX ?? 0, y: outY ?? 0 });
   }
-  return { ok: true, bulges };
+  return { ok: true, parts: { bulges, handlesIn, handlesOut } };
 }
 
 function derivePathNumber(label: string, measure: PathMeasure): DerivedSlotCompute {
@@ -465,11 +530,12 @@ function derivePathNumber(label: string, measure: PathMeasure): DerivedSlotCompu
     if (isErrorValue(vertices)) {
       return vertices;
     }
-    const bulges = readBulges(object, read, vertices.length, label);
-    if (!bulges.ok) {
-      return bulges.error;
+    const parts = readCurveParts(object, read, vertices.length, label);
+    if (!parts.ok) {
+      return parts.error;
     }
-    const measured = measure({ vertices, edges: buildPathEdges(vertices, bulges.bulges, closed), closed });
+    const edges = buildPathEdges(vertices, parts.parts.bulges, closed, parts.parts.handlesIn, parts.parts.handlesOut);
+    const measured = measure({ vertices, edges, closed });
     return isErrorValue(measured) ? measured : finiteOrTypeError(measured, label);
   };
 }
@@ -543,12 +609,21 @@ export function pathEdgesOfObject(object: GraphObject): readonly PathEdge[] {
     return [];
   }
   const vertices = value as readonly Point[];
+  const number = (path: readonly string[]): number => {
+    const held = getSlot(object, path)?.value;
+    return typeof held === "number" && Number.isFinite(held) ? held : 0;
+  };
   const bulges: number[] = [];
+  const handlesIn: Point[] = [];
+  const handlesOut: Point[] = [];
   for (let index = 0; index < vertices.length; index += 1) {
-    const bulge = getSlot(object, vertexBulgePath(index))?.value;
-    bulges.push(typeof bulge === "number" && Number.isFinite(bulge) ? bulge : 0);
+    const handleIn = vertexHandleInPaths(index);
+    const handleOut = vertexHandleOutPaths(index);
+    bulges.push(number(vertexBulgePath(index)));
+    handlesIn.push({ x: number(handleIn.x), y: number(handleIn.y) });
+    handlesOut.push({ x: number(handleOut.x), y: number(handleOut.y) });
   }
-  return buildPathEdges(vertices, bulges, getSlot(object, CLOSED_PATH)?.value === true);
+  return buildPathEdges(vertices, bulges, getSlot(object, CLOSED_PATH)?.value === true, handlesIn, handlesOut);
 }
 
 /**
@@ -564,10 +639,23 @@ export function addVertexToObject(object: GraphObject, point: Point): GraphObjec
     vertexCount: count + 1,
     slots: {
       ...object.slots,
-      [slotKey(vertexXPath(count))]: { kind: "literal", value: point.x },
-      [slotKey(vertexYPath(count))]: { kind: "literal", value: point.y },
-      [slotKey(vertexBulgePath(count))]: { kind: "literal", value: 0 },
+      ...straightVertexSlots(count, point),
     },
+  };
+}
+
+/** One vertex with a straight edge after it and no handles. Every part written, none left absent. */
+function straightVertexSlots(index: number, point: Point): Record<string, Slot> {
+  const handleIn = vertexHandleInPaths(index);
+  const handleOut = vertexHandleOutPaths(index);
+  return {
+    [slotKey(vertexXPath(index))]: { kind: "literal", value: point.x },
+    [slotKey(vertexYPath(index))]: { kind: "literal", value: point.y },
+    [slotKey(vertexBulgePath(index))]: { kind: "literal", value: 0 },
+    [slotKey(handleIn.x)]: { kind: "literal", value: 0 },
+    [slotKey(handleIn.y)]: { kind: "literal", value: 0 },
+    [slotKey(handleOut.x)]: { kind: "literal", value: 0 },
+    [slotKey(handleOut.y)]: { kind: "literal", value: 0 },
   };
 }
 
@@ -598,13 +686,8 @@ export function splitPolylineEdge(object: GraphObject, index: number, near: Poin
  * The vertex before the new one takes bulgeBefore, and the new one takes
  * bulgeAfter. An insert drops no vertex, so a reference only ever needs a shift.
  */
-export function insertVertexIntoObject(
-  object: GraphObject,
-  insertIndex: number,
-  point: Point,
-  bulgeBefore: number,
-  bulgeAfter: number,
-): GraphObject {
+export function insertVertexIntoObject(object: GraphObject, edgeIndex: number, split: EdgeSplit): GraphObject {
+  const insertIndex = edgeIndex + 1;
   const count = object.vertexCount ?? 0;
   const newSlots: Record<string, Slot> = { ...object.slots };
   for (let i = 0; i < count; i += 1) {
@@ -614,17 +697,30 @@ export function insertVertexIntoObject(
   }
   for (let i = 0; i < count; i += 1) {
     const newIndex = i < insertIndex ? i : i + 1;
-    for (const axis of VERTEX_PARTS) {
-      const slot = getSlot(object, vertexPartPath(i, axis));
+    for (const suffix of VERTEX_PART_SUFFIXES) {
+      const slot = getSlot(object, vertexPartPath(i, suffix));
       if (slot !== undefined) {
-        newSlots[slotKey(vertexPartPath(newIndex, axis))] = slot;
+        newSlots[slotKey(vertexPartPath(newIndex, suffix))] = slot;
       }
     }
   }
-  newSlots[slotKey(vertexBulgePath(insertIndex - 1))] = { kind: "literal", value: bulgeBefore };
-  newSlots[slotKey(vertexXPath(insertIndex))] = { kind: "literal", value: point.x };
-  newSlots[slotKey(vertexYPath(insertIndex))] = { kind: "literal", value: point.y };
-  newSlots[slotKey(vertexBulgePath(insertIndex))] = { kind: "literal", value: bulgeAfter };
+  const endIndex = (edgeIndex + 1) % count;
+  const shiftedEnd = endIndex >= insertIndex ? endIndex + 1 : endIndex;
+  const literal = (path: readonly string[], value: number): void => {
+    newSlots[slotKey(path)] = { kind: "literal", value };
+  };
+  literal(vertexBulgePath(edgeIndex), split.firstBulge);
+  literal(vertexHandleOutPaths(edgeIndex).x, split.startOutHandle.x);
+  literal(vertexHandleOutPaths(edgeIndex).y, split.startOutHandle.y);
+  literal(vertexXPath(insertIndex), split.point.x);
+  literal(vertexYPath(insertIndex), split.point.y);
+  literal(vertexBulgePath(insertIndex), split.secondBulge);
+  literal(vertexHandleInPaths(insertIndex).x, split.newInHandle.x);
+  literal(vertexHandleInPaths(insertIndex).y, split.newInHandle.y);
+  literal(vertexHandleOutPaths(insertIndex).x, split.newOutHandle.x);
+  literal(vertexHandleOutPaths(insertIndex).y, split.newOutHandle.y);
+  literal(vertexHandleInPaths(shiftedEnd).x, split.endInHandle.x);
+  literal(vertexHandleInPaths(shiftedEnd).y, split.endInHandle.y);
   return { ...object, vertexCount: count + 1, slots: newSlots };
 }
 
@@ -638,7 +734,7 @@ export function shiftVertexAddressForInsert(address: Address, objectId: string, 
   if (found === undefined || found.index < insertedIndex) {
     return address;
   }
-  return vertexAddressAt(objectId, found.index + 1, found.axis);
+  return vertexAddressAt(objectId, found.index + 1, found.suffix);
 }
 
 /** Removes one vertex and renumbers every later one down by one, in storage. */
@@ -655,21 +751,19 @@ export function deleteVertexFromObject(object: GraphObject, index: number): Grap
       continue;
     }
     const newIndex = i < index ? i : i - 1;
-    for (const axis of VERTEX_PARTS) {
-      const slot = getSlot(object, vertexPartPath(i, axis));
+    for (const suffix of VERTEX_PART_SUFFIXES) {
+      const slot = getSlot(object, vertexPartPath(i, suffix));
       if (slot !== undefined) {
-        newSlots[slotKey(vertexPartPath(newIndex, axis))] = slot;
+        newSlots[slotKey(vertexPartPath(newIndex, suffix))] = slot;
       }
     }
   }
   return { ...object, vertexCount: Math.max(0, count - 1), slots: newSlots };
 }
 
-type VertexPart = "x" | "y" | "bulge";
-
 interface VertexAddress {
   readonly index: number;
-  readonly axis: VertexPart;
+  readonly suffix: readonly string[];
 }
 
 function asVertexAddress(address: Address, objectId: string): VertexAddress | undefined {
@@ -677,11 +771,14 @@ function asVertexAddress(address: Address, objectId: string): VertexAddress | un
     return undefined;
   }
   const path = address.path;
-  if (path.length !== 3 || path[0] !== VERTEX_PATH_PREFIX) {
+  if (path.length < 3 || path[0] !== VERTEX_PATH_PREFIX) {
     return undefined;
   }
-  const axis = path[2];
-  if (axis !== "x" && axis !== "y" && axis !== "bulge") {
+  const rest = path.slice(2);
+  const suffix = VERTEX_PART_SUFFIXES.find(
+    (candidate) => candidate.length === rest.length && candidate.every((segment, at) => segment === rest[at]),
+  );
+  if (suffix === undefined) {
     return undefined;
   }
   const indexText = path[1];
@@ -689,24 +786,21 @@ function asVertexAddress(address: Address, objectId: string): VertexAddress | un
     return undefined;
   }
   const index = Number(indexText);
-  return Number.isInteger(index) && index >= 0 ? { index, axis } : undefined;
+  return Number.isInteger(index) && index >= 0 ? { index, suffix } : undefined;
 }
 
-function vertexAddressAt(objectId: string, index: number, axis: VertexPart): Address {
-  return { objectId, path: vertexPartPath(index, axis) };
+function vertexAddressAt(objectId: string, index: number, suffix: readonly string[]): Address {
+  return { objectId, path: vertexPartPath(index, suffix) };
 }
 
-/** The slot path of one part of one vertex: its x, its y, or the bulge of the edge after it. */
-export function vertexPartPath(index: number, axis: VertexPart): readonly string[] {
-  if (axis === "x") {
-    return vertexXPath(index);
-  }
-  return axis === "y" ? vertexYPath(index) : vertexBulgePath(index);
+/** The slot path of one part of one vertex, such as its y or one of its handles. */
+export function vertexPartPath(index: number, suffix: readonly string[]): readonly string[] {
+  return [VERTEX_PATH_PREFIX, String(index), ...suffix];
 }
 
 /** Every slot path of one vertex. delvertex must move or break all three together. */
 export function vertexPartPaths(index: number): readonly (readonly string[])[] {
-  return [vertexXPath(index), vertexYPath(index), vertexBulgePath(index)];
+  return VERTEX_PART_SUFFIXES.map((suffix) => vertexPartPath(index, suffix));
 }
 
 /**
@@ -721,7 +815,7 @@ export function shiftVertexAddressForDelete(address: Address, objectId: string, 
   if (found === undefined || found.index <= deletedIndex) {
     return address;
   }
-  return vertexAddressAt(objectId, found.index - 1, found.axis);
+  return vertexAddressAt(objectId, found.index - 1, found.suffix);
 }
 
 /**
@@ -738,7 +832,7 @@ export function repairVertexAddressForDelete(address: Address, objectId: string,
     return "deleted";
   }
   if (found.index > deletedIndex) {
-    return vertexAddressAt(objectId, found.index - 1, found.axis);
+    return vertexAddressAt(objectId, found.index - 1, found.suffix);
   }
   return address;
 }
@@ -860,8 +954,7 @@ function explodeCircleToPolyline(object: GraphObject, label: string): ExplodeRes
 function buildExplodedPolyline(object: GraphObject, vertices: readonly Point[], bulges: readonly number[]): GraphObject {
   const slots: Record<string, Slot> = {};
   vertices.forEach((vertex, index) => {
-    slots[slotKey(vertexXPath(index))] = { kind: "literal", value: vertex.x };
-    slots[slotKey(vertexYPath(index))] = { kind: "literal", value: vertex.y };
+    Object.assign(slots, straightVertexSlots(index, vertex));
     slots[slotKey(vertexBulgePath(index))] = { kind: "literal", value: bulges[index] ?? 0 };
   });
   slots[slotKey(CLOSED_PATH)] = { kind: "literal", value: true };

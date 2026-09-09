@@ -41,6 +41,8 @@ import {
   RECT_WIDTH_PATH,
   splitPolylineEdge,
   vertexBulgePath,
+  vertexHandleInPaths,
+  vertexHandleOutPaths,
   vertexXPath,
   vertexYPath,
 } from "../engine/primitives/geometry.ts";
@@ -325,6 +327,12 @@ function createPolyline(command: CreatePolylineCommand, document: Document, cont
     literals.push({ path: vertexXPath(index), value: point.x });
     literals.push({ path: vertexYPath(index), value: point.y });
     literals.push({ path: vertexBulgePath(index), value: 0 });
+    const handleIn = vertexHandleInPaths(index);
+    const handleOut = vertexHandleOutPaths(index);
+    literals.push({ path: handleIn.x, value: 0 });
+    literals.push({ path: handleIn.y, value: 0 });
+    literals.push({ path: handleOut.x, value: 0 });
+    literals.push({ path: handleOut.y, value: 0 });
   });
   return createObjectFromCommand(document, "polyline", literals, context, command.points.length);
 }

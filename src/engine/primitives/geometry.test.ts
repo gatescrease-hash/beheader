@@ -504,18 +504,23 @@ describe("every preset winds counterclockwise (positive doubled signed area)", (
 });
 
 describe("enumeratePolylineVertexSlotPaths — the count comes from vertexCount, a field and not a slot", () => {
-  it("lists x, y then bulge for each index, in order", () => {
-    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 3 };
+  it("lists all seven parts of each vertex, in order", () => {
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 2 };
     expect(enumeratePolylineVertexSlotPaths(object)).toEqual([
       ["vertex", "0", "x"],
       ["vertex", "0", "y"],
       ["vertex", "0", "bulge"],
+      ["vertex", "0", "handle", "in", "x"],
+      ["vertex", "0", "handle", "in", "y"],
+      ["vertex", "0", "handle", "out", "x"],
+      ["vertex", "0", "handle", "out", "y"],
       ["vertex", "1", "x"],
       ["vertex", "1", "y"],
       ["vertex", "1", "bulge"],
-      ["vertex", "2", "x"],
-      ["vertex", "2", "y"],
-      ["vertex", "2", "bulge"],
+      ["vertex", "1", "handle", "in", "x"],
+      ["vertex", "1", "handle", "in", "y"],
+      ["vertex", "1", "handle", "out", "x"],
+      ["vertex", "1", "handle", "out", "y"],
     ]);
   });
 

@@ -24,6 +24,7 @@ type RecordedCall =
   | { readonly op: "closePath" }
   | { readonly op: "stroke" }
   | { readonly op: "arc"; readonly x: number; readonly y: number; readonly radius: number; readonly startAngle: number; readonly endAngle: number }
+  | { readonly op: "bezierCurveTo"; readonly c1x: number; readonly c1y: number; readonly c2x: number; readonly c2y: number; readonly x: number; readonly y: number }
   | { readonly op: "strokeRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillText"; readonly text: string; readonly x: number; readonly y: number; readonly align: string }
@@ -69,6 +70,9 @@ function createFakeContext(): { readonly ctx: CanvasRenderingContext2D; readonly
     },
     arc(x: number, y: number, radius: number, startAngle: number, endAngle: number) {
       calls.push({ op: "arc", x, y, radius, startAngle, endAngle });
+    },
+    bezierCurveTo(c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number) {
+      calls.push({ op: "bezierCurveTo", c1x, c1y, c2x, c2y, x, y });
     },
     strokeRect(x: number, y: number, w: number, h: number) {
       calls.push({ op: "strokeRect", x, y, w, h });
@@ -405,6 +409,35 @@ describe("renderDocument — a polyline draws an open path, unlike the closed ve
       { op: "lineTo", x: 100, y: 100 },
       { op: "lineTo", x: 0, y: 0 },
       { op: "closePath" },
+      { op: "stroke" },
+    ]);
+  });
+
+  it("draws a handled edge as one cubic, and never as a run of short lines", () => {
+    const { ctx, calls } = createFakeContext();
+    const polyline: GraphObject = {
+      id: "obj_1",
+      name: "polyline_1",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        "vertex.0.handle.out.y": { kind: "literal", value: 1 },
+        "vertex.1.handle.in.y": { kind: "literal", value: 1 },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+          ],
+        },
+      },
+    };
+    renderDocument(ctx, 800, 600, [polyline], CAMERA_IDENTITY);
+    const shapeCalls = calls.filter((call) => call.op !== "setTransform" && call.op !== "clearRect" && call.op !== "fillText");
+    expect(shapeCalls).toEqual([
+      { op: "beginPath" },
+      { op: "moveTo", x: 0, y: 0 },
+      { op: "bezierCurveTo", c1x: 0, c1y: 1, c2x: 1, c2y: 1, x: 1, y: 0 },
       { op: "stroke" },
     ]);
   });

@@ -20,7 +20,7 @@
  */
 import { getSlot, isErrorValue, TABLE_TYPE, type GraphObject, type Point, type Value } from "../engine/graph/node.ts";
 import type { EditorTarget } from "./editor.ts";
-import { arcOfEdge } from "../engine/primitives/arc.ts";
+import { arcOfEdge, bezierOfEdge } from "../engine/primitives/edge.ts";
 import { CLOSED_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
@@ -377,6 +377,11 @@ function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): 
   ctx.beginPath();
   ctx.moveTo(first.start.x, first.start.y);
   for (const edge of edges) {
+    const curve = bezierOfEdge(edge);
+    if (curve !== undefined) {
+      ctx.bezierCurveTo(curve.p1.x, curve.p1.y, curve.p2.x, curve.p2.y, curve.p3.x, curve.p3.y);
+      continue;
+    }
     const arc = arcOfEdge(edge);
     if (arc === undefined) {
       ctx.lineTo(edge.end.x, edge.end.y);

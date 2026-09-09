@@ -11,7 +11,7 @@
  * it becomes an invisible click target.
  */
 import { getSlot, type GraphObject } from "../engine/graph/node.ts";
-import { pathBounds } from "../engine/primitives/arc.ts";
+import { pathBounds } from "../engine/primitives/edge.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";

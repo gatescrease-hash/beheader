@@ -225,6 +225,30 @@ describe("hitTest — a polyline is an open path, unlike the closed vertex shape
     expect(hitTest({ x: 100, y: 0 }, [bowed], CAMERA_IDENTITY)).toBeUndefined();
   });
 
+  it("hits a cubic on the curve itself, and misses the control point the curve never reaches", () => {
+    const arch: GraphObject = {
+      id: "obj_2",
+      name: "polyline_2",
+      type: "polyline",
+      vertexCount: 2,
+      slots: {
+        "vertex.0.handle.out.y": { kind: "literal", value: 100 },
+        "vertex.1.handle.in.y": { kind: "literal", value: 100 },
+        vertices: {
+          kind: "derived",
+          value: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+          ],
+        },
+      },
+    };
+    // The curve tops out at three quarters of the handle height, at 75.
+    expect(hitTest({ x: 50, y: 75 }, [arch], CAMERA_IDENTITY)).toBe(arch);
+    expect(hitTest({ x: 0, y: 100 }, [arch], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 50, y: 0 }, [arch], CAMERA_IDENTITY)).toBeUndefined();
+  });
+
   it("swaps those two answers when the same two vertices carry no bulge", () => {
     const straight: GraphObject = {
       id: "obj_2",

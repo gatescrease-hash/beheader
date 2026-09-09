@@ -1644,6 +1644,65 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
   });
 });
 
+describe("bezier handles — a cubic an operator drives from the command line", () => {
+  /** A cubic arch over the chord from (0,0) to (1,0), closed by a straight edge back. */
+  function archPath(): Document {
+    let document = committed("polyline 0,0 1,0 closed", createEmptyDocument());
+    document = committed("set polyline_1.vertex.0.handle.out.y 1", document);
+    return committed("set polyline_1.vertex.1.handle.in.y 1", document);
+  }
+
+  it("gives every fresh vertex a bulge and two handles, all at 0", () => {
+    const object = onlyObject(committed("polyline 0,0 1,0", createEmptyDocument()));
+    expect(getSlot(object, ["vertex", "0", "handle", "out", "x"])).toEqual({ kind: "literal", value: 0 });
+    expect(getSlot(object, ["vertex", "0", "handle", "out", "y"])).toEqual({ kind: "literal", value: 0 });
+    expect(getSlot(object, ["vertex", "1", "handle", "in", "y"])).toEqual({ kind: "literal", value: 0 });
+  });
+
+  it("bends the edge into a cubic, with the area and the high point the integral gives", () => {
+    const object = onlyObject(archPath());
+    expect(getSlot(object, ["area"])?.value).toBeCloseTo(0.6, 9);
+    expect(getSlot(object, ["bounds", "maxY"])?.value).toBeCloseTo(0.75, 9);
+    expect(getSlot(object, ["centroid", "y"])?.value).toBeCloseTo(9 / 28, 9);
+  });
+
+  it("keeps the edge curved while one handle alone still pulls it", () => {
+    const halfPulled = onlyObject(committed("set polyline_1.vertex.0.handle.out.y 0", archPath()));
+    expect(getSlot(halfPulled, ["area"])?.value).toBeCloseTo(0.3, 9);
+  });
+
+  it("straightens the edge again once both handles go back to 0", () => {
+    let document = committed("set polyline_1.vertex.0.handle.out.y 0", archPath());
+    document = committed("set polyline_1.vertex.1.handle.in.y 0", document);
+    const flattened = onlyObject(document);
+    expect(getSlot(flattened, ["area"])?.value).toBe(0);
+    expect(getSlot(flattened, ["bounds", "maxY"])?.value).toBe(0);
+  });
+
+  it("keeps vertices to the two points an operator placed, however far the handles pull", () => {
+    expect(getSlot(onlyObject(archPath()), ["vertices"])?.value).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]);
+  });
+
+  it("splits the cubic without moving the shape, the same promise an arc split makes", () => {
+    const after = onlyObject(committed("split polyline_1 0 0.5,5", archPath()));
+    expect(after.vertexCount).toBe(3);
+    expect(getSlot(after, ["vertex", "1", "y"])?.value).toBeCloseTo(0.75, 9);
+    expect(getSlot(after, ["area"])?.value).toBeCloseTo(0.6, 9);
+    expect(getSlot(after, ["bounds", "maxY"])?.value).toBeCloseTo(0.75, 9);
+  });
+
+  it("refuses a handle that is not a number, naming the vertex and which handle it is", () => {
+    const wrong = onlyObject(committed('set polyline_1.vertex.0.handle.out.y "bendy"', archPath()));
+    expect(getSlot(wrong, ["area"])?.value).toEqual({
+      error: "#TYPE",
+      message: "polyline.area: the outgoing handle of vertex 0 must be a number",
+    });
+  });
+});
+
 describe("split — the only way a vertex arrives on a curve", () => {
   /** Two vertices and two half circles: a true circle of radius 1 about (1,0). */
   function circlePath(): Document {
