@@ -34,6 +34,7 @@ import {
   movePanel,
   performEffect,
   pointerDownAt,
+  promptPreview,
   pointerMoveTo,
   panByScreen,
   pointerUpNow,
@@ -1792,5 +1793,62 @@ describe("a polyline drawn by clicking, which is the AutoCAD gesture", () => {
     state = clickAt(state, 20, 10);
     state = submitLine(state, "", VIEWPORT).state;
     expect(getSlot(pathOf(state), ["vertex", "1", "bulge"])?.value).toBeCloseTo(Math.tan(Math.PI / 8));
+  });
+});
+describe("the preview the canvas draws while a polyline is half finished", () => {
+  function started(): AppState {
+    return submitLine(opened(), "polyline", VIEWPORT).state;
+  }
+
+  function atWorld(state: AppState, x: number, y: number): AppState {
+    return pointerMoveTo(state, worldToScreen(state.document.camera, { x, y }));
+  }
+
+  it("draws nothing before a command is half finished", () => {
+    expect(promptPreview(opened())).toBeUndefined();
+  });
+
+  it("draws nothing on the first prompt, because no point is down and none is under the pointer", () => {
+    expect(promptPreview(started())).toBeUndefined();
+  });
+
+  it("draws a rubber band from the last point to the pointer", () => {
+    let state = pointerDownAt(started(), worldToScreen(opened().document.camera, { x: 0, y: 0 }), VIEWPORT).state;
+    state = atWorld(state, 40, 30);
+    expect(promptPreview(state)?.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 40, y: 30 },
+    ]);
+  });
+
+  it("follows the pointer, so the band redraws where the operator moves it", () => {
+    let state = pointerDownAt(started(), worldToScreen(opened().document.camera, { x: 0, y: 0 }), VIEWPORT).state;
+    state = atWorld(state, 40, 30);
+    state = atWorld(state, 10, 90);
+    expect(promptPreview(state)?.points[1]).toEqual({ x: 10, y: 90 });
+  });
+
+  it("bends the band in arc mode, so the operator sees the curve before the click", () => {
+    let state = started();
+    state = pointerDownAt(state, worldToScreen(state.document.camera, { x: 0, y: 0 }), VIEWPORT).state;
+    state = pointerDownAt(state, worldToScreen(state.document.camera, { x: 10, y: 0 }), VIEWPORT).state;
+    state = submitLine(state, "arc", VIEWPORT).state;
+    state = atWorld(state, 20, 10);
+    expect(promptPreview(state)?.bulges[1]).toBeCloseTo(Math.tan(Math.PI / 8));
+  });
+
+  it("stops drawing once the command finishes", () => {
+    let state = started();
+    state = pointerDownAt(state, worldToScreen(state.document.camera, { x: 0, y: 0 }), VIEWPORT).state;
+    state = pointerDownAt(state, worldToScreen(state.document.camera, { x: 10, y: 0 }), VIEWPORT).state;
+    state = atWorld(state, 20, 20);
+    state = submitLine(state, "", VIEWPORT).state;
+    expect(promptPreview(state)).toBeUndefined();
+  });
+
+  it("stops drawing on Escape, along with the rest of the half finished command", () => {
+    let state = pointerDownAt(started(), worldToScreen(opened().document.camera, { x: 0, y: 0 }), VIEWPORT).state;
+    state = atWorld(state, 40, 30);
+    expect(promptPreview(escape(state))).toBeUndefined();
   });
 });

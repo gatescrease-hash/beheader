@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2234 pass, 0 skip, across 40 test files. |
+| Tests | 2250 pass, 0 skip, across 40 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2234 tests
+npm test             # 2250 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -149,7 +149,7 @@ other suites drive them anyway.
 | `handles.ts` | The resize grabbers on a selected object, and the box math they drive. A resize is absolute, from the extent the drag started with, not a sum of small steps. |
 | `markdown.ts` | The markdown lite parser. Bold, italic, code, headings, list items and paragraph breaks, and nothing else. Its rule for which asterisk opens and which closes is load bearing. A simpler version reintroduces a bug that thirty tests did not catch. |
 | `measure.ts` | The real Canvas2D `TextMeasurer`, and `layOutText`, the line breaker. There are two measurers and they are not the same. The engine one honours markup. The overlay one does not. |
-| `renderer.ts` | The immediate mode painter. It makes three passes. It clears the screen. It draws every object under the camera transform. Then it draws furniture such as labels and badges at a constant size in screen space. It reads `layOutText` from `measure.ts`. Those two files must change together, because one layout with two readers is what keeps the drawn text and the measured height in agreement. |
+| `renderer.ts` | The immediate mode painter. `PathPreview` is the one thing it draws that no object owns: the points, bulges and closed flag of a command the operator has not finished. It draws over the objects and under the screen space furniture, dashed, with a square on each point. It is plain geometry, so this file never asks which command made it. `buildEdgePath` walks an edge list for both a preview and a real path. It makes three passes. It clears the screen. It draws every object under the camera transform. Then it draws furniture such as labels and badges at a constant size in screen space. It reads `layOutText` from `measure.ts`. Those two files must change together, because one layout with two readers is what keeps the drawn text and the measured height in agreement. |
 | `images.ts` | The bitmap decode cache. A data URL decodes once and the result stays for later paints. |
 | `editor.ts` | Where an in place editor goes and what it looks like. It answers the placement question for a text box and for a table cell. `main.ts` mounts the real element. |
 | `interaction.ts` | Mouse state to mutation calls. A drag writes each component on its own. A literal component moves. A component a formula drives stays put and shows a notice. So an object with a bound x slides up and down only, and axis constraint falls out for free. A path has no origin, so it drags by every vertex instead. A shift press over an edge grabs that segment and moves only its two vertices. `pointerDown` picks the vertex list once and `DragState` holds it, so the set never changes under the pointer. |
@@ -283,7 +283,10 @@ group blocks the acceptance test in `SPEC.md` section 12.
    `polyline` starts the AutoCAD prompt sequence, and a click on the canvas
    answers each point. `arc`, `line`, `close` and `undo` are the words it takes.
    An arc leaves the point before it along the direction the path already
-   travels, so one click gives an edge its bulge and the two meet smoothly.
+   travels, so one click gives an edge its bulge and the two meet smoothly. The
+   canvas draws the path as it grows, with a rubber band from the last point to
+   the pointer. `AppState.pointer` holds where the pointer is, and
+   `promptPreview` in `main.ts` asks the command layer what shape to draw.
 2. **Per vertex slots exist, and a mutation can grow or shrink the set.**
    `vertex.0.x` and `vertex.0.y`, as `SPEC.md` section 8 specifies.
    `enumeratePolylineVertexSlotPaths` in `geometry.ts` builds the paths from

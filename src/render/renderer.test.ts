@@ -31,6 +31,7 @@ type RecordedCall =
   | { readonly op: "arc"; readonly x: number; readonly y: number; readonly radius: number; readonly startAngle: number; readonly endAngle: number }
   | { readonly op: "bezierCurveTo"; readonly c1x: number; readonly c1y: number; readonly c2x: number; readonly c2y: number; readonly x: number; readonly y: number }
   | { readonly op: "strokeRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+  | { readonly op: "setLineDash"; readonly pattern: readonly number[] }
   | { readonly op: "fillRect"; readonly x: number; readonly y: number; readonly w: number; readonly h: number }
   | { readonly op: "fillText"; readonly text: string; readonly x: number; readonly y: number; readonly align: string }
   | { readonly op: "drawImage"; readonly image: unknown; readonly x: number; readonly y: number; readonly w: number; readonly h: number; readonly alpha: number };
@@ -108,6 +109,9 @@ function createFakeContext(): {
     },
     strokeRect(x: number, y: number, w: number, h: number) {
       calls.push({ op: "strokeRect", x, y, w, h });
+    },
+    setLineDash(pattern: readonly number[]) {
+      calls.push({ op: "setLineDash", pattern: [...pattern] });
     },
     fillRect(x: number, y: number, w: number, h: number) {
       calls.push({ op: "fillRect", x, y, w, h });
@@ -1658,5 +1662,88 @@ describe("drawScript — the labelled box with ports", () => {
       w: (extent?.maxX ?? 0) - (extent?.minX ?? 0),
       h: (extent?.maxY ?? 0) - (extent?.minY ?? 0),
     });
+  });
+});
+describe("the preview a half finished command draws", () => {
+  const TWO_POINTS = {
+    points: [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+    ],
+    bulges: [0, 0],
+    closed: false,
+  };
+
+  function drawn(preview: Parameters<typeof renderDocument>[9]): ReturnType<typeof createFakeContext> {
+    const fake = createFakeContext();
+    renderDocument(fake.ctx, 800, 600, [], CAMERA_IDENTITY, [], [], undefined, undefined, preview);
+    return fake;
+  }
+
+  it("draws nothing extra when no command is half finished", () => {
+    expect(drawn(undefined).calls.some((call) => call.op === "setLineDash")).toBe(false);
+  });
+
+  it("walks the points it is given, with no object in the document at all", () => {
+    const { calls } = drawn(TWO_POINTS);
+    expect(calls).toContainEqual({ op: "moveTo", x: 0, y: 0 });
+    expect(calls).toContainEqual({ op: "lineTo", x: 10, y: 0 });
+  });
+
+  it("dashes the line, and clears the dash again so the next paint is solid", () => {
+    const dashes = drawn(TWO_POINTS).calls.filter((call) => call.op === "setLineDash");
+    expect(dashes).toHaveLength(2);
+    expect(dashes[1]).toEqual({ op: "setLineDash", pattern: [] });
+  });
+
+  it("marks each point with a square, so the operator sees what is already placed", () => {
+    const squares = drawn(TWO_POINTS).calls.filter((call) => call.op === "strokeRect");
+    expect(squares).toHaveLength(2);
+    expect(squares[0]).toEqual({ op: "strokeRect", x: -3, y: -3, w: 6, h: 6 });
+  });
+
+  it("marks a lone point even though one point draws no line", () => {
+    const { calls } = drawn({ points: [{ x: 5, y: 5 }], bulges: [0], closed: false });
+    expect(calls.filter((call) => call.op === "strokeRect")).toHaveLength(1);
+    expect(calls.some((call) => call.op === "setLineDash")).toBe(false);
+  });
+
+  it("draws a curved preview edge as a true arc, the same call a finished path uses", () => {
+    const { calls } = drawn({ ...TWO_POINTS, bulges: [1, 0] });
+    expect(calls.some((call) => call.op === "arc")).toBe(true);
+  });
+
+  it("closes the preview path when the command has closed it", () => {
+    const closed = {
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      bulges: [0, 0, 0],
+      closed: true,
+    };
+    expect(drawn(closed).calls.some((call) => call.op === "closePath")).toBe(true);
+  });
+
+  it("holds its line width and its marker at one screen size, whatever the zoom", () => {
+    const fake = createFakeContext();
+    renderDocument(fake.ctx, 800, 600, [], { x: 0, y: 0, zoom: 2 }, [], [], undefined, undefined, TWO_POINTS);
+    const squares = fake.calls.filter((call) => call.op === "strokeRect");
+    expect(squares[0]).toEqual({ op: "strokeRect", x: -1.5, y: -1.5, w: 3, h: 3 });
+    expect(fake.paints.some((paint) => paint.op === "stroke" && paint.lineWidth === 0.5)).toBe(true);
+  });
+
+  it("draws in world units, between the camera transform and the screen space pass that follows it", () => {
+    const fake = createFakeContext();
+    renderDocument(fake.ctx, 800, 600, [], { x: 0, y: 0, zoom: 2 }, [], [], undefined, undefined, TWO_POINTS);
+    const transforms = fake.calls.flatMap((call, index) => (call.op === "setTransform" ? [{ index, scale: call.a }] : []));
+    const cameraAt = transforms.find((entry) => entry.scale === 2)?.index ?? -1;
+    const screenSpaceAt = transforms.filter((entry) => entry.index > cameraAt && entry.scale === 1)[0]?.index ?? -1;
+    const dashAt = fake.calls.findIndex((call) => call.op === "setLineDash");
+    expect(cameraAt).toBeGreaterThan(-1);
+    expect(screenSpaceAt).toBeGreaterThan(cameraAt);
+    expect(dashAt).toBeGreaterThan(cameraAt);
+    expect(dashAt).toBeLessThan(screenSpaceAt);
   });
 });

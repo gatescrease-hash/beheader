@@ -21,6 +21,7 @@
 import {
   arcOfEdge,
   bezierOfEdge,
+  buildPathEdges,
   type CameraState,
   CLOSED_PATH,
   formatCellReference,
@@ -34,6 +35,7 @@ import {
   isErrorValue,
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
+  type PathEdge,
   pathEdgesOfObject,
   type Point,
   RADIUS_PATH,
@@ -181,6 +183,12 @@ export function fitBitmapIntoBox(
 }
 
 const SELECTION_HIGHLIGHT_STYLE = "#2456c9";
+
+/** The half finished path a prompt sequence draws. Every size here is screen pixels. */
+const PREVIEW_STROKE_STYLE = "#2456c9";
+const PREVIEW_LINE_WIDTH_SCREEN = 1;
+const PREVIEW_DASH_SCREEN = 5;
+const PREVIEW_POINT_SIZE_SCREEN = 6;
 const SELECTION_HIGHLIGHT_WIDTH = DEFAULT_SHAPE_STROKE_WIDTH * 3;
 
 const RESIZE_HANDLE_FILL_STYLE = "#ffffff";
@@ -208,6 +216,16 @@ function clearScreen(ctx: CanvasRenderingContext2D, viewportWidth: number, viewp
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
 }
 
+/**
+ * The path a half finished command draws, before any object exists for it.
+ * It is plain geometry. This file never asks which command made it.
+ */
+export interface PathPreview {
+  readonly points: readonly Point[];
+  readonly bulges: readonly number[];
+  readonly closed: boolean;
+}
+
 export function renderDocument(
   ctx: CanvasRenderingContext2D,
   viewportWidth: number,
@@ -218,6 +236,7 @@ export function renderDocument(
   panelledObjectIds: readonly string[] = selectedObjectIds,
   editing: EditorTarget | undefined = undefined,
   images: ImageBitmaps | undefined = undefined,
+  preview: PathPreview | undefined = undefined,
 ): void {
   clearScreen(ctx, viewportWidth, viewportHeight);
 
@@ -243,6 +262,10 @@ export function renderDocument(
     }
   }
 
+  if (preview !== undefined) {
+    drawPathPreview(ctx, camera, preview);
+  }
+
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const panelledIds = new Set(panelledObjectIds);
   for (const object of objects) {
@@ -254,6 +277,28 @@ export function renderDocument(
     if (selectedIds.has(object.id) && object.id !== editingTextId) {
       drawResizeHandles(ctx, camera, object);
     }
+  }
+}
+
+/**
+ * The path a prompt sequence has so far, in a dashed accent colour, with a
+ * marker on each point. It draws under the camera transform, so every screen
+ * size here divides by the zoom to hold still.
+ *
+ * A dash pattern outlives the call that sets it, so this clears it again.
+ */
+function drawPathPreview(ctx: CanvasRenderingContext2D, camera: CameraState, preview: PathPreview): void {
+  ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
+  ctx.strokeStyle = PREVIEW_STROKE_STYLE;
+  ctx.lineWidth = PREVIEW_LINE_WIDTH_SCREEN / camera.zoom;
+  if (buildEdgePath(ctx, buildPathEdges(preview.points, preview.bulges, preview.closed), preview.closed)) {
+    ctx.setLineDash([PREVIEW_DASH_SCREEN / camera.zoom, PREVIEW_DASH_SCREEN / camera.zoom]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const side = PREVIEW_POINT_SIZE_SCREEN / camera.zoom;
+  for (const point of preview.points) {
+    ctx.strokeRect(point.x - side / 2, point.y - side / 2, side, side);
   }
 }
 
@@ -397,8 +442,7 @@ function buildOpenVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObjec
  * ctx.arc, the same call a circle uses. Nothing here reads a sample point,
  * because a curved edge never becomes one.
  */
-function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
-  const edges = pathEdgesOfObject(object);
+function buildEdgePath(ctx: CanvasRenderingContext2D, edges: readonly PathEdge[], closed: boolean): boolean {
   const first = edges[0];
   if (first === undefined) {
     return false;
@@ -418,10 +462,14 @@ function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): 
     }
     ctx.arc(arc.center.x, arc.center.y, arc.radius, arc.startAngle, arc.startAngle + arc.sweep, arc.sweep < 0);
   }
-  if (readBoolean(object, CLOSED_PATH) === true) {
+  if (closed) {
     ctx.closePath();
   }
   return true;
+}
+
+function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
+  return buildEdgePath(ctx, pathEdgesOfObject(object), readBoolean(object, CLOSED_PATH) === true);
 }
 
 function drawPolyline(ctx: CanvasRenderingContext2D, object: GraphObject): void {

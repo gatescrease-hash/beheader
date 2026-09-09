@@ -730,6 +730,11 @@ takes the whole word or its first letter:
 The prompt offers a word only where it applies. `close` waits until the path
 holds two points, and the first prompt of all offers no word at all.
 
+**The canvas draws the path as it grows.** A dashed line joins the points the
+operator placed, a square marks each one, and a rubber band runs from the last
+point to the pointer. Arc mode bends that band, so the operator sees the curve
+before the click that commits it.
+
 **An arc leaves the point before it along the direction the path already
 travels.** So the two meet smoothly, and one click gives the arc its
 `vertex.N.bulge` value. The first edge of a path has no direction to follow, so

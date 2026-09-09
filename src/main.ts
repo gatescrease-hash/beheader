@@ -32,10 +32,10 @@ import {
   type Value,
 } from "./engine/index.ts";
 import { DEFAULT_IMAGE_EXTENT, executeCommand, type CommandEffect } from "./command/commands.ts";
-import { parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
+import { findCommandSpec, parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./command/props.ts";
-import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint } from "./render/camera.ts";
+import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint, type WorldPoint } from "./render/camera.ts";
 import {
   editorPlacement,
   editorTargetAt,
@@ -56,7 +56,7 @@ import {
 } from "./render/interaction.ts";
 import { resizeCursor } from "./render/handles.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
-import { fitBitmapIntoBox, renderDocument } from "./render/renderer.ts";
+import { fitBitmapIntoBox, renderDocument, type PathPreview } from "./render/renderer.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
@@ -81,6 +81,8 @@ export interface AppState {
   readonly pending: PendingCommand | undefined;
   readonly log: readonly string[];
   readonly panels: PanelUiRegistry;
+  /** Where the pointer sits in world units. A half finished command draws to it. */
+  readonly pointer: WorldPoint | undefined;
 }
 
 export type FileRequest = "save" | "load";
@@ -99,6 +101,7 @@ export function initialAppState(document: Document, log: readonly string[] = [])
     document: { ...document, camera: clampCamera(document.camera) },
     interaction: INITIAL_INTERACTION_STATE,
     pending: undefined,
+    pointer: undefined,
     log,
     panels: {},
   };
@@ -167,6 +170,23 @@ export function respondToPrompt(
     return transition(state);
   }
   return advance(state, respond(state.pending, response), viewport, context);
+}
+
+/**
+ * The shape a half finished command draws now, or nothing.
+ *
+ * The command layer knows what its own answers mean, so it builds the points
+ * and the bulges. This function only carries the pointer across.
+ */
+export function promptPreview(state: AppState): PathPreview | undefined {
+  const pending = state.pending;
+  if (pending === undefined) {
+    return undefined;
+  }
+  const shape = findCommandSpec(pending.commandName)?.previewFromPrompts?.(pending.answers, state.pointer);
+  return shape === undefined || shape.points.length === 0
+    ? undefined
+    : { points: shape.points, bulges: shape.bulges, closed: shape.closed };
 }
 
 export function escape(state: AppState): AppState {
@@ -314,6 +334,7 @@ export function pointerMoveTo(
     ...state,
     document: { ...state.document, objects: outcome.objects, journal: outcome.journal },
     interaction: outcome.state,
+    pointer: screenToWorld(state.document.camera, screenPoint),
   };
   const lines = outcome.rejection === undefined ? outcome.notices : [...outcome.notices, outcome.rejection];
   return withLog(moved, lines);
@@ -774,6 +795,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       panelledIds,
       inPlaceEditor,
       imageBitmaps,
+      promptPreview(state),
     );
     updatePanels(panelledIds);
     updateEditor();
