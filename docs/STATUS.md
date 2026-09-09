@@ -292,7 +292,7 @@ group blocks the acceptance test in `SPEC.md` section 12.
    open. `interaction.ts` already refuses the drag with a clear notice rather
    than crashing.
 
-### Specified and not built
+### Specified, and built during beta
 
 4. **`addvertex`, `delvertex` and `explode` all exist now.** `addvertex`
    appends one vertex and cannot break a live reference, because nothing else
@@ -339,9 +339,7 @@ group blocks the acceptance test in `SPEC.md` section 12.
    surface re-exports 311 names, and the layers outside use 114. A curated
    list of named re-exports is a separate decision, cheaper to make now that
    the real usage sits in one file for each layer.
-8. **`src/engine/graph/dirty.ts`.** Rule 5 says to keep the module even with a
-   naive body, so the shape of the fast version survives. It was never made.
-9. **The journal has a reader now.** `journal.ts` holds it. `replayJournal`
+8. **The journal has a reader now.** `journal.ts` holds it. `replayJournal`
    rebuilds the objects of a document as they stood after any entry, and undo
    reads the entry before the last one. `journalIsComplete` says whether a
    full replay rebuilds exactly the objects given, so nothing trusts a replay
@@ -352,14 +350,14 @@ group blocks the acceptance test in `SPEC.md` section 12.
 
 ### Smaller
 
-10. **`image` opacity** clamps at draw time instead of at write time. That is a
-    deliberate choice, recorded here so the next reader does not treat it as a
-    defect.
-11. **Nothing now cites a document that does not exist.** The audit rewrote 721
+9. **`image` opacity** clamps at draw time instead of at write time. That is a
+   deliberate choice, recorded here so the next reader does not treat it as a
+   defect.
+10. **Nothing now cites a document that does not exist.** The audit rewrote 721
     test names and 33 operator facing messages that named the old rulings. A
     grep for the old marks over `src/` and `index.html` returns nothing. Keep
     it that way.
-12. **The package carries the name `graphpaper`. The folder carries the name
+11. **The package carries the name `graphpaper`. The folder carries the name
     `beheader-clean`.** The spec calls the product Graphpaper. Nothing depends
     on the folder name. Pick one name when it starts to matter.
 
