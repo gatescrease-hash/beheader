@@ -751,6 +751,7 @@ describe("every registry command reaches a handler", () => {
     "addvertex polyline_1 0,0",
     "delvertex polyline_1 0",
     "explode polygon_1",
+    "split polyline_1 0 5,5",
     "refs intersection_a",
     "props intersection_a",
     "list",
@@ -1638,6 +1639,59 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
 
   it("refuses an unknown object", () => {
     expect(refused("delvertex nosuch 0", sandbox())).toBe('no object named "nosuch"');
+  });
+});
+
+describe("split — the only way a vertex arrives on a curve", () => {
+  /** Two vertices and two half circles: a true circle of radius 1 about (1,0). */
+  function circlePath(): Document {
+    let document = committed("polyline 0,0 2,0 closed", createEmptyDocument());
+    document = committed("set polyline_1.vertex.0.bulge 1", document);
+    return committed("set polyline_1.vertex.1.bulge 1", document);
+  }
+
+  it("leaves the shape exactly where it was — same area, same length, same box", () => {
+    const before = onlyObject(circlePath());
+    expect(getSlot(before, ["area"])?.value).toBeCloseTo(Math.PI);
+
+    const after = onlyObject(committed("split polyline_1 0 1,-1", circlePath()));
+    expect(after.vertexCount).toBe(3);
+    expect(getSlot(after, ["area"])?.value).toBeCloseTo(Math.PI);
+    expect(getSlot(after, ["length"])?.value).toBeCloseTo(2 * Math.PI);
+    expect(getSlot(after, ["bounds.minY"])?.value).toBeCloseTo(-1);
+    expect(getSlot(after, ["bounds.maxY"])?.value).toBeCloseTo(1);
+  });
+
+  it("puts the new vertex on the curve, and gives each half of it a bulge of its own", () => {
+    const after = onlyObject(committed("split polyline_1 0 1,-9", circlePath()));
+    expect(getSlot(after, ["vertex", "1", "x"])?.value).toBeCloseTo(1);
+    expect(getSlot(after, ["vertex", "1", "y"])?.value).toBeCloseTo(-1);
+    expect(getSlot(after, ["vertex", "0", "bulge"])?.value).toBeCloseTo(Math.tan(Math.PI / 8));
+    expect(getSlot(after, ["vertex", "1", "bulge"])?.value).toBeCloseTo(Math.tan(Math.PI / 8));
+    expect(getSlot(after, ["vertex", "2", "bulge"])?.value).toBe(1);
+  });
+
+  it("reports the edge it cut and the vertex it made", () => {
+    const outcome = run("split polyline_1 0 1,-1", circlePath());
+    expect(outcome.ok && outcome.lines[0]).toContain("split polyline_1.edge.0, new vertex 1 at");
+  });
+
+  it("refuses a point that lands on an end of the edge, where a vertex already sits", () => {
+    expect(refused("split polyline_1 0 0,0", circlePath())).toContain("already has a vertex");
+  });
+
+  it("counts edges and not vertices, so an open path has one fewer edge than a closed one", () => {
+    const open = committed("polyline 0,0 2,0", createEmptyDocument());
+    expect(refused("split polyline_1 1 1,0", open)).toContain("out of range");
+    // The same two vertices, closed: edge 1 is the way home, and it takes a cut.
+    const cut = onlyObject(committed("split polyline_1 1 1,1", circlePath()));
+    expect(cut.vertexCount).toBe(3);
+    expect(getSlot(cut, ["vertex", "2", "y"])?.value).toBeCloseTo(1);
+  });
+
+  it("refuses anything that is not a polyline", () => {
+    const document = committed("rect x=0 y=0 w=4 h=3", createEmptyDocument());
+    expect(refused("split rect_1 0 1,1", document)).toContain("only a polyline has an edge to split");
   });
 });
 

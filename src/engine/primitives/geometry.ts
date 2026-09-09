@@ -16,9 +16,11 @@ import type { Address } from "../address.ts";
 import {
   buildPathEdges,
   pathArea,
+  splitEdgeAt,
   pathBounds,
   pathCentroid,
   pathLength,
+  type EdgeSplit,
   type PathEdge,
 } from "./arc.ts";
 import { getSlot, isErrorValue, slotKey, type ErrorValue, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "../graph/node.ts";
@@ -550,6 +552,76 @@ export function addVertexToObject(object: GraphObject, point: Point): GraphObjec
       [slotKey(vertexBulgePath(count))]: { kind: "literal", value: 0 },
     },
   };
+}
+
+/**
+ * The number of edges this path has now. A closed path has one for each
+ * vertex. An open path has one fewer, because it never walks home to vertex 0.
+ */
+export function polylineEdgeCount(object: GraphObject): number {
+  const count = object.vertexCount ?? 0;
+  if (getSlot(object, CLOSED_PATH)?.value === true) {
+    return count;
+  }
+  return Math.max(0, count - 1);
+}
+
+/**
+ * Cuts edge index at the point on it nearest the given point, and puts a new
+ * vertex there. An arc becomes two arcs of the same circle, so the shape on
+ * screen does not move. It returns undefined when the edge does not exist.
+ */
+export function splitPolylineEdge(object: GraphObject, index: number, near: Point): EdgeSplit | undefined {
+  const edge = pathEdgesOfObject(object)[index];
+  return edge === undefined ? undefined : splitEdgeAt(edge, near);
+}
+
+/**
+ * Puts one vertex at insertIndex and moves every vertex at or after it up one.
+ * The vertex before the new one takes bulgeBefore, and the new one takes
+ * bulgeAfter. An insert drops no vertex, so a reference only ever needs a shift.
+ */
+export function insertVertexIntoObject(
+  object: GraphObject,
+  insertIndex: number,
+  point: Point,
+  bulgeBefore: number,
+  bulgeAfter: number,
+): GraphObject {
+  const count = object.vertexCount ?? 0;
+  const newSlots: Record<string, Slot> = { ...object.slots };
+  for (let i = 0; i < count; i += 1) {
+    for (const path of vertexPartPaths(i)) {
+      delete newSlots[slotKey(path)];
+    }
+  }
+  for (let i = 0; i < count; i += 1) {
+    const newIndex = i < insertIndex ? i : i + 1;
+    for (const axis of VERTEX_PARTS) {
+      const slot = getSlot(object, vertexPartPath(i, axis));
+      if (slot !== undefined) {
+        newSlots[slotKey(vertexPartPath(newIndex, axis))] = slot;
+      }
+    }
+  }
+  newSlots[slotKey(vertexBulgePath(insertIndex - 1))] = { kind: "literal", value: bulgeBefore };
+  newSlots[slotKey(vertexXPath(insertIndex))] = { kind: "literal", value: point.x };
+  newSlots[slotKey(vertexYPath(insertIndex))] = { kind: "literal", value: point.y };
+  newSlots[slotKey(vertexBulgePath(insertIndex))] = { kind: "literal", value: bulgeAfter };
+  return { ...object, vertexCount: count + 1, slots: newSlots };
+}
+
+/**
+ * Moves a reference to the new vertex, or to any vertex after it, up one
+ * index. An insert loses no vertex, so this never breaks a reference. There is
+ * no force path, unlike a delete.
+ */
+export function shiftVertexAddressForInsert(address: Address, objectId: string, insertedIndex: number): Address {
+  const found = asVertexAddress(address, objectId);
+  if (found === undefined || found.index < insertedIndex) {
+    return address;
+  }
+  return vertexAddressAt(objectId, found.index + 1, found.axis);
 }
 
 /** Removes one vertex and renumbers every later one down by one, in storage. */

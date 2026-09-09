@@ -58,6 +58,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "addvertex polyline_1 100,100", command: { kind: "addvertex", target: "polyline_1", points: [{ x: 100, y: 100 }] } },
   { line: "delvertex polyline_1 2", command: { kind: "delvertex", target: "polyline_1", index: 2, force: false } },
   { line: "explode polygon_1", command: { kind: "explode", target: "polygon_1", force: false } },
+  { line: "split polyline_1 0 5,5", command: { kind: "split", target: "polyline_1", index: 0, points: [{ x: 5, y: 5 }] } },
   { line: "refs intersection_a", command: { kind: "refs", target: "intersection_a" } },
   { line: "props intersection_a", command: { kind: "props", target: "intersection_a" } },
   { line: "list", command: { kind: "list" } },

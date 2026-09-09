@@ -278,6 +278,61 @@ export function pathBounds(edges: readonly PathEdge[]): PathBounds {
   return { minX, minY, maxX, maxY };
 }
 
+/** Where a split lands on one edge, and the two bulges that replace its own. */
+export interface EdgeSplit {
+  readonly point: Point;
+  /** How far along the edge the split lands, from 0 at the start to 1 at the end. */
+  readonly fraction: number;
+  readonly firstBulge: number;
+  readonly secondBulge: number;
+}
+
+/** How far along the arc an angle lands, clamped to the two ends of the sweep. */
+function fractionAlongArc(arc: ArcGeometry, angle: number): number {
+  let delta = (angle - arc.startAngle) % FULL_TURN;
+  if (delta < 0) {
+    delta += FULL_TURN;
+  }
+  if (arc.sweep === 0) {
+    return 0;
+  }
+  const signed = arc.sweep > 0 ? delta : (delta === 0 ? 0 : delta - FULL_TURN);
+  return Math.max(0, Math.min(1, signed / arc.sweep));
+}
+
+/**
+ * Cuts one edge at the point on it nearest the given point. An arc becomes two
+ * arcs on the same circle, so the two together hold the shape of the one they
+ * replace. Nothing here subdivides an edge evenly. The caller picks the place.
+ */
+export function splitEdgeAt(edge: PathEdge, near: Point): EdgeSplit {
+  const arc = arcOfEdge(edge);
+  if (arc === undefined) {
+    const spanX = edge.end.x - edge.start.x;
+    const spanY = edge.end.y - edge.start.y;
+    const lengthSquared = spanX * spanX + spanY * spanY;
+    const fraction = lengthSquared === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((near.x - edge.start.x) * spanX + (near.y - edge.start.y) * spanY) / lengthSquared));
+    return {
+      point: { x: edge.start.x + fraction * spanX, y: edge.start.y + fraction * spanY },
+      fraction,
+      firstBulge: 0,
+      secondBulge: 0,
+    };
+  }
+  const fraction = fractionAlongArc(arc, Math.atan2(near.y - arc.center.y, near.x - arc.center.x));
+  const firstSweep = arc.sweep * fraction;
+  const secondSweep = arc.sweep - firstSweep;
+  const splitAngle = arc.startAngle + firstSweep;
+  return {
+    point: { x: arc.center.x + Math.cos(splitAngle) * arc.radius, y: arc.center.y + Math.sin(splitAngle) * arc.radius },
+    fraction,
+    firstBulge: Math.tan(firstSweep / 4),
+    secondBulge: Math.tan(secondSweep / 4),
+  };
+}
+
 /** The shortest distance from a point to any edge of a path. */
 export function distanceToPath(point: Point, edges: readonly PathEdge[]): number {
   let shortest = Infinity;

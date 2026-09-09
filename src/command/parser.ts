@@ -45,6 +45,13 @@ export interface CreatePolylineCommand {
   readonly closed: boolean;
 }
 
+export interface SplitEdgeCommand {
+  readonly kind: "split";
+  readonly target: string;
+  readonly index: number;
+  readonly points: readonly CommandPoint[];
+}
+
 export interface CommandPoint {
   readonly x: number;
   readonly y: number;
@@ -203,6 +210,7 @@ export type Command =
   | AddVertexCommand
   | DeleteVertexCommand
   | ExplodeCommand
+  | SplitEdgeCommand
   | RefsCommand
   | PropsCommand
   | ListCommand
@@ -538,6 +546,19 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       target: textArgument(args, "target"),
       index: numberArgument(args, "index"),
       force: hasFlag(args, "force"),
+    }),
+  },
+  {
+    name: "split",
+    usage: "split <object> <edge> <x,y>",
+    positional: [text("target"), { name: "index", kind: "number" }, { name: "points", kind: "points" }],
+    named: [],
+    flags: [],
+    build: (args) => ({
+      kind: "split",
+      target: textArgument(args, "target"),
+      index: numberArgument(args, "index"),
+      points: pointsArgument(args, "points"),
     }),
   },
   {

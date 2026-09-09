@@ -39,6 +39,10 @@ import {
   passThroughVertexRangeForDelete,
   repairVertexAddressForDelete,
   shiftVertexAddressForDelete,
+  insertVertexIntoObject,
+  polylineEdgeCount,
+  shiftVertexAddressForInsert,
+  splitPolylineEdge,
   vertexPartPaths,
   vertexXPath,
   vertexYPath,
@@ -262,6 +266,18 @@ export interface ExplodeOperation {
   readonly force?: boolean;
 }
 
+/**
+ * Cuts one edge at the point on it nearest point, and puts a vertex there. An
+ * arc becomes two arcs of the same circle, so the shape on screen holds still.
+ * There is no force flag, because an insert loses no vertex.
+ */
+export interface SplitEdgeOperation {
+  readonly kind: "splitEdge";
+  readonly objectId: string;
+  readonly index: number;
+  readonly point: Point;
+}
+
 export type Operation =
   | SetSlotOperation
   | ClearSlotOperation
@@ -274,7 +290,8 @@ export type Operation =
   | RemovePortOperation
   | AddVertexOperation
   | DeleteVertexOperation
-  | ExplodeOperation;
+  | ExplodeOperation
+  | SplitEdgeOperation;
 
 function operationTargetId(operation: Operation): string {
   if (operation.kind === "deleteObject") {
@@ -291,7 +308,8 @@ function operationTargetId(operation: Operation): string {
     operation.kind === "removePort" ||
     operation.kind === "addVertex" ||
     operation.kind === "deleteVertex" ||
-    operation.kind === "explode"
+    operation.kind === "explode" ||
+    operation.kind === "splitEdge"
   ) {
     return operation.objectId;
   }
@@ -453,6 +471,23 @@ function applyOperation(
       repairObjectFormulaAddresses(object.id === operation.objectId ? resized : object, repairReference, passThroughVertexRangeForDelete),
     );
     return { objects: repaired.map((entry) => entry.object), brokenSlots: repaired.flatMap((entry) => entry.brokenSlots) };
+  }
+  if (operation.kind === "splitEdge") {
+    const target = objects.find((object) => object.id === operation.objectId);
+    if (target === undefined) {
+      return { objects, brokenSlots: [] };
+    }
+    const split = splitPolylineEdge(target, operation.index, operation.point);
+    if (split === undefined) {
+      return { objects, brokenSlots: [] };
+    }
+    const insertedIndex = operation.index + 1;
+    const grown = insertVertexIntoObject(target, insertedIndex, split.point, split.firstBulge, split.secondBulge);
+    const shiftAddress = (address: Address): Address => shiftVertexAddressForInsert(address, operation.objectId, insertedIndex);
+    return {
+      objects: objects.map((object) => rewriteObjectFormulaAddresses(object.id === operation.objectId ? grown : object, shiftAddress)),
+      brokenSlots: [],
+    };
   }
   if (operation.kind === "explode") {
     const target = objects.find((object) => object.id === operation.objectId);
@@ -629,6 +664,8 @@ export function mutate(
         detail = `attempts to delete vertex ${operation.index} from object id "${targetId}"`;
       } else if (operation.kind === "explode") {
         detail = `attempts to explode object id "${targetId}"`;
+      } else if (operation.kind === "splitEdge") {
+        detail = `attempts to split edge ${operation.index} of object id "${targetId}"`;
       } else {
         detail = `targets slot "${slotKey(operation.address.path)}" on object id "${targetId}"`;
       }
@@ -681,6 +718,11 @@ export function mutate(
   const invalidExplodeMessages = findInvalidExplodeOperations(operations, objects);
   if (invalidExplodeMessages.length > 0) {
     return { ok: false, message: invalidExplodeMessages.join("; ") };
+  }
+
+  const invalidSplitMessages = findInvalidSplitOperations(operations, objects);
+  if (invalidSplitMessages.length > 0) {
+    return { ok: false, message: invalidSplitMessages.join("; ") };
   }
 
   const staged = cloneObjects(objects);
@@ -1336,6 +1378,40 @@ function findLiveVertexDependents(objects: readonly GraphObject[], targetObjectI
  * check applyOperation later trusts, so a bad explode never reaches the
  * stage step.
  */
+/**
+ * A split names an edge, not a vertex. An open path has one fewer edge than it
+ * has vertices, so the bound moves with the closed slot.
+ */
+function findInvalidSplitOperations(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  operations.forEach((operation, index) => {
+    if (operation.kind !== "splitEdge") {
+      return;
+    }
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+    const target = objects.find((candidate) => candidate.id === operation.objectId);
+    if (target === undefined) {
+      return;
+    }
+    if (target.type !== POLYLINE_TYPE) {
+      problems.push(`${prefix}: object "${target.name}" is a "${target.type}", not a polyline, so it has no edge to split`);
+      return;
+    }
+    const edges = polylineEdgeCount(target);
+    if (!Number.isInteger(operation.index) || operation.index < 0 || operation.index >= edges) {
+      const bound = edges === 0 ? "it has no edges" : `must be an integer from 0 to ${edges - 1}`;
+      problems.push(`${prefix}: edge index ${operation.index} is out of range for "${target.name}" (currently ${edges} edges; ${bound})`);
+      return;
+    }
+    // A split reads the current vertices value, the way an explode does. Refuse
+    // rather than do nothing when that value has not resolved to a point list.
+    if (splitPolylineEdge(target, operation.index, operation.point) === undefined) {
+      problems.push(`${prefix}: "${target.name}".vertices did not resolve to a point list, so edge ${operation.index} cannot be cut`);
+    }
+  });
+  return problems;
+}
+
 function findInvalidExplodeOperations(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
   operations.forEach((operation, index) => {

@@ -668,6 +668,7 @@ delete intersection_a [force]
 explode polygon_1 [force]
 addvertex polyline_1 100,100
 delvertex polyline_1 2
+split polyline_1 0 50,50
 addport script_1 in factor
 removeport script_1 in factor
 

@@ -16,6 +16,7 @@ import {
   pathBounds,
   pathCentroid,
   pathLength,
+  splitEdgeAt,
   type PathBounds,
   type PathEdge,
 } from "./arc.ts";
@@ -141,6 +142,45 @@ describe("distanceToEdge — a click measures to the arc, not to the chord", () 
 
   it("measures a straight edge the ordinary way", () => {
     expect(distanceToEdge({ x: 1, y: 3 }, { start: LEFT, end: RIGHT, bulge: 0 })).toBeCloseTo(3);
+  });
+});
+
+describe("splitEdgeAt — a cut where the operator points, never an even subdivision", () => {
+  const halfCircle: PathEdge = { start: LEFT, end: RIGHT, bulge: HALF_CIRCLE_BULGE };
+
+  it("puts the new point on the arc, not on the chord under it", () => {
+    const split = splitEdgeAt(halfCircle, { x: 1, y: -5 });
+    expect(split.point.x).toBeCloseTo(1);
+    expect(split.point.y).toBeCloseTo(-1);
+    expect(split.fraction).toBeCloseTo(0.5);
+  });
+
+  it("gives two quarter arcs that together hold the shape of the half circle they replace", () => {
+    const split = splitEdgeAt(halfCircle, { x: 1, y: -5 });
+    const halves = buildPathEdges([LEFT, split.point, RIGHT], [split.firstBulge, split.secondBulge], false);
+    expect(pathLength(halves)).toBeCloseTo(pathLength([halfCircle]));
+    expectBoundsCloseTo(pathBounds(halves), pathBounds([halfCircle]));
+  });
+
+  it("follows the point the caller gives, so an off centre cut makes two unequal arcs", () => {
+    const split = splitEdgeAt(halfCircle, { x: 0.2, y: -1 });
+    expect(split.fraction).toBeGreaterThan(0);
+    expect(split.fraction).toBeLessThan(0.5);
+    expect(split.firstBulge).toBeLessThan(split.secondBulge);
+    const halves = buildPathEdges([LEFT, split.point, RIGHT], [split.firstBulge, split.secondBulge], false);
+    expect(pathLength(halves)).toBeCloseTo(pathLength([halfCircle]));
+  });
+
+  it("keeps a straight edge straight, and drops the point onto the segment", () => {
+    const split = splitEdgeAt({ start: LEFT, end: RIGHT, bulge: 0 }, { x: 0.5, y: 9 });
+    expect(split.point).toEqual({ x: 0.5, y: 0 });
+    expect(split.firstBulge).toBe(0);
+    expect(split.secondBulge).toBe(0);
+  });
+
+  it("reports a fraction at an end when the point sits past the end of the edge", () => {
+    expect(splitEdgeAt({ start: LEFT, end: RIGHT, bulge: 0 }, { x: -9, y: 0 }).fraction).toBe(0);
+    expect(splitEdgeAt({ start: LEFT, end: RIGHT, bulge: 0 }, { x: 9, y: 0 }).fraction).toBe(1);
   });
 });
 

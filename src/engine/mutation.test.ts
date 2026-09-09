@@ -1647,6 +1647,85 @@ describe("mutate — DeleteVertexOperation, behind `delvertex`, refuses by defau
   });
 });
 
+describe("mutate — SplitEdgeOperation, behind `split`, cuts one edge where the operator points", () => {
+  it("puts the new vertex in the middle of the list and moves every later vertex up one", () => {
+    const polyline = createdPolyline("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }]);
+    const result = mutate([polyline], [{ kind: "splitEdge", objectId: "obj_1", index: 0, point: { x: 4, y: 0 } }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.vertexCount).toBe(4);
+    expect(object?.slots["vertex.1.x"]?.value).toBeCloseTo(4);
+    expect(object?.slots["vertex.2.x"]?.value).toBe(10);
+    expect(object?.slots["vertex.3.y"]?.value).toBe(10);
+  });
+
+  it("shifts a reference to a later vertex up one, and leaves an earlier one alone", () => {
+    const polyline = createdPolyline("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }]);
+    const later: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "2", "y") }, value: 10 } },
+    };
+    const earlier: GraphObject = {
+      id: "obj_3",
+      name: "value_2",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "0", "x") }, value: 0 } },
+    };
+    const result = mutate([polyline, later, earlier], [{ kind: "splitEdge", objectId: "obj_1", index: 0, point: { x: 4, y: 0 } }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.objects.find((candidate) => candidate.id === "obj_2")?.slots.value).toMatchObject({
+      ast: { type: "reference", address: addr("obj_1", "vertex", "3", "y") },
+    });
+    expect(result.objects.find((candidate) => candidate.id === "obj_2")?.slots.value?.value).toBe(10);
+    expect(result.objects.find((candidate) => candidate.id === "obj_3")?.slots.value).toMatchObject({
+      ast: { type: "reference", address: addr("obj_1", "vertex", "0", "x") },
+    });
+  });
+
+  it("never refuses over a live reference, because a split loses no vertex and needs no force", () => {
+    const polyline = createdPolyline("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+    const dependent: GraphObject = {
+      id: "obj_2",
+      name: "value_1",
+      type: "value",
+      slots: { value: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "vertex", "1", "x") }, value: 10 } },
+    };
+    const result = mutate([polyline, dependent], [{ kind: "splitEdge", objectId: "obj_1", index: 0, point: { x: 4, y: 0 } }], []);
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses an edge index the path does not have, and names the count of edges", () => {
+    const polyline = createdPolyline("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+    const result = mutate([polyline], [{ kind: "splitEdge", objectId: "obj_1", index: 1, point: { x: 4, y: 0 } }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("1 edges");
+    }
+  });
+
+  it("refuses anything that is not a polyline", () => {
+    const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
+    const result = mutate([rect], [{ kind: "splitEdge", objectId: "obj_1", index: 0, point: { x: 4, y: 0 } }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("no edge to split");
+    }
+  });
+
+  it("REFUSES rather than does nothing when vertices has not resolved to a point list", () => {
+    const unevaluated = polylineObject("obj_1", "polyline_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+    const result = mutate([unevaluated], [{ kind: "splitEdge", objectId: "obj_1", index: 0, point: { x: 4, y: 0 } }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("did not resolve to a point list");
+    }
+  });
+});
+
 describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an editable path", () => {
   it("changes only the type, keeping the same id and name, and snapshots vertices into literal per vertex slots", () => {
     const rect = createdRect("obj_1", "rect_1", 0, 0, 10, 5);
@@ -1985,6 +2064,23 @@ function polylineObject(id: string, name: string, points: readonly { readonly x:
     slots[`vertex.${index}.y`] = { kind: "literal", value: point.y };
   });
   return { id, name, type: "polyline", vertexCount: points.length, slots: { ...slots, ...vertexSlots } };
+}
+
+function createdPolyline(
+  id: string,
+  name: string,
+  points: readonly { readonly x: number; readonly y: number }[],
+  vertexSlots: Record<string, Slot> = {},
+): GraphObject {
+  const result = mutate([], [{ kind: "createObject", object: polylineObject(id, name, points, vertexSlots) }], []);
+  if (!result.ok) {
+    throw new Error(`test setup: expected the polyline to be created, got: ${result.message}`);
+  }
+  const object = result.objects.find((candidate) => candidate.id === id);
+  if (object === undefined) {
+    throw new Error("test setup: expected the polyline to survive creation");
+  }
+  return object;
 }
 
 function presetPlaceholders(): Record<string, Slot> {

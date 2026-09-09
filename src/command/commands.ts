@@ -39,6 +39,7 @@ import {
   RADIUS_PATH,
   RECT_HEIGHT_PATH,
   RECT_WIDTH_PATH,
+  splitPolylineEdge,
   vertexBulgePath,
   vertexXPath,
   vertexYPath,
@@ -75,6 +76,7 @@ import type {
   DeleteCommand,
   DeleteVertexCommand,
   ExplodeCommand,
+  SplitEdgeCommand,
   LinkCommand,
   PropsCommand,
   RefsCommand,
@@ -183,6 +185,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return deleteVertex(command, document, context);
     case "explode":
       return explodeObject(command, document, context);
+    case "split":
+      return splitEdge(command, document, context);
     case "refs":
       return refs(command, document);
     case "props":
@@ -227,6 +231,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "addvertex",
   "delvertex",
   "explode",
+  "split",
   "refs",
   "props",
   "list",
@@ -697,6 +702,50 @@ function addVertex(command: AddVertexCommand, document: Document, context: EvalC
     ok: true,
     document: { ...document, objects: result.objects, journal: result.journal },
     lines: [`added ${object.name}.vertex.${newIndex} at ${describeSlotValue(point)}`],
+  };
+}
+
+/**
+ * Cuts one edge where the operator points, and puts a vertex there. A curved
+ * edge becomes two curves of the same circle, so the shape holds still. This
+ * is the only way a vertex arrives on a curve. Nothing subdivides an edge.
+ */
+function splitEdge(command: SplitEdgeCommand, document: Document, context: EvalContext): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+  if (object.type !== POLYLINE_TYPE) {
+    return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has an edge to split` };
+  }
+  if (command.points.length !== 1) {
+    return { ok: false, message: `split takes exactly one point, given as x,y — got ${command.points.length}` };
+  }
+  const point = command.points[0];
+  if (point === undefined) {
+    return { ok: false, message: "split needs a point, given as x,y" };
+  }
+  const split = splitPolylineEdge(object, command.index, point);
+  if (split !== undefined && (split.fraction <= 0 || split.fraction >= 1)) {
+    return {
+      ok: false,
+      message: `that point lands on an end of edge ${command.index}, where ${object.name} already has a vertex — aim between the two ends`,
+    };
+  }
+
+  const result = mutate(
+    document.objects,
+    [{ kind: "splitEdge", objectId: object.id, index: command.index, point }],
+    document.journal,
+    context,
+  );
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`split ${object.name}.edge.${command.index}, new vertex ${command.index + 1} at ${describeSlotValue(split?.point ?? point)}`],
   };
 }
 
