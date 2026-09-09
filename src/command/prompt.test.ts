@@ -41,6 +41,11 @@ const EQUIVALENT_FORMS: readonly { readonly name: string; readonly typedLine: st
   { name: "image", typedLine: "image x=0 y=0", responses: [picked(0, 0)] },
   { name: "script", typedLine: "script x=0 y=0", responses: [picked(0, 0)] },
   { name: "text", typedLine: 'text x=0 y=0 ""', responses: [picked(0, 0)] },
+  {
+    name: "polyline",
+    typedLine: "polyline 0,0 100,0 100,100 close",
+    responses: [picked(0, 0), picked(100, 0), picked(100, 100), typed("close")],
+  },
 ];
 
 describe("a command word alone starts a sequence, the AutoCAD gesture", () => {
@@ -299,5 +304,192 @@ describe("what the prompt machine deliberately does not decide", () => {
     const pending = prompting(beginCommand("circle")).pending;
     expect(JSON.parse(JSON.stringify(pending))).toEqual(pending);
     expect(pending).toEqual({ commandName: "circle", stepIndex: 0, answers: {} });
+  });
+});
+const START = "specify start point:";
+const NEXT = "specify next point or [Arc/Line/Undo]:";
+const NEXT_CLOSABLE = "specify next point or [Arc/Line/Close/Undo]:";
+
+describe("polyline, the one step that repeats until the operator ends it", () => {
+
+  it("asks for a start point, and offers no word before it has one", () => {
+    expect(prompting(beginCommand("polyline")).message).toBe(START);
+  });
+
+  it("offers the words that apply once one point is down, and holds Close back", () => {
+    expect(prompting(walk("polyline", picked(0, 0))).message).toBe(NEXT);
+  });
+
+  it("offers Close as soon as the path has the two points a close needs", () => {
+    expect(prompting(walk("polyline", picked(0, 0), picked(10, 0))).message).toBe(NEXT_CLOSABLE);
+  });
+
+  it("stays on the same step while it collects, so the index never moves", () => {
+    expect(prompting(walk("polyline", picked(0, 0), picked(10, 0))).pending.stepIndex).toBe(0);
+  });
+
+  it("builds the path on an empty answer, which is the Enter key", () => {
+    expect(completed(walk("polyline", picked(0, 0), picked(10, 0), picked(10, 10), typed("")))).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      bulges: [0, 0, 0],
+      closed: false,
+    });
+  });
+
+  it("refuses to end on one point, and says how many it has", () => {
+    const short = prompting(walk("polyline", picked(0, 0), typed("")));
+    expect(short.error).toBe("polyline needs at least 2 points, and has 1");
+    expect(short.message).toBe(NEXT);
+  });
+
+  it("takes a typed point as readily as a pick", () => {
+    expect(completed(walk("polyline", typed("0,0"), typed("10,0"), typed("")))).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      bulges: [0, 0],
+      closed: false,
+    });
+  });
+
+  it("names the words it offers when an answer is neither a point nor one of them", () => {
+    const confused = prompting(walk("polyline", picked(0, 0), typed("nope")));
+    expect(confused.error).toBe('specify next point needs a point as x,y or one of the words offered — got "nope"');
+  });
+});
+
+describe("the words a polyline prompt takes, in the AutoCAD manner", () => {
+  it("closes and finishes on the whole word", () => {
+    const command = completed(walk("polyline", picked(0, 0), picked(10, 0), picked(10, 10), typed("close")));
+    expect(command).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      bulges: [0, 0, 0],
+      closed: true,
+    });
+  });
+
+  it("takes the first letter of a word, the way AutoCAD does", () => {
+    const command = completed(walk("polyline", picked(0, 0), picked(10, 0), typed("c")));
+    expect(command.kind === "polyline" && command.closed).toBe(true);
+  });
+
+  it("matches a word without regard to case", () => {
+    const command = completed(walk("polyline", picked(0, 0), picked(10, 0), typed("CLOSE")));
+    expect(command.kind === "polyline" && command.closed).toBe(true);
+  });
+
+  it("reads a letter as a point attempt while the word it names is still held back", () => {
+    const early = prompting(walk("polyline", picked(0, 0), typed("c")));
+    expect(early.error).toContain('got "c"');
+  });
+
+  it("drops the last point on Undo, so the path is one point shorter", () => {
+    const undone = walk("polyline", picked(0, 0), picked(10, 0), picked(99, 99), typed("u"), picked(10, 10), typed(""));
+    expect(completed(undone)).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      bulges: [0, 0, 0],
+      closed: false,
+    });
+  });
+
+  it("takes Undo off the list once the path is empty again, and asks for a start point", () => {
+    const emptied = prompting(walk("polyline", picked(0, 0), typed("u")));
+    expect(emptied.message).toBe(START);
+    expect(emptied.error).toBeUndefined();
+  });
+
+  it("undoes the word itself when the word was the last thing typed, so Arc can be taken back", () => {
+    const command = completed(walk("polyline", picked(0, 0), picked(10, 0), typed("arc"), typed("u"), picked(20, 10), typed("")));
+    expect(command).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 20, y: 10 },
+      ],
+      bulges: [0, 0, 0],
+      closed: false,
+    });
+  });
+});
+
+describe("Arc mode, which is the only way to author a bulge by hand", () => {
+  const QUARTER_TURN_BULGE = Math.tan(Math.PI / 8);
+
+  function bulgesOf(session: CommandSession): readonly number[] {
+    const command = completed(session);
+    return command.kind === "polyline" ? command.bulges : [];
+  }
+
+  it("bends the edge after the word, and leaves the edges before it straight", () => {
+    const bulges = bulgesOf(walk("polyline", picked(0, 0), picked(10, 0), typed("arc"), picked(20, 10), typed("")));
+    expect(bulges[0]).toBe(0);
+    expect(bulges[1]).toBeCloseTo(QUARTER_TURN_BULGE);
+  });
+
+  it("continues the path smoothly, so the arc leaves along the edge before it", () => {
+    const bulges = bulgesOf(walk("polyline", picked(0, 0), picked(0, 10), typed("arc"), picked(10, 20), typed("")));
+    expect(bulges[1]).toBeCloseTo(-QUARTER_TURN_BULGE);
+  });
+
+  it("returns to straight edges on Line", () => {
+    const bulges = bulgesOf(walk("polyline", picked(0, 0), picked(10, 0), typed("a"), picked(20, 10), typed("l"), picked(30, 10), typed("")));
+    expect(bulges[1]).toBeCloseTo(QUARTER_TURN_BULGE);
+    expect(bulges[2]).toBe(0);
+  });
+
+  it("leaves the first edge straight, because a path has no direction to follow yet", () => {
+    const bulges = bulgesOf(walk("polyline", typed("arc"), picked(0, 0), picked(10, 10), typed("")));
+    expect(bulges[0]).toBe(0);
+  });
+
+  it("bends the closing edge too, when the path closes in arc mode", () => {
+    const bulges = bulgesOf(walk("polyline", picked(0, 0), picked(10, 0), typed("arc"), picked(20, 10), typed("close")));
+    expect(bulges[2]).not.toBe(0);
+  });
+
+  it("leaves the closing edge straight when the path closes in line mode", () => {
+    const bulges = bulgesOf(walk("polyline", picked(0, 0), picked(10, 0), picked(20, 10), typed("close")));
+    expect(bulges[2]).toBe(0);
+  });
+});
+
+describe("a polyline line still reads as one line, so the typed form is unaffected", () => {
+  it("routes the trailing closed flag to the parser, which knows that word", () => {
+    expect(completed(beginCommand("polyline 0,0 10,0 closed"))).toEqual({
+      kind: "polyline",
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      bulges: [0, 0],
+      closed: true,
+    });
+  });
+
+  it("takes the prompt word close on a line too, and finishes there", () => {
+    const command = completed(beginCommand("polyline 0,0 10,0 close"));
+    expect(command.kind === "polyline" && command.closed).toBe(true);
+  });
+
+  it("keeps asking when a line runs out of points, because the step has no end of its own", () => {
+    expect(prompting(beginCommand("polyline 0,0 10,0")).message).toBe("specify next point or [Arc/Line/Close/Undo]:");
   });
 });

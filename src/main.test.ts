@@ -1709,3 +1709,88 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
     expect(state.log.join("\n")).not.toContain("cyclic");
   });
 });
+describe("a polyline drawn by clicking, which is the AutoCAD gesture", () => {
+  function clickAt(state: AppState, x: number, y: number): AppState {
+    return pointerDownAt(state, worldToScreen(state.document.camera, { x, y }), VIEWPORT).state;
+  }
+
+  function pathOf(state: AppState): GraphObject {
+    const object = state.document.objects[0];
+    if (object === undefined) {
+      throw new Error("expected the click sequence to create one object");
+    }
+    return object;
+  }
+
+  it("asks for a start point on the bare word, and holds the document until the operator ends it", () => {
+    const started = submitLine(opened(), "polyline", VIEWPORT).state;
+    expect(started.pending?.commandName).toBe("polyline");
+    expect(started.log[started.log.length - 1]).toBe("specify start point:");
+    expect(started.document.objects).toEqual([]);
+  });
+
+  it("turns three clicks and an empty line into a polyline at those points", () => {
+    let state = submitLine(opened(), "polyline", VIEWPORT).state;
+    state = clickAt(state, 0, 0);
+    state = clickAt(state, 100, 0);
+    state = clickAt(state, 100, 100);
+    state = submitLine(state, "", VIEWPORT).state;
+    const path = pathOf(state);
+    expect(path.type).toBe("polyline");
+    expect(path.vertexCount).toBe(3);
+    expect(getSlot(path, ["vertex", "2", "x"])?.value).toBe(100);
+    expect(getSlot(path, ["closed"])?.value).toBe(false);
+    expect(state.pending).toBeUndefined();
+  });
+
+  it("closes the path on the word close, and the area slot answers a number", () => {
+    let state = submitLine(opened(), "polyline", VIEWPORT).state;
+    state = clickAt(state, 0, 0);
+    state = clickAt(state, 4, 0);
+    state = clickAt(state, 4, 3);
+    state = clickAt(state, 0, 3);
+    state = submitLine(state, "close", VIEWPORT).state;
+    expect(getSlot(pathOf(state), ["area"])?.value).toBeCloseTo(12);
+  });
+
+  it("sends a click to the prompt even when it lands on an object, so a pick never selects instead", () => {
+    let state = submitLine(opened(), "rect x=0 y=0 w=200 h=100", VIEWPORT).state;
+    state = submitLine(state, "polyline", VIEWPORT).state;
+    state = clickAt(state, 50, 50);
+    expect(state.interaction.selectedObjectIds).toEqual([]);
+    expect(state.pending?.commandName).toBe("polyline");
+  });
+
+  it("drops the whole half finished path on Escape, and leaves the document alone", () => {
+    let state = submitLine(opened(), "polyline", VIEWPORT).state;
+    state = clickAt(state, 0, 0);
+    state = clickAt(state, 10, 0);
+    const cancelled = escape(state);
+    expect(cancelled.pending).toBeUndefined();
+    expect(cancelled.document.objects).toEqual([]);
+  });
+
+  it("undoes the last click, so the path keeps the points the operator kept", () => {
+    let state = submitLine(opened(), "polyline", VIEWPORT).state;
+    state = clickAt(state, 0, 0);
+    state = clickAt(state, 10, 0);
+    state = clickAt(state, 99, 99);
+    state = submitLine(state, "u", VIEWPORT).state;
+    state = clickAt(state, 10, 10);
+    state = submitLine(state, "", VIEWPORT).state;
+    const path = pathOf(state);
+    expect(path.vertexCount).toBe(3);
+    expect(getSlot(path, ["vertex", "2", "x"])?.value).toBe(10);
+    expect(getSlot(path, ["vertex", "2", "y"])?.value).toBe(10);
+  });
+
+  it("bends the edge after the word arc, so a click sequence can author a curve", () => {
+    let state = submitLine(opened(), "polyline", VIEWPORT).state;
+    state = clickAt(state, 0, 0);
+    state = clickAt(state, 10, 0);
+    state = submitLine(state, "arc", VIEWPORT).state;
+    state = clickAt(state, 20, 10);
+    state = submitLine(state, "", VIEWPORT).state;
+    expect(getSlot(pathOf(state), ["vertex", "1", "bulge"])?.value).toBeCloseTo(Math.tan(Math.PI / 8));
+  });
+});

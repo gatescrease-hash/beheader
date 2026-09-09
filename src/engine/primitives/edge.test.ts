@@ -10,7 +10,9 @@ import {
   arcOfEdge,
   bezierOfEdge,
   buildPathEdges,
+  bulgeForTangentArc,
   distanceToEdge,
+  edgeEndDirection,
   edgeDoubledAreaOverChord,
   edgeLength,
   HALF_CIRCLE_BULGE,
@@ -421,5 +423,97 @@ describe("buildPathEdges — one edge for each vertex when closed, one fewer whe
 
   it("reads a missing bulge as a straight edge", () => {
     expect(buildPathEdges(square, [], true).every((edge) => edge.bulge === 0)).toBe(true);
+  });
+});
+/** The angle of a direction, so a test can compare two directions of any length. */
+function bearing(vector: { readonly x: number; readonly y: number }): number {
+  return Math.atan2(vector.y, vector.x);
+}
+
+const QUARTER_TURN_BULGE = Math.tan(Math.PI / 8);
+
+describe("edgeEndDirection, the way a path leaves an edge", () => {
+  it("leaves a straight edge along its chord", () => {
+    expect(edgeEndDirection({ start: { x: 0, y: 0 }, end: { x: 3, y: 4 }, bulge: 0 })).toEqual({ x: 3, y: 4 });
+  });
+
+  it("turns by half the sweep on an arc, so a half circle leaves square to its chord", () => {
+    const direction = edgeEndDirection({ start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, bulge: HALF_CIRCLE_BULGE });
+    expect(bearing(direction)).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("turns the other way for the other sign of bulge", () => {
+    const direction = edgeEndDirection({ start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, bulge: -HALF_CIRCLE_BULGE });
+    expect(bearing(direction)).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it("leaves a cubic along its last control leg, and not along its chord", () => {
+    const edge: PathEdge = {
+      start: { x: 0, y: 0 },
+      end: { x: 10, y: 0 },
+      bulge: 0,
+      controls: [
+        { x: 0, y: 10 },
+        { x: 10, y: 10 },
+      ],
+    };
+    expect(bearing(edgeEndDirection(edge))).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it("falls back to the chord when the last control sits on the end point", () => {
+    const edge: PathEdge = {
+      start: { x: 0, y: 0 },
+      end: { x: 10, y: 0 },
+      bulge: 0,
+      controls: [
+        { x: 2, y: 6 },
+        { x: 10, y: 0 },
+      ],
+    };
+    expect(bearing(edgeEndDirection(edge))).toBeCloseTo(bearing({ x: 8, y: -6 }));
+  });
+});
+
+describe("bulgeForTangentArc, the arc that continues a path smoothly", () => {
+  it("gives a quarter circle for a chord at 45 degrees to the direction", () => {
+    expect(bulgeForTangentArc({ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 1, y: 0 })).toBeCloseTo(QUARTER_TURN_BULGE);
+  });
+
+  it("puts the centre square to the direction, which is what tangency means", () => {
+    const start = { x: 10, y: 0 };
+    const end = { x: 20, y: 10 };
+    const direction = { x: 1, y: 0 };
+    const arc = arcOfEdge({ start, end, bulge: bulgeForTangentArc(start, end, direction) });
+    const radius = { x: (arc?.center.x ?? 0) - start.x, y: (arc?.center.y ?? 0) - start.y };
+    expect(radius.x * direction.x + radius.y * direction.y).toBeCloseTo(0);
+  });
+
+  it("gives a straight edge for a chord that lies along the direction", () => {
+    expect(bulgeForTangentArc({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 1, y: 0 })).toBeCloseTo(0);
+  });
+
+  it("gives a straight edge for a chord that points back along the direction, because that arc never arrives", () => {
+    expect(bulgeForTangentArc({ x: 0, y: 0 }, { x: -10, y: 0 }, { x: 1, y: 0 })).toBe(0);
+  });
+
+  it("gives a straight edge when the two points are the same", () => {
+    expect(bulgeForTangentArc({ x: 5, y: 5 }, { x: 5, y: 5 }, { x: 1, y: 0 })).toBe(0);
+  });
+
+  it("gives a half circle for a chord square to the direction", () => {
+    expect(bulgeForTangentArc({ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 1, y: 0 })).toBeCloseTo(HALF_CIRCLE_BULGE);
+  });
+
+  it("carries the sign of the turn, so a chord to the right bends the other way", () => {
+    expect(bulgeForTangentArc({ x: 0, y: 0 }, { x: 10, y: -10 }, { x: 1, y: 0 })).toBeCloseTo(-QUARTER_TURN_BULGE);
+  });
+
+  it("joins two arcs smoothly, so the second leaves where the first arrives", () => {
+    const first: PathEdge = { start: { x: 0, y: 0 }, end: { x: 10, y: 10 }, bulge: QUARTER_TURN_BULGE };
+    const direction = edgeEndDirection(first);
+    const second: PathEdge = { start: first.end, end: { x: 10, y: 30 }, bulge: bulgeForTangentArc(first.end, { x: 10, y: 30 }, direction) };
+    const arc = arcOfEdge(second);
+    const radius = { x: (arc?.center.x ?? 0) - second.start.x, y: (arc?.center.y ?? 0) - second.start.y };
+    expect(radius.x * direction.x + radius.y * direction.y).toBeCloseTo(0);
   });
 });

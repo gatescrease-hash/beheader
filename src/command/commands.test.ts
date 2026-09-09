@@ -20,7 +20,7 @@ import {
 import { hitTest } from "../render/hittest.ts";
 import { INITIAL_INTERACTION_STATE, pointerDown, pointerMove } from "../render/interaction.ts";
 import { COMMAND_NAMES, isCommandParseFailure, parseCommand, type Command } from "./parser.ts";
-import { beginCommand, respond } from "./prompt.ts";
+import { beginCommand, respond, type PromptResponse } from "./prompt.ts";
 import { COMMANDS_WITH_HANDLERS, executeCommand, isCommandFailure, MAX_POLYGON_SIDES, type CommandOutcome } from "./commands.ts";
 
 function parsed(line: string): Command {
@@ -49,6 +49,32 @@ function mutateOrThrow(document: Document, operations: readonly Operation[]): Do
     throw new Error(`test setup: expected the batch to succeed, got: ${result.message}`);
   }
   return { ...document, objects: result.objects, journal: result.journal };
+}
+
+const typed = (text: string): PromptResponse => ({ kind: "typed", text });
+const picked = (x: number, y: number): PromptResponse => ({ kind: "picked", point: { x, y } });
+
+/** Walks a prompt sequence to the command it builds, the way a click on the canvas does. */
+function picks(line: string, ...responses: readonly PromptResponse[]): Command {
+  let session = beginCommand(line);
+  for (const response of responses) {
+    if (session.status !== "prompting") {
+      throw new Error(`expected "${line}" to keep prompting, got ${session.status}`);
+    }
+    session = respond(session.pending, response);
+  }
+  if (session.status !== "complete") {
+    throw new Error(`expected "${line}" to complete, got ${session.status}`);
+  }
+  return session.command;
+}
+
+function committedCommand(command: Command): Document {
+  const outcome = executeCommand(command, createEmptyDocument());
+  if (isCommandFailure(outcome)) {
+    throw new Error(`expected the picked command to succeed, got: ${outcome.message}`);
+  }
+  return outcome.document;
 }
 
 function refused(line: string, document: Document): string {
@@ -179,6 +205,22 @@ describe("creation — a typed line becomes an object", () => {
 
   it("refuses a polyline with fewer than two points, naming the count it got", () => {
     expect(refused("polyline 0,0", createEmptyDocument())).toContain("at least 2");
+  });
+
+  it("carries the bulges a picked path chose all the way to the vertex slots", () => {
+    const object = onlyObject(committedCommand(picks("polyline", picked(0, 0), picked(10, 0), typed("arc"), picked(20, 10), typed("close"))));
+    expect(object.vertexCount).toBe(3);
+    expect(literalValue(object, ["vertex", "0", "bulge"])).toBe(0);
+    expect(literalValue(object, ["vertex", "1", "bulge"])).toBeCloseTo(Math.tan(Math.PI / 8));
+    expect(getSlot(object, ["closed"])?.value).toBe(true);
+  });
+
+  it("gives that path a length longer than the straight sided one over the same points, because the edges bend", () => {
+    const bent = onlyObject(committedCommand(picks("polyline", picked(0, 0), picked(10, 0), typed("arc"), picked(20, 10), typed("close"))));
+    const straight = onlyObject(committed("polyline 0,0 10,0 20,10 closed", createEmptyDocument()));
+    const bentLength = getSlot(bent, ["length"])?.value;
+    const straightLength = getSlot(straight, ["length"])?.value;
+    expect(typeof bentLength === "number" && typeof straightLength === "number" && bentLength > straightLength).toBe(true);
   });
 
   it("creates a table carrying its origin and both dimensions, and NO cell slots, because an absent cell is how a table spells empty", () => {

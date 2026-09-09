@@ -37,6 +37,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
         { x: 100, y: 0 },
         { x: 100, y: 100 },
       ],
+      bulges: [0, 0, 0],
       closed: false,
     },
   },
@@ -114,6 +115,7 @@ describe("polyline — a variadic points list, not a fixed positional count", ()
         { x: 10, y: 10 },
         { x: 0, y: 10 },
       ],
+      bulges: [0, 0, 0, 0],
       closed: false,
     });
   });
@@ -125,12 +127,13 @@ describe("polyline — a variadic points list, not a fixed positional count", ()
         { x: 0, y: 0 },
         { x: 10, y: 0 },
       ],
+      bulges: [0, 0],
       closed: true,
     });
   });
 
   it("parses a single point too — the parser checks only the grammar, not the minimum of two a line needs", () => {
-    expect(parsed("polyline 0,0")).toEqual({ kind: "polyline", points: [{ x: 0, y: 0 }], closed: false });
+    expect(parsed("polyline 0,0")).toEqual({ kind: "polyline", points: [{ x: 0, y: 0 }], bulges: [0], closed: false });
   });
 
   it("rejects a point missing its comma, naming the malformed token and its offset", () => {

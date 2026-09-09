@@ -109,6 +109,62 @@ export function sweepCoversAngle(arc: ArcGeometry, angle: number): boolean {
 }
 
 /**
+ * The direction a path travels as it leaves the end of an edge.
+ *
+ * A straight edge leaves along its chord. An arc leaves along the chord turned
+ * by half its sweep. A cubic leaves along its last control leg. The result has
+ * no set length, because every caller reads an angle from it.
+ */
+export function edgeEndDirection(edge: PathEdge): Point {
+  const chord = { x: edge.end.x - edge.start.x, y: edge.end.y - edge.start.y };
+  const bezier = bezierOfEdge(edge);
+  if (bezier !== undefined) {
+    return lastNonZeroLeg(bezier, chord);
+  }
+  const arc = arcOfEdge(edge);
+  return arc === undefined ? chord : turnBy(chord, arc.sweep / 2);
+}
+
+/**
+ * The bulge of the arc that starts at one point, ends at another, and leaves
+ * the start along a direction the caller gives.
+ *
+ * The tangent chord angle of a circle is half the included angle. So the signed
+ * angle from the direction to the chord is a quarter turn of the arc. The
+ * tangent of that quarter turn is the bulge a DXF vertex record carries.
+ *
+ * Two inputs have no arc. A chord of no length is one. A chord that points
+ * straight back along the direction is the other, because that arc closes a
+ * full circle and never arrives. Each one gives 0, which draws a straight edge.
+ */
+export function bulgeForTangentArc(start: Point, end: Point, direction: Point): number {
+  const chordX = end.x - start.x;
+  const chordY = end.y - start.y;
+  const cross = direction.x * chordY - direction.y * chordX;
+  const dot = direction.x * chordX + direction.y * chordY;
+  if (cross === 0 && dot <= 0) {
+    return 0;
+  }
+  const bulge = Math.tan(Math.atan2(cross, dot) / 2);
+  return Number.isFinite(bulge) ? bulge : 0;
+}
+
+function turnBy(vector: Point, angle: number): Point {
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  return { x: vector.x * cosine - vector.y * sine, y: vector.x * sine + vector.y * cosine };
+}
+
+/** The last leg of a control polygon that has a length, or the chord. */
+function lastNonZeroLeg(curve: CubicBezier, chord: Point): Point {
+  const legs = [
+    { x: curve.p3.x - curve.p2.x, y: curve.p3.y - curve.p2.y },
+    { x: curve.p3.x - curve.p1.x, y: curve.p3.y - curve.p1.y },
+  ];
+  return legs.find((leg) => leg.x !== 0 || leg.y !== 0) ?? chord;
+}
+
+/**
  * Five point Gauss-Legendre, mapped onto 0 to 1. A rule with five nodes
  * integrates a polynomial of degree nine exactly. Every area and moment
  * integrand of a cubic is degree eight or less, so these answers are exact

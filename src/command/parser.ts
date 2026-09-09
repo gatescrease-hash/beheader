@@ -14,7 +14,7 @@
  * command error. That list and the built registry must stay disjoint, and a
  * test pins it.
  */
-import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/index.ts";
+import { bulgeForTangentArc, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
 
 export interface CreateCircleCommand {
   readonly kind: "circle";
@@ -42,6 +42,8 @@ export interface CreateRectCommand {
 export interface CreatePolylineCommand {
   readonly kind: "polyline";
   readonly points: readonly CommandPoint[];
+  /** One bulge for each vertex, for the edge that leaves it. The last one closes the path. */
+  readonly bulges: readonly number[];
   readonly closed: boolean;
 }
 
@@ -255,7 +257,35 @@ interface PromptStep {
   readonly accepts: "point" | "distance" | "number";
   readonly relativeTo?: string;
   readonly defaultValue?: number;
+
+  /** A step that repeats collects answers until the operator ends it. */
+  readonly repeats?: true;
+  /** What the step asks the first time, when it has collected nothing yet. */
+  readonly firstMessage?: string;
+  /** How many points the step needs before an empty answer can end it. */
+  readonly minimum?: number;
+  readonly options?: readonly PromptOption[];
 }
+
+/**
+ * One word an operator can type at a prompt that repeats, in the AutoCAD manner.
+ * The prompt offers it by name, and accepts the name or its first letter.
+ */
+interface PromptOption {
+  readonly name: string;
+  /**
+   * "record" keeps the word in the answer and asks again. "undo" drops the
+   * last answer and asks again. "end" keeps the word and finishes the step.
+   */
+  readonly effect: "record" | "undo" | "end";
+  /** How many points the step needs before the prompt offers this word. */
+  readonly needs?: number;
+}
+
+/** One answer to a prompt that repeats. It is a point the operator gave, or a word they typed. */
+export type PromptStroke =
+  | { readonly kind: "point"; readonly point: PromptPoint }
+  | { readonly kind: "option"; readonly option: string };
 
 interface CommandSpec {
   readonly name: string;
@@ -267,13 +297,18 @@ interface CommandSpec {
 
   readonly prompts?: readonly PromptStep[];
   readonly buildFromPrompts?: (answers: PromptAnswers) => Command;
+  /**
+   * The shape a half finished command draws now, with the pointer as its next
+   * point. The render layer paints it. Nothing here reads the pointer itself.
+   */
+  readonly previewFromPrompts?: (answers: PromptAnswers, cursor: PromptPoint | undefined) => CreatePolylineCommand;
 }
 
 export interface PromptAnswers {
   readonly [stepName: string]: PromptValue;
 }
 
-export type PromptValue = number | PromptPoint;
+export type PromptValue = number | PromptPoint | readonly PromptStroke[];
 
 export interface PromptPoint {
   readonly x: number;
@@ -385,7 +420,28 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     positional: [{ name: "points", kind: "points" }],
     named: [],
     flags: ["closed"],
-    build: (args) => ({ kind: "polyline", points: pointsArgument(args, "points"), closed: hasFlag(args, "closed") }),
+    build: (args) => {
+      const points = pointsArgument(args, "points");
+      return { kind: "polyline", points, bulges: points.map(() => 0), closed: hasFlag(args, "closed") };
+    },
+    prompts: [
+      {
+        name: "strokes",
+        firstMessage: "specify start point",
+        message: "specify next point",
+        accepts: "point",
+        repeats: true,
+        minimum: MIN_POLYLINE_VERTICES,
+        options: [
+          { name: "arc", effect: "record", needs: 1 },
+          { name: "line", effect: "record", needs: 1 },
+          { name: "close", effect: "end", needs: MIN_POLYLINE_VERTICES },
+          { name: "undo", effect: "undo", needs: 1 },
+        ],
+      },
+    ],
+    buildFromPrompts: (answers) => polylineFromStrokes(strokeAnswer(answers, "strokes")),
+    previewFromPrompts: (answers, cursor) => polylineFromStrokes(strokeAnswer(answers, "strokes"), cursor),
   },
   {
     name: "text",
@@ -974,14 +1030,88 @@ function hasFlag(args: MatchedArguments, name: string): boolean {
   return args.flags.includes(name);
 }
 
+/**
+ * True for a single point answer. A step that repeats answers with a list, and
+ * a list is an object too, so a plain typeof test is not enough here.
+ */
+export function isPromptPoint(value: PromptValue | undefined): value is PromptPoint {
+  return typeof value === "object" && !Array.isArray(value);
+}
+
 function pointAnswer(answers: PromptAnswers, name: string): PromptPoint {
   const found = answers[name];
-  return typeof found === "object" ? found : { x: Number.NaN, y: Number.NaN };
+  return isPromptPoint(found) ? found : { x: Number.NaN, y: Number.NaN };
 }
 
 function numberAnswer(answers: PromptAnswers, name: string): number {
   const found = answers[name];
   return typeof found === "number" ? found : Number.NaN;
+}
+
+function strokeAnswer(answers: PromptAnswers, name: string): readonly PromptStroke[] {
+  const found = answers[name];
+  return Array.isArray(found) ? found : [];
+}
+
+/**
+ * The polyline a run of picks and words describes.
+ *
+ * "arc" and "line" pick how the next edge bends. An arc leaves the point before
+ * it along the direction the path already travels, so the two meet smoothly.
+ * The first edge of a path has no direction to follow, so it stays straight.
+ * "close" sets the flag, and in arc mode it bends the edge home the same way.
+ *
+ * A cursor point joins the end as one more pick. That is what makes a preview
+ * and a finished command the same walk.
+ */
+function polylineFromStrokes(strokes: readonly PromptStroke[], cursor?: PromptPoint): CreatePolylineCommand {
+  const points: CommandPoint[] = [];
+  const bulges: number[] = [];
+  let arcMode = false;
+  let closed = false;
+  for (const stroke of strokes) {
+    if (stroke.kind === "option") {
+      arcMode = stroke.option === "arc" ? true : stroke.option === "line" ? false : arcMode;
+      closed = closed || stroke.option === "close";
+      continue;
+    }
+    appendVertex(points, bulges, stroke.point, arcMode);
+  }
+  if (cursor !== undefined && !closed) {
+    appendVertex(points, bulges, cursor, arcMode);
+  }
+  if (closed && points.length > 0) {
+    bulges[points.length - 1] = closingBulge(points, bulges, arcMode);
+  }
+  return { kind: "polyline", points, bulges, closed };
+}
+
+function appendVertex(points: CommandPoint[], bulges: number[], point: CommandPoint, arcMode: boolean): void {
+  const previous = points[points.length - 1];
+  if (previous !== undefined) {
+    bulges[points.length - 1] = arcMode ? bulgeForTangentArc(previous, point, directionAtEnd(points, bulges)) : 0;
+  }
+  points.push(point);
+  bulges.push(0);
+}
+
+function closingBulge(points: readonly CommandPoint[], bulges: readonly number[], arcMode: boolean): number {
+  const last = points[points.length - 1];
+  const first = points[0];
+  if (!arcMode || last === undefined || first === undefined || points.length < MIN_POLYLINE_VERTICES) {
+    return 0;
+  }
+  return bulgeForTangentArc(last, first, directionAtEnd(points, bulges));
+}
+
+/** The direction the path travels as it reaches its last point, or nothing before the first edge. */
+function directionAtEnd(points: readonly CommandPoint[], bulges: readonly number[]): CommandPoint {
+  const end = points[points.length - 1];
+  const before = points[points.length - 2];
+  if (end === undefined || before === undefined) {
+    return { x: 0, y: 0 };
+  }
+  return edgeEndDirection({ start: before, end, bulge: bulges[points.length - 2] ?? 0 });
 }
 
 export function findCommandSpec(name: string): CommandSpec | undefined {
@@ -1020,7 +1150,7 @@ export function readCommandHead(line: string): NextTokenResult {
   return nextToken(line, 0);
 }
 
-export type { CommandSpec, CommandToken, NextTokenResult, PromptStep };
+export type { CommandSpec, CommandToken, NextTokenResult, PromptOption, PromptStep };
 
 function failure(message: string, start: number): CommandParseFailure {
   return { ok: false, message, start };

@@ -678,7 +678,7 @@ line stays the main way to author a document.
 ```
 circle x=100 y=100 r=20
 polygon sides=5 x=0 y=0 r=50
-polyline 0,0 100,0 100,100 [closed]
+polyline 0,0 100,0 100,100 [closed]      # or the word alone, then click
 rect x=0 y=0 w=200 h=100
 text x=0 y=0 "Hello {= table_x.A1 }"
 table x=0 y=0 rows=8 cols=8
@@ -711,7 +711,30 @@ log above the input echoes results and errors. **Every refusal message must name
 the slots it is about.** That is the whole debug story for now.
 
 A bare command word starts a prompt sequence in the AutoCAD style. The prompt
-asks for each argument in turn.
+asks for each argument in turn. A click on the canvas answers a prompt that
+takes a point, so the operator can draw with the pointer in place of typed
+coordinates. Escape drops the whole half finished command.
+
+**One prompt step can repeat.** `polyline` uses it. The prompt asks for a start
+point, and then asks for one more point at a time until the operator ends it
+with an empty line. It offers a word at each step, in the AutoCAD manner, and
+takes the whole word or its first letter:
+
+| Word | What it does |
+| --- | --- |
+| `arc` | Bends each edge after it into an arc. |
+| `line` | Returns to straight edges. |
+| `close` | Closes the path and ends the command. |
+| `undo` | Drops the last point or word. |
+
+The prompt offers a word only where it applies. `close` waits until the path
+holds two points, and the first prompt of all offers no word at all.
+
+**An arc leaves the point before it along the direction the path already
+travels.** So the two meet smoothly, and one click gives the arc its
+`vertex.N.bulge` value. The first edge of a path has no direction to follow, so
+it stays straight. This is the only way to author a bulge by hand other than
+`set`.
 
 ---
 

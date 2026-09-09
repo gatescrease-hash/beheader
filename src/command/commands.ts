@@ -359,7 +359,7 @@ function createPolyline(command: CreatePolylineCommand, document: Document, cont
   command.points.forEach((point, index) => {
     literals.push({ path: vertexXPath(index), value: point.x });
     literals.push({ path: vertexYPath(index), value: point.y });
-    literals.push({ path: vertexBulgePath(index), value: 0 });
+    literals.push({ path: vertexBulgePath(index), value: command.bulges[index] ?? 0 });
     const handleIn = vertexHandleInPaths(index);
     const handleOut = vertexHandleOutPaths(index);
     literals.push({ path: handleIn.x, value: 0 });
