@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2179 pass, 0 skip, across 40 test files. |
+| Tests | 2187 pass, 0 skip, across 40 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2179 tests
+npm test             # 2187 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -152,7 +152,7 @@ other suites drive them anyway.
 | `renderer.ts` | The immediate mode painter. It makes three passes. It clears the screen. It draws every object under the camera transform. Then it draws furniture such as labels and badges at a constant size in screen space. It reads `layOutText` from `measure.ts`. Those two files must change together, because one layout with two readers is what keeps the drawn text and the measured height in agreement. |
 | `images.ts` | The bitmap decode cache. A data URL decodes once and the result stays for later paints. |
 | `editor.ts` | Where an in place editor goes and what it looks like. It answers the placement question for a text box and for a table cell. `main.ts` mounts the real element. |
-| `interaction.ts` | Mouse state to mutation calls. A drag writes each component on its own. A literal component moves. A component a formula drives stays put and shows a notice. So an object with a bound x slides up and down only, and axis constraint falls out for free. |
+| `interaction.ts` | Mouse state to mutation calls. A drag writes each component on its own. A literal component moves. A component a formula drives stays put and shows a notice. So an object with a bound x slides up and down only, and axis constraint falls out for free. A path has no origin, so it drags by every vertex instead. A shift press over an edge grabs that segment and moves only its two vertices. `pointerDown` picks the vertex list once and `DragState` holds it, so the set never changes under the pointer. |
 | `panel.ts` | Where a properties panel goes next to its object. Placement only. `main.ts` builds the rows. |
 
 ### `src/command/`
@@ -287,10 +287,13 @@ group blocks the acceptance test in `SPEC.md` section 12.
    itself, because the count changes only through a mutation operation.
    `createObjectFromCommand`, `addVertexToObject` and `deleteVertexFromObject`
    all write it now.
-3. **A drag over an object with no `origin` slot is still not built.** A
-   polyline has vertex slots now, not an `origin` slot, so this path stays
-   open. `interaction.ts` already refuses the drag with a clear notice rather
-   than crashing.
+3. **A path drags by its vertices now.** A polyline has no `origin` slot, so a
+   drag applies the delta to every `vertex.N.x` and `vertex.N.y`, under the
+   same per component rule an origin follows. A vertex a formula drives stays
+   where it is while the rest move, which is how a road holds on to the
+   intersections its ends read. A shift drag over an edge moves only the two
+   vertices of that edge. The press picks its vertices once and holds them, so
+   the set never changes under the pointer.
 
 ### Specified, and built during beta
 

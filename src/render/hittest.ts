@@ -17,6 +17,7 @@ import {
   buildPathEdges,
   type CameraState,
   CLOSED_PATH,
+  distanceToEdge,
   distanceToPath,
   getSlot,
   getTableDimensions,
@@ -26,6 +27,7 @@ import {
   pathContains,
   pathEdgesOfObject,
   type Point,
+  POLYLINE_TYPE,
   RADIUS_PATH,
   VERTICES_PATH,
 } from "../engine/index.ts";
@@ -128,6 +130,38 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
       return false;
     }
   }
+}
+
+/**
+ * The two vertices of the path edge under a point, when one edge sits within
+ * the stroke tolerance. A shift drag moves that pair and leaves the rest of
+ * the path where it is. A click inside a filled path reaches no edge, so this
+ * gives undefined and the whole path moves instead.
+ */
+export function pathSegmentUnder(
+  object: GraphObject,
+  screenPoint: ScreenPoint,
+  camera: CameraState,
+): readonly [number, number] | undefined {
+  if (object.type !== POLYLINE_TYPE) {
+    return undefined;
+  }
+  const count = object.vertexCount ?? 0;
+  const edges = pathEdgesOfObject(object);
+  if (count === 0 || edges.length === 0) {
+    return undefined;
+  }
+  const worldPoint = screenToWorld(camera, screenPoint);
+  let nearest: number | undefined;
+  let shortest = STROKE_HIT_TOLERANCE_SCREEN_PIXELS / camera.zoom;
+  edges.forEach((edge, index) => {
+    const distance = distanceToEdge(worldPoint, edge);
+    if (distance <= shortest) {
+      shortest = distance;
+      nearest = index;
+    }
+  });
+  return nearest === undefined ? undefined : [nearest, (nearest + 1) % count];
 }
 
 /** The topmost object under a screen point, or undefined. */

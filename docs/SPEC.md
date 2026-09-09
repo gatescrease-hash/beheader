@@ -644,6 +644,15 @@ A vertex bound to something else stays put while the rest move. This is on
 purpose. In the road network test, the operator cannot drag a polyline away
 from the two intersections that its endpoints read.
 
+**Shift has two meanings.** Shift adds an object to the selection, or takes it
+out again. Over an edge of a path it means something else: it grabs that
+segment, and the drag moves only the two vertices at the ends of that edge. A
+press that grabs a segment selects the path outright, because nothing can drag
+an object that the same press has just deselected. A shift press inside a
+filled path reaches no edge, so it adds to the selection and drags the whole
+path, the way it does everywhere else. The gesture picks its vertices at the
+press and holds them, so the set never changes under the pointer.
+
 **A note on drag speed.** A drag fires many mutations per second and each one
 deep clones the document. If that becomes slow to watch, throttle drag mutations
 to animation frames and draw a light preview between them. Do not work around it

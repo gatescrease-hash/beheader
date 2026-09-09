@@ -14,6 +14,7 @@ import {
   mutate,
   type MutationJournalEntry,
   resolveDerivedSlots,
+  type Slot,
 } from "../engine/index.ts";
 import { deselect, INITIAL_INTERACTION_STATE, pointerDown, pointerMove, pointerUp, type InteractionState } from "./interaction.ts";
 
@@ -47,6 +48,33 @@ function rectObject(originX: number, originY: number): GraphObject {
   };
 }
 
+/**
+ * A path with no origin slot. Its corners sit at (0,0), (100,0) and (100,100),
+ * so the first edge runs along y of 0 and the second along x of 100.
+ */
+function polylineObject(closed = false, overrides: Record<string, Slot> = {}): GraphObject {
+  const points = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+  ];
+  const slots: Record<string, Slot> = { closed: { kind: "literal", value: closed } };
+  points.forEach((point, index) => {
+    slots[`vertex.${index}.x`] = { kind: "literal", value: point.x };
+    slots[`vertex.${index}.y`] = { kind: "literal", value: point.y };
+    slots[`vertex.${index}.bulge`] = { kind: "literal", value: 0 };
+  });
+  const stub: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", vertexCount: points.length, slots };
+  for (const slot of resolveDerivedSlots(stub, getObjectSchema("polyline")?.derivedSlots ?? [])) {
+    slots[slot.path.join(".")] = { kind: "derived", value: null };
+  }
+  return { ...stub, slots: { ...slots, ...overrides } };
+}
+
+function vertexAt(objects: readonly GraphObject[], index: number): { readonly x: unknown; readonly y: unknown } {
+  return { x: slotValue(objects, "obj_1", `vertex.${index}.x`), y: slotValue(objects, "obj_1", `vertex.${index}.y`) };
+}
+
 function commit(objects: readonly GraphObject[]): { objects: readonly GraphObject[]; journal: readonly MutationJournalEntry[] } {
   const result = mutate(
     [],
@@ -77,7 +105,7 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
 }
 
 function dragFromOrigin(objectId: string): InteractionState {
-  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] }, resize: undefined };
+  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined }, resize: undefined };
 }
 
 describe("pointerDown — click to select, over a list of objects", () => {
@@ -91,7 +119,7 @@ describe("pointerDown — click to select, over a list of objects", () => {
   it("holds the object's id, not the GraphObject the hit test returned", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
-    expect(Object.keys(state.drag ?? {}).sort()).toEqual(["emittedNotices", "lastWorldPoint", "objectId"]);
+    expect(Object.keys(state.drag ?? {}).sort()).toEqual(["emittedNotices", "lastWorldPoint", "objectId", "vertices"]);
     expect(state.drag?.objectId).toBe(objects[0]?.id);
   });
 
@@ -164,7 +192,7 @@ describe("pointerUp and deselect", () => {
   });
 
   it("pointerUp keeps a MULTI-object selection untouched, ending only the drag", () => {
-    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [] }, resize: undefined };
+    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined }, resize: undefined };
     expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined });
   });
 
@@ -348,12 +376,97 @@ describe("a drag works per component, never all or nothing", () => {
     expect(slotValue(outcome.objects, "obj_1", "origin.y")).toBe(5);
   });
 
-  it("reports an object with no origin slots as undraggable rather than swallowing the gesture", () => {
+  it("reports an object with no origin and no vertices as undraggable rather than swallowing the gesture", () => {
     const { objects, journal } = commit([tableObject(1, [10])]);
-    const outcome = pointerMove(dragFromOrigin("obj_2"), { x: 5, y: 5 }, objects, journal, CAMERA_IDENTITY);
+    // A press over such an object picks an empty vertex list, which is what
+    // everyVertexOfPath gives when the object has no origin and no vertices.
+    const state: InteractionState = {
+      selectedObjectIds: ["obj_2"],
+      drag: { objectId: "obj_2", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: [] },
+      resize: undefined,
+    };
+    const outcome = pointerMove(state, { x: 5, y: 5 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.objects).toBe(objects);
     expect(outcome.journal).toBe(journal);
-    expect(outcome.notices).toEqual(["table_x has no origin slots, and dragging by vertex is not built yet — nothing moved"]);
+    expect(outcome.notices).toEqual(["table_x has no origin and no vertices, so a drag has nothing to move"]);
+  });
+});
+
+describe("a path drags by its vertices, because it has no origin", () => {
+  it("moves every vertex by the delta on a plain drag", () => {
+    const { objects, journal } = commit([polylineObject()]);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 50, y: 0 }, objects, CAMERA_IDENTITY);
+    const outcome = pointerMove(state, { x: 57, y: 3 }, objects, journal, CAMERA_IDENTITY);
+    expect(outcome.notices).toEqual([]);
+    expect(vertexAt(outcome.objects, 0)).toEqual({ x: 7, y: 3 });
+    expect(vertexAt(outcome.objects, 1)).toEqual({ x: 107, y: 3 });
+    expect(vertexAt(outcome.objects, 2)).toEqual({ x: 107, y: 103 });
+  });
+
+  it("leaves a vertex a formula drives where it is, and moves the rest — the road holds its intersection", () => {
+    const anchor: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 0 } } };
+    const bound = polylineObject(false, {
+      "vertex.0.x": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["value"] } }, value: 0 },
+    });
+    const { objects, journal } = commit([anchor, bound]);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 50, y: 0 }, objects, CAMERA_IDENTITY);
+    const outcome = pointerMove(state, { x: 57, y: 3 }, objects, journal, CAMERA_IDENTITY);
+    expect(vertexAt(outcome.objects, 0)).toEqual({ x: 0, y: 3 });
+    expect(vertexAt(outcome.objects, 1)).toEqual({ x: 107, y: 3 });
+    expect(outcome.notices.join(" ")).toContain("did not move");
+  });
+});
+
+describe("a shift drag on a path moves only the segment it grabbed", () => {
+  it("moves the two vertices of the edge under the pointer, and no others", () => {
+    const { objects, journal } = commit([polylineObject()]);
+    // The point sits on edge 1, which runs from vertex 1 to vertex 2.
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 100, y: 50 }, objects, CAMERA_IDENTITY, true);
+    expect(state.drag?.vertices).toEqual([1, 2]);
+    const outcome = pointerMove(state, { x: 110, y: 50 }, objects, journal, CAMERA_IDENTITY);
+    expect(vertexAt(outcome.objects, 0)).toEqual({ x: 0, y: 0 });
+    expect(vertexAt(outcome.objects, 1)).toEqual({ x: 110, y: 0 });
+    expect(vertexAt(outcome.objects, 2)).toEqual({ x: 110, y: 100 });
+  });
+
+  it("wraps at the edge that closes a path, pairing the last vertex with the first", () => {
+    const { objects } = commit([polylineObject(true)]);
+    // The edge home to vertex 0 leaves vertex 2 and passes through (50,50).
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 50, y: 50 }, objects, CAMERA_IDENTITY, true);
+    expect(state.drag?.vertices).toEqual([2, 0]);
+  });
+
+  it("picks its vertices once, so a pointer that wanders over another edge still moves the first pair", () => {
+    const { objects, journal } = commit([polylineObject()]);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 50, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(state.drag?.vertices).toEqual([0, 1]);
+    const wandered = pointerMove(state, { x: 100, y: 50 }, objects, journal, CAMERA_IDENTITY);
+    expect(wandered.state.drag?.vertices).toEqual([0, 1]);
+    expect(vertexAt(wandered.objects, 2)).toEqual({ x: 100, y: 100 });
+  });
+
+  it("selects the path outright, rather than take it out of a selection it is already in", () => {
+    const { objects } = commit([polylineObject()]);
+    const selected: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
+    const state = pointerDown(selected, { x: 50, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(state.selectedObjectIds).toEqual(["obj_1"]);
+    expect(state.drag?.vertices).toEqual([0, 1]);
+  });
+
+  it("keeps its usual meaning over a shape with an origin, which adds to the selection and drags whole", () => {
+    const { objects, journal } = commit([rectObject(0, 0)]);
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(state.drag?.vertices).toBeUndefined();
+    const outcome = pointerMove(state, { x: 15, y: 0 }, objects, journal, CAMERA_IDENTITY);
+    expect(slotValue(outcome.objects, "obj_1", "origin.x")).toBe(5);
+  });
+
+  it("falls back to the whole path when the press reaches no edge, as a click inside a fill does", () => {
+    const filled = polylineObject(true, { "style.fillColor": { kind: "literal", value: "#00ff00" } });
+    const { objects } = commit([filled]);
+    // Well inside the triangle, and far from every edge.
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 90, y: 40 }, objects, CAMERA_IDENTITY, true);
+    expect(state.drag?.vertices).toEqual([0, 1, 2]);
   });
 });
 
