@@ -933,8 +933,8 @@ const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
  * Snapshots a preset's current vertices into a fresh polyline object, same id
  * and name. The parameter slots (origin, radius, sides, and so on) are gone.
  * The new path closes, because every preset it accepts is a closed shape. So
- * vertices, centroid, area, length and bounds all survive at the same paths.
- * A formula that reads one of them needs no repair.
+ * vertices, centroid, area, length and bounds all survive at the same paths,
+ * and so does the style. A formula that reads one of them needs no repair.
  */
 export function explodeObjectToPolyline(object: GraphObject, label: string): ExplodeResult {
   if (object.type === "circle") {
@@ -983,6 +983,15 @@ function buildExplodedPolyline(object: GraphObject, vertices: readonly Point[], 
     slots[slotKey(vertexBulgePath(index))] = { kind: "literal", value: bulges[index] ?? 0 };
   });
   slots[slotKey(CLOSED_PATH)] = { kind: "literal", value: true };
+  // A polyline declares the style slots at the same paths a preset does, so
+  // they cross an explode untouched. An operator keeps the colour they chose,
+  // and a formula that drives one needs no repair.
+  for (const path of GEOMETRY_STYLE_PATHS) {
+    const slot = getSlot(object, path);
+    if (slot !== undefined) {
+      slots[slotKey(path)] = slot;
+    }
+  }
   for (const path of POLYLINE_DERIVED_PATHS) {
     slots[slotKey(path)] = { kind: "derived", value: null };
   }

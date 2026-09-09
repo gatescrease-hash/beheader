@@ -10,10 +10,12 @@ import {
   type EvalContext,
   getSlot,
   type GraphObject,
+  journalIsComplete,
   MAX_TABLE_LINES,
   mutate,
   type Operation,
   type Point,
+  replayJournal,
 } from "../engine/index.ts";
 import { hitTest } from "../render/hittest.ts";
 import { INITIAL_INTERACTION_STATE, pointerDown, pointerMove } from "../render/interaction.ts";
@@ -1650,6 +1652,61 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
 
   it("refuses an unknown object", () => {
     expect(refused("delvertex nosuch 0", sandbox())).toBe('no object named "nosuch"');
+  });
+});
+
+describe("the journal replays — a document rebuilt from the record of how it was made", () => {
+  /** One of nearly every command. Three of them read live state as they run. */
+  const SESSION: readonly string[] = [
+    "circle x=0 y=0 r=10",
+    "rect x=20 y=0 w=8 h=6",
+    "polyline 0,0 4,0 4,3 closed",
+    "set polyline_1.vertex.0.bulge 1",
+    'set rect_1.style.fillColor "#ff8800"',
+    "table x=0 y=40 rows=2 cols=2",
+    "set table_1.A1 5",
+    "link circle_1.radius table_1.A1",
+    "rename circle_1 hub",
+    "addvertex polyline_1 0,3",
+    "split polyline_1 0 2,-1",
+    "explode rect_1",
+  ];
+
+  function session(): Document {
+    let document = createEmptyDocument();
+    for (const line of SESSION) {
+      document = committed(line, document);
+    }
+    return document;
+  }
+
+  it("keeps one journal entry for each command that changed state", () => {
+    expect(session().journal.length).toBe(SESSION.length);
+  });
+
+  it("rebuilds the whole document from the journal alone, through every command above", () => {
+    const document = session();
+    expect(journalIsComplete(document.objects, document.journal)).toBe(true);
+  });
+
+  it("steps back one command, which is the state an undo shows", () => {
+    const document = session();
+    const before = replayJournal(document.journal, document.journal.length - 1);
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+    // The last command exploded the rect. One step back, it is a rect again.
+    expect(document.objects.find((object) => object.name === "rect_1")?.type).toBe("polyline");
+    expect(before.objects.find((object) => object.name === "rect_1")?.type).toBe("rect");
+  });
+
+  it("replays a rename and a link, so a later entry still finds what it names", () => {
+    const document = session();
+    const replayed = replayJournal(document.journal, document.journal.length);
+    expect(replayed.ok).toBe(true);
+    if (!replayed.ok) return;
+    const hub = replayed.objects.find((object) => object.name === "hub");
+    expect(hub?.slots["radius"]?.kind).toBe("formula");
+    expect(hub?.slots["radius"]?.value).toBe(5);
   });
 });
 

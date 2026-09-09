@@ -936,6 +936,24 @@ describe("explodeObjectToPolyline — snapshots the current vertices, drops the 
     expect(result.object.slots["vertex.3.bulge"]).toEqual({ kind: "literal", value: 0 });
   });
 
+  it("carries the style slots across, because a polyline declares them at the same paths", () => {
+    const painted: GraphObject = {
+      ...rect,
+      slots: {
+        ...rect.slots,
+        "style.strokeColor": { kind: "literal", value: "#ff0000" },
+        "style.strokeWidth": { kind: "literal", value: 4 },
+        "style.fillColor": { kind: "literal", value: "#00ff00" },
+      },
+    };
+    const result = explodeObjectToPolyline(painted, "rect_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.object.slots["style.strokeColor"]).toEqual({ kind: "literal", value: "#ff0000" });
+    expect(result.object.slots["style.strokeWidth"]).toEqual({ kind: "literal", value: 4 });
+    expect(result.object.slots["style.fillColor"]).toEqual({ kind: "literal", value: "#00ff00" });
+  });
+
   it("closes the new path, because every preset it accepts is a closed shape", () => {
     const result = explodeObjectToPolyline(rect, "rect_1");
     expect(result.ok).toBe(true);

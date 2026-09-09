@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2164 pass, 0 skip, across 39 test files. |
+| Tests | 2179 pass, 0 skip, across 40 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2164 tests
+npm test             # 2179 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -133,6 +133,7 @@ other suites drive them anyway.
 | `primitives/image.ts` | Slot path constants only. No logic. The image primitive is data plus a renderer arm. |
 | `script/stub.ts` | The script node. Ports are ordinary slots. An `in.<port>` slot is a formula slot. An `out.<port>` slot is a derived slot. The `source` slot is a literal slot that nothing reads, so an edit to it triggers no recompute. The `evaluateScriptOutput` function returns the placeholder value. When Python arrives, only that body changes. |
 | `mutation.ts` | The single channel for state change. It runs the eight step loop: stage, apply, derive edges, check integrity, check cycles, refuse or evaluate, then commit and journal. It is the largest engine file and the most load bearing one. A batch applies many operations to one clone and commits all or nothing. A document load must use a batch. A `deleteVertex` without force refuses through `findLiveVertexDependents`, ahead of the stage step, not through the usual post-apply dangling check. The vertex after a deleted one refills its index at once, so a leftover reference to that exact index reads the wrong vertex in silence. It does not dangle. `explode` has no such trap. A slot it drops (`origin`, `radius`, `area`, and so on) is simply gone from the object. The usual post-apply dangling check catches a leftover reference on its own, the same way `deleteObject` already relies on it. |
+| `journal.ts` | The reader of the append only journal `mutation.ts` writes. `replayJournal` rebuilds the objects of a document as they stood after any entry. It runs the same operations again over an empty document. Undo reads the state before the last entry. It refuses, and names the entry, rather than hand back half a document. `journalIsComplete` answers whether a full replay rebuilds exactly the objects given. Anything must ask that before it trusts a replay of a document that arrived from somewhere other than a mutation. A replay rebuilds objects only. `nextObjectId` and the camera never enter the journal. |
 | `document.ts` | The versioned JSON format, and save and load. It never stores a derived value. A full evaluation pass on load regenerates them. Load goes through the mutation API, so a bad file fails the same checks a bad command does. It reconstructs `ports` and `vertexCount` by hand, the same as every slot. Both sit outside `GraphObject.slots`, so a generic JSON parse cannot validate their shape. |
 | `index.ts` | The one public surface of the engine. A consumer outside `src/engine` imports from here, and never from a deep path. It re-exports every other file in this directory. The one name that collides is `evaluate`. Both `graph/eval.ts` and `formula/eval.ts` export it, for different reasons. This file aliases them to `evaluateGraph` and `evaluateFormulaAst`. Two tests in `index.test.ts` hold the boundary. One finds every engine file through the bundler and names each export this file leaves out. The other reads the source of every file outside the engine and names each deep import. Neither reads a list anybody keeps by hand. |
 
@@ -305,8 +306,8 @@ group blocks the acceptance test in `SPEC.md` section 12.
    current `vertices` into literal per vertex slots, closes the new path, and
    drops the parameter slots (`origin`, `radius`, `sides`, and so on).
    `vertices`, `centroid`, `area`, `length` and `bounds` all stay declared at
-   the same paths on the new schema, so a formula that reads one of those
-   needs no repair. A
+   the same paths on the new schema, and the style slots cross unchanged, so a
+   formula that reads one of those needs no repair. A
    formula that reads a dropped slot follows the same refuse-by-default,
    repair-under-`force` rule as `delvertex`.
 5. **Every path segment the spec names exists: straight, arc and cubic
@@ -340,8 +341,14 @@ group blocks the acceptance test in `SPEC.md` section 12.
    the real usage sits in one file for each layer.
 8. **`src/engine/graph/dirty.ts`.** Rule 5 says to keep the module even with a
    naive body, so the shape of the fast version survives. It was never made.
-9. **Journal replay.** Every mutation appends to the journal. Nothing reads it
-   back. Undo needs a reader.
+9. **The journal has a reader now.** `journal.ts` holds it. `replayJournal`
+   rebuilds the objects of a document as they stood after any entry, and undo
+   reads the entry before the last one. `journalIsComplete` says whether a
+   full replay rebuilds exactly the objects given, so nothing trusts a replay
+   of a document the journal does not account for. A session of twelve
+   commands, `explode` and `split` among them, rebuilds from its journal
+   alone. `SPEC.md` section 15 still holds: no undo surface, and no command.
+   This is the reader that one needs, and nothing more.
 
 ### Smaller
 

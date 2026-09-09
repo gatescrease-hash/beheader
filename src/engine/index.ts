@@ -17,6 +17,7 @@
 export * from "./address.ts";
 export * from "./document.ts";
 export * from "./eval-context.ts";
+export * from "./journal.ts";
 export * from "./mutation.ts";
 
 export * from "./graph/edge.ts";
