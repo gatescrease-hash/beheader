@@ -9,17 +9,19 @@
  * A preset has one derived vertices slot, not a slot for each vertex. So a
  * change to sides changes a value and not the slot set, and Rule 4 holds.
  *
- * A circle gets a polygon approximation for bounds and hit tests. The renderer
- * still draws a true arc.
+ * A circle has no vertices slot. Its area, length, centroid and bounds each
+ * have a closed form. Explode turns it into two vertices and two bulges of 1,
+ * which is the same circle exactly.
  */
 import type { Address } from "../address.ts";
 import {
   buildPathEdges,
+  HALF_CIRCLE_BULGE,
   pathArea,
-  splitEdgeAt,
   pathBounds,
   pathCentroid,
   pathLength,
+  splitEdgeAt,
   type EdgeSplit,
   type PathEdge,
 } from "./arc.ts";
@@ -49,8 +51,6 @@ export const BOUNDS_MIN_X_PATH: readonly string[] = ["bounds", "minX"];
 export const BOUNDS_MIN_Y_PATH: readonly string[] = ["bounds", "minY"];
 export const BOUNDS_MAX_X_PATH: readonly string[] = ["bounds", "maxX"];
 export const BOUNDS_MAX_Y_PATH: readonly string[] = ["bounds", "maxY"];
-
-export const CIRCLE_VERTEX_COUNT = 32;
 
 export const MIN_POLYGON_SIDES = 3;
 
@@ -83,10 +83,6 @@ export function computePolygonVertices(sides: number, radius: number, origin: Po
     vertices.push({ x: origin.x + radius * Math.cos(angle), y: origin.y + radius * Math.sin(angle) });
   }
   return vertices;
-}
-
-export function computeCircleVertices(radius: number, origin: Point): readonly Point[] {
-  return computePolygonVertices(CIRCLE_VERTEX_COUNT, radius, origin, 0);
 }
 
 export function computeRectVertices(origin: Point, width: number, height: number): readonly Point[] {
@@ -246,21 +242,6 @@ function readNumericSlots<K extends string>(
   return result;
 }
 
-export const computeCircleVerticesSlot: DerivedSlotCompute = (object, read) => {
-  const inputs = readNumericSlots(object, read, "circle.vertices", {
-    originX: ORIGIN_X_PATH,
-    originY: ORIGIN_Y_PATH,
-    radius: RADIUS_PATH,
-  });
-  if (isNumericSlotReadError(inputs)) {
-    return inputs;
-  }
-  if (inputs.radius < 0) {
-    return { error: "#TYPE", message: "circle.vertices: radius must not be negative" };
-  }
-  const vertices = computeCircleVertices(inputs.radius, { x: inputs.originX, y: inputs.originY });
-  return finalizeVertices(vertices, "circle.vertices");
-};
 
 export const computePolygonVerticesSlot: DerivedSlotCompute = (object, read) => {
   const inputs = readNumericSlots(object, read, "polygon.vertices", {
@@ -490,6 +471,42 @@ function derivePathNumber(label: string, measure: PathMeasure): DerivedSlotCompu
     }
     const measured = measure({ vertices, edges: buildPathEdges(vertices, bulges.bulges, closed), closed });
     return isErrorValue(measured) ? measured : finiteOrTypeError(measured, label);
+  };
+}
+
+/**
+ * The derived slots of a circle, each one exact. A circle needs no vertices
+ * slot now that an arc exists. Two vertices and two bulges of 1 hold a circle
+ * exactly, and explode makes that path.
+ */
+export function circleDerivedSlots(label: string): readonly DerivedSlotSchema[] {
+  const dependencies: DerivedSlotDependencies = { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] };
+  return [
+    { path: CENTROID_X_PATH, dependencies, compute: deriveCircleNumber(`${label}.centroid.x`, (origin) => origin.x) },
+    { path: CENTROID_Y_PATH, dependencies, compute: deriveCircleNumber(`${label}.centroid.y`, (origin) => origin.y) },
+    { path: AREA_PATH, dependencies, compute: deriveCircleNumber(`${label}.area`, (_origin, radius) => Math.PI * radius * radius) },
+    { path: LENGTH_PATH, dependencies, compute: deriveCircleNumber(`${label}.length`, (_origin, radius) => 2 * Math.PI * radius) },
+    { path: BOUNDS_MIN_X_PATH, dependencies, compute: deriveCircleNumber(`${label}.bounds.minX`, (origin, radius) => origin.x - radius) },
+    { path: BOUNDS_MIN_Y_PATH, dependencies, compute: deriveCircleNumber(`${label}.bounds.minY`, (origin, radius) => origin.y - radius) },
+    { path: BOUNDS_MAX_X_PATH, dependencies, compute: deriveCircleNumber(`${label}.bounds.maxX`, (origin, radius) => origin.x + radius) },
+    { path: BOUNDS_MAX_Y_PATH, dependencies, compute: deriveCircleNumber(`${label}.bounds.maxY`, (origin, radius) => origin.y + radius) },
+  ];
+}
+
+function deriveCircleNumber(label: string, measure: (origin: Point, radius: number) => number): DerivedSlotCompute {
+  return (object, read) => {
+    const inputs = readNumericSlots(object, read, label, {
+      originX: ORIGIN_X_PATH,
+      originY: ORIGIN_Y_PATH,
+      radius: RADIUS_PATH,
+    });
+    if (isNumericSlotReadError(inputs)) {
+      return inputs;
+    }
+    if (inputs.radius < 0) {
+      return { error: "#TYPE", message: `${label}: radius must not be negative` };
+    }
+    return finiteOrTypeError(measure({ x: inputs.originX, y: inputs.originY }, inputs.radius), label);
   };
 }
 
@@ -801,6 +818,9 @@ const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
  * A formula that reads one of them needs no repair.
  */
 export function explodeObjectToPolyline(object: GraphObject, label: string): ExplodeResult {
+  if (object.type === "circle") {
+    return explodeCircleToPolyline(object, label);
+  }
   const value = getSlot(object, VERTICES_PATH)?.value;
   if (value === undefined) {
     return { ok: false, message: `${label}: vertices did not resolve to a value, so there is nothing to snapshot` };
@@ -812,17 +832,41 @@ export function explodeObjectToPolyline(object: GraphObject, label: string): Exp
     return { ok: false, message: `${label}: vertices is not a point list, so there is nothing to snapshot` };
   }
   const vertices = value as readonly Point[];
+  return { ok: true, object: buildExplodedPolyline(object, vertices, vertices.map(() => 0)) };
+}
 
+/**
+ * A circle explodes into two vertices across its diameter, joined by two half
+ * circles. That path is the same circle, to the last decimal. There is no
+ * point list to snapshot, because a circle carries none.
+ */
+function explodeCircleToPolyline(object: GraphObject, label: string): ExplodeResult {
+  const originX = getSlot(object, ORIGIN_X_PATH)?.value;
+  const originY = getSlot(object, ORIGIN_Y_PATH)?.value;
+  const radius = getSlot(object, RADIUS_PATH)?.value;
+  if (typeof originX !== "number" || typeof originY !== "number" || typeof radius !== "number") {
+    return { ok: false, message: `${label}: origin and radius must each hold a number, so there is nothing to explode` };
+  }
+  if (!(radius > 0)) {
+    return { ok: false, message: `${label}: the radius must be more than 0, so there is nothing to explode` };
+  }
+  const vertices: readonly Point[] = [
+    { x: originX - radius, y: originY },
+    { x: originX + radius, y: originY },
+  ];
+  return { ok: true, object: buildExplodedPolyline(object, vertices, [HALF_CIRCLE_BULGE, HALF_CIRCLE_BULGE]) };
+}
+
+function buildExplodedPolyline(object: GraphObject, vertices: readonly Point[], bulges: readonly number[]): GraphObject {
   const slots: Record<string, Slot> = {};
   vertices.forEach((vertex, index) => {
     slots[slotKey(vertexXPath(index))] = { kind: "literal", value: vertex.x };
     slots[slotKey(vertexYPath(index))] = { kind: "literal", value: vertex.y };
-    slots[slotKey(vertexBulgePath(index))] = { kind: "literal", value: 0 };
+    slots[slotKey(vertexBulgePath(index))] = { kind: "literal", value: bulges[index] ?? 0 };
   });
   slots[slotKey(CLOSED_PATH)] = { kind: "literal", value: true };
   for (const path of POLYLINE_DERIVED_PATHS) {
     slots[slotKey(path)] = { kind: "derived", value: null };
   }
-
-  return { ok: true, object: { id: object.id, name: object.name, type: "polyline", vertexCount: vertices.length, slots } };
+  return { id: object.id, name: object.name, type: "polyline", vertexCount: vertices.length, slots };
 }

@@ -432,10 +432,13 @@ renderer draws a true arc. Nothing anywhere cuts a curve into sample points.
 
 A variable length vertex list must never change size during evaluation. So:
 
-- **A preset shape** (polygon, circle, rect) has one derived slot `vertices`
+- **A straight sided preset** (polygon, rect) has one derived slot `vertices`
   that holds a `Point[]`. It computes from the parameter slots. A preset has no
   per vertex slots. A change to `sides` from 5 to 6 changes a value, not the
   slot set. Rule 6 holds.
+- **A circle has no `vertices` slot.** Its area, length, centroid and bounds
+  each have a closed form from the origin and the radius. A point list can only
+  approximate what those already give exactly.
 - **An editable path** (a polyline, or a preset after `explode`) has per vertex
   literal slots `vertex.0.x`, `vertex.0.y`, `vertex.0.bulge` and so on. It also
   has a derived `vertices` slot that gathers the coordinates. The count changes
@@ -444,8 +447,9 @@ A variable length vertex list must never change size during evaluation. So:
   home to vertex 0. That edge draws only when `closed` is true, and the slot
   exists at every value of `closed`. So a formula can drive `closed` without a
   change to the slot set.
-- **A consumer always reads `vertices`.** Both cases look the same from
-  downstream.
+- **A consumer of a many sided shape always reads `vertices`.** A preset and an
+  editable path look the same from downstream. A circle is the one shape with
+  no such list, because it needs none.
 
 ### Presets
 
@@ -467,8 +471,9 @@ unless the operator passes `force`.
 literal vertex slots. Anything downstream that reads `vertices` sees no break.
 That is the payoff for the uniform consumer interface. An explode is one way.
 
-For a circle the derived `vertices` slot gives a polygon approximation for
-bounds and hit tests. The renderer still draws a true arc.
+A circle explodes into two vertices across its diameter, joined by two half
+circles. That path is the same circle, to the last decimal. So an explode
+loses nothing, and the operator gets an editable path.
 
 ### Derived slots
 

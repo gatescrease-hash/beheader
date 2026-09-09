@@ -46,11 +46,29 @@ describe("hitTest — circle/polygon/rect: stroke distance-to-segment via vertic
     expect(hitTest({ x: 10, y: 10 }, [square], CAMERA_IDENTITY)).toBeUndefined();
   });
 
-  it("applies the same test to circle/polygon/rect alike, since all three read `vertices`", () => {
-    for (const type of ["circle", "polygon", "rect"] as const) {
+  it("applies the same test to polygon and rect alike, since both read `vertices`", () => {
+    for (const type of ["polygon", "rect"] as const) {
       const square = squareObject("obj_1", `${type}_1`, type);
       expect(hitTest({ x: 5, y: -4 }, [square], CAMERA_IDENTITY)).toBe(square);
     }
+  });
+
+  it("hits a circle on its true ring, read from the origin and the radius and from no point list", () => {
+    const circle: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: 100 },
+      },
+    };
+    // A point on the ring at 45 degrees, which no 32 sided approximation passes through exactly.
+    const onRing = { x: 100 * Math.cos(Math.PI / 4), y: 100 * Math.sin(Math.PI / 4) };
+    expect(hitTest(onRing, [circle], CAMERA_IDENTITY)).toBe(circle);
+    expect(hitTest({ x: 0, y: 0 }, [circle], CAMERA_IDENTITY)).toBeUndefined();
+    expect(hitTest({ x: 120, y: 0 }, [circle], CAMERA_IDENTITY)).toBeUndefined();
   });
 
   it("converts the pixel tolerance into world units via camera.zoom", () => {
@@ -498,8 +516,8 @@ describe("documentExtent — the box that `fit` fits to, which main.ts performs"
   it("gives a single point a real, degenerate extent rather than undefined — the caller decides what to do with it", () => {
     const point: GraphObject = {
       id: "obj_1",
-      name: "circle_1",
-      type: "circle",
+      name: "polygon_1",
+      type: "polygon",
       slots: { vertices: { kind: "derived", value: [{ x: 5, y: 5 }, { x: 5, y: 5 }] } },
     };
     expect(documentExtent([point])).toEqual({ minX: 5, minY: 5, maxX: 5, maxY: 5 });

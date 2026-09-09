@@ -695,15 +695,6 @@ function circleObject(id: string, name: string, slots: Readonly<Record<string, S
       "origin.x": { kind: "literal", value: 0 },
       "origin.y": { kind: "literal", value: 0 },
       radius: { kind: "literal", value: 5 },
-      vertices: {
-        kind: "derived",
-        value: [
-          { x: 5, y: 0 },
-          { x: 0, y: 5 },
-          { x: -5, y: 0 },
-          { x: 0, y: -5 },
-        ],
-      },
       ...slots,
     },
   };
@@ -748,12 +739,19 @@ describe("renderDocument — name label", () => {
     expect(calls.some((call) => call.op === "fillText")).toBe(false);
   });
 
-  it("draws no label for a shape with no vertices slot — furniture appears exactly when a drawn extent does", () => {
+  it("draws no label for a polygon with no vertices slot — furniture appears exactly when a drawn extent does", () => {
+    const { ctx, calls } = createFakeContext();
+    const polygon: GraphObject = { id: "obj_1", name: "polygon_1", type: "polygon", slots: { sides: { kind: "literal", value: 5 } } };
+    renderDocument(ctx, 800, 600, [polygon], CAMERA_IDENTITY);
+    expect(calls.some((call) => call.op === "fillText")).toBe(false);
+  });
+
+  it("DOES label a circle that carries only an origin and a radius, because its extent is exact without a point list", () => {
     const { ctx, calls } = createFakeContext();
     const circle: GraphObject = { id: "obj_1", name: "circle_1", type: "circle", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, radius: { kind: "literal", value: 5 } } };
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
     expect(calls.some((call) => call.op === "arc")).toBe(true);
-    expect(calls.some((call) => call.op === "fillText")).toBe(false);
+    expect(calls.some((call) => call.op === "fillText" && call.text === "circle_1")).toBe(true);
   });
 
   it("labels EVERY object, in document order, not only a selected one", () => {
@@ -827,14 +825,14 @@ describe("renderDocument — selection highlight", () => {
 describe("renderDocument — error badge", () => {
   it("badges an object holding an ErrorValue in ANY slot, not only the ones this file draws from", () => {
     const { ctx, calls } = createFakeContext();
-    const circle = circleObject("obj_1", "circle_1", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
+    const circle = circleObject("obj_1", "circle_1", { area: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
     expect(calls.some((call) => call.op === "fillText" && call.text === "!")).toBe(true);
   });
 
   it("places the badge clear of the name by MEASURING it, on the same baseline, so a long name pushes it out instead of colliding", () => {
     const { ctx, calls } = createFakeContext();
-    const circle = circleObject("obj_1", "a_very_long_object_name", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
+    const circle = circleObject("obj_1", "a_very_long_object_name", { area: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
     const badge = calls.find((call) => call.op === "fillText" && call.text === "!");
     expect(badge).toEqual({ op: "fillText", text: "!", x: 86.5, y: CIRCLE_CHROME_BASELINE, align: "left" });
@@ -842,7 +840,7 @@ describe("renderDocument — error badge", () => {
 
   it("draws the badge ABOVE the shape, never inside it — same baseline as the name", () => {
     const { ctx, calls } = createFakeContext();
-    const circle = circleObject("obj_1", "circle_1", { radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
+    const circle = circleObject("obj_1", "circle_1", { area: { kind: "derived", value: { error: "#TYPE", message: "bad" } } });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);
     const textCalls = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText");
     expect(textCalls.every((call) => call.y === CIRCLE_CHROME_BASELINE)).toBe(true);
@@ -925,7 +923,7 @@ describe("renderDocument — the selected object's name label is suppressed", ()
     const { ctx, calls } = createFakeContext();
     const circle = circleObject("obj_1", "circle_1", {
       "origin.x": boundToCellSlot(),
-      radius: { kind: "derived", value: { error: "#TYPE", message: "bad" } },
+      area: { kind: "derived", value: { error: "#TYPE", message: "bad" } },
     });
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_1"]);
     const texts = calls.filter((call): call is Extract<RecordedCall, { op: "fillText" }> => call.op === "fillText").map((call) => call.text);
@@ -1060,7 +1058,6 @@ describe("renderDocument — resize grabbers and the object being edited (2026-0
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         radius: { kind: "literal", value: 10 },
-        vertices: { kind: "derived", value: [{ x: -10, y: -10 }, { x: 10, y: 10 }] },
       },
     };
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY, ["obj_c"]);
@@ -1242,7 +1239,6 @@ describe("renderDocument — a table's A1 row/column headers (2026-09-02)", () =
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         radius: { kind: "literal", value: 10 },
-        vertices: { kind: "derived", value: [{ x: -10, y: -10 }, { x: 10, y: 10 }] },
       },
     };
     renderDocument(ctx, 800, 600, [circle], CAMERA_IDENTITY);

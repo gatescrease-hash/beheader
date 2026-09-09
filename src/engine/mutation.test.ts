@@ -1845,19 +1845,21 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
     }
   });
 
-  it("refuses when vertices holds an error, since there is nothing to snapshot", () => {
-    const negativeRadius: GraphObject = {
+  it("refuses when a preset's vertices hold an error, since there is nothing to snapshot", () => {
+    const tooFewSides: GraphObject = {
       id: "obj_1",
-      name: "circle_1",
-      type: "circle",
+      name: "polygon_1",
+      type: "polygon",
       slots: {
+        sides: { kind: "literal", value: 2 },
+        radius: { kind: "literal", value: 5 },
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
-        radius: { kind: "literal", value: -5 },
+        rotation: { kind: "literal", value: 0 },
         ...presetPlaceholders(),
       },
     };
-    const created = mutate([], [{ kind: "createObject", object: negativeRadius }], []);
+    const created = mutate([], [{ kind: "createObject", object: tooFewSides }], []);
     if (!created.ok) {
       throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
     }
@@ -1865,6 +1867,59 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.message).toContain("nothing to snapshot");
+    }
+  });
+
+  it("turns a circle into two vertices joined by two half circles, which is the same circle exactly", () => {
+    const circle: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 1 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: 1 },
+        ...circlePlaceholders(),
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: circle }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
+    }
+    const result = mutate(created.objects, [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const object = result.objects.find((candidate) => candidate.id === "obj_1");
+    expect(object?.type).toBe("polyline");
+    expect(object?.vertexCount).toBe(2);
+    expect(object?.slots["vertex.0.x"]?.value).toBe(0);
+    expect(object?.slots["vertex.1.x"]?.value).toBe(2);
+    expect(object?.slots["vertex.0.bulge"]?.value).toBe(1);
+    expect(object?.slots["vertex.1.bulge"]?.value).toBe(1);
+    expect(object?.slots["area"]?.value).toBeCloseTo(Math.PI);
+    expect(object?.slots["length"]?.value).toBeCloseTo(2 * Math.PI);
+  });
+
+  it("refuses a circle with a radius of 0, because there is no path to make", () => {
+    const flat: GraphObject = {
+      id: "obj_1",
+      name: "circle_1",
+      type: "circle",
+      slots: {
+        "origin.x": { kind: "literal", value: 0 },
+        "origin.y": { kind: "literal", value: 0 },
+        radius: { kind: "literal", value: 0 },
+        ...circlePlaceholders(),
+      },
+    };
+    const created = mutate([], [{ kind: "createObject", object: flat }], []);
+    if (!created.ok) {
+      throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
+    }
+    const result = mutate(created.objects, [{ kind: "explode", objectId: "obj_1" }], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("nothing to explode");
     }
   });
 });
@@ -2081,6 +2136,13 @@ function createdPolyline(
     throw new Error("test setup: expected the polyline to survive creation");
   }
   return object;
+}
+
+/** A circle declares the same eight measurements as a preset, and no vertices slot. */
+function circlePlaceholders(): Record<string, Slot> {
+  const placeholders = presetPlaceholders();
+  delete placeholders["vertices"];
+  return placeholders;
 }
 
 function presetPlaceholders(): Record<string, Slot> {

@@ -64,7 +64,6 @@ describe("getObjectSchema", () => {
   });
 
   it.each([
-    ["circle", [["origin", "x"], ["origin", "y"], ["radius"]]],
     ["polygon", [["sides"], ["radius"], ["origin", "x"], ["origin", "y"], ["rotation"]]],
     ["rect", [["origin", "x"], ["origin", "y"], ["width"], ["height"]]],
   ] as const)("returns a real entry for '%s', with vertices + the eight shared derived slots, and its own %s parameter paths", (type, paths) => {
@@ -86,6 +85,27 @@ describe("getObjectSchema", () => {
       ]),
     );
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type, slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual(paths);
+  });
+
+  it("returns a real entry for 'circle' with the same eight measurements and NO vertices slot, because an arc needs no point list", () => {
+    const schema = getObjectSchema("circle");
+    expect(schema).toBeDefined();
+    const derivedSlots = resolveDerivedSlots(stubObject("circle"), schema?.derivedSlots ?? []);
+    expect(derivedSlots.map((slot) => slot.path.join("."))).toEqual([
+      "centroid.x",
+      "centroid.y",
+      "area",
+      "length",
+      "bounds.minX",
+      "bounds.minY",
+      "bounds.maxX",
+      "bounds.maxY",
+    ]);
+    expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type: "circle", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
+      ["origin", "x"],
+      ["origin", "y"],
+      ["radius"],
+    ]);
   });
 
   it("returns a real entry for 'text', with eleven static non-derived paths (origin.x and origin.y at the front, and `autoresize` where `overflow` used to be) and three derived slots (resolvedContent, measuredHeight, measuredWidth)", () => {

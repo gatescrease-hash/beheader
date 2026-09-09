@@ -24,8 +24,8 @@ import type { EvalContext } from "../eval-context.ts";
 import type { ReadRange } from "../formula/eval.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
 import {
+  circleDerivedSlots,
   CLOSED_PATH,
-  computeCircleVerticesSlot,
   computePolygonVerticesSlot,
   computePolylineVerticesSlot,
   computeRectVerticesSlot,
@@ -234,10 +234,7 @@ const TABLE_SCHEMA: ObjectSchema = {
 const CIRCLE_SCHEMA: ObjectSchema = {
   type: "circle",
   nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] }],
-  derivedSlots: [{ kind: "static", slots: [
-    { path: VERTICES_PATH, dependencies: { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] }, compute: computeCircleVerticesSlot },
-    ...verticesDerivedSlots("circle"),
-  ] }],
+  derivedSlots: [{ kind: "static", slots: [...circleDerivedSlots("circle")] }],
 };
 
 const POLYGON_SCHEMA: ObjectSchema = {

@@ -12,7 +12,7 @@
  */
 import { getSlot, type GraphObject } from "../engine/graph/node.ts";
 import { pathBounds } from "../engine/primitives/arc.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_WIDTH_PATH } from "../engine/primitives/image.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import {
@@ -40,6 +40,7 @@ export interface WorldExtent {
 export function objectExtent(object: GraphObject): WorldExtent | undefined {
   switch (object.type) {
     case "circle":
+      return circleExtent(object);
     case "polygon":
     case "rect":
       return verticesExtent(object);
@@ -83,6 +84,17 @@ function verticesExtent(object: GraphObject): WorldExtent | undefined {
     return undefined;
   }
   return { minX, minY, maxX, maxY };
+}
+
+/** The exact box of a circle. It reads the origin and the radius, and no point list. */
+function circleExtent(object: GraphObject): WorldExtent | undefined {
+  const originX = readNumber(object, ORIGIN_X_PATH);
+  const originY = readNumber(object, ORIGIN_Y_PATH);
+  const radius = readNumber(object, RADIUS_PATH);
+  if (originX === undefined || originY === undefined || radius === undefined || radius < 0) {
+    return undefined;
+  }
+  return { minX: originX - radius, minY: originY - radius, maxX: originX + radius, maxY: originY + radius };
 }
 
 /**

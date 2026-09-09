@@ -13,7 +13,7 @@
  */
 import { getSlot, type GraphObject, type Point } from "../engine/graph/node.ts";
 import { distanceToPath, distanceToSegment } from "../engine/primitives/arc.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, VERTICES_PATH } from "../engine/primitives/geometry.ts";
+import { ORIGIN_X_PATH, ORIGIN_Y_PATH, pathEdgesOfObject, RADIUS_PATH, VERTICES_PATH } from "../engine/primitives/geometry.ts";
 import { getTableDimensions } from "../engine/primitives/table.ts";
 import type { CameraState } from "../engine/document.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
@@ -44,6 +44,17 @@ function hitTestVerticesShape(object: GraphObject, worldPoint: WorldPoint, strok
     return false;
   }
   return distanceToClosedPolyline(worldPoint, vertices) <= strokeToleranceWorld;
+}
+
+/** A circle hits on its true ring. It measures to the circle the renderer draws. */
+function hitTestCircle(object: GraphObject, worldPoint: WorldPoint, strokeToleranceWorld: number): boolean {
+  const originX = readNumber(object, ORIGIN_X_PATH);
+  const originY = readNumber(object, ORIGIN_Y_PATH);
+  const radius = readNumber(object, RADIUS_PATH);
+  if (originX === undefined || originY === undefined || radius === undefined || radius < 0) {
+    return false;
+  }
+  return Math.abs(Math.hypot(worldPoint.x - originX, worldPoint.y - originY) - radius) <= strokeToleranceWorld;
 }
 
 /**
@@ -81,6 +92,7 @@ function hitTestBoundingBox(object: GraphObject, worldPoint: WorldPoint): boolea
 function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeToleranceWorld: number): boolean {
   switch (object.type) {
     case "circle":
+      return hitTestCircle(object, worldPoint, strokeToleranceWorld);
     case "polygon":
     case "rect":
       return hitTestVerticesShape(object, worldPoint, strokeToleranceWorld);

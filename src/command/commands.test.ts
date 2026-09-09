@@ -95,10 +95,12 @@ describe("creation — a typed line becomes an object", () => {
     expect(outcome.ok && outcome.lines).toEqual(["created circle_1"]);
   });
 
-  it("leaves every derived slot EVALUATED, not null — step 7 runs inside the creating mutation, so a fresh circle already has its 32 vertices", () => {
+  it("leaves every derived slot EVALUATED, not null — step 7 runs inside the creating mutation, so a fresh circle already measures itself", () => {
     const object = onlyObject(committed("circle x=0 y=0 r=10", createEmptyDocument()));
-    expect(verticesOf(object)).toHaveLength(32);
-    expect(getSlot(object, ["area"])?.value).toBeCloseTo(0.5 * 32 * 100 * Math.sin((2 * Math.PI) / 32), 6);
+    expect(getSlot(object, ["vertices"])).toBeUndefined();
+    expect(getSlot(object, ["area"])?.value).toBeCloseTo(Math.PI * 100);
+    expect(getSlot(object, ["length"])?.value).toBeCloseTo(2 * Math.PI * 10);
+    expect(getSlot(object, ["bounds.maxX"])?.value).toBe(10);
   });
 
   it("creates a polygon with the number of vertices its sides argument asked for, and rotation defaulted to 0, because the command form gives no rotation", () => {
@@ -223,7 +225,7 @@ describe("creation — a typed line becomes an object", () => {
   it("accepts a negative radius and stores it — a value that computes to #TYPE is legitimate state, not a rejection", () => {
     const object = onlyObject(committed("circle x=0 y=0 r=-5", createEmptyDocument()));
     expect(literalValue(object, ["radius"])).toBe(-5);
-    expect(getSlot(object, ["vertices"])?.value).toEqual({ error: "#TYPE", message: "circle.vertices: radius must not be negative" });
+    expect(getSlot(object, ["area"])?.value).toEqual({ error: "#TYPE", message: "circle.area: radius must not be negative" });
   });
 
   it("creates a text object with all eleven non-derived slots (origin.x, origin.y, content, and eight layout and style defaults) plus all three derived placeholders", () => {

@@ -23,7 +23,7 @@ import {
 } from "./index.ts";
 
 describe("engine/index.ts — the one public surface", () => {
-  it("creates a circle, reads its derived vertices, and saves and loads it back unchanged", () => {
+  it("creates a circle, reads its exact derived measurements, and saves and loads it back unchanged", () => {
     const empty: Document = createEmptyDocument();
     const minted = mintObjectId(empty);
     const schema = getObjectSchema("circle");
@@ -38,7 +38,6 @@ describe("engine/index.ts — the one public surface", () => {
         [ORIGIN_X_PATH.join(".")]: { kind: "literal", value: 0 },
         [ORIGIN_Y_PATH.join(".")]: { kind: "literal", value: 0 },
         [RADIUS_PATH.join(".")]: { kind: "literal", value: 5 },
-        vertices: { kind: "derived", value: null },
         "centroid.x": { kind: "derived", value: null },
         "centroid.y": { kind: "derived", value: null },
         area: { kind: "derived", value: null },
@@ -61,7 +60,9 @@ describe("engine/index.ts — the one public surface", () => {
       throw new Error(`expected the saved document to load, got: ${loaded.message}`);
     }
     const roundTripped = loaded.document.objects.find((object) => object.id === minted.id);
-    expect(roundTripped?.slots["vertices"]?.value).toHaveLength(32);
+    expect(roundTripped?.slots["vertices"]).toBeUndefined();
+    expect(roundTripped?.slots["area"]?.value).toBeCloseTo(Math.PI * 25);
+    expect(roundTripped?.slots["bounds.maxX"]?.value).toBe(5);
   });
 
   it("re-exports evaluateFormulaAst and evaluateGraph as two distinct functions, not the same name colliding", () => {

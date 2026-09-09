@@ -354,8 +354,8 @@ describe("buildPanelModel — the rows of the properties panel", () => {
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
     expect(model.header).toBe("circle_1");
     expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "radius"]);
-    expect(model.derived[0]?.path).toBe("vertices");
-    expect(model.derived.map((row) => row.path)).toContain("centroid.x");
+    expect(model.derived[0]?.path).toBe("centroid.x");
+    expect(model.derived.map((row) => row.path)).not.toContain("vertices");
   });
 
   it("shows a literal slot's plain value and no formula source", () => {
@@ -401,12 +401,12 @@ describe("buildPanelModel — the rows of the properties panel", () => {
   it("rounds a derived number's float dust to 4 decimals, while `props` keeps full precision — the two formatters disagree on purpose", () => {
     const state = typed(opened(), "circle x=10 y=20 r=7");
     const model = buildPanelModel(objectNamed(state, "circle_1"), state.document.objects);
-    const centroidX = model.derived.find((row) => row.path === "centroid.x");
-    expect(centroidX?.value).toBe("10");
+    const length = model.derived.find((row) => row.path === "length");
+    expect(length?.value).toBe("43.9823");
 
     const propsState = typed(state, "props circle_1");
     const propsLines = newLines(state, propsState);
-    expect(propsLines.some((line) => line.includes("centroid.x = 10.000000000000002"))).toBe(true);
+    expect(propsLines.some((line) => line.includes(`length = ${2 * Math.PI * 7}`))).toBe(true);
   });
 });
 

@@ -14,12 +14,10 @@ import {
   BOUNDS_MAX_Y_PATH,
   BOUNDS_MIN_X_PATH,
   BOUNDS_MIN_Y_PATH,
-  CIRCLE_VERTEX_COUNT,
+  circleDerivedSlots,
   computeArea,
   computeBounds,
   computeCentroid,
-  computeCircleVertices,
-  computeCircleVerticesSlot,
   computeOpenPathLength,
   computePerimeterLength,
   computePolygonVertices,
@@ -80,16 +78,10 @@ describe("computePolygonVertices", () => {
   });
 });
 
-describe("computeCircleVertices", () => {
-  it("produces exactly CIRCLE_VERTEX_COUNT points, each at distance radius from origin", () => {
-    const origin: Point = { x: 3, y: 4 };
-    const vertices = computeCircleVertices(5, origin);
-    expect(vertices).toHaveLength(CIRCLE_VERTEX_COUNT);
-    for (const vertex of vertices) {
-      expect(Math.hypot(vertex.x - origin.x, vertex.y - origin.y)).toBeCloseTo(5);
-    }
-  });
-});
+/** A shape with no size. It stands in for the degenerate cases the old zero radius circle covered. */
+function degenerate(point: Point): readonly Point[] {
+  return [point, point, point];
+}
 
 describe("computeRectVertices", () => {
   it("returns the four corners in fillRect(x,y,w,h)'s own order/convention: origin, then +width, then +width+height, then +height", () => {
@@ -118,7 +110,7 @@ describe("computeArea", () => {
   });
 
   it("is 0 for a degenerate (zero-radius) shape", () => {
-    expect(computeArea(computeCircleVertices(0, { x: 5, y: 5 }))).toBe(0);
+    expect(computeArea(degenerate({ x: 5, y: 5 }))).toBe(0);
   });
 
   it("is total for an empty vertex list — 0, not NaN or a throw", () => {
@@ -155,7 +147,7 @@ describe("computeCentroid", () => {
   });
 
   it("falls back to the arithmetic mean when the doubled area is exactly 0 (a degenerate, zero-size shape)", () => {
-    const centroid = computeCentroid(computeCircleVertices(0, { x: 7, y: -2 }));
+    const centroid = computeCentroid(degenerate({ x: 7, y: -2 }));
     expect(centroid.x).toBeCloseTo(7);
     expect(centroid.y).toBeCloseTo(-2);
   });
@@ -190,32 +182,66 @@ describe("computeBounds", () => {
   });
 });
 
-describe("computeCircleVerticesSlot", () => {
-  it("computes CIRCLE_VERTEX_COUNT vertices from origin.x/origin.y/radius", () => {
-    const result = computeCircleVerticesSlot(OBJECT, readFrom({ "origin.x": 1, "origin.y": 2, radius: 3 }));
-    expect(Array.isArray(result)).toBe(true);
-    expect((result as readonly Point[])).toHaveLength(CIRCLE_VERTEX_COUNT);
+describe("circleDerivedSlots — exact, and with no vertices slot at all", () => {
+  const slots = circleDerivedSlots("circle");
+  const compute = (path: string) => {
+    const entry = slots.find((slot) => slot.path.join(".") === path);
+    if (entry === undefined) {
+      throw new Error(`test setup: expected a derived slot at ${path}`);
+    }
+    return entry.compute;
+  };
+  const circle = readFrom({ "origin.x": 1, "origin.y": 2, radius: 3 });
+
+  it("declares no vertices slot, because a circle needs no point list", () => {
+    expect(slots.map((slot) => slot.path.join("."))).toEqual([
+      "centroid.x",
+      "centroid.y",
+      "area",
+      "length",
+      "bounds.minX",
+      "bounds.minY",
+      "bounds.maxX",
+      "bounds.maxY",
+    ]);
+  });
+
+  it("gives the true area and circumference, not the slightly small pair a 32 sided polygon gives", () => {
+    expect(compute("area")(OBJECT, circle)).toBeCloseTo(Math.PI * 9);
+    expect(compute("length")(OBJECT, circle)).toBeCloseTo(2 * Math.PI * 3);
+  });
+
+  it("puts the centroid at the origin and the box one radius out on each side", () => {
+    expect(compute("centroid.x")(OBJECT, circle)).toBe(1);
+    expect(compute("centroid.y")(OBJECT, circle)).toBe(2);
+    expect(compute("bounds.minX")(OBJECT, circle)).toBe(-2);
+    expect(compute("bounds.maxY")(OBJECT, circle)).toBe(5);
   });
 
   it("is #REF when a parameter slot does not resolve at all", () => {
-    const result = computeCircleVerticesSlot(OBJECT, readFrom({ "origin.x": 1, "origin.y": 2 }));
-    expect(result).toEqual({ error: "#REF", message: expect.stringContaining("radius") });
+    expect(compute("area")(OBJECT, readFrom({ "origin.x": 1, "origin.y": 2 }))).toEqual({
+      error: "#REF",
+      message: expect.stringContaining("radius"),
+    });
   });
 
   it("propagates an upstream ErrorValue unchanged", () => {
     const upstream = { error: "#DIV0" as const, message: "upstream boom" };
-    const result = computeCircleVerticesSlot(OBJECT, readFrom({ "origin.x": 1, "origin.y": 2, radius: upstream }));
-    expect(result).toBe(upstream);
+    expect(compute("area")(OBJECT, readFrom({ "origin.x": 1, "origin.y": 2, radius: upstream }))).toBe(upstream);
   });
 
   it("is #TYPE for a wrong-shaped parameter", () => {
-    const result = computeCircleVerticesSlot(OBJECT, readFrom({ "origin.x": 1, "origin.y": 2, radius: "not a number" }));
-    expect(result).toEqual({ error: "#TYPE", message: expect.stringContaining("radius") });
+    expect(compute("area")(OBJECT, readFrom({ "origin.x": 1, "origin.y": 2, radius: "not a number" }))).toEqual({
+      error: "#TYPE",
+      message: expect.stringContaining("radius"),
+    });
   });
 
-  it("is #TYPE for a negative radius", () => {
-    const result = computeCircleVerticesSlot(OBJECT, readFrom({ "origin.x": 0, "origin.y": 0, radius: -1 }));
-    expect(result).toEqual({ error: "#TYPE", message: expect.stringContaining("negative") });
+  it("is #TYPE for a negative radius, on every slot", () => {
+    const negative = readFrom({ "origin.x": 0, "origin.y": 0, radius: -1 });
+    for (const slot of slots) {
+      expect(slot.compute(OBJECT, negative)).toEqual({ error: "#TYPE", message: expect.stringContaining("negative") });
+    }
   });
 });
 
@@ -264,8 +290,11 @@ describe("computeRectVerticesSlot", () => {
 });
 
 describe("a preset's vertices compute function never needs to normalise -0 (geometry.ts's own proof, checked rather than assumed)", () => {
-  it("a circle centred at the origin has no -0 vertex, even though cos/sin of some angles crosses through 0 and radius may be 0", () => {
-    const result = computeCircleVerticesSlot(OBJECT, readFrom({ "origin.x": 0, "origin.y": 0, radius: 0 }));
+  it("a polygon centred at the origin has no -0 vertex, even though cos and sin of some angles cross through 0", () => {
+    const result = computePolygonVerticesSlot(
+      { ...OBJECT, type: "polygon" },
+      readFrom({ sides: 32, radius: 0, "origin.x": 0, "origin.y": 0, rotation: 0 }),
+    );
     for (const vertex of result as readonly Point[]) {
       expect(Object.is(vertex.x, -0)).toBe(false);
       expect(Object.is(vertex.y, -0)).toBe(false);
@@ -377,7 +406,7 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
     if (!created.ok) {
       throw new Error(`test setup: expected creation to succeed, got: ${created.message}`);
     }
-    const expectedArea = 0.5 * CIRCLE_VERTEX_COUNT * 2 ** 2 * Math.sin((2 * Math.PI) / CIRCLE_VERTEX_COUNT);
+    const expectedArea = Math.PI * 2 ** 2;
     expect(created.objects[0]?.slots.area?.value).toBeCloseTo(expectedArea);
     expect(created.objects[0]?.slots["centroid.x"]?.value).toBeCloseTo(0);
 
@@ -389,7 +418,7 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
     if (!resized.ok) {
       throw new Error(`test setup: expected the resize to succeed, got: ${resized.message}`);
     }
-    const expectedResizedArea = 0.5 * CIRCLE_VERTEX_COUNT * 4 ** 2 * Math.sin((2 * Math.PI) / CIRCLE_VERTEX_COUNT);
+    const expectedResizedArea = Math.PI * 4 ** 2;
     expect(resized.objects[0]?.slots.area?.value).toBeCloseTo(expectedResizedArea);
     expect(resized.objects[0]?.slots.area?.value).toBeCloseTo(expectedArea * 4);
   });
@@ -461,7 +490,7 @@ describe("every preset winds counterclockwise (positive doubled signed area)", (
   });
 
   it("winds a circle counterclockwise, inheriting the polygon order it delegates to", () => {
-    expect(doubledSignedArea(computeCircleVertices(10, { x: 3, y: -3 }))).toBeGreaterThan(0);
+    expect(doubledSignedArea(computePolygonVertices(32, 10, { x: 3, y: -3 }, 0))).toBeGreaterThan(0);
   });
 
   it("winds a rect counterclockwise, so its fillRect corner order agrees with the other two presets", () => {
@@ -470,7 +499,7 @@ describe("every preset winds counterclockwise (positive doubled signed area)", (
 
   it("gives a degenerate shape an EXACTLY zero doubled area, which is neither winding", () => {
     expect(doubledSignedArea(computeRectVertices({ x: 0, y: 0 }, 0, 3))).toBe(0);
-    expect(doubledSignedArea(computeCircleVertices(0, { x: 5, y: 5 }))).toBe(0);
+    expect(doubledSignedArea(degenerate({ x: 5, y: 5 }))).toBe(0);
   });
 });
 
