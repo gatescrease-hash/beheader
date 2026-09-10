@@ -270,6 +270,7 @@ const RECT_SCHEMA: ObjectSchema = {
 
 const POLYLINE_SCHEMA: ObjectSchema = {
   type: "polyline",
+  slotOptions: [{ path: CLOSED_PATH, values: [true, false] }],
   nonDerivedSlotPaths: [
     { kind: "static", paths: [CLOSED_PATH, ...GEOMETRY_STYLE_PATHS] },
     { kind: "dynamic", enumerate: enumeratePolylineVertexSlotPaths },

@@ -2166,3 +2166,52 @@ describe("executeCommand forwards the EvalContext to the evaluation in mutate", 
     expect(measuredHeightOf(outcome.document)).toBe(20);
   });
 });
+describe("a slot with an option list takes those values and no others", () => {
+  function path(): Document {
+    return committed("polyline 0,0 4,0 4,3 0,3", createEmptyDocument());
+  }
+
+  it("refuses the number 0 where a boolean belongs, and names what the slot takes", () => {
+    expect(refused("set polyline_1.closed 0", path())).toBe("polyline_1.closed takes true or false, and not 0");
+  });
+
+  it("leaves the slot at the value it held, so a refused write changes nothing", () => {
+    const before = path();
+    expect(getSlot(onlyObject(before), ["closed"])?.value).toBe(false);
+    expect(isCommandFailure(run("set polyline_1.closed 1", before))).toBe(true);
+    expect(getSlot(onlyObject(before), ["closed"])?.value).toBe(false);
+  });
+
+  it("takes the values the schema does offer", () => {
+    const closed = committed("set polyline_1.closed TRUE", path());
+    expect(getSlot(onlyObject(closed), ["closed"])?.value).toBe(true);
+    expect(getSlot(onlyObject(closed), ["area"])?.value).toBeCloseTo(12);
+  });
+
+  it("keeps every derived slot a number, which a wrong closed value used to break in six places at once", () => {
+    const closed = committed("set polyline_1.closed TRUE", path());
+    for (const key of ["area", "length", "centroid.x", "bounds.minX", "bounds.maxY"]) {
+      expect(typeof getSlot(onlyObject(closed), key.split("."))?.value).toBe("number");
+    }
+  });
+
+  it("guards the other slots that declare options too, so this is one rule and not a special case", () => {
+    const text = committed('text x=0 y=0 "hi"', createEmptyDocument());
+    expect(refused('set text_1.style.align "sideways"', text)).toContain('takes "left" or "center" or "right"');
+    expect(refused("set text_1.autoresize 1", text)).toContain("takes true or false");
+  });
+
+  it("leaves a slot with no option list free to hold anything, as it always was", () => {
+    const text = committed('text x=0 y=0 "hi"', createEmptyDocument());
+    expect(isCommandFailure(run("set text_1.style.fontSize 99", text))).toBe(false);
+  });
+
+  it("still lets a formula drive such a slot, because only evaluation knows what a formula gives", () => {
+    let document = committed("polyline 0,0 4,0 4,3 0,3", createEmptyDocument());
+    document = committed("table x=500 y=0 rows=2 cols=2", document);
+    document = committed("set table_1.A1 TRUE", document);
+    document = committed("link polyline_1.closed table_1.A1", document);
+    const path = document.objects.find((object) => object.name === "polyline_1");
+    expect(path === undefined ? undefined : getSlot(path, ["closed"])?.value).toBe(true);
+  });
+});

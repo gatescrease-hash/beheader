@@ -1508,9 +1508,19 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
   });
 
   it("reports selectedIndex -1 when the slot holds something none of the choices names, rather than claiming the first is live", () => {
-    const state = typed(withText(), 'set text_1.style.align "sideways"');
+    // "set" refuses a value off the list now, so a document that arrived from a
+    // file is the way a slot still holds one. The panel must read it either way.
+    const state = withOffListAlign(withText());
     expect(rowOf(state, "style.align").choices?.selectedIndex).toBe(-1);
   });
+
+  /** A text object whose align slot holds a word the schema does not offer. */
+  function withOffListAlign(state: AppState): AppState {
+    const objects = state.document.objects.map((object) =>
+      object.name === "text_1" ? { ...object, slots: { ...object.slots, "style.align": { kind: "literal" as const, value: "sideways" } } } : object,
+    );
+    return { ...state, document: { ...state.document, objects } };
+  }
 
   it("offers NO drop-down on a FORMULA row — it is driven, and a choice that silently overwrote the formula is what no gesture can do", () => {
     let state = typed(withText(), "table x=500 y=0");

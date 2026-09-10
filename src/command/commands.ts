@@ -20,6 +20,7 @@ import {
   type EvalContext,
   findDerivedSlotSchema,
   findObjectByName,
+  findSlotOptions,
   formatAddress,
   formatFormula,
   generateDefaultName,
@@ -496,10 +497,33 @@ function writeSlot(write: SlotWrite, targetText: string, document: Document, con
 
 type SlotBuildResult = { readonly ok: true; readonly slot: Slot; readonly lines: readonly string[] } | { readonly ok: false; readonly message: string };
 
+/**
+ * The refusal for a literal outside the values its slot declares, or nothing.
+ *
+ * A slot with an option list takes those values and no others. Without this,
+ * "set path.closed 0" writes a number to a slot that reads booleans, and the
+ * write reports success. Every derived slot of the object then turns into a
+ * #TYPE error that names no cause. A formula still writes what it likes,
+ * because only evaluation knows what a formula produces.
+ */
+function refuseValueOffTheOptionList(value: Value, target: WritableSlotTarget): string | undefined {
+  const options = findSlotOptions(target.object.type, target.address.path);
+  if (options === undefined || options.values.some((candidate) => candidate === value)) {
+    return undefined;
+  }
+  const offered = options.values.map((candidate) => describeSlotValue(candidate)).join(" or ");
+  return `${target.displayName} takes ${offered}, and not ${describeSlotValue(value)}`;
+}
+
 function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Document): SlotBuildResult {
   switch (write.kind) {
-    case "literal":
+    case "literal": {
+      const offList = refuseValueOffTheOptionList(write.value, target);
+      if (offList !== undefined) {
+        return { ok: false, message: offList };
+      }
       return { ok: true, slot: { kind: "literal", value: write.value }, lines: [`${target.displayName} = ${describeSlotValue(write.value)}`] };
+    }
     case "formula": {
       if (isTextContentTarget(target)) {
         return {
