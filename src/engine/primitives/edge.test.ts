@@ -12,6 +12,7 @@ import {
   buildPathEdges,
   bulgeForMidpoint,
   bulgeForTangentArc,
+  cubicHandlesForEdge,
   distanceToEdge,
   edgeEndDirection,
   edgeMidpoint,
@@ -23,6 +24,7 @@ import {
   pathCentroid,
   pathContains,
   pathLength,
+  QUARTER_TURN_BULGE,
   splitEdgeAt,
   type PathBounds,
   type PathEdge,
@@ -432,7 +434,6 @@ function bearing(vector: { readonly x: number; readonly y: number }): number {
   return Math.atan2(vector.y, vector.x);
 }
 
-const QUARTER_TURN_BULGE = Math.tan(Math.PI / 8);
 
 describe("edgeEndDirection, the way a path leaves an edge", () => {
   it("leaves a straight edge along its chord", () => {
@@ -574,5 +575,85 @@ describe("edgeMidpoint and bulgeForMidpoint, the pair a bend grip drags", () => 
 
   it("gives 0 when the two ends are the same point", () => {
     expect(bulgeForMidpoint({ x: 4, y: 4 }, { x: 4, y: 4 }, { x: 9, y: 9 })).toBe(0);
+  });
+});
+describe("cubicHandlesForEdge, the handles that draw one edge as a cubic", () => {
+  const START = { x: 0, y: 0 };
+  const END = { x: 12, y: 0 };
+
+  it("gives a straight edge the handles that keep it straight, one third of the chord at each end", () => {
+    const handles = cubicHandlesForEdge({ start: START, end: END, bulge: 0 });
+    expect(handles.out.x).toBeCloseTo(4);
+    expect(handles.out.y).toBeCloseTo(0);
+    expect(handles.in.x).toBeCloseTo(-4);
+    expect(handles.in.y).toBeCloseTo(0);
+  });
+
+  it("draws the same straight line after the conversion, so a straight edge does not move", () => {
+    const handles = cubicHandlesForEdge({ start: START, end: END, bulge: 0 });
+    const converted: PathEdge = {
+      start: START,
+      end: END,
+      bulge: 0,
+      controls: [
+        { x: START.x + handles.out.x, y: START.y + handles.out.y },
+        { x: END.x + handles.in.x, y: END.y + handles.in.y },
+      ],
+    };
+    expect(edgeLength(converted)).toBeCloseTo(12);
+    expect(edgeMidpoint(converted).x).toBeCloseTo(6);
+    expect(edgeMidpoint(converted).y).toBeCloseTo(0);
+  });
+
+  it("gives a cubic back the handles it already holds", () => {
+    const edge: PathEdge = {
+      start: START,
+      end: END,
+      bulge: 0,
+      controls: [
+        { x: 1, y: 9 },
+        { x: 11, y: 7 },
+      ],
+    };
+    const handles = cubicHandlesForEdge(edge);
+    expect(handles.out).toEqual({ x: 1, y: 9 });
+    expect(handles.in).toEqual({ x: -1, y: 7 });
+  });
+
+  it("leaves an arc along the same tangent it already leaves, so the two meet smoothly", () => {
+    const edge: PathEdge = { start: START, end: END, bulge: QUARTER_TURN_BULGE };
+    const handles = cubicHandlesForEdge(edge);
+    const chord = { x: END.x - START.x, y: END.y - START.y };
+    const sweep = 4 * Math.atan(QUARTER_TURN_BULGE);
+    const wanted = Math.atan2(chord.y, chord.x) - sweep / 2;
+    expect(Math.atan2(handles.out.y, handles.out.x)).toBeCloseTo(wanted);
+  });
+
+  it("puts the middle of the converted arc very near the middle of the arc it came from", () => {
+    const edge: PathEdge = { start: START, end: END, bulge: QUARTER_TURN_BULGE };
+    const handles = cubicHandlesForEdge(edge);
+    const converted: PathEdge = {
+      start: START,
+      end: END,
+      bulge: 0,
+      controls: [
+        { x: START.x + handles.out.x, y: START.y + handles.out.y },
+        { x: END.x + handles.in.x, y: END.y + handles.in.y },
+      ],
+    };
+    const before = edgeMidpoint(edge);
+    const after = edgeMidpoint(converted);
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeLessThan(0.01);
+  });
+
+  it("keeps the two handles the same length on an arc, because a circle is symmetric", () => {
+    const handles = cubicHandlesForEdge({ start: START, end: END, bulge: -0.6 });
+    expect(Math.hypot(handles.out.x, handles.out.y)).toBeCloseTo(Math.hypot(handles.in.x, handles.in.y));
+  });
+
+  it("gives no length at all when the two ends are the same point", () => {
+    const handles = cubicHandlesForEdge({ start: START, end: START, bulge: 0 });
+    expect(Math.hypot(handles.out.x, handles.out.y)).toBe(0);
+    expect(Math.hypot(handles.in.x, handles.in.y)).toBe(0);
   });
 });

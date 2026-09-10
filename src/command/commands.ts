@@ -13,8 +13,15 @@
 import {
   type Address,
   addressKey,
+  bezierOfEdge,
+  bulgeForMidpoint,
   CLOSED_PATH,
+  cubicHandlesForEdge,
   deriveEdges,
+  edgeMidpoint,
+  type PathEdge,
+  pathEdgesOfObject,
+  QUARTER_TURN_BULGE,
   type Document,
   type Edge,
   type EvalContext,
@@ -109,6 +116,8 @@ import type {
   CreateTextCommand,
   DeleteCommand,
   DeleteVertexCommand,
+  EdgeTypeCommand,
+  EdgeTypeName,
   ExplodeCommand,
   SplitEdgeCommand,
   LinkCommand,
@@ -122,6 +131,7 @@ import type {
   UnlinkCommand,
   ZoomCommand,
 } from "./parser.ts";
+import { EDGE_TYPE_NAMES } from "./parser.ts";
 
 export type CommandOutcome =
   | {
@@ -223,6 +233,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return explodeObject(command, document, context);
     case "split":
       return splitEdge(command, document, context);
+    case "edgetype":
+      return setEdgeType(command, document, context);
     case "refs":
       return refs(command, document);
     case "props":
@@ -268,6 +280,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "delvertex",
   "explode",
   "split",
+  "edgetype",
   "refs",
   "props",
   "list",
@@ -812,6 +825,107 @@ function addVertex(command: AddVertexCommand, document: Document, context: EvalC
  * edge becomes two curves of the same circle, so the shape holds still. This
  * is the only way a vertex arrives on a curve. Nothing subdivides an edge.
  */
+/**
+ * Changes one edge of a path between straight, arc and cubic.
+ *
+ * The five slots behind an edge say which of the three it is, and no single
+ * slot names it. So this is the one gesture that sets all five together. It is
+ * also the only way to a cubic that leaves four handle slots untyped.
+ *
+ * The conversion keeps the shape where it can. A curve that becomes an arc
+ * keeps its middle. A straight edge that becomes a curve stays straight, so
+ * the operator has two handles to pull. A straight edge that becomes an arc has
+ * no shape to keep, so it takes a quarter turn.
+ */
+function setEdgeType(command: EdgeTypeCommand, document: Document, context: EvalContext): CommandOutcome {
+  const object = findGraphObjectByName(command.target, document.objects);
+  if (object === undefined) {
+    return { ok: false, message: `no object named "${command.target}"` };
+  }
+  if (object.type !== POLYLINE_TYPE) {
+    return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has an edge to shape` };
+  }
+  const shape = command.shape.trim().toLowerCase();
+  if (!EDGE_TYPE_NAMES.some((candidate) => candidate === shape)) {
+    return { ok: false, message: `"${command.shape}" is not an edge shape — edgetype takes ${EDGE_TYPE_NAMES.join(", ")}` };
+  }
+  const edges = pathEdgesOfObject(object);
+  const edge = edges[command.index];
+  if (edge === undefined) {
+    return {
+      ok: false,
+      message: `${object.name} has no edge ${command.index} — it has ${edges.length} ${edges.length === 1 ? "edge" : "edges"}`,
+    };
+  }
+
+  const count = object.vertexCount ?? 0;
+  const endIndex = (command.index + 1) % count;
+  const writes = edgeShapeWrites(shape as EdgeTypeName, edge, command.index, endIndex);
+  const held = writes.filter((write) => getSlot(object, write.path)?.kind === "formula").map((write) => slotKey(write.path));
+  if (held.length > 0) {
+    return {
+      ok: false,
+      message: `${object.name} cannot change the shape of edge ${command.index}: a formula drives ${held.join(", ")}. Unlink first`,
+    };
+  }
+
+  const result = mutate(
+    document.objects,
+    writes.map((write) => ({
+      kind: "setSlot" as const,
+      address: { objectId: object.id, path: write.path },
+      slot: { kind: "literal" as const, value: write.value },
+    })),
+    document.journal,
+    context,
+  );
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`${object.name} edge ${command.index} is now a ${shape}`],
+  };
+}
+
+/** The five slot writes one shape needs. All five move together or none of them do. */
+function edgeShapeWrites(
+  shape: EdgeTypeName,
+  edge: PathEdge,
+  index: number,
+  endIndex: number,
+): readonly { readonly path: readonly string[]; readonly value: number }[] {
+  const handleOut = vertexHandleOutPaths(index);
+  const handleIn = vertexHandleInPaths(endIndex);
+  if (shape === "curve") {
+    const handles = cubicHandlesForEdge(edge);
+    return [
+      { path: vertexBulgePath(index), value: 0 },
+      { path: handleOut.x, value: handles.out.x },
+      { path: handleOut.y, value: handles.out.y },
+      { path: handleIn.x, value: handles.in.x },
+      { path: handleIn.y, value: handles.in.y },
+    ];
+  }
+  const bulge = shape === "line" ? 0 : arcBulgeFor(edge);
+  return [
+    { path: vertexBulgePath(index), value: bulge },
+    { path: handleOut.x, value: 0 },
+    { path: handleOut.y, value: 0 },
+    { path: handleIn.x, value: 0 },
+    { path: handleIn.y, value: 0 },
+  ];
+}
+
+/** The bulge an edge takes when it becomes an arc. It keeps the middle where it can. */
+function arcBulgeFor(edge: PathEdge): number {
+  if (bezierOfEdge(edge) !== undefined) {
+    return bulgeForMidpoint(edge.start, edge.end, edgeMidpoint(edge));
+  }
+  return edge.bulge === 0 ? QUARTER_TURN_BULGE : edge.bulge;
+}
+
 function splitEdge(command: SplitEdgeCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {

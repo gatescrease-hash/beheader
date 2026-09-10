@@ -47,6 +47,18 @@ export interface CreatePolylineCommand {
   readonly closed: boolean;
 }
 
+/** The three shapes one edge of a path can take. */
+export type EdgeTypeName = "line" | "arc" | "curve";
+
+export const EDGE_TYPE_NAMES: readonly EdgeTypeName[] = ["line", "arc", "curve"];
+
+export interface EdgeTypeCommand {
+  readonly kind: "edgetype";
+  readonly target: string;
+  readonly index: number;
+  readonly shape: string;
+}
+
 export interface SplitEdgeCommand {
   readonly kind: "split";
   readonly target: string;
@@ -213,6 +225,7 @@ export type Command =
   | DeleteVertexCommand
   | ExplodeCommand
   | SplitEdgeCommand
+  | EdgeTypeCommand
   | RefsCommand
   | PropsCommand
   | ListCommand
@@ -602,6 +615,19 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       target: textArgument(args, "target"),
       index: numberArgument(args, "index"),
       force: hasFlag(args, "force"),
+    }),
+  },
+  {
+    name: "edgetype",
+    usage: "edgetype <object> <edge> line|arc|curve",
+    positional: [text("target"), { name: "index", kind: "number" }, text("shape")],
+    named: [],
+    flags: [],
+    build: (args) => ({
+      kind: "edgetype",
+      target: textArgument(args, "target"),
+      index: numberArgument(args, "index"),
+      shape: textArgument(args, "shape"),
     }),
   },
   {

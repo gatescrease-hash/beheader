@@ -59,6 +59,9 @@ export interface PathBounds {
 /** The bulge of a half circle. Two of these make one full circle from two vertices. */
 export const HALF_CIRCLE_BULGE = 1;
 
+/** The bulge of a quarter turn. A straight edge takes it when it becomes an arc. */
+export const QUARTER_TURN_BULGE = Math.tan(Math.PI / 8);
+
 const FULL_TURN = 2 * Math.PI;
 
 const CARDINAL_ANGLES: readonly number[] = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
@@ -123,6 +126,59 @@ export function edgeEndDirection(edge: PathEdge): Point {
   }
   const arc = arcOfEdge(edge);
   return arc === undefined ? chord : turnBy(chord, arc.sweep / 2);
+}
+
+/**
+ * The two handles that draw one edge as a cubic.
+ *
+ * A cubic gives back the handles it already holds. A straight edge gives the
+ * handles that draw the same straight line: one third of the chord at each end.
+ * So the shape does not move. An arc gives the classic approximation, which is
+ * four thirds of the bulge times the radius, along the tangent at each end.
+ *
+ * A cubic cannot hold a circular arc exactly. The approximation is very close
+ * for a quarter turn and looser as the sweep grows. So this conversion moves
+ * the shape of a long arc a little.
+ */
+export function cubicHandlesForEdge(edge: PathEdge): { readonly out: Point; readonly in: Point } {
+  const bezier = bezierOfEdge(edge);
+  if (bezier !== undefined) {
+    return handles(
+      { x: bezier.p1.x - bezier.p0.x, y: bezier.p1.y - bezier.p0.y },
+      { x: bezier.p2.x - bezier.p3.x, y: bezier.p2.y - bezier.p3.y },
+    );
+  }
+  const chordX = edge.end.x - edge.start.x;
+  const chordY = edge.end.y - edge.start.y;
+  const arc = arcOfEdge(edge);
+  if (arc === undefined) {
+    return handles({ x: chordX / 3, y: chordY / 3 }, { x: -chordX / 3, y: -chordY / 3 });
+  }
+  const reach = (4 / 3) * arc.radius * Math.abs(Math.tan(arc.sweep / 4));
+  const startTangent = unit(turnBy({ x: chordX, y: chordY }, -arc.sweep / 2));
+  const endTangent = unit(turnBy({ x: chordX, y: chordY }, arc.sweep / 2));
+  return handles(
+    { x: startTangent.x * reach, y: startTangent.y * reach },
+    { x: -endTangent.x * reach, y: -endTangent.y * reach },
+  );
+}
+
+/**
+ * The pair, with every negative zero turned back into zero. A negative zero
+ * reaches a slot from any subtraction of equals, and mutation.ts refuses one as
+ * illegal document state.
+ */
+function handles(out: Point, into: Point): { readonly out: Point; readonly in: Point } {
+  const plain = (value: number): number => (value === 0 ? 0 : value);
+  return {
+    out: { x: plain(out.x), y: plain(out.y) },
+    in: { x: plain(into.x), y: plain(into.y) },
+  };
+}
+
+function unit(vector: Point): Point {
+  const length = Math.hypot(vector.x, vector.y);
+  return length === 0 ? { x: 0, y: 0 } : { x: vector.x / length, y: vector.y / length };
 }
 
 /**

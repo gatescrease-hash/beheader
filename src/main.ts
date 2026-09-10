@@ -64,6 +64,7 @@ import {
 import { resizeCursor } from "./render/handles.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { fitBitmapIntoBox, renderDocument, type PathPreview } from "./render/renderer.ts";
+import { menuCommandLine, pathMenuAt, type PathMenu } from "./render/menu.ts";
 import { edgeShape, type EdgeShape, type PathGrip } from "./render/grips.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
@@ -870,6 +871,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
   let pan: PanGesture | undefined;
   let spaceHeld = false;
+  let openMenu: { readonly menu: PathMenu; readonly at: ScreenPoint } | undefined;
+  let menuElement: HTMLElement | undefined;
   const panelElements = new Map<string, HTMLElement>();
   let panelDrag: PanelDragGesture | undefined;
   let openEditor: { readonly objectId: string; readonly path: string } | undefined;
@@ -1188,6 +1191,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Escape") {
+      closeMenu();
       apply(escape(state));
       return;
     }
@@ -1230,6 +1234,41 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     paint();
   });
 
+  const closeMenu = (): void => {
+    openMenu = undefined;
+    if (menuElement !== undefined) {
+      menuElement.remove();
+      menuElement = undefined;
+    }
+  };
+
+  /**
+   * Runs one menu entry as the command line it stands for. The log then shows
+   * the same line the operator can type, and every refusal reads the same way.
+   */
+  const runMenuAction = (menu: PathMenu, index: number): void => {
+    const item = menu.items[index];
+    closeMenu();
+    if (item === undefined) {
+      return;
+    }
+    input.focus();
+    applyTransition(submitLine(state, menuCommandLine(menu.objectName, item.action), viewport(), evalContext));
+  };
+
+  canvas.addEventListener("contextmenu", (event: MouseEvent) => {
+    event.preventDefault();
+    const at = screenPointOf(event);
+    const menu = pathMenuAt(at, state.document.objects, state.document.camera);
+    closeMenu();
+    if (menu === undefined) {
+      return;
+    }
+    openMenu = { menu, at };
+    menuElement = writeContextMenu(menu, at, (index) => runMenuAction(menu, index));
+    panelsContainer.appendChild(menuElement);
+  });
+
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
     const point = screenPointOf(event);
     if (pan !== undefined) {
@@ -1250,6 +1289,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
   canvas.addEventListener("pointerup", endGesture);
   canvas.addEventListener("pointercancel", endGesture);
+
+  window.addEventListener("pointerdown", (event: PointerEvent) => {
+    if (openMenu !== undefined && (event.target as HTMLElement).closest(".context-menu") === null) {
+      closeMenu();
+    }
+  });
 
   canvas.addEventListener(
     "wheel",
@@ -1393,6 +1438,35 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 function drawLog(logElement: HTMLElement, lines: readonly string[]): void {
   logElement.textContent = lines.join("\n");
   logElement.scrollTop = logElement.scrollHeight;
+}
+
+/**
+ * The menu element for one press. Each entry is a button, and the caller runs
+ * the command line it stands for. The entry for the shape an edge already has
+ * carries a mark. It stays live, because a second ask for it is harmless.
+ */
+function writeContextMenu(menu: PathMenu, at: ScreenPoint, onChoose: (index: number) => void): HTMLElement {
+  const element = document.createElement("div");
+  element.className = "context-menu";
+  element.style.left = `${at.x}px`;
+  element.style.top = `${at.y}px`;
+
+  const title = document.createElement("div");
+  title.className = "context-menu__title";
+  title.textContent = `${menu.objectName} ${menu.title}`;
+  element.append(title);
+
+  menu.items.forEach((item, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = item.current ? "context-menu__item context-menu__item--current" : "context-menu__item";
+    button.textContent = item.current ? `\u2713 ${item.label}` : item.label;
+    button.addEventListener("click", () => {
+      onChoose(index);
+    });
+    element.append(button);
+  });
+  return element;
 }
 
 function writePanel(panelElement: HTMLElement, model: PanelModel, editing: PanelRowEdit | undefined): void {

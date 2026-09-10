@@ -138,17 +138,12 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
  * the path where it is. A click inside a filled path reaches no edge, so this
  * gives undefined and the whole path moves instead.
  */
-export function pathSegmentUnder(
-  object: GraphObject,
-  screenPoint: ScreenPoint,
-  camera: CameraState,
-): readonly [number, number] | undefined {
+export function pathEdgeUnder(object: GraphObject, screenPoint: ScreenPoint, camera: CameraState): number | undefined {
   if (object.type !== POLYLINE_TYPE) {
     return undefined;
   }
-  const count = object.vertexCount ?? 0;
   const edges = pathEdgesOfObject(object);
-  if (count === 0 || edges.length === 0) {
+  if ((object.vertexCount ?? 0) === 0 || edges.length === 0) {
     return undefined;
   }
   const worldPoint = screenToWorld(camera, screenPoint);
@@ -161,7 +156,17 @@ export function pathSegmentUnder(
       nearest = index;
     }
   });
-  return nearest === undefined ? undefined : [nearest, (nearest + 1) % count];
+  return nearest;
+}
+
+export function pathSegmentUnder(
+  object: GraphObject,
+  screenPoint: ScreenPoint,
+  camera: CameraState,
+): readonly [number, number] | undefined {
+  const index = pathEdgeUnder(object, screenPoint, camera);
+  const count = object.vertexCount ?? 0;
+  return index === undefined ? undefined : [index, (index + 1) % count];
 }
 
 /** The topmost object under a screen point, or undefined. */

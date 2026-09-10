@@ -804,6 +804,7 @@ describe("every registry command reaches a handler", () => {
     "delvertex polyline_1 0",
     "explode polygon_1",
     "split polyline_1 0 5,5",
+    "edgetype polyline_1 0 arc",
     "refs intersection_a",
     "props intersection_a",
     "list",
@@ -2272,5 +2273,87 @@ describe("a colour slot takes a colour, and says so when it does not", () => {
     document = committed("link rect_1.style.fillColor table_1.A1", document);
     const rect = document.objects.find((object) => object.name === "rect_1");
     expect(rect === undefined ? undefined : getSlot(rect, ["style", "fillColor"])?.value).toBe("#123456");
+  });
+});
+describe("edgetype, the one gesture that sets all five slots behind an edge", () => {
+  function path(): Document {
+    return committed("polyline 0,0 12,0 12,12", createEmptyDocument());
+  }
+
+  function slotsOf(document: Document, index: number): Record<string, unknown> {
+    const object = onlyObject(document);
+    return {
+      bulge: literalValue(object, ["vertex", String(index), "bulge"]),
+      outX: literalValue(object, ["vertex", String(index), "handle", "out", "x"]),
+      outY: literalValue(object, ["vertex", String(index), "handle", "out", "y"]),
+      inX: literalValue(object, ["vertex", String(index + 1), "handle", "in", "x"]),
+      inY: literalValue(object, ["vertex", String(index + 1), "handle", "in", "y"]),
+    };
+  }
+
+  it("bends a straight edge into a quarter turn arc, and leaves the handles at 0", () => {
+    const bowed = committed("edgetype polyline_1 0 arc", path());
+    expect(slotsOf(bowed, 0)).toEqual({ bulge: Math.tan(Math.PI / 8), outX: 0, outY: 0, inX: 0, inY: 0 });
+  });
+
+  it("keeps an arc it already has, so asking twice changes nothing the second time", () => {
+    const once = committed("edgetype polyline_1 0 arc", path());
+    const twice = committed("edgetype polyline_1 0 arc", once);
+    expect(slotsOf(twice, 0)).toEqual(slotsOf(once, 0));
+  });
+
+  it("turns a straight edge into a curve that is still straight, so the shape does not move", () => {
+    const curved = committed("edgetype polyline_1 0 curve", path());
+    expect(slotsOf(curved, 0)).toEqual({ bulge: 0, outX: 4, outY: 0, inX: -4, inY: 0 });
+    expect(getSlot(onlyObject(curved), ["length"])?.value).toBeCloseTo(12 + 12);
+  });
+
+  it("puts every slot back to 0 on the way to a line, so no stray handle survives", () => {
+    let document = committed("edgetype polyline_1 0 curve", path());
+    document = committed("edgetype polyline_1 0 line", document);
+    expect(slotsOf(document, 0)).toEqual({ bulge: 0, outX: 0, outY: 0, inX: 0, inY: 0 });
+  });
+
+  it("keeps the middle of a curve when it becomes an arc", () => {
+    let document = committed("edgetype polyline_1 0 curve", path());
+    document = committed("set polyline_1.vertex.0.handle.out.y -8", document);
+    const before = getSlot(onlyObject(document), ["length"])?.value;
+    document = committed("edgetype polyline_1 0 arc", document);
+    expect(literalValue(onlyObject(document), ["vertex", "0", "bulge"])).not.toBe(0);
+    expect(getSlot(onlyObject(document), ["length"])?.value).not.toBe(before);
+  });
+
+  it("names the shapes it takes when given a word that is not one", () => {
+    expect(refused("edgetype polyline_1 0 wiggly", path())).toBe('"wiggly" is not an edge shape — edgetype takes line, arc, curve');
+  });
+
+  it("names the edges it has when the index is past the end", () => {
+    expect(refused("edgetype polyline_1 5 arc", path())).toBe("polyline_1 has no edge 5 — it has 2 edges");
+  });
+
+  it("refuses a shape on an object that has no edges", () => {
+    const circle = committed("circle x=0 y=0 r=5", createEmptyDocument());
+    expect(refused("edgetype circle_1 0 arc", circle)).toContain("only a polyline has an edge to shape");
+  });
+
+  it("refuses rather than write half an edge when a formula drives one of its five slots", () => {
+    let document = committed("polyline 0,0 12,0 12,12", createEmptyDocument());
+    document = committed("table x=500 y=0 rows=2 cols=2", document);
+    document = committed("set table_1.A1 0.5", document);
+    document = committed("link polyline_1.vertex.0.bulge table_1.A1", document);
+    const message = refused("edgetype polyline_1 0 curve", document);
+    expect(message).toContain("a formula drives vertex.0.bulge");
+    expect(message).toContain("Unlink first");
+  });
+
+  it("reaches the edge that closes a path, whose handles sit on the first vertex", () => {
+    const closed = committed("edgetype polyline_1 2 arc", committed("set polyline_1.closed TRUE", path()));
+    expect(literalValue(onlyObject(closed), ["vertex", "2", "bulge"])).toBeCloseTo(Math.tan(Math.PI / 8));
+    expect(literalValue(onlyObject(closed), ["vertex", "0", "handle", "in", "x"])).toBe(0);
+  });
+
+  it("reports what it did, naming the edge and the shape", () => {
+    const outcome = run("edgetype polyline_1 1 curve", path());
+    expect(isCommandFailure(outcome) ? [] : outcome.lines).toEqual(["polyline_1 edge 1 is now a curve"]);
   });
 });

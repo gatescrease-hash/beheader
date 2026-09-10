@@ -705,6 +705,34 @@ curve that looks straight and reads as straight. The four handle slots stay out
 of sight until a handle is what makes the edge a curve. Then they appear, and
 the operator can put them back to 0.
 
+**A right press over a path opens a menu.** The press picks the part, so the
+menu never asks which one the operator meant. Over a vertex it offers that
+vertex its own removal. Over an edge it offers the three shapes and one new
+vertex at the point pressed.
+
+| Over | What the menu offers |
+| --- | --- |
+| A vertex | `delete this vertex` |
+| An edge | `straight`, `arc`, `curve`, `add a vertex here` |
+
+**Every entry is a command line the operator can also type.** The menu writes
+the line and the usual command path runs it, so the log shows what happened,
+the journal records it, and a refusal reads the same either way. The menu
+reaches no mutation of its own.
+
+The entry for the shape an edge already has carries a mark. It stays live,
+because a second ask for it is harmless.
+
+**`edgetype` is the one gesture that sets all five slots behind an edge.** No
+single slot says which of the three shapes an edge is, so nothing else can
+change one without five writes. The conversion keeps the shape where it can. A
+curve that becomes an arc keeps its middle. A straight edge that becomes a
+curve stays straight, so the operator has two handles to pull. A straight edge
+that becomes an arc has no shape to keep, so it takes a quarter turn. A cubic
+cannot hold a circular arc exactly, so an arc that becomes a curve moves a
+little, and more as its sweep grows. The command refuses rather than write half
+an edge when a formula drives one of the five.
+
 **A colour slot takes a hex colour.** `#rgb`, `#rrggbb` or `#rrggbbaa`, or the
 word `none` for no colour at all. A canvas quietly ignores a colour string it
 cannot read, and paints the colour of the shape before it, so a wrong colour is
@@ -776,6 +804,7 @@ explode polygon_1 [force]
 addvertex polyline_1 100,100
 delvertex polyline_1 2
 split polyline_1 0 50,50
+edgetype polyline_1 0 arc
 addport script_1 in factor
 removeport script_1 in factor
 
