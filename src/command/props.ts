@@ -10,7 +10,9 @@
  * has.
  */
 import {
+  findSlotFormat,
   findSlotOptions,
+  type SlotFormat,
   formatFormula,
   getObjectSchema,
   getSlot,
@@ -34,6 +36,8 @@ export interface SlotDescriptor {
   readonly synthetic?: true;
 
   readonly options?: SlotOptionSet;
+  /** The shape a free value must take. A colour slot opens a picker in the panel. */
+  readonly format?: SlotFormat;
 }
 
 /** The slot rows for one object. The panel and the props command both read this. */
@@ -74,9 +78,10 @@ export function buildSlotDescriptors(object: GraphObject, objects: readonly Grap
   return descriptors;
 }
 
-function optionsFor(object: GraphObject, path: readonly string[]): { options?: SlotOptionSet } {
+function optionsFor(object: GraphObject, path: readonly string[]): { options?: SlotOptionSet; format?: SlotFormat } {
   const options = findSlotOptions(object.type, path);
-  return options === undefined ? {} : { options };
+  const format = findSlotFormat(object.type, path);
+  return { ...(options === undefined ? {} : { options }), ...(format === undefined ? {} : { format }) };
 }
 
 function describeNonDerivedSlot(path: readonly string[], slot: Slot, objects: readonly GraphObject[]): SlotDescriptor {

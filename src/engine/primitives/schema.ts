@@ -27,6 +27,8 @@ import {
   circleDerivedSlots,
   CLOSED_PATH,
   GEOMETRY_STYLE_PATHS,
+  STYLE_FILL_COLOR_PATH,
+  STYLE_STROKE_COLOR_PATH,
   computePolygonVerticesSlot,
   computePolylineVerticesSlot,
   computeRectVerticesSlot,
@@ -151,12 +153,51 @@ export interface ObjectSchema {
   readonly derivedSlots: readonly DerivedSlotGroup[];
 
   readonly slotOptions?: readonly SlotOptionSet[];
+  readonly slotFormats?: readonly SlotFormatSet[];
 }
 
 export interface SlotOptionSet {
   readonly path: readonly string[];
   readonly values: readonly (number | string | boolean)[];
   readonly labels?: readonly string[];
+}
+
+/**
+ * The shape a free value must take. An option set names every value a slot
+ * accepts. A format names a rule instead, for a slot with too many values to
+ * list.
+ */
+export type SlotFormat = "color";
+
+export interface SlotFormatSet {
+  readonly path: readonly string[];
+  readonly format: SlotFormat;
+}
+
+/** The word a colour slot takes for no colour at all. It writes null. */
+export const COLOR_NONE = "none";
+
+const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/**
+ * True for a value a colour slot accepts.
+ *
+ * A hex colour, in the three, six or eight digit form, or null for no colour.
+ * A canvas quietly ignores a colour it cannot read, so a name it does not know
+ * paints the colour of the shape before it. Hex is also what a colour picker
+ * gives back, so the typed form and the picked form agree exactly.
+ */
+export function isColorValue(value: Value): boolean {
+  return value === null || (typeof value === "string" && HEX_COLOR_PATTERN.test(value));
+}
+
+export function findSlotFormat(type: ObjectType, path: readonly string[]): SlotFormat | undefined {
+  const schema = getObjectSchema(type);
+  if (schema?.slotFormats === undefined) {
+    return undefined;
+  }
+  const key = slotKey(path);
+  return schema.slotFormats.find((entry) => slotKey(entry.path) === key)?.format;
 }
 
 /**
@@ -232,14 +273,21 @@ const TABLE_SCHEMA: ObjectSchema = {
   derivedSlots: [],
 };
 
+const GEOMETRY_COLOR_FORMATS: readonly SlotFormatSet[] = [
+  { path: STYLE_STROKE_COLOR_PATH, format: "color" },
+  { path: STYLE_FILL_COLOR_PATH, format: "color" },
+];
+
 const CIRCLE_SCHEMA: ObjectSchema = {
   type: "circle",
+  slotFormats: GEOMETRY_COLOR_FORMATS,
   nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, ...GEOMETRY_STYLE_PATHS] }],
   derivedSlots: [{ kind: "static", slots: [...circleDerivedSlots("circle")] }],
 };
 
 const POLYGON_SCHEMA: ObjectSchema = {
   type: "polygon",
+  slotFormats: GEOMETRY_COLOR_FORMATS,
   nonDerivedSlotPaths: [
     { kind: "static", paths: [POLYGON_SIDES_PATH, RADIUS_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH, POLYGON_ROTATION_PATH, ...GEOMETRY_STYLE_PATHS] },
   ],
@@ -255,6 +303,7 @@ const POLYGON_SCHEMA: ObjectSchema = {
 
 const RECT_SCHEMA: ObjectSchema = {
   type: "rect",
+  slotFormats: GEOMETRY_COLOR_FORMATS,
   nonDerivedSlotPaths: [
     { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RECT_WIDTH_PATH, RECT_HEIGHT_PATH, ...GEOMETRY_STYLE_PATHS] },
   ],
@@ -271,6 +320,7 @@ const RECT_SCHEMA: ObjectSchema = {
 const POLYLINE_SCHEMA: ObjectSchema = {
   type: "polyline",
   slotOptions: [{ path: CLOSED_PATH, values: [true, false] }],
+  slotFormats: GEOMETRY_COLOR_FORMATS,
   nonDerivedSlotPaths: [
     { kind: "static", paths: [CLOSED_PATH, ...GEOMETRY_STYLE_PATHS] },
     { kind: "dynamic", enumerate: enumeratePolylineVertexSlotPaths },
@@ -283,6 +333,7 @@ const POLYLINE_SCHEMA: ObjectSchema = {
 
 const TEXT_SCHEMA: ObjectSchema = {
   type: "text",
+  slotFormats: [{ path: TEXT_STYLE_COLOR_PATH, format: "color" }],
   nonDerivedSlotPaths: [
     {
       kind: "static",

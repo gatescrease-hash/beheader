@@ -292,7 +292,7 @@ describe("creation — a typed line becomes an object", () => {
     expect(literalValue(object, ["style", "font"])).toBe("sans-serif");
     expect(literalValue(object, ["style", "fontSize"])).toBe(16);
     expect(literalValue(object, ["style", "lineHeight"])).toBe(20);
-    expect(literalValue(object, ["style", "color"])).toBe("black");
+    expect(literalValue(object, ["style", "color"])).toBe("#000000");
     expect(literalValue(object, ["style", "align"])).toBe("left");
     expect(getSlot(object, ["resolvedContent"])?.kind).toBe("derived");
     expect(getSlot(object, ["measuredHeight"])?.kind).toBe("derived");
@@ -2213,5 +2213,64 @@ describe("a slot with an option list takes those values and no others", () => {
     document = committed("link polyline_1.closed table_1.A1", document);
     const path = document.objects.find((object) => object.name === "polyline_1");
     expect(path === undefined ? undefined : getSlot(path, ["closed"])?.value).toBe(true);
+  });
+});
+describe("a colour slot takes a colour, and says so when it does not", () => {
+  function shape(): Document {
+    return committed("rect x=0 y=0 w=4 h=3", createEmptyDocument());
+  }
+
+  it("takes a six digit hex colour", () => {
+    const painted = committed("set rect_1.style.fillColor \"#00ff88\"", shape());
+    expect(getSlot(onlyObject(painted), ["style", "fillColor"])?.value).toBe("#00ff88");
+  });
+
+  it("takes the three digit form and the eight digit form too", () => {
+    expect(getSlot(onlyObject(committed("set rect_1.style.strokeColor \"#f00\"", shape())), ["style", "strokeColor"])?.value).toBe("#f00");
+    expect(getSlot(onlyObject(committed("set rect_1.style.strokeColor \"#ff000080\"", shape())), ["style", "strokeColor"])?.value).toBe("#ff000080");
+  });
+
+  it("folds the case, so one colour has one stored form", () => {
+    expect(getSlot(onlyObject(committed("set rect_1.style.strokeColor \"#AABBCC\"", shape())), ["style", "strokeColor"])?.value).toBe("#aabbcc");
+  });
+
+  it("refuses a string that is not a colour, and names the form it takes", () => {
+    expect(refused("set rect_1.style.strokeColor \"######\"", shape())).toBe(
+      'rect_1.style.strokeColor takes a hex colour such as #1a1a1a, or "none", and not "######"',
+    );
+  });
+
+  it("refuses a colour name, because a canvas that cannot read one paints the colour before it", () => {
+    expect(refused("set rect_1.style.fillColor \"red\"", shape())).toContain("takes a hex colour");
+  });
+
+  it("refuses a number where a colour belongs", () => {
+    expect(refused("set rect_1.style.fillColor 255", shape())).toContain("takes a hex colour");
+  });
+
+  it("writes no colour at all for the word none, so a filled shape can go hollow again", () => {
+    const filled = committed("set rect_1.style.fillColor \"#00ff88\"", shape());
+    const hollow = committed("set rect_1.style.fillColor \"none\"", filled);
+    expect(getSlot(onlyObject(hollow), ["style", "fillColor"])?.value).toBeNull();
+  });
+
+  it("guards a text colour by the same rule, so this is one rule and not a shape rule", () => {
+    const text = committed('text x=0 y=0 "hi"', createEmptyDocument());
+    expect(getSlot(onlyObject(text), ["style", "color"])?.value).toBe("#000000");
+    expect(refused('set text_1.style.color "black"', text)).toContain("takes a hex colour");
+  });
+
+  it("leaves a slot with no declared format free, so a font name is still a plain string", () => {
+    const text = committed('text x=0 y=0 "hi"', createEmptyDocument());
+    expect(isCommandFailure(run('set text_1.style.font "Georgia"', text))).toBe(false);
+  });
+
+  it("still lets a formula drive a colour, because only evaluation knows what one gives", () => {
+    let document = committed("rect x=0 y=0 w=4 h=3", createEmptyDocument());
+    document = committed("table x=500 y=0 rows=2 cols=2", document);
+    document = committed('set table_1.A1 "#123456"', document);
+    document = committed("link rect_1.style.fillColor table_1.A1", document);
+    const rect = document.objects.find((object) => object.name === "rect_1");
+    expect(rect === undefined ? undefined : getSlot(rect, ["style", "fillColor"])?.value).toBe("#123456");
   });
 });

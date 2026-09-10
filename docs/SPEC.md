@@ -705,6 +705,18 @@ curve that looks straight and reads as straight. The four handle slots stay out
 of sight until a handle is what makes the edge a curve. Then they appear, and
 the operator can put them back to 0.
 
+**A colour slot takes a hex colour.** `#rgb`, `#rrggbb` or `#rrggbbaa`, or the
+word `none` for no colour at all. A canvas quietly ignores a colour string it
+cannot read, and paints the colour of the shape before it, so a wrong colour is
+invisible rather than loud. The command line refuses one instead, and names the
+form it takes. Hex is also what a colour picker gives back, so the typed form
+and the picked form agree exactly.
+
+Each colour row in the panel carries a swatch. It is a real colour input, so the
+browser opens its own wheel. A slot that holds no colour draws a slash across the
+swatch. A formula row carries no swatch, because a picker that silently replaced
+a formula is the one gesture the panel must not offer.
+
 A vertex a formula holds draws in grey italic, the same fact its grip draws.
 The vertex list is the one part of a panel that scrolls, so a long path cannot
 push the derived slots off the screen.

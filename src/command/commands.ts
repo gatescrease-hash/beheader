@@ -19,8 +19,11 @@ import {
   type Edge,
   type EvalContext,
   findDerivedSlotSchema,
+  COLOR_NONE,
   findObjectByName,
+  findSlotFormat,
   findSlotOptions,
+  isColorValue,
   formatAddress,
   formatFormula,
   generateDefaultName,
@@ -152,7 +155,9 @@ const DEFAULT_TEXT_AUTORESIZE = true;
 const DEFAULT_TEXT_STYLE_FONT = "sans-serif";
 const DEFAULT_TEXT_STYLE_FONT_SIZE = 16;
 const DEFAULT_TEXT_STYLE_LINE_HEIGHT = 20;
-const DEFAULT_TEXT_STYLE_COLOR = "black";
+// Every colour slot holds a hex colour, so the typed form and the picked form
+// agree. A canvas reads "black" too, but a picker can never give it back.
+const DEFAULT_TEXT_STYLE_COLOR = "#000000";
 const DEFAULT_TEXT_STYLE_ALIGN = "left";
 
 export const DEFAULT_IMAGE_EXTENT = 100;
@@ -506,6 +511,34 @@ type SlotBuildResult = { readonly ok: true; readonly slot: Slot; readonly lines:
  * #TYPE error that names no cause. A formula still writes what it likes,
  * because only evaluation knows what a formula produces.
  */
+type FormattedRead = { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly message: string };
+
+/**
+ * The value a slot with a declared format takes, or a refusal that names the
+ * form it wants.
+ *
+ * A colour slot takes a hex colour, or the word "none" for no colour at all,
+ * which writes null. A canvas quietly ignores a colour string it cannot read.
+ * It paints the colour of the shape before it instead, so a wrong colour is
+ * invisible rather than loud. This is where it becomes loud.
+ */
+function readFormattedValue(value: Value, target: WritableSlotTarget): FormattedRead {
+  if (findSlotFormat(target.object.type, target.address.path) !== "color") {
+    return { ok: true, value };
+  }
+  const folded = typeof value === "string" ? value.trim().toLowerCase() : value;
+  if (folded === COLOR_NONE) {
+    return { ok: true, value: null };
+  }
+  if (isColorValue(folded)) {
+    return { ok: true, value: folded };
+  }
+  return {
+    ok: false,
+    message: `${target.displayName} takes a hex colour such as #1a1a1a, or "${COLOR_NONE}", and not ${describeSlotValue(value)}`,
+  };
+}
+
 function refuseValueOffTheOptionList(value: Value, target: WritableSlotTarget): string | undefined {
   const options = findSlotOptions(target.object.type, target.address.path);
   if (options === undefined || options.values.some((candidate) => candidate === value)) {
@@ -522,7 +555,11 @@ function buildSlot(write: SlotWrite, target: WritableSlotTarget, document: Docum
       if (offList !== undefined) {
         return { ok: false, message: offList };
       }
-      return { ok: true, slot: { kind: "literal", value: write.value }, lines: [`${target.displayName} = ${describeSlotValue(write.value)}`] };
+      const read = readFormattedValue(write.value, target);
+      if (!read.ok) {
+        return read;
+      }
+      return { ok: true, slot: { kind: "literal", value: read.value }, lines: [`${target.displayName} = ${describeSlotValue(read.value)}`] };
     }
     case "formula": {
       if (isTextContentTarget(target)) {

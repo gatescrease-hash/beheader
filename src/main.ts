@@ -27,6 +27,7 @@ import {
   loadDocument,
   NULL_EVAL_CONTEXT,
   saveDocument,
+  isColorValue,
   polylineEdgeCount,
   slotKey,
   VERTEX_PART_SUFFIXES,
@@ -380,6 +381,16 @@ export interface PanelRow {
   readonly picker: boolean;
 
   readonly choices: PanelRowChoices | undefined;
+
+  /** The colour a swatch shows, for a literal colour slot. Undefined for every other row. */
+  readonly color: PanelRowColor | undefined;
+}
+
+export interface PanelRowColor {
+  /** What the picker opens on. A slot that holds no colour opens on black. */
+  readonly seed: string;
+  /** True when the slot holds no colour at all. */
+  readonly none: boolean;
 }
 
 export interface PanelRowChoices {
@@ -433,6 +444,7 @@ export function buildPanelModel(
     kind: descriptor.kind,
     synthetic: descriptor.synthetic === true,
     choices: resolveChoices(descriptor),
+    color: resolveColor(descriptor),
   });
 
   const byKey = new Map(descriptors.map((descriptor) => [slotKey(descriptor.path), descriptor]));
@@ -490,6 +502,22 @@ function buildPartRow(
 
 function describePartPosition(x: Value | undefined, y: Value | undefined): string {
   return `${describeSlotValue(x ?? null, { maxDecimals: 2 })}, ${describeSlotValue(y ?? null, { maxDecimals: 2 })}`;
+}
+
+/**
+ * The swatch a colour row shows, or nothing.
+ *
+ * Only a literal gets one. A formula drives its own value, and a swatch that
+ * silently replaced a formula is the one gesture the panel must not offer.
+ */
+function resolveColor(descriptor: SlotDescriptor): PanelRowColor | undefined {
+  if (descriptor.format !== "color" || descriptor.kind !== "literal") {
+    return undefined;
+  }
+  const value = descriptor.value;
+  return typeof value === "string" && isColorValue(value)
+    ? { seed: value, none: false }
+    : { seed: "#000000", none: value === null };
 }
 
 function isPictureSourceRow(object: GraphObject, descriptor: SlotDescriptor): boolean {
@@ -1234,7 +1262,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   panelsContainer.addEventListener("pointerdown", (event: PointerEvent) => {
     const target = event.target as HTMLElement;
-    const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice") !== null;
+    const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice, .panel-row__color") !== null;
     if (!insideOpenEditor) {
       event.preventDefault();
     }
@@ -1328,6 +1356,16 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   panelsContainer.addEventListener("change", (event: Event) => {
+    const swatch = (event.target as HTMLElement).closest(".panel-row__color") as HTMLInputElement | null;
+    if (swatch !== null) {
+      const rowElement = swatch.closest(".panel-row") as HTMLElement | null;
+      const objectId = (swatch.closest(".panel") as HTMLElement | null)?.dataset.objectId;
+      const path = rowElement?.dataset.path;
+      if (objectId !== undefined && path !== undefined) {
+        apply(commitPanelChoice(state, objectId, path, swatch.value, evalContext));
+      }
+      return;
+    }
     const select = (event.target as HTMLElement).closest(".panel-row__choice") as HTMLSelectElement | null;
     if (select === null) {
       return;
@@ -1468,6 +1506,9 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
     } else if (!derived && !row.synthetic) {
       right.append(panelClipElement(row));
     }
+    if (row.color !== undefined) {
+      right.append(panelColorElement(row.path, row.color));
+    }
     const value = document.createElement("span");
     value.className = "panel-row__value";
     value.textContent = row.formulaSource === undefined ? row.value : `= ${row.formulaSource}  (${row.value})`;
@@ -1476,6 +1517,21 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
 
   element.append(path, right);
   return element;
+}
+
+/**
+ * The swatch of a colour row. It is a real colour input, sized down to a
+ * square, so the browser opens its own wheel. The operator never types a hex
+ * string to pick a colour.
+ */
+function panelColorElement(path: string, color: PanelRowColor): HTMLInputElement {
+  const swatch = document.createElement("input");
+  swatch.type = "color";
+  swatch.className = color.none ? "panel-row__color panel-row__color--none" : "panel-row__color";
+  swatch.value = color.seed;
+  swatch.title = color.none ? `choose a colour for ${path}` : `change the colour of ${path}`;
+  swatch.setAttribute("aria-label", `colour for ${path}`);
+  return swatch;
 }
 
 function panelChoiceSelect(choices: PanelRowChoices): HTMLSelectElement {

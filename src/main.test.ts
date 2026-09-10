@@ -1958,3 +1958,55 @@ describe("the panel groups a path by its parts, not by its slots", () => {
     expect(built.modifiable.map((row) => row.path)).toContain("radius");
   });
 });
+describe("the panel opens a colour picker on a colour slot", () => {
+  function rowNamed(state: AppState, name: string, path: string): PanelRow {
+    const model = buildPanelModel(objectNamed(state, name), state.document.objects);
+    const found = model.modifiable.find((row) => row.path === path);
+    if (found === undefined) {
+      throw new Error(`expected a row at ${path}`);
+    }
+    return found;
+  }
+
+  function withRect(): AppState {
+    return typed(opened(), "rect x=0 y=0 w=200 h=100");
+  }
+
+  it("gives a colour slot a swatch seeded with the colour it holds", () => {
+    expect(rowNamed(withRect(), "rect_1", "style.strokeColor").color).toEqual({ seed: "#1a1a1a", none: false });
+  });
+
+  it("marks a slot holding no colour, and opens its picker on black", () => {
+    expect(rowNamed(withRect(), "rect_1", "style.fillColor").color).toEqual({ seed: "#000000", none: true });
+  });
+
+  it("follows the slot after a write, so the swatch shows what the shape draws", () => {
+    const painted = typed(withRect(), 'set rect_1.style.fillColor "#00ff88"');
+    expect(rowNamed(painted, "rect_1", "style.fillColor").color).toEqual({ seed: "#00ff88", none: false });
+  });
+
+  it("gives no swatch to a slot that is not a colour", () => {
+    expect(rowNamed(withRect(), "rect_1", "style.strokeWidth").color).toBeUndefined();
+    expect(rowNamed(withRect(), "rect_1", "width").color).toBeUndefined();
+  });
+
+  it("gives NO swatch to a formula row, because a picker that overwrote a formula is what no gesture can do", () => {
+    let state = typed(withRect(), "table x=500 y=0 rows=2 cols=2");
+    state = typed(state, 'set table_1.A1 "#123456"');
+    state = typed(state, "link rect_1.style.fillColor table_1.A1");
+    const row = rowNamed(state, "rect_1", "style.fillColor");
+    expect(row.kind).toBe("formula");
+    expect(row.color).toBeUndefined();
+  });
+
+  it("commits a picked colour as a chosen value, the way a drop-down commits one", () => {
+    const state = withRect();
+    const picked = commitPanelChoice(state, objectNamed(state, "rect_1").id, "style.fillColor", "#3366cc");
+    expect(getSlot(objectNamed(picked, "rect_1"), ["style", "fillColor"])?.value).toBe("#3366cc");
+  });
+
+  it("gives a text colour a swatch too", () => {
+    const text = typed(opened(), 'text x=0 y=0 "hi"');
+    expect(rowNamed(text, "text_1", "style.color").color).toEqual({ seed: "#000000", none: false });
+  });
+});

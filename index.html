@@ -150,6 +150,30 @@
       .panel-row--nested {
         padding-left: 14px;
       }
+      /*
+        The swatch of a colour slot. It is a real colour input, so the browser
+        opens its own wheel. A slot that holds no colour draws a slash instead
+        of a colour, because a colour input cannot show the absence of one.
+      */
+      .panel-row__color {
+        pointer-events: auto;
+        cursor: pointer;
+        width: 14px;
+        height: 14px;
+        padding: 0;
+        border: 1px solid #b0b0b0;
+        background: transparent;
+        vertical-align: middle;
+      }
+      .panel-row__color::-webkit-color-swatch-wrapper {
+        padding: 0;
+      }
+      .panel-row__color::-webkit-color-swatch {
+        border: none;
+      }
+      .panel-row__color--none {
+        background-image: linear-gradient(to top right, transparent 45%, #c04040 45%, #c04040 55%, transparent 55%);
+      }
       .panel-row {
         display: flex;
         justify-content: space-between;
