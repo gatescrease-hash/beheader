@@ -16,7 +16,7 @@ import {
   resolveDerivedSlots,
   type Slot,
 } from "../engine/index.ts";
-import { deselect, INITIAL_INTERACTION_STATE, pointerDown, pointerMove, pointerUp, type InteractionState } from "./interaction.ts";
+import { deselect, focusPathPart, INITIAL_INTERACTION_STATE, pathGripUnder, pointerDown, pointerMove, pointerUp, type InteractionState } from "./interaction.ts";
 
 const CAMERA_IDENTITY: CameraState = { x: 0, y: 0, zoom: 1 };
 
@@ -105,7 +105,7 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
 }
 
 function dragFromOrigin(objectId: string): InteractionState {
-  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined }, resize: undefined };
+  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined }, resize: undefined, bend: undefined, focus: undefined };
 }
 
 describe("pointerDown — click to select, over a list of objects", () => {
@@ -166,7 +166,7 @@ describe("pointerDown — click to select, over a list of objects", () => {
 
   it("a shift-click on empty canvas with no drag running returns the prior state itself", () => {
     const { objects } = commit([rectObject(0, 0)]);
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined };
     expect(pointerDown(idle, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true)).toBe(idle);
   });
 
@@ -187,13 +187,13 @@ describe("pointerUp and deselect", () => {
   });
 
   it("pointerUp returns the same state untouched when no drag is running", () => {
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined };
     expect(pointerUp(idle)).toBe(idle);
   });
 
   it("pointerUp keeps a MULTI-object selection untouched, ending only the drag", () => {
-    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined }, resize: undefined };
-    expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined });
+    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined }, resize: undefined, bend: undefined, focus: undefined };
+    expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined, bend: undefined, focus: undefined });
   });
 
   it("deselect clears the selection AND a drag in progress, so no gesture survives Escape", () => {
@@ -246,7 +246,7 @@ describe("pointerMove — a drag calls the mutation API", () => {
 
   it("is a no-op with no drag in progress, so a caller may wire it to every pointer move", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined };
     const outcome = pointerMove(idle, { x: 99, y: 99 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.state).toBe(idle);
     expect(outcome.objects).toBe(objects);
@@ -383,7 +383,7 @@ describe("a drag works per component, never all or nothing", () => {
     const state: InteractionState = {
       selectedObjectIds: ["obj_2"],
       drag: { objectId: "obj_2", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: [] },
-      resize: undefined,
+      resize: undefined, bend: undefined, focus: undefined,
     };
     const outcome = pointerMove(state, { x: 5, y: 5 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.objects).toBe(objects);
@@ -447,7 +447,7 @@ describe("a shift drag on a path moves only the segment it grabbed", () => {
 
   it("selects the path outright, rather than take it out of a selection it is already in", () => {
     const { objects } = commit([polylineObject()]);
-    const selected: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined };
+    const selected: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined };
     const state = pointerDown(selected, { x: 50, y: 0 }, objects, CAMERA_IDENTITY, true);
     expect(state.selectedObjectIds).toEqual(["obj_1"]);
     expect(state.drag?.vertices).toEqual([0, 1]);
@@ -658,7 +658,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
       throw new Error(`test setup: ${created.message}`);
     }
     return {
-      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined },
+      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined, bend: undefined, focus: undefined },
       objects: created.objects,
       journal: created.journal,
     };
@@ -681,7 +681,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
       throw new Error(`test setup: ${created.message}`);
     }
     return {
-      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined },
+      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined, bend: undefined, focus: undefined },
       objects: created.objects,
       journal: created.journal,
     };
@@ -805,7 +805,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
       throw new Error(`test setup: ${created.message}`);
     }
     return {
-      state: { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined },
+      state: { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined },
       objects: created.objects,
       journal: created.journal,
     };
@@ -868,7 +868,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
     if (!created.ok) {
       throw new Error(`test setup: ${created.message}`);
     }
-    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined };
+    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined };
     const pressed = pointerDown(state, { x: 200, y: 100 }, created.objects, CAMERA_IDENTITY);
     const moved = pointerMove(pressed, { x: 300, y: 100 }, created.objects, created.journal, CAMERA_IDENTITY);
     const resized = moved.objects.find((candidate) => candidate.id === "obj_i");
@@ -894,12 +894,159 @@ describe("resize — an image's grabbers write its own width/height slots", () =
     if (!created.ok) {
       throw new Error(`test setup: ${created.message}`);
     }
-    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined };
+    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined };
     const pressed = pointerDown(state, { x: 200, y: 100 }, created.objects, CAMERA_IDENTITY);
     const moved = pointerMove(pressed, { x: 300, y: 100 }, created.objects, created.journal, CAMERA_IDENTITY);
     const resized = moved.objects.find((candidate) => candidate.id === "obj_i");
     expect(getSlot(resized!, ["height"])?.value).toBe(150);
     expect(getSlot(resized!, ["width"])?.kind).toBe("formula");
     expect(moved.notices.join(" ")).toContain("did not resize");
+  });
+});
+describe("a selected path grows grips, and a grip names one part of it", () => {
+  function selected(overrides: Record<string, Slot> = {}): {
+    objects: readonly GraphObject[];
+    journal: readonly MutationJournalEntry[];
+    state: InteractionState;
+  } {
+    const { objects, journal } = commit([polylineObject(false, overrides)]);
+    // Edge 1 runs straight from (100,0) to (100,100) in every fixture here, so
+    // a press on it selects the path whatever shape edge 0 has.
+    const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 100, y: 40 }, objects, CAMERA_IDENTITY);
+    return { objects, journal, state };
+  }
+
+  it("takes no grip on the first press, because grips belong to a path already selected", () => {
+    const first = pointerDown(INITIAL_INTERACTION_STATE, { x: 0, y: 0 }, commit([polylineObject()]).objects, CAMERA_IDENTITY);
+    expect(first.focus).toBeUndefined();
+    expect(first.drag?.vertices).toEqual([0, 1, 2]);
+  });
+
+  it("drags one vertex on a press over its grip, and leaves the others where they are", () => {
+    const { objects, journal, state } = selected();
+    const grabbed = pointerDown(state, { x: 100, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(grabbed.drag?.vertices).toEqual([1]);
+    expect(grabbed.focus).toEqual({ objectId: "obj_1", grip: { kind: "vertex", index: 1 } });
+    const outcome = pointerMove(grabbed, { x: 130, y: 40 }, objects, journal, CAMERA_IDENTITY);
+    expect(vertexAt(outcome.objects, 0)).toEqual({ x: 0, y: 0 });
+    expect(vertexAt(outcome.objects, 1)).toEqual({ x: 130, y: 40 });
+    expect(vertexAt(outcome.objects, 2)).toEqual({ x: 100, y: 100 });
+  });
+
+  it("holds a vertex a formula drives, and says so, the way every other drag does", () => {
+    const anchor: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 0 } } };
+    const bound = polylineObject(false, {
+      "vertex.0.x": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["value"] } }, value: 0 },
+    });
+    const { objects, journal } = commit([anchor, bound]);
+    let state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    state = pointerDown(state, { x: 0, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(state.drag?.vertices).toEqual([0]);
+    const outcome = pointerMove(state, { x: 30, y: 30 }, objects, journal, CAMERA_IDENTITY);
+    expect(vertexAt(outcome.objects, 0)).toEqual({ x: 0, y: 30 });
+    expect(outcome.notices.join(" ")).toContain("did not move");
+  });
+
+  it("bends an edge on a press over its middle grip, and writes the bulge that puts it under the pointer", () => {
+    const { objects, journal, state } = selected();
+    const grabbed = pointerDown(state, { x: 50, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(grabbed.bend).toEqual({ objectId: "obj_1", index: 0, emittedNotices: [] });
+    expect(grabbed.drag).toBeUndefined();
+    const outcome = pointerMove(grabbed, { x: 50, y: -50 }, objects, journal, CAMERA_IDENTITY);
+    expect(slotValue(outcome.objects, "obj_1", "vertex.0.bulge")).toBeCloseTo(1);
+    expect(vertexAt(outcome.objects, 0)).toEqual({ x: 0, y: 0 });
+    expect(vertexAt(outcome.objects, 1)).toEqual({ x: 100, y: 0 });
+  });
+
+  it("writes an absolute bulge, so a bend that wanders and comes back lands where the pointer is", () => {
+    const { objects, journal, state } = selected();
+    const grabbed = pointerDown(state, { x: 50, y: 0 }, objects, CAMERA_IDENTITY);
+    const wandered = pointerMove(grabbed, { x: 50, y: -90 }, objects, journal, CAMERA_IDENTITY);
+    const back = pointerMove(wandered.state, { x: 50, y: -50 }, wandered.objects, wandered.journal, CAMERA_IDENTITY);
+    expect(slotValue(back.objects, "obj_1", "vertex.0.bulge")).toBeCloseTo(1);
+  });
+
+  it("straightens an edge again on a drag back to the chord", () => {
+    const { objects, journal, state } = selected({ "vertex.0.bulge": { kind: "literal", value: 1 } });
+    const grabbed = pointerDown(state, { x: 50, y: -50 }, objects, CAMERA_IDENTITY);
+    expect(grabbed.bend?.index).toBe(0);
+    const outcome = pointerMove(grabbed, { x: 50, y: 0 }, objects, journal, CAMERA_IDENTITY);
+    expect(slotValue(outcome.objects, "obj_1", "vertex.0.bulge")).toBe(0);
+  });
+
+  it("holds a bulge a formula drives, and says so rather than write it", () => {
+    const anchor: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 0 } } };
+    const bound = polylineObject(false, {
+      "vertex.0.bulge": { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["value"] } }, value: 0 },
+    });
+    const { objects, journal } = commit([anchor, bound]);
+    let state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    state = pointerDown(state, { x: 50, y: 0 }, objects, CAMERA_IDENTITY);
+    const outcome = pointerMove(state, { x: 50, y: -50 }, objects, journal, CAMERA_IDENTITY);
+    expect(slotValue(outcome.objects, "obj_1", "vertex.0.bulge")).toBe(0);
+    expect(outcome.notices.join(" ")).toContain("did not bend");
+  });
+
+  it("keeps shift on its old meaning, so a shift press at the same middle moves the segment", () => {
+    const { objects, journal, state } = selected();
+    const grabbed = pointerDown(state, { x: 50, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(grabbed.bend).toBeUndefined();
+    expect(grabbed.drag?.vertices).toEqual([0, 1]);
+    const outcome = pointerMove(grabbed, { x: 50, y: -50 }, objects, journal, CAMERA_IDENTITY);
+    expect(slotValue(outcome.objects, "obj_1", "vertex.0.bulge")).toBe(0);
+    expect(vertexAt(outcome.objects, 0)).toEqual({ x: 0, y: -50 });
+  });
+
+  it("drops the part again on a press over the body of the path", () => {
+    const { objects, state } = selected();
+    const grabbed = pointerDown(state, { x: 100, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(grabbed.focus).toBeDefined();
+    expect(pointerDown(grabbed, { x: 20, y: 0 }, objects, CAMERA_IDENTITY).focus).toBeUndefined();
+  });
+
+  it("drops the part when the selection moves to another object", () => {
+    const { objects } = commit([polylineObject(), { ...rectObject(400, 400), id: "obj_9", name: "rect_9" }]);
+    let state = pointerDown(INITIAL_INTERACTION_STATE, { x: 20, y: 0 }, objects, CAMERA_IDENTITY);
+    state = pointerDown(state, { x: 100, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(state.focus).toBeDefined();
+    expect(pointerDown(state, { x: 410, y: 410 }, objects, CAMERA_IDENTITY).focus).toBeUndefined();
+  });
+
+  it("keeps the part through the drag it started, so the panel does not flicker under the pointer", () => {
+    const { objects, journal, state } = selected();
+    const grabbed = pointerDown(state, { x: 100, y: 0 }, objects, CAMERA_IDENTITY);
+    const outcome = pointerMove(grabbed, { x: 130, y: 40 }, objects, journal, CAMERA_IDENTITY);
+    expect(outcome.state.focus).toEqual({ objectId: "obj_1", grip: { kind: "vertex", index: 1 } });
+    expect(pointerUp(outcome.state).focus).toEqual({ objectId: "obj_1", grip: { kind: "vertex", index: 1 } });
+  });
+
+  it("reports the grip under the pointer, which is what a cursor reads", () => {
+    const { objects, state } = selected();
+    expect(pathGripUnder(state, { x: 100, y: 0 }, objects, CAMERA_IDENTITY)).toEqual({ kind: "vertex", index: 1 });
+    expect(pathGripUnder(state, { x: 50, y: 0 }, objects, CAMERA_IDENTITY)).toEqual({ kind: "edge", index: 0 });
+    expect(pathGripUnder(state, { x: 20, y: 0 }, objects, CAMERA_IDENTITY)).toBeUndefined();
+  });
+});
+
+describe("focusPathPart, the way a click on a panel row picks a part", () => {
+  it("focuses a part and selects its object", () => {
+    const state = focusPathPart(INITIAL_INTERACTION_STATE, "obj_1", { kind: "vertex", index: 2 });
+    expect(state.focus).toEqual({ objectId: "obj_1", grip: { kind: "vertex", index: 2 } });
+    expect(state.selectedObjectIds).toEqual(["obj_1"]);
+  });
+
+  it("drops the part on a second click of the same row, so one gesture opens and closes it", () => {
+    const opened = focusPathPart(INITIAL_INTERACTION_STATE, "obj_1", { kind: "edge", index: 1 });
+    expect(focusPathPart(opened, "obj_1", { kind: "edge", index: 1 }).focus).toBeUndefined();
+  });
+
+  it("moves the part to the row just clicked", () => {
+    const opened = focusPathPart(INITIAL_INTERACTION_STATE, "obj_1", { kind: "vertex", index: 0 });
+    expect(focusPathPart(opened, "obj_1", { kind: "vertex", index: 1 }).focus?.grip).toEqual({ kind: "vertex", index: 1 });
+  });
+
+  it("keeps a selection that already holds the object, so it never drops the rest of one", () => {
+    const many: InteractionState = { ...INITIAL_INTERACTION_STATE, selectedObjectIds: ["obj_9", "obj_1"] };
+    expect(focusPathPart(many, "obj_1", { kind: "vertex", index: 0 }).selectedObjectIds).toEqual(["obj_9", "obj_1"]);
   });
 });

@@ -256,7 +256,7 @@ export const WHEEL_ZOOM_STEP = 1.1;
 export function performEffect(effect: CommandEffect, state: AppState, viewport: Viewport): AppTransition {
   switch (effect.kind) {
     case "select":
-      return transition(withInteraction(state, { selectedObjectIds: [effect.objectId], drag: undefined, resize: undefined }));
+      return transition(withInteraction(state, { ...INITIAL_INTERACTION_STATE, selectedObjectIds: [effect.objectId] }));
     case "zoom":
       return transition(zoomBy(state, effect.factor, viewport));
     case "fit":
@@ -796,6 +796,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       inPlaceEditor,
       imageBitmaps,
       promptPreview(state),
+      state.interaction.focus?.grip,
     );
     updatePanels(panelledIds);
     updateEditor();

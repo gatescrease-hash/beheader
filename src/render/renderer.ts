@@ -60,6 +60,7 @@ import type { EditorTarget } from "./editor.ts";
 import { worldToScreen } from "./camera.ts";
 import type { ImageBitmaps } from "./images.ts";
 import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREEN } from "./handles.ts";
+import { EDGE_GRIP_SIZE_SCREEN, hasPathGrips, pathGrips, sameGrip, VERTEX_GRIP_SIZE_SCREEN, type PathGrip } from "./grips.ts";
 import { layOutText } from "./measure.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
@@ -184,6 +185,16 @@ export function fitBitmapIntoBox(
 
 const SELECTION_HIGHLIGHT_STYLE = "#2456c9";
 
+/**
+ * The grips on a selected path. A free grip is white inside and a bound one is
+ * grey. So a held vertex reads as a different thing, and not a different mood.
+ */
+const GRIP_STROKE_STYLE = "#2456c9";
+const GRIP_FREE_FILL_STYLE = "#ffffff";
+const GRIP_BOUND_FILL_STYLE = "#b9c2d6";
+const GRIP_FOCUS_FILL_STYLE = "#2456c9";
+const GRIP_LINE_WIDTH = 1;
+
 /** The half finished path a prompt sequence draws. Every size here is screen pixels. */
 const PREVIEW_STROKE_STYLE = "#2456c9";
 const PREVIEW_LINE_WIDTH_SCREEN = 1;
@@ -237,6 +248,7 @@ export function renderDocument(
   editing: EditorTarget | undefined = undefined,
   images: ImageBitmaps | undefined = undefined,
   preview: PathPreview | undefined = undefined,
+  focusedGrip: PathGrip | undefined = undefined,
 ): void {
   clearScreen(ctx, viewportWidth, viewportHeight);
 
@@ -276,7 +288,50 @@ export function renderDocument(
   for (const object of objects) {
     if (selectedIds.has(object.id) && object.id !== editingTextId) {
       drawResizeHandles(ctx, camera, object);
+      drawPathGrips(ctx, camera, object, focusedGrip);
     }
+  }
+}
+
+/**
+ * The grips of a selected path, in screen space.
+ *
+ * A vertex is a square and an edge is a diamond at its middle. A grip whose
+ * slots a formula drives draws hollow. So the operator sees which points hold
+ * still before a drag refuses to move them. The focused grip fills solid.
+ */
+function drawPathGrips(
+  ctx: CanvasRenderingContext2D,
+  camera: CameraState,
+  object: GraphObject,
+  focusedGrip: PathGrip | undefined,
+): void {
+  if (!hasPathGrips(object)) {
+    return;
+  }
+  for (const placed of pathGrips(object)) {
+    const centre = worldToScreen(camera, placed.point);
+    const focused = focusedGrip !== undefined && sameGrip(focusedGrip, placed.grip);
+    const half = (placed.grip.kind === "vertex" ? VERTEX_GRIP_SIZE_SCREEN : EDGE_GRIP_SIZE_SCREEN) / 2;
+    ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
+    ctx.strokeStyle = GRIP_STROKE_STYLE;
+    ctx.fillStyle = focused ? GRIP_FOCUS_FILL_STYLE : placed.free ? GRIP_FREE_FILL_STYLE : GRIP_BOUND_FILL_STYLE;
+    ctx.lineWidth = GRIP_LINE_WIDTH;
+    ctx.beginPath();
+    if (placed.grip.kind === "vertex") {
+      ctx.moveTo(centre.x - half, centre.y - half);
+      ctx.lineTo(centre.x + half, centre.y - half);
+      ctx.lineTo(centre.x + half, centre.y + half);
+      ctx.lineTo(centre.x - half, centre.y + half);
+    } else {
+      ctx.moveTo(centre.x, centre.y - half);
+      ctx.lineTo(centre.x + half, centre.y);
+      ctx.lineTo(centre.x, centre.y + half);
+      ctx.lineTo(centre.x - half, centre.y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 }
 

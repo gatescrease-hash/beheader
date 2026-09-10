@@ -20,6 +20,15 @@
  * gesture picks its vertices once, at the moment of the press, so the set
  * never changes under the pointer.
  *
+ * A selected path grows grips. A press on a vertex grip drags that one vertex.
+ * A press on an edge grip bends that edge, and writes vertex.N.bulge. A bend is
+ * absolute, read from the ends the edge has now, the same way a resize reads
+ * the extent it started with. Both gestures also set the focus, which is the
+ * one part of a path the panel expands.
+ *
+ * A grip answers a plain press only. Shift holds the two meanings it already
+ * had, so a shift press on the middle of an edge still moves that segment.
+ *
  * A drag never writes object state. It calls the mutation API like everything
  * else.
  */
@@ -47,6 +56,7 @@ import {
   TEXT_AUTORESIZE_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_TYPE,
+  vertexBulgePath,
   vertexXPath,
   vertexYPath,
   TEXT_WIDTH_PATH,
@@ -54,6 +64,7 @@ import {
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
+import { bulgeForGrabbedMidpoint, gripAt, hasPathGrips, sameGrip, type PathGrip } from "./grips.ts";
 import { hitTest, pathSegmentUnder } from "./hittest.ts";
 import { readBoolean } from "./slots.ts";
 
@@ -73,16 +84,32 @@ export interface ResizeState {
   readonly emittedNotices: readonly string[];
 }
 
+/** The one part of one path the operator picked. The panel expands it. */
+export interface PathFocus {
+  readonly objectId: string;
+  readonly grip: PathGrip;
+}
+
+export interface BendState {
+  readonly objectId: string;
+  readonly index: number;
+  readonly emittedNotices: readonly string[];
+}
+
 export interface InteractionState {
   readonly selectedObjectIds: readonly string[];
   readonly drag: DragState | undefined;
   readonly resize: ResizeState | undefined;
+  readonly bend: BendState | undefined;
+  readonly focus: PathFocus | undefined;
 }
 
 export const INITIAL_INTERACTION_STATE: InteractionState = {
   selectedObjectIds: [],
   drag: undefined,
   resize: undefined,
+  bend: undefined,
+  focus: undefined,
 };
 
 export interface PointerMoveOutcome {
@@ -103,7 +130,20 @@ export function pointerDown(
 ): InteractionState {
   const grabbed = resizeGestureAt(state, screenPoint, objects, camera);
   if (grabbed !== undefined) {
-    return { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: grabbed };
+    return { ...idle(state), resize: grabbed };
+  }
+
+  // A grip belongs to a path the operator already selected, so it takes the
+  // press ahead of the hit test. Without that, a press near an edge reselects
+  // the object, and the grip never answers.
+  //
+  // Shift keeps both meanings it already had. An edge grip sits at the middle
+  // of an edge, which is where a shift press grabs that segment, so the two
+  // gestures want the same pixel. A plain press bends the edge. A shift press
+  // moves it.
+  const grabbedGrip = additive ? undefined : gripGestureAt(state, screenPoint, objects, camera);
+  if (grabbedGrip !== undefined) {
+    return grabbedGrip;
   }
 
   const object = hitTest(screenPoint, objects, camera);
@@ -111,9 +151,7 @@ export function pointerDown(
     if (!additive) {
       return INITIAL_INTERACTION_STATE;
     }
-    return state.drag === undefined && state.resize === undefined
-      ? state
-      : { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined };
+    return state.drag === undefined && state.resize === undefined && state.bend === undefined ? state : idle(state);
   }
   // Shift over an edge of a path grabs that segment. Held anywhere else, it adds
   // the object to the selection, as it always did.
@@ -131,6 +169,87 @@ export function pointerDown(
       vertices: segment ?? everyVertexOfPath(object),
     },
     resize: undefined,
+    bend: undefined,
+    // A press on the body of a path is about the whole path, so it drops the part.
+    focus: undefined,
+  };
+}
+
+/** The state with every gesture ended, and the selection and focus kept. */
+function idle(state: InteractionState): InteractionState {
+  return {
+    selectedObjectIds: state.selectedObjectIds,
+    drag: undefined,
+    resize: undefined,
+    bend: undefined,
+    focus: keptFocus(state.focus, state.selectedObjectIds),
+  };
+}
+
+/** A focus survives while its object is still selected. */
+function keptFocus(focus: PathFocus | undefined, selectedObjectIds: readonly string[]): PathFocus | undefined {
+  return focus !== undefined && selectedObjectIds.includes(focus.objectId) ? focus : undefined;
+}
+
+/**
+ * The gesture a press on a grip starts, or nothing.
+ *
+ * A vertex grip drags one vertex. An edge grip bends one edge. Either way the
+ * press also focuses that part.
+ */
+function gripGestureAt(
+  state: InteractionState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  camera: CameraState,
+): InteractionState | undefined {
+  for (let i = state.selectedObjectIds.length - 1; i >= 0; i -= 1) {
+    const object = objects.find((candidate) => candidate.id === state.selectedObjectIds[i]);
+    if (object === undefined || !hasPathGrips(object)) {
+      continue;
+    }
+    const grip = gripAt(object, screenPoint, camera);
+    if (grip === undefined) {
+      continue;
+    }
+    const focus: PathFocus = { objectId: object.id, grip };
+    if (grip.kind === "edge") {
+      return {
+        selectedObjectIds: state.selectedObjectIds,
+        drag: undefined,
+        resize: undefined,
+        bend: { objectId: object.id, index: grip.index, emittedNotices: [] },
+        focus,
+      };
+    }
+    return {
+      selectedObjectIds: state.selectedObjectIds,
+      drag: {
+        objectId: object.id,
+        lastWorldPoint: screenToWorld(camera, screenPoint),
+        emittedNotices: [],
+        vertices: [grip.index],
+      },
+      resize: undefined,
+      bend: undefined,
+      focus,
+    };
+  }
+  return undefined;
+}
+
+/** Focuses one part of a path from outside, which is what a click on a panel row does. */
+export function focusPathPart(state: InteractionState, objectId: string, grip: PathGrip): InteractionState {
+  const already = state.focus;
+  if (already !== undefined && already.objectId === objectId && sameGrip(already.grip, grip)) {
+    return { ...state, focus: undefined };
+  }
+  return {
+    selectedObjectIds: state.selectedObjectIds.includes(objectId) ? state.selectedObjectIds : [objectId],
+    drag: undefined,
+    resize: undefined,
+    bend: undefined,
+    focus: { objectId, grip },
   };
 }
 
@@ -143,6 +262,15 @@ function everyVertexOfPath(object: GraphObject): readonly number[] | undefined {
     return undefined;
   }
   return Array.from({ length: object.vertexCount ?? 0 }, (_unused, index) => index);
+}
+
+export function pathGripUnder(
+  state: InteractionState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  camera: CameraState,
+): PathGrip | undefined {
+  return gripGestureAt(state, screenPoint, objects, camera)?.focus?.grip;
 }
 
 export function resizeHandleUnder(
@@ -203,6 +331,9 @@ export function pointerMove(
   if (state.resize !== undefined) {
     return resizeMove(state, state.resize, screenPoint, objects, journal, camera, context);
   }
+  if (state.bend !== undefined) {
+    return bendMove(state, state.bend, screenPoint, objects, journal, camera, context);
+  }
 
   const drag = state.drag;
   if (drag === undefined) {
@@ -212,7 +343,7 @@ export function pointerMove(
   const object = objects.find((candidate) => candidate.id === drag.objectId);
   if (object === undefined) {
     return {
-      state: { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined },
+      state: idle(state),
       objects,
       journal,
       notices: [`the object being dragged (id "${drag.objectId}") no longer exists — drag ended`],
@@ -230,9 +361,8 @@ export function pointerMove(
   const plan = planDrag(object, objects, deltaX, deltaY, drag.vertices);
   const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
-    selectedObjectIds: state.selectedObjectIds,
+    ...idle(state),
     drag: { objectId: drag.objectId, lastWorldPoint: worldPoint, emittedNotices: widenedEmittedNotices, vertices: drag.vertices },
-    resize: undefined,
   };
 
   if (plan.operations.length === 0) {
@@ -245,18 +375,84 @@ export function pointerMove(
       return { state, objects, journal, notices: freshNotices, rejection: result.message };
     }
     const unmoved: InteractionState = {
-      selectedObjectIds: state.selectedObjectIds,
+      ...idle(state),
       drag: {
         objectId: drag.objectId,
         lastWorldPoint: drag.lastWorldPoint,
         emittedNotices: widenedEmittedNotices,
         vertices: drag.vertices,
       },
-      resize: undefined,
     };
     return { state: unmoved, objects, journal, notices: freshNotices, rejection: result.message };
   }
   return { state: advanced, objects: result.objects, journal: result.journal, notices: freshNotices, rejection: undefined };
+}
+
+/**
+ * Continues a bend. It writes vertex.N.bulge so the middle of the edge lands
+ * under the pointer.
+ *
+ * The write is absolute, from the ends the edge holds now. So a bend never sums
+ * small steps. A pointer that leaves the canvas and comes back writes the same
+ * answer as one that never left.
+ */
+function bendMove(
+  state: InteractionState,
+  bend: BendState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  journal: readonly MutationJournalEntry[],
+  camera: CameraState,
+  context: EvalContext,
+): PointerMoveOutcome {
+  const object = objects.find((candidate) => candidate.id === bend.objectId);
+  if (object === undefined) {
+    return {
+      state: idle(state),
+      objects,
+      journal,
+      notices: [`the path being bent (id "${bend.objectId}") no longer exists — bend ended`],
+      rejection: undefined,
+    };
+  }
+
+  const path = vertexBulgePath(bend.index);
+  const bulge = bulgeForGrabbedMidpoint(object, bend.index, screenToWorld(camera, screenPoint));
+  const plan = bulge === undefined ? { operations: [], notices: [] } : planBulge(object, objects, path, bulge);
+  const fresh = plan.notices.filter((notice) => !bend.emittedNotices.includes(notice));
+  const advanced: InteractionState = {
+    ...idle(state),
+    bend: { ...bend, emittedNotices: fresh.length === 0 ? bend.emittedNotices : [...bend.emittedNotices, ...fresh] },
+  };
+  if (plan.operations.length === 0) {
+    return { state: advanced, objects, journal, notices: fresh, rejection: undefined };
+  }
+  const result = mutate(objects, plan.operations, journal, context);
+  if (!result.ok) {
+    return { state: advanced, objects, journal, notices: fresh, rejection: result.message };
+  }
+  return { state: advanced, objects: result.objects, journal: result.journal, notices: fresh, rejection: undefined };
+}
+
+/** An absolute write to one bulge slot, under the same per component rule a drag follows. */
+function planBulge(
+  object: GraphObject,
+  objects: readonly GraphObject[],
+  path: readonly string[],
+  bulge: number,
+): DragPlan {
+  const address: Address = { objectId: object.id, path };
+  const slot = getSlot(object, path);
+  if (slot === undefined) {
+    return { operations: [], notices: [`${describeAddress(address, objects)} has no slot to bend`] };
+  }
+  if (slot.kind !== "literal") {
+    return { operations: [], notices: [`${describeAddress(address, objects)} did not bend: ${describeSlotDriver(slot, objects)}`] };
+  }
+  if (slot.value === bulge) {
+    return { operations: [], notices: [] };
+  }
+  return { operations: [{ kind: "setSlot", address, slot: { kind: "literal", value: bulge } }], notices: [] };
 }
 
 function resizeMove(
@@ -271,7 +467,7 @@ function resizeMove(
   const object = objects.find((candidate) => candidate.id === resize.objectId);
   if (object === undefined) {
     return {
-      state: { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined },
+      state: idle(state),
       objects,
       journal,
       notices: [`the object being resized (id "${resize.objectId}") no longer exists — resize ended`],
@@ -289,8 +485,7 @@ function resizeMove(
   );
   const fresh = plan.notices.filter((notice) => !resize.emittedNotices.includes(notice));
   const advanced: InteractionState = {
-    selectedObjectIds: state.selectedObjectIds,
-    drag: undefined,
+    ...idle(state),
     resize: { ...resize, emittedNotices: fresh.length === 0 ? resize.emittedNotices : [...resize.emittedNotices, ...fresh] },
   };
   if (plan.operations.length === 0) {
@@ -380,10 +575,10 @@ function widenEmittedNotices(
 
 /** Ends a drag or a resize. */
 export function pointerUp(state: InteractionState): InteractionState {
-  if (state.drag === undefined && state.resize === undefined) {
+  if (state.drag === undefined && state.resize === undefined && state.bend === undefined) {
     return state;
   }
-  return { selectedObjectIds: state.selectedObjectIds, drag: undefined, resize: undefined };
+  return idle(state);
 }
 
 export function deselect(): InteractionState {

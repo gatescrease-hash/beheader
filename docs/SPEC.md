@@ -644,6 +644,32 @@ A vertex bound to something else stays put while the rest move. This is on
 purpose. In the road network test, the operator cannot drag a polyline away
 from the two intersections that its endpoints read.
 
+**A selected path grows grips.** A square sits on each vertex and a diamond at
+the middle of each edge. A grip answers a plain press, and only on a path the
+operator already selected, so the first press picks the object and the next one
+picks a part of it.
+
+| Press | What it moves |
+| --- | --- |
+| A vertex grip | That one vertex |
+| An edge grip | Bends that edge, and writes `vertex.N.bulge` |
+| The body of the path | Every vertex |
+
+A bend is absolute. It writes the bulge that puts the middle of the edge under
+the pointer, read from the ends the edge holds now. The sagitta over the half
+chord is the tangent of a quarter of the sweep, so one drag gives an exact
+bulge. A drag on a grip follows the same per component rule as every other
+drag, so a vertex or a bulge a formula drives holds still and shows a notice.
+
+**A grip says whether a formula drives it.** A free grip is white inside and a
+held one is grey. So the operator sees which points hold still before a drag
+tells them. This is what makes the road network legible: the intersections a
+road reads look different from the points it owns.
+
+**One part of one path is the focus.** A press on a grip sets it, and a press on
+the body of the path drops it again. The properties panel expands the focused
+part and lists the rest.
+
 **Shift has two meanings.** Shift adds an object to the selection, or takes it
 out again. Over an edge of a path it means something else: it grabs that
 segment, and the drag moves only the two vertices at the ends of that edge. A
@@ -652,6 +678,10 @@ an object that the same press has just deselected. A shift press inside a
 filled path reaches no edge, so it adds to the selection and drags the whole
 path, the way it does everywhere else. The gesture picks its vertices at the
 press and holds them, so the set never changes under the pointer.
+
+An edge grip sits where a shift press grabs a segment, so the two gestures want
+the same pixel. A plain press bends the edge. A shift press moves it. Shift
+takes no grip at all, so it keeps both meanings it already had.
 
 **A note on drag speed.** A drag fires many mutations per second and each one
 deep clones the document. If that becomes slow to watch, throttle drag mutations

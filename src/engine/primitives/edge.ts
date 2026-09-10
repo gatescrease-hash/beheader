@@ -126,6 +126,50 @@ export function edgeEndDirection(edge: PathEdge): Point {
 }
 
 /**
+ * The point halfway along an edge.
+ *
+ * A straight edge answers with the middle of its chord. An arc answers with the
+ * point at half its sweep, and a cubic with the point at t of one half. A grip
+ * sits here, so a drag on it bends the edge.
+ */
+export function edgeMidpoint(edge: PathEdge): Point {
+  const bezier = bezierOfEdge(edge);
+  if (bezier !== undefined) {
+    return bezierPointAt(bezier, 0.5);
+  }
+  const chordMid = { x: (edge.start.x + edge.end.x) / 2, y: (edge.start.y + edge.end.y) / 2 };
+  const arc = arcOfEdge(edge);
+  if (arc === undefined) {
+    return chordMid;
+  }
+  const angle = arc.startAngle + arc.sweep / 2;
+  return { x: arc.center.x + arc.radius * Math.cos(angle), y: arc.center.y + arc.radius * Math.sin(angle) };
+}
+
+/**
+ * The bulge of the arc through three points: two ends and one point in between.
+ *
+ * The sagitta of an arc is r minus r times the cosine of half the sweep. The
+ * half chord is r times the sine of that same angle. The quotient of the two is
+ * the tangent of a quarter of the sweep, which is the bulge itself. So a drag on
+ * the middle grip writes an exact bulge, and no search runs.
+ *
+ * The sign follows the same side arcOfEdge puts its centre on.
+ */
+export function bulgeForMidpoint(start: Point, end: Point, midpoint: Point): number {
+  const chordX = end.x - start.x;
+  const chordY = end.y - start.y;
+  const chord = Math.hypot(chordX, chordY);
+  if (chord === 0) {
+    return 0;
+  }
+  const awayX = midpoint.x - (start.x + end.x) / 2;
+  const awayY = midpoint.y - (start.y + end.y) / 2;
+  const sagitta = (awayX * chordY - awayY * chordX) / chord;
+  return sagitta / (chord / 2);
+}
+
+/**
  * The bulge of the arc that starts at one point, ends at another, and leaves
  * the start along a direction the caller gives.
  *

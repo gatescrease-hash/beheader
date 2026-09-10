@@ -10,9 +10,11 @@ import {
   arcOfEdge,
   bezierOfEdge,
   buildPathEdges,
+  bulgeForMidpoint,
   bulgeForTangentArc,
   distanceToEdge,
   edgeEndDirection,
+  edgeMidpoint,
   edgeDoubledAreaOverChord,
   edgeLength,
   HALF_CIRCLE_BULGE,
@@ -515,5 +517,62 @@ describe("bulgeForTangentArc, the arc that continues a path smoothly", () => {
     const arc = arcOfEdge(second);
     const radius = { x: (arc?.center.x ?? 0) - second.start.x, y: (arc?.center.y ?? 0) - second.start.y };
     expect(radius.x * direction.x + radius.y * direction.y).toBeCloseTo(0);
+  });
+});
+describe("edgeMidpoint and bulgeForMidpoint, the pair a bend grip drags", () => {
+  it("puts a straight edge's middle at the middle of its chord", () => {
+    expect(edgeMidpoint({ start: { x: 0, y: 0 }, end: { x: 10, y: 4 }, bulge: 0 })).toEqual({ x: 5, y: 2 });
+  });
+
+  it("puts a half circle's middle a radius away from the chord", () => {
+    const middle = edgeMidpoint({ start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, bulge: HALF_CIRCLE_BULGE });
+    expect(middle.x).toBeCloseTo(5);
+    expect(middle.y).toBeCloseTo(-5);
+  });
+
+  it("puts a cubic's middle on the curve, and not on the chord", () => {
+    const middle = edgeMidpoint({
+      start: { x: 0, y: 0 },
+      end: { x: 12, y: 0 },
+      bulge: 0,
+      controls: [
+        { x: 0, y: 12 },
+        { x: 12, y: 12 },
+      ],
+    });
+    expect(middle.x).toBeCloseTo(6);
+    expect(middle.y).toBeCloseTo(9);
+  });
+
+  it("reads back the bulge that put the middle there, for every bulge", () => {
+    const start = { x: -3, y: 7 };
+    const end = { x: 11, y: -2 };
+    for (const bulge of [-2, -1, -0.4, 0, 0.25, HALF_CIRCLE_BULGE, 3]) {
+      const middle = edgeMidpoint({ start, end, bulge });
+      expect(bulgeForMidpoint(start, end, middle)).toBeCloseTo(bulge);
+    }
+  });
+
+  it("gives 0 for a point on the chord, which is a straight edge", () => {
+    expect(bulgeForMidpoint({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 0 })).toBe(0);
+  });
+
+  it("carries a sign, so a drag to one side bends one way and to the other bends back", () => {
+    const above = bulgeForMidpoint({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 5 });
+    const below = bulgeForMidpoint({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: -5 });
+    expect(above).toBeCloseTo(-1);
+    expect(below).toBeCloseTo(1);
+  });
+
+  it("reads the sagitta over the half chord, so a drag of half the chord gives a half circle", () => {
+    expect(bulgeForMidpoint({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: -5 })).toBeCloseTo(HALF_CIRCLE_BULGE);
+  });
+
+  it("ignores a drag along the chord, because only the distance across it bends an edge", () => {
+    expect(bulgeForMidpoint({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 9, y: -5 })).toBeCloseTo(1);
+  });
+
+  it("gives 0 when the two ends are the same point", () => {
+    expect(bulgeForMidpoint({ x: 4, y: 4 }, { x: 4, y: 4 }, { x: 9, y: 9 })).toBe(0);
   });
 });
