@@ -16,6 +16,8 @@
  */
 
 import {
+  arcOfEdge,
+  bezierOfEdge,
   bulgeForMidpoint,
   type CameraState,
   edgeMidpoint,
@@ -95,6 +97,26 @@ export function gripAt(object: GraphObject, screenPoint: ScreenPoint, camera: Ca
     }
   }
   return nearest?.grip;
+}
+
+/**
+ * What one edge is: straight, an arc, or a cubic.
+ *
+ * A handle wins over a bulge, the same order edge.ts builds an edge in. Nothing
+ * else in the interface says which of the five slots behind an edge is live. So
+ * a half unit handle turns an edge into a curve, and no reader can see it.
+ */
+export type EdgeShape = "line" | "arc" | "curve";
+
+export function edgeShape(object: GraphObject, index: number): EdgeShape | undefined {
+  const edge = pathEdgesOfObject(object)[index];
+  if (edge === undefined) {
+    return undefined;
+  }
+  if (bezierOfEdge(edge) !== undefined) {
+    return "curve";
+  }
+  return arcOfEdge(edge) === undefined ? "line" : "arc";
 }
 
 export function sameGrip(one: PathGrip, other: PathGrip): boolean {

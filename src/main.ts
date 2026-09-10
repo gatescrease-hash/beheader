@@ -27,7 +27,11 @@ import {
   loadDocument,
   NULL_EVAL_CONTEXT,
   saveDocument,
+  polylineEdgeCount,
   slotKey,
+  VERTEX_PART_SUFFIXES,
+  vertexPartPath,
+  vertexPartPaths,
   TEXT_CONTENT_PATH,
   type Value,
 } from "./engine/index.ts";
@@ -50,6 +54,8 @@ import {
   pointerDown,
   pointerMove,
   pointerUp,
+  focusPathPart,
+  pathGripUnder,
   resizeHandleUnder,
   INITIAL_INTERACTION_STATE,
   type InteractionState,
@@ -57,6 +63,7 @@ import {
 import { resizeCursor } from "./render/handles.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { fitBitmapIntoBox, renderDocument, type PathPreview } from "./render/renderer.ts";
+import { edgeShape, type EdgeShape, type PathGrip } from "./render/grips.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
@@ -381,31 +388,108 @@ export interface PanelRowChoices {
   readonly selectedIndex: number;
 }
 
+/** Which part of one vertex row the operator opened, if either. */
+export type PanelPartFocus = "none" | "vertex" | "edge";
+
+/**
+ * One vertex of a path, as one row.
+ *
+ * A vertex owns seven slots. Seven rows for each vertex buries the four rows
+ * the object itself has, and the panel then grows past the drawing it
+ * describes. So a vertex reads as one line: its index, where it is, and a chip
+ * for the shape of the edge it leaves. A click on either half opens that part.
+ */
+export interface PanelPartRow {
+  readonly index: number;
+  readonly position: string;
+  /** The shape of the edge that leaves this vertex. The last vertex of an open path has none. */
+  readonly shape: EdgeShape | undefined;
+  /** True while a literal holds both halves of the position, so a drag can move it. */
+  readonly free: boolean;
+  readonly focus: PanelPartFocus;
+  /** The slot rows the open part shows. Empty while the part is shut. */
+  readonly rows: readonly PanelRow[];
+}
+
 export interface PanelModel {
   readonly header: string;
   readonly modifiable: readonly PanelRow[];
+  readonly parts: readonly PanelPartRow[];
   readonly derived: readonly PanelRow[];
 }
 
-export function buildPanelModel(object: GraphObject, objects: readonly GraphObject[]): PanelModel {
-  const grouped = buildSlotDescriptors(object, objects).map((descriptor) => ({
-    row: {
-      path: slotKey(descriptor.path),
-      picker: isPictureSourceRow(object, descriptor),
-      value: isPictureSourceRow(object, descriptor) ? describePictureSource(descriptor.value) : describeSlotValue(descriptor.value, { maxDecimals: 4 }),
-      editSeed: describeSlotValue(descriptor.value, { fullStrings: true }),
-      formulaSource: descriptor.formulaSource,
-      kind: descriptor.kind,
-      synthetic: descriptor.synthetic === true,
-      choices: resolveChoices(descriptor),
-    },
-    derived: descriptor.kind === "derived",
-  }));
+export function buildPanelModel(
+  object: GraphObject,
+  objects: readonly GraphObject[],
+  focus: PathGrip | undefined = undefined,
+): PanelModel {
+  const descriptors = buildSlotDescriptors(object, objects);
+  const rowOf = (descriptor: SlotDescriptor): PanelRow => ({
+    path: slotKey(descriptor.path),
+    picker: isPictureSourceRow(object, descriptor),
+    value: isPictureSourceRow(object, descriptor) ? describePictureSource(descriptor.value) : describeSlotValue(descriptor.value, { maxDecimals: 4 }),
+    editSeed: describeSlotValue(descriptor.value, { fullStrings: true }),
+    formulaSource: descriptor.formulaSource,
+    kind: descriptor.kind,
+    synthetic: descriptor.synthetic === true,
+    choices: resolveChoices(descriptor),
+  });
+
+  const byKey = new Map(descriptors.map((descriptor) => [slotKey(descriptor.path), descriptor]));
+  const vertexKeys = new Set<string>();
+  const parts: PanelPartRow[] = [];
+  for (let index = 0; index < (object.vertexCount ?? 0); index += 1) {
+    for (const path of vertexPartPaths(index)) {
+      vertexKeys.add(slotKey(path));
+    }
+    parts.push(buildPartRow(object, index, byKey, rowOf, focus));
+  }
+
+  const modifiable = descriptors.filter((descriptor) => descriptor.kind !== "derived" && !vertexKeys.has(slotKey(descriptor.path)));
   return {
     header: object.name,
-    modifiable: grouped.filter((entry) => !entry.derived).map((entry) => entry.row),
-    derived: grouped.filter((entry) => entry.derived).map((entry) => entry.row),
+    modifiable: modifiable.map(rowOf),
+    parts,
+    derived: descriptors.filter((descriptor) => descriptor.kind === "derived").map(rowOf),
   };
+}
+
+function buildPartRow(
+  object: GraphObject,
+  index: number,
+  byKey: ReadonlyMap<string, SlotDescriptor>,
+  rowOf: (descriptor: SlotDescriptor) => PanelRow,
+  focus: PathGrip | undefined,
+): PanelPartRow {
+  const at = (suffix: readonly string[]): SlotDescriptor | undefined => byKey.get(slotKey(vertexPartPath(index, suffix)));
+  const held = (suffix: readonly string[]): SlotDescriptor[] => {
+    const found = at(suffix);
+    return found === undefined ? [] : [found];
+  };
+  const shape = edgeShape(object, index);
+  // The four handle slots are 0 on nearly every vertex, so they stay out of
+  // sight until a handle is what makes the edge a curve.
+  const curveSuffixes = shape === "curve" ? VERTEX_PART_SUFFIXES.slice(2) : [["bulge"]];
+  const partFocus: PanelPartFocus =
+    focus === undefined || focus.index !== index ? "none" : focus.kind === "vertex" ? "vertex" : "edge";
+  const open =
+    partFocus === "vertex"
+      ? [...held(["x"]), ...held(["y"])]
+      : partFocus === "edge"
+        ? curveSuffixes.flatMap((suffix) => held(suffix))
+        : [];
+  return {
+    index,
+    position: describePartPosition(at(["x"])?.value, at(["y"])?.value),
+    shape: index < polylineEdgeCount(object) ? shape : undefined,
+    free: at(["x"])?.kind === "literal" && at(["y"])?.kind === "literal",
+    focus: partFocus,
+    rows: open.map(rowOf),
+  };
+}
+
+function describePartPosition(x: Value | undefined, y: Value | undefined): string {
+  return `${describeSlotValue(x ?? null, { maxDecimals: 2 })}, ${describeSlotValue(y ?? null, { maxDecimals: 2 })}`;
 }
 
 function isPictureSourceRow(object: GraphObject, descriptor: SlotDescriptor): boolean {
@@ -837,7 +921,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         element.contains(document.activeElement) &&
         document.activeElement.classList.contains("panel-row__choice");
       if (!alreadyShowingThisEditor && !holdsFocusedChoice) {
-        writePanel(element, buildPanelModel(object, state.document.objects), editing);
+        const focus = state.interaction.focus?.objectId === objectId ? state.interaction.focus.grip : undefined;
+        writePanel(element, buildPanelModel(object, state.document.objects, focus), editing);
         element.dataset.editingPath = editing?.path ?? "";
         if (editing !== undefined) {
           const opened = element.querySelector<HTMLInputElement>(".panel-row__input");
@@ -1125,7 +1210,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     const overHandle = resizeHandleUnder(state.interaction, point, state.document.objects, state.document.camera);
-    canvas.style.cursor = overHandle === undefined ? "" : resizeCursor(overHandle);
+    const overGrip = pathGripUnder(state.interaction, point, state.document.objects, state.document.camera);
+    canvas.style.cursor = overHandle !== undefined ? resizeCursor(overHandle) : overGrip === undefined ? "" : "pointer";
     apply(pointerMoveTo(state, point, evalContext));
   });
 
@@ -1188,6 +1274,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   panelsContainer.addEventListener("click", (event: MouseEvent) => {
     const target = event.target as HTMLElement;
+    const partButton = target.closest("[data-part]") as HTMLElement | null;
+    if (partButton !== null) {
+      const row = partButton.closest(".panel-part") as HTMLElement | null;
+      const objectId = (partButton.closest(".panel") as HTMLElement | null)?.dataset.objectId;
+      const index = Number(row?.dataset.index);
+      if (objectId !== undefined && Number.isInteger(index)) {
+        const kind = partButton.dataset.part === "edge" ? "edge" : "vertex";
+        apply(withInteraction(state, focusPathPart(state.interaction, objectId, { kind, index })));
+      }
+      return;
+    }
     const dismissButton = target.closest(".panel-dismiss");
     if (dismissButton !== null) {
       const element = dismissButton.closest(".panel") as HTMLElement | null;
@@ -1277,6 +1374,17 @@ function writePanel(panelElement: HTMLElement, model: PanelModel, editing: Panel
   for (const row of model.modifiable) {
     children.push(panelRowElement(row, false, editing));
   }
+  if (model.parts.length > 0) {
+    const rule = document.createElement("div");
+    rule.className = "panel-thin-rule";
+    children.push(rule);
+    const list = document.createElement("div");
+    list.className = "panel-parts";
+    for (const part of model.parts) {
+      list.append(...panelPartElements(part, editing));
+    }
+    children.push(list);
+  }
   if (model.derived.length > 0) {
     const rule = document.createElement("div");
     rule.className = "panel-rule";
@@ -1288,9 +1396,60 @@ function writePanel(panelElement: HTMLElement, model: PanelModel, editing: Panel
   panelElement.replaceChildren(...children);
 }
 
-function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit | undefined): HTMLElement {
+/** The chip that names the shape of one edge. A reader cannot tell it from the slots. */
+const EDGE_SHAPE_CHIPS: Readonly<Record<EdgeShape, { readonly glyph: string; readonly title: string }>> = {
+  line: { glyph: "\u2014", title: "straight edge" },
+  arc: { glyph: "\u25DD", title: "arc, from a bulge" },
+  curve: { glyph: "\u223F", title: "cubic curve, from a handle" },
+};
+
+/**
+ * One vertex row, and the slot rows it opens to.
+ *
+ * The index and the position open the vertex. The chip opens the edge that
+ * leaves it. So one row carries two targets, and the panel holds one line for
+ * each vertex rather than seven.
+ */
+function panelPartElements(part: PanelPartRow, editing: PanelRowEdit | undefined): readonly HTMLElement[] {
+  const element = document.createElement("div");
+  element.className = part.focus === "none" ? "panel-part" : "panel-part panel-part--open";
+  element.dataset.index = String(part.index);
+
+  const vertex = document.createElement("button");
+  vertex.type = "button";
+  vertex.className = part.free ? "panel-part__vertex" : "panel-part__vertex panel-part__vertex--held";
+  vertex.dataset.part = "vertex";
+  vertex.title = part.free ? `vertex ${part.index}` : `vertex ${part.index}, which a formula holds`;
+  const index = document.createElement("span");
+  index.className = "panel-part__index";
+  index.textContent = String(part.index);
+  const position = document.createElement("span");
+  position.className = "panel-part__position";
+  position.textContent = part.position;
+  vertex.append(index, position);
+  element.append(vertex);
+
+  const shape = part.shape;
+  if (shape !== undefined) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "panel-part__chip";
+    chip.dataset.part = "edge";
+    chip.dataset.shape = shape;
+    chip.textContent = EDGE_SHAPE_CHIPS[shape].glyph;
+    chip.title = `edge ${part.index}: ${EDGE_SHAPE_CHIPS[shape].title}`;
+    element.append(chip);
+  }
+
+  return [element, ...part.rows.map((row) => panelRowElement(row, false, editing, true))];
+}
+
+function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit | undefined, nested = false): HTMLElement {
   const element = document.createElement("div");
   element.className = derived ? "panel-row panel-row--derived" : "panel-row";
+  if (nested) {
+    element.className = `${element.className} panel-row--nested`;
+  }
   element.dataset.path = row.path;
 
   const path = document.createElement("span");

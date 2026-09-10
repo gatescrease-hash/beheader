@@ -23,7 +23,7 @@ one, in `beheader-clean-alpha-archive`.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2305 pass, 0 skip, across 41 test files. |
+| Tests | 2318 pass, 0 skip, across 41 test files. |
 | Phase | Alpha complete. Beta open. |
 
 The alpha phase built the graph core, the formula engine, the table, the
@@ -37,7 +37,7 @@ The beta phase starts here. Section 5 lists the gaps that beta must close.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2305 tests
+npm test             # 2318 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -147,7 +147,7 @@ other suites drive them anyway.
 | `textbox.ts` | The one rule for how big a text box is. Three files read it. Do not answer the same question in a fourth place. |
 | `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. A shape that paints a fill answers to a click anywhere inside it. A shape with no fill is a hollow outline, and answers only near its edge. A circle hits on its true ring, from the origin and the radius. A polyline is a stroke test too, over its edges rather than its vertices. So a click on an arc measures to the circle and not to the chord. Its `closed` slot says whether the gap between the last vertex and the first is a real edge. |
 | `handles.ts` | The resize grabbers on a selected object, and the box math they drive. A resize is absolute, from the extent the drag started with, not a sum of small steps. |
-| `grips.ts` | The grabbers on a selected path, and the part each one names. A vertex grip sits on a vertex and a diamond sits at the middle of each edge. `pathGrips` places them and says whether a formula drives the slots behind each one, which is what draws a held grip grey. `gripAt` answers a press, and gives a vertex the tie, because two grips sit on top of each other when an edge is short. `bulgeForGrabbedMidpoint` turns a pointer into the bulge that puts the middle of an edge under it. The grips of a path are the second level of selection. Nothing here holds state. |
+| `grips.ts` | The grabbers on a selected path, and the part each one names. `edgeShape` says whether one edge is straight, an arc or a cubic, which is the chip the panel draws. It reads the built edge, so it answers the same question the renderer does. A vertex grip sits on a vertex and a diamond sits at the middle of each edge. `pathGrips` places them and says whether a formula drives the slots behind each one, which is what draws a held grip grey. `gripAt` answers a press, and gives a vertex the tie, because two grips sit on top of each other when an edge is short. `bulgeForGrabbedMidpoint` turns a pointer into the bulge that puts the middle of an edge under it. The grips of a path are the second level of selection. Nothing here holds state. |
 | `markdown.ts` | The markdown lite parser. Bold, italic, code, headings, list items and paragraph breaks, and nothing else. Its rule for which asterisk opens and which closes is load bearing. A simpler version reintroduces a bug that thirty tests did not catch. |
 | `measure.ts` | The real Canvas2D `TextMeasurer`, and `layOutText`, the line breaker. There are two measurers and they are not the same. The engine one honours markup. The overlay one does not. |
 | `renderer.ts` | The immediate mode painter. `PathPreview` is the one thing it draws that no object owns: the points, bulges and closed flag of a command the operator has not finished. It draws over the objects and under the screen space furniture, dashed, with a square on each point. It is plain geometry, so this file never asks which command made it. It draws the grips of a selected path in the screen space pass, so a grip holds one size at every zoom. `buildEdgePath` walks an edge list for both a preview and a real path. It makes three passes. It clears the screen. It draws every object under the camera transform. Then it draws furniture such as labels and badges at a constant size in screen space. It reads `layOutText` from `measure.ts`. Those two files must change together, because one layout with two readers is what keeps the drawn text and the measured height in agreement. |
@@ -173,6 +173,15 @@ functions over it, the panel model, and the wiring to real DOM elements.
 The transitions are pure functions from state to state. That is why a file this
 size still has 1966 lines of tests over it with no browser. Keep new logic in a
 pure transition and keep the DOM work at the edge.
+
+`buildPanelModel` groups a path by its parts. A vertex owns seven slots, so a
+flat list gave a four vertex path 32 rows and buried the four rows the object
+itself has. The model now holds `modifiable` for the object, one `PanelPartRow`
+for each vertex, and `derived` below the rule. A part row carries the index, the
+position, a chip for the shape of the edge that leaves it, and whether a formula
+holds the vertex. It opens to its own slot rows, and only while the interaction
+layer focuses it. The four handle slots stay out of sight until a handle is what
+makes the edge a curve.
 
 ---
 

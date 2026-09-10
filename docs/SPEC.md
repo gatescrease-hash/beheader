@@ -670,6 +670,45 @@ road reads look different from the points it owns.
 the body of the path drops it again. The properties panel expands the focused
 part and lists the rest.
 
+**The panel shows a path by its parts, not by its slots.** A vertex owns seven
+slots. Seven rows for each vertex buries the four rows the object itself has,
+and the panel then grows past the drawing it describes. So a vertex reads as
+one line: its index, where it is, and a chip for the shape of the edge it
+leaves.
+
+```
+polyline_1                        x
+closed             [ true|false ]
+style.strokeColor  #1a1a1a
+style.strokeWidth  1
+style.fillColor    nothing
+---------------------------------
+0    0, 0                       ~
+1    100, 0                     -
+2    100, 100                   -
+3    0, 100
+       vertex.3.x   0
+       vertex.3.y   100
+=================================
+vertices           4 points
+area               #TYPE ...
+```
+
+A click on the index or the position opens the vertex, and shows its `x` and
+`y`. A click on the chip opens the edge, and shows its `bulge`. The click sets
+the same focus a grip does, so the canvas and the panel always agree.
+
+**The chip names the shape of an edge.** A straight edge, an arc from a bulge,
+or a cubic from a handle. Nothing else in the interface says which of the five
+slots behind an edge is live, so a handle of half a unit turns an edge into a
+curve that looks straight and reads as straight. The four handle slots stay out
+of sight until a handle is what makes the edge a curve. Then they appear, and
+the operator can put them back to 0.
+
+A vertex a formula holds draws in grey italic, the same fact its grip draws.
+The vertex list is the one part of a panel that scrolls, so a long path cannot
+push the derived slots off the screen.
+
 **Shift has two meanings.** Shift adds an object to the selection, or takes it
 out again. Over an edge of a path it means something else: it grabs that
 segment, and the drag moves only the two vertices at the ends of that edge. A

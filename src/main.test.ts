@@ -16,6 +16,7 @@ import {
   saveDocument,
 } from "./engine/index.ts";
 import { objectExtent } from "./render/extent.ts";
+import type { PathGrip } from "./render/grips.ts";
 import { createCanvas2dTextMeasurer, type MeasurementContext } from "./render/measure.ts";
 import { renderDocument } from "./render/renderer.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
@@ -1860,5 +1861,100 @@ describe("the preview the canvas draws while a polyline is half finished", () =>
     let state = pointerDownAt(started(), worldToScreen(opened().document.camera, { x: 0, y: 0 }), VIEWPORT).state;
     state = atWorld(state, 40, 30);
     expect(promptPreview(escape(state))).toBeUndefined();
+  });
+});
+describe("the panel groups a path by its parts, not by its slots", () => {
+  // A polyline prompt repeats until the operator ends it, so the empty line
+  // after the points is the Enter key that finishes the command.
+  function withPath(line = "polyline 0,0 100,0 100,100 0,100"): AppState {
+    return typed(typed(opened(), line), "");
+  }
+
+  function model(state: AppState, focus?: PathGrip) {
+    return buildPanelModel(objectNamed(state, "polyline_1"), state.document.objects, focus);
+  }
+
+  it("keeps the object's own slots in the modifiable list, and no vertex slot at all", () => {
+    const rows = model(withPath()).modifiable.map((row) => row.path);
+    expect(rows).toEqual(["closed", "style.strokeColor", "style.strokeWidth", "style.fillColor"]);
+  });
+
+  it("shows one row for each vertex, where seven slots each used to show seven rows", () => {
+    const built = model(withPath());
+    expect(built.parts).toHaveLength(4);
+    expect(built.parts.map((part) => part.index)).toEqual([0, 1, 2, 3]);
+    // Four object rows and four vertex rows, in place of the 32 a flat list held.
+    expect(built.modifiable.length + built.parts.length).toBe(8);
+  });
+
+  it("puts the position of the vertex on its row", () => {
+    expect(model(withPath()).parts[2]?.position).toBe("100, 100");
+  });
+
+  it("chips each edge with its shape, so a reader can see which of the five slots is live", () => {
+    let state = withPath();
+    state = typed(state, "set polyline_1.vertex.1.bulge 1");
+    state = typed(state, "set polyline_1.vertex.2.handle.out.x 0.5");
+    expect(model(state).parts.map((part) => part.shape)).toEqual(["line", "arc", "curve", undefined]);
+  });
+
+  it("gives the last vertex of an open path no chip, because it leaves no edge", () => {
+    expect(model(withPath()).parts[3]?.shape).toBeUndefined();
+  });
+
+  it("gives every vertex a chip once the path closes, including the one that closes it", () => {
+    const closed = typed(withPath(), "set polyline_1.closed TRUE");
+    expect(model(closed).parts.map((part) => part.shape)).toEqual(["line", "line", "line", "line"]);
+  });
+
+  it("opens no part while nothing is focused, so the list stays one line for each vertex", () => {
+    expect(model(withPath()).parts.every((part) => part.focus === "none" && part.rows.length === 0)).toBe(true);
+  });
+
+  it("opens the two position slots of the focused vertex, and only that vertex", () => {
+    const built = model(withPath(), { kind: "vertex", index: 2 });
+    expect(built.parts[2]?.focus).toBe("vertex");
+    expect(built.parts[2]?.rows.map((row) => row.path)).toEqual(["vertex.2.x", "vertex.2.y"]);
+    expect(built.parts[1]?.rows).toEqual([]);
+  });
+
+  it("opens the bulge alone for a focused edge, and holds the four handle slots back", () => {
+    const built = model(withPath(), { kind: "edge", index: 0 });
+    expect(built.parts[0]?.focus).toBe("edge");
+    expect(built.parts[0]?.rows.map((row) => row.path)).toEqual(["vertex.0.bulge"]);
+  });
+
+  it("adds the handle slots once a handle is what makes the edge a curve, so a stray one can be found and zeroed", () => {
+    const bent = typed(withPath(), "set polyline_1.vertex.0.handle.out.x 0.5");
+    const built = model(bent, { kind: "edge", index: 0 });
+    expect(built.parts[0]?.rows.map((row) => row.path)).toEqual([
+      "vertex.0.bulge",
+      "vertex.0.handle.in.x",
+      "vertex.0.handle.in.y",
+      "vertex.0.handle.out.x",
+      "vertex.0.handle.out.y",
+    ]);
+  });
+
+  it("reports a vertex free while literals hold it, and held once a formula drives either half", () => {
+    let state = typed(withPath(), "table x=500 y=0 rows=2 cols=2");
+    state = typed(state, "set table_1.A1 42");
+    state = typed(state, "link polyline_1.vertex.1.x table_1.A1");
+    const parts = model(state).parts;
+    expect(parts[0]?.free).toBe(true);
+    expect(parts[1]?.free).toBe(false);
+  });
+
+  it("still carries every derived slot below the rule, untouched", () => {
+    const derived = model(withPath()).derived.map((row) => row.path);
+    expect(derived).toContain("area");
+    expect(derived).toContain("vertices");
+  });
+
+  it("gives a shape with an origin no parts at all, so nothing else changed", () => {
+    const circle = typed(opened(), "circle x=0 y=0 r=5");
+    const built = buildPanelModel(objectNamed(circle, "circle_1"), circle.document.objects);
+    expect(built.parts).toEqual([]);
+    expect(built.modifiable.map((row) => row.path)).toContain("radius");
   });
 });

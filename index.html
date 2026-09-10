@@ -92,6 +92,64 @@
         border-top: 3px solid #1a1a1a;
         margin: 3px 0;
       }
+      /* The thin rule above the vertex list. */
+      .panel-thin-rule {
+        border-top: 1px solid #d0d0d0;
+        margin: 3px 0;
+      }
+      /*
+        The vertex list. A path can hold many vertices, so this is the one part
+        of a panel that scrolls. Without the cap, a long path pushes the derived
+        slots off screen and hides the drawing behind the panel.
+      */
+      .panel-parts {
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      .panel-part {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .panel-part--open {
+        background: #eef2fb;
+      }
+      .panel-part__vertex,
+      .panel-part__chip {
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        font: inherit;
+        color: inherit;
+        padding: 0;
+        line-height: 1.35;
+      }
+      .panel-part__vertex {
+        display: flex;
+        gap: 8px;
+        text-align: left;
+      }
+      .panel-part__index {
+        color: #555555;
+        min-width: 1.5em;
+      }
+      /* A vertex a formula holds. The grip on the canvas draws grey for the same reason. */
+      .panel-part__vertex--held .panel-part__index,
+      .panel-part__vertex--held .panel-part__position {
+        color: #7a86a0;
+        font-style: italic;
+      }
+      /* The shape of the edge that leaves this vertex. Nothing else says which of its five slots is live. */
+      .panel-part__chip {
+        color: #2456c9;
+        min-width: 1.5em;
+        text-align: center;
+      }
+      /* An open part indents its slot rows under the vertex that owns them. */
+      .panel-row--nested {
+        padding-left: 14px;
+      }
       .panel-row {
         display: flex;
         justify-content: space-between;
