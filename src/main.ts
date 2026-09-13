@@ -1,15 +1,31 @@
 /**
  * main.ts
  *
- * The state transitions here are pure functions from state to state. That is
- * why a file this size has a full test suite that runs without a browser. New
- * logic belongs in a pure transition, and the DOM work stays at the edge.
+ * The only file that owns the browser. It holds AppState, finds the real
+ * DOM elements, and wires the engine, the renderer and the command line to
+ * each other.
  *
- * The in place editor mounts in #stage, not in #panels.
+ * Almost everything in this file is a pure transition: a function from
+ * AppState and an event to a new AppState, with no DOM call inside it.
+ * submitLine, pointerDownAt, wheelZoomAt and the rest are all that shape.
+ * That is why a file of this size has a full test suite that runs without a
+ * browser. Keeping it that way costs nothing: new logic belongs in a
+ * transition, and the DOM work belongs at the edge where the transitions
+ * are called.
  *
- * Application-layer code, and the only file that owns the browser. It finds
- * the DOM elements and wires the engine, the renderer and the command line
- * together.
+ * buildPanelModel groups a path by its parts. A vertex owns seven slots, so
+ * a flat list of rows gave a four vertex path 32 rows and buried the four
+ * rows belonging to the object itself. The model instead holds the object's
+ * own modifiable rows, one PanelPartRow for each vertex, and the derived
+ * rows below a rule. A part row carries the index, the position, and a chip
+ * showing the shape of the edge that leaves it. It opens into its own slot
+ * rows only while the interaction layer has that part focused, and the four
+ * handle slots stay hidden until a handle actually turns the edge into a
+ * curve.
+ *
+ * The in place editor mounts inside #stage rather than #panels. The overlay
+ * is laid out in world units and one transform scales it, so mounting it in
+ * the panel container would scale it twice.
  */
 import {
   type CameraState,

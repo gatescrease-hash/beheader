@@ -1,10 +1,13 @@
 /**
  * props.ts
  *
- * Slot descriptors serve both the props command and the properties panel.
+ * Builds the slot descriptors that the props command prints and the properties
+ * panel draws as rows.
  *
- * Both surfaces read one list, so they can never disagree about what an
- * object has.
+ * Both surfaces read this one list, so they cannot disagree about which slots
+ * an object has or what each one currently holds. A slot that appears in the
+ * panel and not in props, or the reverse, would mean two answers to the same
+ * question.
  *
  * Command-layer code: it turns a typed line into mutation calls, and imports
  * from the engine and from its own layer.

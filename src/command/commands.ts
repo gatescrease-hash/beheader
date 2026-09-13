@@ -1,15 +1,19 @@
 /**
  * commands.ts
  *
- * Each command handler turns a command object into mutation operations and a
- * log line.
+ * The handlers. Each one turns a command object into a list of mutation
+ * operations and the line the log shows.
  *
- * A refusal message gets written here, so this file carries the debug story.
- * Every refusal names the slots it is about, because that message is the
- * whole debug story.
+ * Refusal messages are written here rather than in the engine, so this file
+ * carries the part of the debug story that quotes command syntax. The
+ * engine refuses with the facts it has: deleteVertex names the formulas
+ * that depend on the vertex, and knows nothing about a force flag. The
+ * handler adds the suggestion to retry with force, because an Operation has
+ * no command syntax to quote. deleteObject and explode split the work the
+ * same way.
  *
- * Command-layer code: it turns a typed line into mutation calls, and imports
- * from the engine and from its own layer.
+ * Command-layer code: it turns a typed line into mutation calls, and
+ * imports from the engine and from its own layer.
  */
 import {
   type Address,
