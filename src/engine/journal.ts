@@ -55,8 +55,9 @@ export function replayJournal(
     if (entry === undefined) {
       return { ok: false, message: `journal entry ${index} is missing`, entry: index };
     }
-    // The journal this replay hands over stays empty. Nothing reads it back,
-    // and a copy that grows costs one array for each entry.
+    // Each mutate() call is given an empty journal to append to, and what it
+    // appends is thrown away. A replay only rebuilds objects, and letting the
+    // journal accumulate would allocate a fresh array per entry for nothing.
     const result = mutate(objects, entry.operations, [], context);
     if (!result.ok) {
       return { ok: false, message: `journal entry ${index} did not replay: ${result.message}`, entry: index };
