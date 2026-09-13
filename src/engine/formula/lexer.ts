@@ -1,13 +1,14 @@
 /**
  * lexer.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * Source text to tokens. Stage one of four.
+ * This file turns source text into tokens, as stage one of four.
  *
  * A numeric path segment, such as the 0 in vertex.0.x, scans as a number
  * token. The parser knows this and puts it back together.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 export type WordOrSymbolTokenType =

@@ -73,7 +73,7 @@
         gap: 8px;
         font-weight: bold;
         padding-bottom: 2px;
-        /* The drag handle. It also carries the dismiss control. */
+        /* This is the drag handle, and it also carries the dismiss control. */
         pointer-events: auto;
         cursor: move;
       }
@@ -98,7 +98,7 @@
         margin: 3px 0;
       }
       /*
-        The vertex list. A path can hold many vertices, so this is the one part
+        This is the vertex list. A path can hold many vertices, so this is the one part
         of a panel that scrolls. Without the cap, a long path pushes the derived
         slots off screen and hides the drawing behind the panel.
       */
@@ -267,7 +267,7 @@
         box-sizing: border-box;
       }
       /*
-        A drop down row. A slot with a small set of valid values offers them,
+        This is a drop down row. A slot with a small set of valid values offers them,
         so the operator does not have to know them. It replaces the value
         text and the paperclip. There is no edit mode. It commits on a change.
         Its width matches the text input it stands in for, so the right hand
@@ -286,7 +286,7 @@
         the font size, the family, the line height, the alignment and the
         colour inline, from the style slots of the receiver.
 
-        This file must not set a font, a padding or a border. The box that
+        This file sets no font, no padding and no border. The box that
         main.ts places is the drawn box of the receiver. For an object with an
         auto width, that box fits the committed text exactly. So any inset
         makes the text no longer fit the box that the measurer measured. The
@@ -302,13 +302,13 @@
         The element lays out in world units, and one transform scales it. That
         is what makes a typed line break land where the drawn one does. The
         browser lays the text out at the same font size and width that
-        render/measure.ts measures with, and the transform only magnifies the
+        render/measure.ts measures with. The transform only magnifies the
         finished layout.
 
         The background is transparent, because the canvas does not draw this
         receiver while the editor is open. What shows through is the page.
 
-        It mounts in #stage, not in #panels. One editor at a time.
+        It mounts in #stage, not in #panels, and only one editor opens at a time.
       */
       .text-editor {
         position: absolute;
@@ -323,11 +323,11 @@
         /*
           The wrap rule, stated here and not left to the browser default.
           render/measure.ts implements break-word exactly. A word too wide for
-          the line splits between characters. The two must agree, so neither
-          can rely on a default. The word-break rule keeps that split to a last
+          the line splits between characters. The two agree, so neither
+          relies on a default. The word-break rule keeps that split to a last
           resort.
 
-          Do not set white-space here. The wrap attribute decides whether this
+          Nothing sets white-space here. The wrap attribute decides whether this
           box wraps at all, and an author rule overrides the white-space that
           the off value needs.
         */

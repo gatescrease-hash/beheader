@@ -1,8 +1,8 @@
 /**
  * interaction.test.ts
  *
- * Drag, select and resize. It covers the per component rule that keeps a
- * bound axis fixed.
+ * This suite covers drag, select and resize, and the per component rule that
+ * keeps a bound axis fixed.
  */
 import { describe, expect, it } from "vitest";
 import {

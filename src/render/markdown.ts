@@ -1,14 +1,17 @@
 /**
  * markdown.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
+ * This file holds the markdown lite parser. It covers bold, italic, code, a
+ * heading at levels one to three, a list item and a paragraph break. It
+ * covers nothing else.
  *
- * The markdown lite parser. Bold, italic, code, a heading at levels one to
- * three, a list item, and a paragraph break. Nothing else.
+ * Everything depends on the rule for which asterisk opens a span and which
+ * one closes it. A simpler version brings back a bug that thirty green tests
+ * missed.
  *
- * The rule for which asterisk opens a span and which one closes it is load
- * bearing. A simpler version brings back a bug that thirty green tests missed.
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 export interface MarkdownRun {
   readonly text: string;

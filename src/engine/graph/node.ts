@@ -1,16 +1,19 @@
 /**
  * node.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * The data model: Value, ErrorValue, the three slot kinds, and GraphObject.
+ * This file holds the data model: Value, ErrorValue, the three slot kinds,
+ * and GraphObject.
  *
  * A slot is one addressable value on an object. It is literal, formula or
  * derived. Slots are the nodes of the dependency graph.
  *
  * slotKey joins a path into one string key. There is no sanctioned inverse.
- * Code that needs a path must get it from the schema. Never take a key apart.
+ * Code that needs a path gets it from the schema, because the join has no
+ * inverse.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import type { Address, AddressableObject } from "../address.ts";

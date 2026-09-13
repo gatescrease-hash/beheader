@@ -1,8 +1,8 @@
 /**
  * renderer.test.ts
  *
- * The three passes, drawn against a canvas stub that records each call.
- * It asserts the call order, not pixels.
+ * These tests drive the three passes, against a canvas stub that records each
+ * call. It asserts the call order, not pixels.
  */
 
 import { describe, expect, it } from "vitest";

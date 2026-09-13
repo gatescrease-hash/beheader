@@ -1,8 +1,8 @@
 /**
  * geometry.test.ts
  *
- * Vertex math for the presets, and the derived centroid, area, length
- * and bounds.
+ * These tests cover vertex math for the presets, and the derived centroid,
+ * area, length and bounds.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";
@@ -78,7 +78,10 @@ describe("computePolygonVertices", () => {
   });
 });
 
-/** A shape with no size. It stands in for the degenerate cases the old zero radius circle covered. */
+/**
+ * A shape with no size stands in for the degenerate cases the old zero radius
+ * circle covered.
+ */
 function degenerate(point: Point): readonly Point[] {
   return [point, point, point];
 }

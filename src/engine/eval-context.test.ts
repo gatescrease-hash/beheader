@@ -1,8 +1,8 @@
 /**
  * eval-context.test.ts
  *
- * The measurer interface and the null context. A frozen context must
- * refuse a write at runtime, not only at compile time.
+ * These tests cover the measurer interface and the null context. A frozen
+ * context refuses a write at runtime, not only at compile time.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "./address.ts";
@@ -31,7 +31,8 @@ describe("NULL_EVAL_CONTEXT — the documented default for callers with no text"
       NULL_EVAL_CONTEXT.measurer = { measure: () => ({ width: 99, height: 99 }) };
     }).toThrow();
     expect(() => {
-      // Legal to the type checker, so no @ts-expect-error. It must fail at runtime.
+      // Legal to the type checker, so no @ts-expect-error. It fails at
+      // runtime.
       NULL_EVAL_CONTEXT.measurer.measure = () => ({ width: 99, height: 99 });
     }).toThrow();
     expect(NULL_EVAL_CONTEXT.measurer.measure("x", STYLE)).toEqual({ width: 0, height: 0 });

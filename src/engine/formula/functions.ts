@@ -1,13 +1,14 @@
 /**
  * functions.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * The registry of built in functions maps a name to an arity to a body.
  *
- * The registry of built in functions. A table from name to arity to body.
+ * One line adds a function. Two entries are lazy, because IF does not
+ * evaluate the branch it leaves out.
  *
- * One line adds a function. Two entries are lazy, because IF must not evaluate
- * the branch it does not take.
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import { isErrorValue, isIllegalNumber, type ErrorValue, type Value } from "../graph/node.ts";

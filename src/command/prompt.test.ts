@@ -1,7 +1,7 @@
 /**
  * prompt.test.ts
  *
- * The prompt state machine, one argument at a time.
+ * These tests drive the prompt state machine, one argument at a time.
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/index.ts";

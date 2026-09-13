@@ -2,22 +2,25 @@
 /**
  * ste-check.mjs - a prose checker for this repository.
  *
- * Purpose. Every comment, header and document here must follow ASD-STE100
- * Simplified Technical English. This script reads the prose out of a file and
- * reports each line that breaks a rule. Code is not prose, so the script
- * removes all code before it starts.
+ * Every comment, header and document here follows ASD-STE100 Simplified
+ * Technical English. This script reads the prose out of a file and reports
+ * each line that breaks a rule. Code is not prose, so the script removes all
+ * code before it starts.
  *
- * Use.
+ * The script takes one or more paths. The --all flag reads the whole
+ * repository, --quiet prints the summary alone, and --advice prints the
+ * notes that carry no fault.
+ *
  *   node tools/ste-check.mjs <path> [more paths]
  *   node tools/ste-check.mjs --all
- *   node tools/ste-check.mjs --all --quiet
+ *   node tools/ste-check.mjs --all --quiet --advice
  *
- * The script gives exit code 1 if it finds a fault. If the prose is clean,
- * the script gives exit code 0.
+ * It gives exit code 1 when it finds a fault, and exit code 0 when the prose
+ * is clean.
  *
- * Scope. The script checks the rules that a machine can check: sentence
- * length, active voice, verb form, word choice, punctuation and noun
- * clusters. A person must still check the rules that need judgement.
+ * The script checks the rules that a machine can check. Those are sentence
+ * length, active voice, verb form, word choice, punctuation, noun clusters
+ * and the register of a comment. A person still checks the rest.
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -88,12 +91,27 @@ const CHAT_STYLE = [
   "canonical",
 ];
 
+/**
+ * Figures of speech that a plain word says better. The left side is the
+ * figure, and the right side is a word that carries the same meaning.
+ */
+const METAPHOR = {
+  "load bearing": "heavily relied upon",
+  "load-bearing": "heavily relied upon",
+  "lives here": "is defined here",
+  "live here": "are defined here",
+  "sits here": "is defined here",
+  "sit here": "are defined here",
+  "falls out": "follows",
+  "throwaway": "short lived",
+};
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // A word boundary on each side, so a real word such as delvertex does not
-// match delve. A plain substring test cannot tell the two apart.
+// match the shorter one. A plain substring test cannot tell the two apart.
 const CHAT_STYLE_PATTERNS = CHAT_STYLE.map((phrase) => ({
   phrase,
   re: new RegExp("\\b" + escapeRegExp(phrase) + "\\b"),
@@ -111,7 +129,8 @@ const ALLOWED_ING = new Set([
   "sing", "ping", "morning", "evening", "ceiling", "sibling", "siblings",
   "wiring", "binding", "bindings", "coupling", "bearing", "bounding",
   "dangling", "indexing", "drawing", "drawings", "turing", "floating",
-  "casing", "spring", "timing", "wording",
+  "casing", "spring", "timing", "wording", "meaning", "ending", "endings",
+  "warning", "warnings", "reading", "readings", "opening", "closing",
 ]);
 
 /**
@@ -187,7 +206,16 @@ function extractComments(source) {
       let text = "";
       i += 2;
       while (i < n && source[i] !== "\n") text += source[i++];
-      out.push({ line: start, text });
+      // A run of line comments is one comment. A record for each line cuts a
+      // sentence at the line break, and a rule that reads a sentence then
+      // judges half of one.
+      const last = out[out.length - 1];
+      if (last !== undefined && !last.block && last.endLine === line - 1) {
+        last.text += " " + text;
+        last.endLine = line;
+      } else {
+        out.push({ line: start, text, endLine: line });
+      }
       continue;
     }
 
@@ -241,18 +269,33 @@ function extractComments(source) {
   return out;
 }
 
-/** Reads the prose out of an HTML file: its comments, and its CSS comments. */
+/**
+ * Reads the prose out of an HTML file: its comments, and its CSS comments.
+ *
+ * One comment becomes one record, even where it covers many lines. A record
+ * for each line cuts a sentence at the line break, and every rule that reads
+ * a sentence then judges half of one.
+ */
 function extractHtml(source) {
   const out = [];
-  const lines = source.split(String.fromCharCode(10));
-  let depth = 0;
-  for (let k = 0; k < lines.length; k++) {
-    const raw = lines[k];
-    const opens = (raw.match(/<!--|[/][*]/g) || []).length;
-    const closes = (raw.match(/-->|[*][/]/g) || []).length;
-    if (depth > 0 || opens > 0) out.push({ line: k + 1, text: raw });
-    depth += opens - closes;
-    if (depth < 0) depth = 0;
+  const open = /<!--|\/\*/g;
+  let line = 1;
+  let at = 0;
+  let match;
+  while ((match = open.exec(source)) !== null) {
+    if (match.index < at) continue;
+    for (let k = at; k < match.index; k++) if (source[k] === "\n") line++;
+    const isHtml = match[0] === "<!--";
+    const closer = isHtml ? "-->" : "*/";
+    const from = match.index + match[0].length;
+    let to = source.indexOf(closer, from);
+    if (to === -1) to = source.length;
+    const text = source.slice(from, to);
+    out.push({ line, text });
+    for (let k = match.index; k < to; k++) if (source[k] === "\n") line++;
+    at = to + closer.length;
+    open.lastIndex = at;
+    line += 0;
   }
   return out;
 }
@@ -290,6 +333,7 @@ function stripCode(text) {
     .replace(/^ *[*] {2,}[^ ].*$/gm, " zc. ")
     .replace(/^\s*\*+ ?/gm, " ")
     .replace(/`[^`]*`/g, " zc ")
+    .replace(/"[^"]{0,80}"/g, " zq ")
     .replace(/https?:\/\/\S+/g, " zc ")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/[A-Za-z_$][\w$]*\s*\([^)]*\)/g, " zc ")
@@ -311,11 +355,11 @@ function stripCode(text) {
 /** Cuts cleaned prose into sentences. */
 function sentences(text) {
   if (!text) return [];
-  // A code placeholder (zc, zr, zn) can open a sentence too. stripCode always
+  // A code placeholder (zc, zr, zn, zq) can open a sentence too. stripCode always
   // lowercases it, so the plain capital-letter test alone misses it and
   // merges two real sentences into one.
   return text
-    .split(/(?<=[.!?])\s+(?=[A-Z"(]|z[crn]\b)/)
+    .split(/(?<=[.!?])\s+(?=[A-Z"(]|z[crnq]\b)/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }
@@ -336,6 +380,36 @@ const CONTRACTIONS =
 
 const VAGUE_MODALS = /\b(shall|should|could|would|might|may|ought)\b/i;
 
+/**
+ * Verbs that open an order. A comment describes the code, so a sentence that
+ * opens with one of these speaks to a reader instead of about the code.
+ */
+const IMPERATIVE_OPEN =
+  /^(Do|Use|Read|Write|Keep|Make|Set|Put|Add|Remove|Call|Check|Give|Take|Start|Stop|Send|Open|Close|Find|Show|Move|Draw|Never|Always|Prefer|Avoid|Treat|Ask|Update|Run|Pick|Cut|Leave|Change|Import|Note|Consider|Ensure|Remember|Let|Think|Try|Look|Hold|Wire|Load|Skip|Reuse|Follow|Trust|Assume)\b/;
+
+/** Words that hand a duty to a reader rather than state a fact. */
+const OBLIGATION = /\b(must|do not|don't|you|your)\b/i;
+
+/** A colon label that stands in place of a sentence, such as "Layer: engine". */
+const LABEL_OPEN = /^(?:z[crn] )?[A-Z][a-z]+ *:/;
+
+/**
+ * Verbs that carry a sentence without an -s or -ed ending. A whitelist of
+ * every verb is impossible to keep. The fragment test asks a narrower
+ * question: does any word here look like a verb?
+ */
+const BARE_VERB =
+  /\b(is|are|was|were|be|has|have|had|does|do|did|can|cannot|will|go|come|hold|keep|give|take|make|read|write|need|want|get|put|call|show|set|draw|run|add|mean|use|cover|stay|sit|turn|name|carry|become|exist|belong|depend|return|work|live|fail|pass|move|change|pick|refuse|allow|leave|know|own|declare|build|parse|split|join|reach|apply|start|stop|open|close|find|serve|treat|prefer|avoid|end|begin|cost|prove|follow|throw|drive|paint|feed|beat|accept|send|break|count|measure)\b/i;
+
+/**
+ * Words that open a reason. Rule 2 asks a sentence that names a limit to give
+ * the reason beside it.
+ */
+const REASON = /\b(so|because|which|since|to keep|to make|to let|for)\b/i;
+
+/** Words that name a limit on the code. */
+const LIMIT = /\b(only|no|not|never|without|alone|apart from|nothing)\b/i;
+
 const STOP_WORDS = new Set([
   "the", "a", "an", "of", "to", "in", "on", "for", "is", "are", "and", "but",
   "that", "this", "it", "as", "at", "by", "from", "with", "not", "no", "must",
@@ -352,29 +426,64 @@ const STOP_WORDS = new Set([
   "there", "where", "about", "back", "down", "such", "many", "much", "other",
   "another", "against", "between", "through", "during", "without", "within",
   "along", "across", "behind", "beyond", "plus", "per", "via",
-  "zc", "zr", "zn", "rule", "rules", "form", "forms", "name", "names",
+  "zc", "zr", "zn", "zq", "rule", "rules", "form", "forms", "name", "names",
   "includes", "include", "uses", "holds", "hold", "means", "mean", "covers",
   "cover", "stays", "stay", "sits", "sit", "goes", "go", "comes", "come",
 ]);
 
+/**
+ * Answers whether a short run of words holds a verb. A word that ends in -s
+ * or -ed can be a verb, and so can a word from the bare list. A label such as
+ * "The drag handle" holds none of the three.
+ */
+function looksLikeSentence(sentence) {
+  if (BARE_VERB.test(sentence)) return true;
+  return sentence
+    .split(/\s+/)
+    .some((w) => /^[a-z]{3,}(s|ed)$/i.test(w.replace(/[^A-Za-z]/g, "")));
+}
+
 /** Runs every rule against one sentence. Returns a list of fault records. */
-function checkSentence(sentence, record) {
+function checkSentence(sentence, record, isCode) {
   const faults = [];
   const add = (rule, detail, fix) =>
     faults.push({ rule, detail, fix, ...record });
+  const warn = (rule, detail, fix) =>
+    faults.push({ rule, detail, fix, warn: true, ...record });
 
   const words = sentence.split(/\s+/).filter((w) => /[A-Za-z]/.test(w));
-  const isInstruction =
-    /^(Do|Use|Read|Write|Keep|Make|Set|Put|Add|Remove|Call|Check|Give|Take|Start|Stop|Send|Open|Close|Find|Show|Move|Draw|Never|Always)\b/.test(
-      sentence
-    );
-  const limit = isInstruction ? 20 : 25;
-  if (words.length > limit) {
-    add(
-      "length",
-      words.length + " words, limit " + limit,
-      "Cut the sentence into two."
-    );
+  if (words.length > 25) {
+    add("length", words.length + " words, limit 25", "Cut the sentence into two.");
+  }
+
+  if (isCode) {
+    const duty = sentence.match(OBLIGATION);
+    if (duty) {
+      add(
+        "obligation",
+        duty[0],
+        "State the fact about the code, and give the reason for it."
+      );
+    }
+    if (IMPERATIVE_OPEN.test(sentence)) {
+      add(
+        "imperative",
+        words[0],
+        "A comment describes the code. Name the actor and say what it does."
+      );
+    }
+    if (LABEL_OPEN.test(sentence)) {
+      add("fragment", words[0], "Write a sentence with a subject and a verb.");
+    } else if (words.length <= 5 && !looksLikeSentence(sentence)) {
+      add("fragment", sentence, "Write a sentence with a subject and a verb.");
+    }
+    if (LIMIT.test(sentence) && !REASON.test(sentence)) {
+      warn(
+        "no-reason",
+        "a limit with no reason",
+        'Say why the limit holds, with "so" or "because".'
+      );
+    }
   }
 
   const passive = sentence.match(PASSIVE);
@@ -384,7 +493,7 @@ function checkSentence(sentence, record) {
 
   for (const word of words) {
     const bare = word.toLowerCase().replace(/[^a-z-]/g, "");
-    if (!bare || bare === "zc" || bare === "zr" || bare === "zn") continue;
+    if (!bare || ["zc", "zr", "zn", "zq"].includes(bare)) continue;
     if (TECHNICAL_NAMES.has(bare)) continue;
 
     if (bare.endsWith("ing") && bare.length > 4 && !ALLOWED_ING.has(bare)) {
@@ -403,7 +512,7 @@ function checkSentence(sentence, record) {
     add(
       "modal",
       modal[0],
-      'STE rule 3.5. Use "must" for a duty and "can" for an ability.'
+      'STE rule 3.5. Say what the code does, and use "can" for an ability.'
     );
   }
 
@@ -425,6 +534,12 @@ function checkSentence(sentence, record) {
   for (const { phrase, re } of CHAT_STYLE_PATTERNS) {
     if (re.test(low)) {
       add("chat-style", phrase, "Delete it or say the fact plainly.");
+    }
+  }
+
+  for (const [figure, plain] of Object.entries(METAPHOR)) {
+    if (new RegExp("\\b" + escapeRegExp(figure) + "\\b", "i").test(low)) {
+      add("metaphor", figure, 'Use the plain word. Try "' + plain + '".');
     }
   }
 
@@ -464,13 +579,20 @@ function checkFile(path) {
         ? extractHtml(source)
         : extractComments(source);
   const faults = [];
+  // A document states requirements and gives instructions, so the register
+  // rules fight it. They apply to the comments in source alone.
+  const isCode = ext !== ".md";
 
   for (const block of blocks) {
     const clean = stripCode(block.text);
     for (const sentence of sentences(clean)) {
       if (sentence.split(/\s+/).length < 3) continue;
       faults.push(
-        ...checkSentence(sentence, { file: path, line: block.line, sentence })
+        ...checkSentence(
+          sentence,
+          { file: path, line: block.line, sentence },
+          isCode
+        )
       );
     }
   }
@@ -493,9 +615,14 @@ const targets = args.includes("--all")
   : args.filter((a) => !a.startsWith("--"));
 const quiet = args.includes("--quiet");
 
+// A warning marks prose that a machine cannot judge with confidence. It
+// prints, but it does not set the exit code, so a false positive cannot block
+// a commit.
 let total = 0;
+let advice = 0;
 const byRule = {};
 const byFile = {};
+const warnings = [];
 for (const path of targets) {
   let faults;
   try {
@@ -504,9 +631,14 @@ for (const path of targets) {
     console.error(path + ": cannot read. " + error.message);
     continue;
   }
-  total += faults.length;
-  if (faults.length > 0) byFile[path] = faults.length;
   for (const fault of faults) {
+    if (fault.warn) {
+      advice++;
+      warnings.push(fault);
+      continue;
+    }
+    total++;
+    byFile[fault.file] = (byFile[fault.file] ?? 0) + 1;
     byRule[fault.rule] = (byRule[fault.rule] ?? 0) + 1;
     if (!quiet) {
       console.log(fault.file + ":" + fault.line + "  [" + fault.rule + "] " + fault.detail);
@@ -516,7 +648,18 @@ for (const path of targets) {
   }
 }
 
+if (advice > 0 && args.includes("--advice")) {
+  for (const fault of warnings) {
+    console.log(fault.file + ":" + fault.line + "  [" + fault.rule + "] " + fault.detail);
+    console.log("    " + fault.sentence.slice(0, 160));
+    console.log("    -> " + fault.fix);
+  }
+}
+
 console.log("\n" + total + " fault(s) in " + targets.length + " file(s).");
+if (advice > 0) {
+  console.log(advice + " advisory note(s). Run with --advice to read them.");
+}
 if (total > 0) {
   console.log(
     Object.entries(byRule)

@@ -1,9 +1,9 @@
 /**
  * mutation.test.ts
  *
- * The eight step mutation loop. The largest suite in the repository.
- * It covers each refusal path, the batch form, and the proof that a refused
- * mutation leaves the old state untouched.
+ * These tests drive the eight step mutation loop. It is the largest suite in
+ * the repository. It covers each refusal path, the batch form, and the proof
+ * that a refused mutation leaves the old state untouched.
  */
 
 import { describe, expect, it } from "vitest";

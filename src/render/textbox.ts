@@ -1,14 +1,15 @@
 /**
  * textbox.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
+ * This file holds the one rule for how big a text box is.
  *
- * The one rule for how big a text box is.
- *
- * Three files read this rule. Do not answer the same question in a fourth
- * place. A fixed width and a measured width can disagree, and this file
+ * Three files read this rule. A fourth answer to the same question does not
+ * belong here. A fixed width and a measured width can disagree, and this file
  * decides which one wins.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 export const TEXT_FALLBACK_BOX_WIDTH = 240;
 export const TEXT_FALLBACK_BOX_HEIGHT = 20;

@@ -1,8 +1,8 @@
 /**
  * text.test.ts
  *
- * The block tree parser, nested conditionals, the dependency walker,
- * and the three compute functions.
+ * These tests cover the block tree parser, nested conditionals, the
+ * dependency walker, and the three compute functions.
  */
 
 import { describe, expect, it } from "vitest";

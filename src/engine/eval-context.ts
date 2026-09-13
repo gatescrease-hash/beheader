@@ -1,17 +1,19 @@
 /**
  * eval-context.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * This file declares the TextMeasurer interface and the EvalContext that
+ * carries it.
  *
- * The TextMeasurer interface and the EvalContext that carries it.
- *
- * Text layout needs glyph widths, and a glyph width needs a canvas. The engine
- * must not open a canvas, so it declares this interface instead. render/
- * supplies the real implementation and main.ts wires it in. A test supplies a
- * fake measurer with fixed widths.
+ * Text layout needs glyph widths, and a glyph width needs a canvas. The
+ * engine does not open a canvas, so it declares this interface instead.
+ * render/ supplies the real implementation and main.ts wires it in. A test
+ * supplies a fake measurer with fixed widths.
  *
  * This file has no imports at all. That is the point.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 export interface TextStyle {
   readonly font: string;

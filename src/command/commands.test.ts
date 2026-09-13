@@ -1,7 +1,7 @@
 /**
  * commands.test.ts
  *
- * Every handler, and the refusal message each one produces.
+ * These tests cover every handler, and the refusal message each one produces.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -1699,7 +1699,10 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
 });
 
 describe("the journal replays — a document rebuilt from the record of how it was made", () => {
-  /** One of nearly every command. Three of them read live state as they run. */
+  /**
+   * This session holds one of nearly every command. Three of them read live
+   * state as they run.
+   */
   const SESSION: readonly string[] = [
     "circle x=0 y=0 r=10",
     "rect x=20 y=0 w=8 h=6",

@@ -1,8 +1,8 @@
 /**
  * eval.test.ts
  *
- * Evaluation. It must be lazy where extraction is eager. It covers error
- * propagation and every arithmetic edge case.
+ * This suite covers evaluation, which stays lazy where extraction is eager.
+ * It also covers error propagation and every arithmetic edge case.
  */
 import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";

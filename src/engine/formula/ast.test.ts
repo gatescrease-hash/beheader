@@ -1,7 +1,7 @@
 /**
  * ast.test.ts
  *
- * AST shape checks and the depth check.
+ * These tests cover the AST shape checks and the depth check.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";

@@ -1,8 +1,8 @@
 /**
  * grips.test.ts
  *
- * The grabbers on a selected path. A grip names a part, and a part is what the
- * panel expands and what a drag writes.
+ * These tests cover the grabbers on a selected path. A grip names a part, and
+ * a part is what the panel expands and what a drag writes.
  */
 import { describe, expect, it } from "vitest";
 import { type CameraState, type GraphObject, HALF_CIRCLE_BULGE, type Slot } from "../engine/index.ts";

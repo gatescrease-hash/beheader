@@ -1,14 +1,16 @@
 /**
  * ast.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * The AST node types, plus a shape check and a depth check.
+ * This file declares the AST node types, and it holds a shape check and a
+ * depth check.
  *
  * The AST is the interchange format between the four stages of the formula
  * engine. The document also stores it, so a change to these types is a change
  * to the file format.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 import type { Address } from "../address.ts";
 

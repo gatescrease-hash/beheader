@@ -1,22 +1,23 @@
 /**
  * text.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * This file holds the text primitive: the block tree parser, the dependency
+ * walker over that tree, and the three compute functions.
  *
- * The text primitive. It holds the block tree parser, the dependency walker
- * over that tree, and the three compute functions.
- *
- * Text is literal by default. {= expression } inserts a value.
- * {? condition } ... {:} ... {?} makes a conditional block, and blocks nest.
+ * Text is literal by default. {= expression } inserts a value. {? condition }
+ * ... {:} ... {?} makes a conditional block, and blocks nest.
  *
  * The dependency walker is the first dynamic resolver in the codebase. It
  * re-parses content on every edge derivation, because the set of slots the
  * text names changes with every edit. It reports both branches of a
  * conditional, for the reason formula/deps.ts gives.
  *
- * A text box never crops. The measurer breaks a long word instead. There is no
- * overflow slot, by a decision of the human.
+ * A text box never crops. The measurer breaks a long word instead. There is
+ * no overflow slot, by a decision of the human.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import type { Address, AddressableObject } from "../address.ts";

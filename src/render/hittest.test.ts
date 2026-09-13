@@ -1,7 +1,7 @@
 /**
  * hittest.test.ts
  *
- * Fills, strokes, boxes and z order.
+ * These tests cover fills, strokes, boxes and z order.
  */
 import { describe, expect, it } from "vitest";
 import type { CameraState, GraphObject } from "../engine/index.ts";

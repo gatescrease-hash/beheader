@@ -1,13 +1,15 @@
 /**
  * format.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * AST back to source text. It maps an object ID back to the current name.
+ * The formatter turns an AST back into source text. It maps an object ID back
+ * to the current name.
  *
  * This is what lets the properties panel and the props command show a formula
  * the way the operator wrote it, after a rename.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import { formatAddress, isAddressError, isCellReferenceForm, TABLE_CELL_PATH_PREFIX, type Address, type AddressableObject } from "../address.ts";

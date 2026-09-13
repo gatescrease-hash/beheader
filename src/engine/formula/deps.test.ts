@@ -1,8 +1,8 @@
 /**
  * deps.test.ts
  *
- * Dependency extraction. It must be total across both branches of an IF.
- * This suite is the guard on that rule.
+ * Dependency extraction stays total across both branches of an IF, and this
+ * suite is the guard on that rule.
  */
 import { describe, expect, it } from "vitest";
 import type { Address, AddressableObject } from "../address.ts";

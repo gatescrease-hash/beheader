@@ -1,13 +1,15 @@
 /**
  * camera.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
+ * This file converts world to screen and screen to world, and it holds pan,
+ * zoom and the clamps.
  *
- * World to screen and screen to world, plus pan, zoom and the clamps.
+ * This is the only file that knows about screen space. Every other file reads
+ * the transform from here, because a second copy of the formula drifts.
  *
- * This is the only file that knows about screen space. Every other file must
- * read the transform from here. A second copy of the formula will drift.
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import type { CameraState, Point } from "../engine/index.ts";
 
@@ -18,7 +20,10 @@ export type ScreenPoint = Point;
 export const MIN_ZOOM = 0.01;
 export const MAX_ZOOM = 100;
 
-/** The one conversion. Every other file must call this, not a second copy. */
+/**
+ * This is the one conversion, and every other file calls it rather than a
+ * second copy.
+ */
 export function worldToScreen(camera: CameraState, worldPoint: WorldPoint): ScreenPoint {
   return {
     x: (worldPoint.x - camera.x) * camera.zoom,

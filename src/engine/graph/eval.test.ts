@@ -1,8 +1,8 @@
 /**
  * eval.test.ts
  *
- * The topological pass over all three slot kinds. A derived value must
- * never lag one step behind.
+ * These tests drive the topological pass over all three slot kinds. A derived
+ * value never lags one step behind.
  */
 
 import { describe, expect, it } from "vitest";

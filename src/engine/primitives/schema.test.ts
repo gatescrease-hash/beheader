@@ -1,8 +1,8 @@
 /**
  * schema.test.ts
  *
- * The type registry. Static and dynamic slot groups must resolve per
- * object, and every declared path must be reachable.
+ * This suite covers the type registry, where static and dynamic slot groups
+ * resolve per object, and every declared path stays reachable.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";

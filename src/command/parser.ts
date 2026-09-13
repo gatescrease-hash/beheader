@@ -1,18 +1,19 @@
 /**
  * parser.ts
  *
- * Layer: command. It turns a typed line into mutation calls. It imports from
- * engine and from its own layer.
+ * The parser turns one typed line into one command object, through a table of
+ * specs.
  *
- * One typed line to one command object, through a table of specs.
+ * It never throws. A bad line comes back as a failure that names what is
+ * wrong and where.
  *
- * It never throws. A bad line comes back as a failure that names what is wrong
- * and where.
+ * It also holds the list of commands that the spec names and the code does
+ * not build yet. An operator who types one gets the truth instead of an
+ * unknown command error. That list and the built registry stay disjoint, and
+ * a test pins it.
  *
- * It also holds the list of commands that the spec names and the code does not
- * build yet. An operator who types one gets the truth instead of an unknown
- * command error. That list and the built registry must stay disjoint, and a
- * test pins it.
+ * The file belongs to the command layer, which turns a typed line into
+ * mutation calls. It imports from the engine and from its own layer.
  */
 import { bulgeForTangentArc, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
 
@@ -719,7 +720,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
 
 export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec.name);
 
-// Nothing is on this list today. Keep it, empty, for the next command
+// Nothing is on this list today. It stays here, empty, for the next command
 // SPEC.md documents before the code builds it.
 export const COMMANDS_SPECIFIED_BUT_NOT_BUILT: readonly string[] = [];
 

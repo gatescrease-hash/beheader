@@ -1,7 +1,7 @@
 /**
  * images.test.ts
  *
- * The bitmap cache.
+ * This suite covers the bitmap cache.
  */
 import { describe, expect, it } from "vitest";
 import { createImageBitmapCache, decodeBitmap } from "./images.ts";

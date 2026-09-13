@@ -1,8 +1,8 @@
 /**
  * main.test.ts
  *
- * The pure state transitions. It drives the whole application with no
- * browser.
+ * These tests cover the pure state transitions. The suite drives the whole
+ * application with no browser.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -1509,8 +1509,9 @@ describe("panel drop-downs — a slot with a closed value set offers it (2026-09
   });
 
   it("reports selectedIndex -1 when the slot holds something none of the choices names, rather than claiming the first is live", () => {
-    // "set" refuses a value off the list now, so a document that arrived from a
-    // file is the way a slot still holds one. The panel must read it either way.
+    // "set" refuses a value off the list now, so a document that arrived from
+    // a file is the way a slot still holds one. The panel reads it either
+    // way.
     const state = withOffListAlign(withText());
     expect(rowOf(state, "style.align").choices?.selectedIndex).toBe(-1);
   });

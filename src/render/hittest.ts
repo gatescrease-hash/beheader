@@ -1,17 +1,18 @@
 /**
  * hittest.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
+ * The hit test turns a screen point into the topmost object under it.
  *
- * A screen point to the topmost object.
- *
- * A shape that paints its inside answers to a click anywhere inside it, by the
- * same nonzero rule a canvas fills with. A shape with no fill is a hollow
- * outline, and answers only near its edge, within a pixel tolerance.
- * Text, a table, an image and a script node use a box.
+ * A shape that paints its inside answers to a click anywhere inside it, by
+ * the same nonzero rule a canvas fills with. A shape with no fill is a hollow
+ * outline, and answers only near its edge, within a pixel tolerance. Text, a
+ * table, an image and a script node use a box.
  *
  * Array order is z order. This file walks it backward.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import {
   buildPathEdges,

@@ -1,8 +1,8 @@
 /**
  * document.test.ts
  *
- * The save and load round trip. A document must come back the same. A
- * derived value must never appear in the file.
+ * These tests drive the save and load round trip. A document comes back the
+ * same. A derived value never appears in the file.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "./address.ts";

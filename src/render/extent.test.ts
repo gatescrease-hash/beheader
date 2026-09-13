@@ -1,9 +1,9 @@
 /**
  * extent.test.ts
  *
- * The world space box of one object, and of the whole document. Every
- * clickable type must have an arm here. hitTest and the resize handles both
- * read objectExtent. Neither one measures a type of its own.
+ * These tests cover the world space box of one object, and of the whole
+ * document. Every clickable type has an arm here. hitTest and the resize
+ * handles both read objectExtent. Neither one measures a type of its own.
  */
 import { describe, expect, it } from "vitest";
 import type { GraphObject } from "../engine/index.ts";

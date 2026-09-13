@@ -1,29 +1,31 @@
 /**
  * mutation.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
  * The single channel for state change. No other code writes document state.
  *
  * Every mutation runs these eight steps in order.
- *   1. Stage. Deep clone the current state.
- *   2. Apply the operations to the clone.
- *   3. Derive the whole edge set again, from stored ASTs and from the schema.
- *   4. Check integrity. Refuse a formula that names a slot which is absent.
- *   5. Check for cycles. Refuse and name every slot in the cycle.
- *   6. On a refusal, throw the clone away. The old state never changed.
- *   7. Evaluate. An evaluation error makes an error value, not a rollback.
- *   8. Commit. Swap the clone in and append to the journal.
+ *
+ * 1. Stage. It deep clones the current state. 2. Apply. It applies the
+ * operations to the clone. 3. Derive. It rebuilds the edge set, from stored
+ * ASTs and from the schema. 4. Check integrity. It refuses a formula that
+ * names an absent slot. 5. Check cycles. It refuses a cycle, and names every
+ * slot in it. 6. Refuse. It throws the clone away, and the old state never
+ * changed. 7. Evaluate. An error makes an error value, rather than a
+ * rollback. 8. Commit. It swaps the clone in, and appends to the journal.
  *
  * A batch applies many operations to one clone and commits all or nothing. A
- * document load must use a batch.
+ * document load uses a batch, so a bad file fails as one unit.
  *
- * The integrity check must run before the cycle check. A cycle check over an
- * edge set that nobody trusts proves nothing.
+ * The integrity check runs before the cycle check, because a cycle check over
+ * an edge set that nobody trusts proves nothing.
  *
- * This file and primitives/schema.ts must agree about every slot path. Both
- * read the schema through the same resolver for that reason.
+ * This file and primitives/schema.ts agree about every slot path. Both read
+ * the schema through the same resolver, or a dynamic slot family drifts
+ * between them.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import { checkNameAvailable, formatAddress, isAddressError, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";
@@ -69,8 +71,8 @@ import { evaluate } from "./graph/eval.ts";
 import { hasIllegalNumber, isIllegalNumber, isLegalPortName, POLYLINE_TYPE, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
- * Rebuilds the whole edge set from stored ASTs and from the schema. Step 3.
- * It reads slot paths through the schema resolver. It never takes a key apart.
+ * Step 3 rebuilds the whole edge set from stored ASTs and from the schema. It
+ * reads slot paths through the schema resolver. It never takes a key apart.
  */
 export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
   const edges: Edge[] = [];
@@ -131,8 +133,8 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
 export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false; readonly message: string };
 
 /**
- * Step 4. Four checks, in this order. An undeclared slot first, because a later
- * cycle check over an edge set that nobody trusts proves nothing.
+ * Step 4 runs four checks, in this order. An undeclared slot first, because a
+ * later cycle check over an edge set that nobody trusts proves nothing.
  */
 export function validateIntegrity(objects: readonly GraphObject[], edges: readonly Edge[]): IntegrityCheckResult {
   const undeclaredSlotProblems = findUndeclaredFormulaOrDerivedSlots(objects);

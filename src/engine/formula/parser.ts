@@ -1,15 +1,17 @@
 /**
  * parser.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * This file turns tokens into an AST, by recursive descent, as stage two of
+ * four.
  *
- * Tokens to AST, by recursive descent. Stage two of four.
- *
- * The parser resolves an object name to an ID here. So a formula that names an
- * object which does not exist fails to parse, in any branch.
+ * The parser resolves an object name to an ID here. So a formula that names
+ * an object which does not exist fails to parse, in any branch.
  *
  * A depth limit stops a deep input before it exhausts the stack.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import { type Address, type AddressableObject, bareCellAddress, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";

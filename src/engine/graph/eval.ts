@@ -1,17 +1,19 @@
 /**
  * eval.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * The topological pass. It sorts every slot and evaluates each one.
+ * This file runs the topological pass. It sorts every slot and evaluates each
+ * one.
  *
  * A literal returns its stored value. A formula evaluates its AST. A derived
- * slot calls the compute function that its schema declares. All three kinds go
- * through this one pass, so a derived value is never one step stale.
+ * slot calls the compute function that its schema declares. All three kinds
+ * go through this one pass, so a derived value is never one step stale.
  *
- * No type specific logic belongs here. A script node must stay one more
- * derived slot to this file.
+ * No type specific logic belongs here. A script node stays one more derived
+ * slot to this file.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import type { Address } from "../address.ts";
@@ -24,9 +26,9 @@ import { addressKey, type Edge } from "./edge.ts";
 import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
 
 /**
- * Evaluates every slot of every object, in topological order.
- * It returns the new object list. An error becomes an error value in a slot.
- * It never throws, because one bad formula must not stop the rest.
+ * Evaluates every slot of every object, in topological order. It returns the
+ * new object list. An error becomes an error value in a slot. It never
+ * throws, because one bad formula does not stop the rest.
  */
 export function evaluate(
   objects: readonly GraphObject[],

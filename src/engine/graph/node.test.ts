@@ -1,7 +1,8 @@
 /**
  * node.test.ts
  *
- * The data model. Value guards, the three slot kinds, and slot keys.
+ * This suite covers the data model: value guards, the three slot kinds, and
+ * slot keys.
  */
 
 import { describe, expect, it } from "vitest";

@@ -1,7 +1,7 @@
 /**
  * panel.test.ts
  *
- * Panel placement beside its object.
+ * These tests cover panel placement beside its object.
  */
 import { describe, expect, it } from "vitest";
 import type { CameraState } from "../engine/index.ts";

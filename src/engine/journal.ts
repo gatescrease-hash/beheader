@@ -1,9 +1,6 @@
 /**
  * journal.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
  * The reader of the append only journal that mutation.ts writes. It rebuilds
  * the objects of a document as they stood after any entry. It runs the same
  * operations again over an empty document.
@@ -17,6 +14,10 @@
  * journal is complete only for a document that every mutation built. A
  * document that arrives any other way needs journalIsComplete before anything
  * trusts a replay of it.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { GraphObject } from "./graph/node.ts";
@@ -65,8 +66,8 @@ export function replayJournal(
 
 /**
  * True when a full replay rebuilds exactly the objects given. It answers
- * whether the journal holds the whole history of this document, which is what
- * an undo must know before it offers to step back.
+ * whether the journal holds the whole history of this document. An undo needs
+ * that answer before it offers to step back.
  */
 export function journalIsComplete(
   objects: readonly GraphObject[],

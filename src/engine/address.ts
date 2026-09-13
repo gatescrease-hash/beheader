@@ -1,21 +1,26 @@
 /**
  * address.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * This file defines the address scheme that the engine uses to name a slot on
+ * an object. An address pairs an object ID with a path. parseAddress and
+ * formatAddress convert between that pair and its text form. They are the
+ * only code that knows that form, so the syntax can change in one place.
  *
- * The address scheme, in two layers. An object has a stable ID that never
- * changes and a name that the operator can change. A formula resolves a name
- * to an ID at parse time, and a stored AST holds the ID. So a rename needs no
- * formula rewrite.
+ * The scheme has two layers: a stable ID that identifies the object, and a
+ * name that the operator controls. A formula resolves the name to an ID when
+ * it parses, and the stored AST keeps that ID. So a rename leaves every
+ * formula that reads the object untouched.
  *
- * An address is { objectId, path }. Use parseAddress and formatAddress
- * everywhere. Never build an address string by hand.
+ * This file also holds the A1 cell helpers, because a cell reference is
+ * another form of address. A second copy of that logic drifts away from this
+ * one.
  *
- * The A1 cell helpers live here too. A cell reference is an address form, and
- * one copy of that logic is enough.
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  *
- * This file is load bearing. Almost everything imports it.
+ * Most of the engine imports this file, so a change to the address format
+ * affects a large part of the codebase.
  */
 
 import { RESERVED_WORDS } from "./formula/lexer.ts";
@@ -120,7 +125,11 @@ function normalizeCellReference(cellReference: string): string {
   return cellReference.toUpperCase();
 }
 
-/** True for a bare cell reference such as A1. Legal only in a table cell formula. */
+/**
+ * True for a bare cell reference such as A1. Only a formula inside a table
+ * can use this form, because the table supplies the object that the reference
+ * belongs to.
+ */
 export function isCellReferenceForm(segment: string): boolean {
   return CELL_REFERENCE_PATTERN.test(segment);
 }
@@ -129,6 +138,10 @@ export function bareCellAddress(tableObjectId: string, cellReference: string): A
   return { objectId: tableObjectId, path: [TABLE_CELL_PATH_PREFIX, normalizeCellReference(cellReference)] };
 }
 
+/**
+ * Column letters run in base 26 with no zero digit, so A is 1, Z is 26 and AA
+ * is 27. The minus one in each direction carries that offset.
+ */
 export function columnLettersToIndex(columnLetters: string): number {
   let index = 0;
   for (const char of columnLetters) {
@@ -167,6 +180,11 @@ export function formatCellReference(coordinates: CellCoordinates): string {
   return `${indexToColumnLetters(coordinates.column)}${coordinates.row}`;
 }
 
+/**
+ * A table cell has two spellings. An operator writes A1, and the graph stores
+ * cells.A1. These two functions convert between the pair, so the engine reads
+ * one form and the operator reads the other.
+ */
 function toStoredPath(type: ObjectType, surfacePath: readonly string[]): readonly string[] {
   if (type !== TABLE_TYPE) {
     return surfacePath;
@@ -193,7 +211,10 @@ function toSurfacePath(type: ObjectType, storedPath: readonly string[]): readonl
   return [cellRef];
 }
 
-/** Text to an address. It resolves the object name to an ID, so it needs the object list. */
+/**
+ * Turns text into an address. It resolves the object name to an ID, so it
+ * needs the current object list.
+ */
 export function parseAddress(input: string, objects: readonly AddressableObject[]): Address | AddressError {
   const trimmed = input.trim();
   if (trimmed.length === 0) {
@@ -228,7 +249,7 @@ export function parseAddress(input: string, objects: readonly AddressableObject[
   return { objectId: object.id, path: toStoredPath(object.type, pathParts) };
 }
 
-/** An address back to text, with the current name of the object. */
+/** Turns an address back into text, under the name the object carries now. */
 export function formatAddress(address: Address, objects: readonly AddressableObject[]): string | AddressError {
   const object = findObjectById(address.objectId, objects);
   if (object === undefined) {

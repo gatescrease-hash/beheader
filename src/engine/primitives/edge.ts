@@ -1,13 +1,11 @@
 /**
  * edge.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * The math of one path edge. An edge is straight, an arc, or a cubic bezier.
- * Two control points make it a bezier. Otherwise a bulge makes it an arc: the
- * bulge is the tangent of a quarter of the included angle, the number a DXF
- * file carries. Zero makes a straight line and 1 makes a half circle.
+ * This file holds the math of one path edge. An edge is straight, an arc, or
+ * a cubic bezier. Two control points make it a bezier. Otherwise a bulge
+ * makes it an arc: the bulge is the tangent of a quarter of the included
+ * angle, the number a DXF file carries. Zero makes a straight line and 1
+ * makes a half circle.
  *
  * Nothing here cuts a curve into sample points. A vertex is a point an
  * operator placed, so this file never invents one.
@@ -18,12 +16,17 @@
  * nine exactly. Two answers about a bezier have no closed form for anybody:
  * its length, and the distance from a point to it. Each of those refines a
  * number until the number holds still. Neither makes a vertex.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 import type { Point } from "../graph/node.ts";
 
 /**
- * One edge of a path. Two control points make it a cubic bezier. With none, a
- * bulge of 0 makes it a straight line and any other bulge makes it an arc.
+ * An edge joins two points of a path. Two control points make it a cubic
+ * bezier. With none, a bulge of 0 makes it a straight line and any other
+ * bulge makes it an arc.
  */
 export interface PathEdge {
   readonly start: Point;
@@ -184,9 +187,9 @@ function unit(vector: Point): Point {
 /**
  * The point halfway along an edge.
  *
- * A straight edge answers with the middle of its chord. An arc answers with the
- * point at half its sweep, and a cubic with the point at t of one half. A grip
- * sits here, so a drag on it bends the edge.
+ * A straight edge answers with the middle of its chord. An arc answers with
+ * the point at half its sweep, and a cubic with the point at t of one half. A
+ * grip appears at that point, so a drag on it bends the edge.
  */
 export function edgeMidpoint(edge: PathEdge): Point {
   const bezier = bezierOfEdge(edge);
@@ -286,7 +289,9 @@ const GAUSS_WEIGHTS: readonly number[] = [
   0.5 * 0.23692688505618908,
 ];
 
-/** How close a control polygon must come to its chord before a length holds still. */
+/**
+ * How close a control polygon comes to its chord before a length holds still.
+ */
 const BEZIER_LENGTH_TOLERANCE = 1e-10;
 
 const BEZIER_LENGTH_MAX_DEPTH = 24;
@@ -387,7 +392,7 @@ function mix(from: Point, to: Point, t: number): Point {
 }
 
 /**
- * The length of a cubic. No closed form exists, for anybody. This halves the
+ * A cubic has no closed form for its length, for anybody. This halves the
  * curve until its control polygon and its chord agree, then takes the mean of
  * the two. It returns one number and makes no vertex.
  */

@@ -1,7 +1,7 @@
 /**
  * edge.test.ts
  *
- * The edge record and its key.
+ * These tests cover the edge record and its key.
  */
 
 import { describe, expect, it } from "vitest";

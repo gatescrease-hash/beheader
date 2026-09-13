@@ -1,8 +1,8 @@
 /**
  * textbox.test.ts
  *
- * The one rule for the size of a text box, over every combination of
- * fixed and measured size.
+ * These tests cover the one rule for the size of a text box, over every
+ * combination of fixed and measured size.
  */
 import { describe, expect, it } from "vitest";
 import { textBoxSize, TEXT_FALLBACK_BOX_HEIGHT, TEXT_FALLBACK_BOX_WIDTH } from "./textbox.ts";

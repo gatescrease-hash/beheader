@@ -101,7 +101,7 @@ a mutation. A document load calls a mutation. A mutation either commits in full
 or leaves the old state untouched. The mutation API keeps an append only journal
 from the first commit, so undo can arrive later.
 
-### Rule 3. The address scheme is load bearing
+### Rule 3. The address scheme is heavily relied upon
 
 Formulas, bindings, script ports, storage and the command line all depend on it.
 A change to it touches everything. See section 5.
@@ -634,7 +634,7 @@ A drag writes `origin.x` and `origin.y` on their own. For each one:
   that does not block, such as "a formula drives x".
 
 So a drag on an object with a bound x and a literal y slides it up and down
-only. Axis constraint falls out for free. The single source rule stays true, and
+only. Axis constraint follows with no extra code. The single source rule stays true, and
 a bound object does not feel dead. Only when a formula drives every component
 does the drag do nothing.
 
@@ -900,5 +900,5 @@ Prefer, in this order:
 3. Whatever protects Rule 6.
 4. Whatever is simplest to delete later.
 
-The renderer is throwaway. A GPU renderer replaces it later. The engine is
+The renderer is short lived. A GPU renderer replaces it later. The engine is
 meant to survive and to become Rust. Invest to match.

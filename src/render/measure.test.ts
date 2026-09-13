@@ -1,7 +1,7 @@
 /**
  * measure.test.ts
  *
- * The line breaker and the two measurers.
+ * These tests cover the line breaker and the two measurers.
  */
 import { describe, expect, it } from "vitest";
 import type { TextStyle } from "../engine/index.ts";
