@@ -12,9 +12,9 @@
  * new vertex at the point pressed. The press picks the part, so the menu
  * never asks the operator which one they meant.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 
 import { type CameraState, type GraphObject, POLYLINE_TYPE, type Point } from "../engine/index.ts";

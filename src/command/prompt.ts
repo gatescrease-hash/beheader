@@ -11,8 +11,8 @@
  * them as a stroke list, so a point and a word such as "arc" keep their
  * order. The step index does not move while such a step collects.
  *
- * The file belongs to the command layer, which turns a typed line into
- * mutation calls. It imports from the engine and from its own layer.
+ * Command-layer code: it turns a typed line into mutation calls, and imports
+ * from the engine and from its own layer.
  */
 import {
   findCommandSpec,

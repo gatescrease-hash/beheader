@@ -15,9 +15,8 @@
  * another form of address. A second copy of that logic drifts away from this
  * one.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  *
  * Most of the engine imports this file, so a change to the address format
  * affects a large part of the codebase.

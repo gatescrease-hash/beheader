@@ -17,9 +17,8 @@
  * its length, and the distance from a point to it. Each of those refines a
  * number until the number holds still. Neither makes a vertex.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Point } from "../graph/node.ts";
 
@@ -301,7 +300,9 @@ const BEZIER_SCAN_STEPS = 24;
 
 const BEZIER_NARROW_STEPS = 60;
 
-/** The cubic under an edge, or undefined when the edge carries no control points. */
+/**
+ * The cubic under an edge, or undefined for an edge with no control points.
+ */
 export function bezierOfEdge(edge: PathEdge): CubicBezier | undefined {
   const controls = edge.controls;
   if (controls === undefined) {
@@ -376,7 +377,10 @@ function curveMomentY(curve: CubicBezier): number {
   return -integrateOverCurve(curve, (point, slope) => point.y * point.y * slope.x);
 }
 
-/** De Casteljau. The two halves together hold the shape of the curve they replace, exactly. */
+/**
+ * Splits a curve by De Casteljau. The two halves together hold the shape of
+ * the curve they replace, exactly.
+ */
 export function splitBezier(curve: CubicBezier, t: number): { readonly first: CubicBezier; readonly second: CubicBezier } {
   const a = mix(curve.p0, curve.p1, t);
   const b = mix(curve.p1, curve.p2, t);
@@ -394,7 +398,7 @@ function mix(from: Point, to: Point, t: number): Point {
 /**
  * A cubic has no closed form for its length, for anybody. This halves the
  * curve until its control polygon and its chord agree, then takes the mean of
- * the two. It returns one number and makes no vertex.
+ * the two. It returns one number and does not add a vertex.
  */
 function bezierLength(curve: CubicBezier, depth: number): number {
   const chord = Math.hypot(curve.p3.x - curve.p0.x, curve.p3.y - curve.p0.y);

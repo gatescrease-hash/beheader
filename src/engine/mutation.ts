@@ -7,11 +7,11 @@
  *
  * 1. Stage. It deep clones the current state. 2. Apply. It applies the
  * operations to the clone. 3. Derive. It rebuilds the edge set, from stored
- * ASTs and from the schema. 4. Check integrity. It refuses a formula that
- * names an absent slot. 5. Check cycles. It refuses a cycle, and names every
- * slot in it. 6. Refuse. It throws the clone away, and the old state never
- * changed. 7. Evaluate. An error makes an error value, rather than a
- * rollback. 8. Commit. It swaps the clone in, and appends to the journal.
+ * ASTs and from the schema. 4. Integrity. It refuses a formula that names an
+ * absent slot. 5. Cycles. It refuses a cycle, and names every slot in it. 6.
+ * Refuse. It throws the clone away, and the old state never changed. 7.
+ * Evaluate. An error makes an error value, rather than a rollback. 8. Commit.
+ * It swaps the clone in, and appends to the journal.
  *
  * A batch applies many operations to one clone and commits all or nothing. A
  * document load uses a batch, so a bad file fails as one unit.
@@ -23,9 +23,8 @@
  * the schema through the same resolver, or a dynamic slot family drifts
  * between them.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import { checkNameAvailable, formatAddress, isAddressError, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";

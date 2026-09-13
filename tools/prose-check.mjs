@@ -1,78 +1,38 @@
 #!/usr/bin/env node
 /**
- * ste-check.mjs - a prose checker for this repository.
+ * prose-check.mjs
  *
- * Every comment, header and document here follows ASD-STE100 Simplified
- * Technical English. This script reads the prose out of a file and reports
- * each line that breaks a rule. Code is not prose, so the script removes all
- * code before it starts.
+ * Checks the comments and documents of this repository against the rules in
+ * docs/STYLE.md. It reads the prose out of a file, strips the code back out of
+ * it, and reports each sentence that breaks a rule a machine can judge. A
+ * person judges the rest, against the worked example in that file.
  *
  * The script takes one or more paths. The --all flag reads the whole
  * repository, and --quiet prints the summary alone.
  *
- *   node tools/ste-check.mjs <path> [more paths]
- *   node tools/ste-check.mjs --all
- *   node tools/ste-check.mjs --all --quiet
+ *   node tools/prose-check.mjs <path> [more paths]
+ *   node tools/prose-check.mjs --all
+ *   node tools/prose-check.mjs --all --quiet
  *
  * It gives exit code 1 when it finds a fault, and exit code 0 when the prose
  * is clean.
  *
- * The script checks the rules that a machine can check. Those are sentence
- * length, active voice, verb form, word choice, punctuation, noun clusters
- * and the register of a comment. A person still checks the rest.
+ * This script used to check ASD-STE100 Simplified Technical English. That
+ * standard is built for aircraft maintenance instructions, and its sentence
+ * limit and its ban on the -ing form pushed every comment into the same
+ * clipped shape. Section 5 of docs/STYLE.md holds the reasoning.
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, extname } from "node:path";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 
 /* ------------------------------------------------------------------ */
 /* Word lists                                                          */
 /* ------------------------------------------------------------------ */
 
 /**
- * Words that ASD-STE100 does not approve, and the approved word to use. The
- * standard holds about 900 approved words. This list holds the words that
- * technical writers use most often by mistake.
- */
-const NOT_APPROVED = {
-  abort: "stop", accomplish: "do", additionally: "also", additional: "more",
-  adjacent: "near", aforementioned: "this", alter: "change",
-  alternatively: "or", ascertain: "find", assist: "help", attempt: "try",
-  attempts: "tries", cease: "stop", commence: "start", comprise: "have",
-  comprises: "has", concerning: "about", consequently: "so",
-  considerable: "large", constitute: "form", denote: "show", denotes: "shows",
-  depict: "show", depicts: "shows", desire: "want", deviate: "differ",
-  diminish: "decrease", discontinue: "stop", elevated: "high",
-  eliminate: "remove", employ: "use", employs: "uses", endeavour: "try",
-  endeavor: "try", ensure: "make sure", ensures: "makes sure", entire: "all",
-  equivalent: "equal", establish: "make", evident: "clear",
-  excessive: "too much", exclusively: "only", exhibit: "show",
-  facilitate: "help", feasible: "possible", frequently: "often",
-  furthermore: "also", generate: "make", generates: "makes", hence: "so",
-  however: "but", identical: "the same", illustrate: "show",
-  immediately: "now", inasmuch: "because", indicate: "show",
-  indicates: "shows", initial: "first", initiate: "start",
-  initiates: "starts", inquire: "ask", insufficient: "too few",
-  instruct: "tell", involve: "include", involves: "includes", likewise: "also",
-  locate: "find", locates: "finds", magnitude: "size", maintain: "keep",
-  maintains: "keeps", majority: "most", moreover: "also", nevertheless: "but",
-  nonetheless: "but", notify: "tell", numerous: "many", obtain: "get",
-  obtains: "gets", occur: "happen", occurs: "happens", occurred: "happened",
-  optimum: "best", particular: "specific", portion: "part", possess: "have",
-  possesses: "has", previous: "last", previously: "before", principal: "main",
-  procure: "get", proximity: "distance", purchase: "buy", regarding: "about",
-  remainder: "the rest", request: "ask", requisite: "necessary",
-  retain: "keep", retains: "keeps", subsequent: "next", subsequently: "then",
-  sufficient: "enough", terminate: "stop", terminates: "stops",
-  thereafter: "then", thereby: "so", therefore: "so", thus: "so",
-  transmit: "send", typically: "usually", ultimately: "at the end",
-  utilise: "use", utilize: "use", utilises: "uses", utilizes: "uses",
-  vary: "change", virtually: "almost", whilst: "while", wish: "want",
-};
-
-/**
- * Words and phrases that make text sound like a chat assistant. The user does
- * not want them. Most of them add no information.
+ * Words and phrases that make text sound like a chat assistant. Most of them
+ * add nothing.
  */
 const CHAT_STYLE = [
   "delve", "leverage", "leverages", "robust", "seamless", "seamlessly",
@@ -105,53 +65,32 @@ const METAPHOR = {
   "throwaway": "short lived",
 };
 
+/**
+ * Phrases that judge a value instead of stating a property. Rule 9 of
+ * docs/STYLE.md replaces each one with a fact about the code. A sentence that
+ * ranks one thing above another has stopped describing anything.
+ */
+const VALUE_JUDGMENT = [
+  "matters more", "matters less", "is what keeps", "is what makes",
+  "at work", "earns its", "earns their", "worth the space", "the whole story",
+  "is the point", "that is the point", "the real work", "does the heavy",
+];
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // A word boundary on each side, so a real word such as delvertex does not
-// match the shorter one. A plain substring test cannot tell the two apart.
+// match the shorter one.
 const CHAT_STYLE_PATTERNS = CHAT_STYLE.map((phrase) => ({
   phrase,
   re: new RegExp("\\b" + escapeRegExp(phrase) + "\\b"),
 }));
 
-/**
- * Words that end in -ing and that the checker accepts. STE rule 3.3 refuses
- * the -ing form of a verb. It accepts an -ing word that is a noun or a
- * technical name.
- */
-const ALLOWED_ING = new Set([
-  "string", "strings", "substring", "substrings", "thing", "things", "nothing", "something", "anything",
-  "everything", "during", "setting", "settings", "heading", "headings",
-  "padding", "encoding", "spacing", "ring", "spring", "wing", "king", "bring",
-  "sing", "ping", "morning", "evening", "ceiling", "sibling", "siblings",
-  "wiring", "binding", "bindings", "coupling", "bearing", "bounding",
-  "dangling", "indexing", "drawing", "drawings", "turing", "floating",
-  "casing", "spring", "timing", "wording", "meaning", "ending", "endings",
-  "warning", "warnings", "reading", "readings", "opening", "closing",
-]);
-
-/**
- * Technical names that this project owns. STE rule 1.5 accepts a technical
- * name. The checker does not test these words against the word lists.
- */
-const TECHNICAL_NAMES = new Set([
-  "render", "renders", "rendered", "renderer", "reject", "rejects",
-  "rejected", "commit", "commits", "committed", "stage", "stages", "staged",
-  "derive", "derives", "derived", "evaluate", "evaluates", "evaluated",
-  "mutation", "mutations", "mutate", "mutates", "slot", "slots", "formula",
-  "formulas", "literal", "literals", "parse", "parses", "parsed", "parser",
-  "lexer", "camera", "canvas", "topological", "acyclic", "cycle", "cycles",
-  "graph", "node", "nodes", "edge", "edges", "primitive", "primitives",
-  "polygon", "polyline", "vertex", "vertices", "centroid", "address",
-  "addresses", "serialise", "serialize", "serialized", "journal",
-  "transaction", "transactional", "schema", "schemas", "viewport", "zoom",
-  "pan", "glyph", "glyphs", "kerning", "baseline", "token", "tokens",
-  "operand", "operator", "operators", "precedence", "recursive", "recursion",
-  "boolean", "integer", "float", "enum", "callback", "iterator", "immutable",
-  "idempotent",
-]);
+const VALUE_PATTERNS = VALUE_JUDGMENT.map((phrase) => ({
+  phrase,
+  re: new RegExp("\\b" + escapeRegExp(phrase) + "\\b"),
+}));
 
 /**
  * Documents that state a requirement or give an instruction. A specification
@@ -159,7 +98,7 @@ const TECHNICAL_NAMES = new Set([
  * register that the rules take away. Every other document describes the code
  * that exists, the same as a comment does.
  */
-const DIRECTIVE_DOCUMENTS = new Set(["SPEC.md", "CLAUDE.md"]);
+const DIRECTIVE_DOCUMENTS = new Set(["SPEC.md", "CLAUDE.md", "STYLE.md"]);
 
 /** Short capital words that are names, not loud emphasis. */
 const ACRONYMS = new Set([
@@ -167,21 +106,13 @@ const ACRONYMS = new Set([
   "URL", "UI", "CLI", "RGB", "OK", "NOT", "MUST", "NEVER", "ONLY", "ALL",
   "PNG", "JPG", "SVG", "GPU", "CPU", "IO", "UTF", "MD", "STE", "ASD", "XY",
   "SPEC", "CAD", "DXF", "IPC", "RAM", "URI", "CSV", "TODO", "ASCII", "NaN",
-  "STATUS", "GPL", "MIT", "DFS", "REF", "AND", "OR", "IF", "SUM", "MIN",
-  "MAX", "AVG", "ABS", "POW", "LEN", "PI", "SIN", "COS", "TAN", "DEG", "RAD",
-  "TRUE", "FALSE", "NULL", "TYPE", "DIV0", "PARSE", "SCRIPT", "MEASURE",
+  "STATUS", "STYLE", "GPL", "MIT", "DFS", "REF", "AND", "OR", "IF", "SUM",
+  "MIN", "MAX", "AVG", "ABS", "POW", "LEN", "PI", "SIN", "COS", "TAN", "DEG",
+  "RAD", "TRUE", "FALSE", "NULL", "TYPE", "DIV0", "PARSE", "SCRIPT", "MEASURE",
 ]);
 
-/** Words that show the passive voice when a form of "be" comes before them. */
-const PAST_PARTICIPLES = [
-  "\\w+ed", "written", "given", "taken", "made", "done", "kept", "held",
-  "read", "built", "set", "put", "sent", "shown", "drawn", "known", "seen",
-  "found", "left", "meant", "split", "hit", "cut", "lost", "thrown", "torn",
-  "chosen", "driven", "grown", "spent", "told", "brought", "bound", "sold",
-];
-
 /* ------------------------------------------------------------------ */
-/* Prose extraction                                                    */
+/* Extraction                                                          */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -400,21 +331,13 @@ function sentences(text) {
     .filter((s) => s.length > 0);
 }
 
+
 /* ------------------------------------------------------------------ */
 /* Rules                                                               */
 /* ------------------------------------------------------------------ */
 
-const PASSIVE = new RegExp(
-  "\\b(is|are|was|were|be|been|being)\\s+(?:" +
-    PAST_PARTICIPLES.join("|") +
-    ")\\b",
-  "i"
-);
-
 const CONTRACTIONS =
   /\b(?:can't|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|shouldn't|wouldn't|couldn't|it's|that's|there's|here's|what's|let's|we're|they're|you're|i'm|we've|they've|you've|we'll|they'll|you'll|it'll)\b/i;
-
-const VAGUE_MODALS = /\b(shall|should|could|would|might|may|ought)\b/i;
 
 /**
  * Verbs that open an order. A comment describes the code, so a sentence that
@@ -427,36 +350,23 @@ const IMPERATIVE_OPEN =
 const OBLIGATION = /\b(must|do not|don't|you|your)\b/i;
 
 /** A colon label that stands in place of a sentence, such as "Layer: engine". */
-const LABEL_OPEN = /^(?:z[crn] )?[A-Z][a-z]+ *:/;
+const LABEL_OPEN = /^(?:z[crnq] )?[A-Z][a-z]+ *:/;
+
+/**
+ * A verb of possession in front of "no". Rule 10 of docs/STYLE.md carries the
+ * negative with a preposition instead, so "it keeps no snapshot" becomes "with
+ * no snapshots".
+ */
+const NEGATIVE_POSSESSION =
+  /\b(keeps?|holds?|needs?|sets?|carries|carry|makes?|takes?|gets?|owns?|wants?|leaves?|offers?|gives?|shows?|draws?|reads?|writes?|accepts?|returns?) no\b/i;
 
 /**
  * Verbs that carry a sentence without an -s or -ed ending. A whitelist of
- * every verb is impossible to keep. The fragment test asks a narrower
- * question: does any word here look like a verb?
+ * every verb is impossible to keep, so the fragment test asks a narrower
+ * question: does any word here look like a verb at all?
  */
 const BARE_VERB =
   /\b(is|are|was|were|be|has|have|had|does|do|did|can|cannot|will|go|come|hold|keep|give|take|make|read|write|need|want|get|put|call|show|set|draw|run|add|mean|use|cover|stay|sit|turn|name|carry|become|exist|belong|depend|return|work|live|fail|pass|move|change|pick|refuse|allow|leave|know|own|declare|build|parse|split|join|reach|apply|start|stop|open|close|find|serve|treat|prefer|avoid|end|begin|cost|prove|follow|throw|drive|paint|feed|beat|accept|send|break|count|measure)\b/i;
-
-const STOP_WORDS = new Set([
-  "the", "a", "an", "of", "to", "in", "on", "for", "is", "are", "and", "but",
-  "that", "this", "it", "as", "at", "by", "from", "with", "not", "no", "must",
-  "can", "does", "do", "has", "have", "if", "when", "so", "or", "its", "each",
-  "every", "all", "one", "two", "only", "never", "also", "then", "than", "up",
-  "out", "off", "how", "why", "what", "which", "who", "you", "we", "they",
-  "he", "she", "them", "their", "first", "next", "last", "same", "new", "old",
-  "more", "most", "less", "any", "some", "both", "into", "over", "under",
-  "again", "still", "just", "very", "own", "because", "while", "before",
-  "after", "keeps", "keep", "gives", "give", "takes", "take", "make", "makes",
-  "reads", "read", "writes", "write", "holds", "hold", "needs", "need",
-  "wants", "want", "gets", "get", "puts", "put", "calls", "call", "shows",
-  "show", "sets", "was", "were", "be", "been", "being", "will", "now", "here",
-  "there", "where", "about", "back", "down", "such", "many", "much", "other",
-  "another", "against", "between", "through", "during", "without", "within",
-  "along", "across", "behind", "beyond", "plus", "per", "via",
-  "zc", "zr", "zn", "zq", "rule", "rules", "form", "forms", "name", "names",
-  "includes", "include", "uses", "holds", "hold", "means", "mean", "covers",
-  "cover", "stays", "stay", "sits", "sit", "goes", "go", "comes", "come",
-]);
 
 /**
  * Answers whether a short run of words holds a verb. A word that ends in -s
@@ -477,67 +387,38 @@ function checkSentence(sentence, record, describesCode) {
     faults.push({ rule, detail, fix, ...record });
 
   const words = sentence.split(/\s+/).filter((w) => /[A-Za-z]/.test(w));
-  // The limit counts prose. A placeholder stands for code, and a list of
-  // twenty names reads as one list rather than as twenty words.
-  const prose = words.filter(
-    (w) => !["zc", "zr", "zn", "zq"].includes(w.toLowerCase().replace(/[^a-z]/g, ""))
-  );
-  if (prose.length > 25) {
-    add("length", prose.length + " words, limit 25", "Cut the sentence into two.");
-  }
+  const low = sentence.toLowerCase();
 
   if (describesCode) {
     const duty = sentence.match(OBLIGATION);
     if (duty) {
-      add(
-        "obligation",
-        duty[0],
-        "State the fact about the code, and give the reason for it."
-      );
+      add("obligation", duty[0],
+        "State the fact about the code, and give the reason for it.");
     }
     if (IMPERATIVE_OPEN.test(sentence)) {
-      add(
-        "imperative",
-        words[0],
-        "A comment describes the code. Name the actor and say what it does."
-      );
+      add("imperative", words[0],
+        "A comment describes the code. Name the actor and say what it does.");
     }
     if (LABEL_OPEN.test(sentence)) {
       add("fragment", words[0], "Write a sentence with a subject and a verb.");
     } else if (words.length <= 5 && !looksLikeSentence(sentence)) {
       add("fragment", sentence, "Write a sentence with a subject and a verb.");
     }
-  }
-
-  const passive = sentence.match(PASSIVE);
-  if (passive) {
-    add("passive", passive[0], "Name the actor and use the active voice.");
-  }
-
-  for (const word of words) {
-    const bare = word.toLowerCase().replace(/[^a-z-]/g, "");
-    if (!bare || ["zc", "zr", "zn", "zq"].includes(bare)) continue;
-    if (TECHNICAL_NAMES.has(bare)) continue;
-
-    if (bare.endsWith("ing") && bare.length > 4 && !ALLOWED_ING.has(bare)) {
-      add("ing-form", bare, "STE rule 3.3. Use a simple tense or a noun.");
+    const negative = sentence.match(NEGATIVE_POSSESSION);
+    if (negative) {
+      add("negative-possession", negative[0],
+        'Carry the negative with a preposition, such as "with no snapshots".');
     }
-    if (NOT_APPROVED[bare]) {
-      add("word", bare, 'Not approved. Use "' + NOT_APPROVED[bare] + '".');
+    for (const { phrase, re } of VALUE_PATTERNS) {
+      if (re.test(low)) {
+        add("value-judgment", phrase,
+          "State a property of the code that a reader can act on.");
+      }
     }
   }
 
   const contraction = sentence.match(CONTRACTIONS);
   if (contraction) add("contraction", contraction[0], "Write the words in full.");
-
-  const modal = sentence.match(VAGUE_MODALS);
-  if (modal) {
-    add(
-      "modal",
-      modal[0],
-      'STE rule 3.5. Say what the code does, and use "can" for an ability.'
-    );
-  }
 
   if (/;/.test(sentence)) {
     add("semicolon", ";", "The user refuses semicolons. Use two sentences.");
@@ -545,15 +426,7 @@ function checkSentence(sentence, record, describesCode) {
   if (/[—–]/.test(sentence)) {
     add("dash", "long dash", "Use a full stop or a comma.");
   }
-  if (/\band\/or\b|\betc\.|\be\.g\.|\bi\.e\./i.test(sentence)) {
-    add("abbreviation", "short form", "Write the words in full.");
-  }
-  if (/\s&\s/.test(sentence)) add("ampersand", "&", 'Write "and".');
-  if (/[a-z]\/[a-z]/i.test(sentence)) {
-    add("slash", "/", "STE rule 4.4. Write the words in full.");
-  }
 
-  const low = sentence.toLowerCase();
   for (const { phrase, re } of CHAT_STYLE_PATTERNS) {
     if (re.test(low)) {
       add("chat-style", phrase, "Delete it or say the fact plainly.");
@@ -570,18 +443,6 @@ function checkSentence(sentence, record, describesCode) {
   for (const s of shout) {
     if (!ACRONYMS.has(s)) {
       add("shouting", s, "Do not use capitals for emphasis.");
-    }
-  }
-
-  const cluster = sentence.toLowerCase().match(/(?<![a-z])[a-z]+(?: +[a-z]+){3,}(?![a-z])/);
-  if (cluster) {
-    const parts = cluster[0].trim().split(/\s+/);
-    if (parts.every((p) => !STOP_WORDS.has(p))) {
-      add(
-        "noun-cluster",
-        cluster[0].trim(),
-        "STE rule 2.1. Use no more than three nouns together."
-      );
     }
   }
 
@@ -604,11 +465,17 @@ function checkFile(path) {
   const faults = [];
   const describesCode = !DIRECTIVE_DOCUMENTS.has(basename(path));
 
-
   for (const block of blocks) {
     const clean = stripCode(block.text);
     for (const sentence of sentences(clean)) {
-      if (sentence.split(/\s+/).length < 3) continue;
+      // A placeholder stands for code, so a run that holds one or none of
+      // them is a stray reference rather than prose. Two real words are
+      // enough to judge, which is what catches a label such as "Two traps".
+      const real = sentence
+        .split(/\s+/)
+        .filter((w) => /[A-Za-z]/.test(w))
+        .filter((w) => !["zc", "zr", "zn", "zq"].includes(w.toLowerCase().replace(/[^a-z]/g, "")));
+      if (real.length < 2) continue;
       faults.push(
         ...checkSentence(
           sentence,

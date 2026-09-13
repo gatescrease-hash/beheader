@@ -12,8 +12,8 @@
  * unknown command error. That list and the built registry stay disjoint, and
  * a test pins it.
  *
- * The file belongs to the command layer, which turns a typed line into
- * mutation calls. It imports from the engine and from its own layer.
+ * Command-layer code: it turns a typed line into mutation calls, and imports
+ * from the engine and from its own layer.
  */
 import { bulgeForTangentArc, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
 
@@ -1083,13 +1083,14 @@ function strokeAnswer(answers: PromptAnswers, name: string): readonly PromptStro
 /**
  * The polyline a run of picks and words describes.
  *
- * "arc" and "line" pick how the next edge bends. An arc leaves the point before
- * it along the direction the path already travels, so the two meet smoothly.
- * The first edge of a path has no direction to follow, so it stays straight.
- * "close" sets the flag, and in arc mode it bends the edge home the same way.
+ * "arc" and "line" pick how the next edge bends. An arc leaves the point
+ * before it along the direction the path already travels, so the two meet
+ * smoothly. The first edge of a path has no direction to follow, so it stays
+ * straight. "close" sets the flag, and in arc mode it bends the edge home the
+ * same way.
  *
- * A cursor point joins the end as one more pick. That is what makes a preview
- * and a finished command the same walk.
+ * A cursor point joins the end as one more pick. So a preview and a finished
+ * command run the same walk.
  */
 function polylineFromStrokes(strokes: readonly PromptStroke[], cursor?: PromptPoint): CreatePolylineCommand {
   const points: CommandPoint[] = [];

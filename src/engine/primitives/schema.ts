@@ -13,12 +13,11 @@
  * because its size comes from the state of that object. A table cells.* group
  * and a script out.* group are both dynamic.
  *
- * The value and add types are test fixtures from the first phase. Keep them.
- * They are the smallest case that exercises a derived slot.
+ * The value and add types are test fixtures from the first phase. They stay,
+ * because they are the smallest case that exercises a derived slot.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";
@@ -205,7 +204,7 @@ export function findSlotFormat(type: ObjectType, path: readonly string[]): SlotF
 /**
  * The addresses a derived slot reads. This is the only place a dynamic
  * resolver runs. It runs at edge derivation time, and never during
- * evaluation. That is what keeps evaluation clear of the slot set.
+ * evaluation. So evaluation never changes the slot set.
  */
 export function derivedSlotDependencyAddresses(
   object: GraphObject,

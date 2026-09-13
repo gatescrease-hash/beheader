@@ -8,9 +8,9 @@
  * safe default instead. They exist so no drawing file writes the same
  * defensive read again.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 import {
   DEFAULT_STROKE_COLOR,

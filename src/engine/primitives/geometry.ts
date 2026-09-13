@@ -11,9 +11,8 @@
  * have a closed form. Explode turns it into two vertices and two bulges of 1,
  * which is the same circle exactly.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 import {
@@ -571,9 +570,9 @@ function derivePathNumber(label: string, measure: PathMeasure): DerivedSlotCompu
 }
 
 /**
- * The derived slots of a circle, each one exact. A circle needs no vertices
- * slot now that an arc exists. Two vertices and two bulges of 1 hold a circle
- * exactly, and explode makes that path.
+ * The derived slots of a circle, each one exact. A circle does not need a
+ * vertices slot now that an arc exists. Two vertices and two bulges of 1 hold
+ * a circle exactly, and explode makes that path.
  */
 export function circleDerivedSlots(label: string): readonly DerivedSlotSchema[] {
   const dependencies: DerivedSlotDependencies = { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] };
@@ -942,7 +941,8 @@ const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
  * and name. The parameter slots (origin, radius, sides, and so on) are gone.
  * The new path closes, because every preset it accepts is a closed shape. So
  * vertices, centroid, area, length and bounds all survive at the same paths,
- * and so does the style. A formula that reads one of them needs no repair.
+ * and so does the style. A formula that reads one of them does not need
+ * repair.
  */
 export function explodeObjectToPolyline(object: GraphObject, label: string): ExplodeResult {
   if (object.type === "circle") {
@@ -993,7 +993,7 @@ function buildExplodedPolyline(object: GraphObject, vertices: readonly Point[], 
   slots[slotKey(CLOSED_PATH)] = { kind: "literal", value: true };
   // A polyline declares the style slots at the same paths a preset does, so
   // they cross an explode untouched. An operator keeps the colour they chose,
-  // and a formula that drives one needs no repair.
+  // and a formula that drives one does not need repair.
   for (const path of GEOMETRY_STYLE_PATHS) {
     const slot = getSlot(object, path);
     if (slot !== undefined) {

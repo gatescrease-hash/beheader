@@ -7,9 +7,9 @@
  * belong here. A fixed width and a measured width can disagree, and this file
  * decides which one wins.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 export const TEXT_FALLBACK_BOX_WIDTH = 240;
 export const TEXT_FALLBACK_BOX_HEIGHT = 20;

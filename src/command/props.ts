@@ -6,8 +6,8 @@
  * Both surfaces read one list, so they can never disagree about what an
  * object has.
  *
- * The file belongs to the command layer, which turns a typed line into
- * mutation calls. It imports from the engine and from its own layer.
+ * Command-layer code: it turns a typed line into mutation calls, and imports
+ * from the engine and from its own layer.
  */
 import {
   findSlotFormat,

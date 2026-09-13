@@ -8,8 +8,8 @@
  * Every refusal names the slots it is about, because that message is the
  * whole debug story.
  *
- * The file belongs to the command layer, which turns a typed line into
- * mutation calls. It imports from the engine and from its own layer.
+ * Command-layer code: it turns a typed line into mutation calls, and imports
+ * from the engine and from its own layer.
  */
 import {
   type Address,

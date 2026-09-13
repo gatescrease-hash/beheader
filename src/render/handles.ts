@@ -6,9 +6,9 @@
  * A resize is absolute. It reads the extent that the drag started with. It is
  * never a sum of small steps, because a sum drifts.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 
 import { type CameraState, type GraphObject, IMAGE_TYPE, TEXT_TYPE } from "../engine/index.ts";

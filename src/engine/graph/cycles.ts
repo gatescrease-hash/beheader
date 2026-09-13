@@ -7,12 +7,11 @@
  * slot in the cycle, because that message is the whole debug story for the
  * operator.
  *
- * The search runs from scratch on every mutation, because the simplest
- * correct code matters more here than speed.
+ * The search runs from scratch on every mutation, because this code is
+ * unoptimized for the sake of simplicity.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import { addressKey, type Edge } from "./edge.ts";

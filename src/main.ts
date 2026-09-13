@@ -2,14 +2,14 @@
  * main.ts
  *
  * The state transitions here are pure functions from state to state. That is
- * why a file this size has a full test suite and needs no browser. New logic
- * belongs in a pure transition, and the DOM work stays at the edge.
+ * why a file this size has a full test suite that runs without a browser. New
+ * logic belongs in a pure transition, and the DOM work stays at the edge.
  *
  * The in place editor mounts in #stage, not in #panels.
  *
- * The file belongs to the application layer, and it is the only file that
- * owns the browser. It finds the DOM elements and connects the engine, the
- * renderer and the command line.
+ * Application-layer code, and the only file that owns the browser. It finds
+ * the DOM elements and wires the engine, the renderer and the command line
+ * together.
  */
 import {
   type CameraState,
@@ -389,9 +389,13 @@ export interface PanelRow {
 }
 
 export interface PanelRowColor {
-  /** What the picker opens on. A slot that holds no colour opens on black. */
+  /**
+   * What the picker opens on. A slot with no colour opens on black.
+   */
   readonly seed: string;
-  /** True when the slot holds no colour at all. */
+  /**
+   * True when the slot has no colour at all.
+   */
   readonly none: boolean;
 }
 
@@ -482,7 +486,7 @@ function buildPartRow(
   };
   const shape = edgeShape(object, index);
   // The four handle slots are 0 on nearly every vertex. They stay out of
-  // sight until a handle is what makes the edge a curve.
+  // sight until a handle turns the edge into a curve.
   const curveSuffixes = shape === "curve" ? VERTEX_PART_SUFFIXES.slice(2) : [["bulge"]];
   const partFocus: PanelPartFocus =
     focus === undefined || focus.index !== index ? "none" : focus.kind === "vertex" ? "vertex" : "edge";

@@ -7,9 +7,9 @@
  * This is the only file that knows about screen space. Every other file reads
  * the transform from here, because a second copy of the formula drifts.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 import type { CameraState, Point } from "../engine/index.ts";
 
