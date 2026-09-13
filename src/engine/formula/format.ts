@@ -1,11 +1,12 @@
 /**
  * format.ts
  *
- * The formatter turns an AST back into source text. It maps an object ID back
- * to the current name.
+ * Turns an AST back into source text, resolving each stored object ID to
+ * whatever that object is called now.
  *
- * This is what lets the properties panel and the props command show a formula
- * the way the operator wrote it, after a rename.
+ * The properties panel and the props command both print formulas through this
+ * file, so an operator who renames an object sees the new name in every
+ * formula that reads it, without anything rewriting the stored ASTs.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

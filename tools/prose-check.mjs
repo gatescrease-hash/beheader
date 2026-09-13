@@ -72,6 +72,7 @@ const METAPHOR = {
  */
 const VALUE_JUDGMENT = [
   "matters more", "matters less", "is what keeps", "is what makes",
+  "is what lets", "is what allows", "is what does", "is what gives",
   "at work", "earns its", "earns their", "worth the space", "the whole story",
   "is the point", "that is the point", "the real work", "does the heavy",
 ];

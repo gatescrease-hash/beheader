@@ -1,21 +1,25 @@
 /**
  * edge.ts
  *
- * The math here covers one path edge, which is straight, an arc, or a cubic
- * bezier. Two control points make it a bezier. Otherwise a bulge makes it an
- * arc: the bulge is the tangent of a quarter of the included angle, the
- * number a DXF file carries. Zero makes a straight line and 1 makes a half
- * circle.
+ * The maths of a single path edge, which is a straight line, a circular arc,
+ * or a cubic bezier. Two control points make it a bezier. With none of those,
+ * a bulge makes it an arc: the bulge is the tangent of a quarter of the
+ * included angle, the same number a DXF vertex record carries, so 0 draws a
+ * straight line and 1 draws a half circle.
  *
- * Nothing here cuts a curve into sample points. A vertex is a point an
- * operator placed, so this file never invents one.
+ * Nothing in this file turns a curve into sample points. Every vertex in a
+ * document is a point an operator placed, so an arc stays an arc through area,
+ * length, bounds, hit testing and drawing, and the number of vertices on a
+ * shape is never a quality setting.
  *
- * An arc answers every question in closed form. A bezier answers its area,
- * its centroid and its box in closed form as well. Those integrands are
- * polynomials, and a five point Gauss rule integrates a polynomial of degree
- * nine exactly. Two answers about a bezier have no closed form for anybody:
- * its length, and the distance from a point to it. Each of those refines a
- * number until the number holds still. Neither makes a vertex.
+ * An arc answers every question in closed form. A bezier answers its area, its
+ * centroid and its bounding box in closed form too: those integrands are
+ * polynomials of degree eight or less, and the five point Gauss-Legendre rule
+ * in integrateOverCurve is exact up to degree nine. Two questions about a
+ * bezier have no closed form for anyone. bezierLength halves the curve until
+ * its control polygon and its chord agree, and nearestFractionOnBezier scans
+ * the curve coarsely and then narrows the best bracket. Both return a number,
+ * and neither one adds a vertex.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

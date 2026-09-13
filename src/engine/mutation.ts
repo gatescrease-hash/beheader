@@ -1,27 +1,41 @@
 /**
  * mutation.ts
  *
- * The single channel for state change. No other code writes document state.
+ * The single channel for state change. mutate() takes the current objects and
+ * a list of operations, and returns a new set of objects or a refusal. No
+ * other code in the repository writes document state.
  *
- * Every mutation runs these eight steps in order.
+ * Every call runs the same eight steps in order:
  *
- * 1. Stage. It deep clones the current state. 2. Apply. It applies the
- * operations to the clone. 3. Derive. It rebuilds the edge set, from stored
- * ASTs and from the schema. 4. Integrity. It refuses a formula that names an
- * absent slot. 5. Cycles. It refuses a cycle, and names every slot in it. 6.
- * Refuse. It throws the clone away, and the old state never changed. 7.
- * Evaluate. An error makes an error value, rather than a rollback. 8. Commit.
- * It swaps the clone in, and appends to the journal.
+ *   1. Stage.     Deep clone the current objects.
+ *   2. Apply.     Run the operations against the clone.
+ *   3. Derive.    Rebuild the whole edge set from stored ASTs and the schema.
+ *   4. Integrity. Refuse a formula that names a slot which is not declared.
+ *   5. Cycles.    Refuse a cycle, naming every slot around it.
+ *   6. Refuse.    Throw the clone away. The caller's objects never changed.
+ *   7. Evaluate.  An evaluation error becomes an error value, not a rollback.
+ *   8. Commit.    Return the clone, and append one entry to the journal.
  *
- * A batch applies many operations to one clone and commits all or nothing. A
- * document load uses a batch, so a bad file fails as one unit.
+ * Steps 4 and 5 run in that order on purpose. A cycle check reads the edge
+ * set, and an edge set built from a formula that points at a slot which does
+ * not exist proves nothing either way.
  *
- * The integrity check runs before the cycle check, because a cycle check over
- * an edge set that nobody trusts proves nothing.
+ * A batch is many operations against one clone, committed all or nothing.
+ * Loading a document uses a batch, so a corrupt file fails as a single unit
+ * rather than leaving half its objects behind.
  *
- * This file and primitives/schema.ts agree about every slot path. Both read
- * the schema through the same resolver, or a dynamic slot family drifts
- * between them.
+ * deleteVertex is the one operation that refuses before staging rather than
+ * after. Every other refuse-by-default deletion frees an ID or a coordinate
+ * that never comes back, so a leftover reference to it dangles and step 4
+ * catches it. Deleting a vertex is different: the vertex after it shifts down
+ * and refills the index immediately, so a formula still pointing at that index
+ * would quietly read the wrong vertex instead of dangling. The check for that
+ * runs up front, in findLiveVertexDependents.
+ *
+ * This file and primitives/schema.ts have to agree about every slot path, and
+ * both read the schema through the same resolver. Two resolvers would drift
+ * apart on a dynamic slot family such as a table's cells, and no test would
+ * go red when they did.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

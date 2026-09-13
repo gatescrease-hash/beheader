@@ -1,16 +1,17 @@
 /**
  * eval-context.ts
  *
- * The engine measures text through the TextMeasurer interface, which
- * EvalContext carries.
+ * Declares TextMeasurer, the one interface the engine uses to ask how wide a
+ * run of text is, and EvalContext, the record that carries a measurer into
+ * evaluation.
  *
- * Text layout needs glyph widths, and a glyph width needs a canvas. The
- * engine does not open a canvas, so it declares this interface instead.
- * render/ supplies the real implementation and main.ts wires it in. A test
- * supplies a fake measurer with fixed widths.
+ * Text layout needs glyph widths, and a glyph width needs a canvas, which the
+ * engine cannot open. So the engine declares the interface and takes an
+ * implementation from outside it: render/measure.ts supplies the real one,
+ * main.ts wires it in, and a test supplies a fake with fixed widths.
  *
- * This file has no imports at all, so the boundary is real and not only a
- * rule.
+ * This file imports nothing at all, so nothing can pull a DOM dependency into
+ * the engine through it.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

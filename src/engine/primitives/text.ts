@@ -1,19 +1,24 @@
 /**
  * text.ts
  *
- * The text primitive holds the block tree parser, the dependency walker over
- * that tree, and the three compute functions.
+ * The text primitive: the parser that turns content into a block tree, the
+ * dependency walker over that tree, and the three compute functions behind
+ * resolvedContent, measuredHeight and measuredWidth.
  *
- * Text is literal by default. {= expression } inserts a value. {? condition }
- * ... {:} ... {?} makes a conditional block, and blocks nest.
+ * Text is literal until a block opens. {= expression } inserts a value, and {?
+ * condition } ... {:} ... {?} is a conditional. Blocks nest.
  *
- * The dependency walker is the first dynamic resolver in the codebase. It
- * re-parses content on every edge derivation, because the set of slots the
- * text names changes with every edit. It reports both branches of a
- * conditional, for the reason formula/deps.ts gives.
+ * The dependency walker was the first dynamic resolver in the codebase. It
+ * re-parses content on every edge derivation rather than caching, because
+ * editing a single character can change which slots the text reads. Like
+ * formula/deps.ts it reports both arms of a conditional, so flipping the
+ * condition does not leave the object subscribed to the wrong one.
  *
- * A text box never crops. The measurer breaks a long word instead. There is
- * no overflow slot, by a decision of the human.
+ * A text box never crops its contents. When a word is too long for the width,
+ * the measurer breaks the word. There is no overflow slot and no plan for one:
+ * a person settled that question against eight earlier rulings, and correcting
+ * the code back toward any of them would undo the decision rather than fix a
+ * bug.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

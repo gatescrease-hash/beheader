@@ -1,14 +1,17 @@
 /**
  * cycles.ts
  *
- * Cycle detection walks the whole edge set, depth first.
+ * Finds a cycle in the edge set with a depth first search, so that mutation.ts
+ * can refuse a mutation that would make one.
  *
- * A cycle is an error, and never a problem to solve. The result names every
- * slot in the cycle, because that message is the whole debug story for the
- * operator.
+ * A cycle is always an error here and never something to resolve. When
+ * detectCycle finds one it returns every slot around the loop in order,
+ * because the operator cannot fix a circular reference without seeing which
+ * slots take part in it.
  *
- * The search runs from scratch on every mutation, because this code is
- * unoptimized for the sake of simplicity.
+ * The search runs from scratch over the whole edge set on every mutation. This
+ * code is unoptimized for the sake of simplicity, and it has no incremental
+ * mode.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

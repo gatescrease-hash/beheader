@@ -1,20 +1,25 @@
 /**
  * schema.ts
  *
- * The registry of object types declares which slots exist for each type, and
- * which kind each one has.
+ * The registry of object types. For each type it declares which slots exist
+ * and what kind each one is, which makes it the single source of truth for any
+ * slot path in the engine.
  *
- * This file is the single source of truth for a slot path. Three sites read
- * it in one mutation pass: edge derivation, and two integrity checks. All
- * three go through the same resolver. Three sites that resolve a dynamic slot
- * family on their own will drift, and no test goes red when they do.
+ * Three places read that truth during one mutation: edge derivation, and the
+ * two integrity checks. All three go through the same resolver on purpose. A
+ * slot group can be dynamic, meaning its size comes from the object rather
+ * than from the type, and a table's cells or a script node's outputs are both
+ * dynamic. If those three sites each resolved a dynamic group their own way
+ * they would drift apart, the graph would stop being total, and no test would
+ * go red to say so.
  *
- * A slot group is static or dynamic. A dynamic group resolves per object,
- * because its size comes from the state of that object. A table cells.* group
- * and a script out.* group are both dynamic.
+ * slotOptions and slotFormats narrow what a slot accepts. slotOptions lists
+ * every legal value for a slot with few of them. slotFormats names a rule
+ * instead, for a slot with too many values to list, and colour is the only
+ * format so far.
  *
- * The value and add types are test fixtures from the first phase. They stay,
- * because they are the smallest case that exercises a derived slot.
+ * The value and add types are test fixtures left over from the first phase.
+ * They stay because they are the smallest case that exercises a derived slot.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

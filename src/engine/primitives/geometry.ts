@@ -1,15 +1,32 @@
 /**
  * geometry.ts
  *
- * The vertex math for the presets derives centroid, area, length and bounds.
+ * The vertex maths behind every shape: where the corners of a preset fall, and
+ * how centroid, area, length and bounds are derived from them.
  *
- * A preset has one derived vertices slot, not a slot for each vertex. So a
- * change to sides changes a value and not the slot set, which is what
- * evaluation needs.
+ * A preset such as a polygon has one derived vertices slot rather than a slot
+ * for each corner. Changing sides from 5 to 6 therefore changes a value and
+ * leaves the slot set alone, which is what evaluation requires: only a
+ * mutation may add or remove a slot.
  *
- * A circle has no vertices slot. Its area, length, centroid and bounds each
- * have a closed form. Explode turns it into two vertices and two bulges of 1,
- * which is the same circle exactly.
+ * A circle has no vertices slot at all, because its area, length, centroid and
+ * bounds each have a closed form taken from the origin and the radius. explode
+ * turns a circle into two vertices joined by two bulges of 1, which is the
+ * same circle exactly rather than an approximation of it.
+ *
+ * A polyline stores a slot for each vertex instead, and
+ * enumeratePolylineVertexSlotPaths builds those paths from
+ * GraphObject.vertexCount. A second enumeration sits beside it.
+ * enumeratePolylineCoordinateSlotPaths lists only x and y, and the derived
+ * vertices slot depends on that shorter list, because bending an edge moves no
+ * point.
+ *
+ * A vertex owns seven slots: x, y, the bulge of the edge leaving it, and the x
+ * and y of a handle in each direction. VERTEX_PART_SUFFIXES lists all seven,
+ * and delvertex and split move them as one group. Deleting a vertex and
+ * splitting an edge shift addresses in opposite directions, and the
+ * shiftVertexAddress helpers at the end of the file are what mutation.ts
+ * rewrites references with.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

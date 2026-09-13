@@ -1,10 +1,13 @@
 /**
  * edge.ts
  *
- * An Edge record points from a source slot to a dependent slot.
+ * An Edge is a dependency: it points from the slot that supplies a value to
+ * the slot that reads it. addressKey turns an address into the string the
+ * cycle check and the topological sort use to compare two slots.
  *
- * The operator never makes an edge. Only mutation.ts derives one, from a
- * formula AST or from a schema. This file is small on purpose.
+ * Nothing outside mutation.ts ever builds an Edge. The whole edge set is
+ * derived from scratch on every mutation, out of the stored formula ASTs and
+ * the schema, so an edge cannot go stale or survive the slot it pointed at.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

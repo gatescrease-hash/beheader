@@ -1,14 +1,22 @@
 /**
  * eval.ts
  *
- * The topological pass sorts every slot and evaluates each one.
+ * Evaluates the whole document. It sorts every slot into dependency order and
+ * then evaluates each one in turn, so a slot always reads inputs that have
+ * already been recomputed.
  *
- * A literal returns its stored value. A formula evaluates its AST. A derived
- * slot calls the compute function that its schema declares. All three kinds
- * go through this one pass, so a derived value is never one step stale.
+ * The three kinds of slot go through this single pass. A literal returns the
+ * value it stores, a formula evaluates its AST, and a derived slot calls the
+ * compute function its schema declares. Because all three take the same path,
+ * a derived value is never one evaluation behind the literal that feeds it.
  *
- * No type specific logic belongs here. A script node stays one more derived
- * slot to this file.
+ * Evaluation never throws. A formula that fails leaves an error value in its
+ * own slot and the pass carries on, so one broken formula cannot blank the
+ * rest of the document.
+ *
+ * Nothing here knows about any object type. A script node is one more derived
+ * slot as far as this file is concerned, so a new primitive can arrive without
+ * any change to the evaluator.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
