@@ -1,7 +1,8 @@
 /**
  * camera.test.ts
  *
- * World to screen and back, pan, zoom to a point, and the clamps.
+ * These tests cover world to screen and back, pan, zoom to a point, and the
+ * clamps.
  */
 import { describe, expect, it } from "vitest";
 import { type CameraState, deserializeDocument } from "../engine/index.ts";

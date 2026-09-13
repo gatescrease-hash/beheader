@@ -1,16 +1,17 @@
 /**
  * document.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * The versioned JSON document format, and save and load.
+ * Save and load convert a document to versioned JSON, and back.
  *
  * The file never stores a derived value. A full evaluation pass on load makes
  * them again. So a new derived slot does not break an old saved file.
  *
  * A load goes through the mutation API, so a bad file fails the same checks a
  * bad command does.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import { mutate, type MutationJournalEntry, type Operation } from "./mutation.ts";
@@ -70,7 +71,9 @@ export interface SerializedDocument {
   readonly camera: CameraState;
 }
 
-/** Document to plain JSON. It never writes a derived value. */
+/**
+ * Turns a document into plain JSON. It never writes a derived value.
+ */
 export function serializeDocument(document: Document): SerializedDocument {
   return {
     formatVersion: document.formatVersion,
@@ -134,7 +137,10 @@ function rawContainsIllegalNumber(raw: unknown): boolean {
   return false;
 }
 
-/** JSON to a document. It goes through the mutation API, so a bad file fails the same checks a bad command does. */
+/**
+ * Turns JSON back into a document. It goes through the mutation API, so a bad
+ * file fails the same checks a bad command does.
+ */
 export function deserializeDocument(raw: unknown, context: EvalContext = NULL_EVAL_CONTEXT): DocumentLoadResult {
   if (!isPlainObject(raw)) {
     return { ok: false, message: `a document must be a JSON object, not ${describeTypeof(raw)}` };

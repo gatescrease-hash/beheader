@@ -1,20 +1,21 @@
 /**
  * deps.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * The extractDependencies function walks an AST. It returns every address that
- * the formula can read. It is eager and total, and it returns both branches of
- * an IF. This is correct and it is not a defect. Nobody can know which branch
- * is live without evaluation, and the live branch changes all the time. The
- * graph must subscribe to all of them, or the object fails to update when the
- * condition flips.
+ * The extractDependencies function walks an AST. It returns every address
+ * that the formula can read. It is eager and total, and it returns both
+ * branches of an IF. This is correct and it is not a defect. Nobody can know
+ * which branch is live without evaluation, and the live branch changes all
+ * the time. The graph subscribes to all of them, or the object fails to
+ * update when the condition flips.
  *
  * Compare formula/eval.ts, which is lazy. The contrast is deliberate.
  *
  * The two rewrite passes here serve table resize. One shifts an address. The
  * other turns a broken address into a #REF node.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import type { Address } from "../address.ts";

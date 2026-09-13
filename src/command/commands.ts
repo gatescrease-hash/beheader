@@ -1,14 +1,15 @@
 /**
  * commands.ts
  *
- * Layer: command. It turns a typed line into mutation calls. It imports from
- * engine and from its own layer.
- *
- * The command handlers. Each one turns a command object into mutation
- * operations and a log line.
+ * Each command handler turns a command object into mutation operations and a
+ * log line.
  *
  * A refusal message gets written here, so this file carries the debug story.
- * Every refusal must name the slots it is about.
+ * Every refusal names the slots it is about, because that message is the
+ * whole debug story.
+ *
+ * The file belongs to the command layer, which turns a typed line into
+ * mutation calls. It imports from the engine and from its own layer.
  */
 import {
   type Address,

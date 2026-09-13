@@ -1,18 +1,18 @@
 /**
  * prompt.ts
  *
- * Layer: command. It turns a typed line into mutation calls. It imports from
- * engine and from its own layer.
- *
- * The prompt sequence, in the AutoCAD style. A bare command word starts it,
- * and the prompt asks for each argument in turn.
+ * The prompt sequence follows the AutoCAD style. A bare command word starts
+ * it, and the prompt asks for each argument in turn.
  *
  * This is a state machine of its own. parser.ts answers only the one shot
  * question "is this complete line a command".
  *
  * A step that repeats collects answers until the operator ends it. It holds
- * them as a stroke list, so a point and a word such as "arc" keep their order.
- * The step index does not move while such a step collects.
+ * them as a stroke list, so a point and a word such as "arc" keep their
+ * order. The step index does not move while such a step collects.
+ *
+ * The file belongs to the command layer, which turns a typed line into
+ * mutation calls. It imports from the engine and from its own layer.
  */
 import {
   findCommandSpec,
@@ -140,8 +140,8 @@ export function respond(pending: PendingCommand, response: PromptResponse): Comm
 /**
  * One answer to a step that repeats.
  *
- * An empty answer ends the step, once it holds the points it needs. A word the
- * step offers takes its effect. Anything else must read as a point, and joins
+ * An empty answer ends the step, once it holds the points it needs. A word
+ * the step offers takes its effect. Anything else reads as a point, and joins
  * the list.
  */
 function respondRepeating(

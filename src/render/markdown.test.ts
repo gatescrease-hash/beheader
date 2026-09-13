@@ -1,8 +1,8 @@
 /**
  * markdown.test.ts
  *
- * The markdown lite parser. It covers the rule for which asterisk opens
- * an emphasis span and which one closes it.
+ * These tests cover the markdown lite parser, and the rule for which asterisk
+ * opens an emphasis span and which one closes it.
  */
 import { describe, expect, it } from "vitest";
 import { LIST_BULLET, parseMarkdownLite, verbatimLines, type MarkdownRun } from "./markdown.ts";

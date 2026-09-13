@@ -1,13 +1,11 @@
 /**
  * table.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * Cell address math, range expansion, and the row and column resize passes
+ * make up this file.
  *
- * Cell address math, range expansion, and the row and column resize passes.
- *
- * A range expands to concrete cells at edge derivation time, from the size the
- * table has now. So an expansion can never go stale.
+ * A range expands to concrete cells at edge derivation time, from the size
+ * the table has now. So an expansion can never go stale.
  *
  * An empty cell inside a range gets no edge. An empty cell that a bare
  * reference names gets no edge either. Both are normal state, not a dangling
@@ -15,6 +13,10 @@
  *
  * A row or column delete repairs rather than refuses. It rewrites every
  * inbound reference to #REF and reports what it broke.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";

@@ -1,13 +1,14 @@
 /**
  * handles.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
- *
- * The resize grabbers on a selected object, and the box math they drive.
+ * The resize grabbers on a selected object drive the box math here.
  *
  * A resize is absolute. It reads the extent that the drag started with. It is
  * never a sum of small steps, because a sum drifts.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 
 import { type CameraState, type GraphObject, IMAGE_TYPE, TEXT_TYPE } from "../engine/index.ts";

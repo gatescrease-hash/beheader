@@ -1,7 +1,7 @@
 /**
  * stub.test.ts
  *
- * The script node ports and the placeholder body.
+ * These tests cover the script node ports and the placeholder body.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";

@@ -1,16 +1,18 @@
 /**
  * editor.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
- *
- * Where an in place editor goes, and what it looks like.
+ * The in place editor needs a position and a look, and this file decides
+ * both.
  *
  * It answers the placement question for a text box and for a table cell.
  * main.ts mounts the real element.
  *
- * The overlay lays out in world units and one transform scales it. Do not
- * multiply the zoom into its width or its font size a second time.
+ * The overlay lays out in world units and one transform scales it. Nothing
+ * multiplies the zoom into its width or its font size a second time.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import {
   type CameraState,

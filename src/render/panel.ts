@@ -1,12 +1,13 @@
 /**
  * panel.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
- *
- * Where a properties panel goes beside its object.
+ * A properties panel goes beside its object, and this file decides where.
  *
  * Placement only. main.ts builds the rows and owns the DOM.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import type { CameraState } from "../engine/index.ts";
 import { worldToScreen } from "./camera.ts";

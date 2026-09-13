@@ -1,17 +1,19 @@
 /**
  * geometry.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * Vertex math for the presets, plus centroid, area, length and bounds.
+ * The vertex math for the presets derives centroid, area, length and bounds.
  *
  * A preset has one derived vertices slot, not a slot for each vertex. So a
- * change to sides changes a value and not the slot set, and Rule 4 holds.
+ * change to sides changes a value and not the slot set, which is what
+ * evaluation needs.
  *
  * A circle has no vertices slot. Its area, length, centroid and bounds each
  * have a closed form. Explode turns it into two vertices and two bulges of 1,
  * which is the same circle exactly.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 import type { Address } from "../address.ts";
 import {
@@ -32,8 +34,8 @@ export const VERTEX_PATH_PREFIX = "vertex";
 
 /**
  * The seven slots of one vertex. Two coordinates, the bulge of the edge after
- * it, and one handle for each direction. delvertex and split must move all
- * seven together.
+ * it, and one handle for each direction. delvertex and split move all seven
+ * together.
  */
 export const VERTEX_PART_SUFFIXES: readonly (readonly string[])[] = [
   ["x"],
@@ -107,10 +109,11 @@ export function vertexYPath(index: number): readonly string[] {
 
 /**
  * The curvature of the edge that leaves this vertex, as a DXF file states it.
- * A DXF vertex record carries the bulge of the edge after it, and so does this
- * one. So a path with N vertices carries N bulges, and the last one belongs to
- * the edge home to vertex 0. That edge draws only when closed is true, and the
- * slot exists at every value of closed, which keeps Rule 4 safe.
+ * A DXF vertex record carries the bulge of the edge after it, and so does
+ * this one. So a path with N vertices carries N bulges, and the last one
+ * belongs to the edge home to vertex 0. That edge draws only when closed is
+ * true, and the slot exists at every value of closed. So evaluation changes a
+ * value and never the slot set.
  */
 export function vertexBulgePath(index: number): readonly string[] {
   return [VERTEX_PATH_PREFIX, String(index), "bulge"];
@@ -418,9 +421,9 @@ export const computePolylineVerticesSlot: DerivedSlotCompute = (object, read) =>
 
 /**
  * True when the object carries a closed slot. A path built before the closed
- * slot existed carries none. The dependency list and readClosedFlag must ask
- * this one question. Two answers that drift produce a #REF at every derived
- * slot of the path.
+ * slot existed carries none. The dependency list and readClosedFlag ask this
+ * one question. Two answers that drift produce a #REF at every derived slot
+ * of the path.
  */
 function hasClosedSlot(object: GraphObject): boolean {
   return getSlot(object, CLOSED_PATH) !== undefined;
@@ -448,7 +451,9 @@ export interface PathShape {
   readonly closed: boolean;
 }
 
-/** One measurement of a path. It returns a number, or the reason it cannot. */
+/**
+ * A path measure returns one number, or the reason it cannot.
+ */
 export type PathMeasure = (shape: PathShape) => number | ErrorValue;
 
 /**
@@ -478,8 +483,8 @@ export function readClosedFlag(
 
 /**
  * The bulge of every vertex, in order. An absent slot reads as 0, a straight
- * edge, so a path built before bulges existed still measures. This test for an
- * absent slot must match the one existingBulgePaths uses.
+ * edge, so a path built before bulges existed still measures. This test for
+ * an absent slot matches the one existingBulgePaths uses.
  */
 interface CurveParts {
   readonly bulges: readonly number[];
@@ -494,7 +499,7 @@ type CurveReading =
 /**
  * The bulge and the two handles of every vertex, in order. An absent slot
  * reads as 0, which leaves the edge straight. So a path built before one of
- * these slots existed still measures. This test for an absent slot must match
+ * these slots existed still measures. This test for an absent slot matches
  * the one existingCurvePaths uses.
  */
 function readCurveParts(
@@ -823,7 +828,10 @@ export function vertexPartPath(index: number, suffix: readonly string[]): readon
   return [VERTEX_PATH_PREFIX, String(index), ...suffix];
 }
 
-/** Every slot path of one vertex. delvertex must move or break all three together. */
+/**
+ * These are every slot path of one vertex. delvertex moves or breaks all
+ * three together.
+ */
 export function vertexPartPaths(index: number): readonly (readonly string[])[] {
   return VERTEX_PART_SUFFIXES.map((suffix) => vertexPartPath(index, suffix));
 }
@@ -844,7 +852,7 @@ export function shiftVertexAddressForDelete(address: Address, objectId: string, 
 }
 
 /**
- * The force path. It shifts every vertex after the deleted one, the same as
+ * The force path shifts every vertex after the deleted one, the same as
  * shiftVertexAddressForDelete. It also marks a reference to the deleted
  * vertex itself "deleted", so the caller rewrites it to #REF.
  */

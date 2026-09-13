@@ -1,8 +1,8 @@
 /**
  * parser.test.ts
  *
- * Every command form, every failure message, and the rule that the
- * built registry and the not built list stay disjoint.
+ * These tests cover every command form, every failure message, and the rule
+ * that the built registry and the not built list stay disjoint.
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/index.ts";

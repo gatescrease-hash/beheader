@@ -1,14 +1,15 @@
 /**
  * images.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
- *
- * The bitmap cache. A data URL decodes once and the result stays for later
+ * The bitmap cache decodes a data URL once, and the result stays for later
  * paints.
  *
  * A decode is asynchronous. The cache hands back what it has and starts the
  * decode for what it lacks.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 export interface DecodedBitmap {
   readonly image: CanvasImageSource;

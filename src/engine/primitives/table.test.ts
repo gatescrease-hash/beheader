@@ -1,8 +1,8 @@
 /**
  * table.test.ts
  *
- * Cell math, range expansion, and the row and column resize passes. It
- * covers the repair to a #REF node.
+ * These tests cover cell math, range expansion, and the row and column resize
+ * passes. It covers the repair to a #REF node.
  */
 import { describe, expect, it } from "vitest";
 import type { Address } from "../address.ts";

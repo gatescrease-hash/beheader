@@ -1,7 +1,8 @@
 /**
  * functions.test.ts
  *
- * Every built in function, its arity check, and the two lazy entries.
+ * These tests cover every built in function, its arity check, and the two
+ * lazy entries.
  */
 import { describe, expect, it } from "vitest";
 import type { ErrorValue, Value } from "../graph/node.ts";

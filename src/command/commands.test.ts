@@ -1,7 +1,7 @@
 /**
  * commands.test.ts
  *
- * Every handler, and the refusal message each one produces.
+ * These tests cover every handler, and the refusal message each one produces.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -728,11 +728,11 @@ describe("the rows and cols of a table are bounded at every write, not only at c
     return committed("table x=0 y=0 rows=3 cols=3", createEmptyDocument());
   }
 
-  it("refuses set table_1.rows = 5 — a formula there would let evaluation resize the table (Rule 6), and the table is untouched", () => {
+  it("refuses set table_1.rows = 5, because a formula there would let evaluation resize the table, and the table is untouched", () => {
     const document = seeded();
     const message = refused("set table_1.rows = 5", document);
     expect(message).toContain("table_1.rows");
-    expect(message).toContain("Rule 6");
+    expect(message).toContain("A formula there would let evaluation resize the table");
     expect(literalValue(onlyNamed(document, "table_1"), ["rows"])).toBe(3);
   });
 
@@ -1699,7 +1699,10 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
 });
 
 describe("the journal replays — a document rebuilt from the record of how it was made", () => {
-  /** One of nearly every command. Three of them read live state as they run. */
+  /**
+   * This session holds one of nearly every command. Three of them read live
+   * state as they run.
+   */
   const SESSION: readonly string[] = [
     "circle x=0 y=0 r=10",
     "rect x=20 y=0 w=8 h=6",

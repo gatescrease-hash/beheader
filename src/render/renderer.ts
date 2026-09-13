@@ -1,22 +1,23 @@
 /**
  * renderer.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
+ * The immediate mode painter draws in three passes.
  *
- * The immediate mode painter.
- *
- * It makes three passes. First it clears the whole viewport in screen space.
- * Then it sets the camera transform once and draws every object in world
- * coordinates, and lets the canvas do the conversion. Last it resets to
- * identity and draws the furniture, such as a name label or an error badge, at
- * a constant size in screen space.
+ * First it clears the whole viewport in screen space. Then it sets the camera
+ * transform once and draws every object in world coordinates, and lets the
+ * canvas do the conversion. Last it resets to identity and draws the
+ * furniture, such as a name label or an error badge, at a constant size in
+ * screen space.
  *
  * A selection highlight draws in its own pass after every object. A later
- * object in z order must not cover it.
+ * object in z order does not cover it.
  *
  * The camera transform comes from camera.ts, never from a second copy of the
  * formula written here.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import {
   arcOfEdge,

@@ -1,7 +1,7 @@
 /**
  * handles.test.ts
  *
- * Grabber placement and the absolute resize math.
+ * These tests cover grabber placement and the absolute resize math.
  */
 import { describe, expect, it } from "vitest";
 import type { CameraState, GraphObject } from "../engine/index.ts";

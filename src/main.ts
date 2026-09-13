@@ -1,14 +1,15 @@
 /**
  * main.ts
  *
- * Layer: application. This is the only file that owns the browser. It finds
- * the DOM elements and connects the engine, the renderer and the command line.
- *
  * The state transitions here are pure functions from state to state. That is
- * why a file this size has a full test suite and needs no browser. Keep new
- * logic in a pure transition. Keep the DOM work at the edge.
+ * why a file this size has a full test suite and needs no browser. New logic
+ * belongs in a pure transition, and the DOM work stays at the edge.
  *
  * The in place editor mounts in #stage, not in #panels.
+ *
+ * The file belongs to the application layer, and it is the only file that
+ * owns the browser. It finds the DOM elements and connects the engine, the
+ * renderer and the command line.
  */
 import {
   type CameraState,
@@ -480,7 +481,7 @@ function buildPartRow(
     return found === undefined ? [] : [found];
   };
   const shape = edgeShape(object, index);
-  // The four handle slots are 0 on nearly every vertex, so they stay out of
+  // The four handle slots are 0 on nearly every vertex. They stay out of
   // sight until a handle is what makes the edge a curve.
   const curveSuffixes = shape === "curve" ? VERTEX_PART_SUFFIXES.slice(2) : [["bulge"]];
   const partFocus: PanelPartFocus =
@@ -509,7 +510,7 @@ function describePartPosition(x: Value | undefined, y: Value | undefined): strin
  * The swatch a colour row shows, or nothing.
  *
  * Only a literal gets one. A formula drives its own value, and a swatch that
- * silently replaced a formula is the one gesture the panel must not offer.
+ * silently replaced a formula is the one gesture the panel does not offer.
  */
 function resolveColor(descriptor: SlotDescriptor): PanelRowColor | undefined {
   if (descriptor.format !== "color" || descriptor.kind !== "literal") {

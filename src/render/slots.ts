@@ -1,15 +1,16 @@
 /**
  * slots.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
- *
- * Small readers that pull a number, a string or a boolean out of a slot
- * value. It also holds the fixed sizes of a table cell and a script box.
+ * Small readers pull a number, a string or a boolean out of a slot value. It
+ * also holds the fixed sizes of a table cell and a script box.
  *
  * A slot can hold an error or a value of the wrong type. These readers give a
  * safe default instead. They exist so no drawing file writes the same
  * defensive read again.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import {
   DEFAULT_STROKE_COLOR,

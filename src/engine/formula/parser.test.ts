@@ -1,8 +1,8 @@
 /**
  * parser.test.ts
  *
- * Operator precedence, nested calls, name resolution, and the depth
- * limit. Bad input must give a parse error, never an exception.
+ * These tests cover operator precedence, nested calls, name resolution, and
+ * the depth limit. Bad input gives a parse error, and never an exception.
  */
 import { describe, expect, it } from "vitest";
 import type { AddressableObject } from "../address.ts";

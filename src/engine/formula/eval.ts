@@ -1,15 +1,16 @@
 /**
  * eval.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * AST to value. Stage four of four.
+ * Evaluation turns an AST into a value, as stage four of four.
  *
  * Evaluation is lazy. IF evaluates one branch. AND and OR stop early. So a
  * runtime error in a branch that nothing takes never happens.
  *
  * Compare formula/deps.ts, which is eager and total.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 import type { Address } from "../address.ts";
 import type { BinaryOpNode, FormulaAst, FunctionCallNode, UnaryOpNode } from "./ast.ts";

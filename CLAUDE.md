@@ -37,37 +37,71 @@ These six rules make the design work. Do not break one for convenience.
 4. Update section 5 of `docs/STATUS.md` when the item lands.
 
 ```
-npm test                          # 1955 tests, all must pass
+npm test                          # 2369 tests, all pass
 npm run typecheck                 # both TypeScript configs
 npm run build                     # production build
-npm run prose                     # prose checker, must give exit code 0
+npm run prose                     # prose checker, gives exit code 0
 ```
 
 ## How to write a comment
 
-All prose in this repository follows ASD-STE100 Simplified Technical English.
-The checker enforces it.
+A comment explains the code to a person who reads it for the first time. It
+says what the code is and why it has this shape. It does not give orders to
+whoever edits the file next.
 
-- Keep a sentence to 20 words for an instruction and 25 for a description.
+Eight rules set the register. The checker enforces the ones a machine can
+judge, and a person judges the rest.
+
+1. **Describe the code. Do not direct the reader.** A limit appears as a fact
+   about the code. Write "The file works on plain data alone", not "This file
+   must never touch the DOM".
+2. **Give every constraint its purpose.** A sentence that names a limit
+   carries `so`, `because` or `which keeps` beside it. A rule with no reason
+   is no help in the case that it did not predict.
+3. **Write whole sentences.** Each one needs a subject and a verb. `Layer:
+   engine.` and `Pure logic.` are labels, not sentences.
+4. **State a fact once.** Cut the colourful version when the plain one is
+   there. Cut an adjective that the noun already carries, such as "a stable ID
+   that never changes".
+5. **Use plain words.** "heavily relied upon" beats "load bearing". A domain
+   term with an exact meaning stays.
+6. **Let `never` and `every` describe behaviour, not duty.** "An ID never
+   changes" is a fact about the code. "This file must never import the DOM" is
+   an order to a reader.
+7. **Open with what the file is.** The layer and the import limits come after,
+   each with its reason beside it.
+8. **Connect the sentences.** Where one idea causes the next, write the link.
+
+The mechanics of Simplified Technical English still hold:
+
+- Keep a sentence to 25 words.
 - Use the active voice. Name the actor.
 - Put one idea in one sentence.
 - Do not use a verb in the -ing form.
-- Use `must` for a duty and `can` for an ability. Avoid the four vague
-  modals: `should`, `could`, `would` and `may`.
+- Do not use `must`, or the four vague modals `should`, `could`, `would` and
+  `may`. A comment has no duties to hand out.
 - Do not use a semicolon, a long dash, a contraction, or capitals for emphasis.
 
 A file header answers three questions in about ten lines:
 
 - What does this file do?
-- What layer is it in, and what can it import?
-- What trap must a reader know about?
+- What layer is it in, and what can it import, and why?
+- What surprise waits for a reader who changes it?
 
-Do not write the history of a decision in a comment. Do not quote a section
-number from a document. `docs/STATUS.md` holds the reasons. A comment states a
-fact about the code as it is now.
+Then read the header again and cut it. Ask of each sentence whether the file
+still explains itself without it, and whether a shorter word carries the same
+meaning. Length that survives this second pass has earned its place.
 
-Write a comment only where the code cannot speak for itself. A comment that
-repeats the next line is noise.
+Do not write the history of a decision in a comment. The purpose of the code
+belongs there, because it is still true. The story of how the code reached
+that shape belongs in `docs/STATUS.md`. Do not quote a section number from a
+document.
+
+Write a comment only where the code cannot speak for itself. Read the file as
+if you have never seen it, and ask of each function whether its name and its
+body already answer the question. A comment that repeats the next line is
+noise. A comment that gives the reason behind a choice the code cannot state
+is worth the space.
 
 ## When the spec is silent
 

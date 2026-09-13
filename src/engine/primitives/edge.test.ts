@@ -1,9 +1,10 @@
 /**
  * arc.test.ts
  *
- * The math of one curved edge. The full circle built from two vertices is the
- * test that matters most. It has a known area, length, centroid and box, and
- * every one of them is wrong if a curve degrades into its chord.
+ * These tests cover the math of one curved edge. The full circle built from
+ * two vertices is the test that matters most. It has a known area, length,
+ * centroid and box, and every one of them is wrong if a curve degrades into
+ * its chord.
  */
 import { describe, expect, it } from "vitest";
 import {

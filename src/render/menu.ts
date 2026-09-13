@@ -1,19 +1,20 @@
 /**
  * menu.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
- *
- * The menu a right press opens over a path, and the command line each entry
+ * A right press over a path opens a menu, and the command line each entry
  * stands for.
  *
- * Every entry is a command an operator can also type. The menu writes the line
- * and the usual command path runs it, so the log shows what happened and the
- * journal records it. Nothing here reaches a mutation on its own.
+ * Every entry is a command an operator can also type. The menu writes the
+ * line and the usual command path runs it, so the log shows what happened and
+ * the journal records it. Nothing here reaches a mutation on its own.
  *
- * A vertex offers its own removal. An edge offers its three shapes and one new
- * vertex at the point pressed. The press picks the part, so the menu never asks
- * the operator which one they meant.
+ * A vertex offers its own removal. An edge offers its three shapes and one
+ * new vertex at the point pressed. The press picks the part, so the menu
+ * never asks the operator which one they meant.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 
 import { type CameraState, type GraphObject, POLYLINE_TYPE, type Point } from "../engine/index.ts";

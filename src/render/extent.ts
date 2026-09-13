@@ -1,14 +1,15 @@
 /**
  * extent.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
+ * An extent is the world space box of one object, or of the whole document.
  *
- * The world space box of one object, and of the whole document.
+ * A drawn extent and a clickable extent are one extent. A type with an arm
+ * here becomes clickable. A type with no renderer arm in the same change
+ * becomes an invisible click target.
  *
- * A drawn extent and a clickable extent are one extent. Give a type an arm
- * here and it becomes clickable. Give it a renderer arm in the same change, or
- * it becomes an invisible click target.
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import {
   getSlot,
@@ -40,8 +41,8 @@ export interface WorldExtent {
 }
 
 /**
- * The world box of one object. A type with an arm here becomes clickable.
- * Give it a renderer arm in the same change, or it becomes an invisible target.
+ * The world box of one object. A type with an arm here becomes clickable. A
+ * type with no renderer arm in the same change becomes an invisible target.
  */
 export function objectExtent(object: GraphObject): WorldExtent | undefined {
   switch (object.type) {

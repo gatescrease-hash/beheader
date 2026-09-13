@@ -1,8 +1,8 @@
 /**
  * menu.test.ts
  *
- * The menu a right press opens, and the command line each entry stands for.
- * Every entry must be a line the operator can also type.
+ * These tests cover the menu a right press opens, and the command line each
+ * entry stands for. Every entry is a line the operator can also type.
  */
 import { describe, expect, it } from "vitest";
 import { type CameraState, type GraphObject, HALF_CIRCLE_BULGE, type Slot } from "../engine/index.ts";

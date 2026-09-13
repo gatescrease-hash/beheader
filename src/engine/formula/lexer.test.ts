@@ -1,7 +1,7 @@
 /**
  * lexer.test.ts
  *
- * Tokens. It covers the numeric path segment case.
+ * These tests cover the tokens, and the numeric path segment case.
  */
 import { describe, expect, it } from "vitest";
 import { lex, type Token } from "./lexer.ts";

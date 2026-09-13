@@ -1,15 +1,12 @@
 /**
  * schema.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * The registry of object types declares which slots exist for each type, and
+ * which kind each one has.
  *
- * The registry of object types. For each type it declares which slots exist
- * and which kind each one has.
- *
- * This file is the single source of truth for a slot path. Three sites read it
- * in one mutation pass: edge derivation, and two integrity checks. All three
- * must go through the same resolver. Three sites that resolve a dynamic slot
+ * This file is the single source of truth for a slot path. Three sites read
+ * it in one mutation pass: edge derivation, and two integrity checks. All
+ * three go through the same resolver. Three sites that resolve a dynamic slot
  * family on their own will drift, and no test goes red when they do.
  *
  * A slot group is static or dynamic. A dynamic group resolves per object,
@@ -18,6 +15,10 @@
  *
  * The value and add types are test fixtures from the first phase. Keep them.
  * They are the smallest case that exercises a derived slot.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";
@@ -103,8 +104,9 @@ export type DerivedSlotGroup =
   | { readonly kind: "dynamic"; readonly enumerate: (object: GraphObject) => readonly DerivedSlotSchema[] };
 
 /**
- * The derived slots of one object. A dynamic group resolves against that object.
- * Never read schema.derivedSlots directly. The size of a group depends on the object.
+ * The derived slots of one object. A dynamic group resolves against that
+ * object. Nothing reads schema.derivedSlots directly, because the size of a
+ * group depends on the object.
  */
 export function resolveDerivedSlots(
   object: GraphObject,
@@ -163,7 +165,7 @@ export interface SlotOptionSet {
 }
 
 /**
- * The shape a free value must take. An option set names every value a slot
+ * The shape that a free value takes. An option set names every value a slot
  * accepts. A format names a rule instead, for a slot with too many values to
  * list.
  */
@@ -201,8 +203,9 @@ export function findSlotFormat(type: ObjectType, path: readonly string[]): SlotF
 }
 
 /**
- * The addresses a derived slot reads. This is the only place a dynamic resolver runs.
- * It runs at edge derivation time, never during evaluation. That is what keeps Rule 4 true.
+ * The addresses a derived slot reads. This is the only place a dynamic
+ * resolver runs. It runs at edge derivation time, and never during
+ * evaluation. That is what keeps evaluation clear of the slot set.
  */
 export function derivedSlotDependencyAddresses(
   object: GraphObject,

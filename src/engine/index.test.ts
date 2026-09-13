@@ -3,8 +3,8 @@
  * index.test.ts
  *
  * Proves the public surface is real, not only legal. It builds a document,
- * mutates it, and saves and loads it back. Every name in this file comes
- * from index.ts alone, the way a consumer outside src/engine must import it.
+ * mutates it, and saves and loads it back. Every name in this file comes from
+ * index.ts alone, the way a consumer outside src/engine imports it.
  */
 import { describe, expect, it } from "vitest";
 import * as engineSurface from "./index.ts";
@@ -68,10 +68,11 @@ describe("engine/index.ts — the one public surface", () => {
   });
 
   /**
-   * Every engine file, found by the bundler and not by a list anybody keeps by
-   * hand. A list goes stale the moment somebody adds a file, and that is the
-   * one thing this test exists to catch. The pattern must exclude a test file.
-   * An eager import of one registers its tests inside this file as well.
+   * Every engine file, found by the bundler and not by a list anybody keeps
+   * by hand. A list goes stale the moment somebody adds a file, and that is
+   * the one thing this test exists to catch. The pattern excludes a test
+   * file. An eager import of one registers its tests inside this file as
+   * well.
    */
   const ENGINE_MODULES = import.meta.glob(["./**/*.ts", "!./**/*.test.ts", "!./index.ts"], { eager: true }) as Record<
     string,

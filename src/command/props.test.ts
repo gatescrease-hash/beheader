@@ -1,7 +1,8 @@
 /**
  * props.test.ts
  *
- * Slot descriptors for the panel and for the props command.
+ * These tests cover the slot descriptors for the panel and for the props
+ * command.
  */
 
 import { describe, expect, it } from "vitest";

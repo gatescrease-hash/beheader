@@ -1,7 +1,8 @@
 /**
  * cycles.test.ts
  *
- * Cycle detection. A found cycle must name every slot in it.
+ * These tests cover cycle detection, where a found cycle names every slot in
+ * it.
  */
 
 import { describe, expect, it } from "vitest";

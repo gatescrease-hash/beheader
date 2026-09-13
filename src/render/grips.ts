@@ -1,18 +1,19 @@
 /**
  * grips.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
+ * The grabbers on a selected path each name one part of it.
  *
- * The grabbers on a selected path, and the part each one names.
+ * A vertex grip sits on a vertex and moves it. An edge grip sits halfway
+ * along an edge and bends it. Both appear only on a selected path, so the
+ * first press picks the object and the next one picks a part of it.
  *
- * A vertex grip sits on a vertex and moves it. An edge grip sits halfway along
- * an edge and bends it. Both appear only on a selected path, so the first
- * press picks the object and the next one picks a part of it.
+ * A grip reports whether the slots behind it are literal. A grip that a
+ * formula drives draws hollow. So the operator sees which points hold still
+ * before a drag tells them.
  *
- * A grip reports whether the slots behind it are literal. A grip that a formula
- * drives draws hollow. So the operator sees which points hold still before a
- * drag tells them.
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 
 import {
@@ -32,7 +33,10 @@ import {
 } from "../engine/index.ts";
 import { worldToScreen, type ScreenPoint } from "./camera.ts";
 
-/** One part of a path. The index of an edge is the index of the vertex it leaves. */
+/**
+ * A grip names one part of a path. The index of an edge is the index of the
+ * vertex it leaves.
+ */
 export type PathGrip =
   | { readonly kind: "vertex"; readonly index: number }
   | { readonly kind: "edge"; readonly index: number };

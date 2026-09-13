@@ -1,9 +1,9 @@
 /**
  * address.test.ts
  *
- * Name rules, the address parser, the address formatter, and the A1 cell
- * helpers.
- * A round trip through parse and format must give back the same address.
+ * These tests cover name rules, the address parser, the address formatter,
+ * and the A1 cell helpers. A round trip through parse and format gives back
+ * the same address.
  */
 import { describe, expect, it } from "vitest";
 import {

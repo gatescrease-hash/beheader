@@ -1,7 +1,8 @@
 /**
  * editor.test.ts
  *
- * Editor placement and style for a text box and a table cell.
+ * These tests cover editor placement and style for a text box and a table
+ * cell.
  */
 import { describe, expect, it } from "vitest";
 import type {

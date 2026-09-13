@@ -1,16 +1,18 @@
 /**
  * cycles.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
+ * Cycle detection walks the whole edge set, depth first.
  *
- * Depth first cycle detection over the whole edge set.
- *
- * A cycle is an error, never a problem to solve. The result names every slot
- * in the cycle, because that message is the whole debug story for the
+ * A cycle is an error, and never a problem to solve. The result names every
+ * slot in the cycle, because that message is the whole debug story for the
  * operator.
  *
- * The search runs from scratch on every mutation. That is Rule 5 at work.
+ * The search runs from scratch on every mutation, because the simplest
+ * correct code matters more here than speed.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 
 import { addressKey, type Edge } from "./edge.ts";

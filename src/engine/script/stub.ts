@@ -1,22 +1,23 @@
 /**
  * stub.ts
  *
- * Layer: engine. Pure logic. It imports from engine only. It must never
- * touch the DOM, a window, a document, a canvas or the render layer.
- *
- * The script node. It is a real graph citizen with a fake body.
+ * The script node is a real graph citizen with a fake body.
  *
  * A port is an ordinary slot. An in.<port> slot is a formula slot, which is a
- * binding to some upstream address. An out.<port> slot is a derived slot whose
- * schema names every in.* slot of the node. The source slot is a literal that
- * nothing reads, so an edit to it triggers no recompute.
+ * binding to some upstream address. An out.<port> slot is a derived slot
+ * whose schema names every in.* slot of the node. The source slot is a
+ * literal that nothing reads, so an edit to it triggers no recompute.
  *
- * A port name and a port value are two operations that must land in one batch.
- * The moment an out.* port exists, the integrity check needs every address it
+ * A port name and a port value are two operations that land in one batch. The
+ * moment an out.* port exists, the integrity check needs every address it
  * declares to be a real slot.
  *
  * evaluateScriptOutput returns the placeholder value. When Python arrives,
  * only that body changes.
+ *
+ * The file belongs to the engine layer and works on plain data alone. It does
+ * not use the DOM, a window or a canvas. That keeps it testable without a
+ * browser, and ready for a port to Rust.
  */
 import type { Address } from "../address.ts";
 import { isErrorValue, type GraphObject, type Value } from "../graph/node.ts";

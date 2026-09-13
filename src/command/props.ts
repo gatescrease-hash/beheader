@@ -1,13 +1,13 @@
 /**
  * props.ts
  *
- * Layer: command. It turns a typed line into mutation calls. It imports from
- * engine and from its own layer.
+ * Slot descriptors serve both the props command and the properties panel.
  *
- * Slot descriptors for the props command and for the properties panel.
+ * Both surfaces read one list, so they can never disagree about what an
+ * object has.
  *
- * Both surfaces read one list, so they can never disagree about what an object
- * has.
+ * The file belongs to the command layer, which turns a typed line into
+ * mutation calls. It imports from the engine and from its own layer.
  */
 import {
   findSlotFormat,
@@ -36,7 +36,10 @@ export interface SlotDescriptor {
   readonly synthetic?: true;
 
   readonly options?: SlotOptionSet;
-  /** The shape a free value must take. A colour slot opens a picker in the panel. */
+  /**
+   * The shape that a free value takes. A colour slot opens a picker in the
+   * panel.
+   */
   readonly format?: SlotFormat;
 }
 

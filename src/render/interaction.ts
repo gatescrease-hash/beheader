@@ -1,36 +1,37 @@
 /**
  * interaction.ts
  *
- * Layer: render. It reads engine state and calls mutations. It does nothing
- * else across that line. The engine must never import this file.
- *
- * Mouse state to mutation calls.
+ * This layer turns mouse state into mutation calls.
  *
  * A drag writes each component on its own. A literal component moves. A
  * component that a formula drives stays put, and the caller shows a notice
  * that does not block. So an object with a bound x slides up and down only,
- * and an axis constraint falls out for free.
+ * and an axis constraint follows with no extra code.
  *
  * An object with an origin drags by that origin. A path has none, so it drags
  * by every vertex, under the same per component rule. A vertex a formula
- * drives stays where it is while the rest move. That is how a road holds on to
- * the intersections its ends read.
+ * drives stays where it is while the rest move. That is how a road holds on
+ * to the intersections its ends read.
  *
  * A shift drag on a path edge moves only the two vertices of that edge. The
  * gesture picks its vertices once, at the moment of the press, so the set
  * never changes under the pointer.
  *
- * A selected path grows grips. A press on a vertex grip drags that one vertex.
- * A press on an edge grip bends that edge, and writes vertex.N.bulge. A bend is
- * absolute, read from the ends the edge has now, the same way a resize reads
- * the extent it started with. Both gestures also set the focus, which is the
- * one part of a path the panel expands.
+ * A selected path grows grips. A press on a vertex grip drags that one
+ * vertex. A press on an edge grip bends that edge, and writes vertex.N.bulge.
+ * A bend is absolute, read from the ends the edge has now, the same way a
+ * resize reads the extent it started with. Both gestures also set the focus,
+ * which is the one part of a path the panel expands.
  *
  * A grip answers a plain press only. Shift holds the two meanings it already
  * had, so a shift press on the middle of an edge still moves that segment.
  *
  * A drag never writes object state. It calls the mutation API like everything
  * else.
+ *
+ * The file belongs to the render layer. It reads engine state and calls
+ * mutations, and it crosses that line for nothing else. The engine holds no
+ * import of this file, which keeps the drawing code replaceable.
  */
 import {
   type Address,
@@ -135,12 +136,10 @@ export function pointerDown(
 
   // A grip belongs to a path the operator already selected, so it takes the
   // press ahead of the hit test. Without that, a press near an edge reselects
-  // the object, and the grip never answers.
-  //
-  // Shift keeps both meanings it already had. An edge grip sits at the middle
-  // of an edge, which is where a shift press grabs that segment, so the two
-  // gestures want the same pixel. A plain press bends the edge. A shift press
-  // moves it.
+  // the object, and the grip never answers. Shift keeps both meanings it
+  // already had. An edge grip sits at the middle of an edge, which is where a
+  // shift press grabs that segment. The two gestures want the same pixel. A
+  // plain press bends the edge. A shift press moves it.
   const grabbedGrip = additive ? undefined : gripGestureAt(state, screenPoint, objects, camera);
   if (grabbedGrip !== undefined) {
     return grabbedGrip;
@@ -595,7 +594,10 @@ interface DragPlan {
   readonly notices: readonly string[];
 }
 
-/** The one planner. The vertices a press picked decide which slots it writes. */
+/**
+ * This is the one planner. The vertices a press picked decide which slots it
+ * writes.
+ */
 function planDrag(
   object: GraphObject,
   objects: readonly GraphObject[],
