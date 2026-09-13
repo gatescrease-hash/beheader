@@ -1,11 +1,17 @@
 /**
  * camera.ts
  *
- * The camera converts world to screen and screen to world, and it holds pan,
- * zoom and the clamps.
+ * Converts between world coordinates and screen coordinates, and holds the
+ * pan, the zoom, and the limits on both.
  *
- * This is the only file that knows about screen space. Every other file reads
- * the transform from here, because a second copy of the formula drifts.
+ * This is the only file that knows the transform. Every other file calls
+ * worldToScreen or screenToWorld rather than multiplying by the zoom itself,
+ * because a second copy of the formula drifts out of step the first time the
+ * transform changes.
+ *
+ * zoomAtScreenPoint keeps the world point under the cursor pinned to the
+ * cursor while the zoom changes, so a wheel zoom is anchored to the pointer
+ * rather than to the origin.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a

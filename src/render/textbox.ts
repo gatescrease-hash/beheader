@@ -1,11 +1,16 @@
 /**
  * textbox.ts
  *
- * One rule decides how big a text box is, and this file holds it.
+ * The single rule for how big a text box is.
  *
- * Three files read this rule. A fourth answer to the same question does not
- * belong here. A fixed width and a measured width can disagree, and this file
- * decides which one wins.
+ * Three files read this rule: the renderer that draws the box, the measurer
+ * that sizes the text inside it, and main.ts when it places the editor over
+ * it. A fourth answer to the same question does not belong anywhere, because a
+ * text box that draws at one size and measures at another puts the caret in
+ * the wrong place.
+ *
+ * A text object can carry a fixed width or take its width from the text. This
+ * file decides which one wins when both are present.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a

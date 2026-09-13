@@ -1,10 +1,8 @@
 /**
  * panel.ts
  *
- * A properties panel goes beside its object, and this file decides where.
- *
- * It decides placement and nothing else. main.ts builds the rows and owns the
- * DOM.
+ * Works out where a properties panel sits next to its object, and nothing
+ * else. main.ts builds the rows inside it and owns the DOM.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a

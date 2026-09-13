@@ -1,19 +1,25 @@
 /**
  * renderer.ts
  *
- * The immediate mode painter draws in three passes.
+ * The immediate mode painter redraws everything every frame, in three passes.
  *
- * First it clears the whole viewport in screen space. Then it sets the camera
- * transform once and draws every object in world coordinates, and lets the
- * canvas do the conversion. Last it resets to identity and draws the
- * furniture, such as a name label or an error badge, at a constant size in
- * screen space.
+ * The first pass clears the viewport in screen space. The second sets the
+ * camera transform once and draws every object in world coordinates, letting
+ * the canvas do the conversion. The third resets to the identity transform and
+ * draws the furniture, such as a name label or an error badge, so those stay
+ * one size at every zoom.
  *
- * A selection highlight draws in its own pass after every object. A later
- * object in z order does not cover it.
+ * A selection highlight draws in its own pass after all the objects, so an
+ * object later in z order cannot paint over it.
  *
- * The camera transform comes from camera.ts, never from a second copy of the
- * formula written here.
+ * Every colour is written twice: the default first, then whatever the style
+ * slot holds. A canvas silently keeps its previous colour when it cannot parse
+ * the one it is given, so a single write would paint one shape in the colour
+ * of the shape before it. Writing the default first makes that failure fall
+ * back to the default instead.
+ *
+ * The camera transform comes from camera.ts. There is no second copy of the
+ * formula in this file.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a

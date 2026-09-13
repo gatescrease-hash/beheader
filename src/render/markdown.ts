@@ -1,12 +1,13 @@
 /**
  * markdown.ts
  *
- * The markdown lite parser covers bold, italic, code, a heading at levels one
- * to three, a list item and a paragraph break. It covers nothing else.
+ * A very small markdown parser. It handles bold, italic, code, a heading at
+ * levels one to three, a list item and a paragraph break, and nothing else.
  *
- * Everything depends on the rule for which asterisk opens a span and which
- * one closes it. A simpler version brings back a bug that thirty green tests
- * missed.
+ * The rule for which asterisk opens a span and which one closes it carries the
+ * whole parser. An earlier and simpler version of that rule shipped a real bug
+ * that thirty passing tests did not catch, so treat a simplification here as
+ * something to test hard rather than as tidying.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a

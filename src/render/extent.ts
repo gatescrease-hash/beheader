@@ -1,11 +1,14 @@
 /**
  * extent.ts
  *
- * An extent is the world space box of one object, or of the whole document.
+ * An extent is the world space box around one object, or around the whole
+ * document.
  *
- * A drawn extent and a clickable extent are one extent. A type with an arm
- * here becomes clickable. A type with no renderer arm in the same change
- * becomes an invisible click target.
+ * The drawn extent and the clickable extent are the same extent. Adding an arm
+ * to extentOfObject therefore makes a type clickable straight away, and a type
+ * that gains no matching arm in renderer.ts in the same change becomes an
+ * invisible click target: it swallows presses over what looks like empty
+ * canvas.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a

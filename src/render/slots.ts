@@ -1,12 +1,13 @@
 /**
  * slots.ts
  *
- * Small readers pull a number, a string or a boolean out of a slot value. It
- * also holds the fixed sizes of a table cell and a script box.
+ * Small readers that pull a number, a string or a boolean out of a slot value,
+ * plus the fixed sizes of a table cell and a script box.
  *
- * A slot can hold an error or a value of the wrong type. These readers give a
- * safe default instead. They exist so no drawing file writes the same
- * defensive read again.
+ * A slot can hold an error value, or a value of a type the caller did not
+ * expect, because a formula decides what ends up in it. These readers return a
+ * safe default in either case. They exist so that no drawing file writes the
+ * same defensive read a second time.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a

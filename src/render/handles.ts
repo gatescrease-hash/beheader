@@ -1,10 +1,17 @@
 /**
  * handles.ts
  *
- * The resize grabbers on a selected object drive the box math here.
+ * The resize grabbers around a selected object, and the box arithmetic that a
+ * drag on one of them performs.
  *
- * A resize is absolute. It reads the extent that the drag started with. It is
- * never a sum of small steps, because a sum drifts.
+ * A resize is absolute rather than incremental. resizeBox reads the extent the
+ * drag started from and works out the new box from the total pointer offset,
+ * so a drag that wanders away and comes back lands exactly where it began.
+ * Adding up small per frame deltas instead would accumulate rounding error
+ * across a long drag.
+ *
+ * MIN_RESIZE_BOX_SIZE stops a box collapsing through zero and turning inside
+ * out.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a
