@@ -1,8 +1,8 @@
 /**
  * menu.ts
  *
- * This file builds the menu a right press opens over a path, and the command
- * line each entry stands for.
+ * A right press over a path opens a menu, and the command line each entry
+ * stands for.
  *
  * Every entry is a command an operator can also type. The menu writes the
  * line and the usual command path runs it, so the log shows what happened and

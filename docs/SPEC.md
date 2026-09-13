@@ -424,12 +424,12 @@ Every shape carries `style.strokeColor`, `style.strokeWidth` and
 a table cell can colour a shape. A `fillColor` of null paints no fill, which is
 what a new shape carries. Only a closed shape fills.
 
-An edge is straight, an arc, or a cubic bezier. Two handles make it a cubic:
-one pulls out of the vertex it leaves, the other pulls into the vertex it
-reaches, and each is an offset from its own vertex. With both handles at 0, a
-bulge makes the edge an arc. A bulge is the tangent of a quarter of the
-included angle, the number a DXF file carries on a vertex record. Zero makes a
-straight edge, 1 makes a half circle, and the sign gives the direction.
+An edge is straight, an arc, or a cubic bezier. Two handles make it a cubic.
+One pulls out of the vertex it leaves, and the other pulls into the vertex it
+reaches. Each is an offset from its own vertex. With both handles at 0, a bulge
+makes the edge an arc. A bulge is the tangent of a quarter of the included
+angle, the number a DXF file carries on a vertex record. Zero makes a straight
+edge, 1 makes a half circle, and the sign gives the direction.
 
 So a curve needs no extra vertex, and `vertices` holds only the points an
 operator placed. Nothing anywhere cuts a curve into sample points.
@@ -646,8 +646,8 @@ from the two intersections that its endpoints read.
 
 **A selected path grows grips.** A square sits on each vertex and a diamond at
 the middle of each edge. A grip answers a plain press, and only on a path the
-operator already selected, so the first press picks the object and the next one
-picks a part of it.
+operator already selected. So the first press picks the object, and the next
+one picks a part of it.
 
 | Press | What it moves |
 | --- | --- |
@@ -659,7 +659,7 @@ A bend is absolute. It writes the bulge that puts the middle of the edge under
 the pointer, read from the ends the edge holds now. The sagitta over the half
 chord is the tangent of a quarter of the sweep, so one drag gives an exact
 bulge. A drag on a grip follows the same per component rule as every other
-drag, so a vertex or a bulge a formula drives holds still and shows a notice.
+drag. So a vertex or a bulge a formula drives holds still, and shows a notice.
 
 **A grip says whether a formula drives it.** A free grip is white inside and a
 held one is grey. So the operator sees which points hold still before a drag
@@ -700,7 +700,7 @@ the same focus a grip does, so the canvas and the panel always agree.
 
 **The chip names the shape of an edge.** A straight edge, an arc from a bulge,
 or a cubic from a handle. Nothing else in the interface says which of the five
-slots behind an edge is live, so a handle of half a unit turns an edge into a
+slots behind an edge is live. So a handle of half a unit turns an edge into a
 curve that looks straight and reads as straight. The four handle slots stay out
 of sight until a handle is what makes the edge a curve. Then they appear, and
 the operator can put them back to 0.
@@ -716,7 +716,7 @@ vertex at the point pressed.
 | An edge | `straight`, `arc`, `curve`, `add a vertex here` |
 
 **Every entry is a command line the operator can also type.** The menu writes
-the line and the usual command path runs it, so the log shows what happened,
+the line, and the usual command path runs it. So the log shows what happened,
 the journal records it, and a refusal reads the same either way. The menu
 reaches no mutation of its own.
 
@@ -735,7 +735,7 @@ an edge when a formula drives one of the five.
 
 **A colour slot takes a hex colour.** `#rgb`, `#rrggbb` or `#rrggbbaa`, or the
 word `none` for no colour at all. A canvas quietly ignores a colour string it
-cannot read, and paints the colour of the shape before it, so a wrong colour is
+cannot read, and paints the colour of the shape before it. So a wrong colour is
 invisible rather than loud. The command line refuses one instead, and names the
 form it takes. Hex is also what a colour picker gives back, so the typed form
 and the picked form agree exactly.
@@ -750,11 +750,11 @@ The vertex list is the one part of a panel that scrolls, so a long path cannot
 push the derived slots off the screen.
 
 **Shift has two meanings.** Shift adds an object to the selection, or takes it
-out again. Over an edge of a path it means something else: it grabs that
+out again. Over an edge of a path it means something else. It grabs that
 segment, and the drag moves only the two vertices at the ends of that edge. A
 press that grabs a segment selects the path outright, because nothing can drag
 an object that the same press has just deselected. A shift press inside a
-filled path reaches no edge, so it adds to the selection and drags the whole
+filled path reaches no edge. So it adds to the selection and drags the whole
 path, the way it does everywhere else. The gesture picks its vertices at the
 press and holds them, so the set never changes under the pointer.
 
@@ -767,8 +767,8 @@ deep clones the document. If that becomes slow to watch, throttle drag mutations
 to animation frames and draw a light preview between them. Do not work around it
 by a write outside the mutation API.
 
-**Feedback.** Show a selection highlight, an error badge on an object that holds
-an error value, and a small mark on a slot that a formula drives.
+**Feedback.** Show a selection highlight, and an error badge on an object that
+holds an error value. Show a small mark on a slot that a formula drives.
 
 ---
 
@@ -826,7 +826,7 @@ takes a point, so the operator can draw with the pointer in place of typed
 coordinates. Escape drops the whole half finished command.
 
 **One prompt step can repeat.** `polyline` uses it. The prompt asks for a start
-point, and then asks for one more point at a time until the operator ends it
+point. It then asks for one more point at a time, until the operator ends it
 with an empty line. It offers a word at each step, in the AutoCAD manner, and
 takes the whole word or its first letter:
 
@@ -841,7 +841,7 @@ The prompt offers a word only where it applies. `close` waits until the path
 holds two points, and the first prompt of all offers no word at all.
 
 **The canvas draws the path as it grows.** A dashed line joins the points the
-operator placed, a square marks each one, and a rubber band runs from the last
+operator placed, and a square marks each one. A rubber band runs from the last
 point to the pointer. Arc mode bends that band, so the operator sees the curve
 before the click that commits it.
 
@@ -900,5 +900,5 @@ Prefer, in this order:
 3. Whatever protects Rule 6.
 4. Whatever is simplest to delete later.
 
-The renderer is short lived. A GPU renderer replaces it later. The engine is
-meant to survive and to become Rust. Invest to match.
+The renderer is short lived. A GPU renderer replaces it later. The engine has
+to survive, and to become Rust. Invest to match.

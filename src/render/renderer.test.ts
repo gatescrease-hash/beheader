@@ -1,7 +1,7 @@
 /**
  * renderer.test.ts
  *
- * These tests drive the three passes, against a canvas stub that records each
+ * These tests cover the three passes, against a canvas stub that records each
  * call. It asserts the call order, not pixels.
  */
 

@@ -1,7 +1,8 @@
 /**
  * editor.ts
  *
- * This file decides where an in place editor goes, and what it looks like.
+ * The in place editor needs a position and a look, and this file decides
+ * both.
  *
  * It answers the placement question for a text box and for a table cell.
  * main.ts mounts the real element.

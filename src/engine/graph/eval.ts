@@ -1,8 +1,7 @@
 /**
  * eval.ts
  *
- * This file runs the topological pass. It sorts every slot and evaluates each
- * one.
+ * The topological pass sorts every slot and evaluates each one.
  *
  * A literal returns its stored value. A formula evaluates its AST. A derived
  * slot calls the compute function that its schema declares. All three kinds

@@ -1,7 +1,7 @@
 /**
  * panel.ts
  *
- * This file decides where a properties panel goes beside its object.
+ * A properties panel goes beside its object, and this file decides where.
  *
  * Placement only. main.ts builds the rows and owns the DOM.
  *

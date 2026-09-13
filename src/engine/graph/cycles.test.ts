@@ -1,7 +1,7 @@
 /**
  * cycles.test.ts
  *
- * This suite covers cycle detection, where a found cycle names every slot in
+ * These tests cover cycle detection, where a found cycle names every slot in
  * it.
  */
 

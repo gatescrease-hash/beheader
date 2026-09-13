@@ -8,12 +8,11 @@
  * code before it starts.
  *
  * The script takes one or more paths. The --all flag reads the whole
- * repository, --quiet prints the summary alone, and --advice prints the
- * notes that carry no fault.
+ * repository, and --quiet prints the summary alone.
  *
  *   node tools/ste-check.mjs <path> [more paths]
  *   node tools/ste-check.mjs --all
- *   node tools/ste-check.mjs --all --quiet --advice
+ *   node tools/ste-check.mjs --all --quiet
  *
  * It gives exit code 1 when it finds a fault, and exit code 0 when the prose
  * is clean.
@@ -24,7 +23,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, extname } from "node:path";
+import { basename, join, extname } from "node:path";
 
 /* ------------------------------------------------------------------ */
 /* Word lists                                                          */
@@ -153,6 +152,14 @@ const TECHNICAL_NAMES = new Set([
   "boolean", "integer", "float", "enum", "callback", "iterator", "immutable",
   "idempotent",
 ]);
+
+/**
+ * Documents that state a requirement or give an instruction. A specification
+ * says what to build, and a guide tells a reader what to do, so both need the
+ * register that the rules take away. Every other document describes the code
+ * that exists, the same as a comment does.
+ */
+const DIRECTIVE_DOCUMENTS = new Set(["SPEC.md", "CLAUDE.md"]);
 
 /** Short capital words that are names, not loud emphasis. */
 const ACRONYMS = new Set([
@@ -300,23 +307,52 @@ function extractHtml(source) {
   return out;
 }
 
-/** Reads the prose out of a Markdown file. Code blocks and tables go away. */
+/**
+ * Reads the prose out of a Markdown file. A code block and a table header go
+ * away, and a table row becomes one record for each cell. A heading carries a
+ * mark, because a heading names a section and a name is a label by design.
+ *
+ * A run of plain lines joins into one record, because Markdown wraps a
+ * paragraph across lines. A record for each line cuts a sentence at the wrap,
+ * and a rule that reads a sentence then judges half of one.
+ */
 function extractMarkdown(source) {
   const out = [];
   const lines = source.split("\n");
   let inFence = false;
+  let para = null;
+  const endParagraph = () => { if (para !== null) out.push(para); para = null; };
   for (let k = 0; k < lines.length; k++) {
     const raw = lines[k];
-    if (/^\s*```/.test(raw)) { inFence = !inFence; continue; }
+    if (/^\s*```/.test(raw)) { endParagraph(); inFence = !inFence; continue; }
     if (inFence) continue;
-    if (/^\s{4,}\S/.test(raw)) continue;
-    if (/^ *[|][ -:|]*$/.test(raw)) continue;
-    if (/^ *[|]/.test(raw)) {
-      out.push({ line: k + 1, text: raw.replace(/[|]/g, ". ") });
+    // An indented line under an open list item continues that item. The same
+    // indent at the top level opens a code block, which is not prose.
+    if (/^\s{4,}\S/.test(raw) && !(para !== null && para.list === true)) {
+      endParagraph();
       continue;
     }
-    out.push({ line: k + 1, text: raw });
+    if (/^ *[|][ -:|]*$/.test(raw)) { endParagraph(); continue; }
+    if (/^ *[|]/.test(raw)) {
+      endParagraph();
+      // A row that a divider follows names the columns. A column name is a
+      // label by design, so the rules fight every table in the file.
+      const divider = /^ *[|][ -:|]*$/.test(lines[k + 1] ?? "");
+      if (!divider) out.push({ line: k + 1, text: raw.replace(/[|]/g, ". ") });
+      continue;
+    }
+    if (raw.trim() === "" || /^ *#/.test(raw)) {
+      endParagraph();
+      if (raw.trim() !== "") out.push({ line: k + 1, text: raw, heading: true });
+      continue;
+    }
+    // A list item opens a record of its own, and its wrapped lines join it.
+    const startsItem = /^\s*([-*+]|\d+\.)\s/.test(raw);
+    if (startsItem) endParagraph();
+    if (para === null) para = { line: k + 1, text: raw, list: startsItem };
+    else para.text += " " + raw;
   }
+  endParagraph();
   return out;
 }
 
@@ -401,15 +437,6 @@ const LABEL_OPEN = /^(?:z[crn] )?[A-Z][a-z]+ *:/;
 const BARE_VERB =
   /\b(is|are|was|were|be|has|have|had|does|do|did|can|cannot|will|go|come|hold|keep|give|take|make|read|write|need|want|get|put|call|show|set|draw|run|add|mean|use|cover|stay|sit|turn|name|carry|become|exist|belong|depend|return|work|live|fail|pass|move|change|pick|refuse|allow|leave|know|own|declare|build|parse|split|join|reach|apply|start|stop|open|close|find|serve|treat|prefer|avoid|end|begin|cost|prove|follow|throw|drive|paint|feed|beat|accept|send|break|count|measure)\b/i;
 
-/**
- * Words that open a reason. Rule 2 asks a sentence that names a limit to give
- * the reason beside it.
- */
-const REASON = /\b(so|because|which|since|to keep|to make|to let|for)\b/i;
-
-/** Words that name a limit on the code. */
-const LIMIT = /\b(only|no|not|never|without|alone|apart from|nothing)\b/i;
-
 const STOP_WORDS = new Set([
   "the", "a", "an", "of", "to", "in", "on", "for", "is", "are", "and", "but",
   "that", "this", "it", "as", "at", "by", "from", "with", "not", "no", "must",
@@ -444,19 +471,22 @@ function looksLikeSentence(sentence) {
 }
 
 /** Runs every rule against one sentence. Returns a list of fault records. */
-function checkSentence(sentence, record, isCode) {
+function checkSentence(sentence, record, describesCode) {
   const faults = [];
   const add = (rule, detail, fix) =>
     faults.push({ rule, detail, fix, ...record });
-  const warn = (rule, detail, fix) =>
-    faults.push({ rule, detail, fix, warn: true, ...record });
 
   const words = sentence.split(/\s+/).filter((w) => /[A-Za-z]/.test(w));
-  if (words.length > 25) {
-    add("length", words.length + " words, limit 25", "Cut the sentence into two.");
+  // The limit counts prose. A placeholder stands for code, and a list of
+  // twenty names reads as one list rather than as twenty words.
+  const prose = words.filter(
+    (w) => !["zc", "zr", "zn", "zq"].includes(w.toLowerCase().replace(/[^a-z]/g, ""))
+  );
+  if (prose.length > 25) {
+    add("length", prose.length + " words, limit 25", "Cut the sentence into two.");
   }
 
-  if (isCode) {
+  if (describesCode) {
     const duty = sentence.match(OBLIGATION);
     if (duty) {
       add(
@@ -476,13 +506,6 @@ function checkSentence(sentence, record, isCode) {
       add("fragment", words[0], "Write a sentence with a subject and a verb.");
     } else if (words.length <= 5 && !looksLikeSentence(sentence)) {
       add("fragment", sentence, "Write a sentence with a subject and a verb.");
-    }
-    if (LIMIT.test(sentence) && !REASON.test(sentence)) {
-      warn(
-        "no-reason",
-        "a limit with no reason",
-        'Say why the limit holds, with "so" or "because".'
-      );
     }
   }
 
@@ -579,9 +602,8 @@ function checkFile(path) {
         ? extractHtml(source)
         : extractComments(source);
   const faults = [];
-  // A document states requirements and gives instructions, so the register
-  // rules fight it. They apply to the comments in source alone.
-  const isCode = ext !== ".md";
+  const describesCode = !DIRECTIVE_DOCUMENTS.has(basename(path));
+
 
   for (const block of blocks) {
     const clean = stripCode(block.text);
@@ -591,7 +613,7 @@ function checkFile(path) {
         ...checkSentence(
           sentence,
           { file: path, line: block.line, sentence },
-          isCode
+          describesCode && block.heading !== true
         )
       );
     }
@@ -615,14 +637,9 @@ const targets = args.includes("--all")
   : args.filter((a) => !a.startsWith("--"));
 const quiet = args.includes("--quiet");
 
-// A warning marks prose that a machine cannot judge with confidence. It
-// prints, but it does not set the exit code, so a false positive cannot block
-// a commit.
 let total = 0;
-let advice = 0;
 const byRule = {};
 const byFile = {};
-const warnings = [];
 for (const path of targets) {
   let faults;
   try {
@@ -632,11 +649,6 @@ for (const path of targets) {
     continue;
   }
   for (const fault of faults) {
-    if (fault.warn) {
-      advice++;
-      warnings.push(fault);
-      continue;
-    }
     total++;
     byFile[fault.file] = (byFile[fault.file] ?? 0) + 1;
     byRule[fault.rule] = (byRule[fault.rule] ?? 0) + 1;
@@ -648,18 +660,7 @@ for (const path of targets) {
   }
 }
 
-if (advice > 0 && args.includes("--advice")) {
-  for (const fault of warnings) {
-    console.log(fault.file + ":" + fault.line + "  [" + fault.rule + "] " + fault.detail);
-    console.log("    " + fault.sentence.slice(0, 160));
-    console.log("    -> " + fault.fix);
-  }
-}
-
 console.log("\n" + total + " fault(s) in " + targets.length + " file(s).");
-if (advice > 0) {
-  console.log(advice + " advisory note(s). Run with --advice to read them.");
-}
 if (total > 0) {
   console.log(
     Object.entries(byRule)

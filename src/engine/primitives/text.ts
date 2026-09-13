@@ -1,8 +1,8 @@
 /**
  * text.ts
  *
- * This file holds the text primitive: the block tree parser, the dependency
- * walker over that tree, and the three compute functions.
+ * The text primitive holds the block tree parser, the dependency walker over
+ * that tree, and the three compute functions.
  *
  * Text is literal by default. {= expression } inserts a value. {? condition }
  * ... {:} ... {?} makes a conditional block, and blocks nest.

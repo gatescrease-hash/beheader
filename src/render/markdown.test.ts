@@ -1,7 +1,7 @@
 /**
  * markdown.test.ts
  *
- * This suite covers the markdown lite parser, and the rule for which asterisk
+ * These tests cover the markdown lite parser, and the rule for which asterisk
  * opens an emphasis span and which one closes it.
  */
 import { describe, expect, it } from "vitest";

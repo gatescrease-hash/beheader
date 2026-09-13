@@ -1,8 +1,7 @@
 /**
  * handles.ts
  *
- * This file places the resize grabbers on a selected object, and holds the
- * box math they drive.
+ * The resize grabbers on a selected object drive the box math here.
  *
  * A resize is absolute. It reads the extent that the drag started with. It is
  * never a sum of small steps, because a sum drifts.

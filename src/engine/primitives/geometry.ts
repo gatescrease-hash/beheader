@@ -1,11 +1,11 @@
 /**
  * geometry.ts
  *
- * This file holds the vertex math for the presets, and it derives centroid,
- * area, length and bounds.
+ * The vertex math for the presets derives centroid, area, length and bounds.
  *
  * A preset has one derived vertices slot, not a slot for each vertex. So a
- * change to sides changes a value and not the slot set, and Rule 4 holds.
+ * change to sides changes a value and not the slot set, which is what
+ * evaluation needs.
  *
  * A circle has no vertices slot. Its area, length, centroid and bounds each
  * have a closed form. Explode turns it into two vertices and two bulges of 1,
@@ -109,10 +109,11 @@ export function vertexYPath(index: number): readonly string[] {
 
 /**
  * The curvature of the edge that leaves this vertex, as a DXF file states it.
- * A DXF vertex record carries the bulge of the edge after it, and so does this
- * one. So a path with N vertices carries N bulges, and the last one belongs to
- * the edge home to vertex 0. That edge draws only when closed is true, and the
- * slot exists at every value of closed, which keeps Rule 4 safe.
+ * A DXF vertex record carries the bulge of the edge after it, and so does
+ * this one. So a path with N vertices carries N bulges, and the last one
+ * belongs to the edge home to vertex 0. That edge draws only when closed is
+ * true, and the slot exists at every value of closed. So evaluation changes a
+ * value and never the slot set.
  */
 export function vertexBulgePath(index: number): readonly string[] {
   return [VERTEX_PATH_PREFIX, String(index), "bulge"];

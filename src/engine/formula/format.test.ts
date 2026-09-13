@@ -1,7 +1,7 @@
 /**
  * format.test.ts
  *
- * This suite covers the way an AST turns back into text, where a renamed
+ * These tests cover the way an AST turns back into text, where a renamed
  * object formats under its new name.
  */
 import { describe, expect, it } from "vitest";

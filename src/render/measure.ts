@@ -1,8 +1,7 @@
 /**
  * measure.ts
  *
- * This file holds the real Canvas2D TextMeasurer, and layOutText, which
- * breaks lines.
+ * The real Canvas2D TextMeasurer comes with layOutText, which breaks lines.
  *
  * There are two measurers here and they are not interchangeable. The engine
  * one honours markup. The overlay one does not. The wrong one gives a size

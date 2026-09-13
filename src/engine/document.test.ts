@@ -1,7 +1,7 @@
 /**
  * document.test.ts
  *
- * These tests drive the save and load round trip. A document comes back the
+ * These tests cover the save and load round trip. A document comes back the
  * same. A derived value never appears in the file.
  */
 import { describe, expect, it } from "vitest";

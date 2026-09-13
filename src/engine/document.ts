@@ -1,8 +1,7 @@
 /**
  * document.ts
  *
- * This file defines the versioned JSON document format, and it holds save and
- * load.
+ * Save and load convert a document to versioned JSON, and back.
  *
  * The file never stores a derived value. A full evaluation pass on load makes
  * them again. So a new derived slot does not break an old saved file.

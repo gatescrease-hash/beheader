@@ -1,9 +1,8 @@
 /**
  * slots.ts
  *
- * This file holds small readers that pull a number, a string or a boolean out
- * of a slot value. It also holds the fixed sizes of a table cell and a script
- * box.
+ * Small readers pull a number, a string or a boolean out of a slot value. It
+ * also holds the fixed sizes of a table cell and a script box.
  *
  * A slot can hold an error or a value of the wrong type. These readers give a
  * safe default instead. They exist so no drawing file writes the same

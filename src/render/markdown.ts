@@ -1,9 +1,8 @@
 /**
  * markdown.ts
  *
- * This file holds the markdown lite parser. It covers bold, italic, code, a
- * heading at levels one to three, a list item and a paragraph break. It
- * covers nothing else.
+ * The markdown lite parser covers bold, italic, code, a heading at levels one
+ * to three, a list item and a paragraph break. It covers nothing else.
  *
  * Everything depends on the rule for which asterisk opens a span and which
  * one closes it. A simpler version brings back a bug that thirty green tests

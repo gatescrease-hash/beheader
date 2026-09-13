@@ -1,8 +1,7 @@
 /**
  * node.ts
  *
- * This file holds the data model: Value, ErrorValue, the three slot kinds,
- * and GraphObject.
+ * The data model is Value, ErrorValue, the three slot kinds, and GraphObject.
  *
  * A slot is one addressable value on an object. It is literal, formula or
  * derived. Slots are the nodes of the dependency graph.

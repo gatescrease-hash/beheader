@@ -1,7 +1,7 @@
 /**
  * camera.ts
  *
- * This file converts world to screen and screen to world, and it holds pan,
+ * The camera converts world to screen and screen to world, and it holds pan,
  * zoom and the clamps.
  *
  * This is the only file that knows about screen space. Every other file reads

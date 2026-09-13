@@ -1,8 +1,8 @@
 /**
  * image.ts
  *
- * This file declares the slot path constants for the image type, and holds no
- * logic.
+ * Slot path constants for the image type are all this file holds. No logic
+ * joins them.
  *
  * The image primitive is data plus one renderer arm. It stores the picture as
  * a data URL in the document.

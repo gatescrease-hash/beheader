@@ -1,7 +1,7 @@
 /**
  * eval.ts
  *
- * This file turns an AST into a value, as stage four of four.
+ * Evaluation turns an AST into a value, as stage four of four.
  *
  * Evaluation is lazy. IF evaluates one branch. AND and OR stop early. So a
  * runtime error in a branch that nothing takes never happens.

@@ -1,7 +1,7 @@
 /**
  * parser.ts
  *
- * This file turns tokens into an AST, by recursive descent, as stage two of
+ * The parser turns tokens into an AST, by recursive descent, as stage two of
  * four.
  *
  * The parser resolves an object name to an ID here. So a formula that names

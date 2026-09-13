@@ -1,7 +1,7 @@
 /**
  * lexer.ts
  *
- * This file turns source text into tokens, as stage one of four.
+ * The lexer turns source text into tokens, as stage one of four.
  *
  * A numeric path segment, such as the 0 in vertex.0.x, scans as a number
  * token. The parser knows this and puts it back together.

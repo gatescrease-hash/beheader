@@ -1,7 +1,7 @@
 /**
  * mutation.test.ts
  *
- * These tests drive the eight step mutation loop. It is the largest suite in
+ * These tests cover the eight step mutation loop. It is the largest suite in
  * the repository. It covers each refusal path, the batch form, and the proof
  * that a refused mutation leaves the old state untouched.
  */
@@ -2344,7 +2344,7 @@ describe("mutate — end-to-end through a real table object", () => {
   });
 });
 
-describe("table dimensions are literal-only — Rule 6", () => {
+describe("table dimensions are literal-only, so evaluation cannot resize a table", () => {
   function tableWithFormulaRows(cachedRows: number, cellSlots: Record<string, Slot>): GraphObject {
     return {
       id: "obj_2",
@@ -2474,7 +2474,7 @@ describe("mutate — ClearSlotOperation: emptying a table cell by REMOVING its s
 
 describe("mutate — findInvalidDimensionWrites: a setSlot bounding table rows/cols at write time", () => {
   const REJECTED_ROWS_WRITES: readonly { readonly label: string; readonly slot: Slot }[] = [
-    { label: "a formula (evaluation could resize the table, Rule 6)", slot: { kind: "formula", ast: { type: "literal", value: 5 }, value: 5 } },
+    { label: "a formula, which would let evaluation resize the table", slot: { kind: "formula", ast: { type: "literal", value: 5 }, value: 5 } },
     { label: "zero", slot: { kind: "literal", value: 0 } },
     { label: "a negative number", slot: { kind: "literal", value: -2 } },
     { label: "a non-integer", slot: { kind: "literal", value: 2.5 } },
@@ -2490,7 +2490,7 @@ describe("mutate — findInvalidDimensionWrites: a setSlot bounding table rows/c
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.message).toContain("table_x.rows");
-        expect(result.message).toContain("Rule 6");
+        expect(result.message).toContain("A formula there would let evaluation resize the table");
       }
       expect([table]).toEqual(snapshotBefore);
     });

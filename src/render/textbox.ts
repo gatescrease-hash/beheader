@@ -1,7 +1,7 @@
 /**
  * textbox.ts
  *
- * This file holds the one rule for how big a text box is.
+ * One rule decides how big a text box is, and this file holds it.
  *
  * Three files read this rule. A fourth answer to the same question does not
  * belong here. A fixed width and a measured width can disagree, and this file

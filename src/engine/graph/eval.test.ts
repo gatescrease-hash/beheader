@@ -1,7 +1,7 @@
 /**
  * eval.test.ts
  *
- * These tests drive the topological pass over all three slot kinds. A derived
+ * These tests cover the topological pass over all three slot kinds. A derived
  * value never lags one step behind.
  */
 

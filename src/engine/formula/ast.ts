@@ -1,8 +1,7 @@
 /**
  * ast.ts
  *
- * This file declares the AST node types, and it holds a shape check and a
- * depth check.
+ * The AST node types come with a shape check and a depth check.
  *
  * The AST is the interchange format between the four stages of the formula
  * engine. The document also stores it, so a change to these types is a change

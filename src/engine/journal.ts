@@ -5,9 +5,9 @@
  * the objects of a document as they stood after any entry. It runs the same
  * operations again over an empty document.
  *
- * Rule 5 governs the cost. A replay runs one mutation for each entry, and it
- * keeps no snapshot. Undo reads the state before the last entry as
- * replayJournal(journal, journal.length - 1).
+ * The simplest correct code matters more here than speed. A replay runs one
+ * mutation for each entry, and it keeps no snapshot. Undo reads the state
+ * before the last entry as replayJournal(journal, journal.length - 1).
  *
  * Two traps. A replay rebuilds objects and nothing else, because nextObjectId
  * and the camera never enter the journal, so the caller keeps its own. And a

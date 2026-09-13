@@ -1,11 +1,11 @@
 /**
  * edge.ts
  *
- * This file holds the math of one path edge. An edge is straight, an arc, or
- * a cubic bezier. Two control points make it a bezier. Otherwise a bulge
- * makes it an arc: the bulge is the tangent of a quarter of the included
- * angle, the number a DXF file carries. Zero makes a straight line and 1
- * makes a half circle.
+ * The math here covers one path edge, which is straight, an arc, or a cubic
+ * bezier. Two control points make it a bezier. Otherwise a bulge makes it an
+ * arc: the bulge is the tangent of a quarter of the included angle, the
+ * number a DXF file carries. Zero makes a straight line and 1 makes a half
+ * circle.
  *
  * Nothing here cuts a curve into sample points. A vertex is a point an
  * operator placed, so this file never invents one.

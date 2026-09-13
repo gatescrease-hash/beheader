@@ -1,7 +1,7 @@
 /**
  * interaction.test.ts
  *
- * This suite covers drag, select and resize, and the per component rule that
+ * These tests cover drag, select and resize, and the per component rule that
  * keeps a bound axis fixed.
  */
 import { describe, expect, it } from "vitest";

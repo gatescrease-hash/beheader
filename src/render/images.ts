@@ -1,8 +1,8 @@
 /**
  * images.ts
  *
- * This file holds the bitmap cache. A data URL decodes once and the result
- * stays for later paints.
+ * The bitmap cache decodes a data URL once, and the result stays for later
+ * paints.
  *
  * A decode is asynchronous. The cache hands back what it has and starts the
  * decode for what it lacks.

@@ -1,7 +1,7 @@
 /**
  * eval.test.ts
  *
- * This suite covers evaluation, which stays lazy where extraction is eager.
+ * These tests cover evaluation, which stays lazy where extraction is eager.
  * It also covers error propagation and every arithmetic edge case.
  */
 import { describe, expect, it } from "vitest";

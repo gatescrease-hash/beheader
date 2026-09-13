@@ -1,8 +1,7 @@
 /**
  * extent.ts
  *
- * This file measures the world space box of one object, and of the whole
- * document.
+ * An extent is the world space box of one object, or of the whole document.
  *
  * A drawn extent and a clickable extent are one extent. A type with an arm
  * here becomes clickable. A type with no renderer arm in the same change

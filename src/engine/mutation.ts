@@ -1113,8 +1113,8 @@ function findInvalidDimensionWrites(operations: readonly Operation[], objects: r
     }
     problems.push(
       `operation ${index + 1} of ${operations.length}: ${tracked.name}.${axisName} must be a whole number from ` +
-        `${MIN_TABLE_LINES} to ${MAX_TABLE_LINES} held as a literal — a formula there would let evaluation resize ` +
-        `the table (Rule 6). Got: ${problem}`,
+        `${MIN_TABLE_LINES} to ${MAX_TABLE_LINES} held as a literal. A formula there would let evaluation ` +
+        `resize the table. Got: ${problem}`,
     );
   });
 

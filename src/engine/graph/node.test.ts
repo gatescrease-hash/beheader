@@ -1,7 +1,7 @@
 /**
  * node.test.ts
  *
- * This suite covers the data model: value guards, the three slot kinds, and
+ * These tests cover the data model: value guards, the three slot kinds, and
  * slot keys.
  */
 

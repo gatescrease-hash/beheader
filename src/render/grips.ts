@@ -1,8 +1,7 @@
 /**
  * grips.ts
  *
- * This file places the grabbers on a selected path, and names the part each
- * one covers.
+ * The grabbers on a selected path each name one part of it.
  *
  * A vertex grip sits on a vertex and moves it. An edge grip sits halfway
  * along an edge and bends it. Both appear only on a selected path, so the

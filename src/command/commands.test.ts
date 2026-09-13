@@ -728,11 +728,11 @@ describe("the rows and cols of a table are bounded at every write, not only at c
     return committed("table x=0 y=0 rows=3 cols=3", createEmptyDocument());
   }
 
-  it("refuses set table_1.rows = 5 — a formula there would let evaluation resize the table (Rule 6), and the table is untouched", () => {
+  it("refuses set table_1.rows = 5, because a formula there would let evaluation resize the table, and the table is untouched", () => {
     const document = seeded();
     const message = refused("set table_1.rows = 5", document);
     expect(message).toContain("table_1.rows");
-    expect(message).toContain("Rule 6");
+    expect(message).toContain("A formula there would let evaluation resize the table");
     expect(literalValue(onlyNamed(document, "table_1"), ["rows"])).toBe(3);
   });
 

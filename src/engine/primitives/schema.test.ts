@@ -1,7 +1,7 @@
 /**
  * schema.test.ts
  *
- * This suite covers the type registry, where static and dynamic slot groups
+ * These tests cover the type registry, where static and dynamic slot groups
  * resolve per object, and every declared path stays reachable.
  */
 import { describe, expect, it } from "vitest";

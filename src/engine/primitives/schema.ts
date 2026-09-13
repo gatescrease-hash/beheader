@@ -203,8 +203,9 @@ export function findSlotFormat(type: ObjectType, path: readonly string[]): SlotF
 }
 
 /**
- * The addresses a derived slot reads. This is the only place a dynamic resolver runs.
- * It runs at edge derivation time, never during evaluation. That is what keeps Rule 4 true.
+ * The addresses a derived slot reads. This is the only place a dynamic
+ * resolver runs. It runs at edge derivation time, and never during
+ * evaluation. That is what keeps evaluation clear of the slot set.
  */
 export function derivedSlotDependencyAddresses(
   object: GraphObject,

@@ -1,8 +1,8 @@
 /**
  * eval-context.ts
  *
- * This file declares the TextMeasurer interface and the EvalContext that
- * carries it.
+ * The engine measures text through the TextMeasurer interface, which
+ * EvalContext carries.
  *
  * Text layout needs glyph widths, and a glyph width needs a canvas. The
  * engine does not open a canvas, so it declares this interface instead.

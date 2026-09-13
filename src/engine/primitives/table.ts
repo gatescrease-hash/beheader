@@ -1,8 +1,8 @@
 /**
  * table.ts
  *
- * This file holds cell address math, range expansion, and the row and column
- * resize passes.
+ * Cell address math, range expansion, and the row and column resize passes
+ * make up this file.
  *
  * A range expands to concrete cells at edge derivation time, from the size
  * the table has now. So an expansion can never go stale.

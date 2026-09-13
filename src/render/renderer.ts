@@ -1,13 +1,13 @@
 /**
  * renderer.ts
  *
- * This file holds the immediate mode painter.
+ * The immediate mode painter draws in three passes.
  *
- * It makes three passes. First it clears the whole viewport in screen space.
- * Then it sets the camera transform once and draws every object in world
- * coordinates, and lets the canvas do the conversion. Last it resets to
- * identity and draws the furniture, such as a name label or an error badge,
- * at a constant size in screen space.
+ * First it clears the whole viewport in screen space. Then it sets the camera
+ * transform once and draws every object in world coordinates, and lets the
+ * canvas do the conversion. Last it resets to identity and draws the
+ * furniture, such as a name label or an error badge, at a constant size in
+ * screen space.
  *
  * A selection highlight draws in its own pass after every object. A later
  * object in z order does not cover it.
