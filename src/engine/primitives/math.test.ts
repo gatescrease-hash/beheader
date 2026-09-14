@@ -2,7 +2,20 @@ import { describe, expect, it } from "vitest";
 import { mutate, type Operation } from "../mutation.ts";
 import { parseFormula } from "../formula/parser.ts";
 import { slotKey, type GraphObject } from "../graph/node.ts";
-import { applyMathSource, createMathObject, isMathSourceError, readMathNames, MATH_SOURCE_PATH, mathInPortPath, mathOutPortPath } from "./math.ts";
+import {
+  applyMathSource,
+  createMathObject,
+  isMathSourceError,
+  mathDisplayLatex,
+  readMathDisplayLatex,
+  readMathNames,
+  MATH_SOURCE_PATH,
+  mathInPortPath,
+  mathOutPortPath,
+} from "./math.ts";
+import type { MathProgram } from "../math/ast.ts";
+import { isMathParseError, parseMath } from "../math/parser.ts";
+import type { Value } from "../graph/node.ts";
 
 /** A bare math object, before any source reaches it. */
 function emptyMath(id = "obj_1", name = "math_1"): GraphObject {
@@ -109,6 +122,97 @@ describe("applyMathSource", () => {
 
     expect(object.slots["in.b"]).toBeUndefined();
     expect(object.ports).toEqual({ in: ["a"], out: ["y"] });
+  });
+});
+
+describe("mathDisplayLatex", () => {
+  function programOf(source: string): MathProgram {
+    const parsed = parseMath(source);
+    if (isMathParseError(parsed)) throw new Error(parsed.message);
+    return parsed;
+  }
+
+  it("gives the source back for the source form", () => {
+    expect(mathDisplayLatex("y=a+1", "source", programOf("y=a+1"), new Map())).toBe("y=a+1");
+  });
+
+  it("gives one result per definition for the value form", () => {
+    const exports = new Map<Value, Value>([["y", 4]]) as ReadonlyMap<string, Value>;
+    expect(mathDisplayLatex("y=2+2", "value", programOf("y=2+2"), exports)).toBe("y=4");
+  });
+
+  it("writes a subscripted name the way LaTeX writes one", () => {
+    const exports: ReadonlyMap<string, Value> = new Map([["x_ans", 3]]);
+    expect(mathDisplayLatex("x_{ans}=3", "value", programOf("x_{ans}=3"), exports)).toBe("x_{ans}=3");
+  });
+
+  it("wraps a name of more than one letter in an operator command", () => {
+    const exports: ReadonlyMap<string, Value> = new Map([["rate_a", 2]]);
+    const source = "\\operatorname{rate}_{a}=2";
+    expect(mathDisplayLatex(source, "value", programOf(source), exports)).toBe("\\operatorname{rate}_{a}=2");
+  });
+
+  it("appends the result to the line that produced it for the both form", () => {
+    const exports: ReadonlyMap<string, Value> = new Map([["y", 4]]);
+    expect(mathDisplayLatex("y=2+2", "both", programOf("y=2+2"), exports)).toBe("y=2+2=4");
+  });
+
+  it("keeps each line against its own result across several lines", () => {
+    const source = "a=1\nb=2";
+    const exports: ReadonlyMap<string, Value> = new Map([["a", 1], ["b", 2]]);
+    expect(mathDisplayLatex(source, "both", programOf(source), exports)).toBe("a=1=1\\\\b=2=2");
+  });
+
+  it("leaves a line that defines nothing without a result", () => {
+    const source = "a=1\n2+2";
+    const exports: ReadonlyMap<string, Value> = new Map([["a", 1]]);
+    expect(mathDisplayLatex(source, "both", programOf(source), exports)).toBe("a=1=1\\\\2+2");
+  });
+
+  it("shows the code of a failed line where its result would be", () => {
+    const exports: ReadonlyMap<string, Value> = new Map([["y", { error: "#DIV0", message: "a division by zero" }]]);
+    expect(mathDisplayLatex("y=1/z", "value", programOf("y=1/z"), exports)).toBe("y=\\text{#DIV0}");
+  });
+
+  it("rounds a long result to something a reader can take in", () => {
+    const exports: ReadonlyMap<string, Value> = new Map([["y", 5.048825908847379]]);
+    expect(mathDisplayLatex("y=1", "value", programOf("y=1"), exports)).toBe("y=5.04883");
+  });
+
+  it("gives the source back for a value form over a source that defines nothing", () => {
+    expect(mathDisplayLatex("2+2", "value", programOf("2+2"), new Map())).toBe("2+2");
+  });
+});
+
+describe("readMathDisplayLatex", () => {
+  function built(source: string, display: string): GraphObject {
+    const created = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "setMathSource", objectId: "obj_1", source },
+        { kind: "setSlot", address: { objectId: "obj_1", path: ["display"] }, slot: { kind: "literal", value: display } },
+      ],
+      [],
+    );
+    if (!created.ok) throw new Error(created.message);
+    return created.objects[0] as GraphObject;
+  }
+
+  it("draws the source under the source setting", () => {
+    expect(readMathDisplayLatex(built("y=2+2", "source"))).toBe("y=2+2");
+  });
+
+  it("draws the result under the value setting, reading it off the export slot", () => {
+    expect(readMathDisplayLatex(built("y=2+2", "value"))).toBe("y=4");
+  });
+
+  it("draws both under the both setting", () => {
+    expect(readMathDisplayLatex(built("y=2+2", "both"))).toBe("y=2+2=4");
+  });
+
+  it("falls back to the source for a setting it does not know", () => {
+    expect(readMathDisplayLatex(built("y=2+2", "sideways"))).toBe("y=2+2");
   });
 });
 

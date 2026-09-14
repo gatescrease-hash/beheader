@@ -99,11 +99,19 @@ export type MathAst =
   | MathIntegralNode
   | MathSeriesNode;
 
-/** A line that gives a name a value, which becomes an export slot. */
+/**
+ * A line that gives a name a value, which becomes an export slot.
+ *
+ * sourceLine is which line of the source text this came from, counted from
+ * zero. A display that shows a formula and its result beside each other needs
+ * to put the result against the line that produced it, and the AST arrives
+ * with no text of its own to match against.
+ */
 export interface MathDefinitionLine {
   readonly type: "definition";
   readonly name: string;
   readonly value: MathAst;
+  readonly sourceLine: number;
 }
 
 /**

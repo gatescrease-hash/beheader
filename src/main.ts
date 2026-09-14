@@ -91,7 +91,7 @@ import "mathlive";
 import "mathlive/static.css";
 import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
-import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathLatex } from "./render/math.ts";
+import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
 
 export interface Viewport {
@@ -1027,6 +1027,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
 
       const latex = readMathLatex(object);
+      const drawn = readMathDrawnLatex(object);
       const editing = object.id === editingMathId;
       element.classList.toggle("math-overlay--editing", editing);
 
@@ -1038,9 +1039,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
           delete element.dataset["latex"];
           mathField.focus();
         }
-      } else if (element.dataset["latex"] !== latex) {
-        element.innerHTML = mathMarkup(latex);
-        element.dataset["latex"] = latex;
+      } else if (element.dataset["latex"] !== drawn) {
+        element.innerHTML = mathMarkup(drawn);
+        element.dataset["latex"] = drawn;
       }
       element.style.left = `${placement.left}px`;
       element.style.top = `${placement.top}px`;

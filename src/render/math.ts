@@ -48,6 +48,7 @@ import {
   MATH_MEASURED_HEIGHT_PATH,
   MATH_MEASURED_WIDTH_PATH,
   MATH_SOURCE_PATH,
+  readMathDisplayLatex,
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
 } from "../engine/index.ts";
@@ -136,6 +137,15 @@ function readNumber(object: GraphObject, path: readonly string[]): number | unde
 export function readMathLatex(object: GraphObject): string {
   const value = getSlot(object, MATH_SOURCE_PATH)?.value;
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * The LaTeX an object draws, which is its source or one of the forms that show
+ * a result. The engine measured the same string through the same function, so
+ * the box the canvas drew is the size of what goes into it.
+ */
+export function readMathDrawnLatex(object: GraphObject): string {
+  return readMathDisplayLatex(object);
 }
 
 /**

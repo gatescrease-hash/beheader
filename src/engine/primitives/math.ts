@@ -29,12 +29,22 @@ import type { Address } from "../address.ts";
 import { hasMathMeasurer, type EvalContext } from "../eval-context.ts";
 import { isErrorValue, MATH_TYPE, slotKey, type GraphObject, type Slot, type Value } from "../graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "./geometry.ts";
+import type { MathProgram } from "../math/ast.ts";
 import { evaluateMathObject } from "../math/eval.ts";
 import { isMathNameError, resolveMathNames, type MathNames } from "../math/names.ts";
 import { isMathParseError, parseMath } from "../math/parser.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
 export const MATH_SOURCE_PATH: readonly string[] = ["source"];
+
+export const MATH_DISPLAY_PATH: readonly string[] = ["display"];
+
+/** What a math object shows when nobody is editing it. */
+export type MathDisplay = "source" | "value" | "both";
+
+export const MATH_DISPLAY_VALUES: readonly MathDisplay[] = ["source", "value", "both"];
+
+export const MATH_DEFAULT_DISPLAY: MathDisplay = "source";
 
 export const MATH_MEASURED_WIDTH_PATH: readonly string[] = ["measuredWidth"];
 
@@ -119,6 +129,113 @@ export function readMathNames(source: string): MathSourceReading | MathSourceErr
 }
 
 /**
+ * A name as LaTeX writes it, so an export called x_ans reads as x with ans
+ * under it rather than as four letters and a low line.
+ */
+function nameAsLatex(name: string): string {
+  const [head, ...rest] = name.split("_");
+  if (head === undefined) {
+    return name;
+  }
+  const base = head.length === 1 ? head : `\\operatorname{${head}}`;
+  return rest.length === 0 ? base : `${base}_{${rest.join("_")}}`;
+}
+
+/**
+ * A number as LaTeX writes it, short enough to read at a glance. A value that
+ * is not a number, which is what an error is, reads as the code it carries, so
+ * a failed line says so where its result would be.
+ */
+function valueAsLatex(value: Value | undefined): string {
+  if (value === undefined) {
+    return "?";
+  }
+  if (isErrorValue(value)) {
+    return `\\text{${value.error}}`;
+  }
+  if (typeof value !== "number") {
+    return "\\text{?}";
+  }
+  const rounded = Number(value.toPrecision(MATH_VALUE_DIGITS));
+  return String(rounded);
+}
+
+/** How many significant digits a displayed result carries. */
+export const MATH_VALUE_DIGITS = 6;
+
+/**
+ * The LaTeX a math object draws, for the display setting it carries.
+ *
+ * One function serves the measurement in the engine and the drawing in the
+ * render layer. Two of them would drift, and a box measured from one string
+ * with another string drawn into it is a box of the wrong size.
+ *
+ * The value form shows one line for each name the source defines. The both
+ * form appends the result to the line that produced it, which reads the way an
+ * equation does: the working, then an equals sign, then the answer.
+ */
+export function mathDisplayLatex(
+  source: string,
+  display: MathDisplay,
+  program: MathProgram | undefined,
+  exports: ReadonlyMap<string, Value>,
+): string {
+  if (display === "source" || program === undefined) {
+    return source;
+  }
+
+  const sourceLines = source.split("\n");
+  const definitions = program.lines.filter((line) => line.type === "definition");
+
+  if (display === "value") {
+    if (definitions.length === 0) {
+      return source;
+    }
+    return definitions
+      .map((line) => `${nameAsLatex(line.name)}=${valueAsLatex(exports.get(line.name))}`)
+      .join("\\\\");
+  }
+
+  const resultByLine = new Map<number, string>();
+  for (const line of definitions) {
+    resultByLine.set(line.sourceLine, valueAsLatex(exports.get(line.name)));
+  }
+  return sourceLines
+    .map((text, index) => {
+      const result = resultByLine.get(index);
+      return result === undefined ? text : `${text}=${result}`;
+    })
+    .filter((text) => text.trim() !== "")
+    .join("\\\\");
+}
+
+/**
+ * The LaTeX an object draws right now, read off its own slots. The renderer
+ * calls this, and the measured slots call mathDisplayLatex with the values
+ * evaluation has in hand.
+ */
+export function readMathDisplayLatex(object: GraphObject): string {
+  const source = readMathSource(object);
+  const displaySlot = object.slots[slotKey(MATH_DISPLAY_PATH)]?.value;
+  const display = MATH_DISPLAY_VALUES.find((entry) => entry === displaySlot) ?? MATH_DEFAULT_DISPLAY;
+  if (display === "source") {
+    return source;
+  }
+  const program = parseMath(source);
+  if (isMathParseError(program)) {
+    return source;
+  }
+  const exports = new Map<string, Value>();
+  for (const name of object.ports?.out ?? []) {
+    const slot = object.slots[slotKey(mathOutPortPath(name))];
+    if (slot !== undefined) {
+      exports.set(name, slot.value);
+    }
+  }
+  return mathDisplayLatex(source, display, program, exports);
+}
+
+/**
  * The width and the height of the notation, including the padding around it.
  * Both read the source alone, because the notation is drawn from the source
  * and from nothing an input port carries.
@@ -142,6 +259,24 @@ function makeMathMeasureCompute(axis: "width" | "height"): DerivedSlotCompute {
     if (source.trim() === "") {
       return MATH_EMPTY_BOX[axis];
     }
+
+    const displayValue = read({ objectId: object.id, path: MATH_DISPLAY_PATH });
+    const display = MATH_DISPLAY_VALUES.find((entry) => entry === displayValue) ?? MATH_DEFAULT_DISPLAY;
+
+    let latex = source;
+    if (display !== "source") {
+      const program = parseMath(source);
+      if (!isMathParseError(program)) {
+        const exports = new Map<string, Value>();
+        for (const name of object.ports?.out ?? []) {
+          const value = read({ objectId: object.id, path: mathOutPortPath(name) });
+          if (value !== undefined) {
+            exports.set(name, value);
+          }
+        }
+        latex = mathDisplayLatex(source, display, program, exports);
+      }
+    }
     if (!hasMathMeasurer(context)) {
       return {
         error: "#MEASURE",
@@ -149,7 +284,7 @@ function makeMathMeasureCompute(axis: "width" | "height"): DerivedSlotCompute {
       };
     }
     const measurer = (context as EvalContext).measurer;
-    const measured = measurer.measureMath?.(source, { fontSize: MATH_FONT_SIZE });
+    const measured = measurer.measureMath?.(latex, { fontSize: MATH_FONT_SIZE });
     if (measured === undefined) {
       return { error: "#MEASURE", message: `math: ${object.name} could not be measured` };
     }
@@ -161,15 +296,31 @@ function makeMathMeasureCompute(axis: "width" | "height"): DerivedSlotCompute {
   };
 }
 
+/**
+ * What a measurement reads. It is the source, the display setting, and every
+ * export, because the value forms draw those results and a box has to be the
+ * size of what goes in it.
+ */
+function mathMeasureDependencies(): DerivedSlotDependencies {
+  return {
+    kind: "dynamic",
+    resolve: (object) => [
+      { objectId: object.id, path: MATH_SOURCE_PATH },
+      { objectId: object.id, path: MATH_DISPLAY_PATH },
+      ...(object.ports?.out ?? []).map((name): Address => ({ objectId: object.id, path: mathOutPortPath(name) })),
+    ],
+  };
+}
+
 export const MATH_MEASURED_SLOTS: readonly DerivedSlotSchema[] = [
   {
     path: MATH_MEASURED_WIDTH_PATH,
-    dependencies: { kind: "static", paths: [MATH_SOURCE_PATH] },
+    dependencies: mathMeasureDependencies(),
     compute: makeMathMeasureCompute("width"),
   },
   {
     path: MATH_MEASURED_HEIGHT_PATH,
-    dependencies: { kind: "static", paths: [MATH_SOURCE_PATH] },
+    dependencies: mathMeasureDependencies(),
     compute: makeMathMeasureCompute("height"),
   },
 ];
@@ -252,6 +403,7 @@ export function createMathObject(id: string, name: string, originX: number, orig
       [slotKey(ORIGIN_X_PATH)]: { kind: "literal", value: originX },
       [slotKey(ORIGIN_Y_PATH)]: { kind: "literal", value: originY },
       [slotKey(MATH_SOURCE_PATH)]: { kind: "literal", value: "" },
+      [slotKey(MATH_DISPLAY_PATH)]: { kind: "literal", value: MATH_DEFAULT_DISPLAY },
       [slotKey(MATH_MEASURED_WIDTH_PATH)]: { kind: "derived", value: null },
       [slotKey(MATH_MEASURED_HEIGHT_PATH)]: { kind: "derived", value: null },
     },

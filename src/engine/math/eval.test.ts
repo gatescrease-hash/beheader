@@ -90,7 +90,7 @@ describe("evaluateMathObject", () => {
   it("gives a name with no value an error rather than reading undefined", () => {
     // parseMath would make x an input, so this shape reaches the evaluator
     // only from a program built by hand.
-    const program: MathProgram = { lines: [{ type: "definition", name: "y", value: { type: "name", name: "x" } }] };
+    const program: MathProgram = { lines: [{ type: "definition", name: "y", value: { type: "name", name: "x" }, sourceLine: 0 }] };
     expect(evaluateMathObject(program, {}).exports["y"]).toMatchObject({ error: "#MATH" });
   });
 
@@ -102,7 +102,7 @@ describe("evaluateMathObject", () => {
     const program: MathProgram = {
       lines: [
         { type: "functionDefinition", name: "f", parameters: ["t"], body },
-        { type: "definition", name: "y", value: { type: "call", name: "f", args: [{ type: "number", value: 1 }] } },
+        { type: "definition", name: "y", value: { type: "call", name: "f", args: [{ type: "number", value: 1 }] }, sourceLine: 1 },
       ],
     };
     const result = evaluateMathObject(program, {}).exports["y"];

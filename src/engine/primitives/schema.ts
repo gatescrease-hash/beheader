@@ -60,7 +60,14 @@ import {
   SCRIPT_LANGUAGE_PATH,
   SCRIPT_SOURCE_PATH,
 } from "../script/stub.ts";
-import { enumerateMathInPaths, enumerateMathOutDerivedSlots, MATH_MEASURED_SLOTS, MATH_SOURCE_PATH } from "./math.ts";
+import {
+  enumerateMathInPaths,
+  enumerateMathOutDerivedSlots,
+  MATH_DISPLAY_PATH,
+  MATH_DISPLAY_VALUES,
+  MATH_MEASURED_SLOTS,
+  MATH_SOURCE_PATH,
+} from "./math.ts";
 import { enumerateTableCellSlotPaths, TABLE_COLS_PATH, TABLE_ROWS_PATH } from "./table.ts";
 import {
   computeMeasuredHeight,
@@ -448,12 +455,19 @@ const SCRIPT_SCHEMA: ObjectSchema = {
 const MATH_SCHEMA: ObjectSchema = {
   type: "math",
   nonDerivedSlotPaths: [
-    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, MATH_SOURCE_PATH] },
+    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, MATH_SOURCE_PATH, MATH_DISPLAY_PATH] },
     { kind: "dynamic", enumerate: enumerateMathInPaths },
   ],
   derivedSlots: [
     { kind: "static", slots: MATH_MEASURED_SLOTS },
     { kind: "dynamic", enumerate: enumerateMathOutDerivedSlots },
+  ],
+  slotOptions: [
+    {
+      path: MATH_DISPLAY_PATH,
+      values: [...MATH_DISPLAY_VALUES],
+      labels: ["the formula", "the result", "the formula and its result"],
+    },
   ],
 };
 

@@ -413,7 +413,7 @@ function readFunctionDefinitionName(tokens: readonly MathToken[]): string | unde
   return tokens[0]?.name;
 }
 
-function parseLine(tokens: readonly MathToken[], state: ParseState): MathLine {
+function parseLine(tokens: readonly MathToken[], state: ParseState, sourceLine: number): MathLine {
   const cursor: Cursor = { tokens, index: 0, bars: 0, depth: 0 };
 
   const functionName = readFunctionDefinitionName(tokens);
@@ -443,7 +443,7 @@ function parseLine(tokens: readonly MathToken[], state: ParseState): MathLine {
     advance(cursor);
     const value = parseExpression(cursor, state);
     expect(cursor, "eof", "the end of the line");
-    return { type: "definition", name, value };
+    return { type: "definition", name, value, sourceLine };
   }
 
   // A line with an equals sign that did not match a definition head is almost
@@ -505,7 +505,7 @@ export function parseMath(source: string): MathProgram | MathParseError {
   const lines: MathLine[] = [];
   for (const entry of tokenLines) {
     try {
-      const line = parseLine(entry.tokens, state);
+      const line = parseLine(entry.tokens, state, entry.line);
       const body = line.type === "functionDefinition" ? line.body : line.value;
       if (mathAstDepth(body) > MATH_MAX_DEPTH) {
         return { error: "#PARSE", message: `this line nests deeper than ${MATH_MAX_DEPTH} levels`, line: entry.line };
