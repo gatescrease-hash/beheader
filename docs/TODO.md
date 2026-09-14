@@ -89,6 +89,86 @@ is also the one value that makes a denominator fail.
 Done when a new port either starts at a value that reads as unset rather than
 as zero, or the reason zero is right is written into section 12.
 
+### 5. Complete an address as it is typed, and show what parsed
+
+Every address is typed in full and spelled exactly, and a mistake is a refusal
+after the fact rather than a warning during. The same address typed into ten
+formulas is typed ten times. Nothing on screen separates a run of text that the
+program read as an address from a run that happens to look like one.
+
+**What is already right, and what is not.** A stored AST holds `Address`
+records carrying an object ID, so an address in a committed formula is not text
+and a rename rewrites nothing. The problem is at the two ends, entry and
+display, and in math source, where `table_x` lexes as five letters multiplied
+because juxtaposition is multiplication. So this item builds an input layer and
+changes no stored shape.
+
+**Derive the appearance, do not bake a token.** A completed address could
+become a token in the field that carries its own identity and its own
+appearance. It should not. A token that carries an identity can drift from the
+text beside it, and then what the operator sees and what the parser reads are
+two answers to one question, which is the fault this item exists to remove.
+Instead the field parses what it holds on every keystroke and paints the spans
+that resolved. A hand typed address then lights up without a completion, and a
+misspelt one visibly fails to light up before anything is committed.
+
+The exception is math source, where an address cannot be parsed out of the
+notation at all. That needs a spelling of its own, and the last stage covers it.
+
+**Stages.** Each lands with its tests and leaves the four checks clean.
+
+1. **Completion, and the Tab that drives it.** `completeAddress` in the engine
+   takes a partial string and the objects and returns the candidates, in two
+   phases: an object name first, then a slot path of that object. The registry
+   in `command/parser.ts` gains an `address` argument kind, because it declares
+   `link` and `refs` as taking text today and only `commands.ts` knows better.
+   `completeCommandLine` then answers what a Tab at a given cursor should do.
+   Tab fills the longest common prefix, a second Tab cycles the candidates, and
+   a completed object name takes a dot and offers its slots. The command line
+   drives it in the same change, because `STATUS.md` records that a module with
+   no consumer ships a real bug.
+   Done when Tab completes an object name, a second Tab completes a slot of it,
+   an ambiguous prefix fills as far as it is unambiguous and stops, and the four
+   registry sweeps carry the new argument kind.
+
+2. **Paint what parsed, in the command line.** A mirror element under the input
+   paints one span for each token the parse recognised, and an address that
+   resolved reads as a code font on a grey ground. The input stays an ordinary
+   input holding an ordinary string, so `parser.ts` reads exactly what it reads
+   today. A `contenteditable` field would take that property away and bring
+   selection, undo and input method handling with it.
+   The mirror carries the same risk `.text-editor` already carries: it agrees
+   with the input about font, padding and scrolling, or it drifts a character at
+   a time. That pair belongs in the invariants of `STATUS.md`.
+   Done when an address that resolves is painted and a misspelt one is not,
+   both at the first keystroke that decides it.
+
+3. **The same two things in a formula field.** A table cell, a panel row and the
+   formula half of a `set` all take a formula rather than a command, so the
+   spans come from the formula lexer, which already carries a start for every
+   token. Done when a cell being edited paints its addresses and completes them.
+
+4. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
+   gives notation a spelling for an address that the lexer can read as one
+   token, which juxtaposition cannot break and which draws as a chip without
+   any work. It answers the question the math item leaves open, so that stage
+   and this one settle together.
+   Done when the spec says how an address is spelled in notation and the lexer
+   agrees.
+
+**Done when** all four stages have landed and this item is deleted.
+
+### 6. Say what the program understood, on a refusal
+
+A refusal names the slot it is about, which the spec asks for, and it does not
+say what was typed instead. An operator who misspells an object name is told
+that no object carries that name, and the name they meant is one edit away and
+on screen already.
+
+This rides on the completion of item 5, which computes the candidates a name
+could have meant. Done when a refusal that names a missing object or slot also
+names the nearest one that exists.
+
 ---
 
 ## Where the next items come from
