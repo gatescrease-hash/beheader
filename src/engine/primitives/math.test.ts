@@ -2,21 +2,11 @@ import { describe, expect, it } from "vitest";
 import { mutate, type Operation } from "../mutation.ts";
 import { parseFormula } from "../formula/parser.ts";
 import { slotKey, type GraphObject } from "../graph/node.ts";
-import { applyMathSource, isMathSourceError, readMathNames, MATH_SOURCE_PATH, mathInPortPath, mathOutPortPath } from "./math.ts";
+import { applyMathSource, createMathObject, isMathSourceError, readMathNames, MATH_SOURCE_PATH, mathInPortPath, mathOutPortPath } from "./math.ts";
 
 /** A bare math object, before any source reaches it. */
 function emptyMath(id = "obj_1", name = "math_1"): GraphObject {
-  return {
-    id,
-    name,
-    type: "math",
-    ports: { in: [], out: [] },
-    slots: {
-      "origin.x": { kind: "literal", value: 0 },
-      "origin.y": { kind: "literal", value: 0 },
-      source: { kind: "literal", value: "" },
-    },
-  };
+  return createMathObject(id, name, 0, 0);
 }
 
 function table(id: string, name: string, cells: Record<string, GraphObject["slots"][string]>): GraphObject {

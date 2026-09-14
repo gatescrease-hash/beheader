@@ -30,6 +30,7 @@
 import {
   type CameraState,
   createEmptyDocument,
+  deriveValidateAndEvaluate,
   type Document,
   type EvalContext,
   formatFormula,
@@ -85,7 +86,10 @@ import { menuCommandLine, pathMenuAt, type PathMenu } from "./render/menu.ts";
 import { edgeShape, type EdgeShape, type PathGrip } from "./render/grips.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
+import "mathlive/static.css";
+import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
+import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathLatex } from "./render/math.ts";
 
 export interface Viewport {
   readonly width: number;
@@ -885,8 +889,19 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   }
 
   const measureContext = document.createElement("canvas").getContext("2d");
+
+  // Notation is laid out by a real element, because its size follows the fonts
+  // of the page. The element sits outside the flow so that measuring it moves
+  // nothing an operator can see.
+  const mathMeasureHost = document.createElement("div");
+  mathMeasureHost.className = "math-measure";
+  document.body.appendChild(mathMeasureHost);
+
+  const measureMath = createMathMeasurer(mathMeasureHost);
   const evalContext: EvalContext =
-    measureContext === null ? NULL_EVAL_CONTEXT : { measurer: createCanvas2dTextMeasurer(measureContext) };
+    measureContext === null
+      ? NULL_EVAL_CONTEXT
+      : { measurer: { ...createCanvas2dTextMeasurer(measureContext), measureMath } };
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
@@ -901,6 +916,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | undefined;
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
+  const mathOverlays = new Map<string, HTMLElement>();
   const imageBitmaps = createImageBitmapCache(() => paint());
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
@@ -935,8 +951,88 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       state.interaction.focus?.grip,
     );
     updatePanels(panelledIds);
+    updateMathOverlays();
     updateEditor();
   };
+
+  /**
+   * Puts one element over each math object and moves it with the camera. The
+   * canvas pass has already drawn the box under it, so the two agree on where
+   * the object is by taking the same world box.
+   */
+  const updateMathOverlays = (): void => {
+    const ratio = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    const live = new Set<string>();
+
+    for (const object of state.document.objects) {
+      if (object.type !== "math") {
+        continue;
+      }
+      const placement = mathOverlayPlacement(object, state.document.camera, ratio);
+      if (placement === undefined) {
+        continue;
+      }
+      live.add(object.id);
+
+      let element = mathOverlays.get(object.id);
+      if (element === undefined) {
+        element = document.createElement("div");
+        element.className = "math-overlay";
+        editorLayer.appendChild(element);
+        mathOverlays.set(object.id, element);
+      }
+
+      const latex = readMathLatex(object);
+      if (element.dataset["latex"] !== latex) {
+        element.innerHTML = mathMarkup(latex);
+        element.dataset["latex"] = latex;
+      }
+      element.style.left = `${placement.left}px`;
+      element.style.top = `${placement.top}px`;
+      element.style.width = `${placement.width}px`;
+      element.style.height = `${placement.height}px`;
+      element.style.padding = `${placement.padding}px`;
+      element.style.fontSize = `${placement.fontSize}px`;
+      element.style.transform = `scale(${placement.scale})`;
+    }
+
+    for (const [objectId, element] of [...mathOverlays]) {
+      if (!live.has(objectId)) {
+        element.remove();
+        mathOverlays.delete(objectId);
+      }
+    }
+  };
+
+  /**
+   * Measures every math object again and evaluates the document against the
+   * new sizes. Notation measured before its fonts arrive comes out about a
+   * sixth too narrow, so the box drawn around it is too small until this runs.
+   *
+   * It evaluates rather than mutating, because nothing about the document has
+   * changed. Only the size of what was already there is now known properly, so
+   * there is nothing for the journal to record.
+   */
+  const remeasureMath = (): void => {
+    if (!state.document.objects.some((object) => object.type === "math")) {
+      return;
+    }
+    measureMath.forget();
+    const evaluated = deriveValidateAndEvaluate(state.document.objects, evalContext);
+    if (!evaluated.ok) {
+      return;
+    }
+    state = { ...state, document: { ...state.document, objects: evaluated.objects } };
+    paint();
+  };
+
+  // A font finishing arrival changes what notation measures, and fonts arrive
+  // after the first frame has already been drawn.
+  if (typeof document.fonts?.addEventListener === "function") {
+    document.fonts.addEventListener("loadingdone", () => {
+      remeasureMath();
+    });
+  }
 
   const panelledObjectIds = (): readonly string[] => {
     const ids: string[] = [];

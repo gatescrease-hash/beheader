@@ -102,6 +102,13 @@ export interface CreateScriptCommand {
   readonly y: number;
 }
 
+export interface CreateMathCommand {
+  readonly kind: "math";
+  readonly x: number;
+  readonly y: number;
+  readonly source: string;
+}
+
 export interface CreateTableCommand {
   readonly kind: "table";
   readonly x: number;
@@ -231,6 +238,7 @@ export type Command =
   | CreateTableCommand
   | CreateImageCommand
   | CreateScriptCommand
+  | CreateMathCommand
   | LinkCommand
   | UnlinkCommand
   | AddPortCommand
@@ -546,6 +554,24 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     buildFromPrompts: (answers) => {
       const origin = pointAnswer(answers, "origin");
       return { kind: "script", x: origin.x, y: origin.y };
+    },
+  },
+  {
+    name: "math",
+    usage: 'math [x=<number>] [y=<number>] "<latex>"',
+    positional: [text("source")],
+    named: [optionalNumber("x", 0), optionalNumber("y", 0)],
+    flags: [],
+    build: (args) => ({
+      kind: "math",
+      x: numberArgument(args, "x"),
+      y: numberArgument(args, "y"),
+      source: textArgument(args, "source"),
+    }),
+    prompts: [{ name: "position", message: "specify math position", accepts: "point" }],
+    buildFromPrompts: (answers) => {
+      const position = pointAnswer(answers, "position");
+      return { kind: "math", x: position.x, y: position.y, source: "" };
     },
   },
   {

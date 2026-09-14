@@ -791,6 +791,7 @@ describe("every registry command reaches a handler", () => {
     "table x=0 y=0",
     "image x=0 y=0",
     "script x=0 y=0",
+    'math x=0 y=0 "y=1"',
     "set polygon_1.radius 42",
     "set polygon_1.radius = 1 + 1",
     "link polygon_1.origin.x table_x.A1",

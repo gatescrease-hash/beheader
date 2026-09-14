@@ -309,6 +309,34 @@
 
         It mounts in #stage, not in #panels, and only one editor opens at a time.
       */
+      /*
+        The element that holds one math object's notation. It lays out in world
+        units and one transform scales it to the zoom, so nothing here
+        multiplies the zoom into a size a second time. Pointer events go
+        through to the canvas underneath, because the hit test there is what
+        decides which object a press lands on.
+      */
+      .math-overlay {
+        position: absolute;
+        box-sizing: border-box;
+        transform-origin: 0 0;
+        overflow: visible;
+        pointer-events: none;
+        color: #1a1a1a;
+      }
+
+      /*
+        Where a measurement lays notation out. It is off screen rather than
+        hidden, because an element with display none has no size to read.
+      */
+      .math-measure {
+        position: absolute;
+        left: -10000px;
+        top: -10000px;
+        visibility: hidden;
+        white-space: nowrap;
+      }
+
       .text-editor {
         position: absolute;
         box-sizing: border-box;

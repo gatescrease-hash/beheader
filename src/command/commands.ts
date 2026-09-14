@@ -76,6 +76,7 @@ import {
   resolveDerivedSlots,
   resolveNonDerivedSlotPaths,
   SCRIPT_LANGUAGE_PATH,
+  createMathObject,
   SCRIPT_SOURCE_PATH,
   SCRIPT_TYPE,
   scriptInPortPath,
@@ -116,6 +117,7 @@ import type {
   CreatePolygonCommand,
   CreatePolylineCommand,
   CreateRectCommand,
+  CreateMathCommand,
   CreateScriptCommand,
   CreateTableCommand,
   CreateTextCommand,
@@ -212,6 +214,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return createImage(command, document, context);
     case "script":
       return createScript(command, document, context);
+    case "math":
+      return createMath(command, document, context);
     case "set":
       return setLiteral(command, document, context);
     case "set-formula":
@@ -273,6 +277,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "table",
   "image",
   "script",
+  "math",
   "set",
   "link",
   "unlink",
@@ -446,6 +451,34 @@ function createScript(command: CreateScriptCommand, document: Document, context:
     { path: SCRIPT_LANGUAGE_PATH, value: DEFAULT_SCRIPT_LANGUAGE },
     { path: SCRIPT_SOURCE_PATH, value: DEFAULT_SCRIPT_SOURCE },
   ], context);
+}
+
+/**
+ * Creates a math object and writes its source in one batch. The two land
+ * together because the source decides which port slots the object carries, and
+ * an object committed without them would be a math object that reads nothing
+ * until a second command arrived.
+ */
+function createMath(command: CreateMathCommand, document: Document, context: EvalContext): CommandOutcome {
+  const minted = mintObjectId(document);
+  const name = generateDefaultName("math", document.objects);
+  const object = createMathObject(minted.id, name, command.x, command.y);
+
+  const operations: Operation[] = [{ kind: "createObject", object }];
+  if (command.source !== "") {
+    operations.push({ kind: "setMathSource", objectId: minted.id, source: command.source });
+  }
+
+  const result = mutate(document.objects, operations, document.journal, context);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return {
+    ok: true,
+    document: { ...document, nextObjectId: minted.nextObjectId, objects: result.objects, journal: result.journal },
+    lines: [`created ${name}`],
+    createdObjectId: minted.id,
+  };
 }
 
 interface WritableSlotTarget {

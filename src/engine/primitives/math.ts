@@ -26,13 +26,33 @@
  * tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
-import { isErrorValue, slotKey, type GraphObject, type Slot, type Value } from "../graph/node.ts";
+import { hasMathMeasurer, type EvalContext } from "../eval-context.ts";
+import { isErrorValue, MATH_TYPE, slotKey, type GraphObject, type Slot, type Value } from "../graph/node.ts";
+import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "./geometry.ts";
 import { evaluateMathObject } from "../math/eval.ts";
 import { isMathNameError, resolveMathNames, type MathNames } from "../math/names.ts";
 import { isMathParseError, parseMath } from "../math/parser.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
 export const MATH_SOURCE_PATH: readonly string[] = ["source"];
+
+export const MATH_MEASURED_WIDTH_PATH: readonly string[] = ["measuredWidth"];
+
+export const MATH_MEASURED_HEIGHT_PATH: readonly string[] = ["measuredHeight"];
+
+/**
+ * The size notation is drawn at. It is a constant rather than a slot, because
+ * nothing yet reads a font size off a math object and a slot an operator can
+ * write is a row in the panel and a field in every saved document. A style
+ * slot arrives when something asks for one.
+ */
+export const MATH_FONT_SIZE = 18;
+
+/** The space between the notation and the edge of the box around it. */
+export const MATH_BOX_PADDING = 8;
+
+/** The size of the box drawn for a source that measures to nothing. */
+export const MATH_EMPTY_BOX = { width: 120, height: 40 } as const;
 
 export function mathInPortPath(name: string): readonly string[] {
   return ["in", name];
@@ -98,6 +118,62 @@ export function readMathNames(source: string): MathSourceReading | MathSourceErr
   return { names, source };
 }
 
+/**
+ * The width and the height of the notation, including the padding around it.
+ * Both read the source alone, because the notation is drawn from the source
+ * and from nothing an input port carries.
+ *
+ * An empty source measures to a box an operator can still see and click,
+ * rather than to nothing, so a math object created before anything is typed
+ * into it has a place on the canvas.
+ */
+function makeMathMeasureCompute(axis: "width" | "height"): DerivedSlotCompute {
+  return (object, read, context) => {
+    const source = read({ objectId: object.id, path: MATH_SOURCE_PATH });
+    if (source === undefined) {
+      return { error: "#REF", message: "math: source did not resolve to a value" };
+    }
+    if (isErrorValue(source)) {
+      return source;
+    }
+    if (typeof source !== "string") {
+      return { error: "#TYPE", message: "math: source holds something other than text" };
+    }
+    if (source.trim() === "") {
+      return MATH_EMPTY_BOX[axis];
+    }
+    if (!hasMathMeasurer(context)) {
+      return {
+        error: "#MEASURE",
+        message: `math: ${object.name} has no measurer that can size notation wired, so it cannot be measured`,
+      };
+    }
+    const measurer = (context as EvalContext).measurer;
+    const measured = measurer.measureMath?.(source, { fontSize: MATH_FONT_SIZE });
+    if (measured === undefined) {
+      return { error: "#MEASURE", message: `math: ${object.name} could not be measured` };
+    }
+    const value = axis === "width" ? measured.width : measured.height;
+    if (!Number.isFinite(value)) {
+      return { error: "#MEASURE", message: `math: ${object.name} measured to a size that is not a finite number` };
+    }
+    return value + MATH_BOX_PADDING * 2;
+  };
+}
+
+export const MATH_MEASURED_SLOTS: readonly DerivedSlotSchema[] = [
+  {
+    path: MATH_MEASURED_WIDTH_PATH,
+    dependencies: { kind: "static", paths: [MATH_SOURCE_PATH] },
+    compute: makeMathMeasureCompute("width"),
+  },
+  {
+    path: MATH_MEASURED_HEIGHT_PATH,
+    dependencies: { kind: "static", paths: [MATH_SOURCE_PATH] },
+    compute: makeMathMeasureCompute("height"),
+  },
+];
+
 function mathOutDependencies(): DerivedSlotDependencies {
   return {
     kind: "dynamic",
@@ -162,6 +238,27 @@ export function enumerateMathOutDerivedSlots(object: GraphObject): readonly Deri
 export const MATH_DEFAULT_INPUT: Value = 0;
 
 /**
+ * A math object with nothing typed into it yet, carrying every slot its schema
+ * declares. The two measured slots are part of that set, so an object built any
+ * other way fails the integrity check the moment an edge derives into one.
+ */
+export function createMathObject(id: string, name: string, originX: number, originY: number): GraphObject {
+  return {
+    id,
+    name,
+    type: MATH_TYPE,
+    ports: { in: [], out: [] },
+    slots: {
+      [slotKey(ORIGIN_X_PATH)]: { kind: "literal", value: originX },
+      [slotKey(ORIGIN_Y_PATH)]: { kind: "literal", value: originY },
+      [slotKey(MATH_SOURCE_PATH)]: { kind: "literal", value: "" },
+      [slotKey(MATH_MEASURED_WIDTH_PATH)]: { kind: "derived", value: null },
+      [slotKey(MATH_MEASURED_HEIGHT_PATH)]: { kind: "derived", value: null },
+    },
+  };
+}
+
+/**
  * Rebuilds an object around a new source text: the source slot itself, one
  * input slot for each free name, and one export slot for each defined name.
  *
@@ -190,6 +287,14 @@ export function applyMathSource(object: GraphObject, source: string, names: Math
   }
 
   slots[slotKey(MATH_SOURCE_PATH)] = { kind: "literal", value: source };
+
+  for (const measured of MATH_MEASURED_SLOTS) {
+    const key = slotKey(measured.path);
+    const existing = slots[key];
+    if (existing?.kind !== "derived") {
+      slots[key] = { kind: "derived", value: null };
+    }
+  }
 
   for (const name of names.inputs) {
     const key = slotKey(mathInPortPath(name));

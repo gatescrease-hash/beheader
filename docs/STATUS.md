@@ -12,15 +12,15 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2463 pass, 0 skip, across 48 test files. |
-| Spec | Built, except the drawing and the solving of section 12, and the parts section 16 postpones. |
+| Tests | 2483 pass, 0 skip, across 49 test files. |
+| Spec | Built, except editing notation in place, the solving of section 12, and the parts section 16 postpones. |
 
 ### How to run it
 
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2463 tests
+npm test             # 2483 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -90,7 +90,7 @@ tables, and other suites drive them anyway.
 | File | What you would come here to change |
 | --- | --- |
 | `index.html` | The page and its stylesheet: the canvas, the panel container, the log and the input bar. |
-| `package.json` | Scripts and dev dependencies. There are no runtime dependencies. |
+| `package.json` | Scripts, dev dependencies, and the one runtime dependency, MathLive. |
 | `tsconfig.json` | Strict mode over the whole of `src`. |
 | `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
 | `vite.config.ts` | Dev server, production build, and the Vitest settings. |
@@ -145,6 +145,7 @@ tables, and other suites drive them anyway.
 | `grips.ts` | The grabbers on a selected path, and the part each one names. |
 | `markdown.ts` | The small markdown parser behind a text object. |
 | `measure.ts` | The two Canvas2D measurers, and the line breaker. |
+| `math.ts` | Notation to markup, the size it takes, and where the element holding it goes. |
 | `renderer.ts` | The painter, and the three passes it makes over every frame. |
 | `images.ts` | The decoded bitmap cache. |
 | `editor.ts` | Where the in place editor goes, and how it looks. |
@@ -216,7 +217,13 @@ the code it constrains.
    every function before the first line would run a self calling function that
    the binder had already refused, and the two would disagree about the same
    source. The evaluator registers a function at its own line for that reason.
-13. **The operator cannot see what a test can see.** A live look on screen
+13. **A measurement of notation taken before its fonts arrive is about a
+   sixth too narrow.** The browser falls back to a font with other metrics, so
+   the box drawn around a formula is too small and the end of it hangs outside.
+   `main.ts` empties the measurement cache of `render/math.ts` and evaluates
+   again whenever a font finishes loading, which is the only thing that repairs
+   the sizes of a document already on screen.
+14. **The operator cannot see what a test can see.** A live look on screen
    comes before anyone calls an operator surface done. It has found what the
    suite could not on every surface built so far.
 

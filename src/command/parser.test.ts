@@ -48,6 +48,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "table x=0 y=0 rows=8 cols=8", command: { kind: "table", x: 0, y: 0, rows: 8, cols: 8 } },
   { line: "image x=0 y=0", command: { kind: "image", x: 0, y: 0 } },
   { line: "script x=0 y=0", command: { kind: "script", x: 0, y: 0 } },
+  { line: 'math x=2 y=3 "y=1"', command: { kind: "math", x: 2, y: 3, source: "y=1" } },
   { line: "link polygon_1.origin.x table_x.A1", command: { kind: "link", target: "polygon_1.origin.x", source: "table_x.A1" } },
   { line: "unlink polygon_1.origin.x", command: { kind: "unlink", target: "polygon_1.origin.x" } },
   { line: "clear table_x.A1", command: { kind: "clear", target: "table_x.A1" } },

@@ -27,8 +27,23 @@ export interface TextMeasurement {
   readonly height: number;
 }
 
+/** The size a run of mathematical notation is drawn at. */
+export interface MathStyle {
+  readonly fontSize: number;
+}
+
 export interface TextMeasurer {
   measure(text: string, style: TextStyle, maxWidth?: number): TextMeasurement;
+
+  /**
+   * The size one run of mathematical notation takes, given its LaTeX. It is
+   * optional because a measurer written before the math object existed answers
+   * for text alone, and a fake in a test that never meets a math object has no
+   * reason to grow one. A math object asked to measure itself through a
+   * measurer without this method reports a measurement error rather than a
+   * guessed size.
+   */
+  measureMath?(latex: string, style: MathStyle): TextMeasurement;
 }
 
 export interface EvalContext {
@@ -45,4 +60,9 @@ export const NULL_EVAL_CONTEXT: EvalContext = Object.freeze({
 
 export function hasRealMeasurer(context: EvalContext | undefined): context is EvalContext {
   return context !== undefined && context.measurer !== NULL_TEXT_MEASURER;
+}
+
+/** Answers whether a context carries a measurer that can size notation. */
+export function hasMathMeasurer(context: EvalContext | undefined): context is EvalContext {
+  return hasRealMeasurer(context) && typeof context.measurer.measureMath === "function";
 }

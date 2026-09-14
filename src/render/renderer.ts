@@ -68,6 +68,7 @@ import {
   TEXT_AUTORESIZE_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_MEASURED_HEIGHT_PATH,
+  MATH_MEASURED_WIDTH_PATH,
   TEXT_MEASURED_WIDTH_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
   TEXT_STYLE_ALIGN_PATH,
@@ -106,6 +107,10 @@ const DEFAULT_TEXT_LINE_HEIGHT = 20;
 const SCRIPT_BOX_STROKE_STYLE = "#5b6472";
 const SCRIPT_BODY_FILL_STYLE = "#f4f5f7";
 const SCRIPT_TEXT_STYLE = "#1a1a1a";
+
+const MATH_BOX_STROKE_STYLE = "#c8ccd4";
+const MATH_BODY_FILL_STYLE = "#ffffff";
+const MATH_ERROR_STROKE_STYLE = "#c0392b";
 const SCRIPT_PORT_STUB_STYLE = "#5b6472";
 const SCRIPT_FONT = "12px sans-serif";
 const SCRIPT_TEXT_PADDING = 6;
@@ -143,6 +148,30 @@ function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: I
   ctx.globalAlpha = Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : DEFAULT_IMAGE_OPACITY;
   ctx.drawImage(bitmap.image, box.minX + fitted.x, box.minY + fitted.y, fitted.width, fitted.height);
   ctx.globalAlpha = previousAlpha;
+}
+
+/**
+ * Draws the box of a math object and nothing inside it. The notation is an
+ * element above the canvas, put there by main.ts, because the markup that
+ * MathLive returns is not something a canvas draws. This pass leaves the room
+ * for it and marks a source that failed to measure.
+ */
+function drawMath(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+  const box = objectExtent(object);
+  if (box === undefined) {
+    return;
+  }
+  const width = box.maxX - box.minX;
+  const height = box.maxY - box.minY;
+
+  ctx.fillStyle = MATH_BODY_FILL_STYLE;
+  ctx.fillRect(box.minX, box.minY, width, height);
+
+  const measured = getSlot(object, MATH_MEASURED_WIDTH_PATH)?.value;
+  const failed = measured !== undefined && isErrorValue(measured);
+  ctx.strokeStyle = failed ? MATH_ERROR_STROKE_STYLE : MATH_BOX_STROKE_STYLE;
+  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
+  ctx.strokeRect(box.minX, box.minY, width, height);
 }
 
 function drawScript(ctx: CanvasRenderingContext2D, object: GraphObject): void {
@@ -424,6 +453,8 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
       drawScript(ctx, object);
       return;
     case "math":
+      drawMath(ctx, object);
+      return;
     case "value":
     case "add":
       return;
