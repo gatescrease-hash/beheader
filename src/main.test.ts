@@ -27,6 +27,7 @@ import {
   commitPanelChoice,
   commitPanelEdit,
   commitTableCell,
+  commitMathSource,
   commitTextContent,
   dismissPanel,
   editorSeed,
@@ -908,6 +909,50 @@ describe("submitLine / pointerMoveTo forward the EvalContext", () => {
 
     expect(measuredHeightOf(dragged)).toBe(44);
     expect(numberAt(objectNamed(dragged, "rect_1"), ["origin", "x"])).toBeCloseTo(8, 9);
+  });
+});
+
+describe("commitMathSource — a math object's source rebuilds its ports", () => {
+  function withMath(source: string): { state: AppState; id: string } {
+    const state = typed(opened(), `math x=0 y=0 "${source}"`);
+    return { state, id: objectNamed(state, "math_1").id };
+  }
+
+  it("writes the new source and rebuilds the ports it implies", () => {
+    const { state, id } = withMath("y=a+1");
+    const after = commitMathSource(state, id, "q=b+c");
+    const object = objectNamed(after, "math_1");
+    expect(getSlot(object, ["source"])).toEqual({ kind: "literal", value: "q=b+c" });
+    expect(object.ports).toEqual({ in: ["b", "c"], out: ["q"] });
+  });
+
+  it("drops the slots of the ports the old source needed and the new one does not", () => {
+    const { state, id } = withMath("y=a+1");
+    const after = commitMathSource(state, id, "q=b+1");
+    const object = objectNamed(after, "math_1");
+    expect(getSlot(object, ["in", "a"])).toBeUndefined();
+    expect(getSlot(object, ["out", "y"])).toBeUndefined();
+    expect(getSlot(object, ["in", "b"])).toBeDefined();
+  });
+
+  it("leaves the object alone for a source that does not read, and says why", () => {
+    const { state, id } = withMath("y=a+1");
+    const after = commitMathSource(state, id, "y=(1+");
+    expect(getSlot(objectNamed(after, "math_1"), ["source"])).toEqual({ kind: "literal", value: "y=a+1" });
+    expect(after.log.join("\n")).toContain("line 1");
+  });
+
+  it("does nothing at all when the source has not changed, so no entry is journalled", () => {
+    const { state, id } = withMath("y=a+1");
+    const before = state.document.journal.length;
+    const after = commitMathSource(state, id, "y=a+1");
+    expect(after.document.journal.length).toBe(before);
+    expect(after).toBe(state);
+  });
+
+  it("leaves a document with no such object untouched", () => {
+    const { state } = withMath("y=a+1");
+    expect(commitMathSource(state, "obj_nope", "q=1")).toBe(state);
   });
 });
 

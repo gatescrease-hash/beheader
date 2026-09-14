@@ -309,6 +309,82 @@
 
         It mounts in #stage, not in #panels, and only one editor opens at a time.
       */
+      /*
+        The element that holds one math object's notation. It lays out in world
+        units and one transform scales it to the zoom, so nothing here
+        multiplies the zoom into a size a second time. Pointer events go
+        through to the canvas underneath, because the hit test there is what
+        decides which object a press lands on.
+      */
+      /*
+        The candidates a completion is choosing between. It sits above the
+        command line, which is where an operator is already looking.
+      */
+      .candidates {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: #5b6472;
+        background: #f4f5f7;
+        border-top: 1px solid #d7dae0;
+        padding: 4px 8px;
+        white-space: nowrap;
+        overflow-x: auto;
+      }
+
+      .math-overlay {
+        position: absolute;
+        box-sizing: border-box;
+        transform-origin: 0 0;
+        overflow: visible;
+        pointer-events: none;
+        color: #1a1a1a;
+      }
+
+      /*
+        The overlay while an operator edits it. It takes the pointer, because
+        the field inside it is what a press belongs to now, and it draws above
+        the objects around it so a wider formula covers them rather than being
+        covered.
+      */
+      .math-overlay--editing {
+        pointer-events: auto;
+        z-index: 5;
+        min-width: 160px;
+        outline: 1px solid #1a56db;
+      }
+
+      .math-field {
+        display: block;
+        border: none;
+        outline: none;
+        background: #ffffff;
+        font-size: inherit;
+        min-width: 100%;
+      }
+
+      /*
+        The two buttons a math field offers, for its virtual keyboard and its
+        menu. Both are hidden, because the box is the size of the notation in
+        it and the pair fills that box on their own, leaving the formula with
+        nowhere to draw. An operator here types on a keyboard.
+      */
+      .math-field::part(virtual-keyboard-toggle),
+      .math-field::part(menu-toggle) {
+        display: none;
+      }
+
+      /*
+        Where a measurement lays notation out. It is off screen rather than
+        hidden, because an element with display none has no size to read.
+      */
+      .math-measure {
+        position: absolute;
+        left: -10000px;
+        top: -10000px;
+        visibility: hidden;
+        white-space: nowrap;
+      }
+
       .text-editor {
         position: absolute;
         box-sizing: border-box;
@@ -343,13 +419,69 @@
         border-top: 1px solid #d0d0d0;
         background: #fafafa;
       }
-      #command {
+      /*
+        The command line and the layer that marks it. The input holds the text
+        and the caret, and the layer behind it paints a ground behind each run
+        the parse recognised.
+
+        The two agree on font, padding, border and scrolling, or the marks slide
+        away from the letters they belong to. Every property that moves a glyph
+        is set on both together below, and the layer draws its text in no colour
+        at all, so a disagreement shows as a mark in the wrong place rather than
+        as two sets of letters.
+      */
+      #command-field {
+        position: relative;
         flex: 0 0 auto;
+        background: #ffffff;
+      }
+
+      #command,
+      #command-mirror {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
         border: none;
         border-top: 1px solid #d0d0d0;
         padding: 6px 8px;
         font: inherit;
+        letter-spacing: normal;
+        white-space: pre;
+        text-align: left;
+      }
+
+      #command {
+        position: relative;
+        z-index: 1;
+        background: transparent;
         outline: none;
+      }
+
+      #command-mirror {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        z-index: 0;
+        color: transparent;
+        overflow: hidden;
+        pointer-events: none;
+        user-select: none;
+      }
+
+      /* A run that named a command word, and one that named a live address. */
+      .mark--command {
+        color: transparent;
+        background: #e8eef9;
+        border-radius: 3px;
+      }
+
+      .mark--address {
+        color: transparent;
+        background: #e6efe6;
+        box-shadow: 0 0 0 1px #bcd2bc;
+        border-radius: 3px;
       }
     </style>
   </head>
@@ -360,7 +492,10 @@
         <div id="panels"></div>
       </div>
       <div id="log"></div>
-      <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="command line" />
+      <div id="command-field">
+        <div id="command-mirror" aria-hidden="true"></div>
+        <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="command line" />
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

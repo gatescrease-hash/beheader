@@ -25,6 +25,7 @@
  */
 
 export * from "./address.ts";
+export * from "./complete.ts";
 export * from "./document.ts";
 export * from "./eval-context.ts";
 export * from "./journal.ts";
@@ -50,5 +51,12 @@ export * from "./primitives/geometry.ts";
 export * from "./primitives/table.ts";
 export * from "./primitives/text.ts";
 export * from "./primitives/image.ts";
+export * from "./primitives/math.ts";
+
+export * from "./math/ast.ts";
+export * from "./math/lexer.ts";
+export * from "./math/parser.ts";
+export * from "./math/names.ts";
+export * from "./math/eval.ts";
 
 export * from "./script/stub.ts";

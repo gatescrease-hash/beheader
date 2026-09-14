@@ -12,15 +12,15 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2369 pass, 0 skip, across 42 test files. |
-| Spec | Every section of `SPEC.md` is built, except the parts section 15 postpones. |
+| Tests | 2577 pass, 0 skip, across 51 test files. |
+| Spec | Built, except the in-text math of section 12 and its solving, and the parts section 16 postpones. |
 
 ### How to run it
 
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2369 tests
+npm test             # 2577 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -90,7 +90,7 @@ tables, and other suites drive them anyway.
 | File | What you would come here to change |
 | --- | --- |
 | `index.html` | The page and its stylesheet: the canvas, the panel container, the log and the input bar. |
-| `package.json` | Scripts and dev dependencies. There are no runtime dependencies. |
+| `package.json` | Scripts, dev dependencies, and the one runtime dependency, MathLive. |
 | `tsconfig.json` | Strict mode over the whole of `src`. |
 | `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
 | `vite.config.ts` | Dev server, production build, and the Vitest settings. |
@@ -101,6 +101,7 @@ tables, and other suites drive them anyway.
 | File | What you would come here to change |
 | --- | --- |
 | `address.ts` | Addressing: object IDs, names, paths, and the A1 cell helpers. |
+| `complete.ts` | What a half typed object name or address could still become, and the addresses a formula reads. |
 | `eval-context.ts` | The `TextMeasurer` interface and the context that carries it. |
 | `graph/node.ts` | The data model: values, the three slot kinds, `GraphObject` and `slotKey`. |
 | `graph/edge.ts` | The `Edge` record and `addressKey`. |
@@ -119,6 +120,12 @@ tables, and other suites drive them anyway.
 | `primitives/table.ts` | Cell addressing, range expansion, and the row and column resize. |
 | `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
 | `primitives/image.ts` | Slot path constants for the image type. |
+| `primitives/math.ts` | The slots a math object carries, and the compute function behind each export. |
+| `math/ast.ts` | The node types of the math language, and the depth check over them. |
+| `math/lexer.ts` | LaTeX to tokens, including the subscript and the commands that are dropped. |
+| `math/parser.ts` | Tokens to a program, with implicit multiplication and the binding forms. |
+| `math/names.ts` | Which names are bound, which are defined, and which become input ports. |
+| `math/eval.ts` | A program and its inputs to a value for each export. |
 | `script/stub.ts` | The script node and its ports. |
 | `mutation.ts` | The one channel for state change, and every operation it accepts. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
@@ -139,6 +146,7 @@ tables, and other suites drive them anyway.
 | `grips.ts` | The grabbers on a selected path, and the part each one names. |
 | `markdown.ts` | The small markdown parser behind a text object. |
 | `measure.ts` | The two Canvas2D measurers, and the line breaker. |
+| `math.ts` | Notation to markup, the size it takes, and where the element holding it goes. |
 | `renderer.ts` | The painter, and the three passes it makes over every frame. |
 | `images.ts` | The decoded bitmap cache. |
 | `editor.ts` | Where the in place editor goes, and how it looks. |
@@ -150,6 +158,7 @@ tables, and other suites drive them anyway.
 | File | What you would come here to change |
 | --- | --- |
 | `parser.ts` | One typed line to one command object. |
+| `complete.ts` | What a completion key writes in a line or a formula field, and which runs named something. |
 | `prompt.ts` | The prompt sequence a bare command word starts. |
 | `commands.ts` | The handlers, and every refusal message an operator reads. |
 | `props.ts` | The slot rows that the panel and the `props` command both read. |
@@ -203,7 +212,29 @@ the code it constrains.
 11. **A test that agrees with its author proves nothing.** An inert module with
    thirty green tests shipped a real bug. A new module reaches a consumer in
    the same change.
-12. **The operator cannot see what a test can see.** A live look on screen
+12. **`math/names.ts` and `math/eval.ts` agree on what a line can reach.** The
+   binder resolves a function call against the definitions above that line
+   alone, so a circle of function calls cannot be written and the recursion of
+   the evaluator stays bounded. An evaluator that registered
+   every function before the first line would run a self calling function that
+   the binder had already refused, and the two would disagree about the same
+   source. The evaluator registers a function at its own line for that reason.
+13. **A measurement of notation taken before its fonts arrive is about a
+   sixth too narrow.** The browser falls back to a font with other metrics, so
+   the box drawn around a formula is too small and the end of it hangs outside.
+   `main.ts` empties the measurement cache of `render/math.ts` and evaluates
+   again whenever a font finishes loading, which is the only thing that repairs
+   the sizes of a document already on screen.
+14. **The command line and the layer that marks it agree on every property
+   that moves a glyph.** `index.html` sets the font, the padding, the border
+   and the white space rule on both together, and `main.ts` copies the sideways
+   scroll of one onto the other on every paint. A disagreement slides each mark
+   away from the letters it belongs to, by more the further along the line it
+   sits. The layer draws its own text in no colour at all, so a disagreement
+   shows as a mark in the wrong place rather than as two sets of letters, which
+   is the difference between a fault a reader notices and one that passes for
+   a smudge.
+15. **The operator cannot see what a test can see.** A live look on screen
    comes before anyone calls an operator surface done. It has found what the
    suite could not on every surface built so far.
 

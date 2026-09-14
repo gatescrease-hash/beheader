@@ -30,6 +30,8 @@
 import {
   type CameraState,
   createEmptyDocument,
+  deriveValidateAndEvaluate,
+  mutate,
   type Document,
   type EvalContext,
   formatFormula,
@@ -85,7 +87,13 @@ import { menuCommandLine, pathMenuAt, type PathMenu } from "./render/menu.ts";
 import { edgeShape, type EdgeShape, type PathGrip } from "./render/grips.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
+import "mathlive";
+import "mathlive/static.css";
+import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
+import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
+import { hitTest } from "./render/hittest.ts";
+import { classifyCommandLine, completeCommandLine, completeInFormulaField, type FieldEdit } from "./command/complete.ts";
 
 export interface Viewport {
   readonly width: number;
@@ -704,6 +712,45 @@ export function commitTextContent(
   return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, slotKey(TEXT_CONTENT_PATH)), value: raw }, context);
 }
 
+/**
+ * Writes a new source onto a math object, through the mutation that rebuilds
+ * the slots the source implies. It goes straight to that mutation rather than
+ * through a set command, because writing the source slot on its own would
+ * leave the ports of the last source behind.
+ *
+ * A source that does not read leaves the object as it was and says so, which
+ * is the same answer the command line gives for the same text.
+ */
+export function commitMathSource(
+  state: AppState,
+  objectId: string,
+  latex: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  if (readMathLatex(object) === latex) {
+    return state;
+  }
+
+  const echoed = withLog(state, [`> ${object.name} = "${latex}"`]);
+  const result = mutate(
+    echoed.document.objects,
+    [{ kind: "setMathSource", objectId, source: latex }],
+    echoed.document.journal,
+    context,
+  );
+  if (!result.ok) {
+    return withLog(echoed, [result.message]);
+  }
+  return withLog(
+    { ...echoed, document: { ...echoed.document, objects: result.objects, journal: result.journal } },
+    [`${object.name} holds ${result.objects.find((entry) => entry.id === objectId)?.ports?.out.length ?? 0} value(s)`],
+  );
+}
+
 export function pictureBoxSize(naturalWidth: number, naturalHeight: number): { readonly width: number; readonly height: number } {
   const usable =
     naturalWidth > 0 && naturalHeight > 0 && Number.isFinite(naturalWidth) && Number.isFinite(naturalHeight);
@@ -870,7 +917,15 @@ interface PanelDragGesture {
 interface PanelEditHandlers {
   readonly onCommit: (raw: string) => void;
   readonly onCancel: () => void;
+  /**
+   * What a completion key should write in this field. It arrives as a function
+   * because the document lives inside start and a row is built outside it.
+   */
+  readonly onComplete?: (value: string, cursor: number) => FieldEdit | undefined;
 }
+
+/** How many candidates the list shows before it says how many are left. */
+const CANDIDATE_LIMIT = 12;
 
 interface PanelRowEdit {
   readonly path: string;
@@ -885,8 +940,19 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   }
 
   const measureContext = document.createElement("canvas").getContext("2d");
+
+  // Notation is laid out by a real element, because its size follows the fonts
+  // of the page. The element sits outside the flow so that measuring it moves
+  // nothing an operator can see.
+  const mathMeasureHost = document.createElement("div");
+  mathMeasureHost.className = "math-measure";
+  document.body.appendChild(mathMeasureHost);
+
+  const measureMath = createMathMeasurer(mathMeasureHost);
   const evalContext: EvalContext =
-    measureContext === null ? NULL_EVAL_CONTEXT : { measurer: createCanvas2dTextMeasurer(measureContext) };
+    measureContext === null
+      ? NULL_EVAL_CONTEXT
+      : { measurer: { ...createCanvas2dTextMeasurer(measureContext), measureMath } };
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
@@ -901,6 +967,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | undefined;
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
+  const mathOverlays = new Map<string, HTMLElement>();
+  const commandMirror = document.querySelector<HTMLElement>("#command-mirror") ?? undefined;
+  const candidateList = document.createElement("div");
+  candidateList.className = "candidates";
+  candidateList.hidden = true;
+  input.parentElement?.insertBefore(candidateList, input);
+  let editingMathId: string | undefined;
+  let mathField: HTMLElement & { value: string } | undefined;
   const imageBitmaps = createImageBitmapCache(() => paint());
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
@@ -935,8 +1009,156 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       state.interaction.focus?.grip,
     );
     updatePanels(panelledIds);
+    updateMathOverlays();
     updateEditor();
+    paintCommandLine();
   };
+
+  /**
+   * Puts one element over each math object and moves it with the camera. The
+   * canvas pass has already drawn the box under it, so the two agree on where
+   * the object is by taking the same world box.
+   */
+  const updateMathOverlays = (): void => {
+    const ratio = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    const live = new Set<string>();
+
+    for (const object of state.document.objects) {
+      if (object.type !== "math") {
+        continue;
+      }
+      const placement = mathOverlayPlacement(object, state.document.camera, ratio);
+      if (placement === undefined) {
+        continue;
+      }
+      live.add(object.id);
+
+      let element = mathOverlays.get(object.id);
+      if (element === undefined) {
+        element = document.createElement("div");
+        element.className = "math-overlay";
+        editorLayer.appendChild(element);
+        mathOverlays.set(object.id, element);
+      }
+
+      const latex = readMathLatex(object);
+      const drawn = readMathDrawnLatex(object);
+      const editing = object.id === editingMathId;
+      element.classList.toggle("math-overlay--editing", editing);
+
+      if (editing) {
+        if (mathField === undefined || element.firstChild !== mathField) {
+          element.innerHTML = "";
+          mathField = buildMathField(object.id, latex);
+          element.appendChild(mathField);
+          delete element.dataset["latex"];
+          mathField.focus();
+        }
+      } else if (element.dataset["latex"] !== drawn) {
+        element.innerHTML = mathMarkup(drawn);
+        element.dataset["latex"] = drawn;
+      }
+      element.style.left = `${placement.left}px`;
+      element.style.top = `${placement.top}px`;
+      element.style.width = `${placement.width}px`;
+      element.style.height = `${placement.height}px`;
+      element.style.padding = `${placement.padding}px`;
+      element.style.fontSize = `${placement.fontSize}px`;
+      element.style.transform = `scale(${placement.scale})`;
+    }
+
+    for (const [objectId, element] of [...mathOverlays]) {
+      if (!live.has(objectId)) {
+        element.remove();
+        mathOverlays.delete(objectId);
+      }
+    }
+  };
+
+  /**
+   * Builds the editable field for one math object. It is a MathLive element,
+   * so an operator types the notation the way they would in Desmos rather than
+   * writing LaTeX by hand, and its value is the LaTeX either way.
+   *
+   * A keystroke stops here rather than reaching the command line, which holds
+   * focus for everything else on the page.
+   */
+  const buildMathField = (objectId: string, latex: string): HTMLElement & { value: string } => {
+    const field = document.createElement("math-field") as HTMLElement & { value: string };
+    field.className = "math-field";
+    field.value = latex;
+    field.setAttribute("math-virtual-keyboard-policy", "manual");
+
+    field.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      const key = (event as KeyboardEvent).key;
+      if (key === "Escape") {
+        event.preventDefault();
+        closeMathEditor();
+        paint();
+      } else if (key === "Enter") {
+        event.preventDefault();
+        commitMathEditor();
+      }
+    });
+    field.addEventListener("blur", () => {
+      commitMathEditor();
+    });
+    return field;
+  };
+
+  const closeMathEditor = (): void => {
+    editingMathId = undefined;
+    mathField = undefined;
+    input.focus();
+  };
+
+  const commitMathEditor = (): void => {
+    const objectId = editingMathId;
+    const field = mathField;
+    if (objectId === undefined || field === undefined) {
+      return;
+    }
+    const latex = field.value;
+    closeMathEditor();
+    apply(commitMathSource(state, objectId, latex, evalContext));
+  };
+
+  const openMathEditor = (objectId: string): void => {
+    editingMathId = objectId;
+    mathField = undefined;
+    paint();
+  };
+
+  /**
+   * Measures every math object again and evaluates the document against the
+   * new sizes. Notation measured before its fonts arrive comes out about a
+   * sixth too narrow, so the box drawn around it is too small until this runs.
+   *
+   * It evaluates rather than mutating, because nothing about the document has
+   * changed. Only the size of what was already there is now known properly, so
+   * there is nothing for the journal to record.
+   */
+  const remeasureMath = (): void => {
+    if (!state.document.objects.some((object) => object.type === "math")) {
+      return;
+    }
+    measureMath.forget();
+    const evaluated = deriveValidateAndEvaluate(state.document.objects, evalContext);
+    if (!evaluated.ok) {
+      return;
+    }
+    state = { ...state, document: { ...state.document, objects: evaluated.objects } };
+    paint();
+  };
+
+  // A font finishing arrival changes what notation measures, and fonts arrive
+  // after the first frame has already been drawn.
+  if (typeof document.fonts?.addEventListener === "function") {
+    document.fonts.addEventListener("loadingdone", () => {
+      remeasureMath();
+    });
+  }
 
   const panelledObjectIds = (): readonly string[] => {
     const ids: string[] = [];
@@ -1010,6 +1232,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       input.focus();
       paint();
     },
+    onComplete: (value: string, cursor: number) => completeInFormulaField(value, cursor, state.document.objects),
   });
 
   const panelElement = (objectId: string): HTMLElement => {
@@ -1098,7 +1321,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const buildInPlaceElement = (target: EditorTarget, style: EditorTextStyle): HTMLTextAreaElement | HTMLInputElement => {
     const keydown = (event: KeyboardEvent): void => {
       event.stopPropagation();
-      if (event.key === "Escape") {
+      if (event.key === "Tab" && target.kind === "cell") {
+        event.preventDefault();
+        applyFieldCompletion(event.currentTarget as HTMLInputElement, (value, cursor) =>
+          completeInFormulaField(value, cursor, state.document.objects, target.objectId),
+        );
+      } else if (event.key === "Escape") {
         event.preventDefault();
         cancelInPlace();
       } else if (event.key === "Enter" && target.kind === "cell") {
@@ -1198,8 +1426,28 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   window.addEventListener("resize", paint);
 
+  input.addEventListener("input", () => {
+    paintCommandLine();
+  });
+
+  input.addEventListener("scroll", () => {
+    if (commandMirror !== undefined) {
+      commandMirror.scrollLeft = input.scrollLeft;
+    }
+  });
+
   input.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      completeAtCursor();
+      return;
+    }
+    if (event.key === "Escape") {
+      showCandidates([]);
+      return;
+    }
     if (event.key !== "Enter") {
+      showCandidates([]);
       return;
     }
     const line = input.value;
@@ -1207,8 +1455,82 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (!outcome.refused) {
       input.value = "";
     }
+    showCandidates([]);
     applyTransition(outcome);
   });
+
+  /**
+   * Writes as much of a completion as the candidates agree on, and shows what
+   * is left to choose between. A completion that writes nothing new has run out
+   * of agreement, and the list is then the whole of what it can offer.
+   */
+  const completeAtCursor = (): void => {
+    const cursor = input.selectionStart ?? input.value.length;
+    const completion = completeCommandLine(input.value, cursor, state.document.objects);
+    if (completion === undefined) {
+      showCandidates([]);
+      return;
+    }
+
+    const typed = input.value.slice(completion.from, cursor);
+    if (completion.fill !== "" && completion.fill !== typed) {
+      const before = input.value.slice(0, completion.from);
+      const after = input.value.slice(completion.to);
+      input.value = `${before}${completion.fill}${after}`;
+      const caret = completion.from + completion.fill.length;
+      input.setSelectionRange(caret, caret);
+    }
+
+    showCandidates(completion.candidates.length > 1 ? completion.candidates : []);
+    paintCommandLine();
+  };
+
+  /**
+   * Paints a ground behind each run of the command line that named something.
+   * It builds the layer out of text nodes and elements rather than out of
+   * markup, so a line an operator typed can never be read as markup.
+   *
+   * The layer scrolls with the input, because an input scrolls sideways once
+   * the line outgrows it and a mark that stayed put would sit under the wrong
+   * letters.
+   */
+  const paintCommandLine = (): void => {
+    if (commandMirror === undefined) {
+      return;
+    }
+    const line = input.value;
+    const spans = classifyCommandLine(line, state.document.objects);
+
+    commandMirror.textContent = "";
+    let at = 0;
+    for (const span of spans) {
+      if (span.start > at) {
+        commandMirror.appendChild(document.createTextNode(line.slice(at, span.start)));
+      }
+      const mark = document.createElement("span");
+      mark.className = `mark--${span.kind}`;
+      mark.textContent = line.slice(span.start, span.end);
+      commandMirror.appendChild(mark);
+      at = span.end;
+    }
+    if (at < line.length) {
+      commandMirror.appendChild(document.createTextNode(line.slice(at)));
+    }
+    commandMirror.scrollLeft = input.scrollLeft;
+  };
+
+  const showCandidates = (candidates: readonly string[]): void => {
+    if (candidates.length === 0) {
+      candidateList.textContent = "";
+      candidateList.hidden = true;
+      return;
+    }
+    candidateList.textContent = candidates.slice(0, CANDIDATE_LIMIT).join("   ");
+    if (candidates.length > CANDIDATE_LIMIT) {
+      candidateList.textContent += `   and ${candidates.length - CANDIDATE_LIMIT} more`;
+    }
+    candidateList.hidden = false;
+  };
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Escape") {
@@ -1246,7 +1568,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   canvas.addEventListener("dblclick", (event: MouseEvent) => {
-    const target = editorTargetAt(screenPointOf(event), state.document.objects, state.document.camera);
+    const point = screenPointOf(event);
+
+    // A math object edits through its own overlay rather than the text editor,
+    // because the field is a MathLive element and the text editor is a
+    // textarea holding a string.
+    const underPointer = hitTest(point, state.document.objects, state.document.camera);
+    if (underPointer?.type === "math") {
+      openMathEditor(underPointer.id);
+      return;
+    }
+
+    const target = editorTargetAt(point, state.document.objects, state.document.camera);
     if (target === undefined) {
       return;
     }
@@ -1680,7 +2013,10 @@ function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputEle
   };
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     event.stopPropagation();
-    if (event.key === "Enter") {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      applyFieldCompletion(input, handlers.onComplete);
+    } else if (event.key === "Enter") {
       commit();
     } else if (event.key === "Escape") {
       cancel();
@@ -1688,6 +2024,26 @@ function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputEle
   });
   input.addEventListener("blur", cancel);
   return input;
+}
+
+/**
+ * Writes a completion into a field and puts the caret after it. A field that
+ * offers none is left as it was, so the key does nothing rather than something
+ * surprising.
+ */
+function applyFieldCompletion(
+  field: HTMLInputElement,
+  complete: ((value: string, cursor: number) => FieldEdit | undefined) | undefined,
+): void {
+  if (complete === undefined) {
+    return;
+  }
+  const edit = complete(field.value, field.selectionStart ?? field.value.length);
+  if (edit === undefined) {
+    return;
+  }
+  field.value = edit.value;
+  field.setSelectionRange(edit.caret, edit.caret);
 }
 
 function downloadDocument(state: Document): void {

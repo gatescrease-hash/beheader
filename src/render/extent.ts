@@ -33,6 +33,7 @@ import {
   TEXT_WIDTH_PATH,
   VERTICES_PATH,
 } from "../engine/index.ts";
+import { mathWorldBox } from "./math.ts";
 import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDTH, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 
@@ -64,6 +65,8 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return imageExtent(object);
     case "script":
       return scriptExtent(object);
+    case "math":
+      return mathWorldBox(object);
     case "value":
     case "add":
       return undefined;

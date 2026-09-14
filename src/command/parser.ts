@@ -102,6 +102,13 @@ export interface CreateScriptCommand {
   readonly y: number;
 }
 
+export interface CreateMathCommand {
+  readonly kind: "math";
+  readonly x: number;
+  readonly y: number;
+  readonly source: string;
+}
+
 export interface CreateTableCommand {
   readonly kind: "table";
   readonly x: number;
@@ -231,6 +238,7 @@ export type Command =
   | CreateTableCommand
   | CreateImageCommand
   | CreateScriptCommand
+  | CreateMathCommand
   | LinkCommand
   | UnlinkCommand
   | AddPortCommand
@@ -271,7 +279,13 @@ export function isCommandParseFailure(value: CommandParseResult): value is Comma
   return value.ok === false;
 }
 
-type PositionalKind = "text" | "number" | "literal" | "literal-or-formula" | "points";
+/**
+ * What one positional argument holds. The object and address kinds read
+ * exactly the way text does, and they are separate so that a table can say
+ * which arguments name something in the document. Without them that knowledge
+ * would be in commands.ts alone, where completion cannot reach it.
+ */
+type PositionalKind = "text" | "object" | "address" | "number" | "literal" | "literal-or-formula" | "points";
 
 interface PositionalParameter {
   readonly name: string;
@@ -369,6 +383,16 @@ function optionalNumber(key: string, defaultValue: number): NamedParameter {
 
 function text(name: string): PositionalParameter {
   return { name, kind: "text" };
+}
+
+/** An argument naming an object, such as the target of delete. */
+function objectName(name: string): PositionalParameter {
+  return { name, kind: "object" };
+}
+
+/** An argument naming one slot, such as either side of link. */
+function address(name: string): PositionalParameter {
+  return { name, kind: "address" };
 }
 
 const COMMAND_SPECS: readonly CommandSpec[] = [
@@ -549,9 +573,27 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     },
   },
   {
+    name: "math",
+    usage: 'math [x=<number>] [y=<number>] "<latex>"',
+    positional: [text("source")],
+    named: [optionalNumber("x", 0), optionalNumber("y", 0)],
+    flags: [],
+    build: (args) => ({
+      kind: "math",
+      x: numberArgument(args, "x"),
+      y: numberArgument(args, "y"),
+      source: textArgument(args, "source"),
+    }),
+    prompts: [{ name: "position", message: "specify math position", accepts: "point" }],
+    buildFromPrompts: (answers) => {
+      const position = pointAnswer(answers, "position");
+      return { kind: "math", x: position.x, y: position.y, source: "" };
+    },
+  },
+  {
     name: "link",
     usage: "link <address> <address>",
-    positional: [text("target"), text("source")],
+    positional: [address("target"), address("source")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "link", target: textArgument(args, "target"), source: textArgument(args, "source") }),
@@ -559,7 +601,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "unlink",
     usage: "unlink <address>",
-    positional: [text("target")],
+    positional: [address("target")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "unlink", target: textArgument(args, "target") }),
@@ -567,7 +609,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "clear",
     usage: "clear <address>",
-    positional: [text("target")],
+    positional: [address("target")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "clear", target: textArgument(args, "target") }),
@@ -575,7 +617,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "set",
     usage: "set <address> <value> | set <address> = <formula>",
-    positional: [text("target"), { name: "value", kind: "literal-or-formula" }],
+    positional: [address("target"), { name: "value", kind: "literal-or-formula" }],
     named: [],
     flags: [],
     build: (args) =>
@@ -586,7 +628,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "addport",
     usage: "addport <object>.<in|out>.<port>",
-    positional: [text("target")],
+    positional: [address("target")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "addport", target: textArgument(args, "target") }),
@@ -594,7 +636,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "removeport",
     usage: "removeport <object>.<in|out>.<port>",
-    positional: [text("target")],
+    positional: [address("target")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "removeport", target: textArgument(args, "target") }),
@@ -602,7 +644,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "rename",
     usage: "rename <object> <new-name>",
-    positional: [text("target"), text("new-name")],
+    positional: [objectName("target"), text("new-name")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "rename", target: textArgument(args, "target"), newName: textArgument(args, "new-name") }),
@@ -610,7 +652,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "delete",
     usage: "delete <object> [force]",
-    positional: [text("target")],
+    positional: [objectName("target")],
     named: [],
     flags: ["force"],
     build: (args) => ({ kind: "delete", target: textArgument(args, "target"), force: hasFlag(args, "force") }),
@@ -618,7 +660,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "addvertex",
     usage: "addvertex <object> <x,y>",
-    positional: [text("target"), { name: "points", kind: "points" }],
+    positional: [objectName("target"), { name: "points", kind: "points" }],
     named: [],
     flags: [],
     build: (args) => ({ kind: "addvertex", target: textArgument(args, "target"), points: pointsArgument(args, "points") }),
@@ -626,7 +668,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "delvertex",
     usage: "delvertex <object> <index> [force]",
-    positional: [text("target"), { name: "index", kind: "number" }],
+    positional: [objectName("target"), { name: "index", kind: "number" }],
     named: [],
     flags: ["force"],
     build: (args) => ({
@@ -639,7 +681,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "edgetype",
     usage: "edgetype <object> <edge> line|arc|curve",
-    positional: [text("target"), { name: "index", kind: "number" }, text("shape")],
+    positional: [objectName("target"), { name: "index", kind: "number" }, text("shape")],
     named: [],
     flags: [],
     build: (args) => ({
@@ -652,7 +694,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "split",
     usage: "split <object> <edge> <x,y>",
-    positional: [text("target"), { name: "index", kind: "number" }, { name: "points", kind: "points" }],
+    positional: [objectName("target"), { name: "index", kind: "number" }, { name: "points", kind: "points" }],
     named: [],
     flags: [],
     build: (args) => ({
@@ -665,7 +707,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "explode",
     usage: "explode <object> [force]",
-    positional: [text("target")],
+    positional: [objectName("target")],
     named: [],
     flags: ["force"],
     build: (args) => ({ kind: "explode", target: textArgument(args, "target"), force: hasFlag(args, "force") }),
@@ -673,7 +715,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "refs",
     usage: "refs <object|address>",
-    positional: [text("target")],
+    positional: [address("target")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "refs", target: textArgument(args, "target") }),
@@ -681,7 +723,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "props",
     usage: "props <object>",
-    positional: [text("target")],
+    positional: [objectName("target")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "props", target: textArgument(args, "target") }),
@@ -697,7 +739,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "select",
     usage: "select <object>",
-    positional: [text("target")],
+    positional: [objectName("target")],
     named: [],
     flags: [],
     build: (args) => ({ kind: "select", target: textArgument(args, "target") }),
@@ -737,6 +779,27 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
 ];
 
 export const COMMAND_NAMES: readonly string[] = COMMAND_SPECS.map((spec) => spec.name);
+
+/**
+ * What each positional argument of a command holds, in order. Completion reads
+ * this to answer whether the word under the cursor names something in the
+ * document, so the registry stays the one place a command is described.
+ */
+export function positionalKinds(commandName: string): readonly string[] {
+  const spec = COMMAND_SPECS.find((entry) => entry.name === commandName.toLowerCase());
+  return spec === undefined ? [] : spec.positional.map((parameter) => parameter.kind);
+}
+
+/** The usage line of a command, which says the shape it accepts. */
+export function commandUsage(commandName: string): string | undefined {
+  return COMMAND_SPECS.find((entry) => entry.name === commandName.toLowerCase())?.usage;
+}
+
+/** The named arguments a command accepts, which completion skips over. */
+export function namedArgumentKeys(commandName: string): readonly string[] {
+  const spec = COMMAND_SPECS.find((entry) => entry.name === commandName.toLowerCase());
+  return spec === undefined ? [] : spec.named.map((parameter) => parameter.key);
+}
 
 // Nothing is on this list today. It stays here, empty, for the next command
 // SPEC.md documents before the code builds it.
@@ -1014,6 +1077,8 @@ function readPositionalValue(
 ): { readonly ok: true; readonly value: number | string | boolean } | CommandParseFailure {
   switch (parameter.kind) {
     case "text":
+    case "object":
+    case "address":
       return { ok: true, value: token.text };
     case "number": {
       if (token.quoted || !NUMBER_PATTERN.test(token.text)) {

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS } from "../engine/index.ts";
-import { COMMAND_NAMES, COMMANDS_SPECIFIED_BUT_NOT_BUILT, isCommandParseFailure, parseCommand, type Command } from "./parser.ts";
+import { COMMAND_NAMES, COMMANDS_SPECIFIED_BUT_NOT_BUILT, commandUsage, isCommandParseFailure, parseCommand, positionalKinds, type Command } from "./parser.ts";
 
 function parsed(line: string): Command {
   const result = parseCommand(line);
@@ -48,6 +48,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "table x=0 y=0 rows=8 cols=8", command: { kind: "table", x: 0, y: 0, rows: 8, cols: 8 } },
   { line: "image x=0 y=0", command: { kind: "image", x: 0, y: 0 } },
   { line: "script x=0 y=0", command: { kind: "script", x: 0, y: 0 } },
+  { line: 'math x=2 y=3 "y=1"', command: { kind: "math", x: 2, y: 3, source: "y=1" } },
   { line: "link polygon_1.origin.x table_x.A1", command: { kind: "link", target: "polygon_1.origin.x", source: "table_x.A1" } },
   { line: "unlink polygon_1.origin.x", command: { kind: "unlink", target: "polygon_1.origin.x" } },
   { line: "clear table_x.A1", command: { kind: "clear", target: "table_x.A1" } },
@@ -436,5 +437,44 @@ describe("the command lexer stops at the `=` of a formula, so a string literal s
   it("still applies the command lexer's quoting rules to everything BEFORE the formula's `=`, unchanged", () => {
     expect(rejected('set a"b = CONCAT("x")').start).toBe(5);
     expect(rejected('set a"b = CONCAT("x")').message).toContain("a quote must open an argument");
+  });
+});
+
+describe("an argument that names something declares which kind it is", () => {
+  /**
+   * The usage line and the argument kinds are two statements of the same fact,
+   * and completion reads the kinds while an operator reads the usage. A command
+   * whose first argument is written as an object or an address in one and as
+   * plain text in the other is a command completion goes quiet on, with nothing
+   * else to say it went wrong.
+   */
+  it("agrees with the usage line about the first argument of every command", () => {
+    const disagreements: string[] = [];
+
+    for (const name of COMMAND_NAMES) {
+      const usage = commandUsage(name) ?? "";
+      const rest = usage.slice(name.length).trim();
+      const declared = positionalKinds(name)[0];
+
+      const wantsAddress = rest.startsWith("<address>") || rest.startsWith("<object|address>") || rest.startsWith("<object>.<");
+      const wantsObject = !wantsAddress && rest.startsWith("<object>");
+
+      if (wantsAddress && declared !== "address") {
+        disagreements.push(`${name}: usage says an address, the registry says "${declared}"`);
+      }
+      if (wantsObject && declared !== "object") {
+        disagreements.push(`${name}: usage says an object, the registry says "${declared}"`);
+      }
+      if (!wantsAddress && !wantsObject && (declared === "address" || declared === "object")) {
+        disagreements.push(`${name}: the registry says "${declared}", and the usage names neither`);
+      }
+    }
+
+    expect(disagreements).toEqual([]);
+  });
+
+  it("finds an object or an address argument on every command that takes one", () => {
+    const named = COMMAND_NAMES.filter((name) => positionalKinds(name).some((kind) => kind === "object" || kind === "address"));
+    expect(named.length).toBeGreaterThan(10);
   });
 });

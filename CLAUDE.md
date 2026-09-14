@@ -38,15 +38,63 @@ These six rules make the design work. Do not break one for convenience.
 1. Pick one item from `docs/TODO.md`.
 2. Write the code and the tests together.
 3. Run the checks below. All must be clean.
-4. Delete the item from `docs/TODO.md` when it lands, and update the state
+4. Look at anything an operator can see, on screen. "Look at it on screen"
+   below says how.
+5. Delete the item from `docs/TODO.md` when it lands, and update the state
    table in `docs/STATUS.md` where the change moves it.
 
 ```
-npm test                          # 2369 tests, all pass
+npm test                          # 2577 tests, all pass
 npm run typecheck                 # both TypeScript configs
 npm run build                     # production build
 npm run prose                     # prose checker, gives exit code 0
 ```
+
+## Look at it on screen
+
+A green suite says the code does what its author expected. It says nothing
+about what an operator sees, and every operator surface built here so far has
+shipped a bug that only a look on screen found. Drawing math found two in one
+sitting: notation measured before its fonts arrived was a sixth too narrow and
+hung out through the side of its box, and an editable math field drew nothing
+at all because its own two buttons filled the space the formula needed. No test
+could have failed on either.
+
+So drive the real application in a real browser before calling an operator
+surface done. Chromium is already installed in this environment, and Playwright
+drives it. Take a screenshot and read it.
+
+```
+npm install --prefix <a scratch directory> playwright   # once
+nohup npx vite --port 5173 --strictPort > /tmp/dev.log 2>&1 &
+```
+
+Then a script of about twenty lines does the rest. Launch Chromium, open
+`http://localhost:5173/`, type into `#command` and press Enter for each line of
+the scenario, then call `page.screenshot`. Read the image back.
+
+`PLAYWRIGHT_BROWSERS_PATH` already points at the installed browsers. Where a
+plain `chromium.launch()` cannot find one anyway, because the version Playwright
+wants differs from the version installed, pass the binary directly as
+`executablePath`. `ls /opt/pw-browsers` gives the folder to point at, and the
+binary inside it is at `chrome-linux/chrome`. Never run `playwright install`.
+
+Four things are worth doing every time.
+
+- Collect `pageerror` and `console` messages and print them. A silent exception
+  reads as an empty canvas.
+- Read state back out with `page.evaluate`, such as the text of `#log` or the
+  box of an element, so the numbers can be checked against the arithmetic the
+  scenario expects.
+- Drive the change end to end rather than in one step. Create the object, wire
+  it to another one, change the upstream value, and look at what moved.
+- Use `npm run dev` rather than `vite preview`. The production build sets a
+  base path, and the preview server serves the page somewhere the assets are
+  not.
+
+A picture also answers a question no test result can: whether the thing looks
+right. Read the screenshot as an operator would, and treat anything that looks
+wrong in it as a fault to chase.
 
 ## How to write a comment
 

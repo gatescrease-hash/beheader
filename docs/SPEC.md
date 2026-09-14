@@ -10,8 +10,8 @@ It does not say what the code does today. `STATUS.md` says that.
 Graphpaper is a keyboard driven spatial canvas. Every object on the canvas is a
 live node in one shared dependency graph.
 
-Geometry, text, tables, images and script nodes are not separate tools. They are
-all citizens of the same reactive system. They wire to each other:
+Geometry, text, tables, images, equations and script nodes are not separate
+tools. They are all citizens of the same reactive system. They wire to each other:
 
 - A polygon origin can read cell `A1` of a table. Type a new number in that cell
   and the polygon moves.
@@ -42,8 +42,10 @@ Keep the core simple and safe. Push complexity to the edges.
 - The dependency graph is a strict directed acyclic graph. Each value has one
   source. The program finds a cycle and refuses it. The program never solves a
   cycle.
-- The core holds no constraint solver. Hard problems go into script nodes. The
-  graph treats a script node as an opaque box.
+- The core holds no constraint solver. Hard problems go into a script node or a
+  math object, and the graph treats each of those as an opaque box. A solver
+  inside one box never reaches across the graph, so the rule above holds
+  whatever a box does inside itself.
 - The formula language is not Turing complete. It has expressions and nested
   conditionals. It has no loops and no recursion. It always stops.
 
@@ -57,7 +59,7 @@ Keep the core simple and safe. Push complexity to the edges.
 | Runtime | Browser, one process |
 | Build tool | Vite |
 | Drawing | Canvas2D, immediate mode |
-| Runtime dependencies | None. Hand write the graph, the parser and the renderer. |
+| Runtime dependencies | One, MathLive, for mathematical notation. See section 12. |
 | Python scripts | Not built. A stub node stands in. See section 11. |
 | Storage | Versioned JSON. Save by download. Load by file input. |
 
@@ -111,6 +113,11 @@ A change to it touches everything. See section 5.
 Table cells and text share one parser and one evaluator. Do not write a second
 expression evaluator for text. Only the syntax around it differs.
 
+The math object of section 12 holds a second language, and it is not an
+exception to this rule. Mathematical notation reaches the graph through a
+compute function on a derived slot, the same way a script node does, so no part
+of it is a second evaluator for a cell or for a text box.
+
 ### Rule 5. Speed is not a goal
 
 Write the simplest correct code:
@@ -128,7 +135,7 @@ Evaluation never creates or destroys a slot. Only a mutation changes which slots
 exist. This rule makes the simple topological pass safe. Several designs below
 have their shape because of it.
 
-### Rule 7. Do not build the items in section 15
+### Rule 7. Do not build the items in section 16
 
 ---
 
@@ -186,7 +193,8 @@ evaluation. That is what keeps Rule 6 true.
 
 ```
 Value = number | string | boolean | Point | Point[] | null | ErrorValue
-ErrorValue = { error: "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT" | "#MEASURE",
+ErrorValue = { error: "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT" | "#MEASURE"
+                    | "#MATH",
                message: string }
 ```
 
@@ -532,7 +540,11 @@ Block = { type: "text", value: string }
       | { type: "formula", ast: FormulaAst }
       | { type: "conditional", condition: FormulaAst,
           trueBranch: Block[], falseBranch: Block[] }
+      | { type: "math", parsed: ParsedMath, inline: boolean }
 ```
+
+The math block is the inline and the block form of section 12. That section
+gives its syntax and says what it can and cannot do.
 
 A text specific dependency walker recurses the block tree and calls
 `extractDependencies` on every embedded AST. It includes untaken branches, per
@@ -608,7 +620,250 @@ the right.
 
 ---
 
-## 12. Renderer, camera, hit test, interaction
+## 12. The math object
+
+A math object holds mathematics written the way mathematics is written. It takes
+named numbers in, evaluates one or more equation lines over them, and hands every
+value it defines back to the document as an ordinary slot.
+
+This is a separate primitive and not a larger formula language. Mathematical
+notation has binding forms, implicit multiplication, subscripts and calculus.
+The formula language of section 6 has none of those, and it needs none of them,
+because each one costs the property that keeps that language safe: it is small
+enough to read in an afternoon and it always stops. Rule 4 keeps one expression
+language for cells and for text, and a math object is not a third consumer of
+that language. It is a second language behind a seam, which is the arrangement
+section 11 already gives a script node.
+
+```
+MathObject {
+  source: string                   // the equation lines, as the editor writes them
+  display: "source" | "value" | "both"
+  origin: { x, y }
+  in:   Record<string, Slot>       // one for each free name the source reads
+  out:  Record<string, Slot>       // one for each name the source defines
+  seed: Record<string, number>     // the starting point for a solved unknown
+}
+```
+
+### The box is opaque
+
+`graph/eval.ts` sees input slots, output slots and a compute function. It never
+sees an equation, a solver or a unit. Everything else in this section describes
+what happens inside the box and at its surface, and none of it reaches the
+evaluator. This is the same containment the script node gets, and it is what
+lets the inside of the box use a solver while the document around it stays a
+strict directed acyclic graph.
+
+The seam is one function:
+
+```typescript
+export function evaluateMathObject(
+  source: ParsedMath,
+  exportName: string,
+  inputs: Record<string, Value>,
+  seeds: Record<string, number>,
+): Value;
+```
+
+Only this body knows how an answer is reached. A hand written evaluator and a
+library both satisfy it, so the choice between them is reversible without a
+change anywhere else.
+
+### The three forms
+
+The same parse and the same layout routine serve all three. The form picks the
+box and the baseline rule, and changes nothing else.
+
+- **Standalone** is an object on the canvas with its own origin, the same kind of
+  citizen as a table or a text box.
+- **Block** is a math run alone on a line inside a text object. It lays out on a
+  line of its own, centred across the width of the box.
+- **Inline** is a math run inside a line of prose, with its baseline on the
+  baseline of that line.
+
+### Names
+
+Section 6 already splits a bare name from a dotted name inside a table cell,
+where a bare `A1` means this table and a dotted name means the document. Math
+source uses that same split, so only one piece of code ever resolves an address.
+
+- A **bare name** is local to the object.
+- A **dotted name** such as `table_x.A1` is a document address. The parser
+  resolves it to an ID at parse time, the same as any formula, so a rename needs
+  no rewrite.
+
+A bare name that the source never defines is an input. On a standalone object it
+becomes a literal slot such as `math_1.in.speed`, with a value the operator
+types, and `link` binds it to any upstream address exactly as a script port does.
+A text object has nowhere to hang a port, so a free bare name inside a text math
+run is a parse error, and the writer uses a dotted address instead.
+
+A line of the form `name = expression` defines a name, and that name becomes a
+derived slot `math_1.out.x_ans`. The exports go under `out` rather than at the
+top of the object because a bare export named `source`, `display` or `origin`
+would collide with a slot the schema declares, and a name the operator types must
+never shadow the schema.
+
+A function definition such as `f(x) = x^2` makes no slot, because a slot holds a
+value and the `Value` union of section 4 has no function member. Later lines in
+the same object can call it.
+
+An integral, a sum, a product and a function definition each bind a name over
+their body. A bound name is neither an input nor an export. The `x` in
+`integral from 2 to 8 of sin(x_input) dx` belongs to the integral, and
+`x_input` is the input port.
+
+### The slot set comes from the source, at mutation time
+
+The mutation that writes `source` parses it, works out the port set, the export
+set and the seed set, and adds or removes those slots in the same batch.
+
+Evaluation reads `source` to work out what an export holds, and never to work
+out which exports exist. The port lists on the object carry that, and a
+mutation is the only thing that writes them. So the slot set of a math object
+is fixed for the whole of an evaluation pass even though it came from text an
+operator typed, which is Rule 6. It is the pairing section 4 already describes
+for a port name and a port value: the integrity check needs every address a
+derived slot declares to be a real slot the moment that slot exists.
+
+A parse that fails leaves the slot set alone and fails the mutation, because a
+half parsed source would otherwise take the export slots away from whatever reads
+them on every keystroke.
+
+### Solving
+
+Section 16 postpones constraint solving for the document graph, and that stays
+true. The program never solves across objects. Two math objects that define each
+other in a circle are a cycle, and the cycle check refuses them the same as any
+other cycle.
+
+Inside one box the rule is different. A single math object may solve for an
+unknown that its own lines constrain, because the whole solve begins and ends
+inside one compute function and nothing outside the box can observe a step of it.
+An implicit line such as `x^2 + 3 = y` is therefore legal where `y` is known and
+`x` is the unknown the object solves for.
+
+Four properties make a solve safe to run inside the evaluation pass:
+
+1. **It is confined.** A solve reads the input ports and the lines of one object.
+   It never reads a slot on another object mid solve, so no partial state escapes.
+2. **It terminates.** The solve carries an iteration bound. Exhausting the bound
+   gives an error value and never hangs the pass.
+3. **It is deterministic.** The same inputs give the same answer. Evaluation runs
+   in full on every mutation, so a solver seeded by chance would make a document
+   change under a cursor that touched nothing.
+4. **It gives one value.** An equation with several roots would otherwise leave a
+   slot without a defined value.
+
+The fourth property needs a rule, and the rule is a seed. Each solved unknown
+gets a literal slot `math_1.seed.x`, and the object returns the root nearest that
+seed. The seed is an ordinary slot, so a formula can drive it and an operator can
+sweep a root across a range. A solve that finds no root gives an error value.
+
+**What this does not cover.** Desmos draws `x^2 + y^2 = 9` as a curve by
+sampling the plane, and it fits parameters to data with a regression. A math
+object gives numbers and draws notation, and it does neither of those. Section
+16 holds the reason a curve waits.
+
+### Display
+
+`display` is a literal slot taking `source`, `value` or `both`.
+
+While the operator edits, the object draws its source, with each free name
+followed by its current value, so the reader sees which numbers the answer stands
+on. Out of the editor, `display` picks what shows. The worked example reads as
+the integral under `source`, as a number under `value`, and as the equation
+followed by its result under `both`.
+
+The properties panel of section 14 already splits modifiable slots from derived
+ones, so ports and seeds land above the rule and exports land below it, with no
+change to the panel.
+
+### Math inside a text object
+
+Section 9 parses text content into a block tree of text, formula and conditional
+blocks. Math adds a fourth block type.
+
+```
+      | { type: "math", parsed: ParsedMath, inline: boolean }
+```
+
+`{$ ... }` inside a line is the inline form. A line that holds `{$$ ... }` alone
+is the block form. The text dependency walker already recurses the tree and calls
+`extractDependencies` on every embedded AST, so a math parse reports the
+addresses it reads through that same function, and a text box that reads a math
+object updates like any other reader.
+
+A math run in text defines no name and solves for nothing. It evaluates an
+expression and draws it. A text object that grew slots out of its own content
+would need the mutation time slot derivation above a second time, and the
+standalone object already solves that problem in one place. A document that needs
+a named value puts it in a math object and reads it back with `{= math_1.out.x }`.
+
+### Drawing
+
+`convertLatexToMarkup` gives markup, and the renderer paints a canvas, so a math
+object does not paint in the ordinary pass. It draws as an element in `#stage`,
+laid out in world units with one transform scaling it to the current zoom. The
+in place editor already works this way, and the same rule applies here: nothing
+multiplies the zoom into a width or a font size a second time, because the
+transform has applied it once already.
+
+The canvas pass draws the box of the object, its selection furniture and its
+error badge. The notation itself belongs to the overlay.
+
+This costs one thing. An overlay draws above the canvas, so a math object sits
+above every canvas object whatever the document order says. Raising the box to a
+bitmap and painting that instead would keep the order and lose sharpness at
+every zoom, and the order matters less than the notation being readable.
+
+### Measurement
+
+The inline form needs a width and a height before the line around it can break,
+and that size comes from whatever draws the notation. `TextMeasurer` is the
+existing interface for a measurement that crosses into the engine, so it grows a
+method that measures one math run. `render/measure.ts` implements it with the
+same library that draws, and a test supplies fixed sizes. `measuredWidth` and
+`measuredHeight` are then derived slots like the ones a text box carries, and
+Rule 1 holds.
+
+### Errors
+
+A line that fails gives `#MATH` on the export it defines, and that value travels
+like any other error. A parse failure is not one of these, because a parse
+failure fails the mutation instead.
+
+### Runtime dependencies
+
+The Stack table takes one, MathLive, and it covers both drawing and editing. An
+editable field that behaves the way a mathematician expects is a year of work,
+and the layout of mathematics is a typesetting problem with a long literature
+and no interesting answer here.
+
+MathLive ships two builds and this design uses both. The custom element is the
+editable field, and it needs a browser. The `mathlive/ssr` build exports
+`convertLatexToMarkup`, its type declarations name no DOM type, and it turns
+stored source into markup for an object nobody is editing. So one package
+answers the editable form and the static form, and a second drawing library
+would duplicate the second of those.
+
+MathLive depends on the Cortex compute engine, so that package arrives with it
+whether or not anything calls it. The choice left open is whether the evaluator
+behind `evaluateMathObject` calls that engine or is written by hand. Writing it
+by hand is preferred, because `src/engine/` is the port target for a Rust crate
+and a JavaScript evaluator does not port, and the compute engine parses LaTeX,
+integrates, differentiates and solves, which is most of this section. Both
+options typecheck under `tsconfig.engine.json`, which drops the DOM lib, and
+that config is what catches a library that reaches for a browser.
+
+The cost is a bundle several times its present size. That is acceptable for
+notation an operator reads on every frame, and it is the reason a second
+library would not be.
+
+---
+
+## 13. Renderer, camera, hit test, interaction
 
 **Immediate mode.** On every invalidation: clear, apply the camera transform,
 draw every visible object in z order. There is no retained scene graph and no
@@ -772,7 +1027,7 @@ holds an error value. Show a small mark on a slot that a formula drives.
 
 ---
 
-## 13. The command line
+## 14. The command line
 
 The style is AutoCAD. A persistent input bar sits at the bottom. It holds focus
 whenever the operator does not edit text or a cell.
@@ -853,7 +1108,7 @@ it stays straight. This is the only way to author a bulge by hand other than
 
 ---
 
-## 14. The document format
+## 15. The document format
 
 Versioned JSON with a top level `formatVersion` integer from the first commit.
 
@@ -868,7 +1123,7 @@ download. Load by file input. Do not build a file manager.
 
 ---
 
-## 15. Do not build
+## 16. Do not build
 
 The team considered each item below and postponed it on purpose.
 
@@ -878,11 +1133,17 @@ The team considered each item below and postponed it on purpose.
 - **An undo or redo surface.** Journal the mutations. Build no user interface.
 - **Drag through to source.** A drag on a bound object must not write to the
   upstream literal. The behaviour has no definition when the upstream is itself a
-  formula. The per component rule of section 12 is the answer for now.
+  formula. The per component rule of section 13 is the answer for now.
 - **More than one viewport.** One canvas. Off screen is off screen.
 - **64 bit precision or a floating origin.** Plain JavaScript numbers are fine
   at this scale.
-- **Constraint solving.** The program refuses a cycle. It never solves one.
+- **Graphing a function as a curve.** A math object gives numbers, and drawing
+  one as a curve is geometry. The primitives and the ports it would read exist
+  already, so this waits on want rather than on design.
+- **Constraint solving across objects.** The document graph refuses a cycle and
+  never solves one. A math object may solve for an unknown its own lines
+  constrain, because that solve begins and ends inside one compute function.
+  Section 12 gives the four properties that keep it safe.
 - **Collaboration.**
 - **Script libraries, export formats, DXF or other interchange formats.**
 - **WebGPU, Rust or Tauri.** That is the later stack. Only the module
@@ -891,7 +1152,7 @@ The team considered each item below and postponed it on purpose.
 
 ---
 
-## 16. When the spec is silent
+## 17. When the spec is silent
 
 Prefer, in this order:
 
