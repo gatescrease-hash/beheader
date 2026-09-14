@@ -140,7 +140,27 @@ the space.
 
 ---
 
-## 5. Why ASD-STE100 is gone
+## 5. Where a fact belongs
+
+Prose about the code lives in three places, and each fact belongs in exactly
+one of them. Two copies of a fact drift apart, and the copy that is not next
+to the code is the one that goes stale, because an edit never shows it to
+anybody.
+
+- **A fact about one file** belongs in that file's header. There is no length
+  limit there. An edit to the file cannot miss it.
+- **A fact that spans two or more files** belongs in section 4 of
+  `docs/STATUS.md`, because no single header owns it.
+- **Finding the file at all** is the job of the structure map in section 3 of
+  `docs/STATUS.md`. A row there routes a reader and says nothing else, and
+  `tools/prose-check.mjs` caps the length of one so it cannot grow back into a
+  second copy of a header.
+
+Section 3 once held a second copy of every header. The copies reached 448
+words, drifted out of step with the code, cited a rule by the wrong number,
+and carried a stray pipe that had been breaking the table for months.
+
+## 6. Why ASD-STE100 is gone
 
 This repository used to hold its prose to ASD-STE100 Simplified Technical
 English: a 25 word sentence limit, no verb in the -ing form, no passive voice,

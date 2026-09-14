@@ -7,19 +7,51 @@
  * included angle, the same number a DXF vertex record carries, so 0 draws a
  * straight line and 1 draws a half circle.
  *
- * Nothing in this file turns a curve into sample points. Every vertex in a
- * document is a point an operator placed, so an arc stays an arc through area,
- * length, bounds, hit testing and drawing, and the number of vertices on a
- * shape is never a quality setting.
+ * Nothing in this file turns a curve into sample points, so the vertices of a
+ * shape never grow a point an operator did not place. The circle built from
+ * two vertices and two bulges of 1 is the case that proves it, and
+ * edge.test.ts pins its area, length, centroid and bounding box against the
+ * exact answers.
  *
  * An arc answers every question in closed form. A bezier answers its area, its
  * centroid and its bounding box in closed form too: those integrands are
  * polynomials of degree eight or less, and the five point Gauss-Legendre rule
- * in integrateOverCurve is exact up to degree nine. Two questions about a
- * bezier have no closed form for anyone. bezierLength halves the curve until
- * its control polygon and its chord agree, and nearestFractionOnBezier scans
- * the curve coarsely and then narrows the best bracket. Both return a number,
- * and neither one adds a vertex.
+ * in integrateOverCurve is exact up to degree nine, so those are answers
+ * rather than estimates. Two questions about a bezier have no closed form for
+ * anyone. bezierLength halves the curve until its control polygon and its
+ * chord agree, and nearestFractionOnBezier scans the curve coarsely and then
+ * narrows the best bracket. Both return a number, and neither one adds a
+ * vertex.
+ *
+ * pathContains decides whether a closed path encloses a point, by the same
+ * nonzero rule a canvas fills with. It casts one ray and counts the edges that
+ * cross it, with the direction of each crossing. A line crosses at one point,
+ * an arc wherever the ray meets its circle, and a cubic at the roots of its
+ * own y. So a click inside a filled shape is tested against the true curve
+ * rather than against the chord across it.
+ *
+ * Four functions exist so that a gesture writes an exact number instead of
+ * searching for one. edgeMidpoint gives the point halfway along an edge, on
+ * the true curve, and bulgeForMidpoint reads a bulge back out of such a point:
+ * the sagitta over the half chord is the tangent of a quarter of the sweep, so
+ * a drag on a middle grip writes an exact bulge and no search runs.
+ * edgeEndDirection gives the direction a path travels as it leaves an edge,
+ * and bulgeForTangentArc gives the bulge of the arc that continues from that
+ * direction, so one click can place an arc that meets the edge before it
+ * smoothly.
+ *
+ * cubicHandlesForEdge gives the two handles that draw one edge as a cubic,
+ * which is what the edgetype command writes. A cubic returns the handles it
+ * already has. A straight edge returns one third of the chord at each end, so
+ * the shape does not move. An arc returns the classic approximation, four
+ * thirds of the bulge times the radius along each tangent. A cubic cannot hold
+ * a circular arc exactly, so that last case moves the shape a little, and more
+ * as the sweep grows.
+ *
+ * splitEdgeAt cuts one edge at the point on it nearest a point the caller
+ * gives. An arc becomes two arcs on the same circle and a cubic becomes two
+ * cubics through De Casteljau, so the shape on screen holds still either way.
+ * Nothing here subdivides an edge evenly: the caller picks the place.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.

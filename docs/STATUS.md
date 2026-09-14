@@ -91,184 +91,138 @@ stays a pure function of its arguments, so the tests run without a browser.
 
 ## 3. The structure map
 
-Every source file has a test file beside it with the same name plus `.test.ts`.
-The map below names the source file only. Two files have no test of their own:
-`primitives/image.ts` and `render/slots.ts`. Both are constant tables, and
-other suites drive them anyway.
+This map routes. Each row says what a reader would come to that file to
+change, and no more. The reason a file is shaped the way it is lives in its own header,
+next to the code, where an edit cannot miss it. Section 4 holds the invariants
+that span more than one file, because no single header owns those.
+
+Every source file has a test file beside it with the same name plus
+`.test.ts`. The map below names the source file only. Two files have no test of
+their own: `primitives/image.ts` and `render/slots.ts`. Both are constant
+tables, and other suites drive them anyway.
 
 ### Root
 
-| File | What and why |
+| File | What you would come here to change |
 | --- | --- |
-| `index.html` | This is the page. It holds the canvas, the panel container, the log and the input bar. `main.ts` finds each by id. It has no state and no behaviour. The stylesheet is in this file because there is no CSS build step. |
-| `package.json` | Scripts and dev dependencies. There are no runtime dependencies on purpose. |
-| `tsconfig.json` | Strict mode for the whole of `src`. |
-| `tsconfig.engine.json` | A second, narrower config over `src/engine/` alone. It is the mechanical guard for Rule 1. If someone imports the DOM into the engine, this config fails even when the main one passes. |
-| `vite.config.ts` | Dev server, build, and the Vitest settings. The two share no options that clash, so they live in one file. |
-| `tools/prose-check.mjs` | The prose checker reads comments and Markdown, strips the code out, and reports each sentence that breaks a rule in `STYLE.md`. It checks the register rules in source comments alone, because a specification states requirements and a guide gives instructions, while a comment describes code. It runs before every commit. |
+| `index.html` | The page and its stylesheet: the canvas, the panel container, the log and the input bar. |
+| `package.json` | Scripts and dev dependencies. There are no runtime dependencies. |
+| `tsconfig.json` | Strict mode over the whole of `src`. |
+| `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
+| `vite.config.ts` | Dev server, production build, and the Vitest settings. |
+| `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core
 
-| File | What and why |
+| File | What you would come here to change |
 | --- | --- |
-| `address.ts` | This file defines the two layer address scheme. An object has a stable ID and a name the operator can change. Formulas resolve a name to an ID at parse time, and a stored AST holds the ID. So a rename leaves every formula alone. This file also holds the A1 cell reference helpers. A cell reference is an address form, and nothing else needs a second copy of that logic. Everything depends on this file. |
-| `eval-context.ts` | The `TextMeasurer` interface and the `EvalContext` that carries it. This file exists so Rule 1 has a shape, not only a prohibition. It has no imports at all, so the boundary is real and not only a rule. |
-| `graph/node.ts` | This file holds the data model: `Value`, `ErrorValue`, `Slot` in its three kinds, `GraphObject`, and the `slotKey` function. `slotKey` joins a path into one string key. There is no sanctioned inverse. Code that needs a path derives it from the schema, and never inverts a key. `GraphObject.vertexCount` sits beside the slots, not inside them. A polyline's vertex count changes only through `addvertex` or `delvertex`. Ports sit outside the slots for the same reason. |
-| `graph/edge.ts` | This file holds the `Edge` record and `addressKey`, and it stays small by design. An edge is data, and only `mutation.ts` makes one. |
-| `graph/cycles.ts` | Depth first cycle detection over the whole edge set. It names every slot in the cycle it finds, because the message is the whole debug story. It runs from scratch on every mutation, per Rule 5. |
-| `graph/eval.ts` | The topological pass. It sorts every slot and evaluates each one. A literal returns its stored value. A formula evaluates its AST. A derived slot calls its schema compute function. All three kinds go through this one pass, so a derived value is never one step stale. No type specific logic belongs here. The script node stays one more derived slot. |
-| `formula/lexer.ts` | Source text to tokens. A numeric path segment such as the `0` in `vertex.0.x` scans as a number token. The parser handles that. |
-| `formula/parser.ts` | Tokens to AST, by recursive descent. It resolves object names to IDs here, so an unknown name is a parse error in any branch. It has a depth limit so a deep input cannot exhaust the stack. |
-| `formula/ast.ts` | The AST node types plus a shape validator and a depth check. The AST is the interchange format between the four stages. It is also what the document stores. |
-| `formula/deps.ts` | `extractDependencies` walks an AST and returns every address it can read. It is eager and total. It includes both branches of an `IF`. This is correct and is not a defect. The graph subscribes to a branch that is not live now, or the object fails to update when the condition flips. This file also holds the two AST rewrite passes that table resize needs. |
-| `formula/eval.ts` | This file turns an AST into a value, and it is lazy. `IF` evaluates one branch. `AND` and `OR` stop early. The contrast with `deps.ts` is deliberate. |
-| `formula/functions.ts` | The built in function registry is a table from name to arity to implementation. One line adds a function. Two functions are lazy, because `IF` does not evaluate the branch it leaves out. |
-| `formula/format.ts` | This file turns an AST back into source text. It maps IDs back to current names. The properties panel and the `props` command both print formulas through this file, so a rename shows up in every formula that reads the renamed object. |
-| `primitives/edge.ts` | The math of one path edge. An edge is straight, an arc, or a cubic bezier. Two handles make it a cubic. Otherwise a bulge makes it an arc. A bulge is the tangent of a quarter of the included angle, the number a DXF vertex record carries. Nothing here cuts a curve into sample points, so `vertices` never grows a point an operator did not place. The two vertex circle is the case that proves it, and `edge.test.ts` pins its area, length, centroid and box. An arc answers everything in closed form. A bezier answers its area, its centroid and its box in closed form too, through a five point Gauss rule. Those integrands are polynomials of degree nine or less, so the rule is exact and not an estimate. Two answers about a bezier have no closed form for anybody: its length, and the distance from a point to it. Each of those refines one number until the number holds still. `pathContains` answers whether a closed path encloses a point, by the nonzero rule a canvas fills with. It casts one ray and counts the edges that cross it. A line crosses at one point, an arc where the ray meets its circle, and a cubic at the roots of its own y. So a click inside a filled shape lands on the true curve and not on a chord. `edgeMidpoint` gives the point halfway along an edge, on the true curve, and `bulgeForMidpoint` reads a bulge back from such a point. The sagitta over the half chord is the tangent of a quarter of the sweep. So a drag on a middle grip writes an exact bulge, and no search runs. `edgeEndDirection` gives the direction a path travels as it leaves an edge. `bulgeForTangentArc` gives the bulge of the arc that continues from such a direction. Together they let one click place an arc that meets the edge before it smoothly. `cubicHandlesForEdge` gives the two handles that draw one edge as a cubic, which is what `edgetype` writes. A cubic gives back its own handles. A straight edge gives one third of the chord at each end. An arc gives the classic four thirds of the bulge times the radius, along each tangent. A cubic cannot hold a circular arc exactly, so that last one moves the shape a little, and more as the sweep grows. `splitEdgeAt` cuts one edge at the point on it nearest a point the caller gives. An arc becomes two arcs of the same circle. A cubic becomes two cubics, through De Casteljau. So the shape on screen holds still either way, and nothing here subdivides an edge evenly. |
-| `primitives/schema.ts` | The registry that declares, for each object type, which slots exist and which kind each one has. Two declarations narrow what a slot takes. `slotOptions` names every value, for a slot with few. `slotFormats` names a rule instead, for a slot with too many to list. `color` is the one format. `isColorValue` holds the rule, and `COLOR_NONE` is the word that writes null. It is the single source of truth for a slot path. Three sites read it in one pass: edge derivation and two integrity checks. All three read it through the same resolver, or a dynamic slot family drifts between them. Types with an entry today: `value`, `add`, `table`, `circle`, `polygon`, `polyline`, `rect`, `text`, `image`, `script`. `value` and `add` are test fixtures from the first phase. They stay, because they are the smallest case that exercises a derived slot. |
-| `primitives/geometry.ts` | Vertex math for the presets, plus centroid, area, length and bounds. A straight sided preset has one derived `vertices` slot, not per vertex slots. A change to `sides` changes a value, not the slot set, so Rule 6 holds. A circle has no `vertices` slot at all. `circleDerivedSlots` gives its area, length, centroid and bounds a closed form from the origin and the radius. `explode` turns it into two vertices joined by two bulges of 1, which is the same circle exactly. It also holds the polyline's per vertex slot paths (`vertex.0.x`, `vertex.0.y`, and so on) and `pathDerivedSlots`, the derived set a polyline uses instead of `verticesDerivedSlots`. Both sets sit at the same nine paths, area included, so a polygon is a closed polyline at the schema layer too. The `closed` literal slot picks the math for each one. A closed path gets the shoelace area, the area weighted centroid and the full perimeter. An open path gets the plain vertex mean, the length of the segments it has, and a `#TYPE` error at `area`. `hasClosedSlot` answers one question for two readers: `pathDependencies`, which lists the addresses each derived slot depends on, and `readClosedFlag`, which reads the value. A polyline built before the `closed` slot existed carries none, and both readers agree that it does not. `existingCurvePaths` and `readCurveParts` carry the same duty for the bulge and handle slots. A vertex has seven slots now: `x`, `y`, `bulge`, and the x and y of one handle for each direction. `VERTEX_PART_SUFFIXES` lists them, and `delvertex` and `split` move all seven together. The file holds two vertex enumerations. `enumeratePolylineVertexSlotPaths` lists all three slots of each vertex and declares the schema. `enumeratePolylineCoordinateSlotPaths` lists only x and y, and the `vertices` slot depends on that one, because a change to a bulge moves no point. `pathEdgesOfObject` builds the edge list the render layer draws and hit tests. `GEOMETRY_STYLE_PATHS` names the three style slots every shape declares, and `GEOMETRY_STYLE_DEFAULTS` holds what a new one starts with. `insertVertexIntoObject` and `shiftVertexAddressForInsert` serve `split`. An insert loses no vertex, so a reference only ever shifts up, and `split` has no `force` flag at all.| Two more functions grow and shrink a polyline's storage: `addVertexToObject` and `deleteVertexFromObject`. Two others give `mutation.ts` the address rewrites `delvertex` needs. One, `shiftVertexAddressForDelete`, moves a vertex that survives down an index. The other, `repairVertexAddressForDelete`, marks the exact deleted one, so `mutation.ts` can turn it into `#REF`. `explodeObjectToPolyline` snapshots a preset's vertices into a fresh polyline object, same id and name, and closes it. Every preset it accepts is a closed shape, so `area` survives the explode with the same value. `EXPLODABLE_TYPES` names the three preset types explode accepts: circle, polygon and rect. |
-| `primitives/table.ts` | Cell address math, range expansion, and the row and column resize passes. A range expands to concrete cells at edge derivation time, from the size the table has now. So an expansion can never go stale. An empty cell inside a range does not get an edge, which is why a sparse table works. |
-| `primitives/text.ts` | The block tree parser for `{= }` and `{? }{:}{?}`, the dependency walker over it, and the three compute functions for `resolvedContent`, `measuredHeight` and `measuredWidth`. The dependency walker is the first dynamic dependency resolver in the codebase. It re-parses `content` on every edge derivation, because the set of slots the text names changes with every edit. |
-| `primitives/image.ts` | Slot path constants only, with no logic. The image primitive is data plus a renderer arm. |
-| `script/stub.ts` | The script node treats a port as an ordinary slot. An `in.<port>` slot is a formula slot. An `out.<port>` slot is a derived slot. The `source` slot is a literal slot that nothing reads, so an edit to it triggers no recompute. The `evaluateScriptOutput` function returns the placeholder value. When Python arrives, only that body changes. |
-| `mutation.ts` | The single channel for state change. It runs the eight step loop: stage, apply, derive edges, check integrity, check cycles, refuse or evaluate, then commit and journal. It is the largest engine file and the most heavily relied upon. A batch applies many operations to one clone and commits all or nothing. A document load uses a batch. A `deleteVertex` without force refuses through `findLiveVertexDependents`, ahead of the stage step, not through the usual post-apply dangling check. The vertex after a deleted one refills its index at once, so a leftover reference to that exact index reads the wrong vertex in silence. It does not dangle. `explode` has no such trap. A slot it drops (`origin`, `radius`, `area`, and so on) is simply gone from the object. The usual post-apply dangling check catches a leftover reference on its own, the same way `deleteObject` already relies on it. |
-| `journal.ts` | The reader of the append only journal `mutation.ts` writes. `replayJournal` rebuilds the objects of a document as they stood after any entry. It runs the same operations again over an empty document. Undo reads the state before the last entry. It refuses, and names the entry, rather than hand back half a document. `journalIsComplete` answers whether a full replay rebuilds exactly the objects given. Anything asks that before it trusts a replay of a document that arrived from anywhere other than a mutation. A replay rebuilds objects only. `nextObjectId` and the camera never enter the journal. |
-| `document.ts` | The versioned JSON format, and save and load. It never stores a derived value. A full evaluation pass on load regenerates them. A load goes through the mutation API, so a bad file fails the same checks a bad command does. It reconstructs `ports` and `vertexCount` by hand, the same as every slot. Both sit outside `GraphObject.slots`, so a generic JSON parse cannot validate their shape. |
-| `index.ts` | The one public surface of the engine. A consumer outside `src/engine` imports from here, and never from a deep path. It re-exports every other file in this directory. The one name that collides is `evaluate`. Both `graph/eval.ts` and `formula/eval.ts` export it, for different reasons. This file aliases them to `evaluateGraph` and `evaluateFormulaAst`. Two tests in `index.test.ts` hold the boundary. One finds every engine file through the bundler and names each export this file leaves out. The other reads the source of every file outside the engine and names each deep import. Neither reads a list anybody keeps by hand. |
+| `address.ts` | Addressing: object IDs, names, paths, and the A1 cell helpers. |
+| `eval-context.ts` | The `TextMeasurer` interface and the context that carries it. |
+| `graph/node.ts` | The data model: values, the three slot kinds, `GraphObject` and `slotKey`. |
+| `graph/edge.ts` | The `Edge` record and `addressKey`. |
+| `graph/cycles.ts` | Cycle detection over the edge set. |
+| `graph/eval.ts` | The topological pass that evaluates every slot. |
+| `formula/lexer.ts` | Formula text to tokens. |
+| `formula/parser.ts` | Tokens to an AST, with object names resolved to IDs. |
+| `formula/ast.ts` | The AST node types, and their shape and depth checks. |
+| `formula/deps.ts` | The addresses a formula reads, and the rewrites a table resize needs. |
+| `formula/eval.ts` | An AST to a value. |
+| `formula/functions.ts` | The registry of built in functions. |
+| `formula/format.ts` | An AST back to source text. |
+| `primitives/edge.ts` | The maths of one path edge: straight, arc or cubic. |
+| `primitives/schema.ts` | Which slots each object type declares, and of which kind. |
+| `primitives/geometry.ts` | Vertex maths for every shape, and the derived measurements. |
+| `primitives/table.ts` | Cell addressing, range expansion, and the row and column resize. |
+| `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
+| `primitives/image.ts` | Slot path constants for the image type. |
+| `script/stub.ts` | The script node and its ports. |
+| `mutation.ts` | The one channel for state change, and every operation it accepts. |
+| `journal.ts` | Replay of the journal, and the undo that rests on it. |
+| `document.ts` | Save and load, and the versioned JSON format. |
+| `index.ts` | The public surface of the engine. |
 
 ### `src/render/` - the short lived drawing layer
 
-| File | What and why |
+| File | What you would come here to change |
 | --- | --- |
-| `camera.ts` | World to screen and screen to world, plus pan, zoom and clamps. It is the only place that knows about screen space. Every other file reads the transform from here. |
-| `extent.ts` | The world space box of an object, and of the whole document. A drawn extent and a clickable extent are one extent. A type with an arm here becomes clickable. A type with no renderer arm in the same change becomes an invisible click target. |
-| `slots.ts` | Small readers that pull a number, a string or a boolean out of a slot value, plus the fixed table and script box sizes. It exists so no drawing file re-invents the same defensive read. |
-| `textbox.ts` | The one rule for how big a text box is. Three files read it, and a fourth answer to the same question does not belong there. |
-| `hittest.ts` | A screen point to the topmost object. Point in polygon for a fill. Distance to segment for a stroke. A box for text, tables, images and script nodes. A shape that paints a fill answers to a click anywhere inside it. A shape with no fill is a hollow outline, and answers only near its edge. A circle hits on its true ring, from the origin and the radius. A polyline is a stroke test too, over its edges rather than its vertices. So a click on an arc measures to the circle and not to the chord. Its `closed` slot says whether the gap between the last vertex and the first is a real edge. |
-| `handles.ts` | The resize grabbers on a selected object, and the box math they drive. A resize is absolute, from the extent the drag started with, not a sum of small steps. |
-| `menu.ts` | The menu a right press opens over a path, and the command line each entry stands for. A vertex offers its own removal. An edge offers its three shapes and one new vertex at the point pressed. `menuCommandLine` writes the line, and `main.ts` runs it through the usual command path, so the log shows it and the journal records it. Nothing here reaches a mutation. A vertex beats an edge on a tie, the same rule `gripAt` follows. |
-| `grips.ts` | The grabbers on a selected path, and the part each one names. `edgeShape` says whether one edge is straight, an arc or a cubic, which is the chip the panel draws. It reads the built edge, so it answers the same question the renderer does. A vertex grip sits on a vertex and a diamond sits at the middle of each edge. `pathGrips` places them and says whether a formula drives the slots behind each one, which is what draws a held grip grey. `gripAt` answers a press, and gives a vertex the tie, because two grips sit on top of each other when an edge is short. `bulgeForGrabbedMidpoint` turns a pointer into the bulge that puts the middle of an edge under it. The grips of a path are the second level of selection. Nothing here holds state. |
-| `markdown.ts` | The markdown lite parser covers bold, italic, code, headings, list items and paragraph breaks, and nothing else. Its rule for which asterisk opens and which closes decides the result. A simpler version reintroduces a bug that thirty tests did not catch. |
-| `measure.ts` | The real Canvas2D `TextMeasurer`, and `layOutText`, the line breaker. There are two measurers and they are not the same. The engine one honours markup. The overlay one does not. |
-| `renderer.ts` | The immediate mode painter draws one thing that no object owns, which is `PathPreview`. That is the points, bulges and closed flag of a command the operator has not finished. It draws over the objects and under the screen space furniture, dashed, with a square on each point. It is plain geometry, so this file never asks which command made it. It draws the grips of a selected path in the screen space pass, so a grip holds one size at every zoom. `buildEdgePath` walks an edge list for both a preview and a real path. It makes three passes. It clears the screen. It draws every object under the camera transform. Then it draws furniture such as labels and badges at a constant size in screen space. It reads `layOutText` from `measure.ts`. Those two files change together. One layout with two readers keeps the drawn text and the measured height in agreement. |
-| `images.ts` | The bitmap decode cache decodes a data URL once and the result stays for later paints. |
-| `editor.ts` | Where an in place editor goes and what it looks like. It answers the placement question for a text box and for a table cell. `main.ts` mounts the real element. |
-| `interaction.ts` | Mouse state to mutation calls. A drag writes each component on its own. A literal component moves. A component a formula drives stays put and shows a notice. So an object with a bound x slides up and down only, and axis constraint follows with no extra code. A path has no origin, so it drags by every vertex instead. A shift press over an edge grabs that segment and moves only its two vertices. `pointerDown` picks the vertex list once and `DragState` holds it, so the set never changes under the pointer. A press on a vertex grip drags that one vertex, and a press on an edge grip starts a bend. A bend writes `vertex.N.bulge` absolutely, from the ends the edge holds now, the same way a resize reads the extent it started with. So a bend never drifts. Both gestures set `InteractionState.focus`, the one part of one path the panel expands. A grip answers a plain press only, so shift keeps both meanings it already had. |
-| `panel.ts` | Where a properties panel goes next to its object. It decides placement and nothing else. `main.ts` builds the rows. |
+| `camera.ts` | World and screen coordinates, pan, zoom, and the limits on both. |
+| `extent.ts` | The world box of one object, and of the whole document. |
+| `slots.ts` | Defensive readers for a slot value, and the fixed box sizes. |
+| `textbox.ts` | The one rule for the size of a text box. |
+| `hittest.ts` | A screen point to the topmost object under it. |
+| `handles.ts` | The resize grabbers, and the box maths behind a resize. |
+| `menu.ts` | The right press menu, and the command line each entry writes. |
+| `grips.ts` | The grabbers on a selected path, and the part each one names. |
+| `markdown.ts` | The small markdown parser behind a text object. |
+| `measure.ts` | The two Canvas2D measurers, and the line breaker. |
+| `renderer.ts` | The painter, and the three passes it makes over every frame. |
+| `images.ts` | The decoded bitmap cache. |
+| `editor.ts` | Where the in place editor goes, and how it looks. |
+| `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |
+| `panel.ts` | Where a properties panel sits beside its object. |
 
 ### `src/command/`
 
-| File | What and why |
+| File | What you would come here to change |
 | --- | --- |
-| `parser.ts` | One typed line to one command object, through a table of specs. It never throws. A bad line returns a failure that names what is wrong and where. It also holds the list of commands the spec names but the code does not build yet. An operator who types one gets the truth instead of "unknown command". That list and the built registry stay disjoint. A test pins it. `polyline` and `addvertex` both take a `points` positional kind, which consumes every token left on the line as an `x,y` pair. It is the only positional kind matchArguments lets grow past the declared count. The grammar does not cap `addvertex` at one point. `commands.ts` refuses more than one, the same way it checks `polygon`'s side count. `explode` and `delete` share one spec shape: a bare target plus an optional `force` flag. `edgetype` takes a target, an edge index and one of line, arc or curve. `split` takes a target, an edge index and one point. A `points` list stops at a flag name. That one exception lets `polyline` end with `closed`, and it is why matchArguments looks for a flag before it grows the list. This file also holds `polylineFromStrokes`, which reads a run of picks and words into a finished `polyline` command. It is the only place that knows what `arc`, `line` and `close` mean. `prompt.ts` moves the strokes and never reads them. The same walk serves the preview, because a pointer joins the end as one more pick. |
-| `prompt.ts` | The prompt sequence follows the AutoCAD style, and a bare command word starts it. The prompt asks for each argument in turn. This is a state machine on its own, apart from the one shot parser. One step can repeat. Such a step collects a stroke list. A stroke is a point the operator picked, or a word they typed. The step index holds still while the step collects. An empty answer ends it, once it holds the points its `minimum` names. A word takes one of three effects: `record` keeps it and asks again, `undo` drops the last stroke, and `end` finishes the step. The prompt offers a word only once the count of points reaches its `needs`, so `close` stays hidden until a path can close. `polyline` is the one command that uses any of this. |
-| `commands.ts` | The handlers. Each one turns a command object into mutation operations and a log line. This is where a refusal message gets written, so this is where the debug story lives. The engine's `deleteVertex` refusal names only the dependents. The handler here appends the `force` suggestion on top. `deleteObject` already uses the same split, since an `Operation` does not carry command syntax to quote. `explode` follows the same pattern, one more time. |
-| `props.ts` | Slot descriptors for the `props` command and for the properties panel. Both surfaces read one list, so they can never disagree about what an object has. |
+| `parser.ts` | One typed line to one command object. |
+| `prompt.ts` | The prompt sequence a bare command word starts. |
+| `commands.ts` | The handlers, and every refusal message an operator reads. |
+| `props.ts` | The slot rows that the panel and the `props` command both read. |
 
 ### `src/main.ts`
 
-The only file that owns the browser. It holds `AppState`, the transition
-functions over it, the panel model, and the wiring to real DOM elements.
-
-The transitions are pure functions from state to state. That is why a file this
-size still has 1966 lines of tests over it with no browser. New logic belongs
-in a pure transition, and the DOM work stays at the edge.
-
-`buildPanelModel` groups a path by its parts. A vertex owns seven slots, so a
-flat list gave a four vertex path 32 rows and buried the four rows the object
-itself has. The model now holds `modifiable` for the object, one `PanelPartRow`
-for each vertex, and `derived` below the rule. A part row carries the index,
-the position, and a chip for the shape of the edge that leaves it. It also
-carries whether a formula holds the vertex. It opens to its own slot rows, and
-only while the interaction layer focuses it. The four handle slots stay out of
-sight until a handle turns the edge into a curve.
-
----
+The only file that owns the browser. It holds `AppState`, the transitions over
+it, the panel model, and the wiring to real DOM elements.
 
 ## 4. Invariants a reader cannot guess from the code
 
-These are the traps. Each one cost real time to find.
+These hold across more than one file, so no single header owns them. An
+invariant that lives inside one file belongs in that file's header, next to
+the code it constrains.
 
-1. **`slotKey` has no inverse.** Code that needs a path asks the schema for it,
-   and nothing takes a key apart.
-2. **Edge derivation and both integrity checks call the same resolver.** A
+1. **Edge derivation and both integrity checks call the same resolver.** A
    dynamic slot family such as a table `cells.*` resolves per object. Three
    sites that resolve it on their own will drift. The graph is then no longer
    total, and no test goes red.
-3. **A schema declares the slot set. An object carries its own slots.** Where
+2. **A schema declares the slot set. An object carries its own slots.** Where
    the two disagree, the evaluator still evaluates the slot but nothing ever
    orders it and its edges never exist. An integrity check catches this, and it
    runs before the cycle check. A cycle check over an edge set that nobody
    trusts proves nothing.
-4. **An empty cell inside a range does not get an edge.** Neither does an empty
-   cell that a bare reference names. Both are normal state, not a dangling
-   reference.
-5. **A port name and a port value are two separate operations that land in one
+3. **A port name and a port value are two separate operations that land in one
    batch.** The moment an `out.*` port exists, the integrity check needs every
    address it declares to be a real slot. An `addPort` fails when the same
    batch does not hold a paired `setSlot`.
+4. **Two functions share the name `evaluate`.** `graph/eval.ts` runs the whole
+   graph. `formula/eval.ts` runs one AST. `engine/index.ts` re-exports them as
+   `evaluateGraph` and `evaluateFormulaAst`. Every consumer imports the
+   aliased name from there, and never the bare one from a deep path.
+5. **`vertices` holds only the points an operator placed.** A curve never
+   becomes a run of sample points, at any layer. The renderer draws an arc
+   with `ctx.arc`, the hit test measures to the circle, and area, length and
+   bounds each have a closed form. So the count of vertices is never a quality
+   setting. A vertex arrives on a curve only when an operator splits an edge
+   at a point they pick.
+   ---
 6. **`measure.ts` and `renderer.ts` move together.** One layout function, two
    readers.
 7. **`render/textbox.ts` holds the one rule for the size of a text box.** Three
    readers use it, and a fourth does not belong there.
-8. **There are two text measurers and they are not interchangeable.** The
-   engine one honours markup. The overlay one does not. The wrong one gives a
-   silent size defect.
-9. **A text box never crops.** The measurer breaks a long word. There is no
-   `overflow` slot. A human overruled eight earlier rulings to settle this on
-   2026-09-02. Nothing corrects the code back toward any of them.
-10. **The in place editor mounts in `#stage`, not in `#panels`.** The overlay
-    lays out in world units and one transform scales it. Nothing multiplies the
-    zoom into its width or its font size a second time.
-11. **`.text-editor` does not set a font, a padding or a border.** It sets
-    `overflow-wrap: break-word` on purpose, and `measure.ts` implements the
-    same rule. The pair changes together, or not at all.
-12. **A registry completeness test that goes red has found a real gap.** One
-    new command word turns four tests red, and all four need an update.
-13. **A test that agrees with its author proves nothing.** An inert module with
-    thirty green tests shipped a real bug. A new module reaches a consumer in
-    the same change.
-14. **The operator cannot see what a test can see.** A live look comes before
-    anyone calls an operator surface done. That step decided six cycles in a
-    row, and it closed the last phase.
-15. **A polyline's vertex count is a field on `GraphObject`, not a slot.**
-    `vertexCount` sits beside `slots`, the same as `ports` does for a script
-    node. Both change only through a mutation operation, never through `set`,
-    so neither belongs inside the set a formula can write. `document.ts`
-    reconstructs both by hand on load for the same reason.
-16. **Two functions share the name `evaluate`.** `graph/eval.ts` runs the whole
-    graph. `formula/eval.ts` runs one AST. `engine/index.ts` re-exports them as
-    `evaluateGraph` and `evaluateFormulaAst`. Every consumer imports the
-    aliased name from there, and never the bare one from a deep path.
-17. **`delvertex` cannot lean on the usual post-apply dangling check.** Every
-    other refuse-by-default deletion removes an ID or a coordinate that never
-    comes back. A leftover reference to one of those dangles, and the ordinary
-    integrity check catches it. A vertex delete differs, because the vertex
-    after the deleted one shifts down and refills the index at once. A leftover
-    reference to that exact index then reads the wrong vertex in silence,
-    rather than dangles. So `mutation.ts` refuses ahead of the stage step,
-    through `findLiveVertexDependents`.
-
-18. **A polyline declares `area` at every value of `closed`.** The `closed`
-    slot picks the math, and never the slot set. An open path holds a `#TYPE`
-    error at `area`, rather than no slot at all. Two things follow. A formula
-    can drive `closed`, because evaluation then changes values only, and Rule 4
-    holds. And `explode` breaks no reference to `area`, because it closes the
-    path it makes and the slot stays at the same address.
-
-20. **The renderer writes each colour twice.** It writes the default, then the
-    value the style slot holds. A canvas quietly keeps its last colour when it
-    cannot read the one it gets. A single write then paints one shape in the
-    colour of the shape before it. The first write makes the fallback the
-    default instead. `paintShape` in `renderer.ts` is the only place that needs
-    this.
-
-19. **`vertices` holds only the points an operator placed.** A curve never
-    becomes a run of sample points, at any layer. The renderer draws an arc
-    with `ctx.arc`, the hit test measures to the circle, and area, length and
-    bounds each have a closed form. So the count of vertices is never a quality
-    setting. A vertex arrives on a curve only when an operator splits an edge
-    at a point they pick.
+8. **`.text-editor` does not set a font, a padding or a border.** It sets
+   `overflow-wrap: break-word` on purpose, and `measure.ts` implements the
+   same rule. The pair changes together, or not at all.
+9. **The in place editor mounts in `#stage`, not in `#panels`.** The overlay
+   lays out in world units and one transform scales it. Nothing multiplies the
+   zoom into its width or its font size a second time.
+10. **A registry completeness test that goes red has found a real gap.** One
+   new command word turns four tests red, and all four need an update.
+11. **A test that agrees with its author proves nothing.** An inert module with
+   thirty green tests shipped a real bug. A new module reaches a consumer in
+   the same change.
+12. **The operator cannot see what a test can see.** A live look comes before
+   anyone calls an operator surface done. That step decided six cycles in a
+   row, and it closed the last phase.
 
 ---
 

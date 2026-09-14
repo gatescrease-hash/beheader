@@ -1,9 +1,9 @@
 /**
  * mutation.ts
  *
- * The single channel for state change. mutate() takes the current objects and
- * a list of operations, and returns a new set of objects or a refusal. No
- * other code in the repository writes document state.
+ * The single channel for state change. mutate() takes the current objects
+ * and a list of operations, and returns a new set of objects or a refusal.
+ * No other code in the repository writes document state.
  *
  * Every call runs the same eight steps in order:
  *
@@ -17,8 +17,8 @@
  *   8. Commit.    Return the clone, and append one entry to the journal.
  *
  * Steps 4 and 5 run in that order on purpose. A cycle check reads the edge
- * set, and an edge set built from a formula that points at a slot which does
- * not exist proves nothing either way.
+ * set, and an edge set built from a formula that points at a slot which
+ * does not exist proves nothing either way.
  *
  * A batch is many operations against one clone, committed all or nothing.
  * Loading a document uses a batch, so a corrupt file fails as a single unit
@@ -27,18 +27,21 @@
  * deleteVertex is the one operation that refuses before staging rather than
  * after. Every other refuse-by-default deletion frees an ID or a coordinate
  * that never comes back, so a leftover reference to it dangles and step 4
- * catches it. Deleting a vertex is different: the vertex after it shifts down
- * and refills the index immediately, so a formula still pointing at that index
- * would quietly read the wrong vertex instead of dangling. The check for that
- * runs up front, in findLiveVertexDependents.
+ * catches it. Deleting a vertex is different: the vertex after it shifts
+ * down and refills the index immediately, so a formula still pointing at
+ * that index would quietly read the wrong vertex instead of dangling. The
+ * check for that runs up front, in findLiveVertexDependents. explode has no
+ * such trap: a slot it drops, such as origin or radius, is simply gone from
+ * the object, and the ordinary post-apply check catches any reference left
+ * pointing at it, the same way deleteObject relies on it.
  *
- * This file and primitives/schema.ts have to agree about every slot path, and
- * both read the schema through the same resolver. Two resolvers would drift
- * apart on a dynamic slot family such as a table's cells, and no test would
- * go red when they did.
+ * This file and primitives/schema.ts have to agree about every slot path,
+ * and both read the schema through the same resolver. Two resolvers would
+ * drift apart on a dynamic slot family such as a table's cells, and no test
+ * would go red when they did.
  *
- * Engine-layer code: pure logic with no DOM, window or canvas access, so the
- * tests run headless and the file can move to Rust later.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so
+ * the tests run headless and the file can move to Rust later.
  */
 
 import { checkNameAvailable, formatAddress, isAddressError, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";

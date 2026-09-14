@@ -2,27 +2,29 @@
  * schema.ts
  *
  * The registry of object types. For each type it declares which slots exist
- * and what kind each one is, which makes it the single source of truth for any
- * slot path in the engine.
+ * and what kind each one is, which makes it the single source of truth for
+ * any slot path in the engine.
  *
- * Three places read that truth during one mutation: edge derivation, and the
- * two integrity checks. All three go through the same resolver on purpose. A
- * slot group can be dynamic, meaning its size comes from the object rather
- * than from the type, and a table's cells or a script node's outputs are both
- * dynamic. If those three sites each resolved a dynamic group their own way
- * they would drift apart, the graph would stop being total, and no test would
- * go red to say so.
+ * Three places read that truth during one mutation: edge derivation, and
+ * the two integrity checks. All three go through the same resolver on
+ * purpose. A slot group can be dynamic, meaning its size comes from the
+ * object rather than from the type, and a table's cells or a script node's
+ * outputs are both dynamic. If those three sites each resolved a dynamic
+ * group their own way they would drift apart, the graph would stop being
+ * total, and no test would go red to say so.
  *
  * slotOptions and slotFormats narrow what a slot accepts. slotOptions lists
  * every legal value for a slot with few of them. slotFormats names a rule
- * instead, for a slot with too many values to list, and colour is the only
- * format so far.
+ * instead, for a slot with too many values to list. Colour is the only
+ * format so far: isColorValue holds the rule, and COLOR_NONE is the word
+ * that writes a null.
  *
  * The value and add types are test fixtures left over from the first phase.
- * They stay because they are the smallest case that exercises a derived slot.
+ * They stay because they are the smallest case that exercises a derived
+ * slot.
  *
- * Engine-layer code: pure logic with no DOM, window or canvas access, so the
- * tests run headless and the file can move to Rust later.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so
+ * the tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 import type { EvalContext } from "../eval-context.ts";

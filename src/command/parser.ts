@@ -17,8 +17,12 @@
  *
  * polyline and addvertex take a points argument, which swallows every
  * remaining token on the line as an x,y pair. It is the only argument kind
- * that grows past its declared count. A points list stops when it meets a
- * flag name, so polyline can end with the word closed.
+ * matchArguments lets grow past its declared count, and a points list stops
+ * when it meets a flag name, so polyline can end with the word closed. The
+ * grammar puts no upper bound on addvertex, so commands.ts is what refuses
+ * more than one point, the same way it checks a polygon's side count. Each
+ * spec carries its own usage string, so the accepted shape of a command is
+ * declared as data here rather than described in prose.
  *
  * polylineFromStrokes is in this file too. It reads a run of picks and
  * words into a finished polyline command, and it is the only code that

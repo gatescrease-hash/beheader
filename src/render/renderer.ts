@@ -1,13 +1,14 @@
 /**
  * renderer.ts
  *
- * The immediate mode painter redraws everything every frame, in three passes.
+ * The immediate mode painter: every frame redraws everything, in three passes.
  *
  * The first pass clears the viewport in screen space. The second sets the
  * camera transform once and draws every object in world coordinates, letting
  * the canvas do the conversion. The third resets to the identity transform and
  * draws the furniture, such as a name label or an error badge, so those stay
- * one size at every zoom.
+ * one size at every zoom. The grips of a selected path are drawn in that third
+ * pass for the same reason.
  *
  * A selection highlight draws in its own pass after all the objects, so an
  * object later in z order cannot paint over it.
@@ -18,8 +19,18 @@
  * of the shape before it. Writing the default first makes that failure fall
  * back to the default instead.
  *
- * The camera transform comes from camera.ts. There is no second copy of the
- * formula in this file.
+ * PathPreview is the one thing this file draws that no object owns. It is the
+ * points, the bulges and the closed flag of a command the operator has not
+ * finished yet, drawn dashed with a square on each point, over the objects and
+ * under the screen space furniture. It is plain geometry, so this file never
+ * has to ask which command produced it. buildEdgePath walks an edge list for a
+ * preview and for a real path alike.
+ *
+ * The camera transform comes from camera.ts and the line breaking comes from
+ * layOutText in measure.ts. There is no second copy of either formula here,
+ * and a change to how lines break needs the matching change in measure.ts,
+ * because one layout function with two readers is the only reason the drawn
+ * text and the measured height agree.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a
