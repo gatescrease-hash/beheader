@@ -31,6 +31,7 @@ import {
   type CameraState,
   createEmptyDocument,
   deriveValidateAndEvaluate,
+  mutate,
   type Document,
   type EvalContext,
   formatFormula,
@@ -86,10 +87,12 @@ import { menuCommandLine, pathMenuAt, type PathMenu } from "./render/menu.ts";
 import { edgeShape, type EdgeShape, type PathGrip } from "./render/grips.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
+import "mathlive";
 import "mathlive/static.css";
 import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathLatex } from "./render/math.ts";
+import { hitTest } from "./render/hittest.ts";
 
 export interface Viewport {
   readonly width: number;
@@ -708,6 +711,45 @@ export function commitTextContent(
   return runPanelCommand(state, { kind: "set", target: panelSlotAddress(object.name, slotKey(TEXT_CONTENT_PATH)), value: raw }, context);
 }
 
+/**
+ * Writes a new source onto a math object, through the mutation that rebuilds
+ * the slots the source implies. It goes straight to that mutation rather than
+ * through a set command, because writing the source slot on its own would
+ * leave the ports of the last source behind.
+ *
+ * A source that does not read leaves the object as it was and says so, which
+ * is the same answer the command line gives for the same text.
+ */
+export function commitMathSource(
+  state: AppState,
+  objectId: string,
+  latex: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined) {
+    return state;
+  }
+  if (readMathLatex(object) === latex) {
+    return state;
+  }
+
+  const echoed = withLog(state, [`> ${object.name} = "${latex}"`]);
+  const result = mutate(
+    echoed.document.objects,
+    [{ kind: "setMathSource", objectId, source: latex }],
+    echoed.document.journal,
+    context,
+  );
+  if (!result.ok) {
+    return withLog(echoed, [result.message]);
+  }
+  return withLog(
+    { ...echoed, document: { ...echoed.document, objects: result.objects, journal: result.journal } },
+    [`${object.name} holds ${result.objects.find((entry) => entry.id === objectId)?.ports?.out.length ?? 0} value(s)`],
+  );
+}
+
 export function pictureBoxSize(naturalWidth: number, naturalHeight: number): { readonly width: number; readonly height: number } {
   const usable =
     naturalWidth > 0 && naturalHeight > 0 && Number.isFinite(naturalWidth) && Number.isFinite(naturalHeight);
@@ -917,6 +959,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
   const mathOverlays = new Map<string, HTMLElement>();
+  let editingMathId: string | undefined;
+  let mathField: HTMLElement & { value: string } | undefined;
   const imageBitmaps = createImageBitmapCache(() => paint());
 
   const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
@@ -983,7 +1027,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
 
       const latex = readMathLatex(object);
-      if (element.dataset["latex"] !== latex) {
+      const editing = object.id === editingMathId;
+      element.classList.toggle("math-overlay--editing", editing);
+
+      if (editing) {
+        if (mathField === undefined || element.firstChild !== mathField) {
+          element.innerHTML = "";
+          mathField = buildMathField(object.id, latex);
+          element.appendChild(mathField);
+          delete element.dataset["latex"];
+          mathField.focus();
+        }
+      } else if (element.dataset["latex"] !== latex) {
         element.innerHTML = mathMarkup(latex);
         element.dataset["latex"] = latex;
       }
@@ -1002,6 +1057,61 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         mathOverlays.delete(objectId);
       }
     }
+  };
+
+  /**
+   * Builds the editable field for one math object. It is a MathLive element,
+   * so an operator types the notation the way they would in Desmos rather than
+   * writing LaTeX by hand, and its value is the LaTeX either way.
+   *
+   * A keystroke stops here rather than reaching the command line, which holds
+   * focus for everything else on the page.
+   */
+  const buildMathField = (objectId: string, latex: string): HTMLElement & { value: string } => {
+    const field = document.createElement("math-field") as HTMLElement & { value: string };
+    field.className = "math-field";
+    field.value = latex;
+    field.setAttribute("math-virtual-keyboard-policy", "manual");
+
+    field.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      const key = (event as KeyboardEvent).key;
+      if (key === "Escape") {
+        event.preventDefault();
+        closeMathEditor();
+        paint();
+      } else if (key === "Enter") {
+        event.preventDefault();
+        commitMathEditor();
+      }
+    });
+    field.addEventListener("blur", () => {
+      commitMathEditor();
+    });
+    return field;
+  };
+
+  const closeMathEditor = (): void => {
+    editingMathId = undefined;
+    mathField = undefined;
+    input.focus();
+  };
+
+  const commitMathEditor = (): void => {
+    const objectId = editingMathId;
+    const field = mathField;
+    if (objectId === undefined || field === undefined) {
+      return;
+    }
+    const latex = field.value;
+    closeMathEditor();
+    apply(commitMathSource(state, objectId, latex, evalContext));
+  };
+
+  const openMathEditor = (objectId: string): void => {
+    editingMathId = objectId;
+    mathField = undefined;
+    paint();
   };
 
   /**
@@ -1342,7 +1452,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   canvas.addEventListener("dblclick", (event: MouseEvent) => {
-    const target = editorTargetAt(screenPointOf(event), state.document.objects, state.document.camera);
+    const point = screenPointOf(event);
+
+    // A math object edits through its own overlay rather than the text editor,
+    // because the field is a MathLive element and the text editor is a
+    // textarea holding a string.
+    const underPointer = hitTest(point, state.document.objects, state.document.camera);
+    if (underPointer?.type === "math") {
+      openMathEditor(underPointer.id);
+      return;
+    }
+
+    const target = editorTargetAt(point, state.document.objects, state.document.camera);
     if (target === undefined) {
       return;
     }

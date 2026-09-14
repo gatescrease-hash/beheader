@@ -326,6 +326,39 @@
       }
 
       /*
+        The overlay while an operator edits it. It takes the pointer, because
+        the field inside it is what a press belongs to now, and it draws above
+        the objects around it so a wider formula covers them rather than being
+        covered.
+      */
+      .math-overlay--editing {
+        pointer-events: auto;
+        z-index: 5;
+        min-width: 160px;
+        outline: 1px solid #1a56db;
+      }
+
+      .math-field {
+        display: block;
+        border: none;
+        outline: none;
+        background: #ffffff;
+        font-size: inherit;
+        min-width: 100%;
+      }
+
+      /*
+        The two buttons a math field offers, for its virtual keyboard and its
+        menu. Both are hidden, because the box is the size of the notation in
+        it and the pair fills that box on their own, leaving the formula with
+        nowhere to draw. An operator here types on a keyboard.
+      */
+      .math-field::part(virtual-keyboard-toggle),
+      .math-field::part(menu-toggle) {
+        display: none;
+      }
+
+      /*
         Where a measurement lays notation out. It is off screen rather than
         hidden, because an element with display none has no size to read.
       */

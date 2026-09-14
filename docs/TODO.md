@@ -41,46 +41,47 @@ Done when one name reaches the folder, the package and the documents.
 
 ### 3. Build the math object
 
-Section 12 of `SPEC.md` defines a math object. The language and the object type
-are built, and an operator still cannot see one, because nothing draws it.
+Section 12 of `SPEC.md` defines a math object. An operator can type one, see
+it drawn, edit it in place and wire it to the document. The two in-text forms,
+the display modes, a dotted address and solving are open.
 
 Each stage below lands with its tests, and each leaves the four checks clean.
-Stages one to three together finish typing a formula, seeing it drawn, and
-wiring it to the document. Solving comes after them, because none of that needs
-it.
 
-1. **The standalone form on screen.** The MathLive dependency, the overlay in
-   `#stage` that draws the notation, the editable field, the measurer method
-   behind both, and the `math` command word that creates one. The renderer, the
-   hit test and the extent each carry a `math` case that draws nothing today,
-   and this stage replaces all three. Done when an operator creates a math
-   object from the command line, edits it in place, and watches its value follow
-   an upstream cell.
-
-2. **The block and inline forms inside a text object.** Done when one text box
+1. **The block and inline forms inside a text object.** Done when one text box
    holds both forms, each redraws when the math object it reads changes, and a
    free bare name inside a math run is refused at parse time.
 
-3. **The display modes.** The `source`, `value` and `both` settings, and the
-   values the editor shows beside each free name. Done when the worked example
-   of section 12 reads as an integral, as a number, and as both, and the panel
-   lists ports above the rule with exports below it.
+2. **The display modes.** The `source`, `value` and `both` settings, and the
+   values the editor shows beside each free name. The panel already lists ports
+   above the rule with exports below it, so this stage is the object itself.
+   Done when the worked example of section 12 reads as an integral, as a
+   number, and as both.
 
-4. **A dotted address inside math source.** Section 12 says a dotted name such
+3. **A dotted address inside math source.** Section 12 says a dotted name such
    as `table_x.A1` resolves to a document address at parse time. The lexer
    refuses one today and names the input port that carries the value instead,
    which is a complete answer for wiring and a missing half of the spec. Done
    when a math source reads a document address directly, an edge derives from
    it, and a rename of the object it names rewrites nothing.
 
-5. **Solving.** The seed slots, the iteration bound, and the error value for a
+4. **Solving.** The seed slots, the iteration bound, and the error value for a
    solve that finds no root. Nothing of this is built, and the `seed` family of
    section 12 has no slot yet. Done when an implicit line returns the root
    nearest its seed, a change to the seed moves the answer from one root to
    another, and a solve that runs out of iterations gives an error value rather
    than a hung frame.
 
-**Done when** all five stages have landed and this item is deleted.
+**Done when** all four stages have landed and this item is deleted.
+
+### 4. Decide what a fresh input port holds
+
+A free name the source has not been given a value for starts at zero, so a
+math object whose first line is a fraction shows a division by zero the moment
+it is typed. Zero is the honest answer for a number nobody has entered, and it
+is also the one value that makes a denominator fail.
+
+Done when a new port either starts at a value that reads as unset rather than
+as zero, or the reason zero is right is written into section 12.
 
 ---
 
