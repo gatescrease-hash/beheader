@@ -204,7 +204,7 @@ function toStoredPath(type: ObjectType, surfacePath: readonly string[]): readonl
   return surfacePath;
 }
 
-function toSurfacePath(type: ObjectType, storedPath: readonly string[]): readonly string[] {
+export function toSurfacePath(type: ObjectType, storedPath: readonly string[]): readonly string[] {
   if (type !== TABLE_TYPE || storedPath.length !== 2 || storedPath[0] !== TABLE_CELL_PATH_PREFIX) {
     return storedPath;
   }

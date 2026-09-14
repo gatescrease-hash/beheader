@@ -25,6 +25,7 @@
  */
 
 export * from "./address.ts";
+export * from "./complete.ts";
 export * from "./document.ts";
 export * from "./eval-context.ts";
 export * from "./journal.ts";

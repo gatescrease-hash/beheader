@@ -93,6 +93,7 @@ import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
+import { completeCommandLine } from "./command/complete.ts";
 
 export interface Viewport {
   readonly width: number;
@@ -918,6 +919,9 @@ interface PanelEditHandlers {
   readonly onCancel: () => void;
 }
 
+/** How many candidates the list shows before it says how many are left. */
+const CANDIDATE_LIMIT = 12;
+
 interface PanelRowEdit {
   readonly path: string;
   readonly handlers: PanelEditHandlers;
@@ -959,6 +963,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
   const mathOverlays = new Map<string, HTMLElement>();
+  const candidateList = document.createElement("div");
+  candidateList.className = "candidates";
+  candidateList.hidden = true;
+  input.parentElement?.insertBefore(candidateList, input);
   let editingMathId: string | undefined;
   let mathField: HTMLElement & { value: string } | undefined;
   const imageBitmaps = createImageBitmapCache(() => paint());
@@ -1406,7 +1414,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   window.addEventListener("resize", paint);
 
   input.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      completeAtCursor();
+      return;
+    }
+    if (event.key === "Escape") {
+      showCandidates([]);
+      return;
+    }
     if (event.key !== "Enter") {
+      showCandidates([]);
       return;
     }
     const line = input.value;
@@ -1414,8 +1432,47 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (!outcome.refused) {
       input.value = "";
     }
+    showCandidates([]);
     applyTransition(outcome);
   });
+
+  /**
+   * Writes as much of a completion as the candidates agree on, and shows what
+   * is left to choose between. A completion that writes nothing new has run out
+   * of agreement, and the list is then the whole of what it can offer.
+   */
+  const completeAtCursor = (): void => {
+    const cursor = input.selectionStart ?? input.value.length;
+    const completion = completeCommandLine(input.value, cursor, state.document.objects);
+    if (completion === undefined) {
+      showCandidates([]);
+      return;
+    }
+
+    const typed = input.value.slice(completion.from, cursor);
+    if (completion.fill !== "" && completion.fill !== typed) {
+      const before = input.value.slice(0, completion.from);
+      const after = input.value.slice(completion.to);
+      input.value = `${before}${completion.fill}${after}`;
+      const caret = completion.from + completion.fill.length;
+      input.setSelectionRange(caret, caret);
+    }
+
+    showCandidates(completion.candidates.length > 1 ? completion.candidates : []);
+  };
+
+  const showCandidates = (candidates: readonly string[]): void => {
+    if (candidates.length === 0) {
+      candidateList.textContent = "";
+      candidateList.hidden = true;
+      return;
+    }
+    candidateList.textContent = candidates.slice(0, CANDIDATE_LIMIT).join("   ");
+    if (candidates.length > CANDIDATE_LIMIT) {
+      candidateList.textContent += `   and ${candidates.length - CANDIDATE_LIMIT} more`;
+    }
+    candidateList.hidden = false;
+  };
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Escape") {

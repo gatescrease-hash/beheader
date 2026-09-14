@@ -316,6 +316,21 @@
         through to the canvas underneath, because the hit test there is what
         decides which object a press lands on.
       */
+      /*
+        The candidates a completion is choosing between. It sits above the
+        command line, which is where an operator is already looking.
+      */
+      .candidates {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: #5b6472;
+        background: #f4f5f7;
+        border-top: 1px solid #d7dae0;
+        padding: 4px 8px;
+        white-space: nowrap;
+        overflow-x: auto;
+      }
+
       .math-overlay {
         position: absolute;
         box-sizing: border-box;
