@@ -59,7 +59,7 @@ Keep the core simple and safe. Push complexity to the edges.
 | Runtime | Browser, one process |
 | Build tool | Vite |
 | Drawing | Canvas2D, immediate mode |
-| Runtime dependencies | Two, for mathematical notation alone. See section 12. |
+| Runtime dependencies | One, MathLive, for mathematical notation. See section 12. |
 | Python scripts | Not built. A stub node stands in. See section 11. |
 | Storage | Versioned JSON. Save by download. Load by file input. |
 
@@ -758,10 +758,9 @@ seed. The seed is an ordinary slot, so a formula can drive it and an operator ca
 sweep a root across a range. A solve that finds no root gives an error value.
 
 **What this does not cover.** Desmos draws `x^2 + y^2 = 9` as a curve by
-sampling the plane, and it fits parameters to data with a regression. Neither is
-in this section. A curve is geometry, and a math object exposes numbers. Drawing
-one is a later item against the geometry primitive, and it reads a math object
-through the ports that already exist.
+sampling the plane, and it fits parameters to data with a regression. A math
+object gives numbers and draws notation, and it does neither of those. Section
+16 holds the reason a curve waits.
 
 ### Display
 
@@ -798,6 +797,23 @@ would need the mutation time slot derivation above a second time, and the
 standalone object already solves that problem in one place. A document that needs
 a named value puts it in a math object and reads it back with `{= math_1.out.x }`.
 
+### Drawing
+
+`convertLatexToMarkup` gives markup, and the renderer paints a canvas, so a math
+object does not paint in the ordinary pass. It draws as an element in `#stage`,
+laid out in world units with one transform scaling it to the current zoom. The
+in place editor already works this way, and the same rule applies here: nothing
+multiplies the zoom into a width or a font size a second time, because the
+transform has applied it once already.
+
+The canvas pass draws the box of the object, its selection furniture and its
+error badge. The notation itself belongs to the overlay.
+
+This costs one thing. An overlay draws above the canvas, so a math object sits
+above every canvas object whatever the document order says. Raising the box to a
+bitmap and painting that instead would keep the order and lose sharpness at
+every zoom, and the order matters less than the notation being readable.
+
 ### Measurement
 
 The inline form needs a width and a height before the line around it can break,
@@ -816,20 +832,30 @@ failure fails the mutation instead.
 
 ### Runtime dependencies
 
-The Stack table takes two, and both are in `src/render/`.
+The Stack table takes one, MathLive, and it covers both drawing and editing. An
+editable field that behaves the way a mathematician expects is a year of work,
+and the layout of mathematics is a typesetting problem with a long literature
+and no interesting answer here.
 
-| Need | Choice | Why not by hand |
-| --- | --- | --- |
-| Draw the notation | KaTeX | Layout of mathematics is a typesetting problem with a long literature and no interesting answer here. |
-| Edit the notation | MathLive or MathQuill | An editable math field is most of what makes Desmos pleasant, and it is a year of work. |
+MathLive ships two builds and this design uses both. The custom element is the
+editable field, and it needs a browser. The `mathlive/ssr` build exports
+`convertLatexToMarkup`, its type declarations name no DOM type, and it turns
+stored source into markup for an object nobody is editing. So one package
+answers the editable form and the static form, and a second drawing library
+would duplicate the second of those.
 
-The evaluator is the part that stays written by hand where it can be, because
-`src/engine/` is the port target for a Rust crate and a JavaScript evaluator does
-not port. Where a library supplies the solver instead, it goes behind
-`evaluateMathObject` and nowhere else, so the port replaces one function rather
-than a directory. A library reachable from `src/engine/` must typecheck under
-`tsconfig.engine.json`, which drops the DOM lib, so a library that reaches for a
-browser fails the build rather than the review.
+MathLive depends on the Cortex compute engine, so that package arrives with it
+whether or not anything calls it. The choice left open is whether the evaluator
+behind `evaluateMathObject` calls that engine or is written by hand. Writing it
+by hand is preferred, because `src/engine/` is the port target for a Rust crate
+and a JavaScript evaluator does not port, and the compute engine parses LaTeX,
+integrates, differentiates and solves, which is most of this section. Both
+options typecheck under `tsconfig.engine.json`, which drops the DOM lib, and
+that config is what catches a library that reaches for a browser.
+
+The cost is a bundle several times its present size. That is acceptable for
+notation an operator reads on every frame, and it is the reason a second
+library would not be.
 
 ---
 
@@ -1107,6 +1133,9 @@ The team considered each item below and postponed it on purpose.
 - **More than one viewport.** One canvas. Off screen is off screen.
 - **64 bit precision or a floating origin.** Plain JavaScript numbers are fine
   at this scale.
+- **Graphing a function as a curve.** A math object gives numbers, and drawing
+  one as a curve is geometry. The primitives and the ports it would read exist
+  already, so this waits on want rather than on design.
 - **Constraint solving across objects.** The document graph refuses a cycle and
   never solves one. A math object may solve for an unknown its own lines
   constrain, because that solve begins and ends inside one compute function.

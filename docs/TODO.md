@@ -46,7 +46,9 @@ operator who wants a definite integral over a number that another object
 produces still has nowhere to put it.
 
 The work does not fit in one change. Each stage below lands with its tests, and
-each leaves the four checks clean.
+each leaves the four checks clean. The first four stages together give the whole
+of typing a formula, seeing it drawn, and wiring it to the document. Solving
+comes after them, because none of that needs it.
 
 1. **The language and the object type, together.** The language is a lexer, a
    parser, an AST, a name binder and an evaluator behind `evaluateMathObject`.
@@ -58,27 +60,29 @@ each leaves the four checks clean.
    batch mutation, a bound name never becomes a port, and two math objects that
    define each other are refused with a message naming both slots.
 
-2. **The standalone form on screen.** The renderer, the in place editor, the
-   measurer method behind both, and the two dependencies section 12 names. The
-   choice between MathLive and MathQuill belongs to this stage, and the spec
-   leaves it open because the editing behaviour decides it. Done when an
-   operator creates a math object from the command line, edits it in place, and
-   watches its value follow an upstream cell.
+2. **The standalone form on screen.** The MathLive dependency, the overlay in
+   `#stage` that draws the notation, the editable field, and the measurer method
+   behind both. Done when an operator creates a math object from the command
+   line, edits it in place, and watches its value follow an upstream cell.
 
-3. **Solving.** The seed slots, the iteration bound, and the error value for a
+3. **The block and inline forms inside a text object.** Done when one text box
+   holds both forms, each redraws when the math object it reads changes, and a
+   free bare name inside a math run is refused at parse time.
+
+4. **The display modes.** The `source`, `value` and `both` settings, and the
+   values the editor shows beside each free name. Done when the worked example
+   of section 12 reads as an integral, as a number, and as both, and the panel
+   lists ports and seeds above the rule with exports below it.
+
+5. **Solving.** The seed slots, the iteration bound, and the error value for a
    solve that finds no root. Done when an implicit line returns the root nearest
    its seed, a change to the seed moves the answer from one root to another, and
    a solve that runs out of iterations gives an error value rather than a hung
    frame.
 
-4. **The block and inline forms inside a text object.** Done when one text box
-   holds both forms, each redraws when the math object it reads changes, and a
-   free bare name inside a math run is refused at parse time.
-
-5. **The display modes.** The `source`, `value` and `both` settings, and the
-   values the editor shows beside each free name. Done when the worked example
-   of section 12 reads as an integral, as a number, and as both, and the panel
-   lists ports and seeds above the rule with exports below it.
+Stages one to four stand without stage five. An operator who never writes an
+implicit line never meets a seed slot, so stage five is the one to drop if the
+first four turn out to be enough.
 
 **Done when** all five stages have landed and this item is deleted.
 
