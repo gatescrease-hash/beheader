@@ -2543,7 +2543,7 @@ describe("mutate — findInvalidDimensionWrites: a setSlot bounding table rows/c
   });
 });
 
-describe("mutate — two separate tables, a cross-table formula, live update (Phase 2 criterion clause 1, real end-to-end)", () => {
+describe("mutate — two separate tables, a cross-table formula, live update, end to end", () => {
   it("table_a.B2 holds a formula reading table_b.C3 * 2 and updates live when table_b.C3 changes", () => {
     const tableB = tableObject("obj_2", "table_b", 3, 3, { "cells.C3": { kind: "literal", value: 10 } });
     const tableA = tableObject("obj_1", "table_a", 2, 2, {
@@ -2569,7 +2569,7 @@ describe("mutate — two separate tables, a cross-table formula, live update (Ph
   });
 });
 
-describe("mutate — a circular reference between two tables, running through a RANGE this time, is rejected (Phase 2 criterion clause 2)", () => {
+describe("mutate — a circular reference between two tables, running through a RANGE this time, is rejected", () => {
   it("table_a.A1 = SUM(table_b.A1:A1), table_b.A1 = SUM(table_a.A1:A1) — a genuine cycle through range-derived edges", () => {
     const tableA = tableObject("obj_1", "table_a", 1, 1, {
       "cells.A1": {
@@ -2617,7 +2617,7 @@ describe("mutate — a circular reference between two tables, running through a 
   });
 });
 
-describe("mutate — SUM(A1:A5) recomputes correctly as cell values change (Phase 2 criterion clause 3's LIVE-UPDATE half; the row-INSERT half needs the still-deferred resize cycle — see STATUS.md)", () => {
+describe("mutate — SUM(A1:A5) recomputes correctly as cell values change, which is the live-update half of a range; the row-insert half is the describe block below", () => {
   it("recomputes when a cell WITHIN the range changes, in the same batch that changed only that cell", () => {
     const table = tableObject("obj_1", "table_x", 5, 1, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -3425,7 +3425,7 @@ describe("mutate — findInvalidTableResizes refuses an insert whose dimension i
   });
 });
 
-describe("mutate — Phase 2 acceptance criterion clause 3, completed: SUM(A1:A5) recomputes correctly AFTER INSERTING A ROW INSIDE THE RANGE", () => {
+describe("mutate — SUM(A1:A5) recomputes correctly AFTER INSERTING A ROW INSIDE THE RANGE", () => {
   it("insertion WIDENS the formula's stored range to include the new row, and the new row's cell participates live once set", () => {
     const table = tableObject("obj_1", "table_x", 5, 1, {
       "cells.A1": { kind: "literal", value: 1 },
@@ -3863,7 +3863,7 @@ describe("mutate — findInvalidTableResizes widened for deleteTableLine: one si
   });
 });
 
-describe("mutate — Phase 2 acceptance criterion clause 4, DELETE half: row/column DELETE with #REF repair", () => {
+describe("mutate — row and column DELETE with #REF repair", () => {
   it("a row delete whose cells have external dependents rewrites those references to #REF, takes the repair path rather than a dangling edge, and never refuses", () => {
     const table = tableObject("obj_1", "table_x", 3, 1, {
       "cells.A1": { kind: "literal", value: 10 },
@@ -4331,7 +4331,7 @@ describe("text.resolvedContent end to end through mutate", () => {
     expect(bumped.objects.find((o) => o.id === "obj_x")?.slots.resolvedContent?.value).toBe("value 99");
   });
 
-  it("subscribes to a range and a non-taken conditional branch, so both drive resolvedContent (Phase 5 gate property)", () => {
+  it("subscribes to a range and a non-taken conditional branch, so both drive resolvedContent", () => {
     const table = tableObject("obj_t", "table_1", 4, 4, {
       "cells.A1": { kind: "literal", value: 1 },
       "cells.A2": { kind: "literal", value: 2 },

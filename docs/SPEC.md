@@ -641,8 +641,8 @@ does the drag do nothing.
 **An object with no `origin` slot** (an editable path) drags by a delta applied
 to every `vertex.N.x` and `vertex.N.y` slot, under the same per component rule.
 A vertex bound to something else stays put while the rest move. This is on
-purpose. In the road network test, the operator cannot drag a polyline away
-from the two intersections that its endpoints read.
+purpose. A polyline whose two endpoints read a pair of other objects cannot be
+dragged away from them.
 
 **A selected path grows grips.** A square sits on each vertex and a diamond at
 the middle of each edge. A grip answers a plain press, and only on a path the
@@ -663,8 +663,8 @@ drag. So a vertex or a bulge a formula drives holds still, and shows a notice.
 
 **A grip says whether a formula drives it.** A free grip is white inside and a
 held one is grey. So the operator sees which points hold still before a drag
-tells them. This is what makes the road network legible: the intersections a
-road reads look different from the points it owns.
+tells them. A path is legible this way: the points it reads from elsewhere look
+different from the points it owns.
 
 **One part of one path is the focus.** A press on a grip sets it, and a press on
 the body of the path drops it again. The properties panel expands the focused

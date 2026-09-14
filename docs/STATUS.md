@@ -2,17 +2,7 @@
 
 `SPEC.md` holds the product requirements, and this file holds the state of the
 code. This file also holds the structure map of the repository, and the reason
-each file exists.
-
-The last full audit ran on 2026-09-08.
-
-That audit replaced the old set of process documents with this file and
-`SPEC.md`. It cut the comments in `src/` from 14436 lines to 851. It also
-removed every reference to a document that no longer exists. That covered 4346
-comments, 721 test names, and 33 messages the operator reads. It changed no
-logic. The reasons that used to sit in a file header now sit in section 3
-below. An untouched copy of the repository as it was before the audit sits
-beside this one, in `beheader-clean-alpha-archive`.
+each file exists. `TODO.md` holds the work that is open.
 
 ---
 
@@ -23,13 +13,7 @@ beside this one, in `beheader-clean-alpha-archive`.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2369 pass, 0 skip, across 42 test files. |
-| Phase | The alpha phase is complete, and beta is open. |
-
-The alpha phase built the graph core, the formula engine, the table, the
-canvas, the command line, text, images and the script stub. A person confirmed
-the last of it on screen on 2026-09-07.
-
-The beta phase starts here. Section 5 lists the gaps that remain open for beta.
+| Spec | Every section of `SPEC.md` is built, except the parts section 15 postpones. |
 
 ### How to run it
 
@@ -204,7 +188,6 @@ the code it constrains.
    bounds each have a closed form. So the count of vertices is never a quality
    setting. A vertex arrives on a curve only when an operator splits an edge
    at a point they pick.
-   ---
 6. **`measure.ts` and `renderer.ts` move together.** One layout function, two
    readers.
 7. **`render/textbox.ts` holds the one rule for the size of a text box.** Three
@@ -220,127 +203,18 @@ the code it constrains.
 11. **A test that agrees with its author proves nothing.** An inert module with
    thirty green tests shipped a real bug. A new module reaches a consumer in
    the same change.
-12. **The operator cannot see what a test can see.** A live look comes before
-   anyone calls an operator surface done. That step decided six cycles in a
-   row, and it closed the last phase.
+12. **The operator cannot see what a test can see.** A live look on screen
+   comes before anyone calls an operator surface done. It has found what the
+   suite could not on every surface built so far.
 
 ---
 
-## 5. Gaps. This is the beta backlog.
-
-The alpha phase closed with these items specified and not built. The first
-group blocks the acceptance test in `SPEC.md` section 12.
-
-### Blocks the road network test
-
-1. **`polyline` exists now, and it can close.** It has a schema entry, a
-   creation command (`polyline <x,y> <x,y> [<x,y> ...] [closed]`), per vertex
-   slots, a derived `vertices` slot, an extent, a hit test and a renderer arm.
-   It declares the same nine derived paths a preset declares, `area` included.
-   Its `closed` slot picks the math for each one, and never the slot set. So a
-   closed polyline reports the same area, centroid and length as the polygon
-   over the same corners. A polygon is a closed polyline at the schema layer,
-   and not only in the math. A live polyline can also grow and shrink now,
-   through `addvertex` and `delvertex`, and a preset can turn into one through
-   `explode` (item 4). The operator can also draw one with the pointer. The
-   word `polyline` starts the AutoCAD prompt sequence, and a click on the
-   canvas answers each point. `arc`, `line`, `close` and `undo` are the words
-   it takes. An arc leaves the point before it along the direction the path
-   already travels. So one click gives an edge its bulge, and the two meet
-   smoothly. The canvas draws the path as it grows, with a rubber band from the
-   last point to the pointer. `AppState.pointer` holds where the pointer is,
-   and `promptPreview` in `main.ts` asks the command layer what shape to draw.
-2. **Per vertex slots exist, and a mutation can grow or shrink the set.**
-   `vertex.0.x` and `vertex.0.y`, as `SPEC.md` section 8 specifies.
-   `enumeratePolylineVertexSlotPaths` in `geometry.ts` builds the paths from
-   `GraphObject.vertexCount`, a field beside the slots rather than a slot
-   itself, because the count changes only through a mutation operation.
-   `createObjectFromCommand`, `addVertexToObject` and `deleteVertexFromObject`
-   all write it now.
-3. **A path drags by its vertices now.** A polyline has no `origin` slot, so a
-   drag applies the delta to every `vertex.N.x` and `vertex.N.y`, under the
-   same per component rule an origin follows. A vertex a formula drives stays
-   where it is while the rest move. That is how a road holds on to the
-   intersections its ends read. A shift drag over an edge moves only the two
-   vertices of that edge. The press picks its vertices once and holds them, so
-   the set never changes under the pointer.
-
-### Specified, and built during beta
-
-4. **`addvertex`, `delvertex` and `explode` all exist now.** `addvertex`
-   appends one vertex and cannot break a live reference, because nothing else
-   can name a vertex that does not exist yet. By default, `delvertex` refuses
-   when a live formula, anywhere in the document, names the exact vertex marked
-   for removal, and repairs that reference to `#REF` under `force` instead. A
-   reference to a later vertex always shifts down to match, with or without
-   `force`. The same real vertex survives under a new index, and a shift is
-   never a break. `explode` turns a circle, a polygon or a rect into a
-   polyline, under the same id and name. It snapshots the preset's current
-   `vertices` into literal per vertex slots, closes the new path, and drops the
-   parameter slots. Those are `origin`, `radius`, `sides`, and so on.
-   `vertices`, `centroid`, `area`, `length` and `bounds` all stay declared at
-   the same paths on the new schema. The style slots cross unchanged, so a
-   formula that reads one of those does not need repair. A formula that reads a
-   dropped slot follows the same refuse-by-default, repair-under-`force` rule
-   as `delvertex`.
-5. **Every path segment the spec names exists: straight, arc and cubic
-   bezier.** A
-   `vertex.N.bulge` slot bends the edge that leaves vertex N into an arc.
-   `vertex.N.handle.out.x` and its three companions bend it into a cubic
-   instead, and a handle wins over a bulge. Area, length, centroid, bounds, the
-   hit test and the renderer all treat each edge as the true curve it is.
-   `edge.ts` holds that math. `split <object> <edge> <x,y>` cuts one edge at the
-   point on it nearest `x,y` and puts a vertex there. An arc becomes two arcs
-   and a cubic becomes two cubics, so the shape does not move either way. It
-   refuses a point that lands on an end, where a vertex already sits. A circle
-   has dropped its `vertices` slot too, so no shape anywhere holds a point an
-   operator did not place.
-6. **Geometry style slots exist now.** Circle, polygon, rect and polyline each
-   declare `style.strokeColor`, `style.strokeWidth` and `style.fillColor`. Each
-   one is an ordinary slot, so a formula drives it and a table cell can colour
-   a shape. A new shape gets the old fixed colours as its defaults, and a
-   `fillColor` of null. Only a closed shape fills. A shape that paints a fill
-   also answers to a click anywhere inside it, through `pathContains`.
-7. **`src/engine/index.ts` is the only engine path anything outside the engine
-   imports.** It re-exports every other engine file under one name each, and
-   resolves the one collision (`evaluate`) to `evaluateGraph` and
-   `evaluateFormulaAst`. The 28 files of `command/`, `render/` and `main.ts`
-   each hold one import from it now, in place of the 103 deep imports they
-   held before. The build output did not change by one byte, which is the
-   proof that this moved no logic. Two tests in `index.test.ts` keep it that
-   way. A later question stays open, and this change does not settle it: the
-   surface re-exports 311 names, and the layers outside use 114. A curated
-   list of named re-exports is a separate decision, cheaper to make now that
-   the real usage sits in one file for each layer.
-8. **The journal has a reader now.** `journal.ts` holds it. `replayJournal`
-   rebuilds the objects of a document as they stood after any entry, and undo
-   reads the entry before the last one. `journalIsComplete` says whether a
-   full replay rebuilds exactly the objects given, so nothing trusts a replay
-   of a document the journal does not account for. A session of twelve
-   commands, `explode` and `split` among them, rebuilds from its journal
-   alone. `SPEC.md` section 15 still holds: no undo surface, and no command.
-   This is the reader that one needs, and nothing more.
-
-### Smaller
-
-9. **`image` opacity** clamps at draw time instead of at write time. That is a
-   deliberate choice, recorded here so the next reader does not treat it as a
-   defect.
-10. **Nothing now cites a document that does not exist.** The audit rewrote 721
-    test names and 33 messages the operator reads, which named the old rulings.
-    A grep for the old marks over `src/` and `index.html` returns nothing. It
-    stays that way.
-11. **The package carries the name `graphpaper`. The folder carries the name
-    `beheader-clean`.** The spec calls the product Graphpaper. Nothing depends
-    on the folder name. One name wins when it starts to matter.
-
----
-
-## 6. How to work here
+## 5. How to work here
 
 `CLAUDE.md` holds the rules for a change. It names the checks to run, how to
 write a comment, and what to prefer when the spec is silent. This file held a
 second copy of them, and the two drifted apart.
 
-Git holds the history of each change, and this file holds the state that the
+`TODO.md` holds the open work, and an item leaves that file when it lands. Git
+holds the history of each change, and this file holds the state that the
 history arrives at.

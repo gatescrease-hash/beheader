@@ -366,7 +366,7 @@ describe("renderDocument — table: fixed-size grid, alignment", () => {
 });
 
 describe("renderDocument — object types with no schema/visual definition yet", () => {
-  it("draws nothing for a value/add fixture object (Phase 0 only, never on the command line)", () => {
+  it("draws nothing for a value/add fixture object, which no command word creates", () => {
     const { ctx, calls } = createFakeContext();
     const value: GraphObject = { id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "literal", value: 1 } } };
     renderDocument(ctx, 800, 600, [value], CAMERA_IDENTITY);

@@ -359,7 +359,7 @@ describe("insertTableLine — the row and column insert", () => {
       expect(result.slots["cells.A5"]).toEqual({ kind: "literal", value: 99 });
     });
 
-    it("stands in for Phase 3's future origin.x/origin.y: an arbitrary extra slot is carried through a resize untouched, not just the two named in this test file", () => {
+    it("carries an arbitrary extra slot through a resize untouched, such as origin.x and origin.y, and not just the two named in this test file", () => {
       const table = tableWithCells(1, 1, { A1: 1 });
       const withPosition: GraphObject = {
         ...table,
@@ -517,7 +517,7 @@ describe("deleteTableLine — the row and column delete, and the first user of t
       expect(result.slots["cells.A5"]).toEqual({ kind: "literal", value: 99 });
     });
 
-    it("stands in for Phase 3's future origin.x/origin.y: an arbitrary extra slot survives a delete", () => {
+    it("keeps an arbitrary extra slot, such as origin.x and origin.y, through a delete", () => {
       const table = tableWithCells(2, 1, { A1: 1, A2: 2 });
       const withPosition: GraphObject = {
         ...table,

@@ -426,7 +426,7 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
     expect(resized.objects[0]?.slots.area?.value).toBeCloseTo(expectedArea * 4);
   });
 
-  it("a real polygon's centroid.x formula-bound to a table cell updates live when the cell changes — no false cycle (Phase 4's own shape, proved one phase early)", () => {
+  it("a real polygon's centroid.x formula-bound to a table cell updates live when the cell changes — no false cycle", () => {
     const table: GraphObject = {
       id: "obj_2",
       name: "table_x",
