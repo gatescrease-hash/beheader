@@ -95,11 +95,12 @@ const VALUE_PATTERNS = VALUE_JUDGMENT.map((phrase) => ({
 
 /**
  * Documents that state a requirement or give an instruction. A specification
- * says what to build, and a guide tells a reader what to do, so both need the
- * register that the rules take away. Every other document describes the code
- * that exists, the same as a comment does.
+ * says what to build, a guide tells a reader what to do, and a work list names
+ * the changes nobody has made yet, so all three need the register that the
+ * rules take away. Every other document describes the code that exists, the
+ * same as a comment does.
  */
-const DIRECTIVE_DOCUMENTS = new Set(["SPEC.md", "CLAUDE.md", "STYLE.md"]);
+const DIRECTIVE_DOCUMENTS = new Set(["SPEC.md", "CLAUDE.md", "STYLE.md", "TODO.md"]);
 
 /**
  * How long a cell in a Markdown table can be. A row of the structure map in

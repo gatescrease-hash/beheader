@@ -231,7 +231,7 @@ describe("extractTextDependencies", () => {
     ]);
   });
 
-  it("the acceptance criterion, pinned directly: a reference in an untaken branch is still reported", () => {
+  it("reports a reference in an untaken branch, which is the eager and total rule pinned directly", () => {
     const untaken = objects(["obj_9", "untaken_source"]);
     const blocks = parseTextContent("{? TRUE }{= table_1.rows }{:}{= untaken_source.rows }{?}", [...TABLE_1, ...untaken]);
     const dependencies = extractTextDependencies(blocks);
@@ -399,32 +399,32 @@ describe("recovered parse errors carry a readable message", () => {
   });
 });
 
-describe("the acceptance criterion string for text, word for word", () => {
-  const CRITERION = "Radius: {= table_x.A1 }{? table_x.A1 > 50 } — **LARGE**{:} — small{?}";
+describe("one text string that holds an embedding, a condition and both branches at once", () => {
+  const CONTENT = "Radius: {= table_x.A1 }{? table_x.A1 > 50 } — **LARGE**{:} — small{?}";
   const TABLE_X = objects(["obj_1", "table_x"]);
   const cellA1 = { objectId: "obj_1", path: ["cells", "A1"] };
 
   it("parses into text + formula + conditional, resolving table_x.A1 through its stored path", () => {
-    const blocks = parseTextContent(CRITERION, TABLE_X);
+    const blocks = parseTextContent(CONTENT, TABLE_X);
     expect(blocks.map((block) => block.type)).toEqual(["text", "formula", "conditional"]);
   });
 
   it("subscribes to the cell BOTH the embedding and the condition name (eager and total)", () => {
-    const dependencies = extractTextDependencies(parseTextContent(CRITERION, TABLE_X));
+    const dependencies = extractTextDependencies(parseTextContent(CONTENT, TABLE_X));
     expect(dependencies).toEqual([
       { kind: "reference", address: cellA1 },
       { kind: "reference", address: cellA1 },
     ]);
   });
 
-  it("updates BOTH its number and its branch as the cell changes — the criterion's own clause", () => {
-    const blocks = parseTextContent(CRITERION, TABLE_X);
+  it("updates BOTH its number and its branch as the cell changes", () => {
+    const blocks = parseTextContent(CONTENT, TABLE_X);
     expect(evaluateBlockTree(blocks, () => 80)).toBe("Radius: 80 — **LARGE**");
     expect(evaluateBlockTree(blocks, () => 12)).toBe("Radius: 12 — small");
   });
 
   it("markdown-lite markup survives as literal text for render/ to interpret, uninterpreted here", () => {
-    expect(evaluateBlockTree(parseTextContent(CRITERION, TABLE_X), () => 80)).toContain("**LARGE**");
+    expect(evaluateBlockTree(parseTextContent(CONTENT, TABLE_X), () => 80)).toContain("**LARGE**");
   });
 });
 

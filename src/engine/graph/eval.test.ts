@@ -502,7 +502,7 @@ describe("evaluate — a derived slot's compute evaluating an embedded formula A
     expect(resolvedContentOf([text], textEdges("obj_x"), "obj_x")).toBe("ok !{= 1 + } and 42");
   });
 
-  it("re-renders when a value referenced only inside the currently NON-taken branch changes (Phase 5 gate property)", () => {
+  it("re-renders when a value referenced only inside the currently NON-taken branch changes", () => {
     const text = textObject("obj_x", "text_1", "{? table_1.A1 > 0 }ok{:}fallback is {= table_1.A2 }{?}");
     const edges = textEdges("obj_x", addr("obj_t", "cells", "A1"), addr("obj_t", "cells", "A2"));
     expect(resolvedContentOf([textTable("obj_t", "table_1", 4, 4, { A1: 5, A2: 20 }), text], edges, "obj_x")).toBe("ok");

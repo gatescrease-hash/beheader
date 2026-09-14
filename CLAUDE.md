@@ -1,13 +1,14 @@
 # CLAUDE.md
 
-Read `docs/STATUS.md` first. It holds the state of the code, the structure map
-of the repository, and the list of open work. Read `docs/SPEC.md` when you need
-to know what the product must do.
+Read `docs/STATUS.md` first. It holds the state of the code and the structure
+map of the repository. `docs/TODO.md` holds the open work, and it is where a
+change starts. Read `docs/SPEC.md` when you need to know what the product must
+do.
 
 `docs/STYLE.md` holds the rules for prose, and one worked example of a file
 header written badly and then written well. Read it before you write a comment.
 
-Those three files are the only project documents. Do not add a fourth without a
+Those four files are the only project documents. Do not add a fifth without a
 reason. Do not write a log entry for each change. Git holds the history.
 
 ## What this is
@@ -34,10 +35,11 @@ These six rules make the design work. Do not break one for convenience.
 
 ## How to work
 
-1. Pick one item from section 5 of `docs/STATUS.md`.
+1. Pick one item from `docs/TODO.md`.
 2. Write the code and the tests together.
 3. Run the checks below. All must be clean.
-4. Update section 5 of `docs/STATUS.md` when the item lands.
+4. Delete the item from `docs/TODO.md` when it lands, and update the state
+   table in `docs/STATUS.md` where the change moves it.
 
 ```
 npm test                          # 2369 tests, all pass

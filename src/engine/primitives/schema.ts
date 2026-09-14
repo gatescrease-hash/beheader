@@ -19,9 +19,9 @@
  * format so far: isColorValue holds the rule, and COLOR_NONE is the word
  * that writes a null.
  *
- * The value and add types are test fixtures left over from the first phase.
- * They stay because they are the smallest case that exercises a derived
- * slot.
+ * The value and add types are test fixtures rather than object types an
+ * operator can create, and no command word makes one. They stay because they
+ * are the smallest case that exercises a derived slot.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so
  * the tests run headless and the file can move to Rust later.

@@ -438,7 +438,7 @@ describe("creation — a typed line becomes an object", () => {
     expect(isCommandParseFailure(result) && result.message).toContain('"language"');
   });
 
-  it("declares an in/out port through the existing addPort mutation, then reads/writes it exactly like any other declared slot, which is the acceptance shape at the mutation layer", () => {
+  it("declares an in/out port through the existing addPort mutation, then reads/writes it exactly like any other declared slot", () => {
     const withScript = committed("script x=0 y=0", createEmptyDocument());
     const script = onlyNamed(withScript, "script_1");
 
@@ -458,7 +458,7 @@ describe("creation — a typed line becomes an object", () => {
     expect(getSlot(onlyNamed(withPlaceholder, "script_1"), ["out", "result"])?.value).toBe(99);
   });
 
-  it("Phase 6's acceptance criterion, its exact shape: a table cell drives script_1.in.factor, another object's slot is bound to script_1.out.result, and moving the placeholder moves that object — with no script-specific code in eval.ts", () => {
+  it("a table cell drives script_1.in.factor, another object's slot is bound to script_1.out.result, and moving the placeholder moves that object — with no script-specific code in eval.ts", () => {
     const withTable = committed("table x=0 y=0 rows=1 cols=1", createEmptyDocument());
     const seeded = committed("set table_1.A1 3", withTable);
     const withScript = committed("script x=0 y=0", seeded);
@@ -566,7 +566,7 @@ describe("addport / removeport — ports that the operator declares", () => {
     expect(refused("removeport script_1.in.absent", withScript())).toContain('has no in port named "absent"');
   });
 
-  it("the acceptance criterion for the script node, typed the way a person enters it", () => {
+  it("drives a shape through a script node's ports, typed the way a person enters it", () => {
     let document = createEmptyDocument();
     for (const line of [
       "table x=0 y=0 rows=1 cols=1",

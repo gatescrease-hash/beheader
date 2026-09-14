@@ -635,7 +635,7 @@ describe("panel UI state — dismissal and manual position", () => {
   });
 });
 
-describe("Phase 3's acceptance criterion, end to end", () => {
+describe("a table, a shape and the canvas together, end to end", () => {
 
   type DrawCall = { readonly op: string };
 
@@ -735,7 +735,7 @@ describe("Phase 3's acceptance criterion, end to end", () => {
   });
 });
 
-describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in ONE document, with no false cycle", () => {
+describe("a cell driving a shape, a shape driving a cell, and a drag, all in ONE document, with no false cycle", () => {
 
   function firstVertexOf(object: GraphObject): { readonly x: number; readonly y: number } {
     const vertices = getSlot(object, ["vertices"])?.value as readonly { x: number; y: number }[] | undefined;
@@ -746,7 +746,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     return vertex;
   }
 
-  function gateDocument(): AppState {
+  function builtDocument(): AppState {
     let state = typed(opened(), "table x=0 y=0 rows=4 cols=4");
     state = typed(state, "set table_1.A1 500");
     state = typed(state, "polygon sides=5 x=100 y=100 r=50");
@@ -757,7 +757,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   }
 
   it("builds the whole document without a single refusal — both directions coexist in one graph", () => {
-    const state = gateDocument();
+    const state = builtDocument();
     expect(state.document.objects.map((object) => object.name)).toEqual(["table_1", "polygon_1", "polygon_2"]);
     expect(getSlot(objectNamed(state, "polygon_1"), ["origin", "x"])?.kind).toBe("formula");
     expect(getSlot(objectNamed(state, "table_1"), ["cells", "B1"])?.kind).toBe("formula");
@@ -768,7 +768,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   });
 
   it("(a) data drives geometry — typing a new number in the cell moves polygon_1", () => {
-    let state = gateDocument();
+    let state = builtDocument();
     expect(numberAt(objectNamed(state, "polygon_1"), ["origin", "x"])).toBe(500);
 
     state = typed(state, "set table_1.A1 650");
@@ -778,7 +778,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   });
 
   it("(b) geometry drives data — dragging polygon_2 on canvas updates its cell live", () => {
-    let state = gateDocument();
+    let state = builtDocument();
     const before = objectNamed(state, "polygon_2");
     const originXBefore = numberAt(before, ["origin", "x"]);
     expect(numberAt(objectNamed(state, "table_1"), ["cells", "B1"])).toBe(originXBefore * 2);
@@ -795,7 +795,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   });
 
   it("(c) partial binding — dragging polygon_1 slides it in Y only, because its X is driven", () => {
-    let state = gateDocument();
+    let state = builtDocument();
     const before = objectNamed(state, "polygon_1");
     const originYBefore = numberAt(before, ["origin", "y"]);
 
@@ -810,8 +810,8 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
     expect(state.log.slice(logBefore).join("\n")).toContain("table_1.A1");
   });
 
-  it("all three hold in ONE state at once — the criterion's own wording", () => {
-    let state = gateDocument();
+  it("all three hold in ONE state at once", () => {
+    let state = builtDocument();
 
     state = typed(state, "set table_1.A1 650");
     const polygon2 = objectNamed(state, "polygon_2");
@@ -836,7 +836,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   });
 
   it("no FALSE cycle, and cycle detection is still alive — a genuinely cyclic link is refused", () => {
-    const state = gateDocument();
+    const state = builtDocument();
     const outcome = submitLine(state, "set table_1.A1 = polygon_1.origin.x", VIEWPORT);
 
     expect(newLines(state, outcome.state).join("\n")).toContain("cyclic");
@@ -844,7 +844,7 @@ describe("PHASE 4'S ACCEPTANCE CRITERION — (a), (b) and (c) simultaneously in 
   });
 
   it("no false cycle in the hardest shape either: one object driven by the table and driving it back", () => {
-    let state = typed(gateDocument(), "set table_1.C1 = polygon_1.centroid.x");
+    let state = typed(builtDocument(), "set table_1.C1 = polygon_1.centroid.x");
 
     expect(state.log.join("\n")).not.toContain("cyclic");
     expect(getSlot(objectNamed(state, "table_1"), ["cells", "C1"])?.kind).toBe("formula");
@@ -1654,9 +1654,9 @@ describe("a document saved before `autoresize` existed still loads (2026-09-02)"
   });
 });
 
-describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with a REAL measurer", () => {
+describe("one text box, through mutate, with a REAL measurer", () => {
 
-  const GATE_CONTENT =
+  const CONTENT =
     "Radius: {= table_1.A1 }{? table_1.A1 > 50 } — **LARGE** (max {= table_1.B1 }){:} — small (min {= table_1.C1 }){?}";
 
   const CHAR = 10;
@@ -1677,33 +1677,33 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
     return getSlot(objectNamed(state, "text_1"), ["measuredHeight"])?.value;
   }
 
-  function gateDocument(): AppState {
+  function builtDocument(): AppState {
     const context = realMeasurerContext();
     let state = typedWith(opened(), "table x=0 y=0 rows=1 cols=3", context);
     state = typedWith(state, "set table_1.A1 30", context);
     state = typedWith(state, "set table_1.B1 999", context);
     state = typedWith(state, "set table_1.C1 5", context);
-    state = typedWith(state, `text x=0 y=0 "${GATE_CONTENT}"`, context);
+    state = typedWith(state, `text x=0 y=0 "${CONTENT}"`, context);
     return state;
   }
 
   it("resolves the number and the currently-taken FALSE branch inside the creating mutation", () => {
-    expect(resolvedContentOf(gateDocument())).toBe("Radius: 30 — small (min 5)");
+    expect(resolvedContentOf(builtDocument())).toBe("Radius: 30 — small (min 5)");
   });
 
-  it("updates both the number and the branch as the cell changes — the criterion's own wording", () => {
-    const raised = typedWith(gateDocument(), "set table_1.A1 80", realMeasurerContext());
+  it("updates both the number and the branch as the cell changes", () => {
+    const raised = typedWith(builtDocument(), "set table_1.A1 80", realMeasurerContext());
     expect(resolvedContentOf(raised)).toBe("Radius: 80 — **LARGE** (max 999)");
   });
 
   it("a value referenced ONLY inside the currently non-taken branch is still a real, discoverable dependency, which eager and total extraction gives, proved end to end through `refs`", () => {
-    const before = gateDocument();
+    const before = builtDocument();
     const after = typedWith(before, "refs table_1.B1", realMeasurerContext());
     expect(newLines(before, after)).toContain("table_1.B1 → text_1.resolvedContent");
   });
 
   it("a value changed while its branch is untaken is not stale once that branch is later taken — the observable half of 're-renders'", () => {
-    let state = gateDocument();
+    let state = builtDocument();
     state = typedWith(state, "set table_1.B1 777", realMeasurerContext());
     expect(resolvedContentOf(state)).toBe("Radius: 30 — small (min 5)");
     state = typedWith(state, "set table_1.A1 80", realMeasurerContext());
@@ -1711,14 +1711,14 @@ describe("PHASE 5'S ACCEPTANCE CRITERION — one text box, through mutate, with 
   });
 
   it("wraps at its set width — measuredHeight comes from the real word-wrap algorithm, not a fixed-size fake", () => {
-    let state = gateDocument();
+    let state = builtDocument();
     state = typedWith(state, "set table_1.A1 80", realMeasurerContext());
     state = typedWith(state, "set text_1.width 100", realMeasurerContext());
     expect(measuredHeightOf(state)).toBe(60);
   });
 
-  it("no false cycle — the criterion's own document builds and updates without ever refusing", () => {
-    const state = typedWith(gateDocument(), "set table_1.A1 80", realMeasurerContext());
+  it("no false cycle — the document builds and updates without ever refusing", () => {
+    const state = typedWith(builtDocument(), "set table_1.A1 80", realMeasurerContext());
     expect(state.log.join("\n")).not.toContain("cyclic");
   });
 });

@@ -13,6 +13,11 @@
  * A selection highlight draws in its own pass after all the objects, so an
  * object later in z order cannot paint over it.
  *
+ * The opacity of an image is clamped to the range 0 to 1 here, at draw time,
+ * rather than where the slot is written. So the slot holds whatever a formula
+ * puts in it, including a number outside that range, and the clamp applies to
+ * the painted result alone.
+ *
  * Every colour is written twice: the default first, then whatever the style
  * slot holds. A canvas silently keeps its previous colour when it cannot parse
  * the one it is given, so a single write would paint one shape in the colour

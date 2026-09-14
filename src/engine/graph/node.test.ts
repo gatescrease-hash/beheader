@@ -188,7 +188,7 @@ describe("ObjectType / TABLE_TYPE", () => {
   });
 });
 
-describe("Phase 0 fixture shapes: 'value' and 'add' objects", () => {
+describe("the 'value' and 'add' test fixture shapes", () => {
   it("builds a 'value' object: one literal numeric slot", () => {
     const valueObject: GraphObject = {
       id: "obj_1",
