@@ -13,7 +13,7 @@ each file exists. `TODO.md` holds the work that is open.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2369 pass, 0 skip, across 42 test files. |
-| Spec | Every section of `SPEC.md` is built, except the parts section 15 postpones. |
+| Spec | Built, except the math object of section 12 and the parts section 16 postpones. |
 
 ### How to run it
 
