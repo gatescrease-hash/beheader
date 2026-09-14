@@ -1,23 +1,25 @@
 /**
  * journal.ts
  *
- * The reader of the append only journal that mutation.ts writes. It rebuilds
- * the objects of a document as they stood after any entry. It runs the same
- * operations again over an empty document.
+ * Reads back the append-only journal that mutation.ts writes. replayJournal
+ * rebuilds a document's objects as they stood after any entry, by re-running
+ * those entries over an empty document.
  *
- * The simplest correct code matters more here than speed. A replay runs one
- * mutation for each entry, and it keeps no snapshot. Undo reads the state
- * before the last entry as replayJournal(journal, journal.length - 1).
+ * Replays are unoptimized for the sake of simplicity: one mutate() call per
+ * entry, with no snapshots. Undo is replayJournal(journal, journal.length - 1).
+ * An entry that fails to replay aborts the whole replay and reports which entry
+ * broke, instead of handing back a half-built document.
  *
- * Two traps. A replay rebuilds objects and nothing else, because nextObjectId
- * and the camera never enter the journal, so the caller keeps its own. And a
- * journal is complete only for a document that every mutation built. A
- * document that arrives any other way needs journalIsComplete before anything
- * trusts a replay of it.
+ * The journal has two limitations. First, a replay restores objects only. The
+ * nextObjectId counter and the camera never go into the journal, so whoever
+ * calls replayJournal tracks those two separately. Second, a journal is only
+ * trustworthy for a document where every change went through mutate(). For a
+ * document that arrived some other way, such as a loaded file,
+ * journalIsComplete answers whether the journal accounts for it: it replays
+ * everything and compares the result against the objects the caller passes in.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { GraphObject } from "./graph/node.ts";
@@ -53,8 +55,9 @@ export function replayJournal(
     if (entry === undefined) {
       return { ok: false, message: `journal entry ${index} is missing`, entry: index };
     }
-    // The journal this replay hands over stays empty. Nothing reads it back,
-    // and a copy that grows costs one array for each entry.
+    // Each mutate() call is given an empty journal to append to, and what it
+    // appends is thrown away. A replay only rebuilds objects, and letting the
+    // journal accumulate would allocate a fresh array per entry for nothing.
     const result = mutate(objects, entry.operations, [], context);
     if (!result.ok) {
       return { ok: false, message: `journal entry ${index} did not replay: ${result.message}`, entry: index };

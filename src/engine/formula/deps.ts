@@ -1,21 +1,24 @@
 /**
  * deps.ts
  *
- * The extractDependencies function walks an AST. It returns every address
- * that the formula can read. It is eager and total, and it returns both
- * branches of an IF. This is correct and it is not a defect. Nobody can know
- * which branch is live without evaluation, and the live branch changes all
- * the time. The graph subscribes to all of them, or the object fails to
- * update when the condition flips.
+ * extractDependencies walks an AST and returns every address the formula could
+ * read. It is eager and total: for an IF it returns the addresses in both
+ * branches, not only the branch that is live now.
  *
- * Compare formula/eval.ts, which is lazy. The contrast is deliberate.
+ * That is deliberate, and it is not a defect. Which branch is live depends on
+ * a value that evaluation has not produced yet, and it changes as the document
+ * changes. If the graph subscribed only to the live branch, flipping the
+ * condition would leave the object reading a slot it never subscribed to, and
+ * it would stop updating. formula/eval.ts takes the opposite approach and
+ * evaluates lazily, which is the right trade in that direction.
  *
- * The two rewrite passes here serve table resize. One shifts an address. The
- * other turns a broken address into a #REF node.
+ * The two rewrite passes at the end of the file serve a table resize.
+ * rewriteAddressesInAst shifts an address when rows or columns move, and
+ * repairAddressesInAst turns an address that no longer exists into a #REF
+ * node.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import type { Address } from "../address.ts";

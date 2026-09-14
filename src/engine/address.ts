@@ -1,26 +1,30 @@
 /**
  * address.ts
  *
- * This file defines the address scheme that the engine uses to name a slot on
- * an object. An address pairs an object ID with a path. parseAddress and
- * formatAddress convert between that pair and its text form. They are the
- * only code that knows that form, so the syntax can change in one place.
+ * Defines how the engine names one slot on one object. An address pairs an
+ * object ID with a path, where the path is a list of segments such as
+ * ["origin", "x"]. parseAddress turns text like "table_x.A1" into that pair
+ * and formatAddress turns it back. Those two are the only code that knows the
+ * text form, so the syntax can change in one place.
  *
- * The scheme has two layers: a stable ID that identifies the object, and a
- * name that the operator controls. A formula resolves the name to an ID when
- * it parses, and the stored AST keeps that ID. So a rename leaves every
- * formula that reads the object untouched.
+ * The scheme has two layers by design. Every object carries a stable ID that
+ * never changes, and a display name the operator can edit. A formula resolves
+ * the name to an ID when it parses, and the stored AST keeps the ID rather
+ * than the name, so renaming an object leaves every formula that reads it
+ * alone.
  *
- * This file also holds the A1 cell helpers, because a cell reference is
- * another form of address. A second copy of that logic drifts away from this
- * one.
+ * A table cell has two spellings of the same address. An operator writes A1,
+ * and the graph stores ["cells", "A1"]. toStoredPath and toSurfacePath convert
+ * between the two, so the engine works in one form and the operator reads the
+ * other. The A1 helpers are in this file rather than in primitives/table.ts,
+ * because a cell reference is another form of address and a second copy of
+ * that logic would drift from this one.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  *
- * Most of the engine imports this file, so a change to the address format
- * affects a large part of the codebase.
+ * Most of the engine imports this file. A change to the address format reaches
+ * the formula parser, the mutation channel and the document format at once.
  */
 
 import { RESERVED_WORDS } from "./formula/lexer.ts";

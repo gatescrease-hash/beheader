@@ -1,18 +1,27 @@
 /**
  * node.ts
  *
- * The data model is Value, ErrorValue, the three slot kinds, and GraphObject.
+ * The data model the whole engine is built from: Value and ErrorValue for what
+ * a slot can hold, the three kinds of Slot, and GraphObject.
  *
- * A slot is one addressable value on an object. It is literal, formula or
- * derived. Slots are the nodes of the dependency graph.
+ * A slot is one addressable value on one object, and it is literal, formula or
+ * derived. The slots are the nodes of the dependency graph, so a formula in
+ * one slot that reads another creates an edge between those two slots rather
+ * than between their objects.
  *
- * slotKey joins a path into one string key. There is no sanctioned inverse.
- * Code that needs a path gets it from the schema, because the join has no
- * inverse.
+ * slotKey joins a path such as ["vertex", "0", "x"] into the single string
+ * that GraphObject.slots is keyed by. There is no inverse function, and
+ * writing one would be a mistake: a key cannot be split back into a path
+ * reliably, because a segment can contain the separator. Code that needs a
+ * path asks the schema for it.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * GraphObject.ports and GraphObject.vertexCount sit beside the slot map rather
+ * than inside it. Both change only through a mutation operation, so neither
+ * belongs in the set a formula is allowed to write, and document.ts rebuilds
+ * both by hand when it loads a file.
+ *
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import type { Address, AddressableObject } from "../address.ts";

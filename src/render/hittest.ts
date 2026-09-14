@@ -1,18 +1,24 @@
 /**
  * hittest.ts
  *
- * The hit test turns a screen point into the topmost object under it.
+ * Turns a screen point into the topmost object under it, or into nothing.
  *
- * A shape that paints its inside answers to a click anywhere inside it, by
- * the same nonzero rule a canvas fills with. A shape with no fill is a hollow
- * outline, and answers only near its edge, within a pixel tolerance. Text, a
- * table, an image and a script node use a box.
+ * What a shape answers to depends on whether it paints its inside. A filled
+ * shape answers a click anywhere within it, by the same nonzero winding rule a
+ * canvas fills with, so the answer agrees with what the operator can see. A
+ * shape with no fill is a hollow outline and answers only within a few pixels
+ * of its edge. Text, a table, an image and a script node are boxes.
  *
- * Array order is z order. This file walks it backward.
+ * A circle is tested against its true ring, from the origin and the radius,
+ * and a polyline against its real edges. So a click near an arc measures to
+ * the circle rather than to the chord across it.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * The object array is in z order, and this file walks it backward, so the
+ * topmost object wins.
+ *
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 import {
   buildPathEdges,

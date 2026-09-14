@@ -1,20 +1,23 @@
 /**
  * menu.ts
  *
- * A right press over a path opens a menu, and the command line each entry
- * stands for.
+ * The menu a right press opens over a path, and the command line that each
+ * entry stands for.
  *
- * Every entry is a command an operator can also type. The menu writes the
- * line and the usual command path runs it, so the log shows what happened and
- * the journal records it. Nothing here reaches a mutation on its own.
+ * Every entry is a line the operator could equally have typed. menuCommandLine
+ * writes that line and main.ts runs it through the ordinary command path, so
+ * the log shows it and the journal records it. Nothing in this file reaches a
+ * mutation directly.
  *
- * A vertex offers its own removal. An edge offers its three shapes and one
- * new vertex at the point pressed. The press picks the part, so the menu
- * never asks the operator which one they meant.
+ * A press on a vertex offers to remove that vertex. A press on an edge offers
+ * its three shapes and a new vertex at the point pressed. The press has
+ * already settled which part it landed on, so the menu never asks the operator
+ * to choose again. A vertex wins a tie against an edge, which is the rule
+ * gripAt follows.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 
 import { type CameraState, type GraphObject, POLYLINE_TYPE, type Point } from "../engine/index.ts";

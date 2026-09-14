@@ -1,15 +1,15 @@
 /**
  * ast.ts
  *
- * The AST node types come with a shape check and a depth check.
+ * The AST node types, with a shape check and a depth check over them.
  *
- * The AST is the interchange format between the four stages of the formula
- * engine. The document also stores it, so a change to these types is a change
- * to the file format.
+ * The AST is the interchange format between all four stages of the formula
+ * engine, and document.ts stores it verbatim in a saved file. A change to
+ * these types is therefore a change to the file format, and old documents have
+ * to still parse.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 

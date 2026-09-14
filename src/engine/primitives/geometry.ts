@@ -1,19 +1,35 @@
 /**
  * geometry.ts
  *
- * The vertex math for the presets derives centroid, area, length and bounds.
+ * The vertex maths behind every shape: where the corners of a preset fall, and
+ * how centroid, area, length and bounds are derived from them.
  *
- * A preset has one derived vertices slot, not a slot for each vertex. So a
- * change to sides changes a value and not the slot set, which is what
- * evaluation needs.
+ * A preset such as a polygon has one derived vertices slot rather than a slot
+ * for each corner. Changing sides from 5 to 6 therefore changes a value and
+ * leaves the slot set alone, which is what evaluation requires: only a
+ * mutation may add or remove a slot.
  *
- * A circle has no vertices slot. Its area, length, centroid and bounds each
- * have a closed form. Explode turns it into two vertices and two bulges of 1,
- * which is the same circle exactly.
+ * A circle has no vertices slot at all, because its area, length, centroid and
+ * bounds each have a closed form taken from the origin and the radius. explode
+ * turns a circle into two vertices joined by two bulges of 1, which is the
+ * same circle exactly rather than an approximation of it.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * A polyline stores a slot for each vertex instead, and
+ * enumeratePolylineVertexSlotPaths builds those paths from
+ * GraphObject.vertexCount. A second enumeration sits beside it.
+ * enumeratePolylineCoordinateSlotPaths lists only x and y, and the derived
+ * vertices slot depends on that shorter list, because bending an edge moves no
+ * point.
+ *
+ * A vertex owns seven slots: x, y, the bulge of the edge leaving it, and the x
+ * and y of a handle in each direction. VERTEX_PART_SUFFIXES lists all seven,
+ * and delvertex and split move them as one group. Deleting a vertex and
+ * splitting an edge shift addresses in opposite directions, and the
+ * shiftVertexAddress helpers at the end of the file are what mutation.ts
+ * rewrites references with.
+ *
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 import {
@@ -571,9 +587,9 @@ function derivePathNumber(label: string, measure: PathMeasure): DerivedSlotCompu
 }
 
 /**
- * The derived slots of a circle, each one exact. A circle needs no vertices
- * slot now that an arc exists. Two vertices and two bulges of 1 hold a circle
- * exactly, and explode makes that path.
+ * The derived slots of a circle, each one exact. A circle does not need a
+ * vertices slot now that an arc exists. Two vertices and two bulges of 1 hold
+ * a circle exactly, and explode makes that path.
  */
 export function circleDerivedSlots(label: string): readonly DerivedSlotSchema[] {
   const dependencies: DerivedSlotDependencies = { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH] };
@@ -942,7 +958,8 @@ const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
  * and name. The parameter slots (origin, radius, sides, and so on) are gone.
  * The new path closes, because every preset it accepts is a closed shape. So
  * vertices, centroid, area, length and bounds all survive at the same paths,
- * and so does the style. A formula that reads one of them needs no repair.
+ * and so does the style. A formula that reads one of them does not need
+ * repair.
  */
 export function explodeObjectToPolyline(object: GraphObject, label: string): ExplodeResult {
   if (object.type === "circle") {
@@ -993,7 +1010,7 @@ function buildExplodedPolyline(object: GraphObject, vertices: readonly Point[], 
   slots[slotKey(CLOSED_PATH)] = { kind: "literal", value: true };
   // A polyline declares the style slots at the same paths a preset does, so
   // they cross an explode untouched. An operator keeps the colour they chose,
-  // and a formula that drives one needs no repair.
+  // and a formula that drives one does not need repair.
   for (const path of GEOMETRY_STYLE_PATHS) {
     const slot = getSlot(object, path);
     if (slot !== undefined) {

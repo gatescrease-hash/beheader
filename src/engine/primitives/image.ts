@@ -1,15 +1,15 @@
 /**
  * image.ts
  *
- * Slot path constants for the image type are all this file holds. No logic
- * joins them.
+ * Slot path constants for the image type, and nothing else. There is no logic
+ * in this file.
  *
- * The image primitive is data plus one renderer arm. It stores the picture as
- * a data URL in the document.
+ * An image is data plus one arm in the renderer. The picture itself is stored
+ * as a data URL inside the document, so a saved file carries its images with
+ * it.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 export const IMAGE_WIDTH_PATH: readonly string[] = ["width"];
 export const IMAGE_HEIGHT_PATH: readonly string[] = ["height"];

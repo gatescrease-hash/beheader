@@ -1,15 +1,20 @@
 /**
  * textbox.ts
  *
- * One rule decides how big a text box is, and this file holds it.
+ * The single rule for how big a text box is.
  *
- * Three files read this rule. A fourth answer to the same question does not
- * belong here. A fixed width and a measured width can disagree, and this file
- * decides which one wins.
+ * Three files read this rule: the renderer that draws the box, the measurer
+ * that sizes the text inside it, and main.ts when it places the editor over
+ * it. A fourth answer to the same question does not belong anywhere, because a
+ * text box that draws at one size and measures at another puts the caret in
+ * the wrong place.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * A text object can carry a fixed width or take its width from the text. This
+ * file decides which one wins when both are present.
+ *
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 export const TEXT_FALLBACK_BOX_WIDTH = 240;
 export const TEXT_FALLBACK_BOX_HEIGHT = 20;

@@ -1,16 +1,17 @@
 /**
  * eval.ts
  *
- * Evaluation turns an AST into a value, as stage four of four.
+ * Evaluates an AST down to a single value. This is the last of the four stages
+ * a formula passes through.
  *
- * Evaluation is lazy. IF evaluates one branch. AND and OR stop early. So a
- * runtime error in a branch that nothing takes never happens.
+ * Evaluation is lazy where dependency extraction is eager. IF evaluates only
+ * the branch it takes, and AND and OR stop as soon as the answer is settled,
+ * so a division by zero in a branch nothing reaches never happens.
+ * formula/deps.ts walks both branches instead, for the reason its own header
+ * gives.
  *
- * Compare formula/deps.ts, which is eager and total.
- *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 import type { BinaryOpNode, FormulaAst, FunctionCallNode, UnaryOpNode } from "./ast.ts";

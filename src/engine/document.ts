@@ -1,17 +1,25 @@
 /**
  * document.ts
  *
- * Save and load convert a document to versioned JSON, and back.
+ * Saves a document to JSON and loads it back. SerializedDocument is the shape
+ * on disk: a formatVersion, the objects, the journal, the camera, and the
+ * nextObjectId counter.
  *
- * The file never stores a derived value. A full evaluation pass on load makes
- * them again. So a new derived slot does not break an old saved file.
+ * A derived value never goes into the file. Loading runs a full evaluation
+ * pass to build the derived values again, so adding a derived slot to a schema
+ * does not invalidate a file saved before that slot existed.
  *
- * A load goes through the mutation API, so a bad file fails the same checks a
- * bad command does.
+ * Loading goes through mutate() instead of trusting the JSON, so a corrupt
+ * file fails the same integrity and cycle checks that a bad command would.
+ * GraphObject.ports and GraphObject.vertexCount are rebuilt by hand, because
+ * both sit beside the slot map rather than inside it, and a generic parse
+ * cannot check the shape of either.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * FORMAT_VERSION is 1. loadDocument refuses any other version outright rather
+ * than guess at an older shape.
+ *
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import { mutate, type MutationJournalEntry, type Operation } from "./mutation.ts";

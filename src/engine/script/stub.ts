@@ -1,23 +1,26 @@
 /**
  * stub.ts
  *
- * The script node is a real graph citizen with a fake body.
+ * The script node: a real participant in the graph with a placeholder body. It
+ * exists so that the surrounding machinery is built and tested before any
+ * scripting language arrives.
  *
- * A port is an ordinary slot. An in.<port> slot is a formula slot, which is a
- * binding to some upstream address. An out.<port> slot is a derived slot
- * whose schema names every in.* slot of the node. The source slot is a
- * literal that nothing reads, so an edit to it triggers no recompute.
+ * Its ports are ordinary slots, so the rest of the engine treats it like any
+ * other object. An in.<port> slot is a formula slot, so it
+ * binds to some upstream address. An out.<port> slot is a derived slot whose
+ * schema names every in.* slot on the node. The source slot is a literal that
+ * nothing reads, so editing the script text triggers no recompute.
  *
- * A port name and a port value are two operations that land in one batch. The
- * moment an out.* port exists, the integrity check needs every address it
- * declares to be a real slot.
+ * Adding a port is two operations that have to land in one batch: the name and
+ * the value. The moment an out.* port exists, the integrity check demands that
+ * every address it declares resolves to a real slot, so an addPort on its own
+ * fails.
  *
- * evaluateScriptOutput returns the placeholder value. When Python arrives,
- * only that body changes.
+ * evaluateScriptOutput returns the placeholder. When a real language arrives,
+ * that one function body is what changes.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 import { isErrorValue, type GraphObject, type Value } from "../graph/node.ts";

@@ -1,14 +1,15 @@
 /**
  * lexer.ts
  *
- * The lexer turns source text into tokens, as stage one of four.
+ * Turns formula source text into tokens. This is the first of the four stages
+ * a formula passes through: lexer, parser, deps and eval.
  *
- * A numeric path segment, such as the 0 in vertex.0.x, scans as a number
- * token. The parser knows this and puts it back together.
+ * A numeric path segment scans as a number token, so the 0 in vertex.0.x
+ * arrives at the parser as a number rather than as part of a name. The parser
+ * knows that and joins the pieces back into a path.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 export type WordOrSymbolTokenType =

@@ -1,14 +1,15 @@
 /**
  * functions.ts
  *
- * The registry of built in functions maps a name to an arity to a body.
+ * The registry of built in functions. Each entry maps a name to an arity and a
+ * body, so adding a function is one line in one table.
  *
- * One line adds a function. Two entries are lazy, because IF does not
- * evaluate the branch it leaves out.
+ * Two entries are lazy rather than ordinary: IF and the short circuiting
+ * operators receive their arguments unevaluated, because IF has to leave the
+ * branch it does not take alone.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import { isErrorValue, isIllegalNumber, type ErrorValue, type Value } from "../graph/node.ts";

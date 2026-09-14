@@ -1,19 +1,23 @@
 /**
  * grips.ts
  *
- * The grabbers on a selected path each name one part of it.
+ * The grabbers on a selected path, and which part of the path each one names.
  *
- * A vertex grip sits on a vertex and moves it. An edge grip sits halfway
- * along an edge and bends it. Both appear only on a selected path, so the
- * first press picks the object and the next one picks a part of it.
+ * A vertex grip sits on a vertex and moves it. An edge grip sits halfway along
+ * an edge and bends it. Both appear only once the path itself is selected, so
+ * the first press picks the object and the second picks a part of it.
  *
- * A grip reports whether the slots behind it are literal. A grip that a
- * formula drives draws hollow. So the operator sees which points hold still
- * before a drag tells them.
+ * pathGrips also reports whether the slots behind each grip are literal. A
+ * grip that a formula drives is drawn hollow, so an operator can see which
+ * points will refuse to move before a drag tells them.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * gripAt gives a vertex the tie when a vertex grip and an edge grip overlap,
+ * which happens whenever an edge is short. menu.ts follows the same rule, so a
+ * press and a right press agree about what they are pointing at.
+ *
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 
 import {

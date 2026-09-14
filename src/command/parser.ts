@@ -1,19 +1,33 @@
 /**
  * parser.ts
  *
- * The parser turns one typed line into one command object, through a table of
- * specs.
+ * Turns one complete typed line into one command object, against a table of
+ * specs. Adding a command is an entry in that table rather than a new
+ * branch in a parser.
  *
- * It never throws. A bad line comes back as a failure that names what is
- * wrong and where.
+ * It never throws. A line it cannot read comes back as a failure that names
+ * what is wrong and the column it went wrong at, so the operator gets a
+ * useful message instead of a stack trace.
  *
- * It also holds the list of commands that the spec names and the code does
- * not build yet. An operator who types one gets the truth instead of an
- * unknown command error. That list and the built registry stay disjoint, and
- * a test pins it.
+ * It also holds COMMANDS_SPECIFIED_BUT_NOT_BUILT, the list of commands the
+ * spec describes and the code has not built yet. An operator who types one
+ * of those is told it is not built, rather than that it does not exist.
+ * That list and the built registry have to stay disjoint, and a test pins
+ * them apart.
  *
- * The file belongs to the command layer, which turns a typed line into
- * mutation calls. It imports from the engine and from its own layer.
+ * polyline and addvertex take a points argument, which swallows every
+ * remaining token on the line as an x,y pair. It is the only argument kind
+ * that grows past its declared count. A points list stops when it meets a
+ * flag name, so polyline can end with the word closed.
+ *
+ * polylineFromStrokes is in this file too. It reads a run of picks and
+ * words into a finished polyline command, and it is the only code that
+ * knows what arc, line and close mean. prompt.ts moves the strokes around
+ * and never reads them. The preview runs the same walk with the pointer
+ * joined on as one more pick.
+ *
+ * Command-layer code: it turns a typed line into mutation calls, and
+ * imports from the engine and from its own layer.
  */
 import { bulgeForTangentArc, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
 
@@ -1083,13 +1097,14 @@ function strokeAnswer(answers: PromptAnswers, name: string): readonly PromptStro
 /**
  * The polyline a run of picks and words describes.
  *
- * "arc" and "line" pick how the next edge bends. An arc leaves the point before
- * it along the direction the path already travels, so the two meet smoothly.
- * The first edge of a path has no direction to follow, so it stays straight.
- * "close" sets the flag, and in arc mode it bends the edge home the same way.
+ * "arc" and "line" pick how the next edge bends. An arc leaves the point
+ * before it along the direction the path already travels, so the two meet
+ * smoothly. The first edge of a path has no direction to follow, so it stays
+ * straight. "close" sets the flag, and in arc mode it bends the edge home the
+ * same way.
  *
- * A cursor point joins the end as one more pick. That is what makes a preview
- * and a finished command the same walk.
+ * A cursor point joins the end as one more pick. So a preview and a finished
+ * command run the same walk.
  */
 function polylineFromStrokes(strokes: readonly PromptStroke[], cursor?: PromptPoint): CreatePolylineCommand {
   const points: CommandPoint[] = [];

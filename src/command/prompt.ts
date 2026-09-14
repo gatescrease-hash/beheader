@@ -1,18 +1,28 @@
 /**
  * prompt.ts
  *
- * The prompt sequence follows the AutoCAD style. A bare command word starts
- * it, and the prompt asks for each argument in turn.
+ * The AutoCAD style prompt sequence. A bare command word starts it and the
+ * prompt asks for each argument in turn, which is the other way to author a
+ * document besides typing a whole line.
  *
- * This is a state machine of its own. parser.ts answers only the one shot
- * question "is this complete line a command".
+ * This is a state machine in its own right, separate from parser.ts. The
+ * parser answers one question only: is this complete line a command. The
+ * prompt answers a different one: given what the operator has supplied so far,
+ * what should they be asked next.
  *
- * A step that repeats collects answers until the operator ends it. It holds
- * them as a stroke list, so a point and a word such as "arc" keep their
- * order. The step index does not move while such a step collects.
+ * One step can repeat. Such a step collects answers until the operator ends
+ * it, and holds them as a stroke list so that a picked point and a typed word
+ * such as arc keep their relative order. The step index stays where it is
+ * while a repeating step collects. An empty answer ends the step, once it
+ * holds at least the number of points its minimum names.
  *
- * The file belongs to the command layer, which turns a typed line into
- * mutation calls. It imports from the engine and from its own layer.
+ * A typed word takes one of three effects: record keeps it and asks again,
+ * undo drops the last stroke, and end finishes the step. A word is only
+ * offered once enough points exist for it to mean anything, so close stays
+ * hidden until the path could actually close.
+ *
+ * Command-layer code: it turns a typed line into mutation calls, and imports
+ * from the engine and from its own layer.
  */
 import {
   findCommandSpec,

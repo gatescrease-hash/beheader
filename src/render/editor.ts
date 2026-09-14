@@ -1,18 +1,17 @@
 /**
  * editor.ts
  *
- * The in place editor needs a position and a look, and this file decides
- * both.
+ * Works out where the in place editor goes and what it looks like, for a text
+ * box and for a table cell. main.ts mounts the real DOM element.
  *
- * It answers the placement question for a text box and for a table cell.
- * main.ts mounts the real element.
+ * The overlay is laid out in world units and one CSS transform scales it to
+ * the current zoom. Nothing here multiplies the zoom into the width or the
+ * font size as well, because the transform has already applied it and doing it
+ * twice scales the text by the square of the zoom.
  *
- * The overlay lays out in world units and one transform scales it. Nothing
- * multiplies the zoom into its width or its font size a second time.
- *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 import {
   type CameraState,

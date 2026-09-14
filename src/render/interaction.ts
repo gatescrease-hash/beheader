@@ -1,37 +1,38 @@
 /**
  * interaction.ts
  *
- * This layer turns mouse state into mutation calls.
+ * Turns pointer state into mutation calls. Nothing here writes object state
+ * directly.
  *
- * A drag writes each component on its own. A literal component moves. A
- * component that a formula drives stays put, and the caller shows a notice
- * that does not block. So an object with a bound x slides up and down only,
- * and an axis constraint follows with no extra code.
+ * A drag writes each coordinate separately, and constrained dragging follows
+ * from that alone. A literal coordinate moves. A
+ * coordinate a formula drives stays where it is, and the caller shows a notice
+ * that does not block the drag. So an object whose x is bound to a formula
+ * slides up and down only, and nobody had to write an axis constraint.
  *
- * An object with an origin drags by that origin. A path has none, so it drags
- * by every vertex, under the same per component rule. A vertex a formula
- * drives stays where it is while the rest move. That is how a road holds on
- * to the intersections its ends read.
+ * An object with an origin drags by that origin. A path has no origin, so it
+ * drags by every vertex under the same per coordinate rule. A vertex that a
+ * formula drives stays put while the rest move, which is how a road keeps hold
+ * of the intersections its ends read.
  *
- * A shift drag on a path edge moves only the two vertices of that edge. The
- * gesture picks its vertices once, at the moment of the press, so the set
- * never changes under the pointer.
+ * A shift press over an edge grabs that segment and moves only its two
+ * vertices. pointerDown picks the vertex list once, at the moment of the
+ * press, and DragState holds it, so the set cannot change under the pointer
+ * mid drag.
  *
- * A selected path grows grips. A press on a vertex grip drags that one
- * vertex. A press on an edge grip bends that edge, and writes vertex.N.bulge.
- * A bend is absolute, read from the ends the edge has now, the same way a
- * resize reads the extent it started with. Both gestures also set the focus,
- * which is the one part of a path the panel expands.
+ * A selected path also grows grips. A press on a vertex grip drags that
+ * vertex. A press on an edge grip bends the edge and writes vertex.N.bulge
+ * absolutely, from the ends the edge has now, the same way a resize reads the
+ * extent it started with. A bend therefore never drifts. Both gestures set
+ * InteractionState.focus, which is the one part of the path the properties
+ * panel expands.
  *
- * A grip answers a plain press only. Shift holds the two meanings it already
- * had, so a shift press on the middle of an edge still moves that segment.
+ * A grip answers a plain press only, so shift keeps both meanings it already
+ * had.
  *
- * A drag never writes object state. It calls the mutation API like everything
- * else.
- *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 import {
   type Address,

@@ -9,10 +9,10 @@
       input bar that holds focus. main.ts finds each element by id.
 
       #panels holds one .panel for each selected object. main.ts builds and
-      places them on every paint. The container takes no clicks, so an empty
-      area falls through to the canvas below. Each .panel does take clicks. A
-      panel that covers its own object hides that part from the mouse. The
-      remedy is to drag the panel away.
+      places them on every paint. The container does not take clicks, so an
+      empty area falls through to the canvas below. Each .panel does take
+      clicks. A panel that covers its own object hides that part from the
+      mouse. The remedy is to drag the panel away.
 
       #panels floats over the canvas, so the canvas sits inside a positioned
       #stage. Nothing here holds state or behaviour.
@@ -191,8 +191,8 @@
       }
       /*
         The swatch of a colour slot. It is a real colour input, so the browser
-        opens its own wheel. A slot that holds no colour draws a slash instead
-        of a colour, because a colour input cannot show the absence of one.
+        opens its own wheel. A slot with no colour draws a slash instead of a
+        colour, because a colour input cannot show the absence of one.
       */
       .panel-row__color {
         pointer-events: auto;
@@ -286,12 +286,11 @@
         the font size, the family, the line height, the alignment and the
         colour inline, from the style slots of the receiver.
 
-        This file sets no font, no padding and no border. The box that
+        This file does not set a font, a padding or a border. The box that
         main.ts places is the drawn box of the receiver. For an object with an
         auto width, that box fits the committed text exactly. So any inset
         makes the text no longer fit the box that the measurer measured. The
-        focus ring is an outline, which paints outside the box and takes no
-        layout.
+        focus ring is an outline, which paints outside the box and does not affect layout.
 
         There are no scroll bars. main.ts measures the typed text on every
         keystroke and resizes this element to fit, so the box grows under the
@@ -300,7 +299,7 @@
         width and re-wraps the paragraph.
 
         The element lays out in world units, and one transform scales it. That
-        is what makes a typed line break land where the drawn one does. The
+        is why a typed line break lands where the drawn one does. The
         browser lays the text out at the same font size and width that
         render/measure.ts measures with. The transform only magnifies the
         finished layout.

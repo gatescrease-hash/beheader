@@ -1,22 +1,24 @@
 /**
  * table.ts
  *
- * Cell address math, range expansion, and the row and column resize passes
- * make up this file.
+ * Cell address arithmetic, range expansion, and the passes that resize a table
+ * by a row or a column.
  *
- * A range expands to concrete cells at edge derivation time, from the size
- * the table has now. So an expansion can never go stale.
+ * A range expands to concrete cells at edge derivation time, using the size
+ * the table has right then, so an expansion cannot go stale behind a resize.
  *
- * An empty cell inside a range gets no edge. An empty cell that a bare
- * reference names gets no edge either. Both are normal state, not a dangling
- * reference. This is what makes a sparse table work.
+ * An empty cell produces no edge, whether a range covers it or a bare
+ * reference names it. That is normal state rather than a dangling reference,
+ * and it is why a sparse table is cheap: a thousand empty cells cost nothing
+ * to store and nothing to evaluate.
  *
- * A row or column delete repairs rather than refuses. It rewrites every
- * inbound reference to #REF and reports what it broke.
+ * Deleting a row or a column repairs instead of refusing. It rewrites every
+ * reference that pointed into the deleted line to #REF and reports what it
+ * broke, because refusing would leave an operator unable to delete a row that
+ * anything reads.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";

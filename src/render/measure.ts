@@ -1,18 +1,22 @@
 /**
  * measure.ts
  *
- * The real Canvas2D TextMeasurer comes with layOutText, which breaks lines.
+ * The real Canvas2D implementation of TextMeasurer, and layOutText, which
+ * breaks a run of text into lines.
  *
- * There are two measurers here and they are not interchangeable. The engine
- * one honours markup. The overlay one does not. The wrong one gives a size
- * defect that nothing reports.
+ * There are two measurers in this file and they are not interchangeable. The
+ * one the engine uses honours markup, so bold text measures wider. The one the
+ * editor overlay uses does not, because the overlay shows raw source while the
+ * operator types. Passing the wrong one produces text that is the wrong size,
+ * and nothing reports it.
  *
- * This file and renderer.ts change together. One layout function with two
- * readers is what keeps the drawn text and the measured height in agreement.
+ * This file and renderer.ts have to change together. One layout function with
+ * two readers is the only reason the drawn text and the measured height agree,
+ * so a change to how lines break here needs the matching change there.
  *
- * The file belongs to the render layer. It reads engine state and calls
- * mutations, and it crosses that line for nothing else. The engine holds no
- * import of this file, which keeps the drawing code replaceable.
+ * Render-layer code: it reads engine state and calls mutations, and crosses
+ * that line for nothing else. Nothing in the engine imports this file, so a
+ * GPU renderer can replace the whole layer later.
  */
 import type { TextMeasurement, TextMeasurer, TextStyle } from "../engine/index.ts";
 import { LIST_BULLET, parseMarkdownLite, verbatimLines, type MarkdownLine, type MarkdownRun } from "./markdown.ts";

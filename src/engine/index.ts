@@ -1,17 +1,23 @@
 /**
  * index.ts
  *
- * The one public surface of the engine. A consumer outside src/engine imports
- * from this file, and never from a path inside it. A future Rust port matches
- * this same boundary. Its shape matters more than its length.
+ * The single public surface of the engine. Everything outside src/engine
+ * imports from this file and never from a path inside it, so the engine can be
+ * rearranged without touching the three layers above it. A future Rust port
+ * draws the boundary in the same place.
  *
- * Two functions share the name evaluate: one runs a single formula AST, the
- * other runs the whole graph in topological order. Both are re-exported here
- * under a name that says which: evaluateFormulaAst and evaluateGraph.
+ * Two different functions are called evaluate. The one in formula/eval.ts runs
+ * a single AST, and the one in graph/eval.ts runs the whole graph in
+ * topological order. Both are re-exported here under names that say which is
+ * which: evaluateFormulaAst and evaluateGraph.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * The surface is not curated. It re-exports every file in the engine, so names
+ * that no outside layer uses still cross the boundary. Replacing the star
+ * exports with a hand written list is an open decision rather than an
+ * oversight.
+ *
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 export * from "./address.ts";

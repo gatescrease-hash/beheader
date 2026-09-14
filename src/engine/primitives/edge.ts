@@ -1,25 +1,28 @@
 /**
  * edge.ts
  *
- * The math here covers one path edge, which is straight, an arc, or a cubic
- * bezier. Two control points make it a bezier. Otherwise a bulge makes it an
- * arc: the bulge is the tangent of a quarter of the included angle, the
- * number a DXF file carries. Zero makes a straight line and 1 makes a half
- * circle.
+ * The maths of a single path edge, which is a straight line, a circular arc,
+ * or a cubic bezier. Two control points make it a bezier. With none of those,
+ * a bulge makes it an arc: the bulge is the tangent of a quarter of the
+ * included angle, the same number a DXF vertex record carries, so 0 draws a
+ * straight line and 1 draws a half circle.
  *
- * Nothing here cuts a curve into sample points. A vertex is a point an
- * operator placed, so this file never invents one.
+ * Nothing in this file turns a curve into sample points. Every vertex in a
+ * document is a point an operator placed, so an arc stays an arc through area,
+ * length, bounds, hit testing and drawing, and the number of vertices on a
+ * shape is never a quality setting.
  *
- * An arc answers every question in closed form. A bezier answers its area,
- * its centroid and its box in closed form as well. Those integrands are
- * polynomials, and a five point Gauss rule integrates a polynomial of degree
- * nine exactly. Two answers about a bezier have no closed form for anybody:
- * its length, and the distance from a point to it. Each of those refines a
- * number until the number holds still. Neither makes a vertex.
+ * An arc answers every question in closed form. A bezier answers its area, its
+ * centroid and its bounding box in closed form too: those integrands are
+ * polynomials of degree eight or less, and the five point Gauss-Legendre rule
+ * in integrateOverCurve is exact up to degree nine. Two questions about a
+ * bezier have no closed form for anyone. bezierLength halves the curve until
+ * its control polygon and its chord agree, and nearestFractionOnBezier scans
+ * the curve coarsely and then narrows the best bracket. Both return a number,
+ * and neither one adds a vertex.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 import type { Point } from "../graph/node.ts";
 
@@ -301,7 +304,9 @@ const BEZIER_SCAN_STEPS = 24;
 
 const BEZIER_NARROW_STEPS = 60;
 
-/** The cubic under an edge, or undefined when the edge carries no control points. */
+/**
+ * The cubic under an edge, or undefined for an edge with no control points.
+ */
 export function bezierOfEdge(edge: PathEdge): CubicBezier | undefined {
   const controls = edge.controls;
   if (controls === undefined) {
@@ -376,7 +381,10 @@ function curveMomentY(curve: CubicBezier): number {
   return -integrateOverCurve(curve, (point, slope) => point.y * point.y * slope.x);
 }
 
-/** De Casteljau. The two halves together hold the shape of the curve they replace, exactly. */
+/**
+ * Splits a curve by De Casteljau. The two halves together hold the shape of
+ * the curve they replace, exactly.
+ */
 export function splitBezier(curve: CubicBezier, t: number): { readonly first: CubicBezier; readonly second: CubicBezier } {
   const a = mix(curve.p0, curve.p1, t);
   const b = mix(curve.p1, curve.p2, t);
@@ -394,7 +402,7 @@ function mix(from: Point, to: Point, t: number): Point {
 /**
  * A cubic has no closed form for its length, for anybody. This halves the
  * curve until its control polygon and its chord agree, then takes the mean of
- * the two. It returns one number and makes no vertex.
+ * the two. It returns one number and does not add a vertex.
  */
 function bezierLength(curve: CubicBezier, depth: number): number {
   const chord = Math.hypot(curve.p3.x - curve.p0.x, curve.p3.y - curve.p0.y);

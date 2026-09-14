@@ -9,8 +9,9 @@ import { defineConfig } from "vite";
 export default defineConfig(({ command }) => ({
   base: command === "build" ? "/beheader-clean/" : "/",
   test: {
-    // The engine is pure logic and needs no DOM. A render test that needs one
-    // can ask for it with a jsdom environment comment at the top of the file.
+    // The engine is pure logic and does not touch the DOM. A render test that
+    // needs one can ask for it with a jsdom environment comment at the top of
+    // the file.
     environment: "node",
     include: ["src/**/*.test.ts"],
   },

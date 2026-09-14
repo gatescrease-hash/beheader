@@ -1,17 +1,20 @@
 /**
  * parser.ts
  *
- * The parser turns tokens into an AST, by recursive descent, as stage two of
- * four.
+ * Turns tokens into an AST by recursive descent. This is the second of the
+ * four stages, after the lexer and before dependency extraction.
  *
- * The parser resolves an object name to an ID here. So a formula that names
- * an object which does not exist fails to parse, in any branch.
+ * Object names are resolved to IDs here, at parse time, rather than at
+ * evaluation time. A formula that names an object which does not exist
+ * therefore fails to parse, even when the reference sits in the branch of an
+ * IF that nothing takes. Resolving early is also what allows a rename to leave
+ * stored formulas alone, because the AST holds the ID.
  *
- * A depth limit stops a deep input before it exhausts the stack.
+ * A depth limit stops a deeply nested input before recursive descent exhausts
+ * the stack.
  *
- * The file belongs to the engine layer and works on plain data alone. It does
- * not use the DOM, a window or a canvas. That keeps it testable without a
- * browser, and ready for a port to Rust.
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so the
+ * tests run headless and the file can move to Rust later.
  */
 
 import { type Address, type AddressableObject, bareCellAddress, isAddressError, isCellReferenceForm, parseAddress } from "../address.ts";
