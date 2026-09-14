@@ -112,8 +112,28 @@ Instead the field parses what it holds on every keystroke and paints the spans
 that resolved. A hand typed address then lights up without a completion, and a
 misspelt one visibly fails to light up before anything is committed.
 
-The exception is math source, where an address cannot be parsed out of the
-notation at all. That needs a spelling of its own, and the last stage covers it.
+**Tab writes whatever makes it an address, and the operator writes none of it.**
+The operator types `table_1.origin.x` and presses Tab. Nothing else. Tab is the
+act that says this run is an address, and it completes the name and then writes
+whatever the field it sits in needs for the parser to read one. The ceremony
+stays in the text, because one source of truth is the whole point, and it stops
+being something anybody types.
+
+What Tab writes depends on the field, and each field declares it:
+
+| Field | What a bare address needs | What Tab writes |
+| --- | --- | --- |
+| A command line argument that takes an address | nothing | the completion alone |
+| A table cell or a panel row | a leading equals sign | the sign at the front of the field |
+| The prose of a text object | a formula marker around it | the marker around the run |
+| Math source | a macro around it | the macro around the run |
+
+A table cell already shows its formula back with a leading equals sign when it
+is reopened, so Tab writing that sign puts the field in the state the next edit
+would show anyway.
+
+The exception a spelling has to solve is math source, where an address cannot
+be parsed out of the notation at all. The last stage covers it.
 
 **Stages.** Each lands with its tests and leaves the four checks clean.
 
@@ -146,7 +166,13 @@ notation at all. That needs a spelling of its own, and the last stage covers it.
 3. **The same two things in a formula field.** A table cell, a panel row and the
    formula half of a `set` all take a formula rather than a command, so the
    spans come from the formula lexer, which already carries a start for every
-   token. Done when a cell being edited paints its addresses and completes them.
+   token. This is where Tab starts writing the ceremony rather than only the
+   completion, because a cell needs a leading equals sign and the command line
+   needs nothing.
+   Done when a cell holding the typed run `table_1.origin.x` and nothing else
+   becomes a formula slot reading that address after one Tab, a cell holding
+   the same run with no Tab stays the literal string it looks like, and a cell
+   being edited paints the addresses it holds.
 
 4. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
    gives notation a spelling for an address that the lexer can read as one
