@@ -77,7 +77,7 @@ Each stage below lands with its tests, and each leaves the four checks clean.
    another, and a solve that runs out of iterations gives an error value rather
    than a hung frame.
 
-**Done when** all three stages have landed and this item is deleted.
+**Done when** both stages have landed and this item is deleted.
 
 ### 4. Decide what a fresh input port holds
 
@@ -91,10 +91,9 @@ as zero, or the reason zero is right is written into section 12.
 
 ### 5. Complete an address as it is typed, and show what parsed
 
-The command line completes an object name and then its slots, from Tab. Nothing
-on screen yet separates a run of text that the program read as an address from a
-run that happens to look like one, and no field but the command line completes
-anything.
+The command line completes an object name and then its slots from Tab, and
+marks the runs it read as a command word or as a live address. No field but the
+command line does either, and math source still cannot hold an address at all.
 
 **What is already right, and what is not.** A stored AST holds `Address`
 records carrying an object ID, so an address in a committed formula is not text
@@ -137,19 +136,7 @@ be parsed out of the notation at all. The last stage covers it.
 
 **Stages.** Each lands with its tests and leaves the four checks clean.
 
-1. **Paint what parsed, in the command line.** A mirror element under the input
-   paints one span for each token the parse recognised, and an address that
-   resolved reads as a code font on a grey ground. The input stays an ordinary
-   input holding an ordinary string, so `parser.ts` reads exactly what it reads
-   today. A `contenteditable` field would take that property away and bring
-   selection, undo and input method handling with it.
-   The mirror carries the same risk `.text-editor` already carries: it agrees
-   with the input about font, padding and scrolling, or it drifts a character at
-   a time. That pair belongs in the invariants of `STATUS.md`.
-   Done when an address that resolves is painted and a misspelt one is not,
-   both at the first keystroke that decides it.
-
-2. **The same two things in a formula field.** A table cell, a panel row and the
+1. **The same two things in a formula field.** A table cell, a panel row and the
    formula half of a `set` all take a formula rather than a command, so the
    spans come from the formula lexer, which already carries a start for every
    token. This is where Tab starts writing the ceremony rather than only the
@@ -160,7 +147,7 @@ be parsed out of the notation at all. The last stage covers it.
    the same run with no Tab stays the literal string it looks like, and a cell
    being edited paints the addresses it holds.
 
-3. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
+2. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
    gives notation a spelling for an address that the lexer can read as one
    token, which juxtaposition cannot break and which draws as a chip without
    any work. It answers the question the math item leaves open, so that stage

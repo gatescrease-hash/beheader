@@ -1,10 +1,11 @@
 /**
  * complete.ts
  *
- * Answers what a completion key pressed at a point in a half typed line should
- * write. It reads the registry in parser.ts to learn which word the cursor sits
- * in and what that word holds, and it asks the engine for the candidates when
- * that word names something in the document.
+ * Reads a half typed command line and answers two questions from one analysis:
+ * what a completion key pressed at a point should write, and which runs of the
+ * line named something the document really holds. Both need the same two
+ * things, which word a position falls in and what the registry in parser.ts
+ * says that word holds, so both are defined here.
  *
  * It splits the line itself rather than through the parser, because the parser
  * refuses a line it cannot read in full and completion runs on lines that are
@@ -21,7 +22,16 @@
  * Command-layer code: it turns a typed line into mutation calls, and imports
  * from the engine and from its own layer.
  */
-import { completeAddress, completeObjectName, longestCommonPrefix, type Completion, type GraphObject } from "../engine/index.ts";
+import {
+  completeAddress,
+  completeObjectName,
+  isAddressError,
+  longestCommonPrefix,
+  objectSlotPaths,
+  parseAddress,
+  type Completion,
+  type GraphObject,
+} from "../engine/index.ts";
 import { COMMAND_NAMES, namedArgumentKeys, positionalKinds } from "./parser.ts";
 
 export interface LineWord {
@@ -97,6 +107,28 @@ function isNamedArgument(text: string, keys: readonly string[]): boolean {
   return equals > 0 && keys.includes(text.slice(0, equals).toLowerCase());
 }
 
+/**
+ * Which positional argument a word is, or nothing where it falls past the ones
+ * the command takes. A named argument and a flag each belong to no position, so
+ * counting skips over both.
+ */
+function positionalKindAt(words: readonly LineWord[], word: LineWord, commandName: string): string | undefined {
+  const named = namedArgumentKeys(commandName);
+  if (isNamedArgument(word.text, named)) {
+    return undefined;
+  }
+  let position = 0;
+  for (const earlier of words.slice(1)) {
+    if (earlier.start === word.start) {
+      break;
+    }
+    if (!isNamedArgument(earlier.text, named)) {
+      position += 1;
+    }
+  }
+  return positionalKinds(commandName)[position];
+}
+
 function completionOf(from: number, to: number, result: { candidates: readonly Completion[]; fill: string }): LineCompletion {
   return { from, to, fill: result.fill, candidates: result.candidates.map((entry) => entry.text) };
 }
@@ -106,6 +138,78 @@ function completionOf(from: number, to: number, result: { candidates: readonly C
  * word under the cursor holds something the document does not name, such as the
  * content of a text object or a number.
  */
+/**
+ * Whether a written address names a slot the document carries right now.
+ *
+ * parseAddress answers a narrower question, whether the text resolves to an
+ * object and a path, and it says yes to a path that object has no slot for.
+ * That is right for a caller such as addport, which names a port before it
+ * exists. It is wrong for a mark that tells an operator the program knows what
+ * they wrote, so this asks the further question.
+ */
+function namesALiveSlot(text: string, objects: readonly GraphObject[]): boolean {
+  const resolved = parseAddress(text, objects);
+  if (isAddressError(resolved)) {
+    return false;
+  }
+  const object = objects.find((candidate) => candidate.id === resolved.objectId);
+  if (object === undefined) {
+    return false;
+  }
+  const dot = text.indexOf(".");
+  const path = dot < 0 ? "" : text.slice(dot + 1).toLowerCase();
+  return objectSlotPaths(object).some((candidate) => candidate.toLowerCase() === path);
+}
+
+export type LineSpanKind = "command" | "address";
+
+export interface LineSpan {
+  readonly start: number;
+  readonly end: number;
+  readonly kind: LineSpanKind;
+}
+
+/**
+ * The runs of a line that named something, and what each one named. A run that
+ * sits where an address belongs and resolves to nothing is left out, so an
+ * operator sees a misspelt name stay plain while a correct one is marked, which
+ * is the whole of the report.
+ *
+ * Nothing here is remembered. The spans are worked out again from the text on
+ * every call, so what is marked and what the parser reads can never be two
+ * different answers.
+ */
+export function classifyCommandLine(line: string, objects: readonly GraphObject[]): readonly LineSpan[] {
+  const words = splitLineWords(line);
+  const first = words[0];
+  if (first === undefined) {
+    return [];
+  }
+
+  const spans: LineSpan[] = [];
+  if (COMMAND_NAMES.includes(first.text.toLowerCase())) {
+    spans.push({ start: first.start, end: first.end, kind: "command" });
+  }
+
+  for (const word of words.slice(1)) {
+    if (word.quoted) {
+      continue;
+    }
+    const kind = positionalKindAt(words, word, first.text);
+    if (kind === "object") {
+      if (objects.some((object) => object.name.toLowerCase() === word.text.toLowerCase())) {
+        spans.push({ start: word.start, end: word.end, kind: "address" });
+      }
+      continue;
+    }
+    if (kind === "address" && namesALiveSlot(word.text, objects)) {
+      spans.push({ start: word.start, end: word.end, kind: "address" });
+    }
+  }
+
+  return spans;
+}
+
 export function completeCommandLine(line: string, cursor: number, objects: readonly GraphObject[]): LineCompletion | undefined {
   const words = splitLineWords(line);
   const current = wordAtCursor(words, cursor);
@@ -126,26 +230,10 @@ export function completeCommandLine(line: string, cursor: number, objects: reado
     return undefined;
   }
 
-  const kinds = positionalKinds(first.text);
-  const named = namedArgumentKeys(first.text);
-
-  // Which positional this word is. A named argument and a flag each belong to
-  // no position, so counting skips over both.
-  let position = 0;
-  for (const word of words.slice(1)) {
-    if (current !== undefined && word.start === current.start) {
-      break;
-    }
-    if (!isNamedArgument(word.text, named)) {
-      position += 1;
-    }
-  }
-
-  if (current !== undefined && isNamedArgument(current.text, named)) {
-    return undefined;
-  }
-
-  const kind = kinds[position];
+  const kind =
+    current === undefined
+      ? positionalKinds(first.text)[words.slice(1).filter((word) => !isNamedArgument(word.text, namedArgumentKeys(first.text))).length]
+      : positionalKindAt(words, current, first.text);
   if (kind === "object") {
     return completionOf(from, to, completeObjectName(typed, objects));
   }

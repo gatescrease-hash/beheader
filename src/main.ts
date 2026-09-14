@@ -93,7 +93,7 @@ import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
-import { completeCommandLine } from "./command/complete.ts";
+import { classifyCommandLine, completeCommandLine } from "./command/complete.ts";
 
 export interface Viewport {
   readonly width: number;
@@ -963,6 +963,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
   const mathOverlays = new Map<string, HTMLElement>();
+  const commandMirror = document.querySelector<HTMLElement>("#command-mirror") ?? undefined;
   const candidateList = document.createElement("div");
   candidateList.className = "candidates";
   candidateList.hidden = true;
@@ -1005,6 +1006,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     updatePanels(panelledIds);
     updateMathOverlays();
     updateEditor();
+    paintCommandLine();
   };
 
   /**
@@ -1413,6 +1415,16 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   window.addEventListener("resize", paint);
 
+  input.addEventListener("input", () => {
+    paintCommandLine();
+  });
+
+  input.addEventListener("scroll", () => {
+    if (commandMirror !== undefined) {
+      commandMirror.scrollLeft = input.scrollLeft;
+    }
+  });
+
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Tab") {
       event.preventDefault();
@@ -1459,6 +1471,41 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
 
     showCandidates(completion.candidates.length > 1 ? completion.candidates : []);
+    paintCommandLine();
+  };
+
+  /**
+   * Paints a ground behind each run of the command line that named something.
+   * It builds the layer out of text nodes and elements rather than out of
+   * markup, so a line an operator typed can never be read as markup.
+   *
+   * The layer scrolls with the input, because an input scrolls sideways once
+   * the line outgrows it and a mark that stayed put would sit under the wrong
+   * letters.
+   */
+  const paintCommandLine = (): void => {
+    if (commandMirror === undefined) {
+      return;
+    }
+    const line = input.value;
+    const spans = classifyCommandLine(line, state.document.objects);
+
+    commandMirror.textContent = "";
+    let at = 0;
+    for (const span of spans) {
+      if (span.start > at) {
+        commandMirror.appendChild(document.createTextNode(line.slice(at, span.start)));
+      }
+      const mark = document.createElement("span");
+      mark.className = `mark--${span.kind}`;
+      mark.textContent = line.slice(span.start, span.end);
+      commandMirror.appendChild(mark);
+      at = span.end;
+    }
+    if (at < line.length) {
+      commandMirror.appendChild(document.createTextNode(line.slice(at)));
+    }
+    commandMirror.scrollLeft = input.scrollLeft;
   };
 
   const showCandidates = (candidates: readonly string[]): void => {

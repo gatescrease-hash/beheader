@@ -419,13 +419,69 @@
         border-top: 1px solid #d0d0d0;
         background: #fafafa;
       }
-      #command {
+      /*
+        The command line and the layer that marks it. The input holds the text
+        and the caret, and the layer behind it paints a ground behind each run
+        the parse recognised.
+
+        The two agree on font, padding, border and scrolling, or the marks slide
+        away from the letters they belong to. Every property that moves a glyph
+        is set on both together below, and the layer draws its text in no colour
+        at all, so a disagreement shows as a mark in the wrong place rather than
+        as two sets of letters.
+      */
+      #command-field {
+        position: relative;
         flex: 0 0 auto;
+        background: #ffffff;
+      }
+
+      #command,
+      #command-mirror {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
         border: none;
         border-top: 1px solid #d0d0d0;
         padding: 6px 8px;
         font: inherit;
+        letter-spacing: normal;
+        white-space: pre;
+        text-align: left;
+      }
+
+      #command {
+        position: relative;
+        z-index: 1;
+        background: transparent;
         outline: none;
+      }
+
+      #command-mirror {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        z-index: 0;
+        color: transparent;
+        overflow: hidden;
+        pointer-events: none;
+        user-select: none;
+      }
+
+      /* A run that named a command word, and one that named a live address. */
+      .mark--command {
+        color: transparent;
+        background: #e8eef9;
+        border-radius: 3px;
+      }
+
+      .mark--address {
+        color: transparent;
+        background: #e6efe6;
+        box-shadow: 0 0 0 1px #bcd2bc;
+        border-radius: 3px;
       }
     </style>
   </head>
@@ -436,7 +492,10 @@
         <div id="panels"></div>
       </div>
       <div id="log"></div>
-      <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="command line" />
+      <div id="command-field">
+        <div id="command-mirror" aria-hidden="true"></div>
+        <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="command line" />
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

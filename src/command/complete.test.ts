@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completeCommandLine, splitLineWords, wordAtCursor } from "./complete.ts";
+import { classifyCommandLine, completeCommandLine, splitLineWords, wordAtCursor } from "./complete.ts";
 import type { GraphObject } from "../engine/index.ts";
 
 function circle(id: string, name: string): GraphObject {
@@ -125,5 +125,66 @@ describe("completeCommandLine", () => {
   it("completes an empty argument to everything that argument could be", () => {
     const completion = completeCommandLine("delete ", 7, DOCUMENT);
     expect(completion?.candidates).toEqual(["circle_1", "circle_2"]);
+  });
+});
+
+describe("classifyCommandLine", () => {
+  /** The text of each run the line marked, for a readable expectation. */
+  function marked(line: string, objects: readonly GraphObject[] = DOCUMENT): string[] {
+    return classifyCommandLine(line, objects).map((span) => `${span.kind}:${line.slice(span.start, span.end)}`);
+  }
+
+  it("marks a command word it knows", () => {
+    expect(marked("delete circle_1")).toContain("command:delete");
+  });
+
+  it("leaves a command word it does not know unmarked", () => {
+    expect(marked("frobnicate circle_1")).toEqual([]);
+  });
+
+  it("marks an address that resolves", () => {
+    expect(marked("link circle_1.radius circle_2.radius")).toEqual([
+      "command:link",
+      "address:circle_1.radius",
+      "address:circle_2.radius",
+    ]);
+  });
+
+  it("leaves a misspelt object unmarked, which is how a mistake shows", () => {
+    expect(marked("link cirlce_1.radius circle_2.radius")).toEqual(["command:link", "address:circle_2.radius"]);
+  });
+
+  it("leaves a slot that does not exist on a real object unmarked", () => {
+    expect(marked("unlink circle_1.nothing")).toEqual(["command:unlink"]);
+  });
+
+  it("marks a bare object name where the argument takes one", () => {
+    expect(marked("delete circle_1")).toEqual(["command:delete", "address:circle_1"]);
+  });
+
+  it("does not mark a bare object name where the argument takes a slot", () => {
+    // unlink takes an address, and an object name alone is not one.
+    expect(marked("unlink circle_1")).toEqual(["command:unlink"]);
+  });
+
+  it("marks nothing in a quoted run, whatever it looks like", () => {
+    expect(marked('text x=0 y=0 "circle_1.radius"')).toEqual(["command:text"]);
+  });
+
+  it("leaves a number alone", () => {
+    expect(marked("zoom 2")).toEqual(["command:zoom"]);
+  });
+
+  it("gives the offsets of the run it marked, so a painter can find it", () => {
+    const spans = classifyCommandLine("delete circle_1", DOCUMENT);
+    expect(spans[1]).toEqual({ start: 7, end: 15, kind: "address" });
+  });
+
+  it("gives nothing for an empty line", () => {
+    expect(classifyCommandLine("", DOCUMENT)).toEqual([]);
+  });
+
+  it("stops marking a name the moment the document stops carrying it", () => {
+    expect(marked("delete circle_1", [])).toEqual(["command:delete"]);
   });
 });

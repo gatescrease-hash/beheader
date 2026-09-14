@@ -12,7 +12,7 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2548 pass, 0 skip, across 51 test files. |
+| Tests | 2560 pass, 0 skip, across 51 test files. |
 | Spec | Built, except the in-text math of section 12 and its solving, and the parts section 16 postpones. |
 
 ### How to run it
@@ -20,7 +20,7 @@ each file exists. `TODO.md` holds the work that is open.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2548 tests
+npm test             # 2560 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -158,7 +158,7 @@ tables, and other suites drive them anyway.
 | File | What you would come here to change |
 | --- | --- |
 | `parser.ts` | One typed line to one command object. |
-| `complete.ts` | What a completion key writes at a point in a half typed line. |
+| `complete.ts` | What a completion key writes, and which runs of a line named something real. |
 | `prompt.ts` | The prompt sequence a bare command word starts. |
 | `commands.ts` | The handlers, and every refusal message an operator reads. |
 | `props.ts` | The slot rows that the panel and the `props` command both read. |
@@ -225,7 +225,16 @@ the code it constrains.
    `main.ts` empties the measurement cache of `render/math.ts` and evaluates
    again whenever a font finishes loading, which is the only thing that repairs
    the sizes of a document already on screen.
-14. **The operator cannot see what a test can see.** A live look on screen
+14. **The command line and the layer that marks it agree on every property
+   that moves a glyph.** `index.html` sets the font, the padding, the border
+   and the white space rule on both together, and `main.ts` copies the sideways
+   scroll of one onto the other on every paint. A disagreement slides each mark
+   away from the letters it belongs to, by more the further along the line it
+   sits. The layer draws its own text in no colour at all, so a disagreement
+   shows as a mark in the wrong place rather than as two sets of letters, which
+   is the difference between a fault a reader notices and one that passes for
+   a smudge.
+15. **The operator cannot see what a test can see.** A live look on screen
    comes before anyone calls an operator surface done. It has found what the
    suite could not on every surface built so far.
 
