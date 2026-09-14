@@ -88,10 +88,12 @@ describe("completeCommandLine", () => {
     expect(completion?.from).toBe(21);
   });
 
-  it("takes two completions to reach a whole address", () => {
-    const first = fillAtEnd("unlink circ");
-    expect(first).toBe("circle_");
-    expect(fillAtEnd("unlink circle_1.")).toContain("circle_1.");
+  it("takes two completions to reach a whole address, and types no dot between them", () => {
+    // This is the flow an operator actually uses: press, press, done. Writing
+    // the dot by hand between the two would test something nobody does.
+    expect(fillAtEnd("unlink circle_")).toBe("circle_");
+    expect(fillAtEnd("unlink circle_1")).toBe("circle_1.");
+    expect(fillAtEnd("unlink circle_1.rad")).toBe("circle_1.radius");
   });
 
   it("names where to write, so a completion replaces the word and nothing else", () => {

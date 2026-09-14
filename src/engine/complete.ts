@@ -110,11 +110,24 @@ export function objectSlotPaths(object: GraphObject): readonly string[] {
  * What a partly typed address could become. Before the first dot it completes
  * an object name, and after it the slots of that object, which is why reaching
  * a whole address takes two completions rather than one.
+ *
+ * A name that is already whole and matches one object alone moves straight on
+ * to that object's slots, writing the dot on the way. So an operator completes
+ * the object, presses the key again, and is choosing a slot, without typing
+ * any of the punctuation that separates the two.
  */
 export function completeAddress(partial: string, objects: readonly GraphObject[]): CompletionResult {
   const dot = partial.indexOf(".");
   if (dot < 0) {
-    return completeObjectName(partial, objects);
+    const names = completeObjectName(partial, objects);
+    const sole = names.candidates.length === 1 ? names.candidates[0] : undefined;
+    if (sole !== undefined && sole.text.toLowerCase() === partial.toLowerCase()) {
+      // The object is settled, so the choice left is which of its slots. The
+      // dot is written here rather than by the operator, so the second
+      // completion finishes the address on its own.
+      return completeAddress(`${sole.text}.`, objects);
+    }
+    return names;
   }
 
   const objectPart = partial.slice(0, dot);

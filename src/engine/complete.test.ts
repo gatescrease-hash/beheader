@@ -131,6 +131,20 @@ describe("completeAddress", () => {
     expect(completeAddress("TABLE_1.A1", DOCUMENT).fill).toBe("table_1.A1");
   });
 
+  it("moves on to the slots when the object name is already whole", () => {
+    // The operator presses the key twice and types no dot at all.
+    const second = completeAddress("table_1", DOCUMENT);
+    expect(second.fill).toBe("table_1.");
+    expect(texts(second)).toContain("table_1.A1");
+  });
+
+  it("stays on the names when a whole name is also the start of a longer one", () => {
+    const objects = [...DOCUMENT, circle("obj_4", "circle_12")];
+    const result = completeAddress("circle_1", objects);
+    expect(result.fill).toBe("circle_1");
+    expect(texts(result)).toEqual(["circle_1", "circle_12"]);
+  });
+
   it("offers nothing for a slot no path starts with", () => {
     expect(completeAddress("circle_1.zz", DOCUMENT)).toEqual({ candidates: [], fill: "" });
   });

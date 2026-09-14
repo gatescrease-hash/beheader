@@ -91,10 +91,10 @@ as zero, or the reason zero is right is written into section 12.
 
 ### 5. Complete an address as it is typed, and show what parsed
 
-Every address is typed in full and spelled exactly, and a mistake is a refusal
-after the fact rather than a warning during. The same address typed into ten
-formulas is typed ten times. Nothing on screen separates a run of text that the
-program read as an address from a run that happens to look like one.
+The command line completes an object name and then its slots, from Tab. Nothing
+on screen yet separates a run of text that the program read as an address from a
+run that happens to look like one, and no field but the command line completes
+anything.
 
 **What is already right, and what is not.** A stored AST holds `Address`
 records carrying an object ID, so an address in a committed formula is not text
@@ -137,21 +137,7 @@ be parsed out of the notation at all. The last stage covers it.
 
 **Stages.** Each lands with its tests and leaves the four checks clean.
 
-1. **Completion, and the Tab that drives it.** `completeAddress` in the engine
-   takes a partial string and the objects and returns the candidates, in two
-   phases: an object name first, then a slot path of that object. The registry
-   in `command/parser.ts` gains an `address` argument kind, because it declares
-   `link` and `refs` as taking text today and only `commands.ts` knows better.
-   `completeCommandLine` then answers what a Tab at a given cursor should do.
-   Tab fills the longest common prefix, a second Tab cycles the candidates, and
-   a completed object name takes a dot and offers its slots. The command line
-   drives it in the same change, because `STATUS.md` records that a module with
-   no consumer ships a real bug.
-   Done when Tab completes an object name, a second Tab completes a slot of it,
-   an ambiguous prefix fills as far as it is unambiguous and stops, and the four
-   registry sweeps carry the new argument kind.
-
-2. **Paint what parsed, in the command line.** A mirror element under the input
+1. **Paint what parsed, in the command line.** A mirror element under the input
    paints one span for each token the parse recognised, and an address that
    resolved reads as a code font on a grey ground. The input stays an ordinary
    input holding an ordinary string, so `parser.ts` reads exactly what it reads
@@ -163,7 +149,7 @@ be parsed out of the notation at all. The last stage covers it.
    Done when an address that resolves is painted and a misspelt one is not,
    both at the first keystroke that decides it.
 
-3. **The same two things in a formula field.** A table cell, a panel row and the
+2. **The same two things in a formula field.** A table cell, a panel row and the
    formula half of a `set` all take a formula rather than a command, so the
    spans come from the formula lexer, which already carries a start for every
    token. This is where Tab starts writing the ceremony rather than only the
@@ -174,7 +160,7 @@ be parsed out of the notation at all. The last stage covers it.
    the same run with no Tab stays the literal string it looks like, and a cell
    being edited paints the addresses it holds.
 
-4. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
+3. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
    gives notation a spelling for an address that the lexer can read as one
    token, which juxtaposition cannot break and which draws as a chip without
    any work. It answers the question the math item leaves open, so that stage
@@ -182,7 +168,7 @@ be parsed out of the notation at all. The last stage covers it.
    Done when the spec says how an address is spelled in notation and the lexer
    agrees.
 
-**Done when** all four stages have landed and this item is deleted.
+**Done when** all three stages have landed and this item is deleted.
 
 ### 6. Say what the program understood, on a refusal
 
