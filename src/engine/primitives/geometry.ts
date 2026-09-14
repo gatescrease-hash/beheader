@@ -1,35 +1,67 @@
 /**
  * geometry.ts
  *
- * The vertex maths behind every shape: where the corners of a preset fall, and
- * how centroid, area, length and bounds are derived from them.
+ * The vertex maths behind every shape: where the corners of a preset fall,
+ * and how centroid, area, length and bounds are derived from them.
  *
- * A preset such as a polygon has one derived vertices slot rather than a slot
- * for each corner. Changing sides from 5 to 6 therefore changes a value and
- * leaves the slot set alone, which is what evaluation requires: only a
- * mutation may add or remove a slot.
+ * A preset such as a polygon has one derived vertices slot rather than a
+ * slot for each corner. Changing sides from 5 to 6 therefore changes a
+ * value and leaves the slot set alone, which is what evaluation requires:
+ * only a mutation may add or remove a slot.
  *
- * A circle has no vertices slot at all, because its area, length, centroid and
- * bounds each have a closed form taken from the origin and the radius. explode
- * turns a circle into two vertices joined by two bulges of 1, which is the
- * same circle exactly rather than an approximation of it.
+ * A circle has no vertices slot at all. circleDerivedSlots gives its area,
+ * length, centroid and bounds a closed form taken from the origin and the
+ * radius. explodeObjectToPolyline turns it into two vertices joined by two
+ * bulges of 1, which is the same circle exactly rather than an
+ * approximation.
  *
- * A polyline stores a slot for each vertex instead, and
- * enumeratePolylineVertexSlotPaths builds those paths from
- * GraphObject.vertexCount. A second enumeration sits beside it.
- * enumeratePolylineCoordinateSlotPaths lists only x and y, and the derived
- * vertices slot depends on that shorter list, because bending an edge moves no
- * point.
+ * A polyline stores a slot for each vertex instead, at paths like
+ * vertex.0.x, and uses pathDerivedSlots where a preset uses
+ * verticesDerivedSlots. Both sets sit at the same nine paths, area
+ * included, so a polygon is a closed polyline at the schema layer and not
+ * only in the maths.
  *
- * A vertex owns seven slots: x, y, the bulge of the edge leaving it, and the x
- * and y of a handle in each direction. VERTEX_PART_SUFFIXES lists all seven,
- * and delvertex and split move them as one group. Deleting a vertex and
- * splitting an edge shift addresses in opposite directions, and the
- * shiftVertexAddress helpers at the end of the file are what mutation.ts
- * rewrites references with.
+ * The closed slot picks which maths runs, and never which slots exist. A
+ * closed path gets the shoelace area, the area weighted centroid and the
+ * full perimeter. An open path gets the plain mean of its vertices, the
+ * length of the segments it actually has, and a #TYPE error at area.
+ * Because area is declared either way, a formula can drive closed:
+ * evaluation then changes a value rather than the slot set.
  *
- * Engine-layer code: pure logic with no DOM, window or canvas access, so the
- * tests run headless and the file can move to Rust later.
+ * Three pairs of helpers exist because an old object may lack a slot a
+ * newer one has. hasClosedSlot answers that question for its two readers,
+ * pathDependencies and readClosedFlag, so both agree about a polyline built
+ * before the closed slot existed. existingCurvePaths and readCurveParts
+ * carry the same duty for the bulge and handle slots.
+ *
+ * A vertex owns seven slots: x, y, the bulge of the edge leaving it, and
+ * the x and y of a handle in each direction. VERTEX_PART_SUFFIXES lists all
+ * seven, and delvertex and split move them as one group.
+ *
+ * Two vertex enumerations sit side by side, and they are not
+ * interchangeable. enumeratePolylineVertexSlotPaths lists all the slots of
+ * each vertex and declares the schema. enumeratePolylineCoordinateSlotPaths
+ * lists only x and y, and the derived vertices slot depends on that shorter
+ * one, because bending an edge moves no point.
+ *
+ * Growing and shrinking a path splits across four functions.
+ * addVertexToObject and deleteVertexFromObject change the storage.
+ * shiftVertexAddressForDelete moves a surviving vertex down an index, and
+ * repairVertexAddressForDelete marks the exact vertex that went, so
+ * mutation.ts can turn a reference to it into #REF. insertVertexIntoObject
+ * and shiftVertexAddressForInsert serve split instead, and an insert loses
+ * no vertex, so a reference only ever shifts up and split works without a
+ * force flag at all.
+ *
+ * pathEdgesOfObject builds the edge list that the render layer draws and
+ * hit tests. GEOMETRY_STYLE_PATHS names the three style slots every shape
+ * declares, and GEOMETRY_STYLE_DEFAULTS holds what a new shape starts with.
+ * EXPLODABLE_TYPES names the three presets explode accepts: circle, polygon
+ * and rect. Each one is a closed shape, so area survives an explode with
+ * the same value.
+ *
+ * Engine-layer code: pure logic with no DOM, window or canvas access, so
+ * the tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
 import {

@@ -101,6 +101,13 @@ const VALUE_PATTERNS = VALUE_JUDGMENT.map((phrase) => ({
  */
 const DIRECTIVE_DOCUMENTS = new Set(["SPEC.md", "CLAUDE.md", "STYLE.md"]);
 
+/**
+ * How long a cell in a Markdown table can be. A row of the structure map in
+ * docs/STATUS.md routes a reader to a file, and a row that outgrows this cap
+ * has become a second copy of that file's header.
+ */
+const MAX_TABLE_CELL_WORDS = 30;
+
 /** Short capital words that are names, not loud emphasis. */
 const ACRONYMS = new Set([
   "TS", "JS", "JSON", "DOM", "API", "ID", "IDS", "AST", "DAG", "CSS", "HTML",
@@ -270,7 +277,9 @@ function extractMarkdown(source) {
       // A row that a divider follows names the columns. A column name is a
       // label by design, so the rules fight every table in the file.
       const divider = /^ *[|][ -:|]*$/.test(lines[k + 1] ?? "");
-      if (!divider) out.push({ line: k + 1, text: raw.replace(/[|]/g, ". ") });
+      if (!divider) {
+        out.push({ line: k + 1, text: raw.replace(/[|]/g, ". "), table: true });
+      }
       continue;
     }
     if (raw.trim() === "" || /^ *#/.test(raw)) {
@@ -382,7 +391,7 @@ function looksLikeSentence(sentence) {
 }
 
 /** Runs every rule against one sentence. Returns a list of fault records. */
-function checkSentence(sentence, record, describesCode) {
+function checkSentence(sentence, record, describesCode, inTable) {
   const faults = [];
   const add = (rule, detail, fix) =>
     faults.push({ rule, detail, fix, ...record });
@@ -400,10 +409,14 @@ function checkSentence(sentence, record, describesCode) {
       add("imperative", words[0],
         "A comment describes the code. Name the actor and say what it does.");
     }
-    if (LABEL_OPEN.test(sentence)) {
-      add("fragment", words[0], "Write a sentence with a subject and a verb.");
-    } else if (words.length <= 5 && !looksLikeSentence(sentence)) {
-      add("fragment", sentence, "Write a sentence with a subject and a verb.");
+    // A cell in a table is a label by design, the same as a column name or a
+    // heading. The routing map in docs/STATUS.md is built out of them.
+    if (!inTable) {
+      if (LABEL_OPEN.test(sentence)) {
+        add("fragment", words[0], "Write a sentence with a subject and a verb.");
+      } else if (words.length <= 5 && !looksLikeSentence(sentence)) {
+        add("fragment", sentence, "Write a sentence with a subject and a verb.");
+      }
     }
     const negative = sentence.match(NEGATIVE_POSSESSION);
     if (negative) {
@@ -467,6 +480,24 @@ function checkFile(path) {
   const describesCode = !DIRECTIVE_DOCUMENTS.has(basename(path));
 
   for (const block of blocks) {
+    // A row of the structure map routes a reader to a file. Anything longer is
+    // a second copy of that file's header, which drifts because an edit to the
+    // file never shows it to anybody.
+    if (block.table === true) {
+      for (const cell of block.text.split("|")) {
+        const words = stripCode(cell).split(/\s+/).filter((w) => /[A-Za-z]/.test(w));
+        if (words.length > MAX_TABLE_CELL_WORDS) {
+          faults.push({
+            rule: "table-row",
+            detail: words.length + " words, limit " + MAX_TABLE_CELL_WORDS,
+            fix: "Move the detail into the header of the file the row names.",
+            file: path,
+            line: block.line,
+            sentence: words.slice(0, 14).join(" ") + " ...",
+          });
+        }
+      }
+    }
     const clean = stripCode(block.text);
     for (const sentence of sentences(clean)) {
       // A placeholder stands for code, so a run that holds one or none of
@@ -481,7 +512,8 @@ function checkFile(path) {
         ...checkSentence(
           sentence,
           { file: path, line: block.line, sentence },
-          describesCode && block.heading !== true
+          describesCode && block.heading !== true,
+          block.table === true
         )
       );
     }

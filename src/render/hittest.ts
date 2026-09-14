@@ -4,14 +4,17 @@
  * Turns a screen point into the topmost object under it, or into nothing.
  *
  * What a shape answers to depends on whether it paints its inside. A filled
- * shape answers a click anywhere within it, by the same nonzero winding rule a
- * canvas fills with, so the answer agrees with what the operator can see. A
- * shape with no fill is a hollow outline and answers only within a few pixels
- * of its edge. Text, a table, an image and a script node are boxes.
+ * shape answers a click anywhere within it, by the same nonzero winding
+ * rule a canvas fills with, so the answer agrees with what the operator can
+ * see. A shape with no fill is a hollow outline and answers only within a
+ * few pixels of its edge. Text, a table, an image and a script node are
+ * boxes.
  *
  * A circle is tested against its true ring, from the origin and the radius,
  * and a polyline against its real edges. So a click near an arc measures to
- * the circle rather than to the chord across it.
+ * the circle rather than to the chord across it. The closed slot of a
+ * polyline decides whether the gap between its last vertex and its first is
+ * a real edge to test against.
  *
  * The object array is in z order, and this file walks it backward, so the
  * topmost object wins.

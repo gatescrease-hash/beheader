@@ -1,19 +1,28 @@
 /**
  * grips.ts
  *
- * The grabbers on a selected path, and which part of the path each one names.
+ * The grabbers on a selected path, and which part of the path each one
+ * names.
  *
- * A vertex grip sits on a vertex and moves it. An edge grip sits halfway along
- * an edge and bends it. Both appear only once the path itself is selected, so
- * the first press picks the object and the second picks a part of it.
+ * A vertex grip sits on a vertex and moves it. An edge grip sits halfway
+ * along an edge and bends it. Both appear only once the path itself is
+ * selected, so the first press picks the object and the second picks a part
+ * of it.
  *
- * pathGrips also reports whether the slots behind each grip are literal. A
- * grip that a formula drives is drawn hollow, so an operator can see which
- * points will refuse to move before a drag tells them.
+ * edgeShape reports whether one edge is straight, an arc or a cubic, which
+ * is the chip the properties panel draws. It reads the built edge rather
+ * than the raw slots, so it answers the same question the renderer answers
+ * when it draws that edge. bulgeForGrabbedMidpoint turns a pointer position
+ * into the bulge that puts the middle of the edge under it. Nothing in this
+ * file holds state. pathGrips also reports whether the slots behind each
+ * grip are literal. A grip that a formula drives is drawn hollow, so an
+ * operator can see which points will refuse to move before a drag tells
+ * them.
  *
- * gripAt gives a vertex the tie when a vertex grip and an edge grip overlap,
- * which happens whenever an edge is short. menu.ts follows the same rule, so a
- * press and a right press agree about what they are pointing at.
+ * gripAt gives a vertex the tie when a vertex grip and an edge grip
+ * overlap, which happens whenever an edge is short. menu.ts follows the
+ * same rule, so a press and a right press agree about what they are
+ * pointing at.
  *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a
