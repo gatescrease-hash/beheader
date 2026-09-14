@@ -32,7 +32,7 @@ export interface Point {
   readonly y: number;
 }
 
-export type ErrorCode = "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT" | "#MEASURE";
+export type ErrorCode = "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT" | "#MEASURE" | "#MATH";
 
 export interface ErrorValue {
   readonly error: ErrorCode;
@@ -72,6 +72,7 @@ export type ObjectType =
   | "table"
   | "script"
   | "image"
+  | "math"
   | "value"
   | "add";
 
@@ -84,6 +85,8 @@ export const IMAGE_TYPE: ObjectType = "image";
 export const POLYLINE_TYPE: ObjectType = "polyline";
 
 export const SCRIPT_TYPE: ObjectType = "script";
+
+export const MATH_TYPE: ObjectType = "math";
 
 export interface LiteralSlot {
   readonly kind: "literal";

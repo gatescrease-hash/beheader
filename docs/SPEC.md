@@ -718,10 +718,14 @@ their body. A bound name is neither an input nor an export. The `x` in
 
 The mutation that writes `source` parses it, works out the port set, the export
 set and the seed set, and adds or removes those slots in the same batch.
-Evaluation never reads `source`. This is Rule 6, and it is the pairing section 4
-already describes for a port name and a port value: the integrity check needs
-every address a derived slot declares to be a real slot the moment that slot
-exists.
+
+Evaluation reads `source` to work out what an export holds, and never to work
+out which exports exist. The port lists on the object carry that, and a
+mutation is the only thing that writes them. So the slot set of a math object
+is fixed for the whole of an evaluation pass even though it came from text an
+operator typed, which is Rule 6. It is the pairing section 4 already describes
+for a port name and a port value: the integrity check needs every address a
+derived slot declares to be a real slot the moment that slot exists.
 
 A parse that fails leaves the slot set alone and fails the mutation, because a
 half parsed source would otherwise take the export slots away from whatever reads

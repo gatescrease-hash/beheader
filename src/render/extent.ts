@@ -64,6 +64,7 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return imageExtent(object);
     case "script":
       return scriptExtent(object);
+    case "math":
     case "value":
     case "add":
       return undefined;

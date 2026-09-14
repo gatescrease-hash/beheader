@@ -81,10 +81,11 @@ import {
   TABLE_COLS_PATH,
   TABLE_ROWS_PATH,
 } from "./primitives/table.ts";
+import { applyMathSource, isMathSourceError, readMathNames } from "./primitives/math.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
-import { hasIllegalNumber, isIllegalNumber, isLegalPortName, POLYLINE_TYPE, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE_TYPE, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Step 3 rebuilds the whole edge set from stored ASTs and from the schema. It
@@ -265,6 +266,22 @@ export interface RemovePortOperation {
   readonly name: string;
 }
 
+/**
+ * Writes the source of a math object and rebuilds the slots that source
+ * implies: an input slot for each free name and an export slot for each name
+ * the source defines.
+ *
+ * The slot set changes here, inside a mutation, rather than during evaluation,
+ * so Rule 6 holds for an object whose slots come from text an operator typed. A source that does not parse fails the whole mutation, so
+ * the exports of the last source that did parse stay where their readers
+ * expect them.
+ */
+export interface SetMathSourceOperation {
+  readonly kind: "setMathSource";
+  readonly objectId: string;
+  readonly source: string;
+}
+
 export interface AddVertexOperation {
   readonly kind: "addVertex";
   readonly objectId: string;
@@ -306,6 +323,7 @@ export type Operation =
   | RenameObjectOperation
   | AddPortOperation
   | RemovePortOperation
+  | SetMathSourceOperation
   | AddVertexOperation
   | DeleteVertexOperation
   | ExplodeOperation
@@ -324,6 +342,7 @@ function operationTargetId(operation: Operation): string {
     operation.kind === "renameObject" ||
     operation.kind === "addPort" ||
     operation.kind === "removePort" ||
+    operation.kind === "setMathSource" ||
     operation.kind === "addVertex" ||
     operation.kind === "deleteVertex" ||
     operation.kind === "explode" ||
@@ -461,6 +480,21 @@ function applyOperation(
           }
         }
         return { ...object, ports: nextPorts, slots };
+      }),
+      brokenSlots: [],
+    };
+  }
+  if (operation.kind === "setMathSource") {
+    return {
+      objects: objects.map((object) => {
+        if (object.id !== operation.objectId) {
+          return object;
+        }
+        const reading = readMathNames(operation.source);
+        if (isMathSourceError(reading)) {
+          return object;
+        }
+        return applyMathSource(object, operation.source, reading.names);
       }),
       brokenSlots: [],
     };
@@ -676,6 +710,8 @@ export function mutate(
         detail = `attempts to add ${operation.family} port "${operation.name}" to object id "${targetId}"`;
       } else if (operation.kind === "removePort") {
         detail = `attempts to remove ${operation.family} port "${operation.name}" from object id "${targetId}"`;
+      } else if (operation.kind === "setMathSource") {
+        detail = `attempts to write the source of object id "${targetId}"`;
       } else if (operation.kind === "addVertex") {
         detail = `attempts to add a vertex to object id "${targetId}"`;
       } else if (operation.kind === "deleteVertex") {
@@ -726,6 +762,11 @@ export function mutate(
   const invalidPortMessages = findInvalidPortOperations(operations, objects);
   if (invalidPortMessages.length > 0) {
     return { ok: false, message: invalidPortMessages.join("; ") };
+  }
+
+  const invalidMathSourceMessages = findInvalidMathSources(operations, objects);
+  if (invalidMathSourceMessages.length > 0) {
+    return { ok: false, message: invalidMathSourceMessages.join("; ") };
   }
 
   const invalidVertexMessages = findInvalidVertexOperations(operations, objects);
@@ -1280,6 +1321,42 @@ function findInvalidPortOperations(operations: readonly Operation[], objects: re
       return;
     }
     family.delete(operation.name);
+  });
+
+  return problems;
+}
+
+/**
+ * Checks every math source in the batch before any of it applies. A source
+ * that does not parse names the line it failed on, because an operator reading
+ * the message is looking at the source in front of them.
+ *
+ * A setMathSource against an object of another type is refused here too. The
+ * slot rebuild it would run means nothing for a table or a text box, and
+ * applying it there would strip slots that object needs.
+ */
+function findInvalidMathSources(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
+  const problems: string[] = [];
+  const types = new Map<string, ObjectType>(objects.map((object) => [object.id, object.type]));
+
+  operations.forEach((operation, index) => {
+    if (operation.kind === "createObject") {
+      types.set(operation.object.id, operation.object.type);
+      return;
+    }
+    if (operation.kind !== "setMathSource") {
+      return;
+    }
+    const prefix = `operation ${index + 1} of ${operations.length}`;
+    const type = types.get(operation.objectId);
+    if (type !== undefined && type !== MATH_TYPE) {
+      problems.push(`${prefix} attempts to write a math source onto an object of type "${type}", which holds no equations`);
+      return;
+    }
+    const reading = readMathNames(operation.source);
+    if (isMathSourceError(reading)) {
+      problems.push(`${prefix} carries a source that does not read: line ${reading.line + 1}, ${reading.message}`);
+    }
   });
 
   return problems;

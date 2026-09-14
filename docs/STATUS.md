@@ -12,15 +12,15 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2369 pass, 0 skip, across 42 test files. |
-| Spec | Built, except the math object of section 12 and the parts section 16 postpones. |
+| Tests | 2463 pass, 0 skip, across 48 test files. |
+| Spec | Built, except the drawing and the solving of section 12, and the parts section 16 postpones. |
 
 ### How to run it
 
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2369 tests
+npm test             # 2463 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -119,6 +119,12 @@ tables, and other suites drive them anyway.
 | `primitives/table.ts` | Cell addressing, range expansion, and the row and column resize. |
 | `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
 | `primitives/image.ts` | Slot path constants for the image type. |
+| `primitives/math.ts` | The slots a math object carries, and the compute function behind each export. |
+| `math/ast.ts` | The node types of the math language, and the depth check over them. |
+| `math/lexer.ts` | LaTeX to tokens, including the subscript and the commands that are dropped. |
+| `math/parser.ts` | Tokens to a program, with implicit multiplication and the binding forms. |
+| `math/names.ts` | Which names are bound, which are defined, and which become input ports. |
+| `math/eval.ts` | A program and its inputs to a value for each export. |
 | `script/stub.ts` | The script node and its ports. |
 | `mutation.ts` | The one channel for state change, and every operation it accepts. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
@@ -203,7 +209,14 @@ the code it constrains.
 11. **A test that agrees with its author proves nothing.** An inert module with
    thirty green tests shipped a real bug. A new module reaches a consumer in
    the same change.
-12. **The operator cannot see what a test can see.** A live look on screen
+12. **`math/names.ts` and `math/eval.ts` agree on what a line can reach.** The
+   binder resolves a function call against the definitions above that line
+   alone, so a circle of function calls cannot be written and the recursion of
+   the evaluator stays bounded. An evaluator that registered
+   every function before the first line would run a self calling function that
+   the binder had already refused, and the two would disagree about the same
+   source. The evaluator registers a function at its own line for that reason.
+13. **The operator cannot see what a test can see.** A live look on screen
    comes before anyone calls an operator surface done. It has found what the
    suite could not on every surface built so far.
 

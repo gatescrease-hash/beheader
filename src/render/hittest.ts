@@ -131,6 +131,7 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
       return hitTestBoundingBox(object, worldPoint);
     case "polyline":
       return hitTestPolyline(object, worldPoint, strokeToleranceWorld);
+    case "math":
     case "value":
     case "add":
       return false;

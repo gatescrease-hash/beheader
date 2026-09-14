@@ -41,48 +41,44 @@ Done when one name reaches the folder, the package and the documents.
 
 ### 3. Build the math object
 
-Section 12 of `SPEC.md` defines a math object, and none of it is built. An
-operator who wants a definite integral over a number that another object
-produces still has nowhere to put it.
+Section 12 of `SPEC.md` defines a math object. The language and the object type
+are built, and an operator still cannot see one, because nothing draws it.
 
-The work does not fit in one change. Each stage below lands with its tests, and
-each leaves the four checks clean. The first four stages together give the whole
-of typing a formula, seeing it drawn, and wiring it to the document. Solving
-comes after them, because none of that needs it.
+Each stage below lands with its tests, and each leaves the four checks clean.
+Stages one to three together finish typing a formula, seeing it drawn, and
+wiring it to the document. Solving comes after them, because none of that needs
+it.
 
-1. **The language and the object type, together.** The language is a lexer, a
-   parser, an AST, a name binder and an evaluator behind `evaluateMathObject`.
-   The object type is a schema, the mutation that writes `source` and recomputes
-   the port, export and seed sets from it, and the derived slots. They land as
-   one change, because `STATUS.md` records that an inert module with thirty
-   green tests shipped a real bug, and a language with no consumer is that
-   module. Done when a table cell reads an export of a math object built by a
-   batch mutation, a bound name never becomes a port, and two math objects that
-   define each other are refused with a message naming both slots.
+1. **The standalone form on screen.** The MathLive dependency, the overlay in
+   `#stage` that draws the notation, the editable field, the measurer method
+   behind both, and the `math` command word that creates one. The renderer, the
+   hit test and the extent each carry a `math` case that draws nothing today,
+   and this stage replaces all three. Done when an operator creates a math
+   object from the command line, edits it in place, and watches its value follow
+   an upstream cell.
 
-2. **The standalone form on screen.** The MathLive dependency, the overlay in
-   `#stage` that draws the notation, the editable field, and the measurer method
-   behind both. Done when an operator creates a math object from the command
-   line, edits it in place, and watches its value follow an upstream cell.
-
-3. **The block and inline forms inside a text object.** Done when one text box
+2. **The block and inline forms inside a text object.** Done when one text box
    holds both forms, each redraws when the math object it reads changes, and a
    free bare name inside a math run is refused at parse time.
 
-4. **The display modes.** The `source`, `value` and `both` settings, and the
+3. **The display modes.** The `source`, `value` and `both` settings, and the
    values the editor shows beside each free name. Done when the worked example
    of section 12 reads as an integral, as a number, and as both, and the panel
-   lists ports and seeds above the rule with exports below it.
+   lists ports above the rule with exports below it.
+
+4. **A dotted address inside math source.** Section 12 says a dotted name such
+   as `table_x.A1` resolves to a document address at parse time. The lexer
+   refuses one today and names the input port that carries the value instead,
+   which is a complete answer for wiring and a missing half of the spec. Done
+   when a math source reads a document address directly, an edge derives from
+   it, and a rename of the object it names rewrites nothing.
 
 5. **Solving.** The seed slots, the iteration bound, and the error value for a
-   solve that finds no root. Done when an implicit line returns the root nearest
-   its seed, a change to the seed moves the answer from one root to another, and
-   a solve that runs out of iterations gives an error value rather than a hung
-   frame.
-
-Stages one to four stand without stage five. An operator who never writes an
-implicit line never meets a seed slot, so stage five is the one to drop if the
-first four turn out to be enough.
+   solve that finds no root. Nothing of this is built, and the `seed` family of
+   section 12 has no slot yet. Done when an implicit line returns the root
+   nearest its seed, a change to the seed moves the answer from one root to
+   another, and a solve that runs out of iterations gives an error value rather
+   than a hung frame.
 
 **Done when** all five stages have landed and this item is deleted.
 

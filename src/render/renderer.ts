@@ -423,6 +423,7 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
     case "script":
       drawScript(ctx, object);
       return;
+    case "math":
     case "value":
     case "add":
       return;
@@ -742,6 +743,7 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       ctx.strokeRect(extent.minX, extent.minY, extent.maxX - extent.minX, extent.maxY - extent.minY);
       return;
     }
+    case "math":
     case "value":
     case "add":
       return;
