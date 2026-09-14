@@ -93,7 +93,7 @@ import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
-import { classifyCommandLine, completeCommandLine } from "./command/complete.ts";
+import { classifyCommandLine, completeCommandLine, completeInFormulaField, type FieldEdit } from "./command/complete.ts";
 
 export interface Viewport {
   readonly width: number;
@@ -917,6 +917,11 @@ interface PanelDragGesture {
 interface PanelEditHandlers {
   readonly onCommit: (raw: string) => void;
   readonly onCancel: () => void;
+  /**
+   * What a completion key should write in this field. It arrives as a function
+   * because the document lives inside start and a row is built outside it.
+   */
+  readonly onComplete?: (value: string, cursor: number) => FieldEdit | undefined;
 }
 
 /** How many candidates the list shows before it says how many are left. */
@@ -1227,6 +1232,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       input.focus();
       paint();
     },
+    onComplete: (value: string, cursor: number) => completeInFormulaField(value, cursor, state.document.objects),
   });
 
   const panelElement = (objectId: string): HTMLElement => {
@@ -1315,7 +1321,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const buildInPlaceElement = (target: EditorTarget, style: EditorTextStyle): HTMLTextAreaElement | HTMLInputElement => {
     const keydown = (event: KeyboardEvent): void => {
       event.stopPropagation();
-      if (event.key === "Escape") {
+      if (event.key === "Tab" && target.kind === "cell") {
+        event.preventDefault();
+        applyFieldCompletion(event.currentTarget as HTMLInputElement, (value, cursor) =>
+          completeInFormulaField(value, cursor, state.document.objects, target.objectId),
+        );
+      } else if (event.key === "Escape") {
         event.preventDefault();
         cancelInPlace();
       } else if (event.key === "Enter" && target.kind === "cell") {
@@ -2002,7 +2013,10 @@ function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputEle
   };
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     event.stopPropagation();
-    if (event.key === "Enter") {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      applyFieldCompletion(input, handlers.onComplete);
+    } else if (event.key === "Enter") {
       commit();
     } else if (event.key === "Escape") {
       cancel();
@@ -2010,6 +2024,26 @@ function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputEle
   });
   input.addEventListener("blur", cancel);
   return input;
+}
+
+/**
+ * Writes a completion into a field and puts the caret after it. A field that
+ * offers none is left as it was, so the key does nothing rather than something
+ * surprising.
+ */
+function applyFieldCompletion(
+  field: HTMLInputElement,
+  complete: ((value: string, cursor: number) => FieldEdit | undefined) | undefined,
+): void {
+  if (complete === undefined) {
+    return;
+  }
+  const edit = complete(field.value, field.selectionStart ?? field.value.length);
+  if (edit === undefined) {
+    return;
+  }
+  field.value = edit.value;
+  field.setSelectionRange(edit.caret, edit.caret);
 }
 
 function downloadDocument(state: Document): void {

@@ -26,6 +26,8 @@ import {
   completeAddress,
   completeObjectName,
   isAddressError,
+  formulaReferenceResolves,
+  formulaReferences,
   longestCommonPrefix,
   objectSlotPaths,
   parseAddress,
@@ -241,4 +243,98 @@ export function completeCommandLine(line: string, cursor: number, objects: reado
     return completionOf(from, to, completeAddress(typed, objects));
   }
   return undefined;
+}
+
+/**
+ * A whole new value for a field, and where the caret goes in it. A field
+ * completion returns the finished text rather than a range to splice, because
+ * it can change the front of the field as well as the run under the cursor, and
+ * a caller holding two edits would have to order them itself.
+ */
+export interface FieldEdit {
+  readonly value: string;
+  readonly caret: number;
+  readonly candidates: readonly string[];
+}
+
+/**
+ * The mark an equals sign makes at the front of a field, which is how a table
+ * cell and a panel row tell a formula from the text it otherwise looks like.
+ */
+const FORMULA_MARK = "=";
+
+/**
+ * What a completion key should write in a field holding a formula.
+ *
+ * It completes the run under the cursor, and it writes the equals sign at the
+ * front where the field has none. A field carrying that sign holds a formula,
+ * and a field without one holds the literal text it reads as, so writing the
+ * sign here leaves an operator typing an address and nothing else. The sign goes into the text rather
+ * than beside it, so the field holds the whole of what it means, and reopening
+ * the field later shows the same sign back.
+ *
+ * A cell of a table passes its own object id, because a bare name such as A1 is
+ * an address only there.
+ */
+export function completeInFormulaField(
+  value: string,
+  cursor: number,
+  objects: readonly GraphObject[],
+  tableObjectId?: string,
+): FieldEdit | undefined {
+  const marked = value.startsWith(FORMULA_MARK);
+  const body = marked ? value.slice(FORMULA_MARK.length) : value;
+  const bodyCursor = marked ? cursor - FORMULA_MARK.length : cursor;
+  if (bodyCursor < 0) {
+    return undefined;
+  }
+
+  const run = formulaReferences(body).find((entry) => bodyCursor >= entry.start && bodyCursor <= entry.end);
+  const typed = run === undefined ? "" : body.slice(run.start, bodyCursor);
+  if (run === undefined || typed === "") {
+    return undefined;
+  }
+
+  const completion = completeAddress(typed, objects);
+  if (completion.candidates.length === 0) {
+    // A bare cell of this table completes nothing, and it is already an
+    // address, so the sign alone is what the field is missing.
+    if (!marked && formulaReferenceResolves(typed, objects, tableObjectId)) {
+      return { value: `${FORMULA_MARK}${body}`, caret: cursor + FORMULA_MARK.length, candidates: [] };
+    }
+    return undefined;
+  }
+
+  const filled = completion.fill === "" ? typed : completion.fill;
+  const nextBody = body.slice(0, run.start) + filled + body.slice(run.end);
+  const caretInBody = run.start + filled.length;
+
+  return {
+    value: `${FORMULA_MARK}${nextBody}`,
+    caret: FORMULA_MARK.length + caretInBody,
+    candidates: completion.candidates.map((entry) => entry.text),
+  };
+}
+
+/**
+ * The runs of a formula field that named something the document carries. The
+ * equals sign at the front is not part of the formula, so the offsets it
+ * returns count from the start of the field rather than from the start of what
+ * is parsed.
+ */
+export function classifyFormulaField(
+  value: string,
+  objects: readonly GraphObject[],
+  tableObjectId?: string,
+): readonly LineSpan[] {
+  const marked = value.startsWith(FORMULA_MARK);
+  if (!marked) {
+    return [];
+  }
+  const body = value.slice(FORMULA_MARK.length);
+  const offset = FORMULA_MARK.length;
+
+  return formulaReferences(body)
+    .filter((run) => formulaReferenceResolves(run.text, objects, tableObjectId))
+    .map((run): LineSpan => ({ start: run.start + offset, end: run.end + offset, kind: "address" }));
 }

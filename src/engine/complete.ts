@@ -20,7 +20,8 @@
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
-import { toSurfacePath } from "./address.ts";
+import { isCellReferenceForm, toSurfacePath } from "./address.ts";
+import { lex as lexFormula } from "./formula/lexer.ts";
 import type { GraphObject } from "./graph/node.ts";
 import { getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
 
@@ -141,4 +142,80 @@ export function completeAddress(partial: string, objects: readonly GraphObject[]
     .filter((path) => startsWithIgnoringCase(path, pathPart))
     .map((path): Completion => ({ text: `${object.name}.${path}`, kind: "slot" }));
   return resultOf(matches);
+}
+
+/** One run of a formula that reads like an address, and where it sits. */
+export interface FormulaReference {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+/**
+ * The runs of a formula that read like an address. A run is a name followed by
+ * any number of dotted parts, and a numeric part counts, because a vertex index
+ * such as the 0 of vertex.0.x lexes as a number rather than as a name.
+ *
+ * A formula that will not lex gives nothing rather than a failure. It is being
+ * typed, so it spends most of its life unfinished, and the caller wants the
+ * runs it can see rather than a reason it saw none.
+ */
+export function formulaReferences(source: string): readonly FormulaReference[] {
+  const tokens = lexFormula(source);
+  if (!Array.isArray(tokens)) {
+    return [];
+  }
+
+  const runs: FormulaReference[] = [];
+  let index = 0;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token === undefined || token.type !== "identifier") {
+      index += 1;
+      continue;
+    }
+    const start = token.start;
+    let end = token.start + token.text.length;
+    index += 1;
+
+    while (index + 1 < tokens.length) {
+      const dot = tokens[index];
+      const part = tokens[index + 1];
+      if (dot?.type !== "dot" || part === undefined || (part.type !== "identifier" && part.type !== "number")) {
+        break;
+      }
+      end = part.start + part.text.length;
+      index += 2;
+    }
+
+    runs.push({ start, end, text: source.slice(start, end) });
+  }
+  return runs;
+}
+
+/**
+ * Whether a run written in a formula names something the document carries. A
+ * bare name is one only inside a table cell, where it means a cell of that same
+ * table, which is the rule the formula parser already follows.
+ */
+export function formulaReferenceResolves(
+  text: string,
+  objects: readonly GraphObject[],
+  tableObjectId?: string,
+): boolean {
+  if (!text.includes(".")) {
+    if (tableObjectId === undefined || !isCellReferenceForm(text)) {
+      return false;
+    }
+    const table = objects.find((object) => object.id === tableObjectId);
+    return table !== undefined && objectSlotPaths(table).some((path) => path.toLowerCase() === text.toLowerCase());
+  }
+
+  const dot = text.indexOf(".");
+  const object = objects.find((candidate) => candidate.name.toLowerCase() === text.slice(0, dot).toLowerCase());
+  if (object === undefined) {
+    return false;
+  }
+  const path = text.slice(dot + 1).toLowerCase();
+  return objectSlotPaths(object).some((candidate) => candidate.toLowerCase() === path);
 }

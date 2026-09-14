@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyCommandLine, completeCommandLine, splitLineWords, wordAtCursor } from "./complete.ts";
+import { classifyCommandLine, classifyFormulaField, completeCommandLine, completeInFormulaField, splitLineWords, wordAtCursor } from "./complete.ts";
 import type { GraphObject } from "../engine/index.ts";
 
 function circle(id: string, name: string): GraphObject {
@@ -186,5 +186,122 @@ describe("classifyCommandLine", () => {
 
   it("stops marking a name the moment the document stops carrying it", () => {
     expect(marked("delete circle_1", [])).toEqual(["command:delete"]);
+  });
+});
+
+describe("completeInFormulaField", () => {
+  /** A table, so a bare cell reference has somewhere to belong. */
+  const TABLE: GraphObject = {
+    id: "obj_9",
+    name: "table_1",
+    type: "table",
+    slots: {
+      "origin.x": { kind: "literal", value: 0 },
+      "origin.y": { kind: "literal", value: 0 },
+      rows: { kind: "literal", value: 2 },
+      cols: { kind: "literal", value: 2 },
+      "cells.A1": { kind: "literal", value: 0 },
+      "cells.A2": { kind: "literal", value: 0 },
+      "cells.B1": { kind: "literal", value: 0 },
+      "cells.B2": { kind: "literal", value: 0 },
+    },
+  };
+  const WITH_TABLE: readonly GraphObject[] = [...DOCUMENT, TABLE];
+
+  it("writes the equals sign the field needs, so the operator types only the address", () => {
+    const edit = completeInFormulaField("circle_1.rad", 12, WITH_TABLE);
+    expect(edit?.value).toBe("=circle_1.radius");
+  });
+
+  it("leaves a sign that is already there alone rather than writing a second", () => {
+    const edit = completeInFormulaField("=circle_1.rad", 13, WITH_TABLE);
+    expect(edit?.value).toBe("=circle_1.radius");
+  });
+
+  it("puts the caret after what it wrote", () => {
+    const edit = completeInFormulaField("circle_1.rad", 12, WITH_TABLE);
+    expect(edit?.caret).toBe("=circle_1.radius".length);
+  });
+
+  it("completes a run inside a larger formula and keeps the rest of it", () => {
+    const edit = completeInFormulaField("=2 * circle_1.rad + 1", 17, WITH_TABLE);
+    expect(edit?.value).toBe("=2 * circle_1.radius + 1");
+  });
+
+  it("takes two presses to reach a whole address here too", () => {
+    expect(completeInFormulaField("circle_1", 8, WITH_TABLE)?.value).toBe("=circle_1.");
+    expect(completeInFormulaField("=circle_1.rad", 13, WITH_TABLE)?.value).toBe("=circle_1.radius");
+  });
+
+  it("marks a bare cell of its own table as a formula, which needs the sign and no completion", () => {
+    const edit = completeInFormulaField("A1", 2, WITH_TABLE, "obj_9");
+    expect(edit).toMatchObject({ value: "=A1", candidates: [] });
+  });
+
+  it("does nothing for a bare name that names nothing", () => {
+    expect(completeInFormulaField("hello", 5, WITH_TABLE)).toBeUndefined();
+  });
+
+  it("does nothing where the cursor sits on no run at all", () => {
+    expect(completeInFormulaField("=1 + 2", 6, WITH_TABLE)).toBeUndefined();
+  });
+
+  it("does nothing for an empty field", () => {
+    expect(completeInFormulaField("", 0, WITH_TABLE)).toBeUndefined();
+  });
+});
+
+describe("classifyFormulaField", () => {
+  const TABLE: GraphObject = {
+    id: "obj_9",
+    name: "table_1",
+    type: "table",
+    slots: {
+      "origin.x": { kind: "literal", value: 0 },
+      rows: { kind: "literal", value: 2 },
+      cols: { kind: "literal", value: 2 },
+      "cells.A1": { kind: "literal", value: 0 },
+      "cells.B1": { kind: "literal", value: 0 },
+      "cells.A2": { kind: "literal", value: 0 },
+      "cells.B2": { kind: "literal", value: 0 },
+    },
+  };
+  const WITH_TABLE: readonly GraphObject[] = [...DOCUMENT, TABLE];
+
+  function marked(value: string, tableObjectId?: string): string[] {
+    return classifyFormulaField(value, WITH_TABLE, tableObjectId).map((span) => value.slice(span.start, span.end));
+  }
+
+  it("marks an address inside a formula", () => {
+    expect(marked("=circle_1.radius * 2")).toEqual(["circle_1.radius"]);
+  });
+
+  it("marks each of several addresses", () => {
+    expect(marked("=circle_1.radius + circle_2.radius")).toEqual(["circle_1.radius", "circle_2.radius"]);
+  });
+
+  it("marks nothing in a field that is not a formula, because it is text", () => {
+    expect(marked("circle_1.radius")).toEqual([]);
+  });
+
+  it("leaves a misspelt name unmarked", () => {
+    expect(marked("=cirlce_1.radius + circle_2.radius")).toEqual(["circle_2.radius"]);
+  });
+
+  it("leaves a slot that does not exist unmarked", () => {
+    expect(marked("=circle_1.nothing")).toEqual([]);
+  });
+
+  it("marks a bare cell only inside the table it belongs to", () => {
+    expect(marked("=A1 + 1", "obj_9")).toEqual(["A1"]);
+    expect(marked("=A1 + 1")).toEqual([]);
+  });
+
+  it("gives offsets counted from the front of the field, past the sign", () => {
+    expect(classifyFormulaField("=circle_1.radius", WITH_TABLE)[0]).toEqual({ start: 1, end: 16, kind: "address" });
+  });
+
+  it("marks a function call's arguments and not its name", () => {
+    expect(marked("=SUM(circle_1.radius)")).toEqual(["circle_1.radius"]);
   });
 });
