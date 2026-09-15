@@ -131,7 +131,7 @@ function expect(cursor: Cursor, type: MathToken["type"], what: string): MathToke
 
 /** Answers whether a token can open an operand, which is what juxtaposition needs. */
 function startsOperand(token: MathToken): boolean {
-  if (token.type === "number" || token.type === "identifier" || token.type === "lparen" || token.type === "bar") {
+  if (token.type === "number" || token.type === "identifier" || token.type === "lparen" || token.type === "bar" || token.type === "reference") {
     return true;
   }
   return token.type === "command" && COMMAND_OPERATORS[token.name] === undefined;
@@ -354,6 +354,19 @@ function parseAtomInner(cursor: Cursor, state: ParseState): MathAst {
 
   if (current.type === "number") {
     return { type: "number", value: current.value };
+  }
+
+  if (current.type === "reference") {
+    const dot = current.name.indexOf(".");
+    if (dot <= 0 || dot === current.name.length - 1) {
+      throw new ParseFailure(`"${current.name}" is not an address, which names an object and then a slot of it`);
+    }
+    // The stored spelling carries the object id, so reading it works with no
+    // list of objects and a rename of what it names rewrites nothing.
+    return {
+      type: "reference",
+      address: { objectId: current.name.slice(0, dot), path: current.name.slice(dot + 1).split(".") },
+    };
   }
 
   if (current.type === "identifier") {

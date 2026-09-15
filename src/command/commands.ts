@@ -77,6 +77,7 @@ import {
   resolveNonDerivedSlotPaths,
   SCRIPT_LANGUAGE_PATH,
   createMathObject,
+  mathSourceWithIds,
   SCRIPT_SOURCE_PATH,
   SCRIPT_TYPE,
   scriptInPortPath,
@@ -466,7 +467,9 @@ function createMath(command: CreateMathCommand, document: Document, context: Eva
 
   const operations: Operation[] = [{ kind: "createObject", object }];
   if (command.source !== "") {
-    operations.push({ kind: "setMathSource", objectId: minted.id, source: command.source });
+    // An operator writes an address by the name it carries, and the document
+    // stores the id, so a rename rewrites nothing.
+    operations.push({ kind: "setMathSource", objectId: minted.id, source: mathSourceWithIds(command.source, document.objects) });
   }
 
   const result = mutate(document.objects, operations, document.journal, context);

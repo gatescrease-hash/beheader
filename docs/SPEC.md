@@ -684,20 +684,35 @@ box and the baseline rule, and changes nothing else.
 
 ### Names
 
-Section 6 already splits a bare name from a dotted name inside a table cell,
-where a bare `A1` means this table and a dotted name means the document. Math
-source uses that same split, so only one piece of code ever resolves an address.
+Section 6 splits a bare name from a dotted name inside a table cell, where a
+bare `A1` means this table and a dotted name means the document. Notation cannot
+take that split, because letters beside each other multiply there, so a name of
+more than one letter is a product and `table_x.A1` reads as five names times a
+cell. An address therefore arrives wrapped in a command of its own.
 
 - A **bare name** is local to the object.
-- A **dotted name** such as `table_x.A1` is a document address. The parser
-  resolves it to an ID at parse time, the same as any formula, so a rename needs
-  no rewrite.
+- `\gpref{table_x.A1}` is a document address. The lexer reads the whole of the
+  braced part as one token, which multiplication cannot break apart, and it
+  draws as upright monospace so it reads as a piece of the document rather than
+  as letters.
+
+The stored form of that command holds the ID of the object, as
+`\gpref{obj_3.cells.A1}`, so a rename rewrites nothing. An operator writes and
+reads the name instead: the command line and the editable field map a name to an
+ID on the way in, and the drawn form maps the ID back to whatever name the
+object carries now. That is the same round trip a formula already makes, and it
+is why section 5 keeps two layers.
+
+A source naming a slot the document does not carry is refused when it is
+written, and deleting an object that a source reads is refused with the source
+named, which is the refusal path of section 4 rather than a reference quietly
+going nowhere.
 
 A bare name that the source never defines is an input. On a standalone object it
 becomes a literal slot such as `math_1.in.speed`, with a value the operator
 types, and `link` binds it to any upstream address exactly as a script port does.
 A text object has nowhere to hang a port, so a free bare name inside a text math
-run is a parse error, and the writer uses a dotted address instead.
+run is a parse error, and the writer wraps an address in the command instead.
 
 A line of the form `name = expression` defines a name, and that name becomes a
 derived slot `math_1.out.x_ans`. The exports go under `out` rather than at the

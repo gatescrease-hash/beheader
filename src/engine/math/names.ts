@@ -30,6 +30,7 @@
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
+import type { Address } from "../address.ts";
 import { isLegalPortName } from "../graph/node.ts";
 import type { MathAst, MathProgram } from "./ast.ts";
 import { MATH_BUILT_IN_FUNCTIONS } from "./parser.ts";
@@ -41,6 +42,8 @@ export interface MathNameError {
 }
 
 export interface MathNames {
+  /** The document addresses the source reads, in the order it first reads them. */
+  readonly references: readonly Address[];
   /** The names the source defines, under out, in the order the lines define them. */
   readonly exports: readonly string[];
   /** The free names, under in, in the order the source first reads them. */
@@ -62,6 +65,8 @@ interface Walk {
   readonly allFunctions: ReadonlySet<string>;
   readonly inputs: string[];
   readonly seenInputs: Set<string>;
+  readonly references: Address[];
+  readonly seenReferences: Set<string>;
 }
 
 function withBinding(walk: Walk, name: string): Walk {
@@ -77,6 +82,15 @@ function walkExpression(ast: MathAst, walk: Walk): void {
   switch (ast.type) {
     case "number":
       return;
+
+    case "reference": {
+      const key = `${ast.address.objectId}.${ast.address.path.join(".")}`;
+      if (!walk.seenReferences.has(key)) {
+        walk.seenReferences.add(key);
+        walk.references.push(ast.address);
+      }
+      return;
+    }
 
     case "name": {
       if (walk.bound.has(ast.name) || walk.defined.has(ast.name)) {
@@ -155,6 +169,8 @@ export function resolveMathNames(program: MathProgram): MathNames | MathNameErro
   const functions = new Map<string, number>();
   const inputs: string[] = [];
   const seenInputs = new Set<string>();
+  const references: Address[] = [];
+  const seenReferences = new Set<string>();
 
   const allFunctions = new Set<string>();
   for (let index = 0; index < program.lines.length; index += 1) {
@@ -172,7 +188,7 @@ export function resolveMathNames(program: MathProgram): MathNames | MathNameErro
     if (line === undefined) {
       continue;
     }
-    const walk: Walk = { defined, bound: new Set(), functions, allFunctions, inputs, seenInputs };
+    const walk: Walk = { defined, bound: new Set(), functions, allFunctions, inputs, seenInputs, references, seenReferences };
 
     try {
       if (line.type === "functionDefinition") {
@@ -217,5 +233,5 @@ export function resolveMathNames(program: MathProgram): MathNames | MathNameErro
     }
   }
 
-  return { exports, inputs, functions: [...allFunctions] };
+  return { exports, inputs, functions: [...allFunctions], references };
 }

@@ -31,6 +31,8 @@ import {
   type CameraState,
   createEmptyDocument,
   deriveValidateAndEvaluate,
+  mathSourceWithIds,
+  mathSourceWithNames,
   mutate,
   type Document,
   type EvalContext,
@@ -91,7 +93,7 @@ import "mathlive";
 import "mathlive/static.css";
 import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
-import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
+import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
 import {
   classifyCommandLine,
@@ -738,14 +740,15 @@ export function commitMathSource(
   if (object === undefined) {
     return state;
   }
-  if (readMathLatex(object) === latex) {
+  const stored = mathSourceWithIds(latex, state.document.objects);
+  if (readMathLatex(object) === stored) {
     return state;
   }
 
   const echoed = withLog(state, [`> ${object.name} = "${latex}"`]);
   const result = mutate(
     echoed.document.objects,
-    [{ kind: "setMathSource", objectId, source: latex }],
+    [{ kind: "setMathSource", objectId, source: stored }],
     echoed.document.journal,
     context,
   );
@@ -1078,14 +1081,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
 
       const latex = readMathLatex(object);
-      const drawn = readMathDrawnLatex(object);
+      const drawn = mathSourceWithNames(readMathDrawnLatex(object), state.document.objects);
       const editing = object.id === editingMathId;
       element.classList.toggle("math-overlay--editing", editing);
 
       if (editing) {
         if (mathField === undefined || element.firstChild !== mathField) {
           element.innerHTML = "";
-          mathField = buildMathField(object.id, latex);
+          mathField = buildMathField(object.id, mathSourceWithNames(latex, state.document.objects));
           element.appendChild(mathField);
           delete element.dataset["latex"];
           mathField.focus();
@@ -1124,6 +1127,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     field.className = "math-field";
     field.value = latex;
     field.setAttribute("math-virtual-keyboard-policy", "manual");
+    // The field draws the same macros the static form does, or an address in it
+    // draws in the red MathLive keeps for a command it has never heard of.
+    (field as unknown as { macros: Record<string, string> }).macros = {
+      ...(field as unknown as { macros: Record<string, string> }).macros,
+      ...MATH_MACROS,
+    };
 
     field.addEventListener("keydown", (event) => {
       event.stopPropagation();

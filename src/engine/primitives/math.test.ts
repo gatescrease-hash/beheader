@@ -8,7 +8,10 @@ import {
   isMathSourceError,
   mathDisplayLatex,
   readMathDisplayLatex,
+  mathSourceWithIds,
+  mathSourceWithNames,
   readMathNames,
+  unresolvedMathReferences,
   MATH_SOURCE_PATH,
   mathInPortPath,
   mathOutPortPath,
@@ -347,5 +350,134 @@ describe("a math object in the graph", () => {
     const object = built.objects.find((entry) => entry.id === "obj_1");
     expect(object?.slots["out.g"]?.value).toBe(4);
     expect(object?.slots["out.w"]?.value).toMatchObject({ error: "#DIV0" });
+  });
+});
+
+describe("an address inside math source", () => {
+  function sheet(id = "obj_2", name = "table_1"): GraphObject {
+    return table(id, name, { "cells.A1": { kind: "literal", value: 7 } });
+  }
+
+  it("reads the address as a reference rather than as a product of letters", () => {
+    const reading = readMathNames("y=\\gpref{obj_2.cells.A1}+1");
+    if (isMathSourceError(reading)) throw new Error(reading.message);
+    expect(reading.names.references).toEqual([{ objectId: "obj_2", path: ["cells", "A1"] }]);
+    expect(reading.names.inputs).toEqual([]);
+  });
+
+  it("names the command in the refusal for a bare dotted address", () => {
+    const reading = readMathNames("y=table_1.A1");
+    expect(isMathSourceError(reading)).toBe(true);
+    if (!isMathSourceError(reading)) return;
+    expect(reading.message).toContain("gpref");
+  });
+
+  it("evaluates a reference from the value the document carries", () => {
+    const built = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "createObject", object: sheet() },
+        { kind: "setMathSource", objectId: "obj_1", source: "y=\\gpref{obj_2.cells.A1}*2" },
+      ],
+      [],
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(built.objects.find((o) => o.id === "obj_1")?.slots["out.y"]?.value).toBe(14);
+  });
+
+  it("follows the cell it reads when that cell changes", () => {
+    const built = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "createObject", object: sheet() },
+        { kind: "setMathSource", objectId: "obj_1", source: "y=\\gpref{obj_2.cells.A1}*2" },
+      ],
+      [],
+    );
+    if (!built.ok) throw new Error(built.message);
+    const moved = mutate(
+      built.objects,
+      [{ kind: "setSlot", address: { objectId: "obj_2", path: ["cells", "A1"] }, slot: { kind: "literal", value: 10 } }],
+      built.journal,
+    );
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+    expect(moved.objects.find((o) => o.id === "obj_1")?.slots["out.y"]?.value).toBe(20);
+  });
+
+  it("refuses a source naming a slot the document does not carry", () => {
+    const result = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "setMathSource", objectId: "obj_1", source: "y=\\gpref{obj_9.cells.A1}" },
+      ],
+      [],
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toContain("obj_9.cells.A1");
+  });
+
+  it("refuses to delete an object a math source reads, naming the slot", () => {
+    const built = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "createObject", object: sheet() },
+        { kind: "setMathSource", objectId: "obj_1", source: "y=\\gpref{obj_2.cells.A1}" },
+      ],
+      [],
+    );
+    if (!built.ok) throw new Error(built.message);
+    const removed = mutate(built.objects, [{ kind: "deleteObject", objectId: "obj_2" }], built.journal);
+    expect(removed.ok).toBe(false);
+  });
+
+  it("turns a name into the id the document stores, and back again", () => {
+    const objects = [sheet()];
+    const typed = "y=\\gpref{table_1.A1}";
+    const stored = mathSourceWithIds(typed, objects);
+    expect(stored).toBe("y=\\gpref{obj_2.cells.A1}");
+    expect(mathSourceWithNames(stored, objects)).toBe(typed);
+  });
+
+  it("shows the new name after a rename, with the source untouched", () => {
+    const renamed = [sheet("obj_2", "grid")];
+    expect(mathSourceWithNames("y=\\gpref{obj_2.cells.A1}", renamed)).toBe("y=\\gpref{grid.A1}");
+  });
+
+  it("leaves an address it cannot resolve as it was written", () => {
+    expect(mathSourceWithIds("y=\\gpref{nowhere.A1}", [sheet()])).toBe("y=\\gpref{nowhere.A1}");
+  });
+
+  it("refuses a plain write to the source slot, which would leave the ports behind", () => {
+    const built = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "setMathSource", objectId: "obj_1", source: "y=a+1" },
+      ],
+      [],
+    );
+    if (!built.ok) throw new Error(built.message);
+
+    const direct = mutate(
+      built.objects,
+      [{ kind: "setSlot", address: { objectId: "obj_1", path: ["source"] }, slot: { kind: "literal", value: "z=q+1" } }],
+      built.journal,
+    );
+    expect(direct.ok).toBe(false);
+    if (direct.ok) return;
+    expect(direct.message).toContain("ports");
+    expect(built.objects[0]?.ports).toEqual({ in: ["a"], out: ["y"] });
+  });
+
+  it("finds the addresses a source names that the document does not carry", () => {
+    expect(unresolvedMathReferences("y=\\gpref{obj_9.radius}", [sheet()])).toEqual(["obj_9.radius"]);
+    expect(unresolvedMathReferences("y=\\gpref{obj_2.cells.A1}", [sheet()])).toEqual([]);
   });
 });

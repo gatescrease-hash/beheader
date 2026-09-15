@@ -42,9 +42,9 @@ Done when one name reaches the folder, the package and the documents.
 ### 3. Build the math object
 
 Section 12 of `SPEC.md` defines a math object. An operator can type one, see it
-drawn, edit it in place, wire it to the document, and choose whether it shows
-its formula, its result or both. The two in-text forms, a dotted address and
-solving are open.
+drawn, edit it in place, wire it to the document, read an address of the
+document out of its notation, and choose whether it shows its formula, its
+result or both. The two in-text forms and solving are open.
 
 Each stage below lands with its tests, and each leaves the four checks clean.
 
@@ -61,16 +61,7 @@ Each stage below lands with its tests, and each leaves the four checks clean.
    rather than around a gap, and a free bare name inside a math run is refused
    at parse time.
 
-2. **A dotted address inside math source.** Section 12 says a dotted name such
-   as `table_x.A1` resolves to a document address at parse time, and the lexer
-   refuses one today. Note first that a name of more than one letter is a
-   product in mathematics, so `table_x` reads as five names multiplied and a
-   document name has to arrive as `\operatorname{table_x}`. Decide whether that
-   spelling is worth having next to an input port, which already carries any
-   address without it, and write the answer into section 12 either way.
-   Done when the spec and the lexer agree.
-
-3. **Solving.** The seed slots, the iteration bound, and the error value for a
+2. **Solving.** The seed slots, the iteration bound, and the error value for a
    solve that finds no root. Nothing of this is built, and the `seed` family of
    section 12 has no slot yet. Done when an implicit line returns the root
    nearest its seed, a change to the seed moves the answer from one root to
@@ -89,62 +80,20 @@ is also the one value that makes a denominator fail.
 Done when a new port either starts at a value that reads as unset rather than
 as zero, or the reason zero is right is written into section 12.
 
-### 5. Complete an address as it is typed, and show what parsed
+### 5. Show a math source by the names it reads, in the panel
 
-The command line, a table cell and a panel row each complete an object name and
-then its slots from Tab, and each marks the runs it read as naming something the
-document carries. Math source still cannot hold an address at all.
+A math object stores each address it reads as an object ID, so a rename
+rewrites nothing. The drawn form and the editable field both map that ID back to
+the name the object carries, and the `source` row of the properties panel does
+not, so it shows `\gpref{obj_1.cells.A1}` where everything else shows
+`\gpref{grid.A1}`.
 
-**What is already right, and what is not.** A stored AST holds `Address`
-records carrying an object ID, so an address in a committed formula is not text
-and a rename rewrites nothing. The problem is at the two ends, entry and
-display, and in math source, where `table_x` lexes as five letters multiplied
-because juxtaposition is multiplication. So this item builds an input layer and
-changes no stored shape.
+That row is also offered as a text field an operator can type into, and a write
+there is refused, because only the mutation that rebuilds the ports may write a
+source. A row that cannot be written should not look like one.
 
-**Derive the appearance, do not bake a token.** A completed address could
-become a token in the field that carries its own identity and its own
-appearance. It should not. A token that carries an identity can drift from the
-text beside it, and then what the operator sees and what the parser reads are
-two answers to one question, which is the fault this item exists to remove.
-Instead the field parses what it holds on every keystroke and paints the spans
-that resolved. A hand typed address then lights up without a completion, and a
-misspelt one visibly fails to light up before anything is committed.
-
-**Tab writes whatever makes it an address, and the operator writes none of it.**
-The operator types `table_1.origin.x` and presses Tab. Nothing else. Tab is the
-act that says this run is an address, and it completes the name and then writes
-whatever the field it sits in needs for the parser to read one. The ceremony
-stays in the text, because one source of truth is the whole point, and it stops
-being something anybody types.
-
-What Tab writes depends on the field, and each field declares it:
-
-| Field | What a bare address needs | What Tab writes |
-| --- | --- | --- |
-| A command line argument that takes an address | nothing | the completion alone |
-| A table cell or a panel row | a leading equals sign | the sign at the front of the field |
-| The prose of a text object | a formula marker around it | the marker around the run |
-| Math source | a macro around it | the macro around the run |
-
-A table cell already shows its formula back with a leading equals sign when it
-is reopened, so Tab writing that sign puts the field in the state the next edit
-would show anyway.
-
-The exception a spelling has to solve is math source, where an address cannot
-be parsed out of the notation at all. The last stage covers it.
-
-**Stages.** Each lands with its tests and leaves the four checks clean.
-
-1. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
-   gives notation a spelling for an address that the lexer can read as one
-   token, which juxtaposition cannot break and which draws as a chip without
-   any work. It answers the question the math item leaves open, so that stage
-   and this one settle together.
-   Done when the spec says how an address is spelled in notation and the lexer
-   agrees.
-
-**Done when** that stage has landed and this item is deleted.
+Done when the panel shows a math source by the names it reads, and the row
+opens the editor rather than a text field.
 
 ### 6. Say what the program understood, on a refusal
 

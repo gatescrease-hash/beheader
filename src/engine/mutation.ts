@@ -81,7 +81,7 @@ import {
   TABLE_COLS_PATH,
   TABLE_ROWS_PATH,
 } from "./primitives/table.ts";
-import { applyMathSource, isMathSourceError, readMathNames } from "./primitives/math.ts";
+import { applyMathSource, isMathSourceError, MATH_SOURCE_PATH, readMathNames, unresolvedMathReferences } from "./primitives/math.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate } from "./graph/eval.ts";
@@ -1337,18 +1337,38 @@ function findInvalidPortOperations(operations: readonly Operation[], objects: re
  */
 function findInvalidMathSources(operations: readonly Operation[], objects: readonly GraphObject[]): readonly string[] {
   const problems: string[] = [];
-  const types = new Map<string, ObjectType>(objects.map((object) => [object.id, object.type]));
+  // The batch is walked in order, because a source can name an object the same
+  // batch creates, and a check against the document as it stood before would
+  // refuse it for naming something that is about to exist.
+  const present = new Map<string, GraphObject>(objects.map((object) => [object.id, object]));
 
   operations.forEach((operation, index) => {
     if (operation.kind === "createObject") {
-      types.set(operation.object.id, operation.object.type);
+      present.set(operation.object.id, operation.object);
+      return;
+    }
+    if (operation.kind === "deleteObject") {
+      present.delete(operation.objectId);
+      return;
+    }
+    if (operation.kind === "setSlot" && slotKey(operation.address.path) === slotKey(MATH_SOURCE_PATH)) {
+      // A plain write would leave the ports of the last source behind, so the
+      // object would export names its source no longer defines. Only
+      // setMathSource rebuilds them, so only setMathSource may write here.
+      const target = present.get(operation.address.objectId);
+      if (target?.type === MATH_TYPE) {
+        problems.push(
+          `operation ${index + 1} of ${operations.length} writes ${target.name}.source directly, which would leave its ports ` +
+            `behind. Editing the equations rebuilds them`,
+        );
+      }
       return;
     }
     if (operation.kind !== "setMathSource") {
       return;
     }
     const prefix = `operation ${index + 1} of ${operations.length}`;
-    const type = types.get(operation.objectId);
+    const type = present.get(operation.objectId)?.type;
     if (type !== undefined && type !== MATH_TYPE) {
       problems.push(`${prefix} attempts to write a math source onto an object of type "${type}", which holds no equations`);
       return;
@@ -1356,6 +1376,11 @@ function findInvalidMathSources(operations: readonly Operation[], objects: reado
     const reading = readMathNames(operation.source);
     if (isMathSourceError(reading)) {
       problems.push(`${prefix} carries a source that does not read: line ${reading.line + 1}, ${reading.message}`);
+      return;
+    }
+    const missing = unresolvedMathReferences(operation.source, [...present.values()]);
+    if (missing.length > 0) {
+      problems.push(`${prefix} names ${missing.join(", ")}, which this document does not carry`);
     }
   });
 

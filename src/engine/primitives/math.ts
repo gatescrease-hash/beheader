@@ -25,13 +25,14 @@
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
-import type { Address } from "../address.ts";
+import { formatAddress, isAddressError, parseAddress, type Address } from "../address.ts";
 import { hasMathMeasurer, type EvalContext } from "../eval-context.ts";
 import { isErrorValue, MATH_TYPE, slotKey, type GraphObject, type Slot, type Value } from "../graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "./geometry.ts";
 import type { MathProgram } from "../math/ast.ts";
-import { evaluateMathObject } from "../math/eval.ts";
+import { evaluateMathObject, mathAddressKey } from "../math/eval.ts";
 import { isMathNameError, resolveMathNames, type MathNames } from "../math/names.ts";
+import { MATH_REFERENCE_COMMAND } from "../math/lexer.ts";
 import { isMathParseError, parseMath } from "../math/parser.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
@@ -325,12 +326,36 @@ export const MATH_MEASURED_SLOTS: readonly DerivedSlotSchema[] = [
   },
 ];
 
+/**
+ * The addresses a source reads out of the document, which the schema declares
+ * so the graph carries an edge into every one of them. Reading them means
+ * parsing the source, which happens at edge derivation time and never during
+ * evaluation, so the slot set stays fixed for a whole pass.
+ *
+ * An address naming a slot that is gone is reported all the same. Leaving it
+ * out would drop the edge in silence, and deleting the object a source reads
+ * would then quietly break that source instead of being refused with the
+ * dependent named, which is the answer section 4 of the spec gives for every
+ * other slot.
+ */
+export function mathSourceReferences(object: GraphObject): readonly Address[] {
+  const reading = readMathNames(readMathSource(object));
+  return isMathSourceError(reading) ? [] : reading.names.references;
+}
+
+/** The addresses a parsed program reads, without going back to the text. */
+function collectProgramReferences(program: MathProgram): readonly Address[] {
+  const names = resolveMathNames(program);
+  return isMathNameError(names) ? [] : names.references;
+}
+
 function mathOutDependencies(): DerivedSlotDependencies {
   return {
     kind: "dynamic",
     resolve: (object) => [
       { objectId: object.id, path: MATH_SOURCE_PATH },
       ...(object.ports?.in ?? []).map((name): Address => ({ objectId: object.id, path: mathInPortPath(name) })),
+      ...mathSourceReferences(object),
     ],
   };
 }
@@ -368,7 +393,22 @@ function makeMathOutputCompute(exportName: string): DerivedSlotCompute {
       inputs[name] = value;
     }
 
-    const evaluation = evaluateMathObject(program, inputs);
+    const references: Record<string, number> = {};
+    for (const address of program.lines.length === 0 ? [] : collectProgramReferences(program)) {
+      const value = read(address);
+      if (value === undefined) {
+        return { error: "#REF", message: `math: ${mathAddressKey(address)} did not resolve to a value` };
+      }
+      if (isErrorValue(value)) {
+        return value;
+      }
+      if (typeof value !== "number") {
+        return { error: "#TYPE", message: `math: ${mathAddressKey(address)} holds something other than a number` };
+      }
+      references[mathAddressKey(address)] = value;
+    }
+
+    const evaluation = evaluateMathObject(program, inputs, references);
     const result = evaluation.exports[exportName];
     if (result === undefined) {
       return { error: "#MATH", message: `math: the source no longer defines "${exportName}"` };
@@ -461,4 +501,76 @@ export function applyMathSource(object: GraphObject, source: string, names: Math
   }
 
   return { ...object, ports: { in: [...names.inputs], out: [...names.exports] }, slots };
+}
+
+/** Finds every reference macro in a source, so both directions share one scan. */
+function rewriteReferences(source: string, rewrite: (inside: string) => string | undefined): string {
+  const opening = `\\${MATH_REFERENCE_COMMAND}{`;
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const start = source.indexOf(opening, at);
+    if (start < 0) {
+      return out + source.slice(at);
+    }
+    const close = source.indexOf("}", start + opening.length);
+    if (close < 0) {
+      return out + source.slice(at);
+    }
+    const inside = source.slice(start + opening.length, close);
+    const replaced = rewrite(inside) ?? inside;
+    out += source.slice(at, start) + opening + replaced + "}";
+    at = close + 1;
+  }
+}
+
+/**
+ * A source as an operator reads it, with each address showing the name its
+ * object carries now. The stored form holds an object id, so this is what turns
+ * the stored form back into the one a person typed, the same way a formula is
+ * shown.
+ */
+export function mathSourceWithNames(source: string, objects: readonly GraphObject[]): string {
+  return rewriteReferences(source, (inside) => {
+    const dot = inside.indexOf(".");
+    if (dot <= 0) {
+      return undefined;
+    }
+    const address: Address = { objectId: inside.slice(0, dot), path: inside.slice(dot + 1).split(".") };
+    const formatted = formatAddress(address, objects);
+    return isAddressError(formatted) ? undefined : formatted;
+  });
+}
+
+/**
+ * A source as it is stored, with each address holding the id of the object it
+ * names. An address that names nothing is left as the operator wrote it, so the
+ * mutation that writes the source can refuse it and say which one was wrong.
+ */
+export function mathSourceWithIds(source: string, objects: readonly GraphObject[]): string {
+  return rewriteReferences(source, (inside) => {
+    const parsed = parseAddress(inside, objects);
+    return isAddressError(parsed) ? undefined : `${parsed.objectId}.${parsed.path.join(".")}`;
+  });
+}
+
+/**
+ * The addresses a source names that the document does not carry. The mutation
+ * that writes a source reads this, so a reference to something absent is
+ * refused with the address in the message rather than left to fail later as an
+ * edge into a slot that is not there.
+ */
+export function unresolvedMathReferences(source: string, objects: readonly GraphObject[]): readonly string[] {
+  const reading = readMathNames(source);
+  if (isMathSourceError(reading)) {
+    return [];
+  }
+  const missing: string[] = [];
+  for (const address of reading.names.references) {
+    const object = objects.find((candidate) => candidate.id === address.objectId);
+    if (object === undefined || object.slots[slotKey(address.path)] === undefined) {
+      missing.push(mathAddressKey(address));
+    }
+  }
+  return missing;
 }

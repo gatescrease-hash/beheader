@@ -29,6 +29,7 @@
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
+import type { Address } from "../address.ts";
 import type { ErrorValue, Value } from "../graph/node.ts";
 import type { MathAst, MathProgram } from "./ast.ts";
 
@@ -53,6 +54,8 @@ export const MATH_MAX_CALL_DEPTH = 64;
 
 interface Environment {
   readonly values: ReadonlyMap<string, number>;
+  /** The value of each document address the source reads, keyed by address. */
+  readonly references: ReadonlyMap<string, number>;
   readonly functions: ReadonlyMap<string, { parameters: readonly string[]; body: MathAst }>;
   /** How many function calls enclose this expression. */
   readonly depth: number;
@@ -113,6 +116,15 @@ function evaluateNode(ast: MathAst, environment: Environment): number {
       const value = environment.values.get(ast.name);
       if (value === undefined) {
         fail(`"${ast.name}" has no value here`);
+      }
+      return value;
+    }
+
+    case "reference": {
+      const key = mathAddressKey(ast.address);
+      const value = environment.references.get(key);
+      if (value === undefined) {
+        fail(`the address "${key}" carries no number here`);
       }
       return value;
     }
@@ -241,6 +253,15 @@ function evaluateSeries(ast: MathAst & { readonly type: "series" }, environment:
   return checkFinite(total, `a ${ast.operation}`);
 }
 
+/**
+ * The one spelling of an address this language keys a value by. The graph has
+ * its own key for an edge, and this one stays inside the box, so a change to
+ * either leaves the other alone.
+ */
+export function mathAddressKey(address: Address): string {
+  return `${address.objectId}.${address.path.join(".")}`;
+}
+
 export interface MathEvaluation {
   /** The value of each name the source defines, keyed by that name. */
   readonly exports: Readonly<Record<string, Value>>;
@@ -256,8 +277,13 @@ export interface MathEvaluation {
  * above it reads a node type of the language, and nothing below it reads a
  * slot.
  */
-export function evaluateMathObject(program: MathProgram, inputs: Readonly<Record<string, number>>): MathEvaluation {
+export function evaluateMathObject(
+  program: MathProgram,
+  inputs: Readonly<Record<string, number>>,
+  references: Readonly<Record<string, number>> = {},
+): MathEvaluation {
   const values = new Map<string, number>(Object.entries(inputs));
+  const referenceValues = new Map<string, number>(Object.entries(references));
   const functions = new Map<string, { parameters: readonly string[]; body: MathAst }>();
   const exports: Record<string, Value> = {};
 
@@ -270,7 +296,7 @@ export function evaluateMathObject(program: MathProgram, inputs: Readonly<Record
       continue;
     }
     try {
-      const value = evaluateNode(line.value, { values, functions, depth: 0 });
+      const value = evaluateNode(line.value, { values, functions, references: referenceValues, depth: 0 });
       values.set(line.name, value);
       exports[line.name] = value;
     } catch (failure) {

@@ -47,6 +47,7 @@ import {
   MATH_FONT_SIZE,
   MATH_MEASURED_HEIGHT_PATH,
   MATH_MEASURED_WIDTH_PATH,
+  MATH_REFERENCE_COMMAND,
   MATH_SOURCE_PATH,
   readMathDisplayLatex,
   ORIGIN_X_PATH,
@@ -64,12 +65,25 @@ export interface MathMeasurementHost {
   getBoundingClientRect(): { readonly width: number; readonly height: number };
 }
 
+/**
+ * The macros this drawing knows beyond the ones MathLive ships.
+ *
+ * An address arrives wrapped in a command, because letters beside each other
+ * multiply in notation and a name of more than one letter cannot be written
+ * plainly. The command draws its argument as upright monospace, which reads as
+ * a piece of the document rather than as a product of letters, and a command
+ * MathLive has never heard of would draw in the red it keeps for a mistake.
+ */
+export const MATH_MACROS: Readonly<Record<string, string>> = {
+  [MATH_REFERENCE_COMMAND]: "\\mathtt{\\text{#1}}",
+};
+
 /** The markup of one run of notation, ready to put inside an element. */
 export function mathMarkup(latex: string): string {
   if (latex.trim() === "") {
     return "";
   }
-  return convertLatexToMarkup(latex);
+  return convertLatexToMarkup(latex, { macros: MATH_MACROS });
 }
 
 /**

@@ -40,6 +40,7 @@ export type MathTokenType =
   | "comma"
   | "underscore"
   | "bar"
+  | "reference"
   | "lbrace"
   | "rbrace"
   | "lparen"
@@ -82,6 +83,14 @@ const SPACING_CHARACTERS = new Set([",", ";", ":", "!", " "]);
 
 /** The commands that wrap a multi-letter name. */
 const NAME_COMMANDS = new Set(["operatorname", "mathrm", "text", "mathit"]);
+
+/**
+ * The command that wraps an address of the document. Its argument is taken
+ * whole, so the dots and the low lines in an address reach the parser as one
+ * token rather than as a product of letters, which is what juxtaposition would
+ * otherwise make of them.
+ */
+export const MATH_REFERENCE_COMMAND = "gpref";
 
 const SYMBOL_TOKENS: Readonly<Record<string, MathTokenType>> = {
   "+": "plus",
@@ -157,6 +166,33 @@ function readSubscript(source: string, from: number): { suffix: string; next: nu
   return { suffix: single, next: at + 1 };
 }
 
+/**
+ * Reads the braced argument of the address command. It takes every character
+ * an address can carry, the dot included, and stops at the closing brace.
+ */
+function readBracedAddress(source: string, from: number): { text: string; next: number } | MathLexError {
+  if (source[from] !== "{") {
+    return failure("an address needs a braced address after it", from);
+  }
+  let at = from + 1;
+  let text = "";
+  while (at < source.length && source[at] !== "}") {
+    const character = source[at] as string;
+    if (!isNameCharacter(character) && character !== "_" && character !== ".") {
+      return failure(`an address holds letters, digits, underscores and dots, and this one holds "${character}"`, at);
+    }
+    text += character;
+    at += 1;
+  }
+  if (source[at] !== "}") {
+    return failure("an address needs a closing brace", from);
+  }
+  if (text === "") {
+    return failure("an address with nothing in it has no meaning", from);
+  }
+  return { text, next: at + 1 };
+}
+
 /** Reads the braced argument of \operatorname or \mathrm as one name. */
 function readBracedName(source: string, from: number): { name: string; next: number } | MathLexError {
   if (source[from] !== "{") {
@@ -211,6 +247,15 @@ export function tokenizeMath(source: string): readonly MathToken[] | MathLexErro
       const word = source.slice(at + 1, end);
       if (word === "") {
         return failure("a backslash with no command after it has no meaning", at);
+      }
+      if (word === MATH_REFERENCE_COMMAND) {
+        const braced = readBracedAddress(source, end);
+        if ("error" in braced) {
+          return braced;
+        }
+        tokens.push(token("reference", source.slice(at, braced.next), at, 0, braced.text));
+        at = braced.next;
+        continue;
       }
       if (NAME_COMMANDS.has(word)) {
         const braced = readBracedName(source, end);
@@ -269,7 +314,7 @@ export function tokenizeMath(source: string): readonly MathToken[] | MathLexErro
 
     if (character === ".") {
       return failure(
-        "a dotted address inside math source is not read yet, so an input port linked to that address carries the value instead",
+        `a bare dotted address has no meaning in notation, because letters beside each other multiply. Write \\${MATH_REFERENCE_COMMAND}{...} around it`,
         at,
       );
     }

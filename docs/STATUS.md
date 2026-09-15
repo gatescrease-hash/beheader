@@ -12,7 +12,7 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2582 pass, 0 skip, across 51 test files. |
+| Tests | 2598 pass, 0 skip, across 51 test files. |
 | Spec | Built, except the in-text math of section 12 and its solving, and the parts section 16 postpones. |
 
 ### How to run it
@@ -20,7 +20,7 @@ each file exists. `TODO.md` holds the work that is open.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2582 tests
+npm test             # 2598 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0

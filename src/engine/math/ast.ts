@@ -22,6 +22,7 @@
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
+import type { Address } from "../address.ts";
 
 export interface MathNumberNode {
   readonly type: "number";
@@ -36,6 +37,18 @@ export interface MathNumberNode {
 export interface MathNameNode {
   readonly type: "name";
   readonly name: string;
+}
+
+/**
+ * A slot of the document, read from notation. Mathematical notation multiplies
+ * letters that sit beside each other, so a name of more than one letter cannot
+ * be written plainly there, and an address arrives wrapped in a macro instead.
+ * The node holds the resolved address, so what it names survives a rename of
+ * the object the same way a formula does.
+ */
+export interface MathReferenceNode {
+  readonly type: "reference";
+  readonly address: Address;
 }
 
 export const MATH_BINARY_OPERATORS = ["+", "-", "*", "/", "^"] as const;
@@ -93,6 +106,7 @@ export interface MathSeriesNode {
 export type MathAst =
   | MathNumberNode
   | MathNameNode
+  | MathReferenceNode
   | MathBinaryNode
   | MathNegateNode
   | MathCallNode
@@ -154,6 +168,7 @@ export function mathAstDepth(ast: MathAst): number {
   switch (ast.type) {
     case "number":
     case "name":
+    case "reference":
       return 1;
     case "negate":
       return 1 + mathAstDepth(ast.operand);
