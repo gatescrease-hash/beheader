@@ -187,6 +187,53 @@ describe("classifyCommandLine", () => {
   it("stops marking a name the moment the document stops carrying it", () => {
     expect(marked("delete circle_1", [])).toEqual(["command:delete"]);
   });
+
+  const TABLE: GraphObject = {
+    id: "obj_9",
+    name: "table_1",
+    type: "table",
+    slots: {
+      "origin.x": { kind: "literal", value: 0 },
+      rows: { kind: "literal", value: 2 },
+      cols: { kind: "literal", value: 2 },
+      "cells.A1": { kind: "literal", value: 0 },
+      "cells.B1": { kind: "literal", value: 0 },
+      "cells.A2": { kind: "literal", value: 0 },
+      "cells.B2": { kind: "literal", value: 0 },
+    },
+  };
+  const WITH_TABLE: readonly GraphObject[] = [...DOCUMENT, TABLE];
+
+  it("marks an address inside the formula half of a set", () => {
+    expect(marked("set circle_2.radius = circle_1.radius", WITH_TABLE)).toEqual([
+      "command:set",
+      "address:circle_2.radius",
+      "address:circle_1.radius",
+    ]);
+  });
+
+  it("marks each address of a longer formula", () => {
+    const line = "set circle_2.radius = circle_1.radius + table_1.A1";
+    expect(marked(line, WITH_TABLE)).toEqual([
+      "command:set",
+      "address:circle_2.radius",
+      "address:circle_1.radius",
+      "address:table_1.A1",
+    ]);
+  });
+
+  it("leaves a misspelt name in a formula unmarked", () => {
+    expect(marked("set circle_2.radius = cirlce_1.radius", WITH_TABLE)).toEqual(["command:set", "address:circle_2.radius"]);
+  });
+
+  it("marks nothing in a value that is a literal rather than a formula", () => {
+    expect(marked("set circle_2.radius circle_1.radius", WITH_TABLE)).toEqual(["command:set", "address:circle_2.radius"]);
+  });
+
+  it("marks a bare cell in a formula only where the slot written is itself a cell", () => {
+    expect(marked("set table_1.A1 = B2", WITH_TABLE)).toEqual(["command:set", "address:table_1.A1", "address:B2"]);
+    expect(marked("set circle_1.radius = B2", WITH_TABLE)).toEqual(["command:set", "address:circle_1.radius"]);
+  });
 });
 
 describe("completeInFormulaField", () => {

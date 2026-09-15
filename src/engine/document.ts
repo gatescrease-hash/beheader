@@ -289,9 +289,13 @@ function reconstructPorts(raw: unknown, objectName: string): PortsReconstruction
   if (!isPlainObject(raw) || !Array.isArray(raw.in) || !Array.isArray(raw.out)) {
     return { ok: false, message: `${objectName}.ports must be an object with array "in" and "out" fields` };
   }
+  if (raw.seed !== undefined && !Array.isArray(raw.seed)) {
+    return { ok: false, message: `${objectName}.ports.seed must be an array of names where it is present` };
+  }
   const families: readonly (readonly [string, readonly unknown[]])[] = [
     ["in", raw.in],
     ["out", raw.out],
+    ...(raw.seed === undefined ? [] : ([["seed", raw.seed]] as const)),
   ];
   for (const [family, names] of families) {
     const seen = new Set<string>();
@@ -305,7 +309,14 @@ function reconstructPorts(raw: unknown, objectName: string): PortsReconstruction
       seen.add(name);
     }
   }
-  return { ok: true, ports: { in: raw.in as readonly string[], out: raw.out as readonly string[] } };
+  return {
+    ok: true,
+    ports: {
+      in: raw.in as readonly string[],
+      out: raw.out as readonly string[],
+      ...(raw.seed === undefined ? {} : { seed: raw.seed as readonly string[] }),
+    },
+  };
 }
 
 function withSchemaDerivedSlots(object: GraphObject): Record<string, Slot> {

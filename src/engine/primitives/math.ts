@@ -6,10 +6,11 @@
  * every export.
  *
  * A math object holds its equations in one literal slot named source. The
- * names that source defines become derived slots under out, and the free names
- * it reads become slots under in. Both lists are held in the ports of the
- * object rather than worked out here, because ports change only through a
- * mutation. Evaluation therefore leaves the slot set alone: this file reads
+ * names that source defines become derived slots under out, the free names it
+ * reads become slots under in, and each unknown it solves for becomes a slot
+ * under seed, which is where the search for that unknown starts. All three
+ * lists are held in the ports of the object rather than worked out here,
+ * because ports change only through a mutation. Evaluation therefore leaves the slot set alone: this file reads
  * ports to say which slots exist, and reads source only to say what they hold.
  *
  * Every export parses the whole source and evaluates the whole program, so a
@@ -25,13 +26,14 @@
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
-import type { Address } from "../address.ts";
+import { formatAddress, isAddressError, parseAddress, type Address } from "../address.ts";
 import { hasMathMeasurer, type EvalContext } from "../eval-context.ts";
 import { isErrorValue, MATH_TYPE, slotKey, type GraphObject, type Slot, type Value } from "../graph/node.ts";
 import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "./geometry.ts";
-import type { MathProgram } from "../math/ast.ts";
-import { evaluateMathObject } from "../math/eval.ts";
+import { mathExportLines, type MathProgram } from "../math/ast.ts";
+import { evaluateMathObject, mathAddressKey } from "../math/eval.ts";
 import { isMathNameError, resolveMathNames, type MathNames } from "../math/names.ts";
+import { MATH_REFERENCE_COMMAND } from "../math/lexer.ts";
 import { isMathParseError, parseMath } from "../math/parser.ts";
 import type { DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema } from "./schema.ts";
 
@@ -72,9 +74,24 @@ export function mathOutPortPath(name: string): readonly string[] {
   return ["out", name];
 }
 
+export function mathSeedPath(name: string): readonly string[] {
+  return ["seed", name];
+}
+
 export function enumerateMathInPaths(object: GraphObject): readonly (readonly string[])[] {
   return (object.ports?.in ?? []).map(mathInPortPath);
 }
+
+export function enumerateMathSeedPaths(object: GraphObject): readonly (readonly string[])[] {
+  return (object.ports?.seed ?? []).map(mathSeedPath);
+}
+
+/**
+ * The value a seed takes when a source first solves for the name it belongs
+ * to. Zero is where a search starts before an operator moves it, and it is the
+ * root nearest the origin that an equation with several of them gives first.
+ */
+export const MATH_DEFAULT_SEED: Value = 0;
 
 /**
  * The source text of an object, or an empty string where the slot is missing
@@ -170,9 +187,14 @@ export const MATH_VALUE_DIGITS = 6;
  * render layer. Two of them would drift, and a box measured from one string
  * with another string drawn into it is a box of the wrong size.
  *
- * The value form shows one line for each name the source defines. The both
- * form appends the result to the line that produced it, which reads the way an
- * equation does: the working, then an equals sign, then the answer.
+ * The value form shows one line for each name the source defines, the unknown
+ * of an implicit line among them, because an operator who solves for a root
+ * reads that root the same way as any other answer. The both form appends the
+ * result to the line that produced it, which reads the way an equation does:
+ * the working, then an equals sign, then the answer. An implicit line already
+ * carries an equals sign of its own, so its result arrives after an arrow and
+ * with the name of the unknown in front of it, which keeps the answer from
+ * reading as a third side of the equation.
  */
 export function mathDisplayLatex(
   source: string,
@@ -185,25 +207,26 @@ export function mathDisplayLatex(
   }
 
   const sourceLines = source.split("\n");
-  const definitions = program.lines.filter((line) => line.type === "definition");
+  const exported = mathExportLines(program);
 
   if (display === "value") {
-    if (definitions.length === 0) {
+    if (exported.length === 0) {
       return source;
     }
-    return definitions
+    return exported
       .map((line) => `${nameAsLatex(line.name)}=${valueAsLatex(exports.get(line.name))}`)
       .join("\\\\");
   }
 
   const resultByLine = new Map<number, string>();
-  for (const line of definitions) {
-    resultByLine.set(line.sourceLine, valueAsLatex(exports.get(line.name)));
+  for (const line of exported) {
+    const result = valueAsLatex(exports.get(line.name));
+    resultByLine.set(line.sourceLine, line.kind === "solve" ? `\\Rightarrow ${nameAsLatex(line.name)}=${result}` : `=${result}`);
   }
   return sourceLines
     .map((text, index) => {
       const result = resultByLine.get(index);
-      return result === undefined ? text : `${text}=${result}`;
+      return result === undefined ? text : `${text}${result}`;
     })
     .filter((text) => text.trim() !== "")
     .join("\\\\");
@@ -325,12 +348,44 @@ export const MATH_MEASURED_SLOTS: readonly DerivedSlotSchema[] = [
   },
 ];
 
+/**
+ * The addresses a source reads out of the document, which the schema declares
+ * so the graph carries an edge into every one of them. Reading them means
+ * parsing the source, which happens at edge derivation time and never during
+ * evaluation, so the slot set stays fixed for a whole pass.
+ *
+ * An address naming a slot that is gone is reported all the same. Leaving it
+ * out would drop the edge in silence, and deleting the object a source reads
+ * would then quietly break that source instead of being refused with the
+ * dependent named, which is the answer section 4 of the spec gives for every
+ * other slot.
+ */
+export function mathSourceReferences(object: GraphObject): readonly Address[] {
+  const reading = readMathNames(readMathSource(object));
+  return isMathSourceError(reading) ? [] : reading.names.references;
+}
+
+/** The addresses a parsed program reads, without going back to the text. */
+function collectProgramReferences(program: MathProgram): readonly Address[] {
+  const names = resolveMathNames(program);
+  return isMathNameError(names) ? [] : names.references;
+}
+
+/**
+ * What an export reads: the source, every input port, every seed, and every
+ * address the source names. An export depends on all of them rather than on
+ * the ones its own line touches, because a line reads the lines above it and
+ * working out which of those reach a given export would be a second dependency
+ * pass inside the box.
+ */
 function mathOutDependencies(): DerivedSlotDependencies {
   return {
     kind: "dynamic",
     resolve: (object) => [
       { objectId: object.id, path: MATH_SOURCE_PATH },
       ...(object.ports?.in ?? []).map((name): Address => ({ objectId: object.id, path: mathInPortPath(name) })),
+      ...(object.ports?.seed ?? []).map((name): Address => ({ objectId: object.id, path: mathSeedPath(name) })),
+      ...mathSourceReferences(object),
     ],
   };
 }
@@ -368,7 +423,37 @@ function makeMathOutputCompute(exportName: string): DerivedSlotCompute {
       inputs[name] = value;
     }
 
-    const evaluation = evaluateMathObject(program, inputs);
+    const references: Record<string, number> = {};
+    for (const address of program.lines.length === 0 ? [] : collectProgramReferences(program)) {
+      const value = read(address);
+      if (value === undefined) {
+        return { error: "#REF", message: `math: ${mathAddressKey(address)} did not resolve to a value` };
+      }
+      if (isErrorValue(value)) {
+        return value;
+      }
+      if (typeof value !== "number") {
+        return { error: "#TYPE", message: `math: ${mathAddressKey(address)} holds something other than a number` };
+      }
+      references[mathAddressKey(address)] = value;
+    }
+
+    const seeds: Record<string, number> = {};
+    for (const name of object.ports?.seed ?? []) {
+      const value = read({ objectId: object.id, path: mathSeedPath(name) });
+      if (value === undefined) {
+        return { error: "#REF", message: `math: seed.${name} did not resolve to a value` };
+      }
+      if (isErrorValue(value)) {
+        return value;
+      }
+      if (typeof value !== "number") {
+        return { error: "#TYPE", message: `math: seed.${name} holds something other than a number` };
+      }
+      seeds[name] = value;
+    }
+
+    const evaluation = evaluateMathObject(program, inputs, references, seeds);
     const result = evaluation.exports[exportName];
     if (result === undefined) {
       return { error: "#MATH", message: `math: the source no longer defines "${exportName}"` };
@@ -416,7 +501,9 @@ export function createMathObject(id: string, name: string, originX: number, orig
  *
  * A port that survives the edit keeps the slot it had, so an operator who
  * linked in.speed to a table cell and then edits an unrelated line does not
- * lose that link. A port the new source stops reading loses its slot, and an
+ * lose that link. A seed keeps its value the same way, because an operator who
+ * moved a seed to pick a root has said which root the object returns and a
+ * later edit elsewhere in the source is not a change of mind about that. A port the new source stops reading loses its slot, and an
  * export it stops defining loses its slot as well. An outside formula that
  * read that export then fails the integrity check, rather than reading a value
  * that nothing computes.
@@ -432,7 +519,7 @@ export function applyMathSource(object: GraphObject, source: string, names: Math
     if (slot === undefined) {
       continue;
     }
-    const isPortSlot = key.startsWith("in.") || key.startsWith("out.");
+    const isPortSlot = key.startsWith("in.") || key.startsWith("out.") || key.startsWith("seed.");
     if (!isPortSlot && key !== slotKey(MATH_SOURCE_PATH)) {
       slots[key] = slot;
     }
@@ -454,11 +541,93 @@ export function applyMathSource(object: GraphObject, source: string, names: Math
     slots[key] = existing ?? { kind: "literal", value: MATH_DEFAULT_INPUT };
   }
 
+  for (const name of names.seeds) {
+    const key = slotKey(mathSeedPath(name));
+    const existing = object.slots[key];
+    slots[key] = existing ?? { kind: "literal", value: MATH_DEFAULT_SEED };
+  }
+
   for (const name of names.exports) {
     const key = slotKey(mathOutPortPath(name));
     const existing = object.slots[key];
     slots[key] = existing?.kind === "derived" ? existing : { kind: "derived", value: null };
   }
 
-  return { ...object, ports: { in: [...names.inputs], out: [...names.exports] }, slots };
+  // The seed family is left off a source that solves for nothing, so an object
+  // with no implicit line in it saves the same bytes it saved before a solve
+  // was a thing the language could do.
+  const seed = names.seeds.length === 0 ? {} : { seed: [...names.seeds] };
+  return { ...object, ports: { in: [...names.inputs], out: [...names.exports], ...seed }, slots };
+}
+
+/** Finds every reference macro in a source, so both directions share one scan. */
+function rewriteReferences(source: string, rewrite: (inside: string) => string | undefined): string {
+  const opening = `\\${MATH_REFERENCE_COMMAND}{`;
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const start = source.indexOf(opening, at);
+    if (start < 0) {
+      return out + source.slice(at);
+    }
+    const close = source.indexOf("}", start + opening.length);
+    if (close < 0) {
+      return out + source.slice(at);
+    }
+    const inside = source.slice(start + opening.length, close);
+    const replaced = rewrite(inside) ?? inside;
+    out += source.slice(at, start) + opening + replaced + "}";
+    at = close + 1;
+  }
+}
+
+/**
+ * A source as an operator reads it, with each address showing the name its
+ * object carries now. The stored form holds an object id, so this is what turns
+ * the stored form back into the one a person typed, the same way a formula is
+ * shown.
+ */
+export function mathSourceWithNames(source: string, objects: readonly GraphObject[]): string {
+  return rewriteReferences(source, (inside) => {
+    const dot = inside.indexOf(".");
+    if (dot <= 0) {
+      return undefined;
+    }
+    const address: Address = { objectId: inside.slice(0, dot), path: inside.slice(dot + 1).split(".") };
+    const formatted = formatAddress(address, objects);
+    return isAddressError(formatted) ? undefined : formatted;
+  });
+}
+
+/**
+ * A source as it is stored, with each address holding the id of the object it
+ * names. An address that names nothing is left as the operator wrote it, so the
+ * mutation that writes the source can refuse it and say which one was wrong.
+ */
+export function mathSourceWithIds(source: string, objects: readonly GraphObject[]): string {
+  return rewriteReferences(source, (inside) => {
+    const parsed = parseAddress(inside, objects);
+    return isAddressError(parsed) ? undefined : `${parsed.objectId}.${parsed.path.join(".")}`;
+  });
+}
+
+/**
+ * The addresses a source names that the document does not carry. The mutation
+ * that writes a source reads this, so a reference to something absent is
+ * refused with the address in the message rather than left to fail later as an
+ * edge into a slot that is not there.
+ */
+export function unresolvedMathReferences(source: string, objects: readonly GraphObject[]): readonly string[] {
+  const reading = readMathNames(source);
+  if (isMathSourceError(reading)) {
+    return [];
+  }
+  const missing: string[] = [];
+  for (const address of reading.names.references) {
+    const object = objects.find((candidate) => candidate.id === address.objectId);
+    if (object === undefined || object.slots[slotKey(address.path)] === undefined) {
+      missing.push(mathAddressKey(address));
+    }
+  }
+  return missing;
 }

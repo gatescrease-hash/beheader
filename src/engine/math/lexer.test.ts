@@ -50,8 +50,34 @@ describe("tokenizeMath", () => {
     expect(names("\\int_2")).toEqual(["command:int", "underscore:_", "number:2"]);
   });
 
-  it("reports a dotted address as unread, and says what carries the value instead", () => {
-    expect(failure("table_x.A1")).toContain("input port");
+  it("reports a bare dotted address, and names the command that wraps one", () => {
+    expect(failure("table_x.A1")).toContain("gpref");
+  });
+
+  it("reads an address command as one token carrying the whole address", () => {
+    expect(names("\\gpref{obj_3.cells.A1}")).toEqual(["reference:obj_3.cells.A1"]);
+  });
+
+  it("keeps an address beside other notation as its own token", () => {
+    expect(names("y=\\gpref{obj_3.radius}+1")).toEqual([
+      "identifier:y",
+      "equals:=",
+      "reference:obj_3.radius",
+      "plus:+",
+      "number:1",
+    ]);
+  });
+
+  it("refuses a character an address cannot carry", () => {
+    expect(failure("\\gpref{obj_3.a b}")).toContain("dots");
+  });
+
+  it("refuses an address that never closes", () => {
+    expect(failure("\\gpref{obj_3.a")).toContain("closing brace");
+  });
+
+  it("refuses an address with nothing in it", () => {
+    expect(failure("\\gpref{}")).toContain("nothing in it");
   });
 
   it("reports a character it has no meaning for", () => {
@@ -66,5 +92,23 @@ describe("tokenizeMath", () => {
     const tokens = tokenizeMath("1+1");
     if (isMathLexError(tokens)) throw new Error(tokens.message);
     expect(tokens[tokens.length - 1]?.type).toBe("eof");
+  });
+});
+
+describe("tokenizeMath — the solve command", () => {
+  it("reads the braced unknown as one token of its own", () => {
+    expect(names("\\solve{x}x=1")).toEqual(["solve:x", "identifier:x", "equals:=", "number:1"]);
+  });
+
+  it("reads an unknown written with a low line, which is how a port name is spelled", () => {
+    expect(names("\\solve{x_ans}x_ans=1")[0]).toBe("solve:x_ans");
+  });
+
+  it("refuses a solve command with no braced name after it", () => {
+    expect(failure("\\solve x=1")).toContain("braced name");
+  });
+
+  it("refuses a solve command with nothing between its braces", () => {
+    expect(failure("\\solve{}x=1")).toContain("nothing in it");
   });
 });

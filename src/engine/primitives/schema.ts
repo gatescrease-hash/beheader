@@ -63,6 +63,7 @@ import {
 import {
   enumerateMathInPaths,
   enumerateMathOutDerivedSlots,
+  enumerateMathSeedPaths,
   MATH_DISPLAY_PATH,
   MATH_DISPLAY_VALUES,
   MATH_MEASURED_SLOTS,
@@ -457,6 +458,7 @@ const MATH_SCHEMA: ObjectSchema = {
   nonDerivedSlotPaths: [
     { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, MATH_SOURCE_PATH, MATH_DISPLAY_PATH] },
     { kind: "dynamic", enumerate: enumerateMathInPaths },
+    { kind: "dynamic", enumerate: enumerateMathSeedPaths },
   ],
   derivedSlots: [
     { kind: "static", slots: MATH_MEASURED_SLOTS },

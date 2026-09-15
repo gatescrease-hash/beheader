@@ -18,7 +18,7 @@
  * that line for nothing else. Nothing in the engine imports this file, so a
  * GPU renderer can replace the whole layer later.
  */
-import type { TextMeasurement, TextMeasurer, TextStyle } from "../engine/index.ts";
+import type { MathStyle, TextMeasurement, TextMeasurer, TextStyle } from "../engine/index.ts";
 import { LIST_BULLET, parseMarkdownLite, verbatimLines, type MarkdownLine, type MarkdownRun } from "./markdown.ts";
 
 export interface MeasurementContext {
@@ -36,6 +36,12 @@ export interface LaidOutRun {
   readonly font: string;
   readonly x: number;
   readonly width: number;
+  /**
+   * The notation of a run that holds some. Such a run arrives with no text to
+   * paint, and the caller puts an element over the box it names instead.
+   */
+  readonly latex?: string;
+  readonly height?: number;
 }
 
 export interface LaidOutLine {
@@ -57,6 +63,12 @@ export interface TextLayoutRequest {
   readonly wrapWidth: number | undefined;
   readonly markup: boolean;
   readonly measureRun: (text: string, font: string) => number;
+  /**
+   * The size a run of notation takes. A layout given none lays a math line out
+   * as an empty line of ordinary height, which is what a measurer written
+   * before notation existed does.
+   */
+  readonly measureMath?: (latex: string, fontSize: number) => TextMeasurement;
 }
 
 const HEADING_FONT_SCALES: readonly number[] = [2, 1.5, 1.17];
@@ -66,6 +78,10 @@ const CODE_FONT_FAMILY = "monospace";
 interface Piece {
   readonly text: string;
   readonly font: string;
+  /** The notation of a piece that holds some, with the size it measured to. */
+  readonly latex?: string;
+  readonly mathWidth?: number;
+  readonly mathHeight?: number;
 }
 
 function finitePositive(value: number): number | undefined {
@@ -136,10 +152,30 @@ function hangingIndent(
   return wrapWidth !== undefined && indent < wrapWidth ? indent : 0;
 }
 
-function chunksOf(line: MarkdownLine, family: string, fontSize: number): Piece[][] {
+function chunksOf(
+  line: MarkdownLine,
+  family: string,
+  fontSize: number,
+  measureMath: ((latex: string, fontSize: number) => TextMeasurement) | undefined,
+): Piece[][] {
   const chunks: Piece[][] = [];
   for (const run of line.runs) {
     const font = runFont(run, line, family, fontSize);
+    if (run.latex !== undefined) {
+      // Notation is one chunk of its own, so wrapping moves it whole and never
+      // splits it between two lines the way it splits a long word.
+      const measured = measureMath?.(run.latex, fontSize);
+      chunks.push([
+        {
+          text: "",
+          font,
+          latex: run.latex,
+          mathWidth: finiteOrZero(measured?.width ?? 0),
+          mathHeight: finiteOrZero(measured?.height ?? 0),
+        },
+      ]);
+      continue;
+    }
     for (const chunkText of wrapChunks(run.text)) {
       const previous = chunks[chunks.length - 1];
       const lastPiece = previous?.[previous.length - 1];
@@ -158,11 +194,21 @@ function mergeRuns(pieces: readonly Piece[], measureRun: (text: string, font: st
   let x = 0;
   let index = 0;
   while (index < pieces.length) {
-    const font = pieces[index]?.font ?? "";
+    const first = pieces[index];
+    if (first?.latex !== undefined) {
+      // Notation never joins the text beside it, because it is drawn by
+      // something else and its width came from a measurement of its own.
+      const width = first.mathWidth ?? 0;
+      runs.push({ text: "", font: first.font, x, width, latex: first.latex, height: first.mathHeight ?? 0 });
+      x += width;
+      index += 1;
+      continue;
+    }
+    const font = first?.font ?? "";
     let text = "";
     while (index < pieces.length) {
       const piece = pieces[index];
-      if (piece === undefined || piece.font !== font) {
+      if (piece === undefined || piece.font !== font || piece.latex !== undefined) {
         break;
       }
       text += piece.text;
@@ -236,7 +282,7 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
   for (const sourceLine of sourceLines) {
     const scale = headingScale(sourceLine);
     const height = lineHeight * scale;
-    const chunks = chunksOf(sourceLine, request.style.font, fontSize * scale);
+    const chunks = chunksOf(sourceLine, request.style.font, fontSize * scale, request.measureMath);
     const indent = hangingIndent(sourceLine, request.style.font, fontSize * scale, wrapWidth, request.measureRun);
     const wrapped = wrapWidth === undefined ? [chunks.flat()] : wrapLine(chunks, wrapWidth, indent, request.measureRun);
     let continuation = false;
@@ -245,18 +291,24 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
       const offset = continuation ? indent : 0;
       const runs = offset === 0 ? merged.runs : merged.runs.map((run) => ({ ...run, x: run.x + offset }));
       const width = merged.width + offset;
-      lines.push({ runs, top, width, height });
+      const tallest = runs.reduce((so_far, run) => Math.max(so_far, run.height ?? 0), 0);
+      const lineHeightHere = Math.max(height, tallest);
+      lines.push({ runs, top, width, height: lineHeightHere });
       if (width > widest) {
         widest = width;
       }
-      top += height;
+      top += lineHeightHere;
       continuation = true;
     }
   }
   return { lines, width: widest, height: top };
 }
 
-function createMeasurer(ctx: MeasurementContext, markup: boolean): TextMeasurer {
+function createMeasurer(
+  ctx: MeasurementContext,
+  markup: boolean,
+  measureMath?: (latex: string, fontSize: number) => TextMeasurement,
+): TextMeasurer {
   const measureRun = (text: string, font: string): number => {
     ctx.font = font;
     return finiteOrZero(ctx.measureText(text).width);
@@ -266,9 +318,10 @@ function createMeasurer(ctx: MeasurementContext, markup: boolean): TextMeasurer 
       if (finitePositive(style.fontSize) === undefined || text === "") {
         return { width: 0, height: 0 };
       }
-      const layout = layOutText({ text, style, wrapWidth: maxWidth, markup, measureRun });
+      const layout = layOutText({ text, style, wrapWidth: maxWidth, markup, measureRun, measureMath });
       return { width: finiteOrZero(layout.width), height: finiteOrZero(layout.height) };
     },
+    ...(measureMath === undefined ? {} : { measureMath: (latex: string, mathStyle: MathStyle) => measureMath(latex, mathStyle.fontSize) }),
   };
 }
 
@@ -276,8 +329,11 @@ function createMeasurer(ctx: MeasurementContext, markup: boolean): TextMeasurer 
  * This is the measurer for the engine. It honours markup, so bold text
  * measures wider.
  */
-export function createCanvas2dTextMeasurer(ctx: MeasurementContext): TextMeasurer {
-  return createMeasurer(ctx, true);
+export function createCanvas2dTextMeasurer(
+  ctx: MeasurementContext,
+  measureMath?: (latex: string, fontSize: number) => TextMeasurement,
+): TextMeasurer {
+  return createMeasurer(ctx, true, measureMath);
 }
 
 /**

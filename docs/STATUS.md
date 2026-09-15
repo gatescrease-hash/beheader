@@ -12,15 +12,15 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2577 pass, 0 skip, across 51 test files. |
-| Spec | Built, except the in-text math of section 12 and its solving, and the parts section 16 postpones. |
+| Tests | 2679 pass, 0 skip, across 51 test files. |
+| Spec | Built, except section 13, which nothing implements yet, and the parts section 17 postpones. |
 
 ### How to run it
 
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2577 tests
+npm test             # 2679 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -120,12 +120,12 @@ tables, and other suites drive them anyway.
 | `primitives/table.ts` | Cell addressing, range expansion, and the row and column resize. |
 | `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
 | `primitives/image.ts` | Slot path constants for the image type. |
-| `primitives/math.ts` | The slots a math object carries, and the compute function behind each export. |
+| `primitives/math.ts` | The slots a math object carries, the seeds a solve starts from, and the compute function behind each export. |
 | `math/ast.ts` | The node types of the math language, and the depth check over them. |
 | `math/lexer.ts` | LaTeX to tokens, including the subscript and the commands that are dropped. |
-| `math/parser.ts` | Tokens to a program, with implicit multiplication and the binding forms. |
-| `math/names.ts` | Which names are bound, which are defined, and which become input ports. |
-| `math/eval.ts` | A program and its inputs to a value for each export. |
+| `math/parser.ts` | Tokens to a program, with implicit multiplication, the binding forms and the implicit line. |
+| `math/names.ts` | Which names are bound, which are defined, which are solved for, and which become input ports. |
+| `math/eval.ts` | A program and its inputs to a value for each export, the search for a root included. |
 | `script/stub.ts` | The script node and its ports. |
 | `mutation.ts` | The one channel for state change, and every operation it accepts. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
@@ -144,10 +144,10 @@ tables, and other suites drive them anyway.
 | `handles.ts` | The resize grabbers, and the box maths behind a resize. |
 | `menu.ts` | The right press menu, and the command line each entry writes. |
 | `grips.ts` | The grabbers on a selected path, and the part each one names. |
-| `markdown.ts` | The small markdown parser behind a text object. |
+| `markdown.ts` | The small markdown parser behind a text object, and the line that holds notation. |
 | `measure.ts` | The two Canvas2D measurers, and the line breaker. |
 | `math.ts` | Notation to markup, the size it takes, and where the element holding it goes. |
-| `renderer.ts` | The painter, and the three passes it makes over every frame. |
+| `renderer.ts` | The painter, the three passes it makes, and where notation inside text landed. |
 | `images.ts` | The decoded bitmap cache. |
 | `editor.ts` | Where the in place editor goes, and how it looks. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |
@@ -225,18 +225,44 @@ the code it constrains.
    `main.ts` empties the measurement cache of `render/math.ts` and evaluates
    again whenever a font finishes loading, which is the only thing that repairs
    the sizes of a document already on screen.
-14. **The command line and the layer that marks it agree on every property
-   that moves a glyph.** `index.html` sets the font, the padding, the border
-   and the white space rule on both together, and `main.ts` copies the sideways
-   scroll of one onto the other on every paint. A disagreement slides each mark
-   away from the letters it belongs to, by more the further along the line it
-   sits. The layer draws its own text in no colour at all, so a disagreement
-   shows as a mark in the wrong place rather than as two sets of letters, which
-   is the difference between a fault a reader notices and one that passes for
-   a smudge.
+
+   That repair runs for every object rather than for the math objects alone. A
+   run of notation inside a text object measures the same way and goes just as
+   wrong, and it is worse there: the words after it are written over, because
+   the layout left a gap of the smaller size. A guard that named the math type
+   left that case behind once already.
+14. **A field and the layer that marks it agree on every property that moves a
+   glyph, the sideways scroll included.** Three fields carry a layer: the
+   command line, a table cell being edited, and a panel row. `index.html` sets
+   the font, the padding, the border and the white space rule on each pair
+   together, the cell layer copies its geometry from the field rather than
+   working it out again, and every one of the three copies the scroll of its
+   field on each repaint.
+
+   A disagreement about a size slides each mark away from the letters it
+   belongs to, by more the further along the line it sits. A disagreement about
+   the scroll is worse and easier to miss: the boxes still measure the same, so
+   a check of their geometry passes while each mark sits under whichever
+   letters happen to be in view. A cell is narrow enough that any formula
+   scrolls it, which is where that was found.
+
+   Each layer draws its own text in no colour at all, so either kind of
+   disagreement shows as a mark in the wrong place rather than as two sets of
+   letters, which is the difference between a fault a reader notices and one
+   that passes for a smudge.
 15. **The operator cannot see what a test can see.** A live look on screen
    comes before anyone calls an operator surface done. It has found what the
    suite could not on every surface built so far.
+16. **A MathLive field takes its macros after it is in the page.** Both the
+   read and the write of the `macros` property throw on a field that is not
+   mounted, so a field configured on the way to the page throws from inside the
+   repaint that built it and never arrives. `main.ts` appends the field first
+   and gives it the macros of this program after, which is the order that keeps
+   the editable form drawing an address and a solve command the way the static
+   form draws them.
+
+   The suite cannot reach this. The field is a custom element from a package,
+   and the throw happens where a real browser mounts it.
 
 ---
 

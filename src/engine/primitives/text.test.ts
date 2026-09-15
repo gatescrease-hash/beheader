@@ -745,3 +745,43 @@ describe("computeMeasuredWidth — the measuredWidth compute, the other half of 
     expect(lastCall()?.[0]).toBe("");
   });
 });
+
+describe("a run of notation in text content", () => {
+  it("parses a display run into a block of its own", () => {
+    const blocks = parseTextContent("before {$$ A=\\pi r^2 } after", []);
+    const math = blocks.find((block) => block.type === "math");
+    expect(math).toMatchObject({ type: "math", latex: "A=\\pi r^2", display: true });
+  });
+
+  it("parses an inline run the same way, and says which form it is", () => {
+    const blocks = parseTextContent("see {$ x^2 } here", []);
+    expect(blocks.find((block) => block.type === "math")).toMatchObject({ display: false, latex: "x^2" });
+  });
+
+  it("counts the braces, so a formula marker inside notation is left alone", () => {
+    const blocks = parseTextContent("{$ \\frac{a}{b} }", []);
+    expect(blocks.find((block) => block.type === "math")).toMatchObject({ latex: "\\frac{a}{b}" });
+    expect(blocks.some((block) => block.type === "formula")).toBe(false);
+  });
+
+  it("comes back out of the resolved content as the text it went in as", () => {
+    const content = "before {$$ A=\\pi r^2 } after";
+    expect(evaluateBlockTree(parseTextContent(content, []), () => undefined)).toBe(content);
+  });
+
+  it("reads nothing out of the document, because notation is drawn rather than computed", () => {
+    expect(extractTextDependencies(parseTextContent("{$ x+y }", []))).toEqual([]);
+  });
+
+  it("leaves a marker that never closes as the text it is", () => {
+    const blocks = parseTextContent("a {$ x", []);
+    expect(blocks.some((block) => block.type === "math")).toBe(false);
+  });
+
+  it("keeps a run of notation inside the branch of a conditional it belongs to", () => {
+    const blocks = parseTextContent("{? TRUE }{$ a }{:}{$ b }{?}", []);
+    const conditional = blocks.find((block) => block.type === "conditional");
+    expect(conditional?.type === "conditional" && conditional.trueBranch.some((block) => block.type === "math")).toBe(true);
+    expect(conditional?.type === "conditional" && conditional.falseBranch.some((block) => block.type === "math")).toBe(true);
+  });
+});

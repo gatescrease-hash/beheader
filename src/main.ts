@@ -31,6 +31,9 @@ import {
   type CameraState,
   createEmptyDocument,
   deriveValidateAndEvaluate,
+  MATH_FONT_SIZE,
+  mathSourceWithIds,
+  mathSourceWithNames,
   mutate,
   type Document,
   type EvalContext,
@@ -91,9 +94,18 @@ import "mathlive";
 import "mathlive/static.css";
 import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
-import { createMathMeasurer, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
+import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
-import { classifyCommandLine, completeCommandLine, completeInFormulaField, type FieldEdit } from "./command/complete.ts";
+import { worldToScreen } from "./render/camera.ts";
+import type { TextMathRun } from "./render/renderer.ts";
+import {
+  classifyCommandLine,
+  classifyFormulaField,
+  completeCommandLine,
+  completeInFormulaField,
+  type FieldEdit,
+  type LineSpan,
+} from "./command/complete.ts";
 
 export interface Viewport {
   readonly width: number;
@@ -731,14 +743,15 @@ export function commitMathSource(
   if (object === undefined) {
     return state;
   }
-  if (readMathLatex(object) === latex) {
+  const stored = mathSourceWithIds(latex, state.document.objects);
+  if (readMathLatex(object) === stored) {
     return state;
   }
 
   const echoed = withLog(state, [`> ${object.name} = "${latex}"`]);
   const result = mutate(
     echoed.document.objects,
-    [{ kind: "setMathSource", objectId, source: latex }],
+    [{ kind: "setMathSource", objectId, source: stored }],
     echoed.document.journal,
     context,
   );
@@ -922,6 +935,34 @@ interface PanelEditHandlers {
    * because the document lives inside start and a row is built outside it.
    */
   readonly onComplete?: (value: string, cursor: number) => FieldEdit | undefined;
+  /** Which runs of this field named something, for the same reason. */
+  readonly onMarks?: (value: string) => readonly LineSpan[];
+}
+
+/**
+ * Writes text into a layer with a marked element around each span, built out of
+ * text nodes and elements rather than out of markup, so what an operator typed
+ * can never be read as markup.
+ *
+ * The command line and the cell editor both mark through this, so a mark reads
+ * the same wherever it appears.
+ */
+function writeMarks(layer: HTMLElement, text: string, spans: readonly LineSpan[]): void {
+  layer.textContent = "";
+  let at = 0;
+  for (const span of spans) {
+    if (span.start > at) {
+      layer.appendChild(document.createTextNode(text.slice(at, span.start)));
+    }
+    const mark = document.createElement("span");
+    mark.className = `mark--${span.kind}`;
+    mark.textContent = text.slice(span.start, span.end);
+    layer.appendChild(mark);
+    at = span.end;
+  }
+  if (at < text.length) {
+    layer.appendChild(document.createTextNode(text.slice(at)));
+  }
 }
 
 /** How many candidates the list shows before it says how many are left. */
@@ -949,10 +990,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   document.body.appendChild(mathMeasureHost);
 
   const measureMath = createMathMeasurer(mathMeasureHost);
+  const measureMathForLayout = (latex: string, fontSize: number): { width: number; height: number } =>
+    measureMath(latex, { fontSize });
   const evalContext: EvalContext =
     measureContext === null
       ? NULL_EVAL_CONTEXT
-      : { measurer: { ...createCanvas2dTextMeasurer(measureContext), measureMath } };
+      : { measurer: createCanvas2dTextMeasurer(measureContext, measureMathForLayout) };
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
@@ -965,6 +1008,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let openEditor: { readonly objectId: string; readonly path: string } | undefined;
   let inPlaceEditor: EditorTarget | undefined;
   let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let inPlaceMirror: HTMLElement | undefined;
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
   const mathOverlays = new Map<string, HTMLElement>();
@@ -995,7 +1039,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       canvas.height = backingHeight;
     }
     const panelledIds = panelledObjectIds();
-    renderDocument(
+    const report = renderDocument(
       context,
       canvas.width,
       canvas.height,
@@ -1007,9 +1051,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       imageBitmaps,
       promptPreview(state),
       state.interaction.focus?.grip,
+      measureMathForLayout,
     );
     updatePanels(panelledIds);
-    updateMathOverlays();
+    updateMathOverlays(report.mathRuns);
     updateEditor();
     paintCommandLine();
   };
@@ -1019,7 +1064,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * canvas pass has already drawn the box under it, so the two agree on where
    * the object is by taking the same world box.
    */
-  const updateMathOverlays = (): void => {
+  const updateMathOverlays = (textRuns: readonly TextMathRun[] = []): void => {
     const ratio = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
     const live = new Set<string>();
 
@@ -1042,15 +1087,16 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
 
       const latex = readMathLatex(object);
-      const drawn = readMathDrawnLatex(object);
+      const drawn = mathSourceWithNames(readMathDrawnLatex(object), state.document.objects);
       const editing = object.id === editingMathId;
       element.classList.toggle("math-overlay--editing", editing);
 
       if (editing) {
         if (mathField === undefined || element.firstChild !== mathField) {
           element.innerHTML = "";
-          mathField = buildMathField(object.id, latex);
+          mathField = buildMathField(object.id, mathSourceWithNames(latex, state.document.objects));
           element.appendChild(mathField);
+          applyMathFieldMacros(mathField);
           delete element.dataset["latex"];
           mathField.focus();
         }
@@ -1065,6 +1111,35 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       element.style.padding = `${placement.padding}px`;
       element.style.fontSize = `${placement.fontSize}px`;
       element.style.transform = `scale(${placement.scale})`;
+    }
+
+    // A run of notation inside a text object reaches the screen the same way a
+    // math object does, and it is placed from the box the drawing pass reported
+    // rather than from a layout worked out again here.
+    for (const run of textRuns) {
+      const key = `${run.objectId}#${run.index}`;
+      live.add(key);
+
+      let element = mathOverlays.get(key);
+      if (element === undefined) {
+        element = document.createElement("div");
+        element.className = "math-overlay math-overlay--in-text";
+        editorLayer.appendChild(element);
+        mathOverlays.set(key, element);
+      }
+
+      if (element.dataset["latex"] !== run.latex) {
+        element.innerHTML = mathMarkup(run.latex);
+        element.dataset["latex"] = run.latex;
+      }
+      const topLeft = worldToScreen(state.document.camera, { x: run.x, y: run.y });
+      element.style.left = `${topLeft.x / ratio}px`;
+      element.style.top = `${topLeft.y / ratio}px`;
+      element.style.width = `${run.width}px`;
+      element.style.height = `${run.height}px`;
+      element.style.padding = "0";
+      element.style.fontSize = `${run.fontSize}px`;
+      element.style.transform = `scale(${state.document.camera.zoom / ratio})`;
     }
 
     for (const [objectId, element] of [...mathOverlays]) {
@@ -1107,6 +1182,20 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     return field;
   };
 
+  /**
+   * Gives a field the macros of this program on top of the ones MathLive
+   * ships, so an address and a solve command draw the way they do in the
+   * static form rather than in the red MathLive keeps for a command it has
+   * never heard of.
+   *
+   * It runs after the field is in the page, because both the read and the
+   * write of that property throw on a field that is not mounted yet.
+   */
+  const applyMathFieldMacros = (field: HTMLElement): void => {
+    const withMacros = field as unknown as { macros: Record<string, string> };
+    withMacros.macros = { ...withMacros.macros, ...MATH_MACROS };
+  };
+
   const closeMathEditor = (): void => {
     editingMathId = undefined;
     mathField = undefined;
@@ -1131,16 +1220,20 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
 
   /**
-   * Measures every math object again and evaluates the document against the
-   * new sizes. Notation measured before its fonts arrive comes out about a
-   * sixth too narrow, so the box drawn around it is too small until this runs.
+   * Measures every piece of notation again and evaluates the document against
+   * the new sizes. Notation measured before its fonts arrive comes out about a
+   * sixth too narrow, so the box left for it is too small until this runs.
+   *
+   * It looks at every object rather than at the math objects alone. A text
+   * object holding a run of notation is measured the same way and goes just as
+   * wrong, and a guard that named the math type left that case behind.
    *
    * It evaluates rather than mutating, because nothing about the document has
    * changed. Only the size of what was already there is now known properly, so
    * there is nothing for the journal to record.
    */
   const remeasureMath = (): void => {
-    if (!state.document.objects.some((object) => object.type === "math")) {
+    if (state.document.objects.length === 0) {
       return;
     }
     measureMath.forget();
@@ -1233,6 +1326,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       paint();
     },
     onComplete: (value: string, cursor: number) => completeInFormulaField(value, cursor, state.document.objects),
+    onMarks: (value: string) => classifyFormulaField(value, state.document.objects),
   });
 
   const panelElement = (objectId: string): HTMLElement => {
@@ -1272,6 +1366,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (inPlaceElement !== undefined) {
       const element = inPlaceElement;
       inPlaceElement = undefined;
+      element.remove();
+    }
+    if (inPlaceMirror !== undefined) {
+      const element = inPlaceMirror;
+      inPlaceMirror = undefined;
       element.remove();
     }
   };
@@ -1337,6 +1436,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const grow = (): void => {
       paint();
     };
+    const markAsTyped = (): void => {
+      paintCellEditor();
+    };
+    const followScroll = (): void => {
+      if (inPlaceMirror !== undefined && inPlaceElement !== undefined) {
+        inPlaceMirror.scrollLeft = inPlaceElement.scrollLeft;
+      }
+    };
     if (target.kind === "text") {
       const area = document.createElement("textarea");
       area.className = "text-editor";
@@ -1352,6 +1459,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     field.className = "text-editor";
     field.value = editorSeed(state, target);
     field.addEventListener("keydown", keydown);
+    field.addEventListener("input", markAsTyped);
+    field.addEventListener("scroll", followScroll);
     field.addEventListener("blur", commitInPlace);
     return field;
   };
@@ -1370,6 +1479,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
     const style = editorTextStyle(inPlaceEditor, object, state.document.camera, ratio);
     if (inPlaceElement === undefined) {
+      if (inPlaceEditor.kind === "cell") {
+        inPlaceMirror = document.createElement("div");
+        inPlaceMirror.className = "text-editor text-editor--mirror";
+        inPlaceMirror.setAttribute("aria-hidden", "true");
+        editorLayer.appendChild(inPlaceMirror);
+      }
       inPlaceElement = buildInPlaceElement(inPlaceEditor, style);
       editorLayer.appendChild(inPlaceElement);
       inPlaceElement.focus();
@@ -1391,6 +1506,33 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     inPlaceElement.style.color = style.color;
     inPlaceElement.style.transformOrigin = "0 0";
     inPlaceElement.style.transform = `scale(${placement.scale})`;
+
+    if (inPlaceMirror !== undefined) {
+      // Every property that decides where a glyph falls is copied from the
+      // field rather than worked out again, so the two cannot disagree.
+      for (const property of ["left", "top", "width", "height", "fontSize", "fontFamily", "lineHeight", "textAlign", "transformOrigin", "transform"] as const) {
+        inPlaceMirror.style[property] = inPlaceElement.style[property];
+      }
+      paintCellEditor();
+    }
+  };
+
+  /**
+   * Marks the addresses in the cell being edited. A cell holds a formula only
+   * where it opens with an equals sign, so a field of plain text is marked
+   * nowhere, which is what tells an operator the program read it as text.
+   */
+  const paintCellEditor = (): void => {
+    if (inPlaceMirror === undefined || inPlaceElement === undefined || inPlaceEditor?.kind !== "cell") {
+      return;
+    }
+    const value = inPlaceElement.value;
+    const spans = classifyFormulaField(value, state.document.objects, inPlaceEditor.objectId);
+    writeMarks(inPlaceMirror, value, spans);
+    // A cell is narrow, so a formula of any length scrolls the field sideways
+    // while it is typed. A layer that stayed put would sit under whichever
+    // letters happened to be in view rather than under the ones it marks.
+    inPlaceMirror.scrollLeft = inPlaceElement.scrollLeft;
   };
 
   const apply = (next: AppState): void => {
@@ -1498,24 +1640,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (commandMirror === undefined) {
       return;
     }
-    const line = input.value;
-    const spans = classifyCommandLine(line, state.document.objects);
-
-    commandMirror.textContent = "";
-    let at = 0;
-    for (const span of spans) {
-      if (span.start > at) {
-        commandMirror.appendChild(document.createTextNode(line.slice(at, span.start)));
-      }
-      const mark = document.createElement("span");
-      mark.className = `mark--${span.kind}`;
-      mark.textContent = line.slice(span.start, span.end);
-      commandMirror.appendChild(mark);
-      at = span.end;
-    }
-    if (at < line.length) {
-      commandMirror.appendChild(document.createTextNode(line.slice(at)));
-    }
+    writeMarks(commandMirror, input.value, classifyCommandLine(input.value, state.document.objects));
     commandMirror.scrollLeft = input.scrollLeft;
   };
 
@@ -1991,11 +2116,24 @@ function panelPickElement(row: PanelRow): HTMLElement {
   return pick;
 }
 
-function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputElement {
+function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLElement {
+  const field = document.createElement("span");
+  field.className = "panel-row__field";
+
+  const mirror = document.createElement("div");
+  mirror.className = "panel-row__mirror";
+  mirror.setAttribute("aria-hidden", "true");
+
   const input = document.createElement("input");
   input.type = "text";
   input.className = "panel-row__input";
   input.value = seed;
+
+  const mark = (): void => {
+    writeMarks(mirror, input.value, handlers.onMarks?.(input.value) ?? []);
+    mirror.scrollLeft = input.scrollLeft;
+  };
+
   let settled = false;
   const commit = (): void => {
     if (settled) {
@@ -2016,14 +2154,20 @@ function panelEditInput(seed: string, handlers: PanelEditHandlers): HTMLInputEle
     if (event.key === "Tab") {
       event.preventDefault();
       applyFieldCompletion(input, handlers.onComplete);
+      mark();
     } else if (event.key === "Enter") {
       commit();
     } else if (event.key === "Escape") {
       cancel();
     }
   });
+  input.addEventListener("input", mark);
+  input.addEventListener("scroll", mark);
   input.addEventListener("blur", cancel);
-  return input;
+
+  field.append(mirror, input);
+  mark();
+  return field;
 }
 
 /**

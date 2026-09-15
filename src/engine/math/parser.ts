@@ -18,6 +18,11 @@
  * named d that another identifier follows, and the integral consumes the pair.
  * A name spelled d inside an integrand is the cost of that rule.
  *
+ * A line that opens with the solve command is an implicit line: the unknown
+ * the command names, then an equation with that unknown somewhere in it. It is
+ * the one line shape whose two sides both parse as expressions, because an
+ * equals sign elsewhere separates a name from its value.
+ *
  * Every parse failure carries the offset it happened at, so a message can
  * point into the source the operator typed.
  *
@@ -131,7 +136,7 @@ function expect(cursor: Cursor, type: MathToken["type"], what: string): MathToke
 
 /** Answers whether a token can open an operand, which is what juxtaposition needs. */
 function startsOperand(token: MathToken): boolean {
-  if (token.type === "number" || token.type === "identifier" || token.type === "lparen" || token.type === "bar") {
+  if (token.type === "number" || token.type === "identifier" || token.type === "lparen" || token.type === "bar" || token.type === "reference") {
     return true;
   }
   return token.type === "command" && COMMAND_OPERATORS[token.name] === undefined;
@@ -356,6 +361,19 @@ function parseAtomInner(cursor: Cursor, state: ParseState): MathAst {
     return { type: "number", value: current.value };
   }
 
+  if (current.type === "reference") {
+    const dot = current.name.indexOf(".");
+    if (dot <= 0 || dot === current.name.length - 1) {
+      throw new ParseFailure(`"${current.name}" is not an address, which names an object and then a slot of it`);
+    }
+    // The stored spelling carries the object id, so reading it works with no
+    // list of objects and a rename of what it names rewrites nothing.
+    return {
+      type: "reference",
+      address: { objectId: current.name.slice(0, dot), path: current.name.slice(dot + 1).split(".") },
+    };
+  }
+
   if (current.type === "identifier") {
     const isFunction = state.functions.has(current.name) || MATH_BUILT_IN_FUNCTIONS[current.name] !== undefined;
     if (isFunction && peek(cursor).type === "lparen") {
@@ -415,6 +433,15 @@ function readFunctionDefinitionName(tokens: readonly MathToken[]): string | unde
 
 function parseLine(tokens: readonly MathToken[], state: ParseState, sourceLine: number): MathLine {
   const cursor: Cursor = { tokens, index: 0, bars: 0, depth: 0 };
+
+  if (tokens[0]?.type === "solve") {
+    const unknown = advance(cursor).name;
+    const left = parseExpression(cursor, state);
+    expect(cursor, "equals", "an equals sign between the two sides of the equation");
+    const right = parseExpression(cursor, state);
+    expect(cursor, "eof", "the end of the line");
+    return { type: "solve", unknown, left, right, sourceLine };
+  }
 
   const functionName = readFunctionDefinitionName(tokens);
   if (functionName !== undefined) {
@@ -506,8 +533,8 @@ export function parseMath(source: string): MathProgram | MathParseError {
   for (const entry of tokenLines) {
     try {
       const line = parseLine(entry.tokens, state, entry.line);
-      const body = line.type === "functionDefinition" ? line.body : line.value;
-      if (mathAstDepth(body) > MATH_MAX_DEPTH) {
+      const bodies = line.type === "solve" ? [line.left, line.right] : [line.type === "functionDefinition" ? line.body : line.value];
+      if (Math.max(...bodies.map(mathAstDepth)) > MATH_MAX_DEPTH) {
         return { error: "#PARSE", message: `this line nests deeper than ${MATH_MAX_DEPTH} levels`, line: entry.line };
       }
       lines.push(line);

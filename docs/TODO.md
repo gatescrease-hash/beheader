@@ -39,47 +39,7 @@ every person who clones the repository.
 
 Done when one name reaches the folder, the package and the documents.
 
-### 3. Build the math object
-
-Section 12 of `SPEC.md` defines a math object. An operator can type one, see it
-drawn, edit it in place, wire it to the document, and choose whether it shows
-its formula, its result or both. The two in-text forms, a dotted address and
-solving are open.
-
-Each stage below lands with its tests, and each leaves the four checks clean.
-
-1. **The block and inline forms inside a text object.** This is the largest of
-   the three, because a text object is a string from end to end: `resolvedContent`
-   is a string, `markdown.ts` parses a string, and `layOutText` breaks it into
-   runs of text with a font each. Notation is none of those. Carrying it needs a
-   piece kind that is not text threaded through that pipeline, and `STATUS.md`
-   records that `measure.ts` and `renderer.ts` move together, so the change
-   lands in both. Start by deciding what `resolvedContent` becomes when it can
-   no longer be a string.
-   Done when one text box holds a formula on its own line and another inside a
-   sentence, the text around each lays out against the size of the notation
-   rather than around a gap, and a free bare name inside a math run is refused
-   at parse time.
-
-2. **A dotted address inside math source.** Section 12 says a dotted name such
-   as `table_x.A1` resolves to a document address at parse time, and the lexer
-   refuses one today. Note first that a name of more than one letter is a
-   product in mathematics, so `table_x` reads as five names multiplied and a
-   document name has to arrive as `\operatorname{table_x}`. Decide whether that
-   spelling is worth having next to an input port, which already carries any
-   address without it, and write the answer into section 12 either way.
-   Done when the spec and the lexer agree.
-
-3. **Solving.** The seed slots, the iteration bound, and the error value for a
-   solve that finds no root. Nothing of this is built, and the `seed` family of
-   section 12 has no slot yet. Done when an implicit line returns the root
-   nearest its seed, a change to the seed moves the answer from one root to
-   another, and a solve that runs out of iterations gives an error value rather
-   than a hung frame.
-
-**Done when** both stages have landed and this item is deleted.
-
-### 4. Decide what a fresh input port holds
+### 3. Decide what a fresh input port holds
 
 A free name the source has not been given a value for starts at zero, so a
 math object whose first line is a fraction shows a division by zero the moment
@@ -89,90 +49,88 @@ is also the one value that makes a denominator fail.
 Done when a new port either starts at a value that reads as unset rather than
 as zero, or the reason zero is right is written into section 12.
 
-### 5. Complete an address as it is typed, and show what parsed
+### 4. Show a math source by the names it reads, in the panel
 
-The command line completes an object name and then its slots from Tab, and
-marks the runs it read as a command word or as a live address. No field but the
-command line does either, and math source still cannot hold an address at all.
+A math object stores each address it reads as an object ID, so a rename
+rewrites nothing. The drawn form and the editable field both map that ID back to
+the name the object carries, and the `source` row of the properties panel does
+not, so it shows `\gpref{obj_1.cells.A1}` where everything else shows
+`\gpref{grid.A1}`.
 
-**What is already right, and what is not.** A stored AST holds `Address`
-records carrying an object ID, so an address in a committed formula is not text
-and a rename rewrites nothing. The problem is at the two ends, entry and
-display, and in math source, where `table_x` lexes as five letters multiplied
-because juxtaposition is multiplication. So this item builds an input layer and
-changes no stored shape.
+That row is also offered as a text field an operator can type into, and a write
+there is refused, because only the mutation that rebuilds the ports may write a
+source. A row that cannot be written should not look like one.
 
-**Derive the appearance, do not bake a token.** A completed address could
-become a token in the field that carries its own identity and its own
-appearance. It should not. A token that carries an identity can drift from the
-text beside it, and then what the operator sees and what the parser reads are
-two answers to one question, which is the fault this item exists to remove.
-Instead the field parses what it holds on every keystroke and paints the spans
-that resolved. A hand typed address then lights up without a completion, and a
-misspelt one visibly fails to light up before anything is committed.
+Done when the panel shows a math source by the names it reads, and the row
+opens the editor rather than a text field.
 
-**Tab writes whatever makes it an address, and the operator writes none of it.**
-The operator types `table_1.origin.x` and presses Tab. Nothing else. Tab is the
-act that says this run is an address, and it completes the name and then writes
-whatever the field it sits in needs for the parser to read one. The ceremony
-stays in the text, because one source of truth is the whole point, and it stops
-being something anybody types.
-
-What Tab writes depends on the field, and each field declares it:
-
-| Field | What a bare address needs | What Tab writes |
-| --- | --- | --- |
-| A command line argument that takes an address | nothing | the completion alone |
-| A table cell or a panel row | a leading equals sign | the sign at the front of the field |
-| The prose of a text object | a formula marker around it | the marker around the run |
-| Math source | a macro around it | the macro around the run |
-
-A table cell already shows its formula back with a leading equals sign when it
-is reopened, so Tab writing that sign puts the field in the state the next edit
-would show anyway.
-
-The exception a spelling has to solve is math source, where an address cannot
-be parsed out of the notation at all. The last stage covers it.
-
-**Stages.** Each lands with its tests and leaves the four checks clean.
-
-1. **The same two things in a formula field.** A table cell, a panel row and the
-   formula half of a `set` all take a formula rather than a command, so the
-   spans come from the formula lexer, which already carries a start for every
-   token. This is where Tab starts writing the ceremony rather than only the
-   completion, because a cell needs a leading equals sign and the command line
-   needs nothing.
-   Done when a cell holding the typed run `table_1.origin.x` and nothing else
-   becomes a formula slot reading that address after one Tab, a cell holding
-   the same run with no Tab stays the literal string it looks like, and a cell
-   being edited paints the addresses it holds.
-
-2. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
-   gives notation a spelling for an address that the lexer can read as one
-   token, which juxtaposition cannot break and which draws as a chip without
-   any work. It answers the question the math item leaves open, so that stage
-   and this one settle together.
-   Done when the spec says how an address is spelled in notation and the lexer
-   agrees.
-
-**Done when** all three stages have landed and this item is deleted.
-
-### 6. Say what the program understood, on a refusal
+### 5. Say what the program understood, on a refusal
 
 A refusal names the slot it is about, which the spec asks for, and it does not
 say what was typed instead. An operator who misspells an object name is told
 that no object carries that name, and the name they meant is one edit away and
 on screen already.
 
-This rides on the completion of item 5, which computes the candidates a name
-could have meant. Done when a refusal that names a missing object or slot also
-names the nearest one that exists.
+`engine/complete.ts` already computes the candidates a name could have meant,
+and a refusal is the other place those candidates belong. Done when a refusal
+that names a missing object or slot also names the nearest one that exists.
+
+### 6. Add the document variable
+
+Section 13 of `SPEC.md` describes a named value that belongs to the document
+rather than to an object, readable from any formula by its bare name. Nothing
+of it is built. A document that wants one value today uses a table of one row
+and one column, and every formula that reads it says `table_1.cells.A1`.
+
+The doc object is a singleton with no origin, created by the first `docvar`
+that names a variable, and each variable is one slot at the top of it. The
+`value` primitive already sits in the graph with no place on the canvas, so the
+schema and the renderer need nothing new for that part.
+
+The bare name is the work. `parseAddress` refuses a single segment today, and
+the one place a name with no dot in it resolves is the branch of
+`formula/parser.ts` that reads `A1` as a cell of the enclosing table. The order
+in that branch is what section 13 specifies: a cell of this table first, a
+document variable second, a refusal third. The three names a variable may not
+take each need their own refusal and their own test, because each one is a
+collision that would otherwise be silent: a reserved word of the formula
+language, a name of the `A1` form, and a name an object already carries.
+
+Completion is the other half of the bare name. `engine/complete.ts` offers
+slots by address, and a variable has to arrive there as a bare candidate, so a
+tab completed `speed` gets the code font and the grey box that says the field
+read it as an address rather than as a word.
+
+Done when `docvar speed 12` creates a variable, `speed` reads it from a cell, a
+text formula and a port, `docvar total =doc.a+doc.b` holds a formula and
+re-evaluates when `doc.a` moves, a circle between two variables is refused by
+the cycle check, deleting a variable something reads is refused with the reader
+named, and `vars` opens the properties panel on the doc object.
+
+### 7. Put a copy of a document variable on the canvas
+
+This rides on item 6. A variable with no copy is reachable only through the
+panel, and section 13 gives it a second object type: a copy that draws the
+name, an equals sign and the value in a monospaced font, and that carries its
+position and its target and nothing else.
+
+The copy is derived from end to end, so the graph does the sharing: two copies
+of one variable are two objects reading one slot, and neither holds a value of
+its own. Deleting one deletes a drawing. The measurement follows the text
+primitive of section 9, and the in place editor follows the table cell of
+section 7, except that what it commits is a write to the variable rather than
+to the object the editor sits on.
+
+Done when `docvar speed x=200 y=140` puts a copy down, two copies of one
+variable both move when the variable is set from anywhere, deleting a copy
+leaves the variable and the other copies alone, editing a copy in place writes
+the variable, and deleting the variable takes its copies with it.
 
 ---
 
 ## Where the next items come from
 
-Section 16 of `SPEC.md` lists what the team postponed on purpose. That list is
+Section 17 of `SPEC.md` lists what the team postponed on purpose. That list is
 the boundary of the work, and an item moves here only when the spec releases
 it. Python execution behind `evaluateScriptOutput` is the largest of them, and
 section 11 of the spec holds the seam it arrives through.
