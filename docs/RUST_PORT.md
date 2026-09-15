@@ -1,6 +1,6 @@
 # Rust engine port
 
-This document owns the plan and work register for moving the Graphpaper engine
+This document owns the plan and work register for moving the Beheader engine
 from TypeScript to Rust. It gives each piece a stable name, a dependency, and
 evidence that will establish completion. A session can resume from the handoff
 without reconstructing decisions from conversation history.
@@ -511,7 +511,7 @@ Cargo.toml
 Cargo.lock
 rust-toolchain.toml
 crates/
-  graphpaper-engine/
+  beheader-engine/
     src/
       lib.rs
       model.rs
@@ -527,9 +527,9 @@ crates/
       journal.rs
       complete.rs
     tests/
-  graphpaper-conformance/
+  beheader-conformance/
     src/main.rs
-  graphpaper-wasm/
+  beheader-wasm/
     src/lib.rs
 tests/
   conformance/
@@ -561,7 +561,7 @@ diagnostics, completion, aggregation, or serialization-sensitive arrays.
 
 Serde and `serde_json` are proposed for transport and file conversion, with
 custom validation where their defaults differ from existing behavior.
-Browser bindings belong to `graphpaper-wasm`. A general expression library,
+Browser bindings belong to `beheader-wasm`. A general expression library,
 computer algebra system, or graph framework is not required for the initial
 port and would add another behavior contract to prove.
 
@@ -763,7 +763,7 @@ them as runnable project commands:
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-cargo check -p graphpaper-engine --target wasm32-unknown-unknown --locked
+cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
 ```
 
 Native tests run on Windows and Linux initially, with macOS added before a
@@ -772,7 +772,7 @@ not only a successful compile. The runner command, fixture selection syntax,
 binding build command, and target prerequisites are recorded by `RUST-002`
 and `RUST-003` when their actual interfaces exist.
 
-The production browser build is tested under `/beheader-clean/`, the current
+The production browser build is tested under `/beheader/`, the current
 Pages base path, including Wasm loading and asset failures. Pull-request checks
 include the new suites before any Rust engine becomes selectable. Deployment
 continues to use the established build and permission boundaries.

@@ -1,4 +1,4 @@
-# STATUS - Graphpaper
+# STATUS - Beheader
 
 `SPEC.md` holds the product requirements, and this file holds the state of the
 code. This file also holds the structure map of the repository, and the reason

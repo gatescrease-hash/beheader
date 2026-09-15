@@ -17,7 +17,7 @@ purpose. Do not write a log entry for each change. Git holds the history.
 
 ## What this is
 
-Graphpaper is a spatial canvas. Every object on it is a live node in one shared
+Beheader is a spatial canvas. Every object on it is a live node in one shared
 dependency graph. A table cell can drive a polygon. A polygon can drive a table
 cell. Text can read both.
 

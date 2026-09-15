@@ -1,4 +1,4 @@
-# TODO - Graphpaper
+# TODO - Beheader
 
 The open work, and nothing else. `STATUS.md` describes the code that exists,
 and this file names the changes nobody has made yet.
@@ -19,21 +19,19 @@ the file it is about.
 
 ## Open
 
-### 1. Settle the name of the product
+### 1. Finish the rename to Beheader
 
-The spec calls the product Graphpaper. `package.json` carries `graphpaper`, and
-the folder carries `beheader-clean`. Nothing in the code reads the folder name,
-so the mismatch costs nothing today, and it costs a paragraph of explanation to
-every person who clones the repository.
+The package, the page title, the documents and the in-app strings all carry
+Beheader, and `vite.config.ts` builds against `/beheader/`. Two things outside
+this repository still carry the old name: the GitHub repository is
+`beheader-clean`, and the working folder is named after it.
 
-The folder name is also the name of the repository on GitHub, and
-`vite.config.ts` puts it in the base path because the project site is served
-under `/beheader-clean/`. So the three moves go together: the repository is
-renamed, the base path follows it, and the documents stop naming the old one.
-That first move belongs to whoever owns the repository, because it changes a
-public URL.
+The base path and the repository name have to agree, because GitHub Pages serves
+a project site under the repository name. So the repository is renamed to
+`beheader` before the next merge to `main`, which is what deploys the site.
 
-Done when one name reaches the folder, the package and the documents.
+Done when the repository and the folder carry `beheader`, and a deploy from
+`main` serves the page with its assets.
 
 ---
 

@@ -9,7 +9,7 @@ import { test } from "node:test";
 const checker = fileURLToPath(new URL("./prose-check.mjs", import.meta.url));
 
 test("an unreadable target fails even when another file is clean", () => {
-  const directory = mkdtempSync(join(tmpdir(), "graphpaper-prose-"));
+  const directory = mkdtempSync(join(tmpdir(), "beheader-prose-"));
   const clean = join(directory, "clean.md");
   try {
     writeFileSync(clean, "The document stores objects.\n");

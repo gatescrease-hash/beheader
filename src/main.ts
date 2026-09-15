@@ -1029,7 +1029,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       : { measurer: createCanvas2dTextMeasurer(measureContext, measureMathForLayout) };
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
-  let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
+  let state = initialAppState(createEmptyDocument(), ["Beheader. Type a command, or a command word alone to be prompted."]);
   let pan: PanGesture | undefined;
   let spaceHeld = false;
   let openMenu: { readonly menu: PathMenu; readonly at: ScreenPoint } | undefined;
@@ -2233,7 +2233,7 @@ function downloadDocument(state: Document): void {
   const url = URL.createObjectURL(new Blob([saveDocument(state)], { type: "application/json" }));
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "graphpaper.json";
+  anchor.download = "beheader.json";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

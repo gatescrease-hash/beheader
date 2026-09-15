@@ -1,4 +1,4 @@
-# SPEC - Graphpaper
+# SPEC - Beheader
 
 This document defines the product. It says what the program must do and why.
 It does not say what the code does today. `STATUS.md` says that.
@@ -7,7 +7,7 @@ It does not say what the code does today. `STATUS.md` says that.
 
 ## 1. The idea
 
-Graphpaper is a keyboard driven spatial canvas. Every object on the canvas is a
+Beheader is a keyboard driven spatial canvas. Every object on the canvas is a
 live node in one shared dependency graph.
 
 Geometry, text, tables, images, equations and script nodes are not separate
