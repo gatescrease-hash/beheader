@@ -1096,6 +1096,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
           element.innerHTML = "";
           mathField = buildMathField(object.id, mathSourceWithNames(latex, state.document.objects));
           element.appendChild(mathField);
+          applyMathFieldMacros(mathField);
           delete element.dataset["latex"];
           mathField.focus();
         }
@@ -1162,12 +1163,6 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     field.className = "math-field";
     field.value = latex;
     field.setAttribute("math-virtual-keyboard-policy", "manual");
-    // The field draws the same macros the static form does, or an address in it
-    // draws in the red MathLive keeps for a command it has never heard of.
-    (field as unknown as { macros: Record<string, string> }).macros = {
-      ...(field as unknown as { macros: Record<string, string> }).macros,
-      ...MATH_MACROS,
-    };
 
     field.addEventListener("keydown", (event) => {
       event.stopPropagation();
@@ -1185,6 +1180,20 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       commitMathEditor();
     });
     return field;
+  };
+
+  /**
+   * Gives a field the macros of this program on top of the ones MathLive
+   * ships, so an address and a solve command draw the way they do in the
+   * static form rather than in the red MathLive keeps for a command it has
+   * never heard of.
+   *
+   * It runs after the field is in the page, because both the read and the
+   * write of that property throw on a field that is not mounted yet.
+   */
+  const applyMathFieldMacros = (field: HTMLElement): void => {
+    const withMacros = field as unknown as { macros: Record<string, string> };
+    withMacros.macros = { ...withMacros.macros, ...MATH_MACROS };
   };
 
   const closeMathEditor = (): void => {
