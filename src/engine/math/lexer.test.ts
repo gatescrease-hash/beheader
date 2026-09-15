@@ -94,3 +94,21 @@ describe("tokenizeMath", () => {
     expect(tokens[tokens.length - 1]?.type).toBe("eof");
   });
 });
+
+describe("tokenizeMath — the solve command", () => {
+  it("reads the braced unknown as one token of its own", () => {
+    expect(names("\\solve{x}x=1")).toEqual(["solve:x", "identifier:x", "equals:=", "number:1"]);
+  });
+
+  it("reads an unknown written with a low line, which is how a port name is spelled", () => {
+    expect(names("\\solve{x_ans}x_ans=1")[0]).toBe("solve:x_ans");
+  });
+
+  it("refuses a solve command with no braced name after it", () => {
+    expect(failure("\\solve x=1")).toContain("braced name");
+  });
+
+  it("refuses a solve command with nothing between its braces", () => {
+    expect(failure("\\solve{}x=1")).toContain("nothing in it");
+  });
+});

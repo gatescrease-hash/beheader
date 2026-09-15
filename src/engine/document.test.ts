@@ -549,6 +549,55 @@ describe("deserializeDocument — ports, structural validation only", () => {
     }
   });
 
+  /** A document holding one math object that solves for an unknown. */
+  function documentWithMathPorts(ports: unknown): unknown {
+    return {
+      formatVersion: FORMAT_VERSION,
+      nextObjectId: 2,
+      camera: { x: 0, y: 0, zoom: 1 },
+      journal: [],
+      objects: [
+        {
+          id: "obj_1",
+          name: "math_1",
+          type: "math",
+          ports,
+          slots: {
+            "origin.x": { kind: "literal", value: 0 },
+            "origin.y": { kind: "literal", value: 0 },
+            source: { kind: "literal", value: "\\solve{x}x^2=9" },
+            display: { kind: "literal", value: "source" },
+            "seed.x": { kind: "literal", value: 2 },
+            "out.x": { kind: "derived", value: 3 },
+          },
+        },
+      ],
+    };
+  }
+
+  it("round-trips the seed family of a math object", () => {
+    const result = deserializeDocument(documentWithMathPorts({ in: [], out: ["x"], seed: ["x"] }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.objects[0]?.ports).toEqual({ in: [], out: ["x"], seed: ["x"] });
+      expect(result.document.objects[0]?.slots["seed.x"]).toEqual({ kind: "literal", value: 2 });
+    }
+  });
+
+  it("is ABSENT on a ports field with no seed family, so a document saved before a source could solve still loads", () => {
+    const result = deserializeDocument(documentWithPorts({ in: [], out: ["result"] }, { "placeholder.result": { kind: "literal", value: 0 } }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.objects[0]?.ports).not.toHaveProperty("seed");
+    }
+  });
+
+  it("rejects a seed family that is not an array, and an illegal or repeated name in one", () => {
+    expect(deserializeDocument(documentWithMathPorts({ in: [], out: ["x"], seed: "x" })).ok).toBe(false);
+    expect(deserializeDocument(documentWithMathPorts({ in: [], out: ["x"], seed: ["a.b"] })).ok).toBe(false);
+    expect(deserializeDocument(documentWithMathPorts({ in: [], out: ["x"], seed: ["x", "x"] })).ok).toBe(false);
+  });
+
   it("rejects a ports field that is not an object with array in/out fields", () => {
     expect(deserializeDocument(documentWithPorts("nope")).ok).toBe(false);
     expect(deserializeDocument(documentWithPorts({ in: "not an array", out: [] })).ok).toBe(false);

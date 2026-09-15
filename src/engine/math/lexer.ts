@@ -41,6 +41,7 @@ export type MathTokenType =
   | "underscore"
   | "bar"
   | "reference"
+  | "solve"
   | "lbrace"
   | "rbrace"
   | "lparen"
@@ -59,7 +60,8 @@ export interface MathToken {
   readonly value: number;
   /**
    * The resolved name of an identifier token, with a subscript joined by a low
-   * line, or the word of a command token without its backslash. It is empty for
+   * line, the word of a command token without its backslash, the address a
+   * reference token wraps, or the unknown a solve token names. It is empty for
    * every other type.
    */
   readonly name: string;
@@ -91,6 +93,15 @@ const NAME_COMMANDS = new Set(["operatorname", "mathrm", "text", "mathit"]);
  * otherwise make of them.
  */
 export const MATH_REFERENCE_COMMAND = "gpref";
+
+/**
+ * The command that marks the unknown of an implicit line. Notation writes
+ * x^2+3=y with nothing to say which letter the object solves for, and a rule
+ * that worked it out from the rest of the source would change what a line
+ * solves for when an unrelated line above it was edited. So the unknown is
+ * written, and the command carries it.
+ */
+export const MATH_SOLVE_COMMAND = "solve";
 
 const SYMBOL_TOKENS: Readonly<Record<string, MathTokenType>> = {
   "+": "plus",
@@ -254,6 +265,15 @@ export function tokenizeMath(source: string): readonly MathToken[] | MathLexErro
           return braced;
         }
         tokens.push(token("reference", source.slice(at, braced.next), at, 0, braced.text));
+        at = braced.next;
+        continue;
+      }
+      if (word === MATH_SOLVE_COMMAND) {
+        const braced = readBracedName(source, end);
+        if ("error" in braced) {
+          return braced;
+        }
+        tokens.push(token("solve", source.slice(at, braced.next), at, 0, braced.name));
         at = braced.next;
         continue;
       }

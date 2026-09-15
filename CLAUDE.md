@@ -44,7 +44,7 @@ These six rules make the design work. Do not break one for convenience.
    table in `docs/STATUS.md` where the change moves it.
 
 ```
-npm test                          # 2621 tests, all pass
+npm test                          # 2679 tests, all pass
 npm run typecheck                 # both TypeScript configs
 npm run build                     # production build
 npm run prose                     # prose checker, gives exit code 0

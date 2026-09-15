@@ -48,6 +48,7 @@ import {
   MATH_MEASURED_HEIGHT_PATH,
   MATH_MEASURED_WIDTH_PATH,
   MATH_REFERENCE_COMMAND,
+  MATH_SOLVE_COMMAND,
   MATH_SOURCE_PATH,
   readMathDisplayLatex,
   ORIGIN_X_PATH,
@@ -73,9 +74,16 @@ export interface MathMeasurementHost {
  * plainly. The command draws its argument as upright monospace, which reads as
  * a piece of the document rather than as a product of letters, and a command
  * MathLive has never heard of would draw in the red it keeps for a mistake.
+ *
+ * The unknown of an implicit line arrives wrapped the same way, for the same
+ * reason and one more: which letter a line solves for is a thing the operator
+ * says rather than a thing the program works out, so the source carries it and
+ * the drawn line shows it. It draws as the word solve, the unknown, and a
+ * colon in front of the equation, which is how the instruction reads aloud.
  */
 export const MATH_MACROS: Readonly<Record<string, string>> = {
   [MATH_REFERENCE_COMMAND]: "\\mathtt{\\text{#1}}",
+  [MATH_SOLVE_COMMAND]: "\\operatorname{solve}\\,#1\\,{:}\\,",
 };
 
 /** The markup of one run of notation, ready to put inside an element. */

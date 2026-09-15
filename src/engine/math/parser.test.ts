@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluateMathObject } from "./eval.ts";
 import { isMathParseError, parseMath } from "./parser.ts";
-import type { MathProgram } from "./ast.ts";
+import { MATH_MAX_DEPTH, type MathProgram } from "./ast.ts";
 
 function program(source: string): MathProgram {
   const result = parseMath(source);
@@ -117,5 +117,46 @@ describe("parseMath", () => {
   it("refuses an expression nested deeper than the limit", () => {
     expect(failure(`y=${"-".repeat(80)}1`).message).toContain("nests deeper");
     expect(failure(`y=${"(".repeat(200)}1${")".repeat(200)}`).message).toContain("nests deeper");
+  });
+});
+
+describe("parseMath — an implicit line", () => {
+  it("reads the unknown and the two sides of the equation", () => {
+    expect(program("\\solve{x}x^2+3=y").lines[0]).toMatchObject({
+      type: "solve",
+      unknown: "x",
+      left: { type: "binary", operator: "+" },
+      right: { type: "name", name: "y" },
+      sourceLine: 0,
+    });
+  });
+
+  it("carries the line of the source the equation came from", () => {
+    expect(program("a=1\n\\solve{x}2x=a").lines[1]).toMatchObject({ type: "solve", sourceLine: 1 });
+  });
+
+  it("multiplies letters beside each other on both sides, the way every other line does", () => {
+    expect(program("\\solve{x}2x=3a").lines[0]).toMatchObject({
+      left: { type: "binary", operator: "*" },
+      right: { type: "binary", operator: "*" },
+    });
+  });
+
+  it("refuses an implicit line with no equals sign in it", () => {
+    expect(failure("\\solve{x}x^2").message).toContain("equals sign");
+  });
+
+  it("refuses an implicit line carrying a second equals sign", () => {
+    expect(failure("\\solve{x}x=y=2").message).toContain("the end of the line");
+  });
+
+  it("refuses a solve command in the middle of an expression, and quotes it", () => {
+    expect(failure("y=2+\\solve{x}").message).toContain("a value was expected");
+    expect(failure("y=2\\solve{x}").message).toContain("\\solve{x}");
+  });
+
+  it("refuses an equation nesting deeper than the language runs", () => {
+    const deep = `\\solve{x}x=${"-".repeat(MATH_MAX_DEPTH + 2)}1`;
+    expect(failure(deep).message).toContain("nests deeper");
   });
 });

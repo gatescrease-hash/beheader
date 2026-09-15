@@ -140,6 +140,28 @@ export interface MathFunctionLine {
 }
 
 /**
+ * A line that constrains an unknown rather than giving a name a value. The two
+ * sides hold the same number when the unknown takes the right value, and the
+ * object finds that value with a search that begins at the seed slot the
+ * unknown carries.
+ *
+ * The unknown is written rather than worked out. Notation gives x^2+3=y no way
+ * to say which of its letters the object solves for, and a rule that read the
+ * lines around it would change what this line solves for when a line above it
+ * was edited.
+ *
+ * The unknown becomes an export slot the same as a defined name does, so a
+ * later line reads it and so does the rest of the document.
+ */
+export interface MathSolveLine {
+  readonly type: "solve";
+  readonly unknown: string;
+  readonly left: MathAst;
+  readonly right: MathAst;
+  readonly sourceLine: number;
+}
+
+/**
  * A line that computes something and gives it no name. It reads its inputs
  * like any other line, so it still contributes input ports, and an operator
  * sees its value in the editor.
@@ -149,7 +171,34 @@ export interface MathExpressionLine {
   readonly value: MathAst;
 }
 
-export type MathLine = MathDefinitionLine | MathFunctionLine | MathExpressionLine;
+export type MathLine = MathDefinitionLine | MathFunctionLine | MathSolveLine | MathExpressionLine;
+
+/**
+ * The name a line puts under out, and the line of the source it came from. A
+ * definition and a solve both export a name, and a display that writes a result
+ * beside the working reads both kinds through this shape rather than telling
+ * them apart at every use.
+ */
+export interface MathExportLine {
+  readonly name: string;
+  readonly sourceLine: number;
+  /** Which kind of line it is, because the two write their result differently. */
+  readonly kind: "definition" | "solve";
+}
+
+/** The exporting lines of a program, in source order. */
+export function mathExportLines(program: MathProgram): readonly MathExportLine[] {
+  const exported: MathExportLine[] = [];
+  for (const line of program.lines) {
+    if (line.type === "definition") {
+      exported.push({ name: line.name, sourceLine: line.sourceLine, kind: "definition" });
+    }
+    if (line.type === "solve") {
+      exported.push({ name: line.unknown, sourceLine: line.sourceLine, kind: "solve" });
+    }
+  }
+  return exported;
+}
 
 export interface MathProgram {
   readonly lines: readonly MathLine[];

@@ -109,6 +109,13 @@ export type Slot = LiteralSlot | FormulaSlot | DerivedSlot;
 export interface GraphObjectPorts {
   readonly in: readonly string[];
   readonly out: readonly string[];
+  /**
+   * The unknowns a math object solves for, each of which carries a literal
+   * slot under seed that the search for its value starts from. It is absent on
+   * every other kind of object with ports, and on a math object saved before a
+   * source could solve for anything.
+   */
+  readonly seed?: readonly string[];
 }
 
 export function isLegalPortName(name: string): boolean {

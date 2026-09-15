@@ -12,8 +12,8 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2621 pass, 0 skip, across 51 test files. |
-| Spec | Built, except the solving of section 12, and the parts section 16 postpones. |
+| Tests | 2679 pass, 0 skip, across 51 test files. |
+| Spec | Built, except the parts section 16 postpones. |
 
 ### How to run it
 
@@ -120,12 +120,12 @@ tables, and other suites drive them anyway.
 | `primitives/table.ts` | Cell addressing, range expansion, and the row and column resize. |
 | `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
 | `primitives/image.ts` | Slot path constants for the image type. |
-| `primitives/math.ts` | The slots a math object carries, and the compute function behind each export. |
+| `primitives/math.ts` | The slots a math object carries, the seeds a solve starts from, and the compute function behind each export. |
 | `math/ast.ts` | The node types of the math language, and the depth check over them. |
 | `math/lexer.ts` | LaTeX to tokens, including the subscript and the commands that are dropped. |
-| `math/parser.ts` | Tokens to a program, with implicit multiplication and the binding forms. |
-| `math/names.ts` | Which names are bound, which are defined, and which become input ports. |
-| `math/eval.ts` | A program and its inputs to a value for each export. |
+| `math/parser.ts` | Tokens to a program, with implicit multiplication, the binding forms and the implicit line. |
+| `math/names.ts` | Which names are bound, which are defined, which are solved for, and which become input ports. |
+| `math/eval.ts` | A program and its inputs to a value for each export, the search for a root included. |
 | `script/stub.ts` | The script node and its ports. |
 | `mutation.ts` | The one channel for state change, and every operation it accepts. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
@@ -253,6 +253,16 @@ the code it constrains.
 15. **The operator cannot see what a test can see.** A live look on screen
    comes before anyone calls an operator surface done. It has found what the
    suite could not on every surface built so far.
+16. **A MathLive field takes its macros after it is in the page.** Both the
+   read and the write of the `macros` property throw on a field that is not
+   mounted, so a field configured on the way to the page throws from inside the
+   repaint that built it and never arrives. `main.ts` appends the field first
+   and gives it the macros of this program after, which is the order that keeps
+   the editable form drawing an address and a solve command the way the static
+   form draws them.
+
+   The suite cannot reach this. The field is a custom element from a package,
+   and the throw happens where a real browser mounts it.
 
 ---
 

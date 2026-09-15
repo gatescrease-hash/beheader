@@ -14,6 +14,11 @@
  * the value belongs to the form rather than to the document. So the x of an
  * integral over sin(x_input) arrives with no port, while x_input brings one.
  *
+ * The unknown of an implicit line is bound over both sides of that line and
+ * defined from the line down, so it takes an export slot without ever taking
+ * an input port, and a later line reads the value the solve found. It also
+ * takes a seed slot, which is where the search for that value starts.
+ *
  * A defined name comes from an earlier line of the same source, and it becomes
  * an export slot under out. Earlier is the whole rule: a line reads the names
  * above it and never the names below it, so a circle of definitions inside one
@@ -50,6 +55,8 @@ export interface MathNames {
   readonly inputs: readonly string[];
   /** The functions the source defines, each of them with no slot of its own. */
   readonly functions: readonly string[];
+  /** The unknowns the source solves for, under seed, in the order of the lines. */
+  readonly seeds: readonly string[];
 }
 
 export function isMathNameError(result: MathNames | MathNameError): result is MathNameError {
@@ -151,6 +158,63 @@ function walkExpression(ast: MathAst, walk: Walk): void {
   }
 }
 
+/**
+ * Answers whether an expression reads a name that nothing inside it binds. The
+ * unknown of an implicit line has to appear in the equation this way, because
+ * an equation that never reads it does not constrain it.
+ */
+function readsName(ast: MathAst, name: string): boolean {
+  switch (ast.type) {
+    case "number":
+    case "reference":
+      return false;
+    case "name":
+      return ast.name === name;
+    case "negate":
+      return readsName(ast.operand, name);
+    case "binary":
+      return readsName(ast.left, name) || readsName(ast.right, name);
+    case "call":
+      return ast.args.some((argument) => readsName(argument, name));
+    case "integral":
+    case "series":
+      return (
+        readsName(ast.lower, name) ||
+        readsName(ast.upper, name) ||
+        (ast.variable !== name && readsName(ast.body, name))
+      );
+  }
+}
+
+/**
+ * The refusals a name takes before it can become an export. A definition and
+ * the unknown of an implicit line both land under out, so both go through this
+ * one check and the two can never come to differ.
+ */
+function refuseExportName(
+  name: string,
+  defined: ReadonlySet<string>,
+  allFunctions: ReadonlySet<string>,
+  seenInputs: ReadonlySet<string>,
+): { readonly error: "#PARSE"; readonly message: string } | undefined {
+  if (defined.has(name)) {
+    return { error: "#PARSE", message: `"${name}" is defined twice, and a name carries one value` };
+  }
+  if (allFunctions.has(name)) {
+    return { error: "#PARSE", message: `"${name}" is both a function and a value of this object` };
+  }
+  if (!isLegalPortName(name)) {
+    return { error: "#PARSE", message: `"${name}" holds a character that an export name cannot carry` };
+  }
+  if (seenInputs.has(name)) {
+    return {
+      error: "#PARSE",
+      message: `"${name}" is read above the line that defines it, and a line reads the names above it alone`,
+    };
+  }
+  return undefined;
+}
+
 class NameFailure extends Error {
   constructor(message: string) {
     super(message);
@@ -171,6 +235,7 @@ export function resolveMathNames(program: MathProgram): MathNames | MathNameErro
   const seenInputs = new Set<string>();
   const references: Address[] = [];
   const seenReferences = new Set<string>();
+  const seeds: string[] = [];
 
   const allFunctions = new Set<string>();
   for (let index = 0; index < program.lines.length; index += 1) {
@@ -206,21 +271,33 @@ export function resolveMathNames(program: MathProgram): MathNames | MathNameErro
         continue;
       }
 
-      if (defined.has(line.name)) {
-        return { error: "#PARSE", message: `"${line.name}" is defined twice, and a name carries one value`, line: index };
+      if (line.type === "solve") {
+        const refusal = refuseExportName(line.unknown, defined, allFunctions, seenInputs);
+        if (refusal !== undefined) {
+          return { ...refusal, line: index };
+        }
+        // The unknown is bound over the equation rather than free in it, so it
+        // arrives with no input port. The solve gives it a value, and a port
+        // would offer a second one.
+        if (!readsName(line.left, line.unknown) && !readsName(line.right, line.unknown)) {
+          return {
+            error: "#PARSE",
+            message: `this line solves for "${line.unknown}", and the equation on it never reads "${line.unknown}"`,
+            line: index,
+          };
+        }
+        const equationWalk = withBinding(walk, line.unknown);
+        walkExpression(line.left, equationWalk);
+        walkExpression(line.right, equationWalk);
+        defined.add(line.unknown);
+        exports.push(line.unknown);
+        seeds.push(line.unknown);
+        continue;
       }
-      if (allFunctions.has(line.name)) {
-        return { error: "#PARSE", message: `"${line.name}" is both a function and a value of this object`, line: index };
-      }
-      if (!isLegalPortName(line.name)) {
-        return { error: "#PARSE", message: `"${line.name}" holds a character that an export name cannot carry`, line: index };
-      }
-      if (seenInputs.has(line.name)) {
-        return {
-          error: "#PARSE",
-          message: `"${line.name}" is read above the line that defines it, and a line reads the names above it alone`,
-          line: index,
-        };
+
+      const refusal = refuseExportName(line.name, defined, allFunctions, seenInputs);
+      if (refusal !== undefined) {
+        return { ...refusal, line: index };
       }
       walkExpression(line.value, walk);
       defined.add(line.name);
@@ -233,5 +310,5 @@ export function resolveMathNames(program: MathProgram): MathNames | MathNameErro
     }
   }
 
-  return { exports, inputs, functions: [...allFunctions], references };
+  return { exports, inputs, functions: [...allFunctions], references, seeds };
 }

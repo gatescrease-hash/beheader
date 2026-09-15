@@ -101,3 +101,59 @@ describe("resolveMathNames", () => {
     expect(resolve("")).toMatchObject({ exports: [], inputs: [], functions: [] });
   });
 });
+
+describe("resolveMathNames — an implicit line", () => {
+  it("makes the unknown an export and gives it a seed", () => {
+    expect(resolve("\\solve{x}x^2=y")).toMatchObject({ exports: ["x"], seeds: ["x"], inputs: ["y"] });
+  });
+
+  it("gives the unknown no input port, because the solve is what gives it a value", () => {
+    expect(resolve("\\solve{x}x^2=y").inputs).toEqual(["y"]);
+  });
+
+  it("lists a seed for each implicit line, in the order of the lines", () => {
+    expect(resolve("\\solve{a}2a=1\n\\solve{b}3b=1").seeds).toEqual(["a", "b"]);
+  });
+
+  it("gives a source with no implicit line an empty seed list", () => {
+    expect(resolve("y=2a").seeds).toEqual([]);
+  });
+
+  it("lets a later line read the unknown an implicit line solved for", () => {
+    expect(resolve("\\solve{x}2x=10\nd=x+1")).toMatchObject({ exports: ["x", "d"], inputs: [] });
+  });
+
+  it("reads a document address out of an equation", () => {
+    expect(resolve("\\solve{x}x^2=\\gpref{obj_2.value}").references).toHaveLength(1);
+  });
+
+  it("refuses an unknown that a definition above already carries", () => {
+    expect(refusal("x=1\n\\solve{x}x^2=9")).toContain("defined twice");
+  });
+
+  it("refuses a definition of a name an implicit line above already solves for", () => {
+    expect(refusal("\\solve{x}x^2=9\nx=1")).toContain("defined twice");
+  });
+
+  it("refuses an unknown a line above reads as an input", () => {
+    expect(refusal("y=x\n\\solve{x}x^2=9")).toContain("read above the line that defines it");
+  });
+
+  it("refuses an equation that never reads the unknown it names", () => {
+    expect(refusal("\\solve{x}2a=10")).toContain("never reads");
+  });
+
+  it("refuses an unknown that the equation reads only where a form binds that name", () => {
+    // The x of the integral belongs to the integral, so the equation around it
+    // constrains nothing.
+    expect(refusal("\\solve{x}\\int_{0}^{1}xdx=a")).toContain("never reads");
+  });
+
+  it("takes an unknown a binding form shadows on one side and reads on the other", () => {
+    expect(resolve("\\solve{x}\\int_{0}^{1}xdx=x").seeds).toEqual(["x"]);
+  });
+
+  it("refuses an unknown that names a function of the same object", () => {
+    expect(refusal("f(t)=t\n\\solve{f}f=1")).toContain("both a function and a value");
+  });
+});

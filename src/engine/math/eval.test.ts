@@ -114,3 +114,112 @@ describe("evaluateMathObject", () => {
     expect(run("1+1")).toEqual({});
   });
 });
+
+describe("evaluateMathObject — an implicit line", () => {
+  function solve(source: string, seeds: Record<string, number> = {}, inputs: Record<string, number> = {}): Record<string, unknown> {
+    const program = parseMath(source);
+    if (isMathParseError(program)) throw new Error(`${source}: ${program.message}`);
+    return evaluateMathObject(program, inputs, {}, seeds).exports;
+  }
+
+  it("finds the value that makes the two sides equal", () => {
+    expect(solve("\\solve{x}2x=10").x).toBeCloseTo(5, 9);
+  });
+
+  it("exports the unknown under its own name, the way a definition exports one", () => {
+    expect(Object.keys(solve("\\solve{x}2x=10"))).toEqual(["x"]);
+  });
+
+  it("solves against a value an earlier line defined", () => {
+    expect(solve("y=9\n\\solve{x}x^2=y").x).toBeCloseTo(3, 9);
+  });
+
+  it("solves against an input port", () => {
+    expect(solve("\\solve{x}x^2=y", {}, { y: 16 }).x).toBeCloseTo(4, 9);
+  });
+
+  it("lets a later line read the value the solve found", () => {
+    const exports = solve("\\solve{x}2x=10\nd=x+1");
+    expect(exports.d).toBeCloseTo(6, 9);
+  });
+
+  it("solves a line whose unknown sits under a function of the language", () => {
+    // The root of sin nearest 3 is pi.
+    expect(solve("\\solve{x}\\sin(x)=0", { x: 3 }).x).toBeCloseTo(Math.PI, 6);
+  });
+
+  it("gives the root nearest the seed where an equation has two", () => {
+    expect(solve("\\solve{x}x^2=9", { x: 2 }).x).toBeCloseTo(3, 9);
+    expect(solve("\\solve{x}x^2=9", { x: -2 }).x).toBeCloseTo(-3, 9);
+  });
+
+  it("moves the answer from one root to the other as the seed moves across", () => {
+    const climbing = [-5, -1, 1, 5].map((seed) => Math.round(solve("\\solve{x}x^2=9", { x: seed }).x as number));
+    expect(climbing).toEqual([-3, -3, 3, 3]);
+  });
+
+  it("takes the root above the seed where two of them sit the same distance away", () => {
+    // A tie breaks upward, so the answer stays the same across every pass
+    // instead of following whichever side the search looked at first.
+    expect(solve("\\solve{x}x^2=9", { x: 0 }).x).toBeCloseTo(3, 9);
+  });
+
+  it("reads a seed the caller leaves out as zero", () => {
+    expect(solve("\\solve{x}x^2=9")).toEqual(solve("\\solve{x}x^2=9", { x: 0 }));
+  });
+
+  it("gives an error value for an equation whose sides never cross", () => {
+    const value = solve("\\solve{x}x^2+1=0").x;
+    expect(value).toMatchObject({ error: "#MATH" });
+    expect(String((value as { message: string }).message)).toContain("seed");
+  });
+
+  it("gives an error value rather than a hung frame, and returns while a test can wait for it", () => {
+    const started = Date.now();
+    expect(solve("\\solve{x}x^2+1=0").x).toMatchObject({ error: "#MATH" });
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("steps over the values an equation cannot be read at", () => {
+    // The square root of a negative number is not a number, so every point
+    // below zero is one the search has to pass by rather than fail on.
+    expect(solve("\\solve{x}\\sqrt{x}=3").x).toBeCloseTo(9, 6);
+  });
+
+  it("gives the same answer every time it runs, so a pass that changes nothing moves nothing", () => {
+    const answers = [0, 1, 2, 3, 4].map(() => solve("\\solve{x}\\sin(x)=0.5", { x: 1 }).x);
+    expect(new Set(answers).size).toBe(1);
+  });
+
+  it("leaves the lines around a solve that fails alone", () => {
+    const exports = solve("a=1\n\\solve{x}x^2+1=0\nb=2");
+    expect(exports.a).toBe(1);
+    expect(exports.b).toBe(2);
+    expect(exports.x).toMatchObject({ error: "#MATH" });
+  });
+
+  it("gives an error to a line that reads an unknown whose solve failed", () => {
+    expect(solve("\\solve{x}x^2+1=0\nb=x+1").b).toMatchObject({ error: "#MATH" });
+  });
+
+  it("reads every reference once, at the start, and never again through the search", () => {
+    // The search runs over a snapshot, which is the confinement the spec asks
+    // for: the outside of the box is unreadable part way through a solve, and
+    // the inside of one is invisible from outside.
+    const program = parseMath("\\solve{x}x^2=\\gpref{obj_2.value}");
+    if (isMathParseError(program)) throw new Error(program.message);
+    let reads = 0;
+    const references = new Proxy(
+      { "obj_2.value": 49 },
+      {
+        get(target, key, receiver) {
+          reads += 1;
+          return Reflect.get(target, key, receiver);
+        },
+      },
+    );
+    const exports = evaluateMathObject(program, {}, references, { x: 5 });
+    expect(exports.exports.x).toBeCloseTo(7, 6);
+    expect(reads).toBe(1);
+  });
+});

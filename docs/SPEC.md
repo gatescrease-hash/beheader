@@ -659,12 +659,17 @@ The seam is one function:
 
 ```typescript
 export function evaluateMathObject(
-  source: ParsedMath,
-  exportName: string,
-  inputs: Record<string, Value>,
+  program: MathProgram,
+  inputs: Record<string, number>,
+  references: Record<string, number>,
   seeds: Record<string, number>,
-): Value;
+): { exports: Record<string, Value> };
 ```
+
+It takes the whole program and gives back every name that program defines,
+rather than one export at a time, because a later line reads the value an
+earlier line reached and a call for one export alone would evaluate the lines
+above it again.
 
 Only this body knows how an answer is reached. A hand written evaluator and a
 library both satisfy it, so the choice between them is reversible without a
@@ -756,8 +761,22 @@ other cycle.
 Inside one box the rule is different. A single math object may solve for an
 unknown that its own lines constrain, because the whole solve begins and ends
 inside one compute function and nothing outside the box can observe a step of it.
-An implicit line such as `x^2 + 3 = y` is therefore legal where `y` is known and
-`x` is the unknown the object solves for.
+A line such as `\solve{x} x^2 + 3 = y` is therefore legal, where `y` is known
+and `x` is the unknown the object solves for.
+
+The unknown is written rather than worked out. Notation gives `x^2 + 3 = y` no
+way to say which of its letters the line is about, and every free name of a
+source is otherwise an input port, so a rule that picked the unknown out of the
+rest would have to read the lines around this one and would change what this
+line solves for when a line above it was edited. `\solve{x}` is the same shape
+`\gpref{...}` already takes for the same reason: the lexer reads the braced
+part whole, and a macro draws it as the word solve, the unknown, and a colon in
+front of the equation.
+
+The unknown is bound over the equation, so it takes an export slot and no input
+port, and a later line reads the value the solve reached the way it reads any
+other export. An equation that never reads the unknown it names constrains
+nothing, and the mutation refuses it.
 
 Four properties make a solve safe to run inside the evaluation pass:
 
@@ -775,6 +794,21 @@ The fourth property needs a rule, and the rule is a seed. Each solved unknown
 gets a literal slot `math_1.seed.x`, and the object returns the root nearest that
 seed. The seed is an ordinary slot, so a formula can drive it and an operator can
 sweep a root across a range. A solve that finds no root gives an error value.
+
+The search is what makes those four properties hold. It reads the difference
+between the two sides of the equation at the seed, then at rings of doubling
+radius around it, and a ring whose two ends carry differences of opposite sign
+holds a root that halving the ring finds. Both sides of the first such ring are
+checked before either answer is taken, so the nearer root comes back, and a tie
+breaks upward so the answer is the same on every pass. The rings and the
+halvings are each a fixed count, which is the iteration bound. Exhausting the
+rings gives an error value.
+
+Two costs come with finding a root this way. A root the curve touches without
+crossing is invisible to a sign change, and two roots inside one ring on the
+same side hide each other, which a seed nearer the wanted root uncovers.
+Algebra would find both, and a search over a function built out of an integral
+and a series has no algebra to call on.
 
 **What this does not cover.** Desmos draws `x^2 + y^2 = 9` as a curve by
 sampling the plane, and it fits parameters to data with a regression. A math

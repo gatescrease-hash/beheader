@@ -39,24 +39,7 @@ every person who clones the repository.
 
 Done when one name reaches the folder, the package and the documents.
 
-### 3. Solve for an unknown inside a math object
-
-Section 12 of `SPEC.md` gives a math object the right to solve for an unknown
-that its own lines constrain, and the seed slots that pick one root out of
-several. None of it is built, and the `seed` family of that section has no slot
-yet.
-
-The four properties that section names are what make a solve safe to run inside
-the evaluation pass, so each needs its own test: a solve reads one object and
-never a slot on another, it carries an iteration bound and gives an error value
-rather than hanging when it runs out, the same inputs give the same answer, and
-a seed picks which root the export carries.
-
-Done when an implicit line returns the root nearest its seed, a change to the
-seed moves the answer from one root to another, and a solve that runs out of
-iterations gives an error value rather than a hung frame.
-
-### 4. Decide what a fresh input port holds
+### 3. Decide what a fresh input port holds
 
 A free name the source has not been given a value for starts at zero, so a
 math object whose first line is a fraction shows a division by zero the moment
@@ -66,7 +49,7 @@ is also the one value that makes a denominator fail.
 Done when a new port either starts at a value that reads as unset rather than
 as zero, or the reason zero is right is written into section 12.
 
-### 5. Show a math source by the names it reads, in the panel
+### 4. Show a math source by the names it reads, in the panel
 
 A math object stores each address it reads as an object ID, so a rename
 rewrites nothing. The drawn form and the editable field both map that ID back to
@@ -81,16 +64,16 @@ source. A row that cannot be written should not look like one.
 Done when the panel shows a math source by the names it reads, and the row
 opens the editor rather than a text field.
 
-### 6. Say what the program understood, on a refusal
+### 5. Say what the program understood, on a refusal
 
 A refusal names the slot it is about, which the spec asks for, and it does not
 say what was typed instead. An operator who misspells an object name is told
 that no object carries that name, and the name they meant is one edit away and
 on screen already.
 
-This rides on the completion of item 5, which computes the candidates a name
-could have meant. Done when a refusal that names a missing object or slot also
-names the nearest one that exists.
+`engine/complete.ts` already computes the candidates a name could have meant,
+and a refusal is the other place those candidates belong. Done when a refusal
+that names a missing object or slot also names the nearest one that exists.
 
 ---
 
