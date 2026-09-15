@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.engine.json",
-    "test": "vitest run",
+    "test": "vitest run && node --test tools/prose-check.test.mjs",
     "prose": "node tools/prose-check.mjs --all"
   },
   "devDependencies": {

@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { journalIsComplete, replayJournal } from "./journal.ts";
+import { createEmptyDocument, loadDocument } from "./document.ts";
 import { mutate, type MutationJournalEntry } from "./mutation.ts";
 import { slotKey, type GraphObject, type Slot } from "./graph/node.ts";
 import { getObjectSchema, resolveDerivedSlots } from "./primitives/schema.ts";
@@ -62,6 +63,23 @@ function buildDocument(): Built {
 }
 
 describe("replayJournal — the reader undo needs", () => {
+  it.each([null, "garbage", 42, {}, { operations: null }, { operations: [null] }, { operations: [{ kind: "createObject" }] }])(
+    "refuses a malformed loaded entry without throwing: %j",
+    (entry) => {
+      const built = buildDocument();
+      const loaded = loadDocument(JSON.stringify({ ...createEmptyDocument(), journal: [built.journal[0], entry] }));
+      expect(loaded.ok).toBe(true);
+      if (!loaded.ok) return;
+      const result = replayJournal(loaded.document.journal, 2);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.entry).toBe(1);
+        expect(result.message).toContain("journal entry 1 did not replay");
+      }
+      expect(journalIsComplete([], loaded.document.journal)).toBe(false);
+    },
+  );
+
   it("rebuilds exactly the objects the mutations produced, derived values included", () => {
     const built = buildDocument();
     const replayed = replayJournal(built.journal, built.journal.length);

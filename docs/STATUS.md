@@ -12,7 +12,7 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2679 pass, 0 skip, across 51 test files. |
+| Tests | 2686 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built, except section 13, which nothing implements yet, and the parts section 17 postpones. |
 
 ### How to run it
@@ -20,7 +20,7 @@ each file exists. `TODO.md` holds the work that is open.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2679 tests
+npm test             # engine, application and tooling tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -87,7 +87,7 @@ tables, and other suites drive them anyway.
 
 ### Root
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `index.html` | The page and its stylesheet: the canvas, the panel container, the log and the input bar. |
 | `package.json` | Scripts, dev dependencies, and the one runtime dependency, MathLive. |
@@ -98,7 +98,7 @@ tables, and other suites drive them anyway.
 
 ### `src/engine/` - the pure core
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `address.ts` | Addressing: object IDs, names, paths, and the A1 cell helpers. |
 | `complete.ts` | What a half typed object name or address could still become, and the addresses a formula reads. |
@@ -134,7 +134,7 @@ tables, and other suites drive them anyway.
 
 ### `src/render/` - the short lived drawing layer
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `camera.ts` | World and screen coordinates, pan, zoom, and the limits on both. |
 | `extent.ts` | The world box of one object, and of the whole document. |
@@ -155,7 +155,7 @@ tables, and other suites drive them anyway.
 
 ### `src/command/`
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `parser.ts` | One typed line to one command object. |
 | `complete.ts` | What a completion key writes in a line or a formula field, and which runs named something. |
