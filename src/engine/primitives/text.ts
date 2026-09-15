@@ -51,6 +51,23 @@ export interface ConditionalBlock {
   readonly falseBranch: readonly Block[];
 }
 
+/**
+ * A run of mathematical notation inside text. The block holds the LaTeX and
+ * the marker it was written with, and it evaluates to nothing: notation is
+ * drawn rather than computed, so the run reaches the layout as the text it was
+ * typed as and the two readers of that layout draw it.
+ *
+ * display is true for a run that takes a line of its own, and false for one
+ * that sits inside a line of prose.
+ */
+export interface MathRunBlock {
+  readonly type: "math";
+  readonly latex: string;
+  readonly display: boolean;
+  /** The marker as it was written, which is what the resolved content carries. */
+  readonly source: string;
+}
+
 export interface BlockParseErrorBlock {
   readonly type: "error";
   readonly message: string;
@@ -61,7 +78,7 @@ export interface BlockParseErrorBlock {
   readonly orphaned: readonly Block[];
 }
 
-export type Block = TextBlock | FormulaBlock | ConditionalBlock | BlockParseErrorBlock;
+export type Block = TextBlock | FormulaBlock | ConditionalBlock | MathRunBlock | BlockParseErrorBlock;
 
 export const MAX_BLOCK_TREE_DEPTH = 64;
 
@@ -103,14 +120,66 @@ function findUnquotedBrace(content: string, from: number): number | undefined {
   return undefined;
 }
 
+/** The two markers that open notation: one for a line of its own, one inline. */
+export const MATH_DISPLAY_OPEN = "{$$";
+export const MATH_INLINE_OPEN = "{$";
+
+export interface MathMarker {
+  readonly latex: string;
+  readonly display: boolean;
+  /** The index just past the closing brace. */
+  readonly end: number;
+}
+
+/**
+ * Reads a run of notation that starts at pos, or reports none.
+ *
+ * The braces are counted rather than scanned for the first closing one,
+ * because notation is full of them: the b of a fraction sits inside a pair of
+ * its own, and stopping at the first would cut the run in half.
+ *
+ * This is the one reader of the syntax. The block tree calls it to keep
+ * notation out of the reach of a formula marker, and the markdown parser calls
+ * it again on the resolved text, and two scanners of one syntax would drift.
+ */
+export function matchMathMarkerAt(content: string, pos: number): MathMarker | undefined {
+  const display = content.startsWith(MATH_DISPLAY_OPEN, pos);
+  const inline = !display && content.startsWith(MATH_INLINE_OPEN, pos);
+  if (!display && !inline) {
+    return undefined;
+  }
+
+  const from = pos + (display ? MATH_DISPLAY_OPEN.length : MATH_INLINE_OPEN.length);
+  let depth = 1;
+  let at = from;
+  while (at < content.length) {
+    const character = content[at];
+    if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return { latex: content.slice(from, at).trim(), display, end: at + 1 };
+      }
+    }
+    at += 1;
+  }
+  return undefined;
+}
+
 type Marker =
   | { readonly kind: "formulaOpen"; readonly source: string; readonly end: number }
   | { readonly kind: "conditionalOpen"; readonly source: string; readonly end: number }
   | { readonly kind: "conditionalElse"; readonly end: number }
-  | { readonly kind: "conditionalClose"; readonly end: number };
+  | { readonly kind: "conditionalClose"; readonly end: number }
+  | { readonly kind: "math"; readonly math: MathMarker; readonly end: number };
 
 function matchMarkerAt(content: string, pos: number): Marker | undefined {
   const second = content[pos + 1];
+  if (second === "$") {
+    const math = matchMathMarkerAt(content, pos);
+    return math === undefined ? undefined : { kind: "math", math, end: math.end };
+  }
   if (second === "=") {
     const close = findUnquotedBrace(content, pos + 2);
     if (close === undefined) {
@@ -162,6 +231,17 @@ function parseBlockSequence(state: TextParseState): { readonly blocks: readonly 
       case "conditionalClose":
         state.pos = marker.end;
         return { blocks, terminator: "close" };
+      case "math": {
+        blocks.push({
+          type: "math",
+          latex: marker.math.latex,
+          display: marker.math.display,
+          source: state.content.slice(state.pos, marker.end),
+        });
+        state.pos = marker.end;
+        textStart = state.pos;
+        continue;
+      }
       case "formulaOpen": {
         const spanStart = state.pos;
         state.pos = marker.end;
@@ -271,6 +351,7 @@ export function extractTextDependencies(blocks: readonly Block[]): readonly Depe
   for (const block of blocks) {
     switch (block.type) {
       case "text":
+      case "math":
         break;
       case "error":
         for (const dependency of extractTextDependencies(block.orphaned)) {
@@ -351,6 +432,9 @@ function evaluateBlocks(blocks: readonly Block[], read: ReadSlot, readRange: Rea
     switch (block.type) {
       case "text":
         result += block.value;
+        break;
+      case "math":
+        result += block.source;
         break;
       case "error":
         result += `${BROKEN_SPAN_MARK}${block.source}`;

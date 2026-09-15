@@ -13,6 +13,8 @@
  * that line for nothing else. Nothing in the engine imports this file, so a
  * GPU renderer can replace the whole layer later.
  */
+import { MATH_DISPLAY_OPEN, matchMathMarkerAt } from "../engine/index.ts";
+
 export interface MarkdownRun {
   readonly text: string;
   readonly bold: boolean;
@@ -20,12 +22,26 @@ export interface MarkdownRun {
   readonly code: boolean;
 }
 
-export type MarkdownLineKind = "paragraph" | "heading" | "list";
+export type MarkdownLineKind = "paragraph" | "heading" | "list" | "math";
+
+/**
+ * A line holding one run of notation and nothing else. It carries the LaTeX
+ * rather than runs of text, because notation is measured and drawn whole
+ * instead of broken into words, and it takes a line of its own.
+ */
+export interface MathLine {
+  readonly kind: "math";
+  readonly level: 0;
+  readonly runs: readonly MarkdownRun[];
+  readonly latex: string;
+}
 
 export interface MarkdownLine {
   readonly kind: MarkdownLineKind;
   readonly level: number;
   readonly runs: readonly MarkdownRun[];
+  /** The notation of a math line, and nothing for every other kind. */
+  readonly latex?: string;
 }
 
 export const LIST_BULLET = "• ";
@@ -68,7 +84,30 @@ export function verbatimLines(text: string): readonly MarkdownLine[] {
   return lines;
 }
 
+/**
+ * A line holding one run of display notation and nothing besides space, or
+ * nothing where the line holds anything else.
+ *
+ * The scan comes from the engine, so the marker is read the same way here as it
+ * is where the block tree keeps notation out of the reach of a formula marker.
+ */
+function displayMathLine(hardLine: string): MathLine | undefined {
+  const trimmed = hardLine.trim();
+  if (!trimmed.startsWith(MATH_DISPLAY_OPEN)) {
+    return undefined;
+  }
+  const math = matchMathMarkerAt(trimmed, 0);
+  if (math === undefined || !math.display || trimmed.slice(math.end).trim() !== "") {
+    return undefined;
+  }
+  return { kind: "math", level: 0, runs: [], latex: math.latex };
+}
+
 function parseLine(hardLine: string): MarkdownLine {
+  const math = displayMathLine(hardLine);
+  if (math !== undefined) {
+    return math;
+  }
   for (const heading of HEADING_PREFIXES) {
     if (hardLine.startsWith(heading.prefix)) {
       return { kind: "heading", level: heading.level, runs: parseInlineRuns(hardLine.slice(heading.prefix.length)) };

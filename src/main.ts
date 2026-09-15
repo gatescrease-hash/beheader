@@ -31,6 +31,7 @@ import {
   type CameraState,
   createEmptyDocument,
   deriveValidateAndEvaluate,
+  MATH_FONT_SIZE,
   mathSourceWithIds,
   mathSourceWithNames,
   mutate,
@@ -95,6 +96,8 @@ import "mathlive/fonts.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
+import { worldToScreen } from "./render/camera.ts";
+import type { TextMathRun } from "./render/renderer.ts";
 import {
   classifyCommandLine,
   classifyFormulaField,
@@ -987,10 +990,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   document.body.appendChild(mathMeasureHost);
 
   const measureMath = createMathMeasurer(mathMeasureHost);
+  const measureMathForLayout = (latex: string, fontSize: number): { width: number; height: number } =>
+    measureMath(latex, { fontSize });
   const evalContext: EvalContext =
     measureContext === null
       ? NULL_EVAL_CONTEXT
-      : { measurer: { ...createCanvas2dTextMeasurer(measureContext), measureMath } };
+      : { measurer: createCanvas2dTextMeasurer(measureContext, measureMathForLayout) };
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
   let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
@@ -1034,7 +1039,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       canvas.height = backingHeight;
     }
     const panelledIds = panelledObjectIds();
-    renderDocument(
+    const report = renderDocument(
       context,
       canvas.width,
       canvas.height,
@@ -1046,9 +1051,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       imageBitmaps,
       promptPreview(state),
       state.interaction.focus?.grip,
+      measureMathForLayout,
     );
     updatePanels(panelledIds);
-    updateMathOverlays();
+    updateMathOverlays(report.mathRuns);
     updateEditor();
     paintCommandLine();
   };
@@ -1058,7 +1064,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * canvas pass has already drawn the box under it, so the two agree on where
    * the object is by taking the same world box.
    */
-  const updateMathOverlays = (): void => {
+  const updateMathOverlays = (textRuns: readonly TextMathRun[] = []): void => {
     const ratio = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
     const live = new Set<string>();
 
@@ -1104,6 +1110,35 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       element.style.padding = `${placement.padding}px`;
       element.style.fontSize = `${placement.fontSize}px`;
       element.style.transform = `scale(${placement.scale})`;
+    }
+
+    // A run of notation inside a text object reaches the screen the same way a
+    // math object does, and it is placed from the box the drawing pass reported
+    // rather than from a layout worked out again here.
+    for (const run of textRuns) {
+      const key = `${run.objectId}#${run.index}`;
+      live.add(key);
+
+      let element = mathOverlays.get(key);
+      if (element === undefined) {
+        element = document.createElement("div");
+        element.className = "math-overlay math-overlay--in-text";
+        editorLayer.appendChild(element);
+        mathOverlays.set(key, element);
+      }
+
+      if (element.dataset["latex"] !== run.latex) {
+        element.innerHTML = mathMarkup(run.latex);
+        element.dataset["latex"] = run.latex;
+      }
+      const topLeft = worldToScreen(state.document.camera, { x: run.x, y: run.y });
+      element.style.left = `${topLeft.x / ratio}px`;
+      element.style.top = `${topLeft.y / ratio}px`;
+      element.style.width = `${run.width}px`;
+      element.style.height = `${run.height}px`;
+      element.style.padding = "0";
+      element.style.fontSize = `${MATH_FONT_SIZE}px`;
+      element.style.transform = `scale(${state.document.camera.zoom / ratio})`;
     }
 
     for (const [objectId, element] of [...mathOverlays]) {

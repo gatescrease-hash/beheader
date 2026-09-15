@@ -18,7 +18,7 @@
  * that line for nothing else. Nothing in the engine imports this file, so a
  * GPU renderer can replace the whole layer later.
  */
-import type { TextMeasurement, TextMeasurer, TextStyle } from "../engine/index.ts";
+import type { MathStyle, TextMeasurement, TextMeasurer, TextStyle } from "../engine/index.ts";
 import { LIST_BULLET, parseMarkdownLite, verbatimLines, type MarkdownLine, type MarkdownRun } from "./markdown.ts";
 
 export interface MeasurementContext {
@@ -43,6 +43,12 @@ export interface LaidOutLine {
   readonly top: number;
   readonly width: number;
   readonly height: number;
+  /**
+   * The notation of a line that holds a run of it. Such a line comes back with
+   * no runs at all, because notation reaches the screen as an element over the
+   * canvas, and the caller places that element from the box this line gives.
+   */
+  readonly latex?: string;
 }
 
 export interface TextLayout {
@@ -57,6 +63,12 @@ export interface TextLayoutRequest {
   readonly wrapWidth: number | undefined;
   readonly markup: boolean;
   readonly measureRun: (text: string, font: string) => number;
+  /**
+   * The size a run of notation takes. A layout given none lays a math line out
+   * as an empty line of ordinary height, which is what a measurer written
+   * before notation existed does.
+   */
+  readonly measureMath?: (latex: string, fontSize: number) => TextMeasurement;
 }
 
 const HEADING_FONT_SCALES: readonly number[] = [2, 1.5, 1.17];
@@ -234,6 +246,18 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
   let top = 0;
   let widest = 0;
   for (const sourceLine of sourceLines) {
+    if (sourceLine.kind === "math") {
+      const latex = sourceLine.latex ?? "";
+      const measured = request.measureMath?.(latex, fontSize);
+      const height = measured === undefined ? lineHeight : Math.max(lineHeight, measured.height);
+      const width = measured?.width ?? 0;
+      lines.push({ runs: [], top, width, height, latex });
+      if (width > widest) {
+        widest = width;
+      }
+      top += height;
+      continue;
+    }
     const scale = headingScale(sourceLine);
     const height = lineHeight * scale;
     const chunks = chunksOf(sourceLine, request.style.font, fontSize * scale);
@@ -256,7 +280,11 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
   return { lines, width: widest, height: top };
 }
 
-function createMeasurer(ctx: MeasurementContext, markup: boolean): TextMeasurer {
+function createMeasurer(
+  ctx: MeasurementContext,
+  markup: boolean,
+  measureMath?: (latex: string, fontSize: number) => TextMeasurement,
+): TextMeasurer {
   const measureRun = (text: string, font: string): number => {
     ctx.font = font;
     return finiteOrZero(ctx.measureText(text).width);
@@ -266,9 +294,10 @@ function createMeasurer(ctx: MeasurementContext, markup: boolean): TextMeasurer 
       if (finitePositive(style.fontSize) === undefined || text === "") {
         return { width: 0, height: 0 };
       }
-      const layout = layOutText({ text, style, wrapWidth: maxWidth, markup, measureRun });
+      const layout = layOutText({ text, style, wrapWidth: maxWidth, markup, measureRun, measureMath });
       return { width: finiteOrZero(layout.width), height: finiteOrZero(layout.height) };
     },
+    ...(measureMath === undefined ? {} : { measureMath: (latex: string, mathStyle: MathStyle) => measureMath(latex, mathStyle.fontSize) }),
   };
 }
 
@@ -276,8 +305,11 @@ function createMeasurer(ctx: MeasurementContext, markup: boolean): TextMeasurer 
  * This is the measurer for the engine. It honours markup, so bold text
  * measures wider.
  */
-export function createCanvas2dTextMeasurer(ctx: MeasurementContext): TextMeasurer {
-  return createMeasurer(ctx, true);
+export function createCanvas2dTextMeasurer(
+  ctx: MeasurementContext,
+  measureMath?: (latex: string, fontSize: number) => TextMeasurement,
+): TextMeasurer {
+  return createMeasurer(ctx, true, measureMath);
 }
 
 /**

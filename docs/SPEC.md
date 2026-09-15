@@ -810,11 +810,16 @@ is the block form. The text dependency walker already recurses the tree and call
 addresses it reads through that same function, and a text box that reads a math
 object updates like any other reader.
 
-A math run in text defines no name and solves for nothing. It evaluates an
-expression and draws it. A text object that grew slots out of its own content
-would need the mutation time slot derivation above a second time, and the
-standalone object already solves that problem in one place. A document that needs
-a named value puts it in a math object and reads it back with `{= math_1.out.x }`.
+A math run in text is notation to read rather than a thing to compute. It
+defines no name, reads no address and evaluates nothing, so every letter in it
+is a symbol and writing `E=mc^2` in a sentence asks the program for nothing. A
+text object that grew slots out of its own content would need the mutation time
+slot derivation above a second time, and the standalone object already solves
+that problem in one place.
+
+A document that wants a number in its prose has two ways to it that already
+work. `{= math_1.out.x }` puts the value of a math object in the text, and a
+standalone math object beside the text draws the working.
 
 ### Drawing
 

@@ -386,6 +386,15 @@
         the objects around it so a wider formula covers them rather than being
         covered.
       */
+      /*
+        A run of notation inside a text object. It sits on the canvas with no
+        ground of its own, because the text around it is drawn underneath and a
+        ground would cover the line it belongs to.
+      */
+      .math-overlay--in-text {
+        background: transparent;
+      }
+
       .math-overlay--editing {
         pointer-events: auto;
         z-index: 5;

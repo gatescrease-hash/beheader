@@ -144,10 +144,10 @@ tables, and other suites drive them anyway.
 | `handles.ts` | The resize grabbers, and the box maths behind a resize. |
 | `menu.ts` | The right press menu, and the command line each entry writes. |
 | `grips.ts` | The grabbers on a selected path, and the part each one names. |
-| `markdown.ts` | The small markdown parser behind a text object. |
+| `markdown.ts` | The small markdown parser behind a text object, and the line that holds notation. |
 | `measure.ts` | The two Canvas2D measurers, and the line breaker. |
 | `math.ts` | Notation to markup, the size it takes, and where the element holding it goes. |
-| `renderer.ts` | The painter, and the three passes it makes over every frame. |
+| `renderer.ts` | The painter, the three passes it makes, and where notation inside text landed. |
 | `images.ts` | The decoded bitmap cache. |
 | `editor.ts` | Where the in place editor goes, and how it looks. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |

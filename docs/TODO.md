@@ -57,9 +57,8 @@ Each stage below lands with its tests, and each leaves the four checks clean.
    lands in both. Start by deciding what `resolvedContent` becomes when it can
    no longer be a string.
    Done when one text box holds a formula on its own line and another inside a
-   sentence, the text around each lays out against the size of the notation
-   rather than around a gap, and a free bare name inside a math run is refused
-   at parse time.
+   sentence, and the text around each lays out against the size of the notation
+   rather than around a gap.
 
 2. **Solving.** The seed slots, the iteration bound, and the error value for a
    solve that finds no root. Nothing of this is built, and the `seed` family of

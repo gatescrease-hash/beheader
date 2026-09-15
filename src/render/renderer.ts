@@ -289,6 +289,32 @@ export interface PathPreview {
   readonly closed: boolean;
 }
 
+/**
+ * Where one run of notation inside a text object landed, in world units.
+ *
+ * Notation reaches the screen as an element rather than as paint, so the pass
+ * that laid the text out reports where each run belongs and the caller puts an
+ * element there. The report comes from the pass rather than from a second
+ * layout, because a second one would drift from this and every run would sit a
+ * little further from its line.
+ */
+export interface TextMathRun {
+  readonly objectId: string;
+  readonly index: number;
+  readonly latex: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface RenderReport {
+  readonly mathRuns: readonly TextMathRun[];
+}
+
+/** The size a run of notation takes, which the layout needs and a canvas cannot answer. */
+export type MathRunMeasurer = (latex: string, fontSize: number) => { readonly width: number; readonly height: number };
+
 export function renderDocument(
   ctx: CanvasRenderingContext2D,
   viewportWidth: number,
@@ -301,8 +327,10 @@ export function renderDocument(
   images: ImageBitmaps | undefined = undefined,
   preview: PathPreview | undefined = undefined,
   focusedGrip: PathGrip | undefined = undefined,
-): void {
+  measureMath: MathRunMeasurer | undefined = undefined,
+): RenderReport {
   clearScreen(ctx, viewportWidth, viewportHeight);
+  const mathRuns: TextMathRun[] = [];
 
   const editingTextId = editing?.kind === "text" ? editing.objectId : undefined;
   const editingCellOn = (objectId: string): string | undefined =>
@@ -315,7 +343,7 @@ export function renderDocument(
     if (object.id === editingTextId) {
       continue;
     }
-    drawObject(ctx, object, editingCellOn(object.id), images);
+    drawObject(ctx, object, editingCellOn(object.id), images, measureMath, mathRuns);
   }
 
   const selectedIds = new Set(selectedObjectIds);
@@ -343,6 +371,8 @@ export function renderDocument(
       drawPathGrips(ctx, camera, object, focusedGrip);
     }
   }
+
+  return { mathRuns };
 }
 
 /**
@@ -428,7 +458,14 @@ function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: CameraState, o
   }
 }
 
-function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingCell: string | undefined, images: ImageBitmaps | undefined): void {
+function drawObject(
+  ctx: CanvasRenderingContext2D,
+  object: GraphObject,
+  editingCell: string | undefined,
+  images: ImageBitmaps | undefined,
+  measureMath: MathRunMeasurer | undefined,
+  mathRuns: TextMathRun[],
+): void {
   switch (object.type) {
     case "circle":
       drawCircle(ctx, object);
@@ -444,7 +481,7 @@ function drawObject(ctx: CanvasRenderingContext2D, object: GraphObject, editingC
       drawTable(ctx, object, editingCell);
       return;
     case "text":
-      drawText(ctx, object);
+      drawText(ctx, object, measureMath, mathRuns);
       return;
     case "image":
       drawImage(ctx, object, images);
@@ -685,7 +722,12 @@ function alignmentOffset(align: "left" | "center" | "right", boxWidth: number, l
   return 0;
 }
 
-function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawText(
+  ctx: CanvasRenderingContext2D,
+  object: GraphObject,
+  measureMath: MathRunMeasurer | undefined,
+  mathRuns: TextMathRun[],
+): void {
   const resolved = readText(object, TEXT_RESOLVED_CONTENT_PATH);
   if (resolved === undefined) {
     return;
@@ -705,6 +747,7 @@ function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
       ctx.font = font;
       return ctx.measureText(text).width;
     },
+    measureMath,
   });
 
   const { width: boxWidth } = textBoxSize({
@@ -718,8 +761,24 @@ function drawText(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   ctx.fillStyle = style.color;
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
+  let mathIndex = 0;
   for (const line of layout.lines) {
     const lineLeft = originX + alignmentOffset(style.align, boxWidth, line.width);
+    if (line.latex !== undefined) {
+      // Notation arrives as an element, so the line is reported and left blank
+      // for that element to fill.
+      mathRuns.push({
+        objectId: object.id,
+        index: mathIndex,
+        latex: line.latex,
+        x: lineLeft,
+        y: originY + line.top,
+        width: line.width,
+        height: line.height,
+      });
+      mathIndex += 1;
+      continue;
+    }
     for (const run of line.runs) {
       ctx.font = run.font;
       ctx.fillText(run.text, lineLeft + run.x, originY + line.top);
