@@ -1278,12 +1278,21 @@ holds an error value. Show a small mark on a slot that a formula drives.
 The style is AutoCAD. A persistent input bar sits at the bottom. It holds focus
 whenever the operator does not edit text or a cell.
 
-The screen carries very little other furniture. There is one exception, added by
-the human. A selected object shows a floating properties panel beside it. The
-panel lists the slots of the object. It shows the modifiable slots above a thick
-rule and the derived slots below it. The panel can edit a value and can unlink a
-slot. There is no toolbar, no palette, no menu and no inspector. The command
-line stays the main way to author a document.
+A shell surrounds the canvas. A sidebar holds one button for each creation word,
+and below them an object navigator that lists the objects of the document and
+searches them by name and by type. A header holds the wordmark, the guide, and
+save and load. View controls sit over the canvas for zoom and for fit. A
+selected object shows a floating properties panel beside it. The panel lists the
+slots of the object. It shows the modifiable slots above a thick rule and the
+derived slots below it. The panel can edit a value and can unlink a slot.
+
+**Every part of the shell reaches the document through the command line.** A
+button sends the same line an operator could type, through the same parser and
+the same handlers. So the shell shortens the path to a command word and shows
+what a document holds, with no operation of its own and with no second
+authoring path beside the one the parser defines.
+
+The command line stays the main way to author a document.
 
 ```
 circle x=100 y=100 r=20
@@ -1317,9 +1326,10 @@ zoom <factor> / fit
 save / load
 ```
 
-The parser is table driven. One registry entry adds a command. A small
-log above the input echoes results and errors. **Every refusal message must name
-the slots it is about.** That is the whole debug story for now.
+The parser is table driven. One registry entry adds a command. A status line
+above the input carries the newest result or refusal, and the log of every line
+so far opens behind it. **Every refusal message must name the slots it is
+about.** That is the whole debug story for now.
 
 A bare command word starts a prompt sequence in the AutoCAD style. The prompt
 asks for each argument in turn. A click on the canvas answers a prompt that

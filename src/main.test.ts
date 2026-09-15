@@ -1910,6 +1910,65 @@ describe("the preview the canvas draws while a polyline is half finished", () =>
     expect(promptPreview(escape(state))).toBeUndefined();
   });
 });
+describe("creation feedback for shapes", () => {
+  const move = (state: AppState, x: number, y: number) => pointerMoveTo(state, worldToScreen(state.document.camera, { x, y }));
+  const pick = (state: AppState, x: number, y: number) => pointerDownAt(state, worldToScreen(state.document.camera, { x, y }), VIEWPORT).state;
+
+  it("keeps the selected polygon center visible before the next pointer move", () => {
+    const state = pick(typed(opened(), "polygon 5"), 100, 120);
+    expect(promptPreview(state)?.markers).toEqual([{ x: 100, y: 120 }]);
+    expect(state.document.objects).toHaveLength(0);
+  });
+
+  it("previews the polygon vertices that the next click creates", () => {
+    let state = pick(typed(opened(), "polygon 5"), 100, 120);
+    state = move(state, 160, 200);
+    const preview = promptPreview(state);
+    expect(preview?.points).toHaveLength(5);
+    expect(preview?.guide?.label).toBe("Radius 100");
+    expect(preview?.points[0]).toEqual({ x: 200, y: 120 });
+    const finished = pick(state, 160, 200);
+    expect(getSlot(objectNamed(finished, "polygon_1"), ["vertices"])?.value).toEqual(preview?.points);
+    expect(promptPreview(finished)).toBeUndefined();
+  });
+
+  it("previews a circle as two semicircles with its picked center marked", () => {
+    const state = move(pick(typed(opened(), "circle"), 20, 30), 50, 70);
+    expect(promptPreview(state)).toMatchObject({
+      points: [{ x: 70, y: 30 }, { x: -30, y: 30 }], bulges: [1, 1], closed: true,
+      markers: [{ x: 20, y: 30 }], guide: { label: "Radius 50" },
+    });
+    expect(promptPreview(escape(state))).toBeUndefined();
+  });
+
+  it("previews a rectangle drawn back from its first corner", () => {
+    const state = move(pick(typed(opened(), "rect"), 100, 120), 20, 30);
+    expect(promptPreview(state)).toMatchObject({
+      points: [{ x: 100, y: 120 }, { x: 20, y: 120 }, { x: 20, y: 30 }, { x: 100, y: 30 }],
+      closed: true, guide: { label: "80 × 90" },
+    });
+    const finished = pick(state, 20, 30);
+    expect(objectExtent(objectNamed(finished, "rect_1"))).toMatchObject({ minX: 20, minY: 30, maxX: 100, maxY: 120 });
+  });
+
+  it("marks the placement cursor and retains a table origin while asking for dimensions", () => {
+    const state = move(typed(opened(), "table"), 60, 80);
+    expect(promptPreview(state)?.points).toEqual([{ x: 60, y: 80 }]);
+    expect(promptPreview(pick(state, 60, 80))?.markers).toEqual([{ x: 60, y: 80 }]);
+  });
+
+  it("opens formula properties with their expression and preserves the dependency on commit", () => {
+    let state = typed(opened(), "circle x=10 y=20 r=5");
+    state = typed(state, "set circle_1.radius = circle_1.origin.x * 2");
+    const object = objectNamed(state, "circle_1");
+    const row = buildPanelModel(object, state.document.objects).modifiable.find(item => item.path === "radius");
+    expect(row?.editSeed).toBe("=circle_1.origin.x * 2");
+    state = commitPanelEdit(state, object.id, "radius", row?.editSeed ?? "");
+    state = typed(state, "set circle_1.origin.x 15");
+    expect(getSlot(objectNamed(state, "circle_1"), ["radius"])?.value).toBe(30);
+  });
+});
+
 describe("the panel groups a path by its parts, not by its slots", () => {
   // A polyline prompt repeats until the operator ends it, so the empty line
   // after the points is the Enter key that finishes the command.

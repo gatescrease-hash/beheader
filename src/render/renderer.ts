@@ -241,20 +241,20 @@ export function fitBitmapIntoBox(
   return { x: (boxWidth - width) / 2, y: (boxHeight - height) / 2, width, height };
 }
 
-const SELECTION_HIGHLIGHT_STYLE = "#2456c9";
+const SELECTION_HIGHLIGHT_STYLE = "#a85e45";
 
 /**
  * The grips on a selected path. A free grip is white inside and a bound one is
  * grey. So a held vertex reads as a different thing, and not a different mood.
  */
-const GRIP_STROKE_STYLE = "#2456c9";
+const GRIP_STROKE_STYLE = "#a85e45";
 const GRIP_FREE_FILL_STYLE = "#ffffff";
 const GRIP_BOUND_FILL_STYLE = "#b9c2d6";
-const GRIP_FOCUS_FILL_STYLE = "#2456c9";
+const GRIP_FOCUS_FILL_STYLE = "#a85e45";
 const GRIP_LINE_WIDTH = 1;
 
 /** The half finished path a prompt sequence draws. Every size here is screen pixels. */
-const PREVIEW_STROKE_STYLE = "#2456c9";
+const PREVIEW_STROKE_STYLE = "#a85e45";
 const PREVIEW_LINE_WIDTH_SCREEN = 1;
 const PREVIEW_DASH_SCREEN = 5;
 const PREVIEW_POINT_SIZE_SCREEN = 6;
@@ -268,7 +268,7 @@ const CHROME_GAP_SCREEN = 6;
 const CHROME_FONT = "12px sans-serif";
 const CHROME_LABEL_STYLE = "#1a1a1a";
 const CHROME_ERROR_BADGE_STYLE = "#c0392b";
-const CHROME_FORMULA_TICK_STYLE = "#2456c9";
+const CHROME_FORMULA_TICK_STYLE = "#a2792f";
 
 const TABLE_HEADER_MARGIN_SCREEN = 4;
 const TABLE_HEADER_LABEL_STYLE = "#6b7280";
@@ -293,6 +293,8 @@ export interface PathPreview {
   readonly points: readonly Point[];
   readonly bulges: readonly number[];
   readonly closed: boolean;
+  readonly markers?: readonly Point[];
+  readonly guide?: { readonly from: Point; readonly to: Point; readonly label: string };
 }
 
 /**
@@ -443,11 +445,35 @@ function drawPathPreview(ctx: CanvasRenderingContext2D, camera: CameraState, pre
   ctx.lineWidth = PREVIEW_LINE_WIDTH_SCREEN / camera.zoom;
   if (buildEdgePath(ctx, buildPathEdges(preview.points, preview.bulges, preview.closed), preview.closed)) {
     ctx.setLineDash([PREVIEW_DASH_SCREEN / camera.zoom, PREVIEW_DASH_SCREEN / camera.zoom]);
+    if (preview.closed) {
+      ctx.fillStyle = "rgba(188, 119, 89, 0.09)";
+      ctx.fill();
+    }
     ctx.stroke();
     ctx.setLineDash([]);
   }
+  if (preview.guide) {
+    const { from, to, label } = preview.guide;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.setLineDash([3 / camera.zoom, 4 / camera.zoom]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `${12 / camera.zoom}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    const x = to.x + 12 / camera.zoom;
+    const y = to.y - 12 / camera.zoom;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x - 4 / camera.zoom, y - 14 / camera.zoom, ctx.measureText(label).width + 8 / camera.zoom, 20 / camera.zoom);
+    ctx.fillStyle = PREVIEW_STROKE_STYLE;
+    ctx.fillText(label, x, y);
+  }
   const side = PREVIEW_POINT_SIZE_SCREEN / camera.zoom;
-  for (const point of preview.points) {
+  for (const point of preview.markers ?? preview.points) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(point.x - side / 2, point.y - side / 2, side, side);
     ctx.strokeRect(point.x - side / 2, point.y - side / 2, side, side);
   }
 }

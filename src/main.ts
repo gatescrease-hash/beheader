@@ -30,6 +30,7 @@
 import {
   type CameraState,
   createEmptyDocument,
+  computePolygonVertices,
   deriveValidateAndEvaluate,
   MATH_FONT_SIZE,
   mathSourceWithIds,
@@ -58,8 +59,8 @@ import {
   TEXT_CONTENT_PATH,
   type Value,
 } from "./engine/index.ts";
-import { DEFAULT_IMAGE_EXTENT, executeCommand, type CommandEffect } from "./command/commands.ts";
-import { findCommandSpec, parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
+import { DEFAULT_IMAGE_EXTENT, MAX_POLYGON_SIDES, executeCommand, type CommandEffect } from "./command/commands.ts";
+import { findCommandSpec, isPromptPoint, parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./command/props.ts";
 import { clampCamera, clampZoom, panByScreenDelta, screenToWorld, zoomAtScreenPoint, MAX_ZOOM, MIN_ZOOM, type ScreenPoint, type WorldPoint } from "./render/camera.ts";
@@ -91,8 +92,10 @@ import { edgeShape, type EdgeShape, type PathGrip } from "./render/grips.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
 import "mathlive";
+import type { MathfieldElement } from "mathlive";
 import "mathlive/static.css";
 import "mathlive/fonts.css";
+import "./workspace.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
@@ -221,8 +224,8 @@ export function respondToPrompt(
 /**
  * The shape a half finished command draws now, or nothing.
  *
- * The command layer knows what its own answers mean, so it builds the points
- * and the bulges. This function only carries the pointer across.
+ * Path commands supply their own points and bulges. Shape commands use their
+ * picked origin and the pointer to show the next size before it is committed.
  */
 export function promptPreview(state: AppState): PathPreview | undefined {
   const pending = state.pending;
@@ -230,9 +233,35 @@ export function promptPreview(state: AppState): PathPreview | undefined {
     return undefined;
   }
   const shape = findCommandSpec(pending.commandName)?.previewFromPrompts?.(pending.answers, state.pointer);
-  return shape === undefined || shape.points.length === 0
-    ? undefined
-    : { points: shape.points, bulges: shape.bulges, closed: shape.closed };
+  if (shape !== undefined) {
+    return shape.points.length === 0 ? undefined : { points: shape.points, bulges: shape.bulges, closed: shape.closed };
+  }
+  const { commandName, answers } = pending;
+  const anchor = answers.center ?? answers.corner ?? answers.origin ?? answers.position;
+  const cursor = state.pointer;
+  if (anchor !== undefined && isPromptPoint(anchor)) {
+    const markers = [anchor];
+    if (cursor && (commandName === "circle" || commandName === "polygon")) {
+      const radius = Math.hypot(cursor.x - anchor.x, cursor.y - anchor.y);
+      const sides = answers.sides;
+      const points = commandName === "circle"
+        ? [{ x: anchor.x + radius, y: anchor.y }, { x: anchor.x - radius, y: anchor.y }]
+          : typeof sides === "number" && Number.isInteger(sides) && sides >= 3 && sides <= MAX_POLYGON_SIDES
+          ? computePolygonVertices(sides, radius, anchor, 0) : [];
+      return { points, bulges: commandName === "circle" ? [1, 1] : [], closed: true, markers,
+        guide: { from: anchor, to: cursor, label: `Radius ${Number(radius.toFixed(2))}` } };
+    }
+    if (cursor && commandName === "rect") {
+      return { points: [anchor, { x: cursor.x, y: anchor.y }, cursor, { x: anchor.x, y: cursor.y }],
+        bulges: [], closed: true, markers: [anchor, cursor],
+        guide: { from: anchor, to: cursor, label: `${Number(Math.abs(cursor.x - anchor.x).toFixed(2))} × ${Number(Math.abs(cursor.y - anchor.y).toFixed(2))}` } };
+    }
+    return { points: [anchor], bulges: [], closed: false, markers };
+  }
+  const step = findCommandSpec(commandName)?.prompts?.[pending.stepIndex];
+  return cursor && step?.accepts === "point"
+    ? { points: [cursor], bulges: [], closed: false }
+    : undefined;
 }
 
 export function escape(state: AppState): AppState {
@@ -341,12 +370,24 @@ function fitToDocument(state: AppState, viewport: Viewport): AppState {
   const centreX = (extent.minX + extent.maxX) / 2;
   const centreY = (extent.minY + extent.maxY) / 2;
   const fitted = clampCamera({ x: centreX - viewport.width / (2 * zoom), y: centreY - viewport.height / (2 * zoom), zoom });
-  const line = fits ? describeZoom(fitted.zoom, fitted.zoom) : `the document's extent is a single point — centred it at zoom ${fitted.zoom}`;
+  const line = fits ? describeZoom(fitted.zoom, fitted.zoom) : `the document's extent is a single point — centred it at zoom ${roundedZoom(fitted.zoom)}`;
   return withLog(withCamera(state, fitted), [line]);
 }
 
+/**
+ * The zoom as a line an operator reads. A zoom reached by repeated steps is a
+ * float of full precision, such as 2.6584615384615384, and the command dock
+ * shows the newest line for as long as it stays the newest. Four decimals
+ * hold two neighbouring steps apart and leave the rest of the digits off.
+ */
+function roundedZoom(zoom: number): number {
+  return Number(zoom.toFixed(4));
+}
+
 function describeZoom(actual: number, requested: number): string {
-  return actual === requested ? `zoom is now ${actual}` : `zoom is now ${actual} — clamped to the ${MIN_ZOOM}-${MAX_ZOOM} range`;
+  return actual === requested
+    ? `zoom is now ${roundedZoom(actual)}`
+    : `zoom is now ${roundedZoom(actual)} — clamped to the ${MIN_ZOOM}-${MAX_ZOOM} range`;
 }
 
 export function pointerDownAt(
@@ -358,7 +399,7 @@ export function pointerDownAt(
 ): AppTransition {
   if (state.pending !== undefined) {
     const world = screenToWorld(state.document.camera, screenPoint);
-    return respondToPrompt(state, { kind: "picked", point: { x: world.x, y: world.y } }, viewport, context);
+    return respondToPrompt({ ...state, pointer: world }, { kind: "picked", point: { x: world.x, y: world.y } }, viewport, context);
   }
   return transition(withInteraction(state, pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive)));
 }
@@ -481,7 +522,7 @@ export function buildPanelModel(
     path: slotKey(descriptor.path),
     picker: isPictureSourceRow(object, descriptor),
     value: isPictureSourceRow(object, descriptor) ? describePictureSource(descriptor.value) : describeSlotValue(descriptor.value, { maxDecimals: 4 }),
-    editSeed: describeSlotValue(descriptor.value, { fullStrings: true }),
+    editSeed: descriptor.formulaSource === undefined ? describeSlotValue(descriptor.value, { fullStrings: true }) : `=${descriptor.formulaSource}`,
     formulaSource: descriptor.formulaSource,
     kind: descriptor.kind,
     synthetic: descriptor.synthetic === true,
@@ -1088,6 +1129,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     updateMathOverlays(report.mathRuns);
     updateEditor();
     paintCommandLine();
+    updateWorkspace();
   };
 
   /**
@@ -1127,6 +1169,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
           element.innerHTML = "";
           mathField = buildMathField(object.id, mathSourceWithNames(latex, state.document.objects));
           element.appendChild(mathField);
+          (mathField as MathfieldElement).mathVirtualKeyboardPolicy = "manual";
+          window.mathVirtualKeyboard.hide();
           applyMathFieldMacros(mathField);
           delete element.dataset["latex"];
           mathField.focus();
@@ -1230,6 +1274,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const closeMathEditor = (): void => {
     editingMathId = undefined;
     mathField = undefined;
+    window.mathVirtualKeyboard.hide();
     input.focus();
   };
 
@@ -1600,6 +1645,112 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   window.addEventListener("resize", paint);
 
+  const objectList = document.querySelector<HTMLElement>("#object-list");
+  const objectSearch = document.querySelector<HTMLInputElement>("#object-search");
+  const status = document.querySelector<HTMLElement>("#command-status");
+  const history: string[] = [];
+  let historyIndex = 0;
+  let historyDraft = "";
+  let objectListKey = "";
+
+  const updateWorkspace = (): void => {
+    const pending = state.pending;
+    const welcome = document.querySelector<HTMLElement>("#welcome");
+    if (welcome) welcome.hidden = state.document.objects.length > 0 || pending !== undefined;
+    const cancel = document.querySelector<HTMLElement>("#cancel-command");
+    if (cancel) cancel.hidden = pending === undefined;
+    const keyboardToggle = document.querySelector<HTMLButtonElement>("#math-keyboard-toggle");
+    if (keyboardToggle) {
+      const visible = window.mathVirtualKeyboard.visible;
+      keyboardToggle.hidden = editingMathId === undefined && !visible;
+      keyboardToggle.textContent = visible ? "Hide keyboard" : "Math keyboard";
+      keyboardToggle.setAttribute("aria-expanded", String(visible));
+    }
+    if (status) status.textContent = pending
+      ? `${pending.commandName} · ${state.log[state.log.length - 1] ?? "Follow the prompt"}`
+      : state.log.length > 1 ? state.log[state.log.length - 1] ?? "Ready" : "Ready";
+    input.placeholder = pending ? "Enter a value or pick a point…" : "Type a command…";
+    for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>(".tool-grid button"))) {
+      button.setAttribute("aria-pressed", String(button.dataset.command === pending?.commandName));
+    }
+    const zoom = document.querySelector<HTMLElement>("#zoom-level");
+    if (zoom) zoom.textContent = `${Math.round(state.document.camera.zoom * 100)}%`;
+    const selected = state.interaction.selectedObjectIds;
+    const count = document.querySelector<HTMLElement>("#object-count");
+    if (count) count.textContent = String(state.document.objects.length);
+    const query = objectSearch?.value.toLowerCase().trim() ?? "";
+    const key = JSON.stringify([state.document.objects.map(({ id, name, type }) => [id, name, type]), selected, query]);
+    if (objectList && key !== objectListKey) {
+      objectListKey = key;
+      objectList.replaceChildren();
+      for (const object of state.document.objects.filter((item) => `${item.name} ${item.type}`.toLowerCase().includes(query))) {
+        const button = document.createElement("button");
+        button.className = "object-item";
+        button.setAttribute("aria-pressed", String(selected.includes(object.id)));
+        const name = document.createElement("span");
+        name.textContent = object.name;
+        const type = document.createElement("small");
+        type.textContent = object.type;
+        button.append(name, type);
+        button.addEventListener("click", () => runWorkspaceCommand(`select ${object.name}`));
+        objectList.append(button);
+      }
+      if (!objectList.childElementCount) {
+        const empty = document.createElement("p");
+        empty.className = "object-empty";
+        empty.textContent = query ? "No matches." : "No objects yet.";
+        objectList.append(empty);
+      }
+    }
+  };
+
+  const runWorkspaceCommand = (line: string): void => {
+    commitInPlace();
+    commitMathEditor();
+    if (state.pending) state = escape(state);
+    input.value = "";
+    showCandidates([]);
+    if (status) status.dataset.error = "false";
+    applyTransition(submitLine(state, line, viewport(), evalContext));
+    input.focus();
+  };
+  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-command]"))) {
+    button.addEventListener("click", () => runWorkspaceCommand(button.dataset.command ?? ""));
+  }
+  objectSearch?.addEventListener("input", updateWorkspace);
+  const keyboardToggle = document.querySelector<HTMLButtonElement>("#math-keyboard-toggle");
+  keyboardToggle?.addEventListener("pointerdown", event => event.preventDefault());
+  keyboardToggle?.addEventListener("click", () => {
+    if (window.mathVirtualKeyboard.visible) window.mathVirtualKeyboard.hide();
+    else window.mathVirtualKeyboard.show();
+    updateWorkspace();
+  });
+  window.mathVirtualKeyboard.addEventListener("virtual-keyboard-toggle", updateWorkspace);
+  document.querySelector("#cancel-command")?.addEventListener("click", () => {
+    input.value = "";
+    apply(escape(state));
+    input.focus();
+  });
+  const help = document.querySelector<HTMLElement>("#help-panel");
+  const helpToggle = document.querySelector<HTMLButtonElement>("#help-toggle");
+  const setHelp = (open: boolean): void => {
+    if (help) help.hidden = !open;
+    helpToggle?.setAttribute("aria-expanded", String(open));
+    if (!open) helpToggle?.focus();
+  };
+  helpToggle?.addEventListener("click", () => setHelp(help?.hidden ?? false));
+  document.querySelector("#help-close")?.addEventListener("click", () => setHelp(false));
+  document.querySelector("#history-toggle")?.addEventListener("click", (event) => {
+    logElement.hidden = !logElement.hidden;
+    (event.currentTarget as HTMLElement).setAttribute("aria-expanded", String(!logElement.hidden));
+    // A hidden element measures zero, so the scroll to the last line that
+    // drawLog runs after each command had no effect while the panel was shut.
+    // Drawing the log again on the way open puts the newest lines in view,
+    // which are the ones an operator opens the panel to read.
+    drawLog(logElement, state.log);
+    paint();
+  });
+
   input.addEventListener("input", () => {
     paintCommandLine();
   });
@@ -1611,6 +1762,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   input.addEventListener("keydown", (event: KeyboardEvent) => {
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && history.length > 0 && state.pending === undefined) {
+      event.preventDefault();
+      if (historyIndex === history.length) historyDraft = input.value;
+      historyIndex = Math.max(0, Math.min(history.length, historyIndex + (event.key === "ArrowUp" ? -1 : 1)));
+      input.value = history[historyIndex] ?? historyDraft;
+      input.setSelectionRange(input.value.length, input.value.length);
+      paintCommandLine();
+      return;
+    }
     if (event.key === "Tab") {
       event.preventDefault();
       completeAtCursor();
@@ -1625,7 +1785,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     const line = input.value;
+    if (line.trim() === "" && state.pending === undefined) return;
+    if (state.pending === undefined && line.trim() !== "") {
+      if (history[history.length - 1] !== line) history.push(line);
+      historyIndex = history.length;
+      historyDraft = "";
+    }
     const outcome = submitLine(state, line, viewport(), evalContext);
+    if (status) status.dataset.error = String(outcome.refused);
     if (!outcome.refused) {
       input.value = "";
     }
@@ -1691,11 +1858,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   window.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Escape") {
+      if (help && !help.hidden) {
+        setHelp(false);
+        return;
+      }
       closeMenu();
       apply(escape(state));
       return;
     }
-    if (event.key === " " && input.value === "") {
+    const target = event.target as HTMLElement;
+    const editing = target.matches("input, textarea, select, math-field, [contenteditable]");
+    if (event.key === " " && input.value === "" && (!editing || target === input)) {
       event.preventDefault();
       spaceHeld = true;
     }
@@ -1910,7 +2083,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       openMathEditor(objectId);
       return;
     }
-    if (clip.classList.contains("panel-clip--formula")) {
+    if (clip.getAttribute("data-action") === "unlink") {
       apply(unlinkPanelSlot(state, objectId, path, evalContext));
       return;
     }
@@ -2018,6 +2191,8 @@ function writePanel(panelElement: HTMLElement, model: PanelModel, editing: Panel
   if (model.derived.length > 0) {
     const rule = document.createElement("div");
     rule.className = "panel-rule";
+    rule.textContent = "Calculated";
+    rule.title = "Read-only values calculated from the inputs above";
     children.push(rule);
     for (const row of model.derived) {
       children.push(panelRowElement(row, true, editing));
@@ -2081,29 +2256,42 @@ function panelRowElement(row: PanelRow, derived: boolean, editing: PanelRowEdit 
     element.className = `${element.className} panel-row--nested`;
   }
   element.dataset.path = row.path;
+  element.dataset.kind = row.synthetic ? "summary" : row.kind;
 
   const path = document.createElement("span");
   path.className = "panel-row__path";
-  path.textContent = row.path;
+  path.textContent = ({ "style.strokeColor": "stroke", "style.strokeWidth": "stroke width", "style.fillColor": "fill" } as Record<string, string>)[row.path] ?? row.path;
+  path.title = row.path;
 
   const right = document.createElement("span");
   right.className = "panel-row__right";
-  if (row.choices !== undefined) {
-    right.append(panelChoiceSelect(row.choices));
-  } else if (editing !== undefined && editing.path === row.path) {
+  if (editing !== undefined && editing.path === row.path) {
     right.append(panelEditInput(row.editSeed, editing.handlers));
+  } else if (row.choices !== undefined) {
+    right.append(panelClipElement(row));
+    right.append(panelChoiceSelect(row.choices));
   } else {
     if (row.picker) {
       right.append(panelPickElement(row));
     } else if (!derived && !row.synthetic) {
       right.append(panelClipElement(row));
+      if (row.kind === "formula") {
+        const unlink = document.createElement("button");
+        unlink.type = "button";
+        unlink.className = "panel-clip panel-unlink";
+        unlink.dataset.action = "unlink";
+        unlink.textContent = "Unlink";
+        unlink.title = `Disconnect ${row.path} and keep its current value`;
+        unlink.setAttribute("aria-label", `Unlink ${row.path} and keep its current value`);
+        right.append(unlink);
+      }
     }
     if (row.color !== undefined) {
       right.append(panelColorElement(row.path, row.color));
     }
     const value = document.createElement("span");
     value.className = "panel-row__value";
-    value.textContent = row.formulaSource === undefined ? row.value : `= ${row.formulaSource}  (${row.value})`;
+    value.textContent = row.formulaSource === undefined ? (row.kind === "literal" && row.value === "nothing" ? "" : row.value) : `= ${row.formulaSource}  (${row.value})`;
     right.append(value);
   }
 
@@ -2132,7 +2320,8 @@ function panelChoiceSelect(choices: PanelRowChoices): HTMLSelectElement {
   for (let index = 0; index < choices.labels.length; index += 1) {
     const option = document.createElement("option");
     option.value = String(index);
-    option.textContent = choices.labels[index] ?? "";
+    const label = choices.labels[index] ?? "";
+    option.textContent = ({ "the formula": "Formula", "the result": "Result", "the formula and its result": "Formula + result" } as Record<string, string>)[label] ?? label;
     select.append(option);
   }
   select.selectedIndex = choices.selectedIndex;
@@ -2140,10 +2329,14 @@ function panelChoiceSelect(choices: PanelRowChoices): HTMLSelectElement {
 }
 
 function panelClipElement(row: PanelRow): HTMLElement {
-  const clip = document.createElement("span");
+  const clip = document.createElement("button");
+  clip.type = "button";
   clip.className = row.kind === "formula" ? "panel-clip panel-clip--formula" : "panel-clip panel-clip--literal";
-  clip.textContent = "📎";
-  clip.setAttribute("aria-label", row.kind === "formula" ? `unlink ${row.path} — it is driven by a formula` : `edit ${row.path}`);
+  const unset = row.kind === "literal" && row.value === "nothing";
+  if (unset) clip.classList.add("panel-clip--unset");
+  clip.textContent = row.kind === "formula" ? "ƒx" : unset ? "Unset" : "Value";
+  clip.title = row.kind === "formula" ? "Driven by a formula · click to edit" : unset ? "No value assigned · click to set a value or formula" : "Fixed value · click to edit or enter a formula";
+  clip.setAttribute("aria-label", row.kind === "formula" ? `Edit formula for ${row.path}` : `Edit value for ${row.path}`);
   return clip;
 }
 

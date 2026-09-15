@@ -1,0 +1,126 @@
+/*
+  The look of the workspace that surrounds the canvas: the header and its
+  wordmark, the sidebar of creation tools, the object navigator, the guide
+  panel, the view controls and the command dock. main.ts imports this file, so
+  the bundler places it in the page and index.html reaches it through that
+  import rather than through a link element.
+
+  index.html holds the other half of the page style in a style element, and
+  the two divide the work by subject. That one owns the geometry the drawing
+  layers measure against, and this one owns the palette and the layout around
+  it. docs/STATUS.md records how a selector named in both resolves, and why a
+  size written here for one half of a field and its marking layer moves each
+  mark away from the letters it belongs to. Each pair is written as one
+  selector here for that reason.
+
+  The colours are custom properties on :root. --paper, --paper-deep and
+  --paper-light are the three grounds, running from the canvas outward, and
+  --ink, --muted, --accent, --ochre and --clay are the marks that sit on them.
+*/
+:root { color-scheme: light; --paper: #f4f0e5; --paper-deep: #eae2cf; --paper-light: #faf7ef; --ink: #303b32; --muted: #6f7464; --line: #d3cab5; --accent: #667653; --accent-dark: #45543d; --ochre: #c19b50; --clay: #bc7759; }
+html, body { color: var(--ink); background: var(--paper-deep); font-family: "Segoe UI", Tahoma, sans-serif; }
+* { box-sizing: border-box; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.app-header { height: 54px; flex: 0 0 auto; display: flex; align-items: center; gap: 16px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--line); background: var(--paper-light); }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; }
+.brand-mark { width: 43px; height: 43px; overflow: visible; }
+.brand-knight { fill: var(--accent-dark); stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; }
+.brand-visor { fill: none; stroke: var(--paper-light); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.brand-plume { fill: none; stroke: var(--clay); stroke-width: 2.3; stroke-linecap: round; }
+.brand-word { font: 600 25px/1 "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; letter-spacing: .015em; transform: translateY(-1px); }
+.app-header nav { margin-left: auto; display: flex; gap: 8px; }
+.app-header button, .view-controls button, .command-status button, #help-close { border: 1px solid transparent; background: transparent; color: var(--ink); border-radius: 4px; padding: 8px 12px; font-size: 12px; }
+button:hover { background-color: #e7dfcc; }
+button.primary { background: var(--accent-dark); color: var(--paper-light); border: 1px solid var(--accent-dark); border-radius: 4px; padding: 9px 16px; font-size: 12px; font-weight: 600; }
+button.primary:hover { background: #35432f; }
+.workspace { display: flex; flex: 1; min-height: 0; }
+.sidebar { position: relative; width: 208px; flex-shrink: 0; padding: 18px 12px 16px; background: var(--paper-deep); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 700; letter-spacing: 1.4px; color: var(--accent-dark); margin-bottom: 14px; }
+.section-heading span { font-weight: 400; font-size: 10px; letter-spacing: 0; color: var(--muted); }
+.tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.tool-grid button { display: flex; align-items: center; gap: 6px; padding: 7px 5px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--ink); text-align: left; font-size: 11px; }
+.tool-grid button span { width: 19px; font-size: 21px; line-height: 20px; text-align: center; color: var(--accent-dark); }
+.tool-grid button:hover { background: #e3dcc8; border-color: #c9bea5; }
+.tool-grid button[aria-pressed="true"] { background: #dce0c9; border-color: var(--accent); box-shadow: inset 3px 0 0 var(--clay); }
+.objects-heading { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
+#object-search { width: 100%; min-height: 33px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 3px; font-size: 11px; background: var(--paper-light); color: var(--ink); }
+#object-list { overflow: auto; min-height: 60px; flex: 1; margin-top: 10px; }
+.object-empty { color: var(--muted); font-size: 12px; line-height: 1.7; padding: 6px; }
+.object-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; background: transparent; color: var(--ink); font-size: 12px; text-align: left; }
+.object-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.object-item small { color: var(--muted); font-size: 10px; }
+.object-item[aria-pressed="true"] { background: #dce0c9; color: var(--accent-dark); box-shadow: inset 3px 0 0 var(--clay); }
+#stage { background-color: var(--paper); background-image: radial-gradient(circle at 18% 22%, rgba(89, 75, 48, .035) 0 1px, transparent 1.4px), radial-gradient(circle at 72% 64%, rgba(89, 75, 48, .026) 0 1px, transparent 1.2px); background-size: 29px 31px, 37px 41px; }
+#welcome { position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%); width: min(520px, 85%); text-align: center; }
+#welcome p { font-size: 14px; color: var(--muted); line-height: 1.8; margin: 0; }
+.view-controls { position: absolute; bottom: 18px; right: 20px; display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 4px; background: rgba(250, 247, 239, .94); box-shadow: 0 3px 12px rgba(48, 59, 50, .08); font-size: 11px; }
+#zoom-level { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; }
+#help-panel { position: absolute; top: 18px; right: 18px; width: min(340px, calc(100% - 36px)); max-height: calc(100% - 90px); overflow: auto; padding: 18px 22px; background: var(--paper-light); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 12px 36px rgba(48, 59, 50, .15); z-index: 12; font-size: 12px; line-height: 1.7; }
+.help-title { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+#help-panel p, #help-panel dd { color: var(--muted); }
+#help-panel dt { font-weight: 600; margin-top: 15px; }
+#help-panel dd { margin: 3px 0 0; }
+#help-panel code { font-size: 11px; color: var(--accent-dark); }
+.command-dock { background: var(--paper-light); border-top: 1px solid var(--line); padding: 5px 16px 8px; }
+.command-status { display: flex; align-items: center; gap: 12px; min-height: 27px; font-size: 12px; }
+#command-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#command-status[data-error="true"] { color: #ad3d32; }
+#history-toggle { margin-left: auto; }
+.command-status button { padding: 4px 8px; font-size: 11px; }
+#command-field { border: 1px solid var(--line); border-radius: 3px; margin-top: 6px; background: var(--paper); }
+#command-field:focus-within { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--ochre); }
+#command, #command-mirror { font: 13px "Cascadia Mono", Consolas, monospace; border: 0; padding: 9px 12px; }
+#command { color: var(--ink); }
+#command::placeholder { color: #8a9890; }
+kbd { font: inherit; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; margin-left: 5px; }
+#log { font: 12px/1.65 "Cascadia Mono", Consolas, monospace; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 4px; margin: 7px 0; padding: 10px; }
+.panel { width: min(320px, 100%); border-color: #c7bda6; border-radius: 4px; padding: 9px 11px; background: rgba(250, 247, 239, .96); box-shadow: 0 6px 20px rgba(48, 59, 50, .13); }
+.panel-header { padding: 3px 0 9px; color: var(--accent-dark); font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; font-size: 14px; }
+.panel-row, .panel-part { min-height: 21px; }
+.panel-row { align-items: baseline; padding: 1px 0; }
+.panel-clip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 32px; min-height: 19px; padding: 1px 4px; border: 1px solid #c8d7ce; border-radius: 4px; font: 10px/1.2 "Segoe UI", sans-serif; font-style: normal; white-space: nowrap; }
+.panel-clip--literal { background: #e5e7d7; color: var(--accent-dark); opacity: 1; font-size: 10px; }
+.panel-clip--formula { background: #efe0c2; color: #72583a; border-color: #cfb77d; font-size: 13px; font-weight: 600; }
+.panel-clip--unset { background: transparent; border-style: dashed; color: #77867e; }
+.panel-unlink { min-width: 0; color: #697b76; background: white; font-size: 9px; }
+.panel-clip:hover { border-color: var(--accent); background: #dce0c9; }
+.panel-row[data-kind="formula"] .panel-row__path { color: #86533d; }
+.panel-row--derived { font-style: normal; color: #738078; }
+.panel-row__value { white-space: normal; overflow-wrap: anywhere; text-align: right; min-width: 0; }
+.panel-row__path { flex-shrink: 0; }
+.panel-row__choice { appearance: none; width: 12.5em; min-width: 0; max-width: 100%; padding: 3px 24px 3px 6px; border: 1px solid #c8bda6; border-radius: 3px; color: var(--ink); background: var(--paper-light) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4 3 3 3-3' fill='none' stroke='%23667653' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 6px center; text-overflow: ellipsis; }
+.math-overlay--editing, .text-editor { outline-color: var(--clay); }
+.mark--command { background: #e8dfc7; }
+.mark--address { background: #dde2cf; box-shadow: 0 0 0 1px #aeb897; }
+.panel-rule { border-top: 1px solid #b7cabc; margin: 7px 0 3px; padding-top: 6px; color: var(--muted); font: 10px "Segoe UI", sans-serif; }
+.panel-dismiss { padding: 5px; }
+.context-menu { border-radius: 3px; padding: 6px 0; border-color: var(--line); background: var(--paper-light); }
+.context-menu__item { padding: 7px 12px; }
+@media (max-width: 850px) {
+  .sidebar { width: 184px; padding: 16px 10px; }
+  .tool-grid button { font-size: 10px; gap: 4px; }
+  .section-heading span { font-size: 9px; }
+  .app-header { padding: 0 16px; }
+}
+/* A narrow screen keeps the tools and drops the navigator, which needs width
+   to show a name and a type on one row. */
+@media (max-width: 560px) {
+  .app-header { height: 50px; gap: 8px; padding: 0 10px 0 7px; }
+  .brand { gap: 5px; }
+  .brand-mark { width: 35px; height: 35px; }
+  .brand-word { font-size: 19px; }
+  .app-header nav { gap: 0; }
+  .app-header button { padding: 8px; font-size: 10px; }
+  .app-header .primary { padding: 8px; font-size: 10px; }
+  .sidebar { width: 74px; padding: 15px 7px; }
+  .tool-grid { grid-template-columns: 1fr; gap: 4px; overflow: auto; }
+  .tool-grid button { flex-direction: column; padding: 6px 2px; gap: 3px; font-size: 9px; }
+  .sidebar .section-heading, #object-list, #object-search { display: none; }
+  #welcome { width: 88%; }
+  #welcome p { font-size: 11px; }
+  .view-controls { right: 10px; bottom: 10px; }
+  .command-dock { padding: 7px 10px 10px; }
+}

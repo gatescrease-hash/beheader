@@ -1713,6 +1713,18 @@ describe("the preview a half finished command draws", () => {
     expect(calls.some((call) => call.op === "arc")).toBe(true);
   });
 
+  it("fills a ghost circle and marks its center instead of its construction vertices", () => {
+    const { calls, paints } = drawn({
+      points: [{ x: 50, y: 0 }, { x: -50, y: 0 }], bulges: [1, 1], closed: true,
+      markers: [{ x: 0, y: 0 }],
+      guide: { from: { x: 0, y: 0 }, to: { x: 30, y: 40 }, label: "Radius 50" },
+    });
+    expect(calls.filter(call => call.op === "arc")).toHaveLength(2);
+    expect(calls.filter(call => call.op === "strokeRect")).toEqual([{ op: "strokeRect", x: -3, y: -3, w: 6, h: 6 }]);
+    expect(calls).toContainEqual({ op: "fillText", text: "Radius 50", x: 42, y: 28, align: "left" });
+    expect(paints.some(paint => paint.op === "fill" && paint.color === "rgba(188, 119, 89, 0.09)")).toBe(true);
+  });
+
   it("closes the preview path when the command has closed it", () => {
     const closed = {
       points: [

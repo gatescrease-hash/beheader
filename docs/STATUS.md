@@ -15,7 +15,7 @@ register, and its current handoff. Rust implementation remains deferred.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2743 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2750 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built, except the parts section 17 postpones. |
 
 ### How to run it
@@ -93,7 +93,9 @@ tables, and other suites drive them anyway.
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | The page and its stylesheet: the canvas, the panel container, the log and the input bar. |
+| `index.html` | The workspace shell, creation tools, object navigator, guide, canvas, panels, and command dock. |
+| `src/workspace.css` | Workspace layout, responsive navigation, focus styles, and panel presentation. |
+| `tools/workspace-check.cjs` | Browser checks for creation, live formulas, saved values, navigation, command recall, and narrow screens. Uses Playwright, with optional `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_EXECUTABLE`, and `WORKSPACE_URL` environment variables. |
 | `package.json` | Scripts, dev dependencies, and the one runtime dependency, MathLive. |
 | `tsconfig.json` | Strict mode over the whole of `src`. |
 | `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
@@ -287,13 +289,28 @@ the code it constrains.
    names it and leaves the other lines exporting numbers. Section 12 of the
    spec carries the reason.
 
+19. **The page carries two stylesheets, and the later one settles a tie.**
+   The style element in `index.html` holds the geometry that the drawing
+   layers measure against. `src/workspace.css` holds the palette and the
+   layout of the shell around the canvas, and `main.ts` imports it, so the
+   bundler puts it after that element and a selector named in both resolves
+   there.
+
+   So the stylesheet that arrives later reaches the same classes the
+   measurements in TypeScript rest on. A font or a padding written there for a
+   field alone, or for its marking layer alone, slides each mark away from the
+   letters it belongs to, which is the failure the invariant above describes,
+   reached from the other direction. Each pair is written as one selector in
+   both files for that reason.
+
 ---
 
 ## 5. How to work here
 
 `CLAUDE.md` holds the rules for a change. It names the checks to run, how to
 write a comment, and what to prefer when the spec is silent. This file held a
-second copy of them, and the two drifted apart.
+second copy of them, and the two drifted apart. `AGENTS.md` at the root is a
+pointer to `CLAUDE.md`, and it exists for a tool that looks for that filename.
 
 `TODO.md` holds the open work, and an item leaves that file when it lands. Git
 holds the history of each change, and this file holds the state that the

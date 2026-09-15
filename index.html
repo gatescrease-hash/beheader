@@ -5,8 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Beheader</title>
     <!--
-      The furniture of the page: the canvas, the log above the input, and the
-      input bar that holds focus. main.ts finds each element by id.
+      The furniture of the page: the header and its wordmark, the sidebar that
+      holds the creation tools and the object navigator, the canvas with the
+      property panels over it, the guide, and the command dock along the
+      bottom. main.ts finds each element by id or by class, and it writes
+      everything that changes.
+
+      A button that carries a data-command attribute sends the line named there
+      through the command layer, so a tool in the sidebar and the same word
+      typed into the dock reach the document by one route.
 
       #panels holds one .panel for each selected object. main.ts builds and
       places them on every paint. The container does not take clicks, so an
@@ -16,6 +23,11 @@
 
       #panels floats over the canvas, so the canvas sits inside a positioned
       #stage. Nothing here holds state or behaviour.
+
+      The style element below holds the geometry that the drawing layers
+      measure against, such as the size and the padding of a field and of the
+      layer that marks it. src/workspace.css is the other half of the page
+      style, and docs/STATUS.md records how the two meet.
     -->
     <style>
       html,
@@ -552,15 +564,84 @@
   </head>
   <body>
     <div id="app">
-      <div id="stage">
-        <canvas id="canvas"></canvas>
-        <div id="panels"></div>
+      <header class="app-header">
+        <div class="brand" aria-label="Beheader">
+          <svg class="brand-mark" viewBox="5 2 34 38" role="img" aria-label="Knight helmet in profile">
+            <path class="brand-knight" d="M8 39h26l-4-6v-6l7-4-3-13-8-5-11 3-5 9 2 8-5 5 5 2z" />
+            <path class="brand-visor" d="M17 15h17l2 4H18zm11 4-2 7 7-3" />
+            <path class="brand-plume" d="M15 10c2-6 8-8 14-6-6 0-10 3-11 8" />
+          </svg>
+          <span class="brand-word">Beheader</span>
+        </div>
+        <nav aria-label="Workspace actions">
+          <button id="help-toggle" aria-expanded="false" aria-controls="help-panel">Help</button>
+          <button data-command="load">Open</button>
+          <button class="primary" data-command="save" title="Download this document">Save</button>
+        </nav>
+      </header>
+      <div class="workspace">
+        <aside class="sidebar" aria-label="Workspace tools">
+          <div class="section-heading">CREATE</div>
+          <div class="tool-grid">
+            <button data-command="rect"><span>▭</span>Rectangle</button>
+            <button data-command="circle"><span>○</span>Circle</button>
+            <button data-command="polygon"><span>⬡</span>Polygon</button>
+            <button data-command="polyline"><span>⌁</span>Path</button>
+            <button data-command="text"><span>T</span>Text</button>
+            <button data-command="table"><span>▦</span>Table</button>
+            <button data-command="math"><span>ƒ</span>Equation</button>
+            <button data-command="image"><span>▧</span>Image</button>
+            <button data-command="script"><span>⌘</span>Script</button>
+          </div>
+          <div class="section-heading objects-heading">OBJECTS <span id="object-count">0</span></div>
+          <input id="object-search" type="search" placeholder="Find an object…" aria-label="Find an object" />
+          <div id="object-list" aria-label="Objects"></div>
+        </aside>
+        <div id="stage">
+          <canvas id="canvas" aria-label="Spatial canvas. Choose a creation tool to begin."></canvas>
+          <div id="welcome">
+            <p>Choose a tool, then click to place.<br />Or type a command below.</p>
+          </div>
+          <aside id="help-panel" hidden aria-label="Quick guide">
+            <div class="help-title">
+              <strong>Quick reference</strong>
+              <button id="help-close" aria-label="Close guide">×</button>
+            </div>
+            <dl>
+              <dt>Select and edit</dt>
+              <dd>Click an object for its properties. Double-click text, cells, or equations to edit.</dd>
+              <dt>Move around</dt>
+              <dd>Scroll to zoom. Hold Space and drag to pan. Use Fit to see everything.</dd>
+              <dt>Connect values</dt>
+              <dd>Enter a formula in a property or cell, such as <code>= circle_1.radius * 2</code>.</dd>
+              <dt>Use commands</dt>
+              <dd>Type a command below. Tab completes names and addresses. ↑ / ↓ recalls commands. Esc cancels.</dd>
+              <dt>Keep your work</dt>
+              <dd>Save downloads a document. Open restores a saved file. Save before closing this page.</dd>
+            </dl>
+          </aside>
+          <div class="view-controls" aria-label="Canvas view">
+            <button data-command="zoom 0.8" aria-label="Zoom out">−</button>
+            <span id="zoom-level">100%</span>
+            <button data-command="zoom 1.25" aria-label="Zoom in">+</button>
+            <button data-command="fit">Fit</button>
+          </div>
+          <div id="panels"></div>
+        </div>
       </div>
-      <div id="log"></div>
-      <div id="command-field">
-        <div id="command-mirror" aria-hidden="true"></div>
-        <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="command line" />
-      </div>
+      <footer class="command-dock">
+        <div class="command-status">
+          <span id="command-status" role="status">Ready</span>
+          <button id="cancel-command" hidden>Cancel <kbd>Esc</kbd></button>
+          <button id="math-keyboard-toggle" hidden aria-expanded="false">Math keyboard</button>
+          <button id="history-toggle" aria-expanded="false" aria-controls="log">History</button>
+        </div>
+        <div id="log" hidden aria-label="Command history"></div>
+        <div id="command-field">
+          <div id="command-mirror" aria-hidden="true"></div>
+          <input id="command" type="text" autocomplete="off" spellcheck="false" aria-label="Command line" placeholder="Type a command…" />
+        </div>
+      </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
