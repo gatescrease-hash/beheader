@@ -19,19 +19,7 @@ the file it is about.
 
 ## Open
 
-### 1. Finish the rename to Beheader
-
-The package, the page title, the documents and the in-app strings all carry
-Beheader, and `vite.config.ts` builds against `/beheader/`. Two things outside
-this repository still carry the old name: the GitHub repository is
-`beheader-clean`, and the working folder is named after it.
-
-The base path and the repository name have to agree, because GitHub Pages serves
-a project site under the repository name. So the repository is renamed to
-`beheader` before the next merge to `main`, which is what deploys the site.
-
-Done when the repository and the folder carry `beheader`, and a deploy from
-`main` serves the page with its assets.
+Nothing is open. The next item comes from the spec, by the route below.
 
 ---
 
