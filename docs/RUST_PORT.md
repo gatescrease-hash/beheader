@@ -122,9 +122,9 @@ The first implementation task therefore inventories actual imports, including
 type-only imports and helper calls. A runtime export count alone misses types,
 and a list copied into this document would become stale.
 
-At the inspected baseline, the TypeScript compiler reports 424 declared exports,
-of which 286 have runtime values. Production consumers in 19 source files import
-154 distinct engine names. This audit excludes test consumers and counts aliases
+At the inspected baseline, the TypeScript compiler reports 435 declared exports,
+of which 297 have runtime values. Production consumers in 19 source files import
+160 distinct engine names. This audit excludes test consumers and counts aliases
 by their imported name. These numbers explain the size of the boundary today.
 The generated inventory in `RUST-001` becomes the continuing coverage check.
 
@@ -151,6 +151,7 @@ source file's adjacent test file travels with its behavior.
 | [primitives/geometry.ts](../src/engine/primitives/geometry.ts) | `primitives::geometry` | `RUST-007` |
 | [primitives/table.ts](../src/engine/primitives/table.ts) | `primitives::table` | `RUST-007` |
 | [primitives/image.ts](../src/engine/primitives/image.ts) | `primitives::image` | `RUST-007` |
+| [primitives/doc.ts](../src/engine/primitives/doc.ts) | `primitives::doc` | `RUST-007` |
 | [primitives/schema.ts](../src/engine/primitives/schema.ts) | `schema` | `RUST-007`, `RUST-010` |
 | [script/stub.ts](../src/engine/script/stub.ts) | `script` | `RUST-007` |
 | [math/ast.ts](../src/engine/math/ast.ts) | `math::ast` | `RUST-008` |

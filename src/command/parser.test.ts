@@ -25,6 +25,10 @@ function rejected(line: string): { readonly message: string; readonly start: num
 }
 
 const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: Command }[] = [
+  { line: "docvar speed 12", command: { kind: "docvar", name: "speed", value: 12 } },
+  { line: "delvar speed", command: { kind: "delvar", name: "speed" } },
+  { line: "renamevar speed velocity", command: { kind: "renamevar", name: "speed", newName: "velocity" } },
+  { line: "vars", command: { kind: "vars" } },
   { line: "circle x=100 y=100 r=20", command: { kind: "circle", x: 100, y: 100, radius: 20 } },
   { line: "polygon sides=5 x=0 y=0 r=50", command: { kind: "polygon", sides: 5, x: 0, y: 0, radius: 50 } },
   { line: "rect x=0 y=0 w=200 h=100", command: { kind: "rect", x: 0, y: 0, width: 200, height: 100 } },

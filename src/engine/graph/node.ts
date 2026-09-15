@@ -74,6 +74,8 @@ export type ObjectType =
   | "image"
   | "math"
   | "value"
+  | "doc"
+  | "docref"
   | "add";
 
 export const TABLE_TYPE: ObjectType = "table";
@@ -123,6 +125,7 @@ export function isLegalPortName(name: string): boolean {
 }
 
 export interface GraphObject extends AddressableObject {
+  readonly target?: Address;
   readonly slots: Readonly<Record<string, Slot>>;
   readonly ports?: GraphObjectPorts;
 

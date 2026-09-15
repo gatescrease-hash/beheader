@@ -29,6 +29,7 @@ import {
   commitTableCell,
   commitMathSource,
   commitTextContent,
+  commitVariableCopy,
   dismissPanel,
   editorSeed,
   escape,
@@ -2054,5 +2055,54 @@ describe("the panel opens a colour picker on a colour slot", () => {
   it("gives a text colour a swatch too", () => {
     const text = typed(opened(), 'text x=0 y=0 "hi"');
     expect(rowNamed(text, "text_1", "style.color").color).toEqual({ seed: "#000000", none: false });
+  });
+});
+
+
+describe("document variable surfaces", () => {
+  it("selects the invisible singleton and builds editable rows", () => {
+    const state = typed(typed(opened(), "docvar speed 12"), "vars");
+    const doc = objectNamed(state, "doc");
+    expect(state.interaction.selectedObjectIds).toEqual([doc.id]);
+    expect(objectExtent(doc)).toBeUndefined();
+    expect(buildPanelModel(doc, state.document.objects).modifiable).toMatchObject([{ path: "speed", value: "12", kind: "literal" }]);
+  });
+
+  it("edits a copy through its target and updates its sibling in the same pass", () => {
+    let state = typed(opened(), "docvar speed 12");
+    state = typed(state, "docvar speed x=100 y=100");
+    state = typed(state, "docvar speed x=100 y=140");
+    const copy = objectNamed(state, "docref_1");
+    expect(editorSeed(state, { kind: "docref", objectId: copy.id })).toBe("12");
+    const edited = commitVariableCopy(state, copy.id, "24");
+    expect(numberAt(objectNamed(edited, "doc"), ["speed"])).toBe(24);
+    expect(numberAt(objectNamed(edited, "docref_1"), ["value"])).toBe(24);
+    expect(numberAt(objectNamed(edited, "docref_2"), ["value"])).toBe(24);
+    expect(numberAt(objectNamed(state, "doc"), ["speed"])).toBe(12);
+  });
+
+  it("preserves an unchanged copy edit and commits text, boolean and formula values", () => {
+    let state = typed(typed(opened(), "docvar speed 12"), "docvar speed x=100 y=100");
+    const copy = objectNamed(state, "docref_1");
+    expect(commitVariableCopy(state, copy.id, "12")).toBe(state);
+    state = commitVariableCopy(state, copy.id, "hello");
+    expect(objectNamed(state, "doc").slots.speed?.value).toBe("hello");
+    state = commitVariableCopy(state, copy.id, "TRUE");
+    expect(objectNamed(state, "doc").slots.speed?.value).toBe(true);
+    state = commitVariableCopy(state, copy.id, "=2+3");
+    expect(objectNamed(state, "doc").slots.speed).toMatchObject({ kind: "formula", value: 5 });
+    expect(editorSeed(state, { kind: "docref", objectId: copy.id })).toContain("2 + 3");
+  });
+
+  it("shows renamed object names in the math source row without changing stored IDs", () => {
+    let state = typed(opened(), "table x=0 y=0");
+    state = typed(state, "set table_1.A1 12");
+    state = typed(state, 'math x=100 y=100 ' + JSON.stringify('y=\\gpref{table_1.A1}'));
+    state = typed(state, "rename table_1 grid");
+    const math = objectNamed(state, "math_1");
+    const row = buildPanelModel(math, state.document.objects).modifiable.find((row) => row.path === "source");
+    expect(row?.value).toContain("grid.A1");
+    expect(row?.value).not.toContain("obj_");
+    expect(math.slots.source?.value).toContain("obj_");
   });
 });

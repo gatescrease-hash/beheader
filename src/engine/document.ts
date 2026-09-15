@@ -73,6 +73,7 @@ export function mintObjectId(document: Document): MintedObjectId | { readonly ok
 export type SerializedSlot = { readonly kind: "literal"; readonly value: Value } | { readonly kind: "formula"; readonly ast: FormulaAst; readonly value: Value } | { readonly kind: "derived" };
 
 export interface SerializedGraphObject {
+  readonly target?: GraphObject["target"];
   readonly id: string;
   readonly name: string;
   readonly type: ObjectType;
@@ -118,6 +119,7 @@ function serializeObject(object: GraphObject): SerializedGraphObject {
     slots,
     ...(object.ports === undefined ? {} : { ports: object.ports }),
     ...(object.vertexCount === undefined ? {} : { vertexCount: object.vertexCount }),
+    ...(object.target === undefined ? {} : { target: object.target }),
   };
 }
 
@@ -284,6 +286,9 @@ function reconstructObject(raw: unknown, index: number): ObjectReconstructionRes
   }
 
   const objectType = type as ObjectType;
+  if (raw.target !== undefined && (!isPlainObject(raw.target) || typeof raw.target.objectId !== "string" || !Array.isArray(raw.target.path) || !raw.target.path.every((part) => typeof part === "string"))) {
+    return { ok: false, message: `${name}.target must be an address` };
+  }
   const object: GraphObject = {
     id,
     name,
@@ -291,6 +296,7 @@ function reconstructObject(raw: unknown, index: number): ObjectReconstructionRes
     slots,
     ...(portsResult.ports === undefined ? {} : { ports: portsResult.ports }),
     ...(vertexCountResult.vertexCount === undefined ? {} : { vertexCount: vertexCountResult.vertexCount }),
+    ...(raw.target === undefined ? {} : { target: raw.target as unknown as NonNullable<GraphObject["target"]> }),
   };
   return { ok: true, object: { ...object, slots: withSchemaDerivedSlots(object) } };
 }

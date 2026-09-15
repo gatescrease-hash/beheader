@@ -27,6 +27,7 @@
  * the tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
+import { DOCREF_DERIVED_SLOTS } from "./doc.ts";
 import type { EvalContext } from "../eval-context.ts";
 import type { ReadRange } from "../formula/eval.ts";
 import { isErrorValue, slotKey, type GraphObject, type ObjectType, type Value } from "../graph/node.ts";
@@ -474,6 +475,23 @@ const MATH_SCHEMA: ObjectSchema = {
 };
 
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
+  // A variable is a slot an operator named, so the doc object declares
+  // whatever slots it holds rather than a fixed set. That makes the set
+  // dynamic without breaking Rule 6: only a mutation writes a variable, and
+  // this enumeration reads the slots the object already carries.
+  doc: {
+    type: "doc",
+    nonDerivedSlotPaths: [{ kind: "dynamic", enumerate: (object) => Object.keys(object.slots).map((name) => [name]) }],
+    derivedSlots: [],
+  },
+  // A copy carries a position and nothing else it could hold a value in. Its
+  // address lives in `target`, outside the slot set, so nothing here declares
+  // it and the integrity check is what pairs it with a variable.
+  docref: {
+    type: "docref",
+    nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH] }],
+    derivedSlots: [{ kind: "static", slots: DOCREF_DERIVED_SLOTS }],
+  },
   value: VALUE_SCHEMA,
   add: ADD_SCHEMA,
   table: TABLE_SCHEMA,

@@ -44,7 +44,10 @@
  * the tests run headless and the file can move to Rust later.
  */
 
-import { checkNameAvailable, formatAddress, isAddressError, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";
+import { checkNameAvailable, formatAddress, isAddressError, nameSuggestion, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";
+import { documentVariableNameProblem } from "./primitives/doc.ts";
+import { rewriteTextReferences } from "./primitives/text.ts";
+import { rewriteMathReferences } from "./primitives/math.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
@@ -154,6 +157,44 @@ export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false;
  * later cycle check over an edge set that nobody trusts proves nothing.
  */
 export function validateIntegrity(objects: readonly GraphObject[], edges: readonly Edge[]): IntegrityCheckResult {
+  // The doc object is a singleton under a fixed name, because a bare name
+  // resolves against it and a second one would make that resolution a choice.
+  // A variable name is checked here as well as at the command, so a document
+  // that arrives from a file cannot carry a name a command would have refused.
+  const docs = objects.filter((object) => object.type === "doc");
+  if (docs.length > 1) {
+    return { ok: false, message: "the document can have only one doc object" };
+  }
+  for (const object of objects) {
+    if (object.type !== "doc" && object.name.toLowerCase() === "doc") {
+      return { ok: false, message: "the name doc belongs to the document variables" };
+    }
+    if (object.type === "doc") {
+      if (object.name !== "doc") {
+        return { ok: false, message: "the document variable object is named doc" };
+      }
+      for (const name of Object.keys(object.slots)) {
+        const problem = documentVariableNameProblem(name, objects, name);
+        if (problem !== undefined) {
+          return { ok: false, message: problem };
+        }
+      }
+    }
+    // A copy holds its address outside the slot set, so the integrity check is
+    // the one place that pairs it with a variable that exists. Nothing else
+    // carries a target, and a target elsewhere would be state that no
+    // evaluation reads.
+    if (object.type === "docref") {
+      const missing = object.target?.objectId !== docs[0]?.id
+        || object.target?.path.length !== 1
+        || docs[0]?.slots[object.target.path[0]!] === undefined;
+      if (missing) {
+        return { ok: false, message: `${object.name} must target an existing document variable` };
+      }
+    } else if (object.target !== undefined) {
+      return { ok: false, message: `${object.name} cannot carry a variable target` };
+    }
+  }
   const undeclaredSlotProblems = findUndeclaredFormulaOrDerivedSlots(objects);
   if (undeclaredSlotProblems.length > 0) {
     return { ok: false, message: undeclaredSlotProblems.join("; ") };
@@ -314,6 +355,7 @@ export interface SplitEdgeOperation {
 }
 
 export type Operation =
+  | { readonly kind: "renameVariable"; readonly address: Address; readonly name: string }
   | SetSlotOperation
   | ClearSlotOperation
   | DeleteObjectOperation
@@ -375,6 +417,41 @@ function applyOperation(
   objects: readonly GraphObject[],
   operation: Operation,
 ): { readonly objects: readonly GraphObject[]; readonly brokenSlots: readonly Address[] } {
+  // Renaming a variable moves the slot and every reader of it in one pass.
+  // A variable has no ID behind its name, unlike an object, so the name is the
+  // address and a reader left alone would point at a slot that no longer
+  // exists. Three kinds of reader carry one: a formula, the embedded formulas
+  // of a text object, and the address macros of a math source. A copy carries
+  // the address in its `target` rather than in a slot, so it moves as well.
+  if (operation.kind === "renameVariable") {
+    const shift = (address: Address): Address =>
+      addressKey(address) === addressKey(operation.address) ? { ...address, path: [operation.name] } : address;
+    const renamed = objects.map((object) =>
+      object.id !== operation.address.objectId
+        ? object
+        : {
+            ...object,
+            slots: Object.fromEntries(
+              Object.entries(object.slots).map(([key, slot]) => [key === operation.address.path[0] ? operation.name : key, slot]),
+            ),
+          },
+    );
+    const objectsAfter = renamed.map((object) => {
+      const rewritten = rewriteObjectFormulaAddresses(object, shift);
+      const slots = { ...rewritten.slots };
+      // A text content and a math source are literal text that holds addresses
+      // the formula rewrite cannot see, so each is rewritten through the
+      // primitive that knows where an address sits inside it.
+      if (object.type === "text" && slots.content?.kind === "literal" && typeof slots.content.value === "string") {
+        slots.content = { ...slots.content, value: rewriteTextReferences(slots.content.value, objects, renamed, shift) };
+      }
+      if (object.type === "math" && slots.source?.kind === "literal" && typeof slots.source.value === "string") {
+        slots.source = { ...slots.source, value: rewriteMathReferences(slots.source.value, shift) };
+      }
+      return { ...rewritten, slots, ...(object.target === undefined ? {} : { target: shift(object.target) }) };
+    });
+    return { objects: objectsAfter, brokenSlots: [] };
+  }
   if (operation.kind === "deleteObject") {
     if (operation.force !== true) {
       return { objects: objects.filter((object) => object.id !== operation.objectId), brokenSlots: [] };
@@ -428,8 +505,16 @@ function applyOperation(
   }
   if (operation.kind === "clearSlot") {
     const key = slotKey(operation.address.path);
+    // A copy of the cleared slot goes with it. A copy is an object with no
+    // value of its own, so one left behind would draw an address that resolves
+    // to nothing, and the integrity check would refuse the whole mutation
+    // rather than let the variable go.
+    const survivors = objects.filter((object) =>
+      !(object.type === "docref"
+        && object.target?.objectId === operation.address.objectId
+        && slotKey(object.target.path) === key));
     return {
-      objects: objects.map((object) => {
+      objects: survivors.map((object) => {
         if (object.id !== operation.address.objectId) {
           return object;
         }
@@ -784,14 +869,52 @@ export function mutate(
     return { ok: false, message: invalidSplitMessages.join("; ") };
   }
 
-  const staged = cloneObjects(objects);
-  const folded = operations.reduce<{ readonly objects: readonly GraphObject[]; readonly brokenSlots: readonly Address[] }>(
-    (current, operation) => {
-      const applied = applyOperation(current.objects, operation);
-      return { objects: applied.objects, brokenSlots: [...current.brokenSlots, ...applied.brokenSlots] };
-    },
-    { objects: staged, brokenSlots: [] },
-  );
+  // The fold runs one operation at a time against the objects the last one
+  // produced, because the three refusals below read the state a batch has
+  // reached rather than the state it started from. A batch that creates a
+  // variable and then renames it has to see the variable the first operation
+  // made.
+  let folded: { readonly objects: readonly GraphObject[]; readonly brokenSlots: readonly Address[] } = {
+    objects: cloneObjects(objects),
+    brokenSlots: [],
+  };
+  for (const operation of operations) {
+    const target = folded.objects.find((object) => object.id === operationTargetId(operation));
+    // Deleting the doc object would take every variable with it under a
+    // command that names none of them, so a variable is removed one at a time.
+    if (operation.kind === "deleteObject" && target?.type === "doc") {
+      return { ok: false, message: "document variables are removed individually with delvar" };
+    }
+    if (operation.kind === "renameVariable") {
+      const missing = target?.type !== "doc"
+        || operation.address.path.length !== 1
+        || getVariableSlot(target, operation.address) === undefined;
+      if (missing) {
+        return { ok: false, message: "renameVariable needs an existing document variable" };
+      }
+      const problem = documentVariableNameProblem(operation.name, folded.objects, operation.address.path[0]);
+      if (problem !== undefined) {
+        return { ok: false, message: problem };
+      }
+    }
+    // Deleting a variable that something reads is refused with the reader
+    // named, which is the refusal path of section 4 rather than a reference
+    // quietly going nowhere. A copy is not a reader for this purpose: it draws
+    // the variable and nothing else, so it goes when the variable goes, which
+    // is what the clearSlot branch of applyOperation does.
+    if (operation.kind === "clearSlot" && target?.type === "doc") {
+      const readers = deriveEdges(folded.objects).filter((edge) =>
+        addressKey(edge.sourceSlot) === addressKey(operation.address)
+        && addressKey(edge.dependentSlot) !== addressKey(operation.address)
+        && folded.objects.find((object) => object.id === edge.dependentSlot.objectId)?.type !== "docref");
+      if (readers.length > 0) {
+        const names = [...new Set(readers.map((edge) => formatSlotNameForVariable(edge.dependentSlot, folded.objects)))];
+        return { ok: false, message: `${formatSlotNameForVariable(operation.address, folded.objects)} is read by ${names.join(", ")}` };
+      }
+    }
+    const applied = applyOperation(folded.objects, operation);
+    folded = { objects: applied.objects, brokenSlots: [...folded.brokenSlots, ...applied.brokenSlots] };
+  }
 
   const result = deriveValidateAndEvaluate(folded.objects, context);
   if (!result.ok) {
@@ -821,6 +944,15 @@ function dedupeAddresses(addresses: readonly Address[]): readonly Address[] {
     deduped.push(address);
   }
   return deduped;
+}
+
+function getVariableSlot(object: GraphObject, address: Address): Slot | undefined {
+  return object.slots[slotKey(address.path)];
+}
+
+function formatSlotNameForVariable(address: Address, objects: readonly GraphObject[]): string {
+  const name = formatAddress(address, objects);
+  return isAddressError(name) ? name.message : name;
 }
 
 function findUndeclaredFormulaOrDerivedSlots(objects: readonly GraphObject[]): readonly string[] {
@@ -915,13 +1047,22 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
   }
 
   const problems: string[] = [];
-  for (const dependents of dependentsByMissingSource.values()) {
+  for (const [key, dependents] of dependentsByMissingSource) {
     const names = dependents.map((address) => {
       const formatted = formatAddress(address, objects);
       return isAddressError(formatted) ? formatted.message : formatted;
     });
     const verb = names.length === 1 ? "references" : "reference";
-    problems.push(`${names.join(", ")} ${verb} a slot that does not exist`);
+    const source = edges.find((edge) => addressKey(edge.sourceSlot) === key)?.sourceSlot;
+    const object = objects.find((object) => object.id === source?.objectId);
+    const schema = object === undefined ? undefined : getObjectSchema(object.type);
+    let detail = "";
+    if (source !== undefined && object !== undefined && schema !== undefined) {
+      const candidates = [...resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths), ...resolveDerivedSlots(object, schema.derivedSlots).map((slot) => slot.path)].map((path) => formatSlotNameForVariable({ objectId: object.id, path }, objects));
+      const typed = formatSlotNameForVariable(source, objects);
+      detail = `: ${typed}${nameSuggestion(typed, candidates)}`;
+    }
+    problems.push(`${names.join(", ")} ${verb} a slot that does not exist${detail}`);
   }
   return problems;
 }
@@ -1194,7 +1335,7 @@ function findIllegalSlotClears(operations: readonly Operation[], objects: readon
     }
     const path = operation.address.path;
     const isCell = target.type === TABLE_TYPE && path.length === 2 && path[0] === TABLE_CELL_PATH_PREFIX;
-    if (isCell) {
+    if (isCell || (target.type === "doc" && path.length === 1)) {
       return;
     }
     problems.push(

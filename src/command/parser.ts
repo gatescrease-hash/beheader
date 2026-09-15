@@ -230,6 +230,10 @@ export interface LoadCommand {
 }
 
 export type Command =
+  | { readonly kind: "renamevar"; readonly name: string; readonly newName: string }
+  | { readonly kind: "docvar"; readonly name: string; readonly value?: number | string | boolean; readonly formula?: string; readonly x?: number; readonly y?: number }
+  | { readonly kind: "delvar"; readonly name: string }
+  | { readonly kind: "vars" }
   | CreateCircleCommand
   | CreatePolygonCommand
   | CreateRectCommand
@@ -288,11 +292,13 @@ export function isCommandParseFailure(value: CommandParseResult): value is Comma
 type PositionalKind = "text" | "object" | "address" | "number" | "literal" | "literal-or-formula" | "points";
 
 interface PositionalParameter {
+  readonly optional?: boolean;
   readonly name: string;
   readonly kind: PositionalKind;
 }
 
 interface NamedParameter {
+  readonly optional?: boolean;
   readonly key: string;
   readonly defaultValue: number | undefined;
 }
@@ -396,6 +402,19 @@ function address(name: string): PositionalParameter {
 }
 
 const COMMAND_SPECS: readonly CommandSpec[] = [
+  { name: "renamevar", usage: "renamevar <name> <new-name>", positional: [text("name"), text("new-name")], named: [], flags: [], build: (args) => ({ kind: "renamevar", name: textArgument(args, "name"), newName: textArgument(args, "new-name") }) },
+  {
+    name: "docvar", usage: "docvar <name> <value|=formula> or docvar <name> x=<number> y=<number>",
+    positional: [text("name"), { name: "value", kind: "literal-or-formula", optional: true }],
+    named: [{ key: "x", defaultValue: undefined, optional: true }, { key: "y", defaultValue: undefined, optional: true }], flags: [],
+    build: (args) => ({ kind: "docvar", name: textArgument(args, "name"),
+      ...(args.formula === undefined ? (findArgument(args, "value") === undefined ? {} : { value: valueArgument(args, "value") }) : { formula: args.formula }),
+      ...(args.named.find((arg) => arg.name === "x") === undefined ? {} : { x: numberArgument(args, "x") }),
+      ...(args.named.find((arg) => arg.name === "y") === undefined ? {} : { y: numberArgument(args, "y") }),
+    }),
+  },
+  { name: "delvar", usage: "delvar <name>", positional: [text("name")], named: [], flags: [], build: (args) => ({ kind: "delvar", name: textArgument(args, "name") }) },
+  { name: "vars", usage: "vars", positional: [], named: [], flags: [], build: () => ({ kind: "vars" }) },
   {
     name: "circle",
     usage: "circle x=<number> y=<number> r=<number>",
@@ -1015,6 +1034,7 @@ function matchArguments(
     }
     const token = positionalTokens[index];
     if (token === undefined) {
+      if (parameter.optional) continue;
       return failure(`"${spec.name}" needs <${parameter.name}> — usage: ${spec.usage}`, endOffset);
     }
     const read = readPositionalValue(spec, parameter, token);
@@ -1028,6 +1048,7 @@ function matchArguments(
   for (const parameter of spec.named) {
     const supplied = namedTokens.find((candidate) => candidate.parameter.key === parameter.key);
     if (supplied === undefined) {
+      if (parameter.optional) continue;
       if (parameter.defaultValue === undefined) {
         return failure(`"${spec.name}" needs ${parameter.key}=<number> — usage: ${spec.usage}`, endOffset);
       }

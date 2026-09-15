@@ -23,6 +23,11 @@ import {
   CLOSED_PATH,
   cubicHandlesForEdge,
   deriveEdges,
+  DOC_TYPE,
+  DOCREF_TYPE,
+  documentVariableNameProblem,
+  nameSuggestion,
+  objectSlotPaths,
   edgeMidpoint,
   type PathEdge,
   pathEdgesOfObject,
@@ -199,6 +204,16 @@ function refuseCountOutOfRange(name: string, value: number, minimum: number, max
 /** Runs one command object. It returns the new document, log lines and any effect. */
 export function executeCommand(command: Command, document: Document, context: EvalContext = NULL_EVAL_CONTEXT): CommandOutcome {
   switch (command.kind) {
+    case "renamevar":
+      return renameDocumentVariable(command, document, context);
+    case "docvar":
+      return writeDocumentVariable(command, document, context);
+    case "delvar":
+      return deleteDocumentVariable(command, document, context);
+    case "vars":
+      // The doc object draws nothing, so selecting it is the whole of what
+      // `vars` does: the panel is the only surface a variable with no copy has.
+      return select({ kind: "select", target: DOC_TYPE }, document);
     case "circle":
       return createCircle(command, document, context);
     case "polygon":
@@ -270,6 +285,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
 }
 
 export const COMMANDS_WITH_HANDLERS: readonly string[] = [
+  "renamevar",
+  "docvar", "delvar", "vars",
   "circle",
   "polygon",
   "rect",
@@ -516,7 +533,7 @@ function resolveWritableSlot(target: string, document: Document): SlotTargetResu
   }
   const declared = resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).some((path) => slotKey(path) === slotKey(address.path));
   if (!declared) {
-    return { ok: false, message: `${object.name} has no slot at "${target}" — object type "${object.type}" does not declare one` };
+    return { ok: false, message: `${object.name} has no slot at "${target}" — object type "${object.type}" does not declare one${nameSuggestion(target.includes(".") ? target.slice(target.indexOf(".") + 1) : target, objectSlotPaths(object))}` };
   }
 
   return { ok: true, target: { object, address, existing: getSlot(object, address.path), displayName } };
@@ -799,7 +816,7 @@ function removePortCommand(command: RemovePortCommand, document: Document, conte
 function renameObject(command: RenameCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
 
   const result = mutate(document.objects, [{ kind: "renameObject", objectId: object.id, name: command.newName }], document.journal, context);
@@ -816,7 +833,7 @@ function renameObject(command: RenameCommand, document: Document, context: EvalC
 function deleteObject(command: DeleteCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
 
   const result = mutate(document.objects, [{ kind: "deleteObject", objectId: object.id, force: command.force }], document.journal, context);
@@ -838,7 +855,7 @@ function deleteObject(command: DeleteCommand, document: Document, context: EvalC
 function addVertex(command: AddVertexCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
   if (object.type !== POLYLINE_TYPE) {
     return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has vertices to add` };
@@ -883,7 +900,7 @@ function addVertex(command: AddVertexCommand, document: Document, context: EvalC
 function setEdgeType(command: EdgeTypeCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
   if (object.type !== POLYLINE_TYPE) {
     return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has an edge to shape` };
@@ -972,7 +989,7 @@ function arcBulgeFor(edge: PathEdge): number {
 function splitEdge(command: SplitEdgeCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
   if (object.type !== POLYLINE_TYPE) {
     return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has an edge to split` };
@@ -1011,7 +1028,7 @@ function splitEdge(command: SplitEdgeCommand, document: Document, context: EvalC
 function deleteVertex(command: DeleteVertexCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
   if (object.type !== POLYLINE_TYPE) {
     return { ok: false, message: `${object.name} is a "${object.type}" object — only a polyline has vertices to delete` };
@@ -1043,7 +1060,7 @@ function deleteVertex(command: DeleteVertexCommand, document: Document, context:
 function explodeObject(command: ExplodeCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
 
   const result = mutate(document.objects, [{ kind: "explode", objectId: object.id, force: command.force }], document.journal, context);
@@ -1149,10 +1166,10 @@ function edgeReadsTarget(sourceSlot: Address, target: RefsTarget): boolean {
 type RefsTargetResult = { readonly ok: true; readonly target: RefsTarget } | { readonly ok: false; readonly message: string };
 
 function resolveRefsTarget(typed: string, document: Document): RefsTargetResult {
-  if (isValidName(typed)) {
+  if (isValidName(typed) && !document.objects.some((object) => object.type === "doc" && Object.keys(object.slots).some((name) => name.toLowerCase() === typed.toLowerCase()))) {
     const object = findGraphObjectByName(typed, document.objects);
     if (object === undefined) {
-      return { ok: false, message: `no object named "${typed}"` };
+      return { ok: false, message: `no object named "${typed}"${nameSuggestion(typed, document.objects.map((object) => object.name))}` };
     }
     return { ok: true, target: { kind: "object", object } };
   }
@@ -1166,7 +1183,7 @@ function resolveRefsTarget(typed: string, document: Document): RefsTargetResult 
     return { ok: false, message: `no object with id "${address.objectId}"` };
   }
   if (!declaresSlotPath(object, address.path)) {
-    return { ok: false, message: `${object.name} has no slot at "${typed}" — object type "${object.type}" does not declare one` };
+    return { ok: false, message: `${object.name} has no slot at "${typed}" — object type "${object.type}" does not declare one${nameSuggestion(typed.slice(typed.indexOf(".") + 1), objectSlotPaths(object))}` };
   }
   return { ok: true, target: { kind: "slot", object, address, displayName: formatSlotName(address, document.objects, typed) } };
 }
@@ -1186,7 +1203,7 @@ function declaresSlotPath(object: GraphObject, path: readonly string[]): boolean
 function props(command: PropsCommand, document: Document): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
   const descriptors = buildSlotDescriptors(object, document.objects);
   if (descriptors.length === 0) {
@@ -1211,7 +1228,7 @@ function formatSlotDescriptorLine(descriptor: SlotDescriptor): string {
 function select(command: SelectCommand, document: Document): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"` };
+    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
   return { ok: true, document, lines: [`selected ${object.name}`], effect: { kind: "select", objectId: object.id } };
 }
@@ -1246,6 +1263,171 @@ function findGraphObjectByName(name: string, objects: readonly GraphObject[]): G
 function formatSlotAddress(address: Address, objects: readonly GraphObject[]): string {
   const formatted = formatAddress(address, objects);
   return isAddressError(formatted) ? formatted.message : formatted;
+}
+
+/**
+ * The address of a variable an operator named, under either spelling.
+ *
+ * A variable is written `speed` on the command line and `doc.speed` inside a
+ * formula, and both reach the same slot, so a command takes either and the
+ * dotted form is what `parseAddress` resolves.
+ */
+function documentVariableAddress(name: string, document: Document): Address | { readonly ok: false; readonly message: string } {
+  const address = parseAddress(name.includes(".") ? name : `${DOC_TYPE}.${name}`, document.objects);
+  if (isAddressError(address)) {
+    return { ok: false, message: address.message };
+  }
+  const doc = document.objects.find((object) => object.id === address.objectId);
+  if (doc?.type !== DOC_TYPE || address.path.length !== 1 || getSlot(doc, address.path) === undefined) {
+    return { ok: false, message: `no document variable named "${name}"` };
+  }
+  return address;
+}
+
+/** Runs `renamevar`, which moves a variable and every reader of it together. */
+function renameDocumentVariable(command: Extract<Command, { kind: "renamevar" }>, document: Document, context: EvalContext): CommandOutcome {
+  const address = documentVariableAddress(command.name, document);
+  if ("ok" in address) {
+    return address;
+  }
+  const result = mutate(document.objects, [{ kind: "renameVariable", address, name: command.newName }], document.journal, context);
+  if (!result.ok) {
+    return result;
+  }
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`renamed ${command.name} to ${command.newName}`],
+  };
+}
+
+/**
+ * Runs `delvar`, which removes one variable and the copies that drew it.
+ *
+ * The doc object stays behind with no variables in it, because an operator who
+ * removes the last one has said nothing about the next one, and a `docvar`
+ * that follows finds the object already there.
+ */
+function deleteDocumentVariable(command: Extract<Command, { kind: "delvar" }>, document: Document, context: EvalContext): CommandOutcome {
+  const address = documentVariableAddress(command.name, document);
+  if ("ok" in address) {
+    return address;
+  }
+  const result = mutate(document.objects, [{ kind: "clearSlot", address }], document.journal, context);
+  if (!result.ok) {
+    return result;
+  }
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`deleted ${command.name}`],
+  };
+}
+
+/**
+ * Runs `docvar`, which writes a variable, puts a copy of one on the canvas, or
+ * does both in one mutation.
+ *
+ * The three things it may do reach `mutate` as one batch, so a command that
+ * creates the doc object, writes the first variable into it and puts a copy
+ * down either lands whole or leaves the document as it was. A copy created in
+ * a separate mutation would sit for one pass against a variable that the batch
+ * had not written yet, and the integrity check refuses that.
+ *
+ * A name is matched against the variables that exist without regard to case,
+ * and the spelling the slot already carries is what the write takes, so
+ * `docvar Speed 3` moves `speed` rather than opening a second variable beside
+ * it. A name that matches nothing is checked for the collisions of section 13
+ * before it becomes a slot.
+ */
+function writeDocumentVariable(command: Extract<Command, { kind: "docvar" }>, document: Document, context: EvalContext): CommandOutcome {
+  const hasPosition = command.x !== undefined || command.y !== undefined;
+  if (hasPosition && (command.x === undefined || command.y === undefined)) {
+    return { ok: false, message: "a variable copy needs both x and y" };
+  }
+  if (command.value === undefined && command.formula === undefined && !hasPosition) {
+    return { ok: false, message: "docvar needs a value, a formula, or x and y for a copy" };
+  }
+
+  const operations: Operation[] = [];
+  let nextObjectId = document.nextObjectId;
+  let doc = document.objects.find((object) => object.type === DOC_TYPE);
+  const name = Object.keys(doc?.slots ?? {}).find((key) => key.toLowerCase() === command.name.toLowerCase()) ?? command.name;
+  const existing = doc !== undefined && Object.hasOwn(doc.slots, name) ? doc.slots[name] : undefined;
+  if (existing === undefined) {
+    if (command.value === undefined && command.formula === undefined) {
+      return { ok: false, message: `no document variable named "${command.name}"` };
+    }
+    const problem = documentVariableNameProblem(command.name, document.objects);
+    if (problem !== undefined) {
+      return { ok: false, message: problem };
+    }
+  }
+
+  // The first variable of a document creates the object that holds them all.
+  if (doc === undefined) {
+    const minted = mintObjectId(document);
+    if ("ok" in minted) {
+      return minted;
+    }
+    nextObjectId = minted.nextObjectId;
+    doc = { id: minted.id, name: DOC_TYPE, type: DOC_TYPE, slots: {} };
+    operations.push({ kind: "createObject", object: doc });
+  }
+
+  if (command.value !== undefined || command.formula !== undefined) {
+    let slot: Slot = { kind: "literal", value: command.value ?? null };
+    if (command.formula !== undefined) {
+      // The formula is parsed against a doc object that already carries the
+      // name being written, so `docvar total =total+1` parses and reaches the
+      // cycle check, which is where a formula that reads itself is refused.
+      const parsingDoc = { ...doc, slots: { ...doc.slots, [name]: existing ?? { kind: "literal" as const, value: null } } };
+      const others = document.objects.filter((object) => object.id !== doc.id);
+      const ast = parseFormula(command.formula.replace(/^=/, ""), [...others, parsingDoc]);
+      if (isParseError(ast)) {
+        return { ok: false, message: ast.message };
+      }
+      slot = { kind: "formula", ast, value: null };
+    }
+    operations.push({ kind: "setSlot", address: { objectId: doc.id, path: [name] }, slot });
+  }
+
+  let createdObjectId: string | undefined;
+  if (hasPosition) {
+    const minted = mintObjectId({ ...document, nextObjectId });
+    if ("ok" in minted) {
+      return minted;
+    }
+    nextObjectId = minted.nextObjectId;
+    createdObjectId = minted.id;
+    operations.push({
+      kind: "createObject",
+      object: {
+        id: minted.id,
+        name: generateDefaultName(DOCREF_TYPE, document.objects),
+        type: DOCREF_TYPE,
+        target: { objectId: doc.id, path: [name] },
+        slots: {
+          "origin.x": { kind: "literal", value: command.x! },
+          "origin.y": { kind: "literal", value: command.y! },
+          value: { kind: "derived", value: null },
+          measuredWidth: { kind: "derived", value: null },
+          measuredHeight: { kind: "derived", value: null },
+        },
+      },
+    });
+  }
+
+  const result = mutate(document.objects, operations, document.journal, context);
+  if (!result.ok) {
+    return result;
+  }
+  return {
+    ok: true,
+    document: { ...document, nextObjectId, objects: result.objects, journal: result.journal },
+    lines: [hasPosition ? `created copy of ${name}` : `set doc.${name}`],
+    ...(createdObjectId === undefined ? {} : { createdObjectId }),
+  };
 }
 
 function countedNoun(count: number, singular: string): string {
