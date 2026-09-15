@@ -42,6 +42,8 @@
  * GPU renderer can replace the whole layer later.
  */
 import {
+  docrefLabel,
+  DOCREF_STYLE,
   arcOfEdge,
   bezierOfEdge,
   buildPathEdges,
@@ -103,6 +105,10 @@ const DEFAULT_TEXT_FILL_STYLE = "#1a1a1a";
 const DEFAULT_TEXT_FONT_FAMILY = "sans-serif";
 const DEFAULT_TEXT_FONT_SIZE = 16;
 const DEFAULT_TEXT_LINE_HEIGHT = 20;
+
+// A copy draws in the same ink as the text primitive, so a variable on the
+// canvas reads as document text rather than as a control.
+const DOCREF_TEXT_STYLE = "#1a1a1a";
 
 const SCRIPT_BOX_STROKE_STYLE = "#5b6472";
 const SCRIPT_BODY_FILL_STYLE = "#f4f5f7";
@@ -339,7 +345,7 @@ export function renderDocument(
   clearScreen(ctx, viewportWidth, viewportHeight);
   const mathRuns: TextMathRun[] = [];
 
-  const editingTextId = editing?.kind === "text" ? editing.objectId : undefined;
+  const editingTextId = editing?.kind === "text" || editing?.kind === "docref" ? editing.objectId : undefined;
   const editingCellOn = (objectId: string): string | undefined =>
     editing?.kind === "cell" && editing.objectId === objectId ? editing.cell : undefined;
 
@@ -474,6 +480,19 @@ function drawObject(
   mathRuns: TextMathRun[],
 ): void {
   switch (object.type) {
+    // The doc object has no origin and nothing to draw. Its variables reach
+    // the screen through the panel and through the copies of them.
+    case "doc":
+      return;
+    case "docref": {
+      ctx.font = `${DOCREF_STYLE.fontSize}px ${DOCREF_STYLE.font}`;
+      ctx.fillStyle = DOCREF_TEXT_STYLE;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      const label = docrefLabel(object.target, getSlot(object, ["value"])?.value ?? null);
+      ctx.fillText(label, readNumber(object, ORIGIN_X_PATH) ?? 0, readNumber(object, ORIGIN_Y_PATH) ?? 0);
+      return;
+    }
     case "circle":
       drawCircle(ctx, object);
       return;
@@ -799,6 +818,10 @@ function drawText(
 
 function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   switch (object.type) {
+    // The doc object has no box to outline. `vars` names it in the panel
+    // header instead, which is the whole of what selecting it shows.
+    case "doc":
+      return;
     case "circle": {
       if (buildCirclePath(ctx, object)) {
         strokeHighlight(ctx);
@@ -833,6 +856,7 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       return;
     }
     case "text":
+    case "docref":
     case "image":
     case "script": {
       const extent = objectExtent(object);
@@ -875,6 +899,12 @@ function objectHasError(object: GraphObject): boolean {
 }
 
 function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject, suppressName: boolean): void {
+  // A copy draws the variable name as the left half of its own label, and it
+  // draws the error code in place of the value, so the name tag and the error
+  // badge would both repeat what the operator is already reading.
+  if (object.type === "docref") {
+    return;
+  }
   const anchor = chromeAnchorPoint(object);
   if (anchor === undefined) {
     return;

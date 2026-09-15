@@ -8,12 +8,16 @@ do.
 `docs/STYLE.md` holds the rules for prose, and one worked example of a file
 header written badly and then written well. Read it before you write a comment.
 
-Those four files are the only project documents. Do not add a fifth without a
-reason. Do not write a log entry for each change. Git holds the history.
+`docs/RUST_PORT.md` owns the future engine migration plan, work packages, and
+current handoff. Read it for Rust port work. Its stable task register supports
+work across sessions, while the spec still controls when implementation starts.
+
+Those five files are the project documents. Add another only for a distinct
+purpose. Do not write a log entry for each change. Git holds the history.
 
 ## What this is
 
-Graphpaper is a spatial canvas. Every object on it is a live node in one shared
+Beheader is a spatial canvas. Every object on it is a live node in one shared
 dependency graph. A table cell can drive a polygon. A polygon can drive a table
 cell. Text can read both.
 
@@ -35,16 +39,18 @@ These six rules make the design work. Do not break one for convenience.
 
 ## How to work
 
-1. Pick one item from `docs/TODO.md`.
+1. Pick one item from `docs/TODO.md`. Once Rust implementation is active,
+   pick a migration package from `docs/RUST_PORT.md` for port work.
 2. Write the code and the tests together.
 3. Run the checks below. All must be clean.
 4. Look at anything an operator can see, on screen. "Look at it on screen"
    below says how.
 5. Delete the item from `docs/TODO.md` when it lands, and update the state
-   table in `docs/STATUS.md` where the change moves it.
+   table in `docs/STATUS.md` where the change moves it. Rust migration packages
+   retain their IDs and completion evidence in `docs/RUST_PORT.md`.
 
 ```
-npm test                          # 2679 tests, all pass
+npm test                          # engine, application and tooling tests
 npm run typecheck                 # both TypeScript configs
 npm run build                     # production build
 npm run prose                     # prose checker, gives exit code 0

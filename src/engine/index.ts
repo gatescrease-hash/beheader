@@ -16,9 +16,10 @@
  * bundler and names any export this file leaves out. The other reads the
  * source of every file outside the engine and names any deep import. The
  * surface is not curated. It re-exports every file in the engine, so names
- * that no outside layer uses still cross the boundary. Replacing the star
- * exports with a hand written list is an open decision rather than an
- * oversight.
+ * that no outside layer uses still cross the boundary. This full surface is
+ * intentional: engine tests, tools and future adapters can use the same entry
+ * point, and its completeness test detects a new module without a second list
+ * to maintain. The Rust adapter owns its smaller transport contract separately.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so
  * the tests run headless and the file can move to Rust later.
@@ -46,6 +47,7 @@ export type { ReadSlot, ReadRange } from "./formula/eval.ts";
 export { evaluate as evaluateFormulaAst } from "./formula/eval.ts";
 
 export * from "./primitives/schema.ts";
+export * from "./primitives/doc.ts";
 export * from "./primitives/edge.ts";
 export * from "./primitives/geometry.ts";
 export * from "./primitives/table.ts";

@@ -22,6 +22,7 @@ import {
   getTableDimensions,
   type GraphObject,
   isErrorValue,
+  mathSourceWithNames,
   type Point,
   resolveDerivedSlots,
   type Slot,
@@ -74,7 +75,9 @@ export function buildSlotDescriptors(object: GraphObject, objects: readonly Grap
       if (slot === undefined) {
         continue;
       }
-      descriptors.push({ ...describeNonDerivedSlot(path, slot, objects), ...optionsFor(object, path) });
+      const shown = object.type === "math" && path.length === 1 && path[0] === "source" && typeof slot.value === "string"
+        ? { ...slot, value: mathSourceWithNames(slot.value, objects) } : slot;
+      descriptors.push({ ...describeNonDerivedSlot(path, shown, objects), ...optionsFor(object, path) });
     }
   }
   for (const derived of resolveDerivedSlots(object, schema.derivedSlots)) {

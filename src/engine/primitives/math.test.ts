@@ -93,7 +93,7 @@ describe("applyMathSource", () => {
     const object = applyMathSource(emptyMath(), "y=2a+b", reading.names);
 
     expect(object.ports).toEqual({ in: ["a", "b"], out: ["y"] });
-    expect(object.slots[slotKey(mathInPortPath("a"))]).toEqual({ kind: "literal", value: 0 });
+    expect(object.slots[slotKey(mathInPortPath("a"))]).toEqual({ kind: "literal", value: null });
     expect(object.slots[slotKey(mathOutPortPath("y"))]).toEqual({ kind: "derived", value: null });
     expect(object.slots[slotKey(MATH_SOURCE_PATH)]).toEqual({ kind: "literal", value: "y=2a+b" });
     expect(object.slots["origin.x"]).toEqual({ kind: "literal", value: 0 });
@@ -351,7 +351,46 @@ describe("a math object in the graph", () => {
     if (!built.ok) return;
     const object = built.objects.find((entry) => entry.id === "obj_1");
     expect(object?.slots["out.g"]?.value).toBe(4);
-    expect(object?.slots["out.w"]?.value).toMatchObject({ error: "#DIV0" });
+    expect(object?.slots["out.w"]?.value).toMatchObject({ error: "#MATH", message: expect.stringContaining('"z" has no value here') });
+  });
+
+  it("names the empty port on the lines that read it, and leaves the other exports alone", () => {
+    const built = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "setMathSource", objectId: "obj_1", source: "g=2+2\nw=1/z\nv=z+1" },
+      ],
+      [],
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const object = built.objects.find((entry) => entry.id === "obj_1");
+    expect(object?.slots["in.z"]).toEqual({ kind: "literal", value: null });
+    expect(object?.slots["out.g"]?.value).toBe(4);
+    expect(object?.slots["out.w"]?.value).toMatchObject({ error: "#MATH", message: expect.stringContaining('"z" has no value here') });
+    expect(object?.slots["out.v"]?.value).toMatchObject({ error: "#MATH" });
+  });
+
+  it("exports a number from every line once the port carries one", () => {
+    const built = mutate(
+      [],
+      [
+        { kind: "createObject", object: emptyMath() },
+        { kind: "setMathSource", objectId: "obj_1", source: "w=1/z" },
+      ],
+      [],
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const filled = mutate(
+      built.objects,
+      [{ kind: "setSlot", address: { objectId: "obj_1", path: mathInPortPath("z") }, slot: { kind: "literal", value: 4 } }],
+      [],
+    );
+    expect(filled.ok).toBe(true);
+    if (!filled.ok) return;
+    expect(filled.objects.find((entry) => entry.id === "obj_1")?.slots["out.w"]?.value).toBe(0.25);
   });
 });
 

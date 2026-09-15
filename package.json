@@ -1,5 +1,5 @@
 {
-  "name": "graphpaper",
+  "name": "beheader",
   "private": true,
   "version": "0.0.0",
   "description": "A spatial canvas where every object is a live node in one shared dependency graph.",
@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.engine.json",
-    "test": "vitest run",
+    "test": "vitest run && node --test tools/prose-check.test.mjs",
     "prose": "node tools/prose-check.mjs --all"
   },
   "devDependencies": {

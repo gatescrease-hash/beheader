@@ -17,6 +17,8 @@
  * document that arrived some other way, such as a loaded file,
  * journalIsComplete answers whether the journal accounts for it: it replays
  * everything and compares the result against the objects the caller passes in.
+ * Loaded journals can contain malformed entries, so replay turns an exception
+ * from an entry into a refusal with its index, preserving the load contract.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
@@ -58,7 +60,13 @@ export function replayJournal(
     // Each mutate() call is given an empty journal to append to, and what it
     // appends is thrown away. A replay only rebuilds objects, and letting the
     // journal accumulate would allocate a fresh array per entry for nothing.
-    const result = mutate(objects, entry.operations, [], context);
+    let result;
+    try {
+      result = mutate(objects, entry.operations, [], context);
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return { ok: false, message: `journal entry ${index} did not replay: ${reason}`, entry: index };
+    }
     if (!result.ok) {
       return { ok: false, message: `journal entry ${index} did not replay: ${result.message}`, entry: index };
     }

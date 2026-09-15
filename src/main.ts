@@ -687,6 +687,11 @@ export function editorSeed(state: AppState, target: EditorTarget): string {
   if (object === undefined) {
     return "";
   }
+  if (target.kind === "docref") {
+    const host = state.document.objects.find((candidate) => candidate.id === object.target?.objectId);
+    const slot = host === undefined || object.target === undefined ? undefined : getSlot(host, object.target.path);
+    return slot === undefined ? "" : slot.kind === "formula" ? `=${formatFormula(slot.ast, state.document.objects)}` : cellLiteralSeed(slot.value);
+  }
   if (target.kind === "text") {
     const value = getSlot(object, TEXT_CONTENT_PATH)?.value;
     return typeof value === "string" ? value : "";
@@ -897,6 +902,32 @@ export function commitTableCell(
   return runPanelCommand(state, buildCellCommand(panelSlotAddress(object.name, cell), raw), context);
 }
 
+/**
+ * Commits what an operator typed into a copy on the canvas.
+ *
+ * The write goes to the variable rather than to the copy the editor sits on,
+ * which is the one way this editor differs from the table cell of section 7.
+ * A copy is an object with no value of its own, so every other copy of the
+ * variable moves in the same pass.
+ *
+ * An empty field writes an empty value rather than clearing the slot, because
+ * clearing a variable is `delvar`, and an operator who selected the text and
+ * deleted it has not asked for the variable and its other copies to go.
+ */
+export function commitVariableCopy(state: AppState, objectId: string, raw: string, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
+  if (raw === editorSeed(state, { kind: "docref", objectId })) {
+    return state;
+  }
+  const copy = state.document.objects.find((object) => object.id === objectId);
+  const doc = state.document.objects.find((object) => object.id === copy?.target?.objectId);
+  if (copy?.type !== "docref" || copy.target === undefined || doc === undefined) {
+    return state;
+  }
+  const target = `${doc.name}.${copy.target.path[0]}`;
+  const command = raw.trim() === "" ? { kind: "set" as const, target, value: "" } : buildCellCommand(target, raw);
+  return runPanelCommand(state, command, context);
+}
+
 function buildCellCommand(target: string, raw: string): SetLiteralCommand | SetFormulaCommand | ClearCommand {
   const trimmed = raw.trim();
   if (trimmed === "") {
@@ -998,7 +1029,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       : { measurer: createCanvas2dTextMeasurer(measureContext, measureMathForLayout) };
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
-  let state = initialAppState(createEmptyDocument(), ["Graphpaper. Type a command, or a command word alone to be prompted."]);
+  let state = initialAppState(createEmptyDocument(), ["Beheader. Type a command, or a command word alone to be prompted."]);
   let pan: PanGesture | undefined;
   let spaceHeld = false;
   let openMenu: { readonly menu: PathMenu; readonly at: ScreenPoint } | undefined;
@@ -1257,7 +1288,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const ids: string[] = [];
     for (const objectId of state.interaction.selectedObjectIds) {
       const object = state.document.objects.find((candidate) => candidate.id === objectId);
-      const extent = object === undefined ? undefined : objectExtent(object);
+      const extent = object === undefined ? undefined : object.type === "doc" ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : objectExtent(object);
       if (object === undefined || extent === undefined || panelUiState(state, objectId).dismissed) {
         continue;
       }
@@ -1273,7 +1304,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     for (const objectId of panelledIds) {
       const object = state.document.objects.find((candidate) => candidate.id === objectId);
-      const extent = object === undefined ? undefined : objectExtent(object);
+      const extent = object === undefined ? undefined : object.type === "doc" ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : objectExtent(object);
       if (object === undefined || extent === undefined) {
         continue;
       }
@@ -1301,7 +1332,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
           }
         }
       }
-      placePanelElement(element, extent, panelUiState(state, objectId).manualPosition);
+      placePanelElement(element, extent, panelUiState(state, objectId).manualPosition ?? (object.type === "doc" ? { left: 8, top: 8 } : undefined));
     }
     for (const [objectId, element] of panelElements) {
       if (!shown.has(objectId)) {
@@ -1398,6 +1429,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     apply(
       target.kind === "text"
         ? commitTextContent(state, target.objectId, raw, evalContext)
+        : target.kind === "docref" ? commitVariableCopy(state, target.objectId, raw, evalContext)
         : commitTableCell(state, target.objectId, target.cell, raw, evalContext),
     );
   };
@@ -1420,15 +1452,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const buildInPlaceElement = (target: EditorTarget, style: EditorTextStyle): HTMLTextAreaElement | HTMLInputElement => {
     const keydown = (event: KeyboardEvent): void => {
       event.stopPropagation();
-      if (event.key === "Tab" && target.kind === "cell") {
+      if (event.key === "Tab" && target.kind !== "text") {
         event.preventDefault();
         applyFieldCompletion(event.currentTarget as HTMLInputElement, (value, cursor) =>
-          completeInFormulaField(value, cursor, state.document.objects, target.objectId),
+          completeInFormulaField(value, cursor, state.document.objects, target.kind === "cell" ? target.objectId : undefined),
         );
       } else if (event.key === "Escape") {
         event.preventDefault();
         cancelInPlace();
-      } else if (event.key === "Enter" && target.kind === "cell") {
+      } else if (event.key === "Enter" && target.kind !== "text") {
         event.preventDefault();
         commitInPlace();
       }
@@ -1479,7 +1511,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const ratio = bounds.width > 0 ? canvas.width / bounds.width : 1;
     const style = editorTextStyle(inPlaceEditor, object, state.document.camera, ratio);
     if (inPlaceElement === undefined) {
-      if (inPlaceEditor.kind === "cell") {
+      if (inPlaceEditor.kind !== "text") {
         inPlaceMirror = document.createElement("div");
         inPlaceMirror.className = "text-editor text-editor--mirror";
         inPlaceMirror.setAttribute("aria-hidden", "true");
@@ -1523,11 +1555,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
    * nowhere, which is what tells an operator the program read it as text.
    */
   const paintCellEditor = (): void => {
-    if (inPlaceMirror === undefined || inPlaceElement === undefined || inPlaceEditor?.kind !== "cell") {
+    if (inPlaceMirror === undefined || inPlaceElement === undefined || inPlaceEditor === undefined || inPlaceEditor.kind === "text") {
       return;
     }
     const value = inPlaceElement.value;
-    const spans = classifyFormulaField(value, state.document.objects, inPlaceEditor.objectId);
+    const spans = classifyFormulaField(value, state.document.objects, inPlaceEditor.kind === "cell" ? inPlaceEditor.objectId : undefined);
     writeMarks(inPlaceMirror, value, spans);
     // A cell is narrow, so a formula of any length scrolls the field sideways
     // while it is typed. A layer that stayed put would sit under whichever
@@ -1871,6 +1903,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (objectId === undefined || path === undefined) {
       return;
     }
+    // Only the mutation that rebuilds the ports may write a math source, so a
+    // text field on that row would look writable and refuse every write. The
+    // row opens the editor that can write it instead.
+    if (path === "source" && state.document.objects.find((object) => object.id === objectId)?.type === "math") {
+      openMathEditor(objectId);
+      return;
+    }
     if (clip.classList.contains("panel-clip--formula")) {
       apply(unlinkPanelSlot(state, objectId, path, evalContext));
       return;
@@ -2194,7 +2233,7 @@ function downloadDocument(state: Document): void {
   const url = URL.createObjectURL(new Blob([saveDocument(state)], { type: "application/json" }));
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "graphpaper.json";
+  anchor.download = "beheader.json";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

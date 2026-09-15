@@ -121,6 +121,9 @@ export function completeAddress(partial: string, objects: readonly GraphObject[]
   const dot = partial.indexOf(".");
   if (dot < 0) {
     const names = completeObjectName(partial, objects);
+    const variables = objects.filter((object) => object.type === "doc").flatMap((object) => Object.keys(object.slots))
+      .filter((name) => startsWithIgnoringCase(name, partial)).map((text): Completion => ({ text, kind: "slot" }));
+    if (variables.length > 0) return resultOf([...variables, ...names.candidates]);
     const sole = names.candidates.length === 1 ? names.candidates[0] : undefined;
     if (sole !== undefined && sole.text.toLowerCase() === partial.toLowerCase()) {
       // The object is settled, so the choice left is which of its slots. The
@@ -204,6 +207,8 @@ export function formulaReferenceResolves(
   tableObjectId?: string,
 ): boolean {
   if (!text.includes(".")) {
+    const doc = objects.find((object) => object.type === "doc");
+    if (Object.keys(doc?.slots ?? {}).some((name) => name.toLowerCase() === text.toLowerCase())) return true;
     if (tableObjectId === undefined || !isCellReferenceForm(text)) {
       return false;
     }

@@ -118,6 +118,14 @@ function hitTestBoundingBox(object: GraphObject, worldPoint: WorldPoint): boolea
 
 function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeToleranceWorld: number): boolean {
   switch (object.type) {
+    // The doc object draws nothing, so nothing on the canvas can hit it and
+    // `vars` is the way to reach it.
+    case "doc":
+      return false;
+    // A copy is a line of text, and its box is what an operator aims at, the
+    // same as the text primitive.
+    case "docref":
+      return hitTestBoundingBox(object, worldPoint);
     case "circle":
       return hitTestCircle(object, worldPoint, strokeToleranceWorld);
     case "polygon":

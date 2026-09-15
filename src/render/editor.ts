@@ -40,6 +40,7 @@ import { readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH 
 import { textBoxSize, TEXT_FALLBACK_BOX_HEIGHT, TEXT_FALLBACK_BOX_WIDTH, type TextBoxSize } from "./textbox.ts";
 
 export type EditorTarget =
+  | { readonly kind: "docref"; readonly objectId: string }
   | { readonly kind: "text"; readonly objectId: string }
   | { readonly kind: "cell"; readonly objectId: string; readonly cell: string };
 
@@ -82,6 +83,7 @@ export function editorTargetAt(
   if (hit.type === TEXT_TYPE) {
     return { kind: "text", objectId: hit.id };
   }
+  if (hit.type === "docref") return { kind: "docref", objectId: hit.id };
   if (hit.type === TABLE_TYPE) {
     const cell = cellReferenceAt(hit, screenPoint, camera);
     return cell === undefined ? undefined : { kind: "cell", objectId: hit.id, cell };
@@ -110,12 +112,12 @@ export function editorPlacement(
   liveSize?: TextBoxSize,
 ): EditorPlacement {
   const ratio = usableRatio(ratioBackingPerCss);
-  const box = target.kind === "text" ? textEditorBox(object, liveSize) : cellEditorBox(object, target.cell);
+  const box = target.kind === "text" ? textEditorBox(object, liveSize) : target.kind === "docref" ? objectExtent(object)! : cellEditorBox(object, target.cell);
   const topLeft = worldToScreen(camera, { x: box.minX, y: box.minY });
   return {
     left: topLeft.x / ratio,
     top: topLeft.y / ratio,
-    width: box.maxX - box.minX,
+    width: target.kind === "docref" ? Math.max(120, box.maxX - box.minX) : box.maxX - box.minX,
     height: box.maxY - box.minY,
     scale: camera.zoom / ratio,
   };
@@ -150,6 +152,7 @@ export function editorTextStyle(
   _camera: CameraState,
   _ratioBackingPerCss: number,
 ): EditorTextStyle {
+  if (target.kind === "docref") return { fontSize: 16, fontFamily: "monospace", lineHeight: 20, textAlign: "left", color: "#1a1a1a", wraps: false };
   if (target.kind === "cell") {
     return {
       fontSize: CELL_EDITOR_FONT_SIZE,

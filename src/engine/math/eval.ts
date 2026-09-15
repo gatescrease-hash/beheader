@@ -10,11 +10,9 @@
  * script node. A different implementation of this one function, whether it is
  * a library or a Rust port, changes nothing anywhere else.
  *
- * Every operation here terminates. Arithmetic and a function call return at
- * once, a definite integral runs a fixed number of quadrature steps, and a sum
- * or a product runs over a range whose size is checked before the loop starts.
- * So a program that parses always finishes, and the evaluation pass that runs
- * on every mutation has no way to hang.
+ * Each exported line has a shared budget of expression visits. Nested series,
+ * integrals, function calls and solver samples spend the same budget, so their
+ * individual loop limits cannot multiply into an unbounded workload.
  *
  * An integral uses Simpson's rule over an even number of intervals. The count
  * is fixed rather than adaptive, because an adaptive rule reaches a different
@@ -69,6 +67,9 @@ export const MATH_MAX_SERIES_TERMS = 100000;
  */
 export const MATH_MAX_CALL_DEPTH = 64;
 
+/** A line can visit this many expressions before returning a math error. */
+export const MATH_MAX_EVALUATION_STEPS = 1000000;
+
 /**
  * How many rings the search for a root looks through before it gives up. Each
  * ring is twice as far from the seed as the one before it, so the last of this
@@ -94,6 +95,7 @@ export const MATH_SOLVE_FIRST_RADIUS = 1 / 256;
 export const MATH_SOLVE_BISECTIONS = 80;
 
 interface Environment {
+  readonly budget: { remaining: number };
   readonly values: ReadonlyMap<string, number>;
   /** The value of each document address the source reads, keyed by address. */
   readonly references: ReadonlyMap<string, number>;
@@ -109,6 +111,8 @@ class EvalFailure extends Error {
     this.value = value;
   }
 }
+
+class BudgetFailure extends EvalFailure {}
 
 function fail(message: string): never {
   throw new EvalFailure({ error: "#MATH", message });
@@ -149,6 +153,9 @@ const BINARY_FUNCTIONS: Readonly<Record<string, (a: number, b: number) => number
 };
 
 function evaluateNode(ast: MathAst, environment: Environment): number {
+  if (environment.budget.remaining-- <= 0) {
+    throw new BudgetFailure({ error: "#MATH", message: `the line exceeds its budget of ${MATH_MAX_EVALUATION_STEPS} expression evaluations` });
+  }
   switch (ast.type) {
     case "number":
       return ast.value;
@@ -275,8 +282,8 @@ function evaluateSeries(ast: MathAst & { readonly type: "series" }, environment:
   const lower = evaluateNode(ast.lower, environment);
   const upper = evaluateNode(ast.upper, environment);
 
-  if (!Number.isInteger(lower) || !Number.isInteger(upper)) {
-    fail(`a ${ast.operation} runs between two whole numbers, and this one runs between ${lower} and ${upper}`);
+  if (!Number.isSafeInteger(lower) || !Number.isSafeInteger(upper)) {
+    fail(`a ${ast.operation} runs between two safe whole numbers, and this one runs between ${lower} and ${upper}`);
   }
   if (upper < lower) {
     return ast.operation === "sum" ? 0 : 1;
@@ -287,7 +294,8 @@ function evaluateSeries(ast: MathAst & { readonly type: "series" }, environment:
   }
 
   let total = ast.operation === "sum" ? 0 : 1;
-  for (let step = lower; step <= upper; step += 1) {
+  for (let index = 0; index < terms; index += 1) {
+    const step = lower + index;
     const term = evaluateAt(ast.body, ast.variable, step, environment);
     total = ast.operation === "sum" ? total + term : total * term;
   }
@@ -316,6 +324,7 @@ function residualOrNothing(line: MathSolveLine, at: number, environment: Environ
   try {
     return residualAt(line, at, environment);
   } catch (failure) {
+    if (failure instanceof BudgetFailure) throw failure;
     if (failure instanceof EvalFailure) {
       return undefined;
     }
@@ -466,7 +475,7 @@ export function evaluateMathObject(
     if (line.type === "expression") {
       continue;
     }
-    const environment: Environment = { values, functions, references: referenceValues, depth: 0 };
+    const environment: Environment = { values, functions, references: referenceValues, depth: 0, budget: { remaining: MATH_MAX_EVALUATION_STEPS } };
     const name = line.type === "solve" ? line.unknown : line.name;
     try {
       const value = line.type === "solve" ? solveLine(line, seedValues.get(line.unknown) ?? 0, environment) : evaluateNode(line.value, environment);

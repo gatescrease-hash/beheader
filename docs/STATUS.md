@@ -1,8 +1,11 @@
-# STATUS - Graphpaper
+# STATUS - Beheader
 
 `SPEC.md` holds the product requirements, and this file holds the state of the
 code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
+
+[RUST_PORT.md](RUST_PORT.md) holds the planned engine migration, its work
+register, and its current handoff. Rust implementation remains deferred.
 
 ---
 
@@ -12,15 +15,15 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2679 pass, 0 skip, across 51 test files. |
-| Spec | Built, except section 13, which nothing implements yet, and the parts section 17 postpones. |
+| Tests | 2743 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built, except the parts section 17 postpones. |
 
 ### How to run it
 
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2679 tests
+npm test             # engine, application and tooling tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -44,9 +47,10 @@ The repository has four layers. The import direction is one way.
 formula language, the primitives and the mutation channel. It does not touch
 the DOM, `window`, `document`, a canvas or `src/render/`.
 
-Why. The plan is to port this directory to a Rust crate. A pure directory ports
-one to one. A directory with browser calls in it does not. The rule also makes
-every part of the engine testable with no browser.
+Why. The plan is to port this directory to a Rust crate. The separation keeps
+host services explicit and makes the engine testable with no browser. The
+port still needs a host adapter and tests that establish equivalent behavior,
+which `RUST_PORT.md` plans.
 
 The one hard case is text measurement. Layout needs glyph widths, and a glyph
 width needs a canvas. The engine declares a `TextMeasurer` interface and takes
@@ -87,7 +91,7 @@ tables, and other suites drive them anyway.
 
 ### Root
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `index.html` | The page and its stylesheet: the canvas, the panel container, the log and the input bar. |
 | `package.json` | Scripts, dev dependencies, and the one runtime dependency, MathLive. |
@@ -98,7 +102,7 @@ tables, and other suites drive them anyway.
 
 ### `src/engine/` - the pure core
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `address.ts` | Addressing: object IDs, names, paths, and the A1 cell helpers. |
 | `complete.ts` | What a half typed object name or address could still become, and the addresses a formula reads. |
@@ -120,6 +124,7 @@ tables, and other suites drive them anyway.
 | `primitives/table.ts` | Cell addressing, range expansion, and the row and column resize. |
 | `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
 | `primitives/image.ts` | Slot path constants for the image type. |
+| `primitives/doc.ts` | The document variable, the copy of one on the canvas, and the names a variable may not take. |
 | `primitives/math.ts` | The slots a math object carries, the seeds a solve starts from, and the compute function behind each export. |
 | `math/ast.ts` | The node types of the math language, and the depth check over them. |
 | `math/lexer.ts` | LaTeX to tokens, including the subscript and the commands that are dropped. |
@@ -134,7 +139,7 @@ tables, and other suites drive them anyway.
 
 ### `src/render/` - the short lived drawing layer
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `camera.ts` | World and screen coordinates, pan, zoom, and the limits on both. |
 | `extent.ts` | The world box of one object, and of the whole document. |
@@ -155,7 +160,7 @@ tables, and other suites drive them anyway.
 
 ### `src/command/`
 
-| File | What you would come here to change |
+| File | Purpose |
 | --- | --- |
 | `parser.ts` | One typed line to one command object. |
 | `complete.ts` | What a completion key writes in a line or a formula field, and which runs named something. |
@@ -263,6 +268,24 @@ the code it constrains.
 
    The suite cannot reach this. The field is a custom element from a package,
    and the throw happens where a real browser mounts it.
+17. **A copy of a document variable carries its address outside the slot set.**
+   Every other reference in the program sits in a formula, and the schema
+   declares the slot that holds it. A copy holds its address in `target`, a
+   field of the object beside its name and its type, because the copy has to
+   know which variable it draws before any slot of it is evaluated.
+
+   So `validateIntegrity` is the one place that pairs a copy with a variable
+   that exists, and it is also what refuses a `target` on any other type, where
+   the field would be state that nothing reads. A rename moves the field along
+   with every formula, and clearing a variable removes the copies of it in the
+   same mutation, because a copy left behind would draw an address that
+   resolves to nothing.
+18. **An input port of a math object holds `null` until something fills it.**
+   A number there would be read as an answer, so a source is left exporting a
+   value that no operator entered. The empty port is left out of the evaluation
+   environment instead, which puts `"x" has no value here` on each line that
+   names it and leaves the other lines exporting numbers. Section 12 of the
+   spec carries the reason.
 
 ---
 

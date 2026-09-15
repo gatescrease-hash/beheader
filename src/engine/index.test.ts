@@ -28,6 +28,7 @@ describe("engine/index.ts — the one public surface", () => {
   it("creates a circle, reads its exact derived measurements, and saves and loads it back unchanged", () => {
     const empty: Document = createEmptyDocument();
     const minted = mintObjectId(empty);
+    if ("ok" in minted) throw new Error(minted.message);
     const schema = getObjectSchema("circle");
     if (schema === undefined) {
       throw new Error("test setup: expected the circle schema to exist");

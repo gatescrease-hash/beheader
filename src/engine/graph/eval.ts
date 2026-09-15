@@ -4,6 +4,8 @@
  * Evaluates the whole document. It sorts every slot into dependency order and
  * then evaluates each one in turn, so a slot always reads inputs that have
  * already been recomputed.
+ * The depth first sort uses an explicit stack, so long dependency chains
+ * retain their traversal order without exhausting the JavaScript call stack.
  *
  * The three kinds of slot go through this single pass. A literal returns the
  * value it stores, a formula evaluates its AST, and a derived slot calls the
@@ -61,18 +63,22 @@ export function evaluate(
 
   const visited = new Set<string>();
   const postorder: string[] = [];
-  function visit(nodeKey: string): void {
-    if (visited.has(nodeKey)) {
-      return;
-    }
-    visited.add(nodeKey);
-    for (const next of outgoing.get(nodeKey) ?? []) {
-      visit(next);
-    }
-    postorder.push(nodeKey);
-  }
+  const stack: { key: string; next: number }[] = [];
   for (const nodeKey of nodesByKey.keys()) {
-    visit(nodeKey);
+    if (visited.has(nodeKey)) continue;
+    visited.add(nodeKey);
+    stack.push({ key: nodeKey, next: 0 });
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]!;
+      const next = outgoing.get(frame.key)?.[frame.next++];
+      if (next === undefined) {
+        postorder.push(frame.key);
+        stack.pop();
+      } else if (!visited.has(next)) {
+        visited.add(next);
+        stack.push({ key: next, next: 0 });
+      }
+    }
   }
   const topologicalOrder = postorder.slice().reverse();
 

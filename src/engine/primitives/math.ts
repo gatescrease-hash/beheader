@@ -417,6 +417,14 @@ function makeMathOutputCompute(exportName: string): DerivedSlotCompute {
       if (isErrorValue(value)) {
         return value;
       }
+      // A port nobody has filled yet is left out of the environment rather
+      // than refused here, because this loop is read once for the whole object
+      // and a refusal would take down every export, including the lines that
+      // never name the port. Left out, the name fails on the lines that read
+      // it, and `evaluateMathObject` says which name carried no value.
+      if (value === null) {
+        continue;
+      }
       if (typeof value !== "number") {
         return { error: "#TYPE", message: `math: in.${name} holds something other than a number` };
       }
@@ -470,8 +478,25 @@ export function enumerateMathOutDerivedSlots(object: GraphObject): readonly Deri
   }));
 }
 
-/** The value an input port takes when the source first names it. */
-export const MATH_DEFAULT_INPUT: Value = 0;
+/**
+ * The value an input port takes when the source first names it. It is `null`
+ * rather than a number, because no operator has given the port a value yet and
+ * `null` is the member of the `Value` union that carries the absence of one.
+ *
+ * A number in its place would be read as an answer. A source whose first line
+ * is `y = x + 1` would export 1 from an input nobody typed, and a source whose
+ * first line is a fraction would export a division by zero, which reads as a
+ * fault in the arithmetic rather than as a port waiting to be filled. With
+ * `null` both sources export `"x" has no value here`, which names the port,
+ * and the port is the row an operator fills or the address `link` binds.
+ *
+ * The error lands on each line that names the port, so a line reading nothing
+ * but its own arithmetic still exports a number.
+ *
+ * A seed keeps its zero, because zero there is the start of a search and the
+ * root nearest the origin rather than the absence of a choice.
+ */
+export const MATH_DEFAULT_INPUT: Value = null;
 
 /**
  * A math object with nothing typed into it yet, carrying every slot its schema
@@ -579,6 +604,16 @@ function rewriteReferences(source: string, rewrite: (inside: string) => string |
     out += source.slice(at, start) + opening + replaced + "}";
     at = close + 1;
   }
+}
+
+/** Rewrites stored address macros without changing the surrounding notation. */
+export function rewriteMathReferences(source: string, rewrite: (address: Address) => Address): string {
+  return rewriteReferences(source, (inside) => {
+    const [objectId, ...path] = inside.split(".");
+    if (objectId === undefined || path.length === 0) return undefined;
+    const address = rewrite({ objectId, path });
+    return `${address.objectId}.${address.path.join(".")}`;
+  });
 }
 
 /**

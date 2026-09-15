@@ -27,7 +27,8 @@
 import type { Address, AddressableObject } from "../address.ts";
 import { hasRealMeasurer, type EvalContext, type TextStyle } from "../eval-context.ts";
 import type { FormulaAst } from "../formula/ast.ts";
-import { extractDependencies, type Dependency } from "../formula/deps.ts";
+import { extractDependencies, rewriteAddressesInAst, type Dependency } from "../formula/deps.ts";
+import { formatFormula } from "../formula/format.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
 import { isParseError, parseFormula } from "../formula/parser.ts";
 import { getSlot, hasIllegalNumber, isErrorValue, resolveSlot, type ErrorValue, type GraphObject, type Value } from "../graph/node.ts";
@@ -201,6 +202,29 @@ function matchMarkerAt(content: string, pos: number): Marker | undefined {
     return { kind: "conditionalElse", end: pos + 3 };
   }
   return undefined;
+}
+
+/** Rewrites addresses in formula markers while preserving prose and notation. */
+export function rewriteTextReferences(content: string, before: readonly GraphObject[], after: readonly GraphObject[], rewrite: (address: Address) => Address): string {
+  let output = "";
+  let copied = 0;
+  for (let pos = 0; pos < content.length; pos += 1) {
+    if (content[pos] !== "{") continue;
+    const marker = matchMarkerAt(content, pos);
+    if (marker === undefined) continue;
+    if (marker.kind === "formulaOpen" || marker.kind === "conditionalOpen") {
+      const ast = parseFormula(marker.source, before);
+      if (!isParseError(ast)) {
+        const rewritten = rewriteAddressesInAst(ast, rewrite);
+        if (JSON.stringify(ast) !== JSON.stringify(rewritten)) {
+          output += content.slice(copied, pos + 2) + " " + formatFormula(rewritten, after) + " }";
+          copied = marker.end;
+        }
+      }
+    }
+    pos = marker.end - 1;
+  }
+  return output + content.slice(copied);
 }
 
 function parseBlockSequence(state: TextParseState): { readonly blocks: readonly Block[]; readonly terminator: SequenceTerminator } {

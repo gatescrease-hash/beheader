@@ -783,6 +783,7 @@ describe("every registry command reaches a handler", () => {
   });
 
   const EVERY_REGISTRY_EXAMPLE: readonly string[] = [
+    "docvar speed 12", "delvar speed", "renamevar speed velocity", "vars",
     "circle x=0 y=0 r=1",
     "polygon sides=3 x=0 y=0 r=1",
     "rect x=0 y=0 w=1 h=1",
@@ -855,7 +856,7 @@ describe("the effect commands — select, zoom, fit, save, load", () => {
     });
 
     it("refuses an unknown name here rather than handing main.ts an effect it cannot check", () => {
-      expect(refused("select nosuch", sandbox())).toBe('no object named "nosuch"');
+      expect(refused("select nosuch", sandbox())).toBe('no object named "nosuch" Did you mean "table_1"?');
     });
 
     it("returns the document it was given, by identity — nothing about the selection is document state", () => {
@@ -1045,7 +1046,7 @@ describe("the slot commands — set, link, unlink", () => {
 
   describe("what a slot command refuses (the handler owns an identity failure)", () => {
     it("refuses an unknown object name with parseAddress's own message", () => {
-      expect(refused("set nosuch.radius 1", sandbox())).toBe('no object named "nosuch"');
+      expect(refused("set nosuch.radius 1", sandbox())).toBe('no object named "nosuch" Did you mean "table_1"?');
     });
 
     it("refuses a DERIVED slot, naming it, because the schema fixes a derived slot and nothing converts it", () => {
@@ -1054,7 +1055,7 @@ describe("the slot commands — set, link, unlink", () => {
     });
 
     it("refuses a path the object's type does not declare, rather than quietly creating a literal slot nothing reads", () => {
-      expect(refused("set polygon_1.radius2 1", sandbox())).toBe('polygon_1 has no slot at "polygon_1.radius2" — object type "polygon" does not declare one');
+      expect(refused("set polygon_1.radius2 1", sandbox())).toBe('polygon_1 has no slot at "polygon_1.radius2" — object type "polygon" does not declare one Did you mean "radius"?');
     });
 
     it("refuses a cell outside the table's own extent, because a 4x4 table declares cells only up to D4", () => {
@@ -1265,7 +1266,7 @@ describe("the slot commands — set, link, unlink", () => {
     });
 
     it("refuses an address that resolves to nothing, through the same identity checks `set`/`link`/`unlink` use", () => {
-      expect(refused("clear nosuch_1.A1", sandbox())).toBe('no object named "nosuch_1"');
+      expect(refused("clear nosuch_1.A1", sandbox())).toBe('no object named "nosuch_1" Did you mean "polygon_1"?');
     });
 
     it("a cell a formula READS can be cleared, and the dependent re-reads it as empty rather than breaking", () => {
@@ -1428,11 +1429,11 @@ describe("delete, refs, props and list — the object commands that need no new 
     });
 
     it("refuses a name no object has, rather than reporting that nothing references it", () => {
-      expect(refused("refs nosuch", sandbox())).toBe('no object named "nosuch"');
+      expect(refused("refs nosuch", sandbox())).toBe('no object named "nosuch" Did you mean "table_1"?');
     });
 
     it("refuses a path the schema does not declare, for the reason resolveWritableSlot does: a confident answer about a slot that does not exist is worse than a refusal", () => {
-      expect(refused("refs polygon_1.radius2", sandbox())).toBe('polygon_1 has no slot at "polygon_1.radius2" — object type "polygon" does not declare one');
+      expect(refused("refs polygon_1.radius2", sandbox())).toBe('polygon_1 has no slot at "polygon_1.radius2" — object type "polygon" does not declare one Did you mean "radius"?');
       expect(refused("refs table_1.E1", sandbox())).toContain("does not declare one");
     });
 
@@ -1536,7 +1537,7 @@ describe("delete, refs, props and list — the object commands that need no new 
     });
 
     it("refuses a name no object has", () => {
-      expect(refused("props nosuch", sandbox())).toBe('no object named "nosuch"');
+      expect(refused("props nosuch", sandbox())).toBe('no object named "nosuch" Did you mean "table_1"?');
     });
 
     it("returns the document it was given, unchanged and unjournalled", () => {
@@ -1590,7 +1591,7 @@ describe("delete, refs, props and list — the object commands that need no new 
     });
 
     it("refuses a name no object has", () => {
-      expect(refused("delete nosuch", sandbox())).toBe('no object named "nosuch"');
+      expect(refused("delete nosuch", sandbox())).toBe('no object named "nosuch" Did you mean "table_1"?');
     });
 
     it("treats an EXTERNAL formula reading a DERIVED slot exactly like any other reference: refused, then repaired under force", () => {
@@ -1641,7 +1642,7 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
   });
 
   it("refuses an unknown object", () => {
-    expect(refused("addvertex nosuch 1,1", sandbox())).toBe('no object named "nosuch"');
+    expect(refused("addvertex nosuch 1,1", sandbox())).toBe('no object named "nosuch" Did you mean "polyline_1"?');
   });
 
   it("removes the target vertex and renumbers the rest down by one", () => {
@@ -1695,7 +1696,7 @@ describe("addvertex / delvertex — growing and shrinking a polyline", () => {
   });
 
   it("refuses an unknown object", () => {
-    expect(refused("delvertex nosuch 0", sandbox())).toBe('no object named "nosuch"');
+    expect(refused("delvertex nosuch 0", sandbox())).toBe('no object named "nosuch" Did you mean "polyline_1"?');
   });
 });
 
@@ -1946,7 +1947,7 @@ describe("explode — a preset turned into an editable path", () => {
   });
 
   it("refuses an unknown object", () => {
-    expect(refused("explode nosuch", sandbox())).toBe('no object named "nosuch"');
+    expect(refused("explode nosuch", sandbox())).toBe('no object named "nosuch" Did you mean "rect_1"?');
   });
 
   it("refuses a type that is not a preset, naming its real type", () => {
@@ -1996,7 +1997,7 @@ describe("rename — the one object command that needed a new Operation kind", (
   it("makes the OLD name unresolvable to every other command at once, since they all resolve through the document", () => {
     const renamed = committed("rename table_1 grid", wired());
     expect(refused("refs table_1", renamed)).toContain("table_1");
-    expect(refused("delete table_1", renamed)).toBe('no object named "table_1"');
+    expect(refused("delete table_1", renamed)).toBe('no object named "table_1" Did you mean "polygon_1"?');
     expect(refused("set table_1.A1 1", renamed)).toContain("table_1");
   });
 
@@ -2007,7 +2008,7 @@ describe("rename — the one object command that needed a new Operation kind", (
   });
 
   it("refuses an old name no object has", () => {
-    expect(refused("rename nosuch whatever", wired())).toBe('no object named "nosuch"');
+    expect(refused("rename nosuch whatever", wired())).toBe('no object named "nosuch" Did you mean "table_1"?');
   });
 
   it("refuses a new name another object already holds, in the words of mutate, because uniqueness has one gate and not a copy here", () => {
@@ -2360,4 +2361,13 @@ describe("edgetype, the one gesture that sets all five slots behind an edge", ()
     const outcome = run("edgetype polyline_1 1 curve", path());
     expect(isCommandFailure(outcome) ? [] : outcome.lines).toEqual(["polyline_1 edge 1 is now a curve"]);
   });
+});
+
+
+it.each(["circle x=0 y=0 r=1", 'math x=0 y=0 "y=1"'])("refuses creation with an exhausted counter: %s", (command) => {
+  const document = { ...createEmptyDocument(), nextObjectId: Number.MAX_SAFE_INTEGER };
+  expect(run(command, document)).toMatchObject({ ok: false, message: expect.stringContaining("exhausted") });
+  expect(document.objects).toEqual([]);
+  expect(document.journal).toEqual([]);
+  expect(document.nextObjectId).toBe(Number.MAX_SAFE_INTEGER);
 });

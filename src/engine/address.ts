@@ -31,6 +31,7 @@ import { RESERVED_WORDS } from "./formula/lexer.ts";
 import { type ObjectType, TABLE_TYPE } from "./graph/node.ts";
 
 export interface AddressableObject {
+  readonly slots?: Readonly<Record<string, unknown>>;
   readonly id: string;
   readonly name: string;
   readonly type: ObjectType;
@@ -61,6 +62,49 @@ export function isValidName(name: string): boolean {
   return NAME_PATTERN.test(name);
 }
 
+/**
+ * The candidate closest to what was typed, by edit distance, with the first
+ * of an equal distance winning so the order the document holds decides.
+ *
+ * The comparison ignores case, because a name resolves without regard to case
+ * and a difference of case is the fault an operator is least likely to see.
+ */
+export function nearestName(typed: string, candidates: readonly string[]): string | undefined {
+  let best: string | undefined;
+  let distance = Infinity;
+  const target = typed.toLowerCase();
+  for (const candidate of candidates) {
+    const against = candidate.toLowerCase();
+    let previous = Array.from({ length: against.length + 1 }, (_, index) => index);
+    for (let row = 1; row <= target.length; row += 1) {
+      const current = [row];
+      for (let column = 1; column <= against.length; column += 1) {
+        const substitution = previous[column - 1]! + (target[row - 1] === against[column - 1] ? 0 : 1);
+        current[column] = Math.min(current[column - 1]! + 1, previous[column]! + 1, substitution);
+      }
+      previous = current;
+    }
+    if (previous[against.length]! < distance) {
+      distance = previous[against.length]!;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+/**
+ * The tail of a refusal that names the nearest name that exists, or an empty
+ * string where there is nothing to compare against.
+ *
+ * It returns the whole phrase rather than the name so a caller appends it to a
+ * message without deciding how a suggestion is worded, and every refusal in
+ * the program words one the same way.
+ */
+export function nameSuggestion(typed: string, candidates: readonly string[]): string {
+  const nearest = nearestName(typed, candidates);
+  return nearest === undefined ? "" : ` Did you mean "${nearest}"?`;
+}
+
 export function findObjectByName(
   name: string,
   objects: readonly AddressableObject[],
@@ -82,7 +126,7 @@ export function isNameTaken(
   excludeId?: string,
 ): boolean {
   const target = name.toLowerCase();
-  return objects.some((object) => object.id !== excludeId && object.name.toLowerCase() === target);
+  return objects.some((object) => (object.id !== excludeId && object.name.toLowerCase() === target) || (object.type === "doc" && Object.keys(object.slots ?? {}).some((name) => name.toLowerCase() === target)));
 }
 
 /** Tests a name for both faults: a bad pattern, and a name already in use. */
@@ -230,6 +274,15 @@ export function parseAddress(input: string, objects: readonly AddressableObject[
     return { error: "#REF", message: `malformed address "${input}" — empty segment` };
   }
   if (segments.length < 2) {
+    // One segment is a document variable, the one address in the program
+    // written with no object name in front of it. The stored spelling is what the
+    // address takes, so a variable written in another case still addresses the
+    // one slot the doc object holds.
+    const doc = objects.find((object) => object.type === "doc");
+    const name = Object.keys(doc?.slots ?? {}).find((key) => key.toLowerCase() === trimmed.toLowerCase());
+    if (doc !== undefined && name !== undefined) {
+      return { objectId: doc.id, path: [name] };
+    }
     return {
       error: "#REF",
       message: `malformed address "${input}" — expected "name.path", e.g. "table_x.A1"`,
@@ -247,10 +300,17 @@ export function parseAddress(input: string, objects: readonly AddressableObject[
 
   const object = findObjectByName(namePart, objects);
   if (object === undefined) {
-    return { error: "#REF", message: `no object named "${namePart}"` };
+    return { error: "#REF", message: `no object named "${namePart}"${nameSuggestion(namePart, objects.map((object) => object.name))}` };
   }
 
-  return { objectId: object.id, path: toStoredPath(object.type, pathParts) };
+  const path = [...toStoredPath(object.type, pathParts)];
+  if (object.type === "doc" && path.length === 1) {
+    // `doc.Speed` and `doc.speed` name one variable, so the path takes the
+    // spelling the slot carries and two addresses of the same variable compare
+    // equal wherever the program keys one by its path.
+    path[0] = Object.keys(object.slots ?? {}).find((key) => key.toLowerCase() === path[0]?.toLowerCase()) ?? path[0]!;
+  }
+  return { objectId: object.id, path };
 }
 
 /** Turns an address back into text, under the name the object carries now. */

@@ -48,8 +48,31 @@ export interface WorldExtent {
  * The world box of one object. A type with an arm here becomes clickable. A
  * type with no renderer arm in the same change becomes an invisible target.
  */
+/**
+ * The box a copy takes where neither measured slot holds a number. It is wide
+ * enough for a short name, an equals sign and a small value, so a copy stays
+ * clickable in a document that was evaluated with no real measurer.
+ */
+export const DOCREF_FALLBACK_WIDTH = 120;
+export const DOCREF_FALLBACK_HEIGHT = 20;
+
 export function objectExtent(object: GraphObject): WorldExtent | undefined {
   switch (object.type) {
+    // A copy is measured text, so its box comes from the two measured slots.
+    // The fallback covers a document evaluated with no real measurer, where
+    // both slots hold #MEASURE and a box of no size would make the copy
+    // impossible to click on.
+    case "docref": {
+      const x = readNumber(object, ORIGIN_X_PATH) ?? 0;
+      const y = readNumber(object, ORIGIN_Y_PATH) ?? 0;
+      const width = readNumber(object, ["measuredWidth"]) ?? DOCREF_FALLBACK_WIDTH;
+      const height = readNumber(object, ["measuredHeight"]) ?? DOCREF_FALLBACK_HEIGHT;
+      return { minX: x, minY: y, maxX: x + width, maxY: y + height };
+    }
+    // The doc object has no origin and never draws, so it has no box. Every
+    // caller already handles an object with no extent.
+    case "doc":
+      return undefined;
     case "circle":
       return circleExtent(object);
     case "polygon":

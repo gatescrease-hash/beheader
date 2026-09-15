@@ -14,8 +14,8 @@
  *   node tools/prose-check.mjs --all
  *   node tools/prose-check.mjs --all --quiet
  *
- * It gives exit code 1 when it finds a fault, and exit code 0 when the prose
- * is clean.
+ * It gives exit code 1 when it finds a fault or cannot read a target, and
+ * exit code 0 when every target is readable and the prose is clean.
  *
  * This script used to check ASD-STE100 Simplified Technical English. That
  * standard is built for aircraft maintenance instructions, and its sentence
@@ -539,6 +539,7 @@ const targets = args.includes("--all")
 const quiet = args.includes("--quiet");
 
 let total = 0;
+let readErrors = 0;
 const byRule = {};
 const byFile = {};
 for (const path of targets) {
@@ -546,6 +547,7 @@ for (const path of targets) {
   try {
     faults = checkFile(path);
   } catch (error) {
+    readErrors++;
     console.error(path + ": cannot read. " + error.message);
     continue;
   }
@@ -562,6 +564,7 @@ for (const path of targets) {
 }
 
 console.log("\n" + total + " fault(s) in " + targets.length + " file(s).");
+if (readErrors > 0) console.error(readErrors + " file(s) could not be read.");
 if (total > 0) {
   console.log(
     Object.entries(byRule)
@@ -580,4 +583,4 @@ if (total > 0) {
     );
   }
 }
-process.exit(total > 0 ? 1 : 0);
+process.exit(total > 0 || readErrors > 0 ? 1 : 0);

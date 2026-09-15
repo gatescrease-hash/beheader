@@ -1,4 +1,4 @@
-# SPEC - Graphpaper
+# SPEC - Beheader
 
 This document defines the product. It says what the program must do and why.
 It does not say what the code does today. `STATUS.md` says that.
@@ -7,7 +7,7 @@ It does not say what the code does today. `STATUS.md` says that.
 
 ## 1. The idea
 
-Graphpaper is a keyboard driven spatial canvas. Every object on the canvas is a
+Beheader is a keyboard driven spatial canvas. Every object on the canvas is a
 live node in one shared dependency graph.
 
 Geometry, text, tables, images, equations and script nodes are not separate
@@ -70,7 +70,9 @@ exact coupling this design avoids.
 
 **The planned future stack.** A Rust engine core, a Tauri shell, a
 TypeScript and WebGPU front end, and a local Python interpreter as a subprocess.
-Do not build it. The shape of `src/engine/` matches a one to one port target for a
+The migration plan and work register are in [RUST_PORT.md](RUST_PORT.md).
+That document plans the engine port without starting the deferred implementation.
+Do not implement the future stack yet. The shape of `src/engine/` matches a one to one port target for a
 future Rust crate. Two rules come out of that:
 
 1. Store IDs, not object references. The graph must never use JavaScript object
@@ -719,6 +721,20 @@ types, and `link` binds it to any upstream address exactly as a script port does
 A text object has nowhere to hang a port, so a free bare name inside a text math
 run is a parse error, and the writer wraps an address in the command instead.
 
+A port the source has just named holds `null`, which is the member of the
+`Value` union of section 4 that carries the absence of a value. A number in its
+place would be read as an answer: `y = x + 1` would export 1 from an input
+nobody typed, and `y = 1/x` would export a division by zero, which reads as a
+fault in the arithmetic rather than as a port waiting for a value. An empty
+port leaves its name out of the evaluation environment instead, so each line
+that reads the name exports `"x" has no value here`, and that error names the
+row an operator fills or the address `link` binds.
+
+The error lands per line, so a source whose other lines read nothing but their
+own arithmetic still exports numbers from them. A seed keeps its zero, because
+zero there is the start of a search and the root nearest the origin rather than
+the absence of a choice.
+
 A line of the form `name = expression` defines a name, and that name becomes a
 derived slot `math_1.out.x_ans`. The exports go under `out` rather than at the
 top of the object because a bare export named `source`, `display` or `origin`
@@ -789,6 +805,13 @@ Four properties make a solve safe to run inside the evaluation pass:
    change under a cursor that touched nothing.
 4. **It gives one value.** An equation with several roots would otherwise leave a
    slot without a defined value.
+
+Each exported math line has a limit of 1,000,000 expression evaluations shared
+by its function calls, series, integral samples and solver samples. Exhaustion
+gives that export a `#MATH` error, and an independent line still evaluates.
+This deterministic work limit prevents nested bounded loops from multiplying
+into a stalled frame. Series endpoints are safe integers, so their indices
+advance exactly. The existing series and solver iteration limits also apply.
 
 The fourth property needs a rule, and the rule is a seed. Each solved unknown
 gets a literal slot `math_1.seed.x`, and the object returns the root nearest that
@@ -1033,14 +1056,34 @@ is shared rather than duplicated.
 
 ### Renaming and deleting a variable
 
-A copy stores the address of its target and a formula stores the ID of the doc
-object, so renaming a variable rewrites neither. That is the two layer scheme of
-section 5, and a document variable gets it for the same reason a table does.
+A formula stores the ID of the doc object, so renaming the object that holds
+the variables would rewrite nothing. That is the two layer scheme of section 5.
+The name of a variable is the other half of the address, and there is no ID
+under it: the slot key is the name an operator typed. So renaming a variable
+moves the slot and rewrites every address that names it, in one mutation, the
+way deleting a column of a table rewrites the references into it.
+
+Three kinds of reader carry such an address: a formula, the embedded formulas of
+a text object, and the address macros of a math source. A copy carries one as
+well, in its target rather than in a slot. The rename moves all four together,
+because a reader left behind would name a slot that is no longer there and the
+integrity check would refuse the whole mutation.
+
+```
+renamevar speed velocity         // moves the slot and every reader of it
+delvar speed                     // removes the variable and its copies
+```
 
 Deleting a variable that something reads is refused, with the reader named, by
 the rule section 4 gives every slot. A variable that nothing reads goes on the
 word `delvar`, and its copies go with it, because a copy with no target is a
-drawing of a slot that is not there.
+drawing of a slot that is not there. A copy is not a reader for that refusal:
+it draws the variable and holds nothing else, so it is what goes rather than
+what stands in the way.
+
+The doc object stays behind when its last variable goes. An operator who
+removed one has said nothing about the next, and the `docvar` that follows
+finds the object already there.
 
 ### Seeing the ones with no copy
 
@@ -1323,6 +1366,14 @@ load regenerates them.
 
 A load applies objects through the mutation API and then evaluates. Save by JSON
 download. Load by file input. Do not build a file manager.
+
+The next object ID counter is a non-negative safe integer above every generated
+`obj_` ID in current objects and journal creation or deletion entries. An ID
+with that prefix followed by decimal digits without leading zeros reserves its
+number even after deletion. Other ID spellings leave the counter unchanged.
+Loading refuses a counter that could reuse an allocated ID or lies outside the
+safe integer range. The maximum safe integer represents exhaustion: the file
+still saves and loads, and creation returns a refusal without changing it.
 
 ---
 

@@ -11,6 +11,7 @@ import {
   createEmptyDocument,
   deserializeDocument,
   loadDocument,
+  mintObjectId,
   saveDocument,
   serializeDocument,
   type Document,
@@ -67,7 +68,7 @@ describe("createEmptyDocument", () => {
 
 describe("serializeDocument — drops every derived slot's value", () => {
   it("omits `value` from a derived slot, but keeps literal/formula slots (including their cached value) unchanged", () => {
-    const document: Document = { ...createEmptyDocument(), objects: consistentFixture() };
+    const document: Document = { ...createEmptyDocument(), nextObjectId: 4, objects: consistentFixture() };
 
     const serialized = serializeDocument(document);
 
@@ -149,7 +150,7 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
   });
 
   it("re-evaluates on load rather than trusting a stale cached formula/derived value sitting in the file", () => {
-    const document: Document = { ...createEmptyDocument(), objects: consistentFixture() };
+    const document: Document = { ...createEmptyDocument(), nextObjectId: 4, objects: consistentFixture() };
     const parsed = JSON.parse(saveDocument(document)) as { objects: Array<{ id: string; slots: Record<string, { value?: unknown }> }> };
     const add1 = parsed.objects.find((object) => object.id === "obj_3");
     if (add1 === undefined) {
@@ -845,6 +846,7 @@ describe("deserializeDocument — a loaded AST has its depth checked once, at th
   function documentWithFormula(ast: FormulaAst): unknown {
     return {
       ...serializeDocument(createEmptyDocument()),
+      nextObjectId: 2,
       objects: [{ id: "obj_1", name: "value_1", type: "value", slots: { value: { kind: "formula", ast, value: null } } }],
     };
   }
@@ -894,7 +896,7 @@ describe("deserializeDocument / loadDocument forward the EvalContext to the load
   }
 
   function savedDocumentWithText(width: number | "auto" = "auto"): string {
-    return saveDocument({ ...createEmptyDocument(), nextObjectId: 1, objects: [textObject(width)] });
+    return saveDocument({ ...createEmptyDocument(), nextObjectId: 2, objects: [textObject(width)] });
   }
 
   function measuredHeightOf(result: ReturnType<typeof loadDocument>): unknown {
@@ -923,4 +925,71 @@ describe("deserializeDocument / loadDocument forward the EvalContext to the load
     };
     expect(measuredHeightOf(loadDocument(savedDocumentWithText(200), wrapAware))).toBe(20);
   });
+});
+
+
+describe("object counter validation", () => {
+  it.each([1, 2, 9])("refuses counter %i before an existing allocated ID", (nextObjectId) => {
+    expect(deserializeDocument({ ...createEmptyDocument(), nextObjectId, objects: [valueObject("obj_9", "v", 1)] })).toMatchObject({ ok: false, message: expect.stringContaining("nextObjectId") });
+  });
+
+  it("reserves deleted IDs from creation and deletion entries in partial journals", () => {
+    for (const operations of [
+      [{ kind: "createObject", object: valueObject("obj_9", "v", 1) }, { kind: "deleteObject", objectId: "obj_9" }],
+      [{ kind: "deleteObject", objectId: "obj_9" }],
+    ]) {
+      const raw = { ...createEmptyDocument(), nextObjectId: 9, journal: [{ operations }] };
+      expect(deserializeDocument(raw).ok).toBe(false);
+      expect(deserializeDocument({ ...raw, nextObjectId: 10 }).ok).toBe(true);
+    }
+  });
+
+  it.each([Number.MAX_SAFE_INTEGER + 1, 1e20])("refuses unsafe counter %s", (nextObjectId) => {
+    expect(deserializeDocument({ ...createEmptyDocument(), nextObjectId }).ok).toBe(false);
+    expect(mintObjectId({ ...createEmptyDocument(), nextObjectId })).toMatchObject({ ok: false });
+  });
+
+  it("mints the final ID and preserves the exhausted document across save and load", () => {
+    const document = { ...createEmptyDocument(), nextObjectId: Number.MAX_SAFE_INTEGER - 1 };
+    const minted = mintObjectId(document);
+    expect(minted).toEqual({ id: "obj_9007199254740990", nextObjectId: Number.MAX_SAFE_INTEGER });
+    if ("ok" in minted) throw new Error(minted.message);
+    const exhausted = { ...document, nextObjectId: minted.nextObjectId, objects: [valueObject(minted.id, "last", 1)] };
+    const loaded = loadDocument(saveDocument(exhausted));
+    expect(loaded).toEqual({ ok: true, document: exhausted });
+    if (!loaded.ok) throw new Error(loaded.message);
+    expect(mintObjectId(loaded.document)).toMatchObject({ ok: false, message: expect.stringContaining("exhausted") });
+  });
+
+  it("compares canonical numeric IDs without rounding and ignores other ID spellings", () => {
+    expect(deserializeDocument({ ...createEmptyDocument(), objects: [valueObject("obj_9007199254740993", "v", 1)] }).ok).toBe(false);
+    for (const id of ["custom", "obj_01", "obj_1tail"]) {
+      expect(deserializeDocument({ ...createEmptyDocument(), objects: [valueObject(id, "v", 1)] }).ok).toBe(true);
+    }
+  });
+});
+
+describe("deep loaded journal validation", () => {
+  it.each(["0", "1e999", "-0"])("checks a number beneath 20000 nested arrays: %s", (leaf) => {
+    const base = saveDocument(createEmptyDocument());
+    const json = base.replace('"journal":[]', '"journal":' + "[".repeat(20000) + leaf + "]".repeat(20000));
+    const result = loadDocument(json);
+    expect(result.ok).toBe(leaf === "0");
+    if (!result.ok) expect(result.message).toContain("illegal number");
+  });
+});
+
+
+it.each(["binaryOp", "unaryOp", "functionCall"])("round-trips and evaluates a %s formula at the depth limit", (kind) => {
+  let ast: FormulaAst = { type: "literal", value: 1 };
+  for (let depth = 1; depth < MAX_FORMULA_AST_DEPTH; depth += 1) {
+    ast = kind === "binaryOp" ? { type: "binaryOp", operator: "+", left: ast, right: { type: "literal", value: 0 } }
+      : kind === "unaryOp" ? { type: "unaryOp", operator: "-", operand: ast }
+      : { type: "functionCall", name: "ABS", args: [ast] };
+  }
+  const document: Document = { ...createEmptyDocument(), nextObjectId: 2, objects: [{ id: "obj_1", name: "v", type: "value", slots: { value: { kind: "formula", ast, value: null } } }] };
+  const loaded = loadDocument(saveDocument(document));
+  expect(loaded.ok).toBe(true);
+  if (!loaded.ok) throw new Error(loaded.message);
+  expect(loaded.document.objects[0]?.slots.value?.value).toBe(kind === "unaryOp" ? -1 : 1);
 });
