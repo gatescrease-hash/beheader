@@ -13,13 +13,19 @@
  * that line for nothing else. Nothing in the engine imports this file, so a
  * GPU renderer can replace the whole layer later.
  */
-import { MATH_DISPLAY_OPEN, matchMathMarkerAt } from "../engine/index.ts";
+import { MATH_DISPLAY_OPEN, MATH_INLINE_OPEN, matchMathMarkerAt } from "../engine/index.ts";
 
 export interface MarkdownRun {
   readonly text: string;
   readonly bold: boolean;
   readonly italic: boolean;
   readonly code: boolean;
+  /**
+   * The notation of a run that holds some. Such a run arrives with no text in
+   * it, because notation is measured and drawn whole rather than broken into
+   * words, and the layout keeps it in one piece for that reason.
+   */
+  readonly latex?: string;
 }
 
 export type MarkdownLineKind = "paragraph" | "heading" | "list" | "math";
@@ -100,7 +106,12 @@ function displayMathLine(hardLine: string): MathLine | undefined {
   if (math === undefined || !math.display || trimmed.slice(math.end).trim() !== "") {
     return undefined;
   }
-  return { kind: "math", level: 0, runs: [], latex: math.latex };
+  return {
+    kind: "math",
+    level: 0,
+    runs: [{ text: "", bold: false, italic: false, code: false, latex: math.latex }],
+    latex: math.latex,
+  };
 }
 
 function parseLine(hardLine: string): MarkdownLine {
@@ -165,6 +176,15 @@ function parseInlineRuns(line: string): readonly MarkdownRun[] {
       open.pop();
       index += innermost.closer.length;
       continue;
+    }
+    if (line.startsWith(MATH_INLINE_OPEN, index)) {
+      const math = matchMathMarkerAt(line, index);
+      if (math !== undefined) {
+        flush();
+        runs.push({ text: "", bold: style.bold, italic: style.italic, code: false, latex: math.latex });
+        index = math.end;
+        continue;
+      }
     }
     if (line.startsWith(CODE_MARKER, index)) {
       const closer = line.indexOf(CODE_MARKER, index + CODE_MARKER.length);

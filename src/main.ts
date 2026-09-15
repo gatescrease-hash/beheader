@@ -1137,7 +1137,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       element.style.width = `${run.width}px`;
       element.style.height = `${run.height}px`;
       element.style.padding = "0";
-      element.style.fontSize = `${MATH_FONT_SIZE}px`;
+      element.style.fontSize = `${run.fontSize}px`;
       element.style.transform = `scale(${state.document.camera.zoom / ratio})`;
     }
 
@@ -1211,16 +1211,20 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
 
   /**
-   * Measures every math object again and evaluates the document against the
-   * new sizes. Notation measured before its fonts arrive comes out about a
-   * sixth too narrow, so the box drawn around it is too small until this runs.
+   * Measures every piece of notation again and evaluates the document against
+   * the new sizes. Notation measured before its fonts arrive comes out about a
+   * sixth too narrow, so the box left for it is too small until this runs.
+   *
+   * It looks at every object rather than at the math objects alone. A text
+   * object holding a run of notation is measured the same way and goes just as
+   * wrong, and a guard that named the math type left that case behind.
    *
    * It evaluates rather than mutating, because nothing about the document has
    * changed. Only the size of what was already there is now known properly, so
    * there is nothing for the journal to record.
    */
   const remeasureMath = (): void => {
-    if (!state.document.objects.some((object) => object.type === "math")) {
+    if (state.document.objects.length === 0) {
       return;
     }
     measureMath.forget();

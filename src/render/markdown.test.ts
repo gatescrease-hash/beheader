@@ -232,3 +232,39 @@ describe("verbatimLines — the same hard lines with no markup honoured", () => 
     expect(verbatimLines("a\n\nb")[1]).toEqual({ kind: "paragraph", level: 0, runs: [] });
   });
 });
+
+describe("notation inside text", () => {
+  it("reads a line holding only display notation as a math line", () => {
+    const [line] = parseMarkdownLite("{$$ A=\\pi r^2 }");
+    expect(line).toMatchObject({ kind: "math", latex: "A=\\pi r^2" });
+  });
+
+  it("allows space around a display line, because a typed line often carries it", () => {
+    expect(parseMarkdownLite("   {$$ x }   ")[0]).toMatchObject({ kind: "math", latex: "x" });
+  });
+
+  it("leaves a line with prose beside the notation as a paragraph", () => {
+    expect(parseMarkdownLite("see {$$ x } here")[0]?.kind).toBe("paragraph");
+  });
+
+  it("reads notation inside a sentence as a run of its own", () => {
+    const [line] = parseMarkdownLite("Euler wrote {$ e^{i\\pi} } and stopped.");
+    expect(line?.runs.map((run) => run.latex ?? run.text)).toEqual(["Euler wrote ", "e^{i\\pi}", " and stopped."]);
+  });
+
+  it("counts the braces, so a fraction is not cut in half", () => {
+    const [line] = parseMarkdownLite("a {$ \\frac{1}{2} } b");
+    expect(line?.runs.map((run) => run.latex ?? run.text)).toEqual(["a ", "\\frac{1}{2}", " b"]);
+  });
+
+  it("leaves a marker that never closes as the text it is", () => {
+    const [line] = parseMarkdownLite("a {$ x");
+    expect(line?.runs.map((run) => run.text)).toEqual(["a {$ x"]);
+  });
+
+  it("keeps a run of notation out of the reach of emphasis", () => {
+    // A star means a product in notation and emphasis in prose.
+    const [line] = parseMarkdownLite("{$ a*b }");
+    expect(line?.runs[0]?.latex).toBe("a*b");
+  });
+});

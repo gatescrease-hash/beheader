@@ -39,35 +39,22 @@ every person who clones the repository.
 
 Done when one name reaches the folder, the package and the documents.
 
-### 3. Build the math object
+### 3. Solve for an unknown inside a math object
 
-Section 12 of `SPEC.md` defines a math object. An operator can type one, see it
-drawn, edit it in place, wire it to the document, read an address of the
-document out of its notation, and choose whether it shows its formula, its
-result or both. The two in-text forms and solving are open.
+Section 12 of `SPEC.md` gives a math object the right to solve for an unknown
+that its own lines constrain, and the seed slots that pick one root out of
+several. None of it is built, and the `seed` family of that section has no slot
+yet.
 
-Each stage below lands with its tests, and each leaves the four checks clean.
+The four properties that section names are what make a solve safe to run inside
+the evaluation pass, so each needs its own test: a solve reads one object and
+never a slot on another, it carries an iteration bound and gives an error value
+rather than hanging when it runs out, the same inputs give the same answer, and
+a seed picks which root the export carries.
 
-1. **The block and inline forms inside a text object.** This is the largest of
-   the three, because a text object is a string from end to end: `resolvedContent`
-   is a string, `markdown.ts` parses a string, and `layOutText` breaks it into
-   runs of text with a font each. Notation is none of those. Carrying it needs a
-   piece kind that is not text threaded through that pipeline, and `STATUS.md`
-   records that `measure.ts` and `renderer.ts` move together, so the change
-   lands in both. Start by deciding what `resolvedContent` becomes when it can
-   no longer be a string.
-   Done when one text box holds a formula on its own line and another inside a
-   sentence, and the text around each lays out against the size of the notation
-   rather than around a gap.
-
-2. **Solving.** The seed slots, the iteration bound, and the error value for a
-   solve that finds no root. Nothing of this is built, and the `seed` family of
-   section 12 has no slot yet. Done when an implicit line returns the root
-   nearest its seed, a change to the seed moves the answer from one root to
-   another, and a solve that runs out of iterations gives an error value rather
-   than a hung frame.
-
-**Done when** that stage has landed and this item is deleted.
+Done when an implicit line returns the root nearest its seed, a change to the
+seed moves the answer from one root to another, and a solve that runs out of
+iterations gives an error value rather than a hung frame.
 
 ### 4. Decide what a fresh input port holds
 

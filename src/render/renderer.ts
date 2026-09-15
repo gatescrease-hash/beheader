@@ -306,6 +306,13 @@ export interface TextMathRun {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  /**
+   * The size the run was measured at, which is the size of the text around it
+   * rather than the size a standalone math object draws at. Drawing it at any
+   * other size makes it wider than the room the layout left, and the words
+   * after it are then written over.
+   */
+  readonly fontSize: number;
 }
 
 export interface RenderReport {
@@ -764,22 +771,26 @@ function drawText(
   let mathIndex = 0;
   for (const line of layout.lines) {
     const lineLeft = originX + alignmentOffset(style.align, boxWidth, line.width);
-    if (line.latex !== undefined) {
-      // Notation arrives as an element, so the line is reported and left blank
-      // for that element to fill.
-      mathRuns.push({
-        objectId: object.id,
-        index: mathIndex,
-        latex: line.latex,
-        x: lineLeft,
-        y: originY + line.top,
-        width: line.width,
-        height: line.height,
-      });
-      mathIndex += 1;
-      continue;
-    }
     for (const run of line.runs) {
+      if (run.latex !== undefined) {
+        // Notation arrives as an element, so the run is reported and nothing is
+        // painted where it sits. It is put on the bottom of the line, which is
+        // where a baseline of text would be, so notation inside a sentence sits
+        // on the same line the words do.
+        const height = run.height ?? line.height;
+        mathRuns.push({
+          objectId: object.id,
+          index: mathIndex,
+          latex: run.latex,
+          x: lineLeft + run.x,
+          y: originY + line.top + Math.max(0, line.height - height),
+          width: run.width,
+          height,
+          fontSize: style.fontSize,
+        });
+        mathIndex += 1;
+        continue;
+      }
       ctx.font = run.font;
       ctx.fillText(run.text, lineLeft + run.x, originY + line.top);
     }

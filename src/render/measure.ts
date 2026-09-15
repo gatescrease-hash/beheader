@@ -36,6 +36,12 @@ export interface LaidOutRun {
   readonly font: string;
   readonly x: number;
   readonly width: number;
+  /**
+   * The notation of a run that holds some. Such a run arrives with no text to
+   * paint, and the caller puts an element over the box it names instead.
+   */
+  readonly latex?: string;
+  readonly height?: number;
 }
 
 export interface LaidOutLine {
@@ -43,12 +49,6 @@ export interface LaidOutLine {
   readonly top: number;
   readonly width: number;
   readonly height: number;
-  /**
-   * The notation of a line that holds a run of it. Such a line comes back with
-   * no runs at all, because notation reaches the screen as an element over the
-   * canvas, and the caller places that element from the box this line gives.
-   */
-  readonly latex?: string;
 }
 
 export interface TextLayout {
@@ -78,6 +78,10 @@ const CODE_FONT_FAMILY = "monospace";
 interface Piece {
   readonly text: string;
   readonly font: string;
+  /** The notation of a piece that holds some, with the size it measured to. */
+  readonly latex?: string;
+  readonly mathWidth?: number;
+  readonly mathHeight?: number;
 }
 
 function finitePositive(value: number): number | undefined {
@@ -148,10 +152,30 @@ function hangingIndent(
   return wrapWidth !== undefined && indent < wrapWidth ? indent : 0;
 }
 
-function chunksOf(line: MarkdownLine, family: string, fontSize: number): Piece[][] {
+function chunksOf(
+  line: MarkdownLine,
+  family: string,
+  fontSize: number,
+  measureMath: ((latex: string, fontSize: number) => TextMeasurement) | undefined,
+): Piece[][] {
   const chunks: Piece[][] = [];
   for (const run of line.runs) {
     const font = runFont(run, line, family, fontSize);
+    if (run.latex !== undefined) {
+      // Notation is one chunk of its own, so wrapping moves it whole and never
+      // splits it between two lines the way it splits a long word.
+      const measured = measureMath?.(run.latex, fontSize);
+      chunks.push([
+        {
+          text: "",
+          font,
+          latex: run.latex,
+          mathWidth: finiteOrZero(measured?.width ?? 0),
+          mathHeight: finiteOrZero(measured?.height ?? 0),
+        },
+      ]);
+      continue;
+    }
     for (const chunkText of wrapChunks(run.text)) {
       const previous = chunks[chunks.length - 1];
       const lastPiece = previous?.[previous.length - 1];
@@ -170,11 +194,21 @@ function mergeRuns(pieces: readonly Piece[], measureRun: (text: string, font: st
   let x = 0;
   let index = 0;
   while (index < pieces.length) {
-    const font = pieces[index]?.font ?? "";
+    const first = pieces[index];
+    if (first?.latex !== undefined) {
+      // Notation never joins the text beside it, because it is drawn by
+      // something else and its width came from a measurement of its own.
+      const width = first.mathWidth ?? 0;
+      runs.push({ text: "", font: first.font, x, width, latex: first.latex, height: first.mathHeight ?? 0 });
+      x += width;
+      index += 1;
+      continue;
+    }
+    const font = first?.font ?? "";
     let text = "";
     while (index < pieces.length) {
       const piece = pieces[index];
-      if (piece === undefined || piece.font !== font) {
+      if (piece === undefined || piece.font !== font || piece.latex !== undefined) {
         break;
       }
       text += piece.text;
@@ -246,21 +280,9 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
   let top = 0;
   let widest = 0;
   for (const sourceLine of sourceLines) {
-    if (sourceLine.kind === "math") {
-      const latex = sourceLine.latex ?? "";
-      const measured = request.measureMath?.(latex, fontSize);
-      const height = measured === undefined ? lineHeight : Math.max(lineHeight, measured.height);
-      const width = measured?.width ?? 0;
-      lines.push({ runs: [], top, width, height, latex });
-      if (width > widest) {
-        widest = width;
-      }
-      top += height;
-      continue;
-    }
     const scale = headingScale(sourceLine);
     const height = lineHeight * scale;
-    const chunks = chunksOf(sourceLine, request.style.font, fontSize * scale);
+    const chunks = chunksOf(sourceLine, request.style.font, fontSize * scale, request.measureMath);
     const indent = hangingIndent(sourceLine, request.style.font, fontSize * scale, wrapWidth, request.measureRun);
     const wrapped = wrapWidth === undefined ? [chunks.flat()] : wrapLine(chunks, wrapWidth, indent, request.measureRun);
     let continuation = false;
@@ -269,11 +291,13 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
       const offset = continuation ? indent : 0;
       const runs = offset === 0 ? merged.runs : merged.runs.map((run) => ({ ...run, x: run.x + offset }));
       const width = merged.width + offset;
-      lines.push({ runs, top, width, height });
+      const tallest = runs.reduce((so_far, run) => Math.max(so_far, run.height ?? 0), 0);
+      const lineHeightHere = Math.max(height, tallest);
+      lines.push({ runs, top, width, height: lineHeightHere });
       if (width > widest) {
         widest = width;
       }
-      top += height;
+      top += lineHeightHere;
       continuation = true;
     }
   }

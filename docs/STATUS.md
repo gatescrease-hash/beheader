@@ -12,15 +12,15 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2598 pass, 0 skip, across 51 test files. |
-| Spec | Built, except the in-text math of section 12 and its solving, and the parts section 16 postpones. |
+| Tests | 2621 pass, 0 skip, across 51 test files. |
+| Spec | Built, except the solving of section 12, and the parts section 16 postpones. |
 
 ### How to run it
 
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2598 tests
+npm test             # 2621 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -225,6 +225,12 @@ the code it constrains.
    `main.ts` empties the measurement cache of `render/math.ts` and evaluates
    again whenever a font finishes loading, which is the only thing that repairs
    the sizes of a document already on screen.
+
+   That repair runs for every object rather than for the math objects alone. A
+   run of notation inside a text object measures the same way and goes just as
+   wrong, and it is worse there: the words after it are written over, because
+   the layout left a gap of the smaller size. A guard that named the math type
+   left that case behind once already.
 14. **A field and the layer that marks it agree on every property that moves a
    glyph, the sideways scroll included.** Three fields carry a layer: the
    command line, a table cell being edited, and a panel row. `index.html` sets

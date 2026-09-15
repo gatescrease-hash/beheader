@@ -361,3 +361,62 @@ describe("layOutText — a wrapped list item hangs its continuation lines under 
     expect(listLayout("- `aaa` `bbb`", 60).lines[1]?.runs[0]?.x).toBe(2 * CHAR);
   });
 });
+
+describe("notation in a laid out line", () => {
+  const style = { font: "sans-serif", fontSize: 10, lineHeight: 12 };
+  const measureRun = (text: string): number => text.length * 5;
+  const measureMath = (): { width: number; height: number } => ({ width: 60, height: 14 });
+
+  function layOut(text: string, wrapWidth?: number) {
+    return layOutText({ text, style, wrapWidth, markup: true, measureRun, measureMath });
+  }
+
+  it("leaves the notation its measured width, and the words after it start past that", () => {
+    const [line] = layOut("ab {$ x } cd").lines;
+    expect(line?.runs.map((run) => ({ text: run.text, x: run.x, width: run.width, latex: run.latex }))).toEqual([
+      { text: "ab ", x: 0, width: 15, latex: undefined },
+      { text: "", x: 15, width: 60, latex: "x" },
+      { text: " cd", x: 75, width: 15, latex: undefined },
+    ]);
+  });
+
+  it("never joins notation to the text beside it, however the fonts match", () => {
+    const [line] = layOut("{$ a }{$ b }").lines;
+    expect(line?.runs.map((run) => run.latex)).toEqual(["a", "b"]);
+  });
+
+  it("grows the line to the height of the notation in it", () => {
+    // The notation measures 14 and the line height is 12.
+    expect(layOut("ab {$ x } cd").lines[0]?.height).toBe(14);
+  });
+
+  it("leaves a line of plain text at its own height", () => {
+    expect(layOut("ab cd").lines[0]?.height).toBe(12);
+  });
+
+  it("stacks a second line below the grown one", () => {
+    const lines = layOut("ab {$ x }\ncd").lines;
+    expect(lines[1]?.top).toBe(14);
+  });
+
+  it("gives a display line the notation as its only run", () => {
+    const [line] = layOut("{$$ y }").lines;
+    expect(line?.runs).toEqual([{ text: "", font: expect.any(String), x: 0, width: 60, latex: "y", height: 14 }]);
+  });
+
+  it("wraps notation whole rather than splitting it between two lines", () => {
+    const lines = layOut("aaaa {$ x } bbbb", 70).lines;
+    const withMath = lines.filter((line) => line.runs.some((run) => run.latex !== undefined));
+    expect(withMath).toHaveLength(1);
+    expect(withMath[0]?.runs.filter((run) => run.latex !== undefined)).toHaveLength(1);
+  });
+
+  it("measures a line of notation as the width of that notation", () => {
+    expect(layOut("{$$ y }").width).toBe(60);
+  });
+
+  it("lays notation out as nothing where the measurer cannot size it", () => {
+    const layout = layOutText({ text: "a {$ x } b", style, wrapWidth: undefined, markup: true, measureRun });
+    expect(layout.lines[0]?.runs.find((run) => run.latex !== undefined)?.width).toBe(0);
+  });
+});
