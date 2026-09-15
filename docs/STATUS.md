@@ -15,7 +15,7 @@ register, and its current handoff. Rust implementation remains deferred.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2686 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2711 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built, except section 13, which nothing implements yet, and the parts section 17 postpones. |
 
 ### How to run it

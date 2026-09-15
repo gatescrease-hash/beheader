@@ -2361,3 +2361,12 @@ describe("edgetype, the one gesture that sets all five slots behind an edge", ()
     expect(isCommandFailure(outcome) ? [] : outcome.lines).toEqual(["polyline_1 edge 1 is now a curve"]);
   });
 });
+
+
+it.each(["circle x=0 y=0 r=1", 'math x=0 y=0 "y=1"'])("refuses creation with an exhausted counter: %s", (command) => {
+  const document = { ...createEmptyDocument(), nextObjectId: Number.MAX_SAFE_INTEGER };
+  expect(run(command, document)).toMatchObject({ ok: false, message: expect.stringContaining("exhausted") });
+  expect(document.objects).toEqual([]);
+  expect(document.journal).toEqual([]);
+  expect(document.nextObjectId).toBe(Number.MAX_SAFE_INTEGER);
+});

@@ -792,6 +792,13 @@ Four properties make a solve safe to run inside the evaluation pass:
 4. **It gives one value.** An equation with several roots would otherwise leave a
    slot without a defined value.
 
+Each exported math line has a limit of 1,000,000 expression evaluations shared
+by its function calls, series, integral samples and solver samples. Exhaustion
+gives that export a `#MATH` error, and an independent line still evaluates.
+This deterministic work limit prevents nested bounded loops from multiplying
+into a stalled frame. Series endpoints are safe integers, so their indices
+advance exactly. The existing series and solver iteration limits also apply.
+
 The fourth property needs a rule, and the rule is a seed. Each solved unknown
 gets a literal slot `math_1.seed.x`, and the object returns the root nearest that
 seed. The seed is an ordinary slot, so a formula can drive it and an operator can
@@ -1325,6 +1332,14 @@ load regenerates them.
 
 A load applies objects through the mutation API and then evaluates. Save by JSON
 download. Load by file input. Do not build a file manager.
+
+The next object ID counter is a non-negative safe integer above every generated
+`obj_` ID in current objects and journal creation or deletion entries. An ID
+with that prefix followed by decimal digits without leading zeros reserves its
+number even after deletion. Other ID spellings leave the counter unchanged.
+Loading refuses a counter that could reuse an allocated ID or lies outside the
+safe integer range. The maximum safe integer represents exhaustion: the file
+still saves and loads, and creation returns a refusal without changing it.
 
 ---
 

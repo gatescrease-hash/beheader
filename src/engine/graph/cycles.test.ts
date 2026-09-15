@@ -153,3 +153,14 @@ describe("detectCycle — cyclic graphs report hasCycle: true, naming every slot
     }
   });
 });
+
+
+describe("deep graph traversal", () => {
+  it("finds a late cycle in a 20000-node chain and accepts the open chain", () => {
+    const addresses = Array.from({ length: 20000 }, (_, index) => slot(String(index), "value"));
+    const edges = addresses.slice(1).map((address, index) => edge(addresses[index]!, address));
+    expect(detectCycle(edges)).toEqual({ hasCycle: false });
+    const cycle = detectCycle([...edges, edge(addresses[19999]!, addresses[19997]!)]);
+    expect(cycle).toEqual({ hasCycle: true, cycle: addresses.slice(19997) });
+  });
+});

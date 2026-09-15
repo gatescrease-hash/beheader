@@ -18,6 +18,13 @@
  * FORMAT_VERSION is 1. loadDocument refuses any other version outright rather
  * than guess at an older shape.
  *
+ * The counter is a non-negative safe integer above every generated obj_ ID
+ * in the current objects and journal creation or deletion entries. The maximum
+ * safe integer is an exhausted counter: it can be saved and loaded, but minting
+ * returns a refusal. This preserves the final document without reusing an ID.
+ * Journal number validation uses an explicit work list because loaded entries
+ * can be deeper than the JavaScript call stack.
+ *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
@@ -55,8 +62,11 @@ export interface MintedObjectId {
   readonly nextObjectId: number;
 }
 
-/** Makes the next object ID. An ID is never reused. */
-export function mintObjectId(document: Document): MintedObjectId {
+/** Makes the next object ID, or refuses when the counter cannot advance safely. */
+export function mintObjectId(document: Document): MintedObjectId | { readonly ok: false; readonly message: string } {
+  if (!Number.isSafeInteger(document.nextObjectId) || document.nextObjectId < 0 || Object.is(document.nextObjectId, -0) || document.nextObjectId >= Number.MAX_SAFE_INTEGER) {
+    return { ok: false, message: "the document has exhausted its safe object ID counter" };
+  }
   return { id: `obj_${document.nextObjectId}`, nextObjectId: document.nextObjectId + 1 };
 }
 
@@ -133,16 +143,31 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function rawContainsIllegalNumber(raw: unknown): boolean {
-  if (typeof raw === "number") {
-    return isIllegalNumber(raw);
-  }
-  if (Array.isArray(raw)) {
-    return raw.some(rawContainsIllegalNumber);
-  }
-  if (typeof raw === "object" && raw !== null) {
-    return Object.values(raw).some(rawContainsIllegalNumber);
+  const pending: unknown[] = [raw];
+  const seen = new Set<object>();
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === "number" && isIllegalNumber(value)) return true;
+    if (typeof value === "object" && value !== null && !seen.has(value)) {
+      seen.add(value);
+      for (const child of Object.values(value)) pending.push(child);
+    }
   }
   return false;
+}
+
+/** Creation entries reserve IDs even after their objects have been deleted. */
+function counterReusesId(counter: number, objects: readonly GraphObject[], journal: readonly unknown[]): boolean {
+  const ids: unknown[] = objects.map((object) => object.id);
+  for (const entry of journal) {
+    if (!isPlainObject(entry) || !Array.isArray(entry.operations)) continue;
+    for (const operation of entry.operations) {
+      if (!isPlainObject(operation)) continue;
+      if (operation.kind === "createObject" && isPlainObject(operation.object)) ids.push(operation.object.id);
+      if (operation.kind === "deleteObject") ids.push(operation.objectId);
+    }
+  }
+  return ids.some((id) => typeof id === "string" && /^obj_(0|[1-9][0-9]*)$/.test(id) && BigInt(id.slice(4)) >= BigInt(counter));
 }
 
 /**
@@ -161,11 +186,11 @@ export function deserializeDocument(raw: unknown, context: EvalContext = NULL_EV
   }
   if (
     typeof raw.nextObjectId !== "number" ||
-    !Number.isInteger(raw.nextObjectId) ||
+    !Number.isSafeInteger(raw.nextObjectId) ||
     raw.nextObjectId < 0 ||
     isIllegalNumber(raw.nextObjectId)
   ) {
-    return { ok: false, message: "nextObjectId must be a non-negative integer, and not -0" };
+    return { ok: false, message: "nextObjectId must be a non-negative safe integer, and not -0" };
   }
   if (!Array.isArray(raw.objects)) {
     return { ok: false, message: "objects must be an array" };
@@ -192,20 +217,22 @@ export function deserializeDocument(raw: unknown, context: EvalContext = NULL_EV
 
   const nextObjectId = raw.nextObjectId;
   const journal = raw.journal as readonly MutationJournalEntry[];
-
-  if (reconstructedObjects.length === 0) {
-    return { ok: true, document: { formatVersion: FORMAT_VERSION, nextObjectId, objects: [], journal, camera: cameraResult.camera } };
+  let objects: readonly GraphObject[] = reconstructedObjects;
+  if (objects.length > 0) {
+    const operations: readonly Operation[] = objects.map((object) => ({ kind: "createObject", object }));
+    const result = mutate([], operations, [], context);
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+    objects = result.objects;
   }
-
-  const operations: readonly Operation[] = reconstructedObjects.map((object) => ({ kind: "createObject", object }));
-  const result = mutate([], operations, [], context);
-  if (!result.ok) {
-    return { ok: false, message: result.message };
+  if (counterReusesId(nextObjectId, reconstructedObjects, journal)) {
+    return { ok: false, message: "nextObjectId must be greater than every allocated obj_ ID in the objects and journal" };
   }
 
   return {
     ok: true,
-    document: { formatVersion: FORMAT_VERSION, nextObjectId, objects: result.objects, journal, camera: cameraResult.camera },
+    document: { formatVersion: FORMAT_VERSION, nextObjectId, objects, journal, camera: cameraResult.camera },
   };
 }
 

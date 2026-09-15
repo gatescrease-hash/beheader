@@ -19,21 +19,9 @@ the file it is about.
 
 ## Open
 
-### Validate the object counter when loading a document
-
-`deserializeDocument` accepts a `nextObjectId` that an existing object already
-uses. A file with `obj_1` and a counter of 1 loads, but the next creation is
-refused as a duplicate, and each retry uses the same counter. It also accepts
-integers beyond the safe integer range, where adding 1 can leave the counter
-unchanged.
-
-Done when loading refuses a counter that can reuse an ID or cannot advance
-exactly, with tests for an existing ID, a deleted ID recorded in the journal,
-and the safe integer boundary.
-
 ### 1. Decide the shape of the engine export surface
 
-`src/engine/index.ts` exposes 424 declared names, including 286 runtime exports.
+`src/engine/index.ts` exposes 425 declared names, including 287 runtime exports.
 Production consumers outside the engine import 154 distinct names. Replace
 the stars with a hand written list of the names that are used, or write down
 why the whole surface stays open. Either answer settles it.

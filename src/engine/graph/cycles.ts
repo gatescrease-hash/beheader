@@ -12,6 +12,8 @@
  * The search runs from scratch over the whole edge set on every mutation. This
  * code is unoptimized for the sake of simplicity, and it has no incremental
  * mode.
+ * An explicit stack preserves depth first order without consuming a call
+ * frame for each dependent slot in a long chain.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
@@ -53,39 +55,29 @@ export function detectCycle(edges: readonly Edge[]): CycleCheckResult {
     return colors.get(key) ?? "white";
   }
 
-  const stack: Address[] = [];
-
-  function visit(address: Address): readonly Address[] | undefined {
-    const key = addressKey(address);
+  const stack: { address: Address; next: number }[] = [];
+  for (const [key, address] of allNodes) {
+    if (colorOf(key) !== "white") continue;
     colors.set(key, "gray");
-    stack.push(address);
-
-    for (const neighbor of outgoing.get(key) ?? []) {
+    stack.push({ address, next: 0 });
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]!;
+      const frameKey = addressKey(frame.address);
+      const neighbor = outgoing.get(frameKey)?.[frame.next++];
+      if (neighbor === undefined) {
+        colors.set(frameKey, "black");
+        stack.pop();
+        continue;
+      }
       const neighborKey = addressKey(neighbor);
       const neighborColor = colorOf(neighborKey);
-
       if (neighborColor === "gray") {
-        const cycleStart = stack.findIndex((onStack) => addressKey(onStack) === neighborKey);
-        return stack.slice(cycleStart);
+        const start = stack.findIndex((entry) => addressKey(entry.address) === neighborKey);
+        return { hasCycle: true, cycle: stack.slice(start).map((entry) => entry.address) };
       }
       if (neighborColor === "white") {
-        const found = visit(neighbor);
-        if (found !== undefined) {
-          return found;
-        }
-      }
-    }
-
-    colors.set(key, "black");
-    stack.pop();
-    return undefined;
-  }
-
-  for (const [key, address] of allNodes) {
-    if (colorOf(key) === "white") {
-      const cycle = visit(address);
-      if (cycle !== undefined) {
-        return { hasCycle: true, cycle };
+        colors.set(neighborKey, "gray");
+        stack.push({ address: neighbor, next: 0 });
       }
     }
   }

@@ -320,6 +320,7 @@ function createObjectFromCommand(
   }
 
   const minted = mintObjectId(document);
+  if ("ok" in minted) return minted;
   const name = generateDefaultName(type, document.objects);
 
   const slots: Record<string, Slot> = {};
@@ -462,6 +463,7 @@ function createScript(command: CreateScriptCommand, document: Document, context:
  */
 function createMath(command: CreateMathCommand, document: Document, context: EvalContext): CommandOutcome {
   const minted = mintObjectId(document);
+  if ("ok" in minted) return minted;
   const name = generateDefaultName("math", document.objects);
   const object = createMathObject(minted.id, name, command.x, command.y);
 

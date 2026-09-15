@@ -67,7 +67,7 @@ describe("replayJournal — the reader undo needs", () => {
     "refuses a malformed loaded entry without throwing: %j",
     (entry) => {
       const built = buildDocument();
-      const loaded = loadDocument(JSON.stringify({ ...createEmptyDocument(), journal: [built.journal[0], entry] }));
+      const loaded = loadDocument(JSON.stringify({ ...createEmptyDocument(), nextObjectId: 2, journal: [built.journal[0], entry] }));
       expect(loaded.ok).toBe(true);
       if (!loaded.ok) return;
       const result = replayJournal(loaded.document.journal, 2);

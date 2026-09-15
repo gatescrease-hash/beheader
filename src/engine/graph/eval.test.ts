@@ -586,3 +586,19 @@ describe("evaluate — the measuredHeight derived slot", () => {
     expect(measuredHeightOf(object, fakeMeasurer())).toMatchObject({ error: "#REF" });
   });
 });
+
+
+it("propagates through 20000 dependent slots without using the call stack", () => {
+  const slots: Record<string, Slot> = { n0: { kind: "literal", value: 7 } };
+  const edges: Edge[] = [];
+  for (let index = 1; index < 20000; index += 1) {
+    const source = addr("chain", "n" + (index - 1));
+    slots["n" + index] = { kind: "formula", ast: { type: "reference", address: source }, value: null };
+    edges.push(edge(source, addr("chain", "n" + index)));
+  }
+  const original: GraphObject = { id: "chain", name: "chain", type: "value", slots };
+  const result = evaluate([original], edges);
+  expect(Object.keys(result[0]!.slots)).toEqual(Object.keys(slots));
+  expect(Object.values(result[0]!.slots).every((slot) => slot.value === 7)).toBe(true);
+  expect(original.slots.n19999?.value).toBeNull();
+});

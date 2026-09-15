@@ -223,3 +223,32 @@ describe("evaluateMathObject — an implicit line", () => {
     expect(reads).toBe(1);
   });
 });
+
+
+describe("composed math work limits", () => {
+  it("finishes a series at the safe integer boundary", () => {
+    expect(run("y=\\sum_{i=a}^{b}1", { a: Number.MAX_SAFE_INTEGER - 1, b: Number.MAX_SAFE_INTEGER })).toEqual({ y: 2 });
+  });
+
+  it.each([Number.MAX_SAFE_INTEGER + 1, -Number.MAX_SAFE_INTEGER - 1])("refuses an unsafe series bound %s", (bound) => {
+    expect(run("y=\\sum_{i=a}^{b}1", { a: bound, b: bound }).y).toMatchObject({ error: "#MATH" });
+  });
+
+  it("allows the full term limit for a simple series", () => {
+    expect(run("y=\\sum_{i=1}^{n}i", { n: MATH_MAX_SERIES_TERMS }).y).toBe(MATH_MAX_SERIES_TERMS * (MATH_MAX_SERIES_TERMS + 1) / 2);
+  });
+
+  it("bounds nested sums and lets an independent line finish", () => {
+    const result = run("f(x)=\\sum_{i=1}^{x}i\ny=\\sum_{j=1}^{n}f(n)\nz=42", { n: MATH_MAX_SERIES_TERMS });
+    expect(result.y).toMatchObject({ error: "#MATH", message: expect.stringContaining("budget") });
+    expect(result.z).toBe(42);
+  });
+
+  it("shares the budget across integral samples", () => {
+    expect(run("f(x)=\\sum_{i=1}^{n}i\ny=\\int_{0}^{1}f(x)dx", { n: MATH_MAX_SERIES_TERMS }).y).toMatchObject({ error: "#MATH", message: expect.stringContaining("budget") });
+  });
+
+  it("reports budget exhaustion during a solve instead of swallowing it as a domain gap", () => {
+    expect(run("f(x)=\\sum_{i=1}^{n}i\n\\solve{x}x+f(x)=0", { n: MATH_MAX_SERIES_TERMS }).x).toMatchObject({ error: "#MATH", message: expect.stringContaining("budget") });
+  });
+});

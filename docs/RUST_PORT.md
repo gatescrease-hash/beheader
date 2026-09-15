@@ -303,6 +303,7 @@ Baseline limits belong in conformance fixtures:
 | Formula AST depth | 1,000 | `formula/ast.ts` |
 | Math AST depth | 64 | `math/ast.ts` |
 | Math call depth | 64 | `math/eval.ts` |
+| Expression evaluations per exported math line | 1,000,000, added after the planning baseline | `math/eval.ts` |
 | Integral intervals | 512 | `math/eval.ts` |
 | Series terms | 100,000 | `math/eval.ts` |
 | Solver search rings | 60 | `math/eval.ts` |
@@ -310,10 +311,11 @@ Baseline limits belong in conformance fixtures:
 | Solver bisections | 80 | `math/eval.ts` |
 | Table rows and columns | 1 through 1,000 each | `primitives/table.ts` |
 
-Total evaluation cost can remain large within these local bounds. Nested
-series and integrals can multiply their work. `RUST-015` measures composed
-cases and records any proposed total budget as a behavior change, with a
-defined refusal or error and fixtures in both implementations.
+Total document cost can remain large within these bounds. Nested series and
+integrals share the per-line budget, but each exported line starts a fresh one.
+`RUST-015` measures composed cases and records any proposed whole-document
+budget as a behavior change, with a defined refusal or error and fixtures in
+both implementations.
 
 ### Persistence and replay
 
@@ -1069,19 +1071,38 @@ rollback artifact, and the condition for removing the old implementation.
 
 ### Known baseline issues affecting the port
 
-The object counter issue in [TODO.md](TODO.md) can trap creation after load,
-and values beyond the safe integer range can fail to advance. It needs a
-product fix or an explicit compatibility exception before cutover. The Rust
-decoder should not accidentally preserve it merely because the baseline does.
+The TypeScript counter defect is fixed after the planning baseline. Loading
+requires a non-negative safe integer above generated `obj_` IDs in current
+objects and journal creation or deletion entries, including deleted objects.
+Only `obj_` followed by a decimal integer without leading zeros reserves a
+counter value. The maximum safe integer is
+an exhausted counter that still round-trips, with creation returning a refusal.
+This terminal state preserves the last document without minting an unsafe ID.
+The Rust fixtures include these cases from
+[document.test.ts](../src/engine/document.test.ts) and the creation refusals in
+[commands.test.ts](../src/command/commands.test.ts).
 
 Loaded journals are structurally permissive by design in current tests. That
 behavior is different from the counter defect. It needs a deliberate raw-data
 strategy or a separately approved restriction, not an unannounced stricter
 Serde model.
 
-Recursive graph walks, AST traversals, raw journal validation, and nested math
-workloads need target-specific limits and stress evidence. Rust alone does not
-eliminate stack exhaustion or expensive valid inputs.
+TypeScript graph sorting, cycle detection and raw journal number validation
+now use explicit stacks. Regression tests cover 20,000-slot chains, a late
+cycle and 20,000 nested journal arrays. Formula load and evaluation tests cover
+binary, unary and function-call trees at the existing 1,000-level limit.
+
+Math series reject unsafe integer endpoints. Each exported line now shares a
+1,000,000-expression budget across function calls, integral samples, nested
+series and solver samples. Exhaustion produces a `#MATH` value and leaves
+independent lines evaluable. The simple 100,000-term series still succeeds.
+These changes have regression coverage in
+[math/eval.test.ts](../src/engine/math/eval.test.ts).
+
+Native and Wasm stack sizes, file serialization depth, total document size and
+whole-document workloads still need target-specific stress evidence under
+`RUST-015`. The per-line budget is a deterministic work bound, not a promise
+about elapsed time for every document. Rust alone does not remove these limits.
 
 Browser measurement is a semantic dependency. Replacing it can change the
 graph even when numeric evaluation is identical. Measurement errors and font
@@ -1094,7 +1115,8 @@ fixtures would change the reference implementation while it is being measured.
 ### Decisions
 
 The entries below distinguish recommendations from decisions that have been
-accepted. They are all open at this baseline. A resolved entry records the
+accepted. Counter behavior and the TypeScript per-line work budget are resolved
+below, while the other choices remain open. A resolved entry records the
 choice, reason, evidence link, and affected packages in this table or directly
 under it. Superseded choices remain linked through Git history.
 
@@ -1106,10 +1128,10 @@ under it. Superseded choices remain linked through Git history.
 | `D-004` | Numeric compatibility | Binary64, JavaScript rounding, fixture-specific tolerances | `RUST-004` |
 | `D-005` | String representation | Preserve UTF-16 semantics and decide lone surrogate handling | `RUST-004` |
 | `D-006` | Loaded journal representation | Retain raw entries, validate each on replay | `RUST-012` |
-| `D-007` | Counter and malformed-file policy | Resolve baseline defects explicitly in both engines | `RUST-012` |
+| `D-007` | Counter and malformed-file policy | Counter behavior resolved in TypeScript as described above. Raw journal policy remains a separate compatibility decision. | `RUST-012` |
 | `D-008` | Diagnostic equality | Exact domain messages, narrowly normalized platform details | `RUST-002` |
 | `D-009` | Product baseline drift | Pin each package and synchronize accepted behavior changes | `RUST-001` |
-| `D-010` | Resource budgets | Measure composed workloads before setting new limits | `RUST-015` |
+| `D-010` | Resource budgets | Preserve the TypeScript per-line expression budget. Measure total document workloads on each target before setting broader limits. | `RUST-015` |
 | `D-011` | Cutover acceptance period | Define supported targets and rollback criteria before default switch | `RUST-016` |
 
 A decision about a public behavior is reflected in the spec when it changes
@@ -1125,9 +1147,9 @@ implemented, then its lasting rationale belongs beside that code.
 | Last inspected source commit | `2ba050dd583fcdb67902e51564c6462b538fb5dd` |
 | Rust artifacts | None |
 | Selected runtime | Undecided, Wasm first is recommended |
-| Unresolved architecture decisions | `D-001` through `D-011` |
+| Unresolved architecture decisions | `D-001` through `D-011`, with TypeScript counter and per-line budget choices recorded under `D-007` and `D-010` |
 | Next implementation action | Activate scope and complete `RUST-001` |
-| Existing product dependency | Counter validation and baseline inclusion decisions |
+| Existing product dependency | Include the counter, graph traversal and math workload fixes in the frozen baseline |
 | Completion evidence | None for Rust implementation |
 
 ### Handoff record for an active package
