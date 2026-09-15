@@ -77,7 +77,7 @@ Each stage below lands with its tests, and each leaves the four checks clean.
    another, and a solve that runs out of iterations gives an error value rather
    than a hung frame.
 
-**Done when** both stages have landed and this item is deleted.
+**Done when** that stage has landed and this item is deleted.
 
 ### 4. Decide what a fresh input port holds
 
@@ -91,9 +91,9 @@ as zero, or the reason zero is right is written into section 12.
 
 ### 5. Complete an address as it is typed, and show what parsed
 
-The command line completes an object name and then its slots from Tab, and
-marks the runs it read as a command word or as a live address. No field but the
-command line does either, and math source still cannot hold an address at all.
+The command line, a table cell and a panel row each complete an object name and
+then its slots from Tab, and each marks the runs it read as naming something the
+document carries. Math source still cannot hold an address at all.
 
 **What is already right, and what is not.** A stored AST holds `Address`
 records carrying an object ID, so an address in a committed formula is not text
@@ -136,18 +136,7 @@ be parsed out of the notation at all. The last stage covers it.
 
 **Stages.** Each lands with its tests and leaves the four checks clean.
 
-1. **The same two things in a formula field.** A table cell, a panel row and the
-   formula half of a `set` all take a formula rather than a command, so the
-   spans come from the formula lexer, which already carries a start for every
-   token. This is where Tab starts writing the ceremony rather than only the
-   completion, because a cell needs a leading equals sign and the command line
-   needs nothing.
-   Done when a cell holding the typed run `table_1.origin.x` and nothing else
-   becomes a formula slot reading that address after one Tab, a cell holding
-   the same run with no Tab stays the literal string it looks like, and a cell
-   being edited paints the addresses it holds.
-
-2. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
+1. **An address inside math source.** A macro such as `\gpref{table_x.A1}`
    gives notation a spelling for an address that the lexer can read as one
    token, which juxtaposition cannot break and which draws as a chip without
    any work. It answers the question the math item leaves open, so that stage
@@ -155,7 +144,7 @@ be parsed out of the notation at all. The last stage covers it.
    Done when the spec says how an address is spelled in notation and the lexer
    agrees.
 
-**Done when** all three stages have landed and this item is deleted.
+**Done when** that stage has landed and this item is deleted.
 
 ### 6. Say what the program understood, on a refusal
 

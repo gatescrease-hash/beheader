@@ -12,7 +12,7 @@ each file exists. `TODO.md` holds the work that is open.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2577 pass, 0 skip, across 51 test files. |
+| Tests | 2582 pass, 0 skip, across 51 test files. |
 | Spec | Built, except the in-text math of section 12 and its solving, and the parts section 16 postpones. |
 
 ### How to run it
@@ -20,7 +20,7 @@ each file exists. `TODO.md` holds the work that is open.
 ```
 npm install
 npm run dev          # dev server
-npm test             # 2577 tests
+npm test             # 2582 tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
@@ -225,15 +225,25 @@ the code it constrains.
    `main.ts` empties the measurement cache of `render/math.ts` and evaluates
    again whenever a font finishes loading, which is the only thing that repairs
    the sizes of a document already on screen.
-14. **The command line and the layer that marks it agree on every property
-   that moves a glyph.** `index.html` sets the font, the padding, the border
-   and the white space rule on both together, and `main.ts` copies the sideways
-   scroll of one onto the other on every paint. A disagreement slides each mark
-   away from the letters it belongs to, by more the further along the line it
-   sits. The layer draws its own text in no colour at all, so a disagreement
-   shows as a mark in the wrong place rather than as two sets of letters, which
-   is the difference between a fault a reader notices and one that passes for
-   a smudge.
+14. **A field and the layer that marks it agree on every property that moves a
+   glyph, the sideways scroll included.** Three fields carry a layer: the
+   command line, a table cell being edited, and a panel row. `index.html` sets
+   the font, the padding, the border and the white space rule on each pair
+   together, the cell layer copies its geometry from the field rather than
+   working it out again, and every one of the three copies the scroll of its
+   field on each repaint.
+
+   A disagreement about a size slides each mark away from the letters it
+   belongs to, by more the further along the line it sits. A disagreement about
+   the scroll is worse and easier to miss: the boxes still measure the same, so
+   a check of their geometry passes while each mark sits under whichever
+   letters happen to be in view. A cell is narrow enough that any formula
+   scrolls it, which is where that was found.
+
+   Each layer draws its own text in no colour at all, so either kind of
+   disagreement shows as a mark in the wrong place rather than as two sets of
+   letters, which is the difference between a fault a reader notices and one
+   that passes for a smudge.
 15. **The operator cannot see what a test can see.** A live look on screen
    comes before anyone calls an operator surface done. It has found what the
    suite could not on every surface built so far.

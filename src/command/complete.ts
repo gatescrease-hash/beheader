@@ -31,6 +31,7 @@ import {
   longestCommonPrefix,
   objectSlotPaths,
   parseAddress,
+  TABLE_CELL_PATH_PREFIX,
   type Completion,
   type GraphObject,
 } from "../engine/index.ts";
@@ -193,8 +194,10 @@ export function classifyCommandLine(line: string, objects: readonly GraphObject[
     spans.push({ start: first.start, end: first.end, kind: "command" });
   }
 
+  const formulaStart = formulaTailStart(words, first.text);
+
   for (const word of words.slice(1)) {
-    if (word.quoted) {
+    if (word.quoted || (formulaStart !== undefined && word.start >= formulaStart)) {
       continue;
     }
     const kind = positionalKindAt(words, word, first.text);
@@ -209,7 +212,60 @@ export function classifyCommandLine(line: string, objects: readonly GraphObject[
     }
   }
 
+  if (formulaStart !== undefined) {
+    const table = cellHostOf(words, first.text, objects);
+    for (const span of classifyFormulaField(line.slice(formulaStart), objects, table)) {
+      spans.push({ start: span.start + formulaStart, end: span.end + formulaStart, kind: span.kind });
+    }
+  }
+
   return spans;
+}
+
+/**
+ * Where the formula half of a command begins, or nothing where the command has
+ * no formula half or the operator has not opened one.
+ *
+ * A command such as set takes a value that is either a literal or a formula,
+ * and an equals sign at that position opens a formula that runs to the end of
+ * the line. matchArguments reads it the same way, so a mark and a parse agree
+ * about where the formula starts.
+ */
+function formulaTailStart(words: readonly LineWord[], commandName: string): number | undefined {
+  const kinds = positionalKinds(commandName);
+  const formulaAt = kinds.indexOf("literal-or-formula");
+  if (formulaAt < 0) {
+    return undefined;
+  }
+  const named = namedArgumentKeys(commandName);
+  let position = 0;
+  for (const word of words.slice(1)) {
+    if (isNamedArgument(word.text, named)) {
+      continue;
+    }
+    if (position === formulaAt) {
+      return word.text.startsWith("=") ? word.start : undefined;
+    }
+    position += 1;
+  }
+  return undefined;
+}
+
+/**
+ * The table a bare cell reference in this command's formula would belong to. A
+ * name such as A2 is an address only where the slot being written is itself a
+ * cell, which is the rule the command handler follows when it parses.
+ */
+function cellHostOf(words: readonly LineWord[], commandName: string, objects: readonly GraphObject[]): string | undefined {
+  const target = words[1];
+  if (target === undefined || positionalKindAt(words, target, commandName) !== "address") {
+    return undefined;
+  }
+  const resolved = parseAddress(target.text, objects);
+  if (isAddressError(resolved) || resolved.path.length !== 2 || resolved.path[0] !== TABLE_CELL_PATH_PREFIX) {
+    return undefined;
+  }
+  return resolved.objectId;
 }
 
 export function completeCommandLine(line: string, cursor: number, objects: readonly GraphObject[]): LineCompletion | undefined {

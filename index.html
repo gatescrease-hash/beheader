@@ -261,10 +261,50 @@
         color: #1a56db;
         white-space: nowrap;
       }
-      .panel-row__input {
+      /*
+        A panel row being edited, and the layer that marks it. The two agree on
+        every property that decides where a glyph falls, which is why the border
+        and the padding are written here rather than left to the browser: a
+        default the layer does not share slides each mark away from the letters
+        it belongs to.
+      */
+      .panel-row__field {
+        position: relative;
+        display: inline-block;
+        line-height: normal;
+      }
+
+      .panel-row__input,
+      .panel-row__mirror {
+        display: block;
         font: inherit;
         width: 10em;
         box-sizing: border-box;
+        margin: 0;
+        border: 1px solid #b0b0b0;
+        padding: 1px 2px;
+        letter-spacing: normal;
+        white-space: pre;
+        text-align: left;
+      }
+
+      .panel-row__input {
+        position: relative;
+        z-index: 1;
+        background: transparent;
+      }
+
+      .panel-row__mirror {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        z-index: 0;
+        background: #ffffff;
+        color: transparent;
+        overflow: hidden;
+        pointer-events: none;
+        user-select: none;
       }
       /*
         This is a drop down row. A slot with a small set of valid values offers them,
@@ -385,7 +425,23 @@
         white-space: nowrap;
       }
 
+      /*
+        The layer that marks a cell being edited. It shares .text-editor, so the
+        box rules that decide where a glyph falls are written once and both
+        carry them, and the modifier turns off only what a mark needs off: its
+        own text, the outline the input draws, and the pointer.
+      */
+      .text-editor--mirror {
+        z-index: 0;
+        color: transparent;
+        outline: none;
+        pointer-events: none;
+        user-select: none;
+        white-space: pre;
+      }
+
       .text-editor {
+        z-index: 1;
         position: absolute;
         box-sizing: border-box;
         margin: 0;
