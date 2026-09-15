@@ -4,6 +4,9 @@
 code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
 
+[RUST_PORT.md](RUST_PORT.md) holds the planned engine migration, its work
+register, and its current handoff. Rust implementation remains deferred.
+
 ---
 
 ## 1. State
@@ -44,9 +47,10 @@ The repository has four layers. The import direction is one way.
 formula language, the primitives and the mutation channel. It does not touch
 the DOM, `window`, `document`, a canvas or `src/render/`.
 
-Why. The plan is to port this directory to a Rust crate. A pure directory ports
-one to one. A directory with browser calls in it does not. The rule also makes
-every part of the engine testable with no browser.
+Why. The plan is to port this directory to a Rust crate. The separation keeps
+host services explicit and makes the engine testable with no browser. The
+port still needs a host adapter and tests that establish equivalent behavior,
+which `RUST_PORT.md` plans.
 
 The one hard case is text measurement. Layout needs glyph widths, and a glyph
 width needs a canvas. The engine declares a `TextMeasurer` interface and takes

@@ -7,6 +7,10 @@ Take an item, build it with its tests, run the four checks in `CLAUDE.md`, and
 delete the item when it lands. Do not rewrite it into a record of the work.
 Git holds what was done, and this file holds what is left.
 
+[RUST_PORT.md](RUST_PORT.md) holds the future Rust engine migration plan and
+its stable work register. Port packages are tracked there. They become active
+when the spec releases that implementation scope from deferral.
+
 A new item names the change, gives the reason, and says how a reader will know
 it is finished. Anything else is a note, and a note belongs in the header of
 the file it is about.
@@ -29,8 +33,8 @@ and the safe integer boundary.
 
 ### 1. Decide the shape of the engine export surface
 
-`src/engine/index.ts` re-exports every file in the engine with a star, so all
-311 names cross the boundary while the layers outside use 114 of them. Replace
+`src/engine/index.ts` exposes 424 declared names, including 286 runtime exports.
+Production consumers outside the engine import 154 distinct names. Replace
 the stars with a hand written list of the names that are used, or write down
 why the whole surface stays open. Either answer settles it.
 

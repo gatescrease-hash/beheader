@@ -70,7 +70,9 @@ exact coupling this design avoids.
 
 **The planned future stack.** A Rust engine core, a Tauri shell, a
 TypeScript and WebGPU front end, and a local Python interpreter as a subprocess.
-Do not build it. The shape of `src/engine/` matches a one to one port target for a
+The migration plan and work register are in [RUST_PORT.md](RUST_PORT.md).
+That document plans the engine port without starting the deferred implementation.
+Do not implement the future stack yet. The shape of `src/engine/` matches a one to one port target for a
 future Rust crate. Two rules come out of that:
 
 1. Store IDs, not object references. The graph must never use JavaScript object
