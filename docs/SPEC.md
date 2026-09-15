@@ -135,7 +135,7 @@ Evaluation never creates or destroys a slot. Only a mutation changes which slots
 exist. This rule makes the simple topological pass safe. Several designs below
 have their shape because of it.
 
-### Rule 7. Do not build the items in section 16
+### Rule 7. Do not build the items in section 17
 
 ---
 
@@ -753,7 +753,7 @@ them on every keystroke.
 
 ### Solving
 
-Section 16 postpones constraint solving for the document graph, and that stays
+Section 17 postpones constraint solving for the document graph, and that stays
 true. The program never solves across objects. Two math objects that define each
 other in a circle are a cycle, and the cycle check refuses them the same as any
 other cycle.
@@ -825,7 +825,7 @@ on. Out of the editor, `display` picks what shows. The worked example reads as
 the integral under `source`, as a number under `value`, and as the equation
 followed by its result under `both`.
 
-The properties panel of section 14 already splits modifiable slots from derived
+The properties panel of section 15 already splits modifiable slots from derived
 ones, so ports and seeds land above the rule and exports land below it, with no
 change to the panel.
 
@@ -917,7 +917,156 @@ library would not be.
 
 ---
 
-## 13. Renderer, camera, hit test, interaction
+## 13. The document variable
+
+A document variable is a named value that belongs to the document rather than
+to any object on the canvas. One name, one value, readable by that name from a
+formula anywhere, and shown wherever a copy of it is put down.
+
+It exists because the pattern it replaces is a table of one row and one column.
+That table carries a row count, a column count, a grid to draw and a cell to
+address, all to hold a single number, and every formula that wants the number
+reads `table_1.cells.A1` and depends on nobody moving it into another cell. The
+number is the whole content, and the object around it is packaging.
+
+### The shape
+
+```
+DocObject {                      // one for the document, named doc
+  <name>: Slot                   // one slot for each variable, at the top
+}
+
+DocRefObject {                   // a copy on the canvas
+  target: Address                // the variable this copy shows
+  origin: { x, y }
+  value:          Slot           // derived, the value of the target
+  measuredWidth:  Slot           // derived, the size of the drawn text
+  measuredHeight: Slot
+}
+```
+
+A variable sits at the top of the doc object rather than under a family such as
+`vars`, so an operator writes `doc.speed`. Section 12 puts the exports of a math
+object under `out` because an export named `source` or `origin` would shadow a
+slot that schema declares, and the doc object declares none of its own, so
+nothing here is shadowed by a name an operator picks.
+
+### One object, with no place on the canvas
+
+The doc object is a singleton. It arrives with the first variable rather than
+with the document, so a document that uses none carries none and a file saved
+before this section loads unchanged.
+
+It carries no origin, so the renderer never draws it and the hit test never
+finds it. The `value` primitive already sits in the graph this way, which is
+what makes a whole object type reachable by address alone.
+
+### A bare name is the point
+
+`speed` reads the variable, in a table cell, in a text formula, in a port of a
+script or a math object, and in the command line. A name with no dot in it is
+resolved in this order:
+
+1. Inside a table cell, a name of the `A1` form is a cell of that table.
+2. A document variable of that name.
+3. Anything else is refused.
+
+Three kinds of name are therefore refused when a variable is created, each for
+the collision it would otherwise cause. A reserved word of section 6 is refused
+because `SUM` is a function of the formula language. A name of the `A1` form is
+refused because rule 1 above would make it unreachable from inside any table. A
+name an object carries is refused because `speed` and `speed.value` would then
+name two different things.
+
+The address is the second thing a bare name has to survive. An operator types
+`speed` and tab completion writes it as an address, which the field then draws
+in the code font and the grey box that every other completed address gets. A
+name typed without completing is still resolved, and the chip is what says so
+on the way in, which is the difference between an address and a word that looks
+like one.
+
+### Writing one
+
+```
+docvar speed 12                  // a literal
+docvar total =doc.a+doc.b        // a formula, read like any other slot
+set doc.speed 12                 // the ordinary set, once the variable exists
+```
+
+A variable holds any member of the `Value` union of section 4, so a name can
+carry text or a boolean as readily as a number.
+
+A variable that holds a formula is an ordinary formula slot: it reads other
+variables and any slot of the document, it re-evaluates when they change, and a
+circle of variables that define each other is refused by the cycle check that
+refuses every other circle. So the document has derived knobs as well as typed
+ones, and neither is a new kind of thing in the graph.
+
+### The copy on the canvas
+
+```
+docvar speed x=200 y=140         // puts a copy where the click lands
+```
+
+A copy draws the name, an equals sign and the value, in a monospaced font, with
+no box and no furniture around it. It draws the name rather than the value
+alone because two copies of different variables that hold the same number are
+otherwise the same picture, and the name is the only thing in the drawing that
+says which knob it is. A number with nothing beside it is what `{= doc.speed }`
+inside a text object already gives, and a sentence around it is what a text
+object is for.
+
+A copy carries its position and its target and nothing else. It takes no fill,
+no font size and no format, because each of those would be a property of a
+second view of a value that lives somewhere else, and two copies of one variable
+that look different are two things an operator then has to keep in step by hand.
+
+Deleting a copy deletes the copy. The variable is in the doc object, so it
+survives, and the other copies of it are undisturbed.
+
+Editing a copy in place writes the variable. A table cell already edits this
+way in section 7, the editor opens on a double click and commits on Enter, and
+what it commits here goes through the same mutation `set doc.speed` goes
+through. Every other copy
+shows the new value in the same pass, which is the visible half of a value that
+is shared rather than duplicated.
+
+### Renaming and deleting a variable
+
+A copy stores the address of its target and a formula stores the ID of the doc
+object, so renaming a variable rewrites neither. That is the two layer scheme of
+section 5, and a document variable gets it for the same reason a table does.
+
+Deleting a variable that something reads is refused, with the reader named, by
+the rule section 4 gives every slot. A variable that nothing reads goes on the
+word `delvar`, and its copies go with it, because a copy with no target is a
+drawing of a slot that is not there.
+
+### Seeing the ones with no copy
+
+A variable with no copy on the canvas is invisible, and a document driven by a
+knob nobody can find is worse than one driven by a cell. `vars` selects the doc
+object, and the properties panel of section 15 lists its slots and edits each in
+place, which is the surface every other object already has. The panel needs no
+change to serve it.
+
+### What this does not cover
+
+A name is one segment. `doc.rates.vat` would group the knobs of a document into
+families, and the path already carries more than one segment, so the cost is in
+the bare name rather than in the address: `vat` alone would then have to find
+which family it belongs to. It waits for a document with enough knobs to need
+grouping.
+
+A slider, a stepper or any other widget. A copy on the canvas is text, and
+section 17 holds the reason a control surface waits.
+
+A unit, a number format or a value that is a list. A variable holds one member
+of the `Value` union, the same as every literal slot in the document.
+
+---
+
+## 14. Renderer, camera, hit test, interaction
 
 **Immediate mode.** On every invalidation: clear, apply the camera transform,
 draw every visible object in z order. There is no retained scene graph and no
@@ -1081,7 +1230,7 @@ holds an error value. Show a small mark on a slot that a formula drives.
 
 ---
 
-## 14. The command line
+## 15. The command line
 
 The style is AutoCAD. A persistent input bar sits at the bottom. It holds focus
 whenever the operator does not edit text or a cell.
@@ -1162,7 +1311,7 @@ it stays straight. This is the only way to author a bulge by hand other than
 
 ---
 
-## 15. The document format
+## 16. The document format
 
 Versioned JSON with a top level `formatVersion` integer from the first commit.
 
@@ -1177,7 +1326,7 @@ download. Load by file input. Do not build a file manager.
 
 ---
 
-## 16. Do not build
+## 17. Do not build
 
 The team considered each item below and postponed it on purpose.
 
@@ -1187,7 +1336,7 @@ The team considered each item below and postponed it on purpose.
 - **An undo or redo surface.** Journal the mutations. Build no user interface.
 - **Drag through to source.** A drag on a bound object must not write to the
   upstream literal. The behaviour has no definition when the upstream is itself a
-  formula. The per component rule of section 13 is the answer for now.
+  formula. The per component rule of section 14 is the answer for now.
 - **More than one viewport.** One canvas. Off screen is off screen.
 - **64 bit precision or a floating origin.** Plain JavaScript numbers are fine
   at this scale.
@@ -1206,7 +1355,7 @@ The team considered each item below and postponed it on purpose.
 
 ---
 
-## 17. When the spec is silent
+## 18. When the spec is silent
 
 Prefer, in this order:
 
