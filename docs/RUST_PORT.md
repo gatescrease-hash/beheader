@@ -938,8 +938,8 @@ met, and a package is done only where the status column says so.
 | `RUST-001` | Frozen contract and consumer inventory | Scope activation | done |
 | `RUST-002` | Workspace and conformance runner | `001` | done |
 | `RUST-003` | Hosting and measurement proof | `002` | done |
-| `RUST-004` | Model, addresses, context, wire types | `002`, `003` | active |
-| `RUST-005` | Formula syntax, formatting, dependencies | `004` | planned |
+| `RUST-004` | Model, addresses, context, wire types | `002`, `003` | done |
+| `RUST-005` | Formula syntax, formatting, dependencies | `004` | active |
 | `RUST-006` | Formula evaluation and functions | `005` | planned |
 | `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | planned |
 | `RUST-008` | Math language and evaluator | `004`, `005` | planned |
@@ -1095,6 +1095,20 @@ and numeric boundary in the approved corpus. The representation distinguishes
 missing slots from null values.
 The fake, null, and math-capable measurement contexts produce expected results.
 The core builds without host bindings.
+
+**Landed.** The runtime model now includes the three slot variants, ordered
+port families, optional targets and vertex counts, and graph objects whose
+formula payload stays typed without pulling the next package forward.
+Address parsing resolves case-insensitive object names and document variables,
+normalizes table cells, preserves stored variable spelling, and returns the
+same diagnostic suggestions as the TypeScript engine. Edge records and their
+stable traversal key complete the graph data foundation. Unit tests distinguish
+a missing slot from a present null and exercise the optional object fields.
+
+`D-004` and `D-005` are resolved below. The existing shared value fixtures
+cover every value variant and numeric boundary. The generic formula payload is
+bound to the persisted AST and gains its wire round trips in `RUST-005`, where
+that type is introduced rather than represented temporarily as raw JSON.
 
 ### `RUST-005`: Port formula syntax and reference handling
 
@@ -1430,12 +1444,21 @@ of one call. The proof needed nothing more, so nothing more was decided. A
 handle based design that moves authoritative state into Rust stays open, and
 `RUST-014` is where the cost of copying a snapshot is measured against it.
 
-`D-005` has its first evidence. Fixtures send a character outside the basic
-plane and a letter carrying a combining mark through slot keys, object names
+`D-004` is resolved as binary64 throughout the runtime model. Illegal-number
+checks reject non-finite values and negative zero at graph boundaries, while
+the wire fixture codec can still carry those values so the checks themselves
+remain testable. Operator-facing conversion follows ECMAScript number text.
+A comparison declares an allowed tolerance in its fixture, so exact comparison
+remains the default.
+
+`D-005` is resolved for the runtime and fixture boundary. Fixtures send a
+character outside the basic plane and a letter carrying a combining mark through slot keys, object names
 and text values, and the two engines agree on every one. The name pattern is
-the ASCII alphabet, so neither engine accepts a name outside it. What is still
-open is a lone surrogate, which a JavaScript string holds and a Rust `String`
-cannot, and the shared decision on that belongs with the document decoder.
+the ASCII alphabet, so neither engine accepts a name outside it. Rust strings
+hold Unicode scalar values, and an unpaired UTF-16 surrogate is refused when
+it crosses into Rust rather than replaced or normalized. The document decoder
+in `RUST-012` applies that boundary rule to escaped JSON input, so a file cannot
+introduce a string that the runtime model cannot preserve.
 
 `D-008` is resolved for the part the two adapters own. A refusal of the
 arguments of a case is worded identically by both runners, and the comparator
@@ -1456,42 +1479,31 @@ implemented, then its lasting rationale belongs beside that code.
 | Field | Current value |
 | --- | --- |
 | Migration phase | Implementation, through Gate B |
-| Active implementation package | `RUST-004`, begun. `RUST-005` is ready and unstarted |
+| Active implementation package | `RUST-005` |
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
-| Unresolved architecture decisions | `D-004`, `D-006`, `D-007`, `D-009`, `D-011`. `D-005` and `D-008` are part resolved, and `D-010` holds a recorded choice |
-| Next implementation action | Finish `RUST-004`, then `RUST-005` |
-| Completion evidence | `RUST-001`, `RUST-002` and `RUST-003`, under their headings above |
+| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` is part resolved, and `D-010` holds a recorded choice |
+| Next implementation action | Port formula syntax under `RUST-005` |
+| Completion evidence | `RUST-001` through `RUST-004`, under their headings above |
 
 ### Handoff record for the active package
 
 ```text
-Package: RUST-004, model, addresses, context and wire types
+Package: RUST-005, formula syntax, formatting and dependencies
 Status: active
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
-Completed contract cases:
-  Value, ErrorValue, ErrorCode, Point, ObjectType and slotKey in model.rs.
-  is_error_value, is_illegal_number and has_illegal_number, with fixtures over
-  every value shape, both refused numbers and an empty list of points.
-  Names, cell reference forms, the base twenty six column arithmetic and
-  to_surface_path in address.rs.
-  The JavaScript number to text conversion in number.rs, with fixtures over
-  both notation boundaries and the three numbers that are not finite.
-  The wire codec in wire.rs, with fixtures over every value shape and six
-  shapes no value takes.
-  The measurement contract in measure.rs: the trait, the capability that tells
-  a fake measurer from the null one, and the check that refuses a width the
-  graph could not store.
+Completed dependency:
+  RUST-004 supplies values, slots, objects, ports, vertex counts, addresses,
+  edge data, measurement capabilities and the initial wire codec.
+  The object and slot records use a generic formula payload. RUST-005 replaces
+  that parameter with its validated FormulaAst without a temporary JSON AST.
 Remaining cases:
-  Slot, GraphObject, ports and vertex counts, which need the graph package
-  beside them.
-  Addresses that resolve a name against an object list, which need the object
-  record.
-  The lone surrogate decision under D-005.
-Open decision IDs: D-004 and D-005 reach this package
+  Lexing, AST validation, parsing, formatting, dependency extraction and
+  reference rewriting.
+Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   tests/conformance/contract/inventory.json and dispositions.json
@@ -1512,11 +1524,9 @@ Native and browser targets exercised:
   Chromium. Windows runs the Rust checks in the pull request workflow and has
   not run the browser proof.
 Known failures with smallest reproduction: none
-Next concrete action: finish RUST-004, then RUST-005
-Dependencies that can proceed independently:
-  RUST-005, the formula syntax, needs the model alone. Its first fixture
-  already exists as formula.parse-awaiting-rust, which the TypeScript engine
-  answers and the Rust engine does not.
+Next concrete action: implement the AST and lexer, then make
+  formula.parse-awaiting-rust answer from Rust.
+Dependencies that can proceed independently: none
 ```
 
 A resumed session compares the recorded commits with the current branch,

@@ -2,11 +2,9 @@
 //! hold, the seven error codes, the thirteen object types, and the key that a
 //! slot path joins into.
 //!
-//! This is the Rust side of `src/engine/graph/node.ts`. The parts of that file
-//! that need a graph around them, such as the slot kinds and the object
-//! record, arrive with the package that ports the graph. What is here is what
-//! a value on its own means, which is what the shared fixtures can already
-//! ask both engines about.
+//! This is the Rust side of `src/engine/graph/node.ts`. The formula payload of
+//! a slot is generic until the syntax package supplies its AST. That keeps the
+//! graph model complete without using unvalidated JSON as a temporary AST.
 //!
 //! A number is `f64` because the TypeScript graph stores binary64 and two
 //! engines that disagree about the width of a number disagree about every
@@ -15,7 +13,10 @@
 //! the refusal is a check the engine runs rather than a shape the type makes
 //! impossible, and a check that cannot be fed its input cannot be tested.
 
+use std::collections::BTreeMap;
 use std::fmt;
+
+use crate::address::Address;
 
 /// A point in world coordinates, which is the value a vertex slot holds.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,6 +88,83 @@ pub enum Value {
     Points(Vec<Point>),
     Null,
     Error(ErrorValue),
+}
+
+/// One addressable value on an object. The formula package supplies `A`, so
+/// unvalidated JSON never stands in for an expression tree.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Slot<A> {
+    Literal { value: Value },
+    Formula { ast: A, value: Value },
+    Derived { value: Value },
+}
+
+impl<A> Slot<A> {
+    pub fn value(&self) -> &Value {
+        match self {
+            Slot::Literal { value } | Slot::Formula { value, .. } | Slot::Derived { value } => {
+                value
+            }
+        }
+    }
+}
+
+/// Ordered port names carried outside the slot set.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct GraphObjectPorts {
+    pub input: Vec<String>,
+    pub output: Vec<String>,
+    pub seed: Option<Vec<String>>,
+}
+
+/// One object in the dependency graph.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphObject<A> {
+    pub id: String,
+    pub name: String,
+    pub object_type: ObjectType,
+    pub target: Option<Address>,
+    pub slots: BTreeMap<String, Slot<A>>,
+    pub ports: Option<GraphObjectPorts>,
+    pub vertex_count: Option<f64>,
+}
+
+impl<A> GraphObject<A> {
+    pub fn get_slot(&self, path: &[String]) -> Option<&Slot<A>> {
+        self.slots.get(&slot_key(path))
+    }
+}
+
+impl<A> crate::address::AddressableObject for GraphObject<A> {
+    fn id(&self) -> &str {
+        &self.id
+    }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn object_type(&self) -> ObjectType {
+        self.object_type
+    }
+    fn slot_keys(&self) -> Vec<&str> {
+        self.slots.keys().map(String::as_str).collect()
+    }
+}
+
+pub fn resolve_slot<'a, A>(
+    address: &Address,
+    objects: &'a [GraphObject<A>],
+) -> Option<&'a Slot<A>> {
+    objects
+        .iter()
+        .find(|object| object.id == address.object_id)?
+        .get_slot(&address.path)
+}
+
+pub fn is_legal_port_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
 /// Whether a value is the error kind, which is the branch that every other
@@ -194,9 +272,12 @@ pub fn slot_key(path: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ErrorCode, ErrorValue, ObjectType, Point, Value, has_illegal_number, is_error_value,
-        is_illegal_number, slot_key,
+        ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, Value,
+        has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, resolve_slot,
+        slot_key,
     };
+    use crate::address::Address;
+    use std::collections::BTreeMap;
 
     fn path(segments: &[&str]) -> Vec<String> {
         segments
@@ -210,6 +291,40 @@ mod tests {
         assert_eq!(slot_key(&path(&["vertex", "0", "x"])), "vertex.0.x");
         assert_eq!(slot_key(&path(&["radius"])), "radius");
         assert_eq!(slot_key(&[]), "");
+    }
+
+    #[test]
+    fn an_object_distinguishes_a_missing_slot_from_a_null_value() {
+        let object = GraphObject::<()> {
+            id: "obj_1".into(),
+            name: "value_1".into(),
+            object_type: ObjectType::Value,
+            target: None,
+            slots: BTreeMap::from([("value".into(), Slot::Literal { value: Value::Null })]),
+            ports: Some(GraphObjectPorts {
+                input: vec!["factor".into()],
+                output: vec!["result".into()],
+                seed: None,
+            }),
+            vertex_count: None,
+        };
+        let address = Address {
+            object_id: "obj_1".into(),
+            path: path(&["value"]),
+        };
+        assert_eq!(
+            resolve_slot(&address, std::slice::from_ref(&object)).map(Slot::value),
+            Some(&Value::Null)
+        );
+        assert!(object.get_slot(&path(&["missing"])).is_none());
+    }
+
+    #[test]
+    fn a_port_name_is_one_nonempty_ascii_path_segment() {
+        assert!(is_legal_port_name("speed_2"));
+        for bad in ["", "a.b", "my-port", "café"] {
+            assert!(!is_legal_port_name(bad));
+        }
     }
 
     #[test]
