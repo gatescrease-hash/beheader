@@ -5,11 +5,12 @@ code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
 
 [RUST_PORT.md](RUST_PORT.md) holds the engine migration, its work register,
-and its current handoff. The spec has released that scope, and the first four
+and its current handoff. The spec has released that scope, and the first five
 packages have landed. The boundary is frozen in a generated inventory, a Rust
 crate answers the same fixtures the TypeScript engine does, a browser binding
-takes its measurements from the page, and the data foundation holds values,
-slots, objects, addresses and edges.
+takes its measurements from the page, the data foundation holds values, slots,
+objects, addresses and edges, and the formula language reaches from source text
+to a tree and back.
 
 ---
 
@@ -20,8 +21,8 @@ slots, objects, addresses and edges.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 88 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 317 cases match across the two engines, with none awaiting either. |
+| Rust | 96 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 356 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -207,6 +208,7 @@ file.
 | `beheader-engine/src/formula/functions.rs` | The name, argument count and two habits of every built-in function. |
 | `beheader-engine/src/formula/parser.rs` | Tokens to a tree, with names resolved to IDs and ranges placed. |
 | `beheader-engine/src/formula/format.rs` | A tree back to source text, under the name each object carries now. |
+| `beheader-engine/src/formula/deps.rs` | The addresses a formula reads, and the two rewrites a resize asks of a tree. |
 | `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
 | `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |

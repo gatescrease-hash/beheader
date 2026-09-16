@@ -1,0 +1,1078 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "formula.dependencies",
+  "sourceTest": "src/engine/formula/deps.test.ts",
+  "requirement": "SPEC.md section 7, the dependency graph",
+  "comparison": "exact",
+  "note": "The rewrite moves every address off one object and onto another, and the repair treats one object as deleted. Both are the callers' work in the engine, so the two runners supply the same one and what is compared is the walk over the tree.",
+  "cases": [
+    {
+      "name": "a literal alone",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "literal",
+          "value": 1
+        }
+      }
+    },
+    {
+      "name": "one reference",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "reference",
+          "address": {
+            "objectId": "t1",
+            "path": [
+              "cells",
+              "A1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a range",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "range",
+              "start": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              },
+              "end": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "both sides of an operator, in the order the source names them",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "+",
+          "left": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          },
+          "right": {
+            "type": "reference",
+            "address": {
+              "objectId": "p1",
+              "path": [
+                "vertices"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "both branches of an IF, because either can become the live one",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "IF",
+          "args": [
+            {
+              "type": "binaryOp",
+              "operator": ">",
+              "left": {
+                "type": "reference",
+                "address": {
+                  "objectId": "p1",
+                  "path": [
+                    "vertices"
+                  ]
+                }
+              },
+              "right": {
+                "type": "literal",
+                "value": 0
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a reference under a prefix operator",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "unaryOp",
+          "operator": "-",
+          "operand": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the arguments of a call, in order",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a reference named twice, which is listed twice",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "+",
+          "left": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          },
+          "right": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a tree with nothing to read",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "*",
+          "left": {
+            "type": "literal",
+            "value": 2
+          },
+          "right": {
+            "type": "literal",
+            "value": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "an error node",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "error",
+          "error": "#REF"
+        }
+      }
+    },
+    {
+      "name": "a range beside a reference",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "range",
+              "start": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              },
+              "end": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a nested call",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "functionCall",
+              "name": "ABS",
+              "args": [
+                {
+                  "type": "reference",
+                  "address": {
+                    "objectId": "t1",
+                    "path": [
+                      "cells",
+                      "A1"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "moved off its object: a literal alone",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "literal",
+          "value": 1
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: one reference",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "reference",
+          "address": {
+            "objectId": "t1",
+            "path": [
+              "cells",
+              "A1"
+            ]
+          }
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: a range",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "range",
+              "start": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              },
+              "end": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: both sides of an operator, in the order the source names them",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "+",
+          "left": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          },
+          "right": {
+            "type": "reference",
+            "address": {
+              "objectId": "p1",
+              "path": [
+                "vertices"
+              ]
+            }
+          }
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: both branches of an IF, because either can become the live one",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "IF",
+          "args": [
+            {
+              "type": "binaryOp",
+              "operator": ">",
+              "left": {
+                "type": "reference",
+                "address": {
+                  "objectId": "p1",
+                  "path": [
+                    "vertices"
+                  ]
+                }
+              },
+              "right": {
+                "type": "literal",
+                "value": 0
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: a reference under a prefix operator",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "unaryOp",
+          "operator": "-",
+          "operand": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          }
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: the arguments of a call, in order",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: a reference named twice, which is listed twice",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "+",
+          "left": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          },
+          "right": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          }
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: a tree with nothing to read",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "*",
+          "left": {
+            "type": "literal",
+            "value": 2
+          },
+          "right": {
+            "type": "literal",
+            "value": 3
+          }
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: an error node",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "error",
+          "error": "#REF"
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: a range beside a reference",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "range",
+              "start": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              },
+              "end": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            }
+          ]
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "moved off its object: a nested call",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "functionCall",
+              "name": "ABS",
+              "args": [
+                {
+                  "type": "reference",
+                  "address": {
+                    "objectId": "t1",
+                    "path": [
+                      "cells",
+                      "A1"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            }
+          ]
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    },
+    {
+      "name": "with that object deleted: a literal alone",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "literal",
+          "value": 1
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: one reference",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "reference",
+          "address": {
+            "objectId": "t1",
+            "path": [
+              "cells",
+              "A1"
+            ]
+          }
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: a range",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "range",
+              "start": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              },
+              "end": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: both sides of an operator, in the order the source names them",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "+",
+          "left": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          },
+          "right": {
+            "type": "reference",
+            "address": {
+              "objectId": "p1",
+              "path": [
+                "vertices"
+              ]
+            }
+          }
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: both branches of an IF, because either can become the live one",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "IF",
+          "args": [
+            {
+              "type": "binaryOp",
+              "operator": ">",
+              "left": {
+                "type": "reference",
+                "address": {
+                  "objectId": "p1",
+                  "path": [
+                    "vertices"
+                  ]
+                }
+              },
+              "right": {
+                "type": "literal",
+                "value": 0
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: a reference under a prefix operator",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "unaryOp",
+          "operator": "-",
+          "operand": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          }
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: the arguments of a call, in order",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: a reference named twice, which is listed twice",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "+",
+          "left": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          },
+          "right": {
+            "type": "reference",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          }
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: a tree with nothing to read",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "binaryOp",
+          "operator": "*",
+          "left": {
+            "type": "literal",
+            "value": 2
+          },
+          "right": {
+            "type": "literal",
+            "value": 3
+          }
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: an error node",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "error",
+          "error": "#REF"
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: a range beside a reference",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "range",
+              "start": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              },
+              "end": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            }
+          ]
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "with that object deleted: a nested call",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "functionCall",
+              "name": "ABS",
+              "args": [
+                {
+                  "type": "reference",
+                  "address": {
+                    "objectId": "t1",
+                    "path": [
+                      "cells",
+                      "A1"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "type": "reference",
+              "address": {
+                "objectId": "p1",
+                "path": [
+                  "vertices"
+                ]
+              }
+            }
+          ]
+        },
+        "deletedObjectId": "t1"
+      }
+    },
+    {
+      "name": "a range with only its far end deleted",
+      "call": "repairAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "functionCall",
+          "name": "SUM",
+          "args": [
+            {
+              "type": "range",
+              "start": {
+                "objectId": "t1",
+                "path": [
+                  "cells",
+                  "A1"
+                ]
+              },
+              "end": {
+                "objectId": "t2",
+                "path": [
+                  "cells",
+                  "B2"
+                ]
+              }
+            }
+          ]
+        },
+        "deletedObjectId": "t2"
+      }
+    },
+    {
+      "name": "a tree that is not a tree",
+      "call": "extractDependencies",
+      "args": {
+        "ast": {
+          "type": "nope"
+        }
+      }
+    },
+    {
+      "name": "a tree that is not a tree, rewritten",
+      "call": "rewriteAddressesInAst",
+      "args": {
+        "ast": {
+          "type": "nope"
+        },
+        "fromObjectId": "t1",
+        "toObjectId": "t9"
+      }
+    }
+  ]
+}

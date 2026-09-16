@@ -60,10 +60,13 @@ const {
   isErrorValue,
   isIllegalNumber,
   exceedsMaxFormulaAstDepth,
+  extractDependencies,
   formatFormula,
   isLegalPortName,
   isParseError,
   isValidName,
+  repairAddressesInAst,
+  rewriteAddressesInAst,
   lex,
   validateFormulaAstShape,
   formatAddress,
@@ -326,6 +329,10 @@ function addressableObjectListArgument(args, name) {
  * A formula tree as JSON, with a literal number carried in the tagged form the
  * fixtures use so a tree holding 1e21 compares by the text both engines print.
  */
+function encodeAddress(address) {
+  return { objectId: address.objectId, path: [...address.path] };
+}
+
 function encodeAst(ast) {
   switch (ast.type) {
     case "literal":
@@ -453,6 +460,46 @@ const CALLS = {
   addressKey: (args) => addressKey(addressArgument(args, "address")),
   parseAddress: (args) => encodeAddressResult(parseAddress(textArgument(args, "input"), addressableObjectListArgument(args, "objects"))),
   formatAddress: (args) => encodeAddressResult(formatAddress(addressArgument(args, "address"), addressableObjectListArgument(args, "objects"))),
+  extractDependencies: (args) => {
+    const shape = validateFormulaAstShape(argument(args, "ast"));
+    if (!shape.ok) {
+      return { ok: false, reason: shape.reason };
+    }
+    return extractDependencies(shape.ast).map((dependency) =>
+      dependency.kind === "reference"
+        ? { kind: "reference", address: encodeAddress(dependency.address) }
+        : { kind: "range", start: encodeAddress(dependency.start), end: encodeAddress(dependency.end) },
+    );
+  },
+  rewriteAddressesInAst: (args) => {
+    const shape = validateFormulaAstShape(argument(args, "ast"));
+    if (!shape.ok) {
+      return { ok: false, reason: shape.reason };
+    }
+    const from = textArgument(args, "fromObjectId");
+    const to = textArgument(args, "toObjectId");
+    // The rewrite the fixtures use moves every address off one object and onto
+    // another, which reaches each node kind that holds an address.
+    return encodeAst(rewriteAddressesInAst(shape.ast, (address) =>
+      address.objectId === from ? { objectId: to, path: [...address.path] } : address,
+    ));
+  },
+  repairAddressesInAst: (args) => {
+    const shape = validateFormulaAstShape(argument(args, "ast"));
+    if (!shape.ok) {
+      return { ok: false, reason: shape.reason };
+    }
+    const deleted = textArgument(args, "deletedObjectId");
+    // The repair the fixtures use treats one object as deleted, and a range
+    // with either end on it goes the same way as a reference to it.
+    return encodeAst(
+      repairAddressesInAst(
+        shape.ast,
+        (address) => (address.objectId === deleted ? "deleted" : address),
+        (start, end) => (start.objectId === deleted || end.objectId === deleted ? "deleted" : { start, end }),
+      ),
+    );
+  },
   formatFormula: (args) => {
     const shape = validateFormulaAstShape(argument(args, "ast"));
     if (!shape.ok) {

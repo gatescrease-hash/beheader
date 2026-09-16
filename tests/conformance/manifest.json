@@ -101,13 +101,19 @@
       "covers": [
         "src/engine/formula/format.ts"
       ]
+    },
+    {
+      "id": "formula.dependencies",
+      "file": "fixtures/formula.dependencies.json",
+      "covers": [
+        "src/engine/formula/deps.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
     "src/engine/complete.ts",
     "src/engine/document.ts",
     "src/engine/eval-context.ts",
-    "src/engine/formula/deps.ts",
     "src/engine/formula/eval.ts",
     "src/engine/graph/cycles.ts",
     "src/engine/graph/eval.ts",

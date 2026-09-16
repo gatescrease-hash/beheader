@@ -939,8 +939,8 @@ met, and a package is done only where the status column says so.
 | `RUST-002` | Workspace and conformance runner | `001` | done |
 | `RUST-003` | Hosting and measurement proof | `002` | done |
 | `RUST-004` | Model, addresses, context, wire types | `002`, `003` | done |
-| `RUST-005` | Formula syntax, formatting, dependencies | `004` | active |
-| `RUST-006` | Formula evaluation and functions | `005` | planned |
+| `RUST-005` | Formula syntax, formatting, dependencies | `004` | done |
+| `RUST-006` | Formula evaluation and functions | `005` | active |
 | `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | planned |
 | `RUST-008` | Math language and evaluator | `004`, `005` | planned |
 | `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | planned |
@@ -1140,10 +1140,19 @@ rewrite helpers have direct fixtures before mutation consumes them. Unicode
 source offsets match field marking. Malformed and maximum-depth inputs return
 defined results without process failure.
 
-**Landed so far.** The lexer, the node types with their shape and depth checks,
-the parser, and the signature half of the function registry. What a function
+**Landed.** The lexer, the node types with their shape and depth checks, the
+parser, the printer, dependency extraction, the two rewrites a resize asks of a
+stored tree, and the signature half of the function registry. What a function
 computes arrives with `RUST-006`, because the parser needs only the name, the
 argument count and whether a range may be handed to the function.
+
+Six fixtures carry the package: `formula.lex`, `formula.ast-shape`,
+`formula.parse`, `formula.format`, `formula.dependencies`, and the arity and
+unknown-name cases inside `formula.parse` that reach the registry. The printer
+is compared by reading its text back and comparing the tree, rather than by the
+text alone, so a bracket in the wrong place shows as a different tree.
+Dependency extraction answers both branches of an `IF`, because which branch is
+live rests on a value evaluation has not produced.
 
 The lexer scans UTF-16 code units, so the offset a token carries is the offset
 a JavaScript string gives and the command line marks the faulty field of a
@@ -1186,7 +1195,9 @@ that, so this is a finding rather than a change made here.
 
 **Work.** Port the function registry, operator behavior, lazy evaluation,
 argument validation, range reads, and error propagation. Implement JavaScript
-rounding and string-length compatibility deliberately.
+rounding and string-length compatibility deliberately. The signature half of
+the registry landed with `RUST-005`, so what arrives here is what each function
+computes.
 
 **Evidence.** Every registered function has normal, type-error, and arity cases
 where applicable. Lazy branches containing errors remain unevaluated when the
@@ -1545,49 +1556,40 @@ implemented, then its lasting rationale belongs beside that code.
 | Field | Current value |
 | --- | --- |
 | Migration phase | Implementation, through Gate B |
-| Active implementation package | `RUST-005` |
+| Active implementation package | `RUST-006`. `RUST-008` is ready and unstarted |
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
 | Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` is part resolved, and `D-010` holds a recorded choice |
 | Next implementation action | Port formula syntax under `RUST-005` |
-| Completion evidence | `RUST-001` through `RUST-004`, under their headings above |
+| Completion evidence | `RUST-001` through `RUST-005`, under their headings above |
 
 ### Handoff record for the active package
 
 ```text
-Package: RUST-005, formula syntax, formatting and dependencies
+Package: RUST-006, formula evaluation and functions
 Status: active
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
-Completed dependency:
+Completed dependencies:
   RUST-004 supplies values, slots, objects, ports, vertex counts, addresses,
   edge data, measurement capabilities and the initial wire codec.
-  The object and slot records use a generic formula payload. RUST-005 replaces
-  that parameter with its validated FormulaAst without a temporary JSON AST.
-Completed cases:
-  The lexer in formula/lexer.rs, over UTF-16 code units so the offset a token
-  carries is the offset the command line marks a faulty field by.
-  The node types, the shape check over a tree that arrived as JSON, and the
-  depth limit, in formula/ast.rs.
-  The signature half of the registry in formula/functions.rs: the name, the
-  argument count and the two habits of all 23 functions.
-  The descent in formula/parser.rs, with precedence, associativity, names
-  resolved to IDs, bare cell references inside a table, range placement, both
-  depth limits and the wording of every refusal.
-  The printer in formula/format.rs, which brackets by precedence and names an
-  object as the document names it now.
+  RUST-005 supplies the lexer, the tree with its shape and depth checks, the
+  parser, the printer, dependency extraction, the two resize rewrites, and the
+  name, argument count and two habits of all 23 functions.
 Remaining cases:
-  Dependency extraction, and the rewrites a table or vertex resize asks of a
-  stored formula.
+  What each of the 23 functions computes, operator behaviour, the lazy reading
+  that leaves an untaken branch unevaluated, argument validation, reads over a
+  range, and how an error travels up a tree. JavaScript rounding and string
+  length are compatibility choices this package makes deliberately.
 Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
   graph.address-key carry the RUST-004 surface
-  formula.lex, formula.ast-shape, formula.parse and formula.format carry the
-  stages of RUST-005 that have landed
+  formula.lex, formula.ast-shape, formula.parse, formula.format and
+  formula.dependencies carry RUST-005
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1597,9 +1599,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  88 pass
+  cargo test --workspace --locked                                  96 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           317 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           356 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1610,9 +1612,11 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port deps.ts, which reads the addresses a formula names,
-  then the rewrites a table or vertex resize asks of a stored formula.
-Dependencies that can proceed independently: none
+Next concrete action: port formula/eval.ts and the bodies of the 23 functions
+  in formula/functions.ts.
+Dependencies that can proceed independently:
+  RUST-008, the math language, needs the model and the formula syntax, and both
+  have landed.
 ```
 
 A resumed session compares the recorded commits with the current branch,
