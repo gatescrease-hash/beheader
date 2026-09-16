@@ -211,7 +211,12 @@ export function lex(source: string): readonly Token[] | LexError {
       continue;
     }
 
-    return { error: "#PARSE", message: `unrecognised character "${ch}" at offset ${i}`, start: i };
+    // The message names the whole code point, not the one UTF-16 unit the
+    // scan is sitting on, so a character outside the basic plane reads as
+    // itself rather than as the lone surrogate that is half of it. The offset
+    // stays the unit offset, because that is what marks the faulty field.
+    const whole = String.fromCodePoint(source.codePointAt(i) as number);
+    return { error: "#PARSE", message: `unrecognised character "${whole}" at offset ${i}`, start: i };
   }
 
   tokens.push({ type: "eof", text: "", start: source.length });

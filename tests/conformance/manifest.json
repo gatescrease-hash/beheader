@@ -81,6 +81,13 @@
       "covers": [
         "src/engine/graph/edge.ts"
       ]
+    },
+    {
+      "id": "formula.lex",
+      "file": "fixtures/formula.lex.json",
+      "covers": [
+        "src/engine/formula/lexer.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [

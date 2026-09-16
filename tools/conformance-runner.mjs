@@ -61,6 +61,7 @@ const {
   isIllegalNumber,
   isLegalPortName,
   isValidName,
+  lex,
   formatAddress,
   nearestName,
   parseAddress,
@@ -312,6 +313,15 @@ function addressableObjectListArgument(args, name) {
   }));
 }
 
+/**
+ * The value a literal token carries. A number goes through the tagged form the
+ * fixtures use for every other number, so a token holding 1e21 compares by the
+ * text both engines print rather than by what JSON does with it.
+ */
+function encodeTokenValue(value) {
+  return typeof value === "number" ? encodeNumber(value) : value;
+}
+
 function textListArgument(args, name) {
   const value = argument(args, name);
   if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
@@ -374,6 +384,17 @@ const CALLS = {
   hasIllegalNumber: (args) => hasIllegalNumber(valueArgument(args, "value")),
   valueRoundTrip: (args) => encodeValue(valueArgument(args, "value")),
   isLegalPortName: (args) => isLegalPortName(textArgument(args, "name")),
+  lex: (args) => {
+    const result = lex(textArgument(args, "source"));
+    if (!Array.isArray(result)) {
+      return { error: result.error, message: result.message, start: result.start };
+    }
+    return result.map((token) =>
+      "value" in token
+        ? { type: token.type, text: token.text, start: token.start, value: encodeTokenValue(token.value) }
+        : { type: token.type, text: token.text, start: token.start },
+    );
+  },
   nearestName: (args) => {
     const nearest = nearestName(textArgument(args, "typed"), textListArgument(args, "candidates"));
     return nearest === undefined ? null : nearest;

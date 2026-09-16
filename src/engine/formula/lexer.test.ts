@@ -266,6 +266,14 @@ describe("lex — malformed input never throws, returns a #PARSE LexError instea
     expect(lex("#bad")).toEqual({ error: "#PARSE", message: 'unrecognised character "#" at offset 0', start: 0 });
   });
 
+  it("names a character outside the basic plane whole, rather than half of it", () => {
+    expect(lex("1 + \u{1D518}")).toEqual({
+      error: "#PARSE",
+      message: 'unrecognised character "\u{1D518}" at offset 4',
+      start: 4,
+    });
+  });
+
   it("never throws across a battery of malformed inputs", () => {
     const malformed = ["#", "@", "$", "[", "]", "{", "}", "`", "~", '"unterminated', '"esc\\"', "\\"];
     for (const source of malformed) {

@@ -26,6 +26,7 @@ use beheader_engine::address::{
     format_address, format_cell_reference, index_to_column_letters, is_cell_reference_form,
     is_valid_name, nearest_name, parse_address, parse_cell_reference, to_surface_path,
 };
+use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::graph::address_key;
 use beheader_engine::model::{
     ObjectType, has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
@@ -55,6 +56,7 @@ const SUPPORTED_CALLS: &[&str] = &[
     "isIllegalNumber",
     "isLegalPortName",
     "isValidName",
+    "lex",
     "nearestName",
     "numberToText",
     "parseAddress",
@@ -273,6 +275,37 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
             value_argument(args, "value").map(|value| json!(has_illegal_number(&value)))
         }
         "valueRoundTrip" => value_argument(args, "value").map(|value| encode_value(&value)),
+        "lex" => text_argument(args, "source").map(|source| match lex(&source) {
+            Err(error) => json!({
+                "error": "#PARSE",
+                "message": error.message,
+                "start": error.start,
+            }),
+            Ok(tokens) => Json::Array(
+                tokens
+                    .iter()
+                    .map(|token| {
+                        let mut held = Map::new();
+                        held.insert("type".into(), json!(token.kind.as_str()));
+                        held.insert("text".into(), json!(token.text));
+                        held.insert("start".into(), json!(token.start));
+                        match &token.kind {
+                            TokenKind::Number(number) => {
+                                held.insert("value".into(), encode_number(*number));
+                            }
+                            TokenKind::Text(text) => {
+                                held.insert("value".into(), json!(text));
+                            }
+                            TokenKind::Boolean(boolean) => {
+                                held.insert("value".into(), json!(boolean));
+                            }
+                            _ => {}
+                        }
+                        Json::Object(held)
+                    })
+                    .collect(),
+            ),
+        }),
         "isLegalPortName" => {
             text_argument(args, "name").map(|name| json!(is_legal_port_name(&name)))
         }
