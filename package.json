@@ -8,8 +8,10 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.engine.json",
-    "test": "vitest run && node --test tools/prose-check.test.mjs",
-    "prose": "node tools/prose-check.mjs --all"
+    "test": "vitest run && node --test \"tools/*.test.mjs\"",
+    "prose": "node tools/prose-check.mjs --all",
+    "contract": "node tools/engine-contract.mjs",
+    "conformance": "node tools/conformance-compare.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

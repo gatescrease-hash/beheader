@@ -1,0 +1,31 @@
+{
+  "note": "Hand written results files. tools/conformance-compare.test.mjs sends them through the comparator so a known match, a difference, a call the Rust engine cannot answer and a pair of runs that fell out of step are each proved to be reported, with no Rust toolchain in the way.",
+  "engine": "rust",
+  "runnerVersion": 1,
+  "supportedCalls": [
+    "slotKey",
+    "numberToText"
+  ],
+  "results": [
+    {
+      "fixture": "model.slot-key",
+      "case": 0,
+      "name": "a vertex part",
+      "call": "slotKey",
+      "outcome": {
+        "status": "ok",
+        "value": "vertex.0.x"
+      }
+    },
+    {
+      "fixture": "number.javascript-text",
+      "case": 0,
+      "name": "a negative zero",
+      "call": "numberToText",
+      "outcome": {
+        "status": "ok",
+        "value": "0"
+      }
+    }
+  ]
+}

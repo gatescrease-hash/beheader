@@ -1,0 +1,8 @@
+# The toolchain every Rust command in this repository runs under. It is pinned
+# so that a formatting rule, a lint or a floating point detail cannot change
+# between two machines while the port is being compared against TypeScript.
+[toolchain]
+channel = "1.94.1"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

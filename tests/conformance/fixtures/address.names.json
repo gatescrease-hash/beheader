@@ -1,0 +1,94 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "address.names",
+  "sourceTest": "src/engine/address.test.ts",
+  "requirement": "SPEC.md section 5, object names",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "a plain name",
+      "call": "isValidName",
+      "args": {
+        "name": "table_x"
+      }
+    },
+    {
+      "name": "a leading underscore",
+      "call": "isValidName",
+      "args": {
+        "name": "_hidden"
+      }
+    },
+    {
+      "name": "digits after a letter",
+      "call": "isValidName",
+      "args": {
+        "name": "A1"
+      }
+    },
+    {
+      "name": "an empty name",
+      "call": "isValidName",
+      "args": {
+        "name": ""
+      }
+    },
+    {
+      "name": "a leading digit",
+      "call": "isValidName",
+      "args": {
+        "name": "1st"
+      }
+    },
+    {
+      "name": "a space",
+      "call": "isValidName",
+      "args": {
+        "name": "has space"
+      }
+    },
+    {
+      "name": "a dash",
+      "call": "isValidName",
+      "args": {
+        "name": "has-dash"
+      }
+    },
+    {
+      "name": "a letter with a diacritic",
+      "call": "isValidName",
+      "args": {
+        "name": "naïve"
+      }
+    },
+    {
+      "name": "a letter and a combining mark",
+      "call": "isValidName",
+      "args": {
+        "name": "naïve"
+      }
+    },
+    {
+      "name": "a character outside the basic plane",
+      "call": "isValidName",
+      "args": {
+        "name": "a😀"
+      }
+    },
+    {
+      "name": "a newline inside the name",
+      "call": "isValidName",
+      "args": {
+        "name": "a\nb"
+      }
+    },
+    {
+      "name": "a name given as a number",
+      "call": "isValidName",
+      "args": {
+        "name": 12
+      }
+    }
+  ]
+}

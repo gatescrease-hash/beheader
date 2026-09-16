@@ -1,0 +1,158 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "number.javascript-text",
+  "sourceTest": "src/engine/formula/format.test.ts",
+  "requirement": "RUST_PORT.md, number to text conversion under D-004",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "zero",
+      "call": "numberToText",
+      "args": {
+        "number": 0
+      }
+    },
+    {
+      "name": "a negative zero",
+      "call": "numberToText",
+      "args": {
+        "number": {
+          "$number": "-0"
+        }
+      }
+    },
+    {
+      "name": "a whole number",
+      "call": "numberToText",
+      "args": {
+        "number": 42
+      }
+    },
+    {
+      "name": "a negative whole number",
+      "call": "numberToText",
+      "args": {
+        "number": -42
+      }
+    },
+    {
+      "name": "a fraction",
+      "call": "numberToText",
+      "args": {
+        "number": 0.1
+      }
+    },
+    {
+      "name": "the sum that is not a fifth",
+      "call": "numberToText",
+      "args": {
+        "number": 0.30000000000000004
+      }
+    },
+    {
+      "name": "the last fixed magnitude",
+      "call": "numberToText",
+      "args": {
+        "number": 1e+20
+      }
+    },
+    {
+      "name": "the first magnitude with an exponent",
+      "call": "numberToText",
+      "args": {
+        "number": 1e+21
+      }
+    },
+    {
+      "name": "an exponent with digits after the point",
+      "call": "numberToText",
+      "args": {
+        "number": 1.5e+21
+      }
+    },
+    {
+      "name": "the last small fixed magnitude",
+      "call": "numberToText",
+      "args": {
+        "number": 1e-06
+      }
+    },
+    {
+      "name": "the first small magnitude with an exponent",
+      "call": "numberToText",
+      "args": {
+        "number": 1e-07
+      }
+    },
+    {
+      "name": "a negative small magnitude",
+      "call": "numberToText",
+      "args": {
+        "number": -1e-07
+      }
+    },
+    {
+      "name": "several digits at a small magnitude",
+      "call": "numberToText",
+      "args": {
+        "number": 1.2345e-07
+      }
+    },
+    {
+      "name": "the largest number",
+      "call": "numberToText",
+      "args": {
+        "number": 1.7976931348623157e+308
+      }
+    },
+    {
+      "name": "the smallest normal number",
+      "call": "numberToText",
+      "args": {
+        "number": 2.2250738585072014e-308
+      }
+    },
+    {
+      "name": "the smallest number of all",
+      "call": "numberToText",
+      "args": {
+        "number": 5e-324
+      }
+    },
+    {
+      "name": "the largest safe integer",
+      "call": "numberToText",
+      "args": {
+        "number": 9007199254740991
+      }
+    },
+    {
+      "name": "a number that is not a number",
+      "call": "numberToText",
+      "args": {
+        "number": {
+          "$number": "NaN"
+        }
+      }
+    },
+    {
+      "name": "infinity",
+      "call": "numberToText",
+      "args": {
+        "number": {
+          "$number": "Infinity"
+        }
+      }
+    },
+    {
+      "name": "negative infinity",
+      "call": "numberToText",
+      "args": {
+        "number": {
+          "$number": "-Infinity"
+        }
+      }
+    }
+  ]
+}

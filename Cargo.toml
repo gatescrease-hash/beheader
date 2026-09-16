@@ -1,0 +1,23 @@
+# The Rust side of the engine port. beheader-engine holds the logic being
+# moved out of src/engine, and beheader-conformance answers the shared
+# fixtures under tests/conformance so the two engines can be compared.
+#
+# The browser binding and the application adapter arrive with the hosting
+# proof rather than as empty crates ahead of it.
+#
+# serde_json is the only dependency. Its derive companion is a proposal in
+# RUST_PORT.md rather than a decision, and the wire codec here is written out
+# by hand because the document format has shapes that a derived one would
+# accept or reject differently.
+[workspace]
+resolver = "3"
+members = ["crates/beheader-engine", "crates/beheader-conformance"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+beheader-engine = { path = "crates/beheader-engine" }
+serde_json = "1.0.145"

@@ -21,3 +21,32 @@ jobs:
       - run: npm run typecheck
       - run: npm run prose
       - run: npm run build
+
+  # The Rust engine and the comparison between the two engines. It runs on
+  # Windows as well as Linux, because a difference in a floating point result
+  # or in a path would otherwise reach the port through one target alone.
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      # The TypeScript side of the comparison reads the engine as TypeScript
+      # with no build step between the two, which Node does from 22.18 onward.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # rust-toolchain.toml pins the version, the two components and the
+      # browser target, and rustup installs that toolchain here rather than
+      # part way through the checks below.
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
+      - run: npm run conformance

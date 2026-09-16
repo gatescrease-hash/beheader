@@ -1,0 +1,50 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "formula.parse-awaiting-rust",
+  "sourceTest": "src/engine/formula/parser.test.ts",
+  "requirement": "SPEC.md section 6, the formula language",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "a literal",
+      "call": "parseFormula",
+      "args": {
+        "source": "1",
+        "objects": []
+      }
+    },
+    {
+      "name": "precedence between a sum and a product",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 + 2 * 3",
+        "objects": []
+      }
+    },
+    {
+      "name": "a function call",
+      "call": "parseFormula",
+      "args": {
+        "source": "SUM(1, 2)",
+        "objects": []
+      }
+    },
+    {
+      "name": "an empty formula",
+      "call": "parseFormula",
+      "args": {
+        "source": "",
+        "objects": []
+      }
+    },
+    {
+      "name": "a name with nothing to resolve against",
+      "call": "parseFormula",
+      "args": {
+        "source": "table_x.A1",
+        "objects": []
+      }
+    }
+  ]
+}

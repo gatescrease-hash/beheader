@@ -4,8 +4,10 @@
 code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
 
-[RUST_PORT.md](RUST_PORT.md) holds the planned engine migration, its work
-register, and its current handoff. Rust implementation remains deferred.
+[RUST_PORT.md](RUST_PORT.md) holds the engine migration, its work register,
+and its current handoff. The spec has released that scope, and the first two
+packages have landed: the boundary is frozen in a generated inventory, and a
+Rust crate answers the same fixtures the TypeScript engine does.
 
 ---
 
@@ -15,7 +17,9 @@ register, and its current handoff. Rust implementation remains deferred.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2743 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2743 Vitest tests and 23 tooling tests pass, with 0 skipped. |
+| Rust | 23 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 122 cases match across the two engines, 5 await a Rust implementation. |
 | Spec | Built, except the parts section 17 postpones. |
 
 ### How to run it
@@ -27,6 +31,17 @@ npm test             # engine, application and tooling tests
 npm run typecheck    # both TypeScript configs
 npm run build        # production build
 npm run prose        # the prose checker, must give exit code 0
+```
+
+The Rust side needs a toolchain, which `rust-toolchain.toml` pins.
+
+```
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
+npm run conformance  # both engines over the shared fixtures
+npm run contract     # rewrites the frozen engine boundary
 ```
 
 ---
@@ -47,10 +62,12 @@ The repository has four layers. The import direction is one way.
 formula language, the primitives and the mutation channel. It does not touch
 the DOM, `window`, `document`, a canvas or `src/render/`.
 
-Why. The plan is to port this directory to a Rust crate. The separation keeps
-host services explicit and makes the engine testable with no browser. The
-port still needs a host adapter and tests that establish equivalent behavior,
-which `RUST_PORT.md` plans.
+Why. This directory is being ported to a Rust crate, and that port is under
+way. The separation keeps host services explicit and makes the engine testable
+with no browser. `crates/beheader-engine/` holds the Rust that exists so far,
+and shared fixtures ask the two engines the same questions. The port still
+needs a host adapter and coverage of the rest of the behaviour, which
+`RUST_PORT.md` registers.
 
 The one hard case is text measurement. Layout needs glyph widths, and a glyph
 width needs a canvas. The engine declares a `TextMeasurer` interface and takes
@@ -84,10 +101,14 @@ change, and no more. The reason a file is shaped the way it is lives in its own 
 next to the code, where an edit cannot miss it. Section 4 holds the invariants
 that span more than one file, because no single header owns those.
 
-Every source file has a test file beside it with the same name plus
-`.test.ts`. The map below names the source file only. Two files have no test of
-their own: `primitives/image.ts` and `render/slots.ts`. Both are constant
-tables, and other suites drive them anyway.
+Every source file under `src/` has a test file beside it with the same name
+plus `.test.ts`. The map below names the source file only. Two files have no
+test of their own: `primitives/image.ts` and `render/slots.ts`. Both are
+constant tables, and other suites drive them anyway.
+
+A Rust file carries its tests in a `tests` module at its own foot, which is
+where a Rust reader looks for them, so the `.rs` rows below name no separate
+file.
 
 ### Root
 
@@ -98,7 +119,12 @@ tables, and other suites drive them anyway.
 | `tsconfig.json` | Strict mode over the whole of `src`. |
 | `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
 | `vite.config.ts` | Dev server, production build, and the Vitest settings. |
+| `Cargo.toml` | The Rust workspace, its two crates, and the one dependency they share. |
+| `rust-toolchain.toml` | The pinned Rust version, the components and the browser target. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
+| `tools/engine-contract.mjs` | Reads the engine boundary out of the source, and refuses drift from the frozen copy. |
+| `tools/conformance-runner.mjs` | Answers the shared fixtures with the TypeScript engine. |
+| `tools/conformance-compare.mjs` | Runs both engines over the fixtures and reports where they differ. |
 
 ### `src/engine/` - the pure core
 
@@ -157,6 +183,26 @@ tables, and other suites drive them anyway.
 | `editor.ts` | Where the in place editor goes, and how it looks. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |
 | `panel.ts` | Where a properties panel sits beside its object. |
+
+### `crates/` - the Rust engine and its runner
+
+| File | Purpose |
+| --- | --- |
+| `beheader-engine/src/model.rs` | Values, error codes, object types, and the key a slot path joins into. |
+| `beheader-engine/src/address.rs` | Names, cell reference forms, the column arithmetic, and the surface path. |
+| `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
+| `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
+| `beheader-conformance/src/main.rs` | Answers the shared fixtures with the Rust engine. |
+
+### `tests/conformance/` - what the two engines are compared on
+
+| File | Purpose |
+| --- | --- |
+| `contract/inventory.json` | The generated engine boundary: exports, consumers, union members, modules. |
+| `contract/dispositions.json` | What the Rust boundary does with each name a production file imports. |
+| `fixtures/` | The questions both engines answer, and the comparison policy of each. |
+| `manifest.json` | Which engine file each fixture reaches, and which files nothing reaches yet. |
+| `comparator/` | Hand written results files that the comparator itself is tested on. |
 
 ### `src/command/`
 
@@ -286,6 +332,30 @@ the code it constrains.
    environment instead, which puts `"x" has no value here` on each line that
    names it and leaves the other lines exporting numbers. Section 12 of the
    spec carries the reason.
+
+19. **The two conformance runners are one adapter written twice.**
+   `tools/conformance-runner.mjs` and `crates/beheader-conformance/src/main.rs`
+   read the same fixtures, check the same argument domains, and word every
+   refusal with the same sentence. The comparison compares that wording
+   exactly, so a difference in it reads as a conformance failure. A refusal
+   never quotes the JSON it came from, because the two engines print a number
+   differently and a fixture that compared the wording would then be comparing
+   their JSON writers rather than their decoders.
+
+   The value codec at the head of the TypeScript runner mirrors
+   `crates/beheader-engine/src/wire.rs` for the same reason. It is runner code
+   rather than engine code: the TypeScript value union is structural and gets
+   by without a decoder, while a Rust enum has to have one, so the two are held
+   together by fixtures over every shape a value takes and six shapes no value
+   takes.
+
+20. **A number reaches an operator as text, and the two languages spell one
+   differently.** Rust prints `1e21` as twenty two digits and JavaScript prints
+   it as `1e+21`. That text reaches a formatted formula, the resolved content
+   of a text object and the wording of a diagnostic, so
+   `crates/beheader-engine/src/number.rs` implements the ECMAScript rules and
+   the Rust engine never uses the Rust formatter for a number an operator
+   sees.
 
 ---
 

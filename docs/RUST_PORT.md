@@ -5,15 +5,23 @@ from TypeScript to Rust. It gives each piece a stable name, a dependency, and
 evidence that will establish completion. A session can resume from the handoff
 without reconstructing decisions from conversation history.
 
-**The migration is currently in planning.** The application still runs the TypeScript
-engine. The repository has no Rust engine, transport adapter, or differential
-test runner. All paths and commands below that name those artifacts are
-proposals until their work packages land.
+**The migration is in implementation.** Section 2 of the spec has released the
+Rust engine core, the runner that compares it against TypeScript, the browser
+binding and the engine selection from the deferred list. `RUST-001` and
+`RUST-002` have landed, so the contract inventory, the Cargo workspace, the two
+runners and the comparator are in the repository and the four commands under
+[proposed checks](#checks-over-the-rust-side) run. The application still runs
+the TypeScript engine, and the browser binding and the application adapter are
+still proposals. A path or a command below that names one of those two is a
+proposal until its own package lands.
 
-The source baseline for this plan is commit
+The plan was written against commit
 `2ba050dd583fcdb67902e51564c6462b538fb5dd`, inspected on 2026-09-14.
-The baseline suite has 2,686 Vitest tests and two tooling tests. Those counts
-describe the whole application, not the number of Rust tests to produce.
+Implementation began against `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3`, which
+every fixture records under `baselineCommit`. The suite at that commit has
+2,743 Vitest tests and 23 tooling tests, and the Rust crates add 23 of their
+own. Those counts describe the whole application, not the number of Rust tests
+to produce.
 
 ## Contents
 
@@ -24,7 +32,7 @@ describe the whole application, not the number of Rust tests to produce.
 | [Compatibility contract](#compatibility-contract) | Behavior that survives the port |
 | [Runtime and ownership decisions](#runtime-and-ownership-decisions) | Host choices and committed state |
 | [Measurement across the boundary](#measurement-across-the-boundary) | Browser layout as an engine input |
-| [Proposed Rust structure](#proposed-rust-structure) | Crates and internal representations |
+| [Rust structure](#rust-structure) | Crates and internal representations |
 | [Application adapter](#application-adapter) | Consumer API and failure handling |
 | [Verification strategy](#verification-strategy) | Fixtures, comparisons, and checks |
 | [Work register](#work-register) | Stable packages and acceptance evidence |
@@ -47,10 +55,10 @@ This register retains completed IDs and a short link to their evidence. Git
 holds the narrative history. The handoff is replaced with the current state
 instead of accumulating session notes.
 
-The spec currently postpones Rust, Tauri, and WebGPU implementation. Writing
-this plan does not activate that work. When implementation begins, an explicit
-scope change in the spec records what has been released from deferral. A Rust
-engine can begin without releasing Tauri, WebGPU, or Python execution.
+Section 2 of the spec names the released Rust scope and the four limits over
+it, and section 17 keeps Tauri, WebGPU and Python execution deferred. That
+scope change is what activated this register. A later package that needs one of
+the three still deferred needs its own release in the spec first.
 
 A product change remains a product change even when discovered during the
 port. Its requirement belongs in the spec, and its implementation belongs in
@@ -122,11 +130,18 @@ The first implementation task therefore inventories actual imports, including
 type-only imports and helper calls. A runtime export count alone misses types,
 and a list copied into this document would become stale.
 
-At the inspected baseline, the TypeScript compiler reports 435 declared exports,
-of which 297 have runtime values. Production consumers in 19 source files import
-160 distinct engine names. This audit excludes test consumers and counts aliases
-by their imported name. These numbers explain the size of the boundary today.
-The generated inventory in `RUST-001` becomes the continuing coverage check.
+[tools/engine-contract.mjs](../tools/engine-contract.mjs) reads that inventory
+out of the TypeScript source and writes
+[inventory.json](../tests/conformance/contract/inventory.json). At
+`0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` the barrel carries 435 exports, 297
+of which have a runtime value, and production consumers in 19 source files
+import 160 distinct names. The audit excludes test consumers and counts an
+alias by the name the consumer imports. Every one of those 160 names carries a
+disposition in
+[dispositions.json](../tests/conformance/contract/dispositions.json), which is
+the checklist `RUST-013` works through. The check runs inside `npm test`, so a
+new export, a new consumer import or a disposition for a name that has gone
+turns the suite red.
 
 ### Source-to-package map
 
@@ -200,11 +215,19 @@ The mutation contract includes the following properties:
 8. Forced repairs return the affected addresses in `brokenSlots` and preserve
    the current address-repair rules.
 
-The operation inventory at the baseline is `createObject`, `deleteObject`,
-`setSlot`, `clearSlot`, `renameObject`, `insertTableLine`, `deleteTableLine`,
-`addPort`, `removePort`, `setMathSource`, `addVertex`, `deleteVertex`, `explode`,
-and `splitEdge`. A generated coverage check against the TypeScript union
-replaces this baseline list as the implementation guard.
+The operation inventory has fifteen members: `createObject`, `deleteObject`,
+`setSlot`, `clearSlot`, `renameObject`, `renameVariable`, `insertTableLine`,
+`deleteTableLine`, `addPort`, `removePort`, `setMathSource`, `addVertex`,
+`deleteVertex`, `explode`, and `splitEdge`. The generated
+[inventory.json](../tests/conformance/contract/inventory.json) reads that list
+out of the TypeScript union under `variants.Operation`, and it is the guard the
+implementation works against rather than the list in this paragraph.
+
+`renameVariable` is the one this document missed when it was written against
+the earlier commit, because it is the only member of the union written inline
+rather than as a named interface. It renames a document variable, and it
+arrived with the document variable work. A count taken by hand is exactly what
+the generated inventory replaces.
 
 Deletion behavior is deliberately asymmetric. A referenced object normally
 refuses deletion unless forced. Deleting a table line repairs references.
@@ -502,9 +525,11 @@ An unexpected request fails the test. Both engines receive identical responses.
 Browser tests then establish that the real host implementation still draws and
 edits correctly. Numeric headless parity does not establish visual parity.
 
-## Proposed Rust structure
+## Rust structure
 
-The proposed workspace separates the core, comparison runner, and host adapter:
+The workspace separates the core, the comparison runner, and the host adapter.
+A name marked as planned is a proposal that arrives with the package that needs
+it, and everything else is in the repository now.
 
 ```text
 Cargo.toml
@@ -514,35 +539,48 @@ crates/
   beheader-engine/
     src/
       lib.rs
-      model.rs
-      address.rs
-      context.rs
-      formula/
-      math/
-      primitives/
-      schema.rs
-      graph/
-      mutation.rs
-      document.rs
-      journal.rs
-      complete.rs
-    tests/
+      model.rs           values, error codes, object types, slot keys
+      address.rs         names, cell references, surface paths
+      number.rs          the text JavaScript prints for a number
+      wire.rs            the JSON codec the fixtures travel through
+      context.rs         planned
+      formula/           planned
+      math/              planned
+      primitives/        planned
+      schema.rs          planned
+      graph/             planned
+      mutation.rs        planned
+      document.rs        planned
+      journal.rs         planned
+      complete.rs        planned
   beheader-conformance/
     src/main.rs
-  beheader-wasm/
+  beheader-wasm/         planned
     src/lib.rs
 tests/
   conformance/
-    fixtures/
+    contract/            the frozen boundary and its dispositions
+    fixtures/            the questions both engines answer
+    comparator/          hand written results the comparator is tested on
     manifest.json
+tools/
+  engine-contract.mjs    writes the contract inventory
+  conformance-runner.mjs the TypeScript side of the comparison
+  conformance-compare.mjs runs both engines and reports the difference
 src/
-  engine-adapter/
+  engine-adapter/        planned
 ```
 
 The Wasm crate and application adapter arrive with the hosting proof, not as
 empty permanent abstractions. A Tauri adapter is absent until desktop work is
 released from deferral. `std` is acceptable in the core. A `no_std` conversion
 has no demonstrated requirement here.
+
+A Rust test sits beside the code it covers, in a `tests` module at the foot of
+the file, which is where a Rust reader looks for it. The repository convention
+of a test file beside each source file belongs to the TypeScript tree and its
+bundler, and a second file for each Rust module would put the tests somewhere
+the language does not expect them.
 
 The core owns typed IDs, addresses, values, ASTs, slots, and operation enums.
 An owned candidate graph provides transaction isolation. Evaluation reads a
@@ -559,16 +597,21 @@ An ordered object sequence and explicit traversal order preserve application
 behavior. Maps may accelerate lookup internally without deciding the order of
 diagnostics, completion, aggregation, or serialization-sensitive arrays.
 
-Serde and `serde_json` are proposed for transport and file conversion, with
-custom validation where their defaults differ from existing behavior.
-Browser bindings belong to `beheader-wasm`. A general expression library,
-computer algebra system, or graph framework is not required for the initial
-port and would add another behavior contract to prove.
+`serde_json` is the one dependency the workspace has. Its derive companion
+remains a proposal rather than a decision: the value union is untagged in JSON
+and the order a decoder tries its shapes in is the behavior, so
+[wire.rs](../crates/beheader-engine/src/wire.rs) is written out by hand and
+each refusal in it has a fixture. The document decoder of `RUST-012` decides
+separately whether a derive can carry the file format. Browser bindings belong
+to `beheader-wasm`. A general expression library, computer algebra system, or
+graph framework is not required for the initial port and would add another
+behavior contract to prove.
 
-The first implementation pins a supported Rust toolchain, dependency versions,
-target configuration, and any binding generator used. The lockfile is committed.
-Version selection happens when implementation starts, rather than freezing
-today's latest release into a long-lived planning document.
+[rust-toolchain.toml](../rust-toolchain.toml) pins Rust 1.94.1, the two
+components the checks need, and the browser target, so a formatting rule, a
+lint or a floating point detail cannot change between two machines while the
+two engines are being compared. `Cargo.lock` is committed. The workspace uses
+edition 2024.
 
 ## Application adapter
 
@@ -621,15 +664,73 @@ request timeouts.
 
 ### A shared executable contract
 
-The conformance runner sends the same fixture to TypeScript and Rust and
-compares results. A fixture records its source test or requirement, baseline
-commit, initial state, operation sequence or query, measurement context,
-expected outcome, and comparison policy. Both engines are invoked through
-equivalent adapters, with no hand-patched expected Rust output.
+The comparison sends the same fixture to both engines and puts the two answers
+side by side. A fixture records its source test or requirement, the baseline
+commit it was taken at, a comparison policy, and its cases. Neither side holds
+an expected result, so nothing in the repository can be patched to make a
+difference disappear.
 
-The first fixture vocabulary covers parsing, evaluation, mutation sequences,
-load/save, replay, and completion. It grows as a package needs a new observable
-contract. An example of the proposed mutation fixture shape is:
+```
+npm run conformance
+```
+
+That command runs [conformance-runner.mjs](../tools/conformance-runner.mjs)
+over the TypeScript engine and `beheader-conformance` over the Rust one, and
+then [conformance-compare.mjs](../tools/conformance-compare.mjs) reads the two
+results files. Each runner also answers `--calls` with the calls it can reach,
+and either one writes its results alone with `--fixtures` and `--out`.
+
+A fixture in the shape the runners read now:
+
+```json
+{
+  "fixtureVersion": 1,
+  "id": "model.illegal-numbers",
+  "sourceTest": "src/engine/graph/node.test.ts",
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "requirement": "SPEC.md section 4, the value union",
+  "comparison": "exact",
+  "cases": [
+    { "name": "a negative zero", "call": "isIllegalNumber",
+      "args": { "number": { "$number": "-0" } } },
+    { "name": "an empty list of points", "call": "hasIllegalNumber",
+      "args": { "value": [] } }
+  ]
+}
+```
+
+A case reaches one of three outcomes in each engine. An `ok` outcome carries
+the answer. An `error` outcome carries a refusal of the arguments, worded the
+same way by both runners, so a difference in the wording is a difference
+between the two adapters rather than between the two engines. An `unsupported`
+outcome says the engine has no implementation of that call, which is the
+ordinary state of most of the vocabulary while the port runs. The report counts
+an unsupported case apart from a pass and names the calls the Rust engine
+cannot answer yet.
+
+Three of the numbers the engine is tested against have no JSON spelling that
+survives the trip. A non-finite number has none at all, and `JSON.stringify`
+writes a negative zero as `0`. Each of those travels as a tagged object such as
+`{"$number": "-0"}`, decoded by the runners alone. A document never holds one,
+because a document never holds one of those numbers.
+
+The comparison policy of a fixture is `exact` or an approximate one that
+carries its own bounds. Two answers compare by structure: the key order of an
+object is not part of an answer, because one engine sorts the keys of a JSON
+object and the other keeps the order they were written in, while the order of
+an array is part of an answer. A number compares by `Object.is`, so a negative
+zero never passes for a zero.
+
+[manifest.json](../tests/conformance/manifest.json) says which engine file each
+fixture reaches and which files nothing reaches yet. The comparison checks it
+against the fixtures on disk and against the module list in the contract
+inventory, so a new engine file fails the comparison until somebody places it
+in one of the two lists.
+
+The fixture vocabulary grows as a package needs a new observable contract, and
+it reaches parsing, evaluation, mutation sequences, load and save, replay, and
+completion by the end. An example of the mutation fixture shape those packages
+propose is:
 
 ```json
 {
@@ -664,10 +765,11 @@ contract. An example of the proposed mutation fixture shape is:
 }
 ```
 
-This example describes a future runner. It is not an existing test command or
-a claim that the named TypeScript file contains this exact fixture. The runner
-also compares the complete returned state and refusal, beyond the abbreviated
-expectations shown here.
+That second example describes a shape neither runner reads yet. It is not a
+claim that the named TypeScript file holds this exact fixture. A mutation
+fixture also compares the complete returned state and refusal, beyond the
+abbreviated expectations shown there, and it carries a measurement context
+which a fixture over a pure conversion has no use for.
 
 ### Comparison rules
 
@@ -745,9 +847,10 @@ it, deep raw JSON, long graph chains, wide sparse tables, large journals, and
 composed math workloads. Safe destruction of deep Rust data is tested as well
 as parsing it. A test process that crashes does not satisfy a refusal test.
 
-### Proposed checks once artifacts exist
+### Checks over the Rust side
 
-The repository's current checks remain required:
+The repository's four checks remain required, and `npm test` now also runs the
+contract check and the comparator tests:
 
 ```text
 npm test
@@ -756,21 +859,32 @@ npm run build
 npm run prose
 ```
 
-The Rust scaffold adds and verifies the following commands before documenting
-them as runnable project commands:
+Four Rust commands run beside them, and one more compares the two engines:
 
 ```text
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
+npm run conformance
 ```
 
-Native tests run on Windows and Linux initially, with macOS added before a
-macOS application is supported. Wasm has an executed browser conformance run,
-not only a successful compile. The runner command, fixture selection syntax,
-binding build command, and target prerequisites are recorded by `RUST-002`
-and `RUST-003` when their actual interfaces exist.
+The pull request workflow runs all five on Linux and on Windows. macOS joins
+them before a macOS application is supported. The Wasm check compiles the core
+for the browser target, and an executed browser conformance run arrives with
+`RUST-003` rather than standing on a successful compile.
+
+`npm run conformance` needs Cargo, so it is a command of its own rather than a
+step inside `npm test`. A contributor with no Rust toolchain still runs the
+four checks, and the comparator keeps its own tests inside `npm test` by
+reading hand written results files instead of running either engine.
+
+It also needs Node 22.18 or newer, because the TypeScript runner reads the
+engine as TypeScript and Node strips the types itself from that version. That
+keeps a build step out from between the two engines, so nothing in between can
+be patched to make a difference disappear. The runner reports the version
+before it reaches the import, because an older Node reports the same failure as
+an unknown file extension.
 
 The production browser build is tested under `/beheader/`, the current
 Pages base path, including Wasm loading and asset failures. Pull-request checks
@@ -785,16 +899,16 @@ gate. A completed package links to its commit or PR and validation evidence.
 The status vocabulary is `planned`, `ready`, `active`, `blocked`, `done`, and
 `superseded`. A blocked entry names the dependency or decision that releases it.
 
-All entries are currently planned. The dependencies below apply after the
-spec releases implementation. A heading saying proposed completion criteria
-does not mean those criteria have been met.
+The spec has released implementation, so the dependencies below apply. A
+heading that states completion criteria does not mean those criteria have been
+met, and a package is done only where the status column says so.
 
 | Package | Deliverable | Depends on | Status |
 | --- | --- | --- | --- |
-| `RUST-001` | Frozen contract and consumer inventory | Scope activation | planned |
-| `RUST-002` | Workspace and conformance runner | `001` | planned |
-| `RUST-003` | Hosting and measurement proof | `002` | planned |
-| `RUST-004` | Model, addresses, context, wire types | `002`, `003` | planned |
+| `RUST-001` | Frozen contract and consumer inventory | Scope activation | done |
+| `RUST-002` | Workspace and conformance runner | `001` | done |
+| `RUST-003` | Hosting and measurement proof | `002` | ready |
+| `RUST-004` | Model, addresses, context, wire types | `002`, `003` | active |
 | `RUST-005` | Formula syntax, formatting, dependencies | `004` | planned |
 | `RUST-006` | Formula evaluation and functions | `005` | planned |
 | `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | planned |
@@ -824,6 +938,31 @@ intended compatibility. The four repository checks pass at the selected base.
 **Boundary.** The package produces contracts and fixtures, with no requirement
 to shrink the TypeScript barrel or redesign commands first.
 
+**Landed.** [engine-contract.mjs](../tools/engine-contract.mjs) writes
+[inventory.json](../tests/conformance/contract/inventory.json) from the
+TypeScript source: 435 exports with their file, their declaration form and
+whether they have a runtime value, the 19 production consumers and the names
+each imports, the members of eleven union types, and the engine modules with
+whether a test sits beside each. Every one of the 160 imported names carries a
+disposition in
+[dispositions.json](../tests/conformance/contract/dispositions.json), which the
+same tool folds into the inventory. An export nothing imports takes its
+disposition from its shape.
+
+The six dispositions of the paragraph above turned out to be enough, with no
+name needing a seventh. The counts are 7 core operations, 52 host queries, 79
+descriptors, 138 types and 159 unused exports, and no compatibility helper
+exists yet. The line between a query and a descriptor is whether an object
+reaches the call, so `findSlotFormat` reads a fixed table and is a descriptor
+while `resolveDerivedSlots` takes an object and is a query, which tells the
+adapter of `RUST-013` which calls have to carry document state across the
+boundary.
+
+`node tools/engine-contract.mjs --check` runs inside `npm test` and reports
+drift in either direction. Its own tests drive a missing disposition, a
+disposition for a name that has gone, a disposition outside the six, a type
+recorded as an operation, and a changed variant in the committed inventory.
+
 ### `RUST-002`: Establish repeatable comparison
 
 **Work.** This package adds the minimal Cargo workspace, pinned toolchain,
@@ -838,6 +977,30 @@ application checks continue to pass.
 
 **Boundary.** No placeholder evaluator claims to implement unavailable cases.
 The runner distinguishes not-yet-implemented coverage from conformance passes.
+
+**Landed.** The workspace holds `beheader-engine` and `beheader-conformance`
+under a pinned toolchain and a committed lockfile. The first Rust capability is
+the value model, the addressing arithmetic, the JavaScript number to text
+conversion and the wire codec, which is what a fixture over a conversion can
+already ask both engines. 23 Rust tests cover them.
+
+Seven fixtures hold 127 cases. 122 of them reach both engines and agree, and
+the five that call `parseFormula` come back unsupported from Rust, which is the
+case that proves an unimplemented call is never reported as a pass. The
+comparator is tested on hand written results files under
+[comparator](../tests/conformance/comparator): a known match, a deliberate
+difference that is reported with the field it happened at, a call the Rust
+engine cannot answer, two runs that fell out of step, and a results file that
+names the wrong engine. Those tests run without Cargo, so they sit inside `npm test`
+while the end to end comparison runs in the Rust job.
+
+The number to text conversion is the first compatibility helper the port
+needed. Rust prints `1e21` as twenty two digits and JavaScript prints it as
+`1e+21`, and that text reaches an operator through a formatted formula, the
+resolved content of a text object and the wording of a diagnostic.
+[number.rs](../crates/beheader-engine/src/number.rs) implements the ECMAScript
+rules, and the fixture over it covers both notation boundaries, the smallest
+and largest numbers, and the three that are not finite.
 
 ### `RUST-003`: Prove hosting and measurement
 
@@ -1030,7 +1193,14 @@ tests, with a recorded mapping rather than deleted coverage.
 
 The spec names the released Rust scope. `RUST-001` has a baseline and consumer
 inventory. Product changes in flight have an explicit inclusion decision.
-The current document alone does not pass this gate.
+This document alone never passed this gate, and the spec change that released
+the scope is what did.
+
+**Passed.** Section 2 of the spec names the released scope and its four limits,
+and section 17 keeps the rest of the future stack deferred. `RUST-001` records
+the baseline commit `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` and the consumer
+inventory. `TODO.md` held nothing open at that commit, so no product change was
+in flight to decide about.
 
 ### Gate B: architecture can support the application
 
@@ -1127,13 +1297,30 @@ under it. Superseded choices remain linked through Git history.
 | `D-002` | Measurement contract | Synchronous host callbacks for Wasm, proven exchange for native | `RUST-003` |
 | `D-003` | Authoritative state | Host snapshot ownership first, handles only after measurement | `RUST-003` |
 | `D-004` | Numeric compatibility | Binary64, JavaScript rounding, fixture-specific tolerances | `RUST-004` |
-| `D-005` | String representation | Preserve UTF-16 semantics and decide lone surrogate handling | `RUST-004` |
+| `D-005` | String representation | Preserve UTF-16 semantics. Part covered by fixtures, and the lone surrogate case is open. See below. | `RUST-004` |
 | `D-006` | Loaded journal representation | Retain raw entries, validate each on replay | `RUST-012` |
 | `D-007` | Counter and malformed-file policy | Counter behavior resolved in TypeScript as described above. Raw journal policy remains a separate compatibility decision. | `RUST-012` |
-| `D-008` | Diagnostic equality | Exact domain messages, narrowly normalized platform details | `RUST-002` |
+| `D-008` | Diagnostic equality | Resolved for the two adapters, and open for platform details. See below. | `RUST-002` |
 | `D-009` | Product baseline drift | Pin each package and synchronize accepted behavior changes | `RUST-001` |
 | `D-010` | Resource budgets | Preserve the TypeScript per-line expression budget. Measure total document workloads on each target before setting broader limits. | `RUST-015` |
 | `D-011` | Cutover acceptance period | Define supported targets and rollback criteria before default switch | `RUST-016` |
+
+`D-005` has its first evidence. Fixtures send a character outside the basic
+plane and a letter carrying a combining mark through slot keys, object names
+and text values, and the two engines agree on every one. The name pattern is
+the ASCII alphabet, so neither engine accepts a name outside it. What is still
+open is a lone surrogate, which a JavaScript string holds and a Rust `String`
+cannot, and the shared decision on that belongs with the document decoder.
+
+`D-008` is resolved for the part the two adapters own. A refusal of the
+arguments of a case is worded identically by both runners, and the comparator
+compares that wording exactly, so a difference in it is a difference between
+the adapters rather than between the engines. A wire error never quotes the
+JSON it refused, because the two engines print a number differently and a
+fixture that compared the wording would then be comparing their JSON writers.
+Engine diagnostics keep the same exact rule. What is still open is the
+normalization of a platform generated message, such as the text a JSON parser
+produces, which arrives with `RUST-012`.
 
 A decision about a public behavior is reflected in the spec when it changes
 the requirement. A decision about a Rust module stays here until it is
@@ -1143,35 +1330,64 @@ implemented, then its lasting rationale belongs beside that code.
 
 | Field | Current value |
 | --- | --- |
-| Migration phase | Planning |
-| Active implementation package | None |
-| Last inspected source commit | `2ba050dd583fcdb67902e51564c6462b538fb5dd` |
-| Rust artifacts | None |
-| Selected runtime | Undecided, Wasm first is recommended |
-| Unresolved architecture decisions | `D-001` through `D-011`, with TypeScript counter and per-line budget choices recorded under `D-007` and `D-010` |
-| Next implementation action | Activate scope and complete `RUST-001` |
-| Existing product dependency | Include the counter, graph traversal and math workload fixes in the frozen baseline |
-| Completion evidence | None for Rust implementation |
+| Migration phase | Implementation |
+| Active implementation package | `RUST-004`, begun. `RUST-003` is ready and unstarted |
+| TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
+| Rust artifacts | `beheader-engine` with model, address, number and wire. `beheader-conformance` |
+| Selected runtime | Undecided, Wasm first is recommended, and `RUST-003` decides it |
+| Unresolved architecture decisions | `D-001` through `D-004`, `D-006`, `D-007`, `D-009` through `D-011`. `D-005` and `D-008` are part resolved |
+| Next implementation action | `RUST-003`, the hosting and measurement proof |
+| Completion evidence | `RUST-001` and `RUST-002`, under their headings above |
 
-### Handoff record for an active package
-
-The following template replaces the current record when implementation begins:
+### Handoff record for the active package
 
 ```text
-Package:
-Status:
-Owner or current branch:
-TypeScript baseline commit:
-Implementation commit:
+Package: RUST-004, model, addresses, context and wire types
+Status: active, and its first slice has landed under RUST-002
+Owner or current branch: claude/todo-quick-clears-994uv2
+TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
+Implementation commit: the commit that carries this document
 Completed contract cases:
+  Value, ErrorValue, ErrorCode, Point, ObjectType and slotKey in model.rs.
+  is_error_value, is_illegal_number and has_illegal_number, with fixtures over
+  every value shape, both refused numbers and an empty list of points.
+  Names, cell reference forms, the base twenty six column arithmetic and
+  to_surface_path in address.rs.
+  The JavaScript number to text conversion in number.rs, with fixtures over
+  both notation boundaries and the three numbers that are not finite.
+  The wire codec in wire.rs, with fixtures over every value shape and six
+  shapes no value takes.
 Remaining cases:
-Open decision IDs:
+  Slot, GraphObject, ports and vertex counts, which need the graph package
+  beside them.
+  EvalContext and the measurement capability distinction, which wait on the
+  hosting choice in RUST-003.
+  Addresses that resolve a name against an object list, which need the object
+  record.
+  The lone surrogate decision under D-005.
+Open decision IDs: D-001, D-002, D-003 and D-005 all reach this package
 Fixture and evidence paths:
+  tests/conformance/fixtures, tests/conformance/manifest.json
+  tests/conformance/contract/inventory.json and dispositions.json
 Commands run and results:
+  npm test                      2743 Vitest tests and 23 tooling tests pass
+  npm run typecheck             both configs pass
+  npm run build                 succeeds
+  npm run prose                 exit code 0
+  cargo fmt --all -- --check    clean
+  cargo clippy --workspace --all-targets --locked -- -D warnings   clean
+  cargo test --workspace --locked                                  23 pass
+  cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
+  npm run conformance           122 matched, 0 differed, 5 awaiting Rust
 Native and browser targets exercised:
-Known failures with smallest reproduction:
-Next concrete action:
+  x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown for a compile.
+  No browser run yet, which is what RUST-003 adds.
+Known failures with smallest reproduction: none
+Next concrete action: RUST-003, the hosting and measurement proof
 Dependencies that can proceed independently:
+  RUST-005, the formula syntax, needs the model alone and can start beside
+  RUST-003. Its first fixture already exists as formula.parse-awaiting-rust,
+  which the TypeScript engine answers and the Rust engine does not.
 ```
 
 A resumed session compares the recorded commits with the current branch,

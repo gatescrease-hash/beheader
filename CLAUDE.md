@@ -8,9 +8,10 @@ do.
 `docs/STYLE.md` holds the rules for prose, and one worked example of a file
 header written badly and then written well. Read it before you write a comment.
 
-`docs/RUST_PORT.md` owns the future engine migration plan, work packages, and
-current handoff. Read it for Rust port work. Its stable task register supports
-work across sessions, while the spec still controls when implementation starts.
+`docs/RUST_PORT.md` owns the engine migration plan, work packages, and current
+handoff. Read it for Rust port work. Its stable task register supports work
+across sessions. The spec has released that scope, so the register is active
+and a port package comes from it rather than from `docs/TODO.md`.
 
 Those five files are the project documents. Add another only for a distinct
 purpose. Do not write a log entry for each change. Git holds the history.
@@ -54,6 +55,17 @@ npm test                          # engine, application and tooling tests
 npm run typecheck                 # both TypeScript configs
 npm run build                     # production build
 npm run prose                     # prose checker, gives exit code 0
+```
+
+A change that touches the Rust side runs these as well. The toolchain is
+pinned in `rust-toolchain.toml`.
+
+```
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
+npm run conformance               # both engines over the shared fixtures
 ```
 
 ## Look at it on screen

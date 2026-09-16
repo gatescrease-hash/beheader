@@ -1,0 +1,293 @@
+//! The data model the rest of the crate is built from: the value a slot can
+//! hold, the seven error codes, the thirteen object types, and the key that a
+//! slot path joins into.
+//!
+//! This is the Rust side of `src/engine/graph/node.ts`. The parts of that file
+//! that need a graph around them, such as the slot kinds and the object
+//! record, arrive with the package that ports the graph. What is here is what
+//! a value on its own means, which is what the shared fixtures can already
+//! ask both engines about.
+//!
+//! A number is `f64` because the TypeScript graph stores binary64 and two
+//! engines that disagree about the width of a number disagree about every
+//! value derived from one. The two numbers that the graph refuses, a
+//! non-finite one and a negative zero, are still representable here, because
+//! the refusal is a check the engine runs rather than a shape the type makes
+//! impossible, and a check that cannot be fed its input cannot be tested.
+
+use std::fmt;
+
+/// A point in world coordinates, which is the value a vertex slot holds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// The seven error codes a slot value carries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ErrorCode {
+    Ref,
+    Type,
+    Div0,
+    Parse,
+    Script,
+    Measure,
+    Math,
+}
+
+impl ErrorCode {
+    /// The spelling the document format and every operator message use.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ErrorCode::Ref => "#REF",
+            ErrorCode::Type => "#TYPE",
+            ErrorCode::Div0 => "#DIV0",
+            ErrorCode::Parse => "#PARSE",
+            ErrorCode::Script => "#SCRIPT",
+            ErrorCode::Measure => "#MEASURE",
+            ErrorCode::Math => "#MATH",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<ErrorCode> {
+        match text {
+            "#REF" => Some(ErrorCode::Ref),
+            "#TYPE" => Some(ErrorCode::Type),
+            "#DIV0" => Some(ErrorCode::Div0),
+            "#PARSE" => Some(ErrorCode::Parse),
+            "#SCRIPT" => Some(ErrorCode::Script),
+            "#MEASURE" => Some(ErrorCode::Measure),
+            "#MATH" => Some(ErrorCode::Math),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+/// An error that reached a slot, with the wording an operator reads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ErrorValue {
+    pub error: ErrorCode,
+    pub message: String,
+}
+
+/// What one slot holds.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value {
+    Number(f64),
+    Text(String),
+    Boolean(bool),
+    Point(Point),
+    Points(Vec<Point>),
+    Null,
+    Error(ErrorValue),
+}
+
+/// Whether a value is the error kind, which is the branch that every other
+/// test of a value has to take first. An error value is an object with an
+/// error member, and a point is an object without one, so a test that reads
+/// the coordinates first would read an error as a point with no coordinates.
+pub fn is_error_value(value: &Value) -> bool {
+    matches!(value, Value::Error(_))
+}
+
+/// Whether a number is one the graph refuses to store. A non-finite number has
+/// no place in a document that serializes to JSON, and a negative zero
+/// compares equal to zero while printing and dividing differently, so both are
+/// refused at the boundary rather than left to surprise a reader later.
+pub fn is_illegal_number(number: f64) -> bool {
+    !number.is_finite() || (number == 0.0 && number.is_sign_negative())
+}
+
+/// Whether any number inside a value is one the graph refuses. A text, a
+/// boolean, a null and an error carry no number, so each of those is legal
+/// whatever it holds.
+pub fn has_illegal_number(value: &Value) -> bool {
+    match value {
+        Value::Number(number) => is_illegal_number(*number),
+        Value::Point(point) => is_illegal_number(point.x) || is_illegal_number(point.y),
+        Value::Points(points) => points
+            .iter()
+            .any(|point| is_illegal_number(point.x) || is_illegal_number(point.y)),
+        Value::Text(_) | Value::Boolean(_) | Value::Null | Value::Error(_) => false,
+    }
+}
+
+/// The thirteen kinds of object a document holds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ObjectType {
+    Circle,
+    Polygon,
+    Polyline,
+    Rect,
+    Text,
+    Table,
+    Script,
+    Image,
+    Math,
+    Value,
+    Doc,
+    Docref,
+    Add,
+}
+
+impl ObjectType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ObjectType::Circle => "circle",
+            ObjectType::Polygon => "polygon",
+            ObjectType::Polyline => "polyline",
+            ObjectType::Rect => "rect",
+            ObjectType::Text => "text",
+            ObjectType::Table => "table",
+            ObjectType::Script => "script",
+            ObjectType::Image => "image",
+            ObjectType::Math => "math",
+            ObjectType::Value => "value",
+            ObjectType::Doc => "doc",
+            ObjectType::Docref => "docref",
+            ObjectType::Add => "add",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<ObjectType> {
+        match text {
+            "circle" => Some(ObjectType::Circle),
+            "polygon" => Some(ObjectType::Polygon),
+            "polyline" => Some(ObjectType::Polyline),
+            "rect" => Some(ObjectType::Rect),
+            "text" => Some(ObjectType::Text),
+            "table" => Some(ObjectType::Table),
+            "script" => Some(ObjectType::Script),
+            "image" => Some(ObjectType::Image),
+            "math" => Some(ObjectType::Math),
+            "value" => Some(ObjectType::Value),
+            "doc" => Some(ObjectType::Doc),
+            "docref" => Some(ObjectType::Docref),
+            "add" => Some(ObjectType::Add),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for ObjectType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+/// Joins a slot path into the one string an object keys its slots by.
+///
+/// There is no inverse, and writing one would be a mistake, because a segment
+/// can hold the separator and a key cannot be split back into a path
+/// reliably. Code that needs a path asks the schema for it.
+pub fn slot_key(path: &[String]) -> String {
+    path.join(".")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ErrorCode, ErrorValue, ObjectType, Point, Value, has_illegal_number, is_error_value,
+        is_illegal_number, slot_key,
+    };
+
+    fn path(segments: &[&str]) -> Vec<String> {
+        segments
+            .iter()
+            .map(|segment| (*segment).to_string())
+            .collect()
+    }
+
+    #[test]
+    fn joins_a_path_into_a_key() {
+        assert_eq!(slot_key(&path(&["vertex", "0", "x"])), "vertex.0.x");
+        assert_eq!(slot_key(&path(&["radius"])), "radius");
+        assert_eq!(slot_key(&[]), "");
+    }
+
+    #[test]
+    fn a_segment_holding_the_separator_makes_a_key_that_cannot_be_split_back() {
+        assert_eq!(
+            slot_key(&path(&["a.b", "c"])),
+            slot_key(&path(&["a", "b.c"]))
+        );
+    }
+
+    #[test]
+    fn refuses_the_two_kinds_of_number_the_graph_cannot_store() {
+        assert!(is_illegal_number(f64::NAN));
+        assert!(is_illegal_number(f64::INFINITY));
+        assert!(is_illegal_number(f64::NEG_INFINITY));
+        assert!(is_illegal_number(-0.0));
+        assert!(!is_illegal_number(0.0));
+        assert!(!is_illegal_number(-1.5));
+    }
+
+    #[test]
+    fn reads_every_number_inside_a_value() {
+        assert!(has_illegal_number(&Value::Number(f64::NAN)));
+        assert!(has_illegal_number(&Value::Point(Point { x: 1.0, y: -0.0 })));
+        assert!(has_illegal_number(&Value::Points(vec![
+            Point { x: 1.0, y: 2.0 },
+            Point {
+                x: f64::INFINITY,
+                y: 2.0
+            },
+        ])));
+        assert!(!has_illegal_number(&Value::Points(vec![])));
+        assert!(!has_illegal_number(&Value::Text("NaN".to_string())));
+        assert!(!has_illegal_number(&Value::Null));
+    }
+
+    #[test]
+    fn an_error_value_carries_no_number_to_refuse() {
+        let error = Value::Error(ErrorValue {
+            error: ErrorCode::Div0,
+            message: "division by zero".to_string(),
+        });
+        assert!(is_error_value(&error));
+        assert!(!has_illegal_number(&error));
+        assert!(!is_error_value(&Value::Point(Point { x: 0.0, y: 0.0 })));
+    }
+
+    #[test]
+    fn every_error_code_and_object_type_reads_back_from_its_spelling() {
+        for code in [
+            ErrorCode::Ref,
+            ErrorCode::Type,
+            ErrorCode::Div0,
+            ErrorCode::Parse,
+            ErrorCode::Script,
+            ErrorCode::Measure,
+            ErrorCode::Math,
+        ] {
+            assert_eq!(ErrorCode::parse(code.as_str()), Some(code));
+        }
+        for object_type in [
+            ObjectType::Circle,
+            ObjectType::Polygon,
+            ObjectType::Polyline,
+            ObjectType::Rect,
+            ObjectType::Text,
+            ObjectType::Table,
+            ObjectType::Script,
+            ObjectType::Image,
+            ObjectType::Math,
+            ObjectType::Value,
+            ObjectType::Doc,
+            ObjectType::Docref,
+            ObjectType::Add,
+        ] {
+            assert_eq!(ObjectType::parse(object_type.as_str()), Some(object_type));
+        }
+        assert_eq!(ErrorCode::parse("#NOPE"), None);
+        assert_eq!(ObjectType::parse("sphere"), None);
+    }
+}

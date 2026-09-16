@@ -1,0 +1,119 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "model.slot-key",
+  "sourceTest": "src/engine/graph/node.test.ts",
+  "requirement": "SPEC.md section 5, the address scheme",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "a vertex part",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "vertex",
+          "0",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a single segment",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "radius"
+        ]
+      }
+    },
+    {
+      "name": "an empty path",
+      "call": "slotKey",
+      "args": {
+        "path": []
+      }
+    },
+    {
+      "name": "a stored cell",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "cells",
+          "AA12"
+        ]
+      }
+    },
+    {
+      "name": "a segment holding the separator",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "a.b",
+          "c"
+        ]
+      }
+    },
+    {
+      "name": "the other split of the same key",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "a",
+          "b.c"
+        ]
+      }
+    },
+    {
+      "name": "an empty segment",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "a character outside the basic plane",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "😀",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a combining mark",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "é",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a path that is not a list",
+      "call": "slotKey",
+      "args": {
+        "path": "vertex.0.x"
+      }
+    },
+    {
+      "name": "a path holding a number",
+      "call": "slotKey",
+      "args": {
+        "path": [
+          "vertex",
+          0
+        ]
+      }
+    },
+    {
+      "name": "no path at all",
+      "call": "slotKey",
+      "args": {}
+    }
+  ]
+}

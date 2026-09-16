@@ -1,0 +1,186 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "model.value-shapes",
+  "sourceTest": "src/engine/graph/node.test.ts",
+  "requirement": "SPEC.md section 4, the value union",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "a null",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": null
+      }
+    },
+    {
+      "name": "a boolean",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": false
+      }
+    },
+    {
+      "name": "a number",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": -1.5
+      }
+    },
+    {
+      "name": "a negative zero",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "$number": "-0"
+        }
+      }
+    },
+    {
+      "name": "an infinity",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "$number": "-Infinity"
+        }
+      }
+    },
+    {
+      "name": "an empty text",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": ""
+      }
+    },
+    {
+      "name": "a text outside the basic plane",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": "a😀b"
+      }
+    },
+    {
+      "name": "a point",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "x": 1,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a list of points",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": [
+          {
+            "x": 1,
+            "y": 2
+          },
+          {
+            "x": 3,
+            "y": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "an error value",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "error": "#MATH",
+          "message": "no root"
+        }
+      }
+    },
+    {
+      "name": "an error value is not a point",
+      "call": "isErrorValue",
+      "args": {
+        "value": {
+          "error": "#REF",
+          "message": "gone"
+        }
+      }
+    },
+    {
+      "name": "a point is not an error",
+      "call": "isErrorValue",
+      "args": {
+        "value": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a list is not an error",
+      "call": "isErrorValue",
+      "args": {
+        "value": []
+      }
+    },
+    {
+      "name": "a null is not an error",
+      "call": "isErrorValue",
+      "args": {
+        "value": null
+      }
+    },
+    {
+      "name": "a point missing a coordinate",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "x": 1
+        }
+      }
+    },
+    {
+      "name": "a point with a third member",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "x": 1,
+          "y": 2,
+          "z": 3
+        }
+      }
+    },
+    {
+      "name": "an error code nobody defined",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "error": "#NOPE",
+          "message": ""
+        }
+      }
+    },
+    {
+      "name": "an error value with no message",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": {
+          "error": "#REF"
+        }
+      }
+    },
+    {
+      "name": "a list of things that are not points",
+      "call": "valueRoundTrip",
+      "args": {
+        "value": [
+          "a"
+        ]
+      }
+    },
+    {
+      "name": "no value at all",
+      "call": "valueRoundTrip",
+      "args": {}
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "model.illegal-numbers",
+  "sourceTest": "src/engine/graph/node.test.ts",
+  "requirement": "SPEC.md section 4, the value union",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "an ordinary number",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": 1.5
+      }
+    },
+    {
+      "name": "a positive zero",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": 0
+      }
+    },
+    {
+      "name": "a negative zero",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": {
+          "$number": "-0"
+        }
+      }
+    },
+    {
+      "name": "a number that is not a number",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": {
+          "$number": "NaN"
+        }
+      }
+    },
+    {
+      "name": "infinity",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": {
+          "$number": "Infinity"
+        }
+      }
+    },
+    {
+      "name": "negative infinity",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": {
+          "$number": "-Infinity"
+        }
+      }
+    },
+    {
+      "name": "the largest safe integer",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": 9007199254740991
+      }
+    },
+    {
+      "name": "a tag nobody defined",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": {
+          "$number": "twelve"
+        }
+      }
+    },
+    {
+      "name": "a number given as text",
+      "call": "isIllegalNumber",
+      "args": {
+        "number": "1.5"
+      }
+    },
+    {
+      "name": "a clean number",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": 3
+      }
+    },
+    {
+      "name": "a text that spells one",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": "NaN"
+      }
+    },
+    {
+      "name": "a boolean",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": true
+      }
+    },
+    {
+      "name": "a null",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": null
+      }
+    },
+    {
+      "name": "a clean point",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": {
+          "x": 1,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a point with a negative zero",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": {
+          "x": 1,
+          "y": {
+            "$number": "-0"
+          }
+        }
+      }
+    },
+    {
+      "name": "a point with an infinity",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": {
+          "x": {
+            "$number": "Infinity"
+          },
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "an empty list of points",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": []
+      }
+    },
+    {
+      "name": "a list with one bad point",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": [
+          {
+            "x": 1,
+            "y": 2
+          },
+          {
+            "x": 3,
+            "y": {
+              "$number": "NaN"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an error value carries no number",
+      "call": "hasIllegalNumber",
+      "args": {
+        "value": {
+          "error": "#DIV0",
+          "message": "division by zero"
+        }
+      }
+    }
+  ]
+}

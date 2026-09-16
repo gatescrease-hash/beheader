@@ -524,7 +524,7 @@ function checkFile(path) {
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === ".git" || name === "dist") continue;
+    if (name === "node_modules" || name === ".git" || name === "dist" || name === "target") continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) walk(full, out);
     else if ([".ts", ".js", ".mjs", ".md", ".html"].includes(extname(full))) out.push(full);

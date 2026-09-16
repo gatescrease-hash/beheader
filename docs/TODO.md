@@ -7,9 +7,10 @@ Take an item, build it with its tests, run the four checks in `CLAUDE.md`, and
 delete the item when it lands. Do not rewrite it into a record of the work.
 Git holds what was done, and this file holds what is left.
 
-[RUST_PORT.md](RUST_PORT.md) holds the future Rust engine migration plan and
-its stable work register. Port packages are tracked there. They become active
-when the spec releases that implementation scope from deferral.
+[RUST_PORT.md](RUST_PORT.md) holds the Rust engine migration and its stable
+work register. The spec has released that scope, so those packages are active
+now, and they stay tracked there rather than here. Take a port package from
+that register, not from this file.
 
 A new item names the change, gives the reason, and says how a reader will know
 it is finished. Anything else is a note, and a note belongs in the header of
@@ -19,7 +20,8 @@ the file it is about.
 
 ## Open
 
-Nothing is open. The next item comes from the spec, by the route below.
+Nothing is open here. The next product item comes from the spec, by the route
+below. The next engine item is the active package in `RUST_PORT.md`.
 
 ---
 

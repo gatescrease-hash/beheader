@@ -55,7 +55,7 @@ Keep the core simple and safe. Push complexity to the edges.
 
 | Item | Choice |
 | --- | --- |
-| Language | TypeScript, strict mode |
+| Language | TypeScript, strict mode. The engine is being ported to Rust beside it, under the register in [RUST_PORT.md](RUST_PORT.md). |
 | Runtime | Browser, one process |
 | Build tool | Vite |
 | Drawing | Canvas2D, immediate mode |
@@ -71,14 +71,34 @@ exact coupling this design avoids.
 **The planned future stack.** A Rust engine core, a Tauri shell, a
 TypeScript and WebGPU front end, and a local Python interpreter as a subprocess.
 The migration plan and work register are in [RUST_PORT.md](RUST_PORT.md).
-That document plans the engine port without starting the deferred implementation.
-Do not implement the future stack yet. The shape of `src/engine/` matches a one to one port target for a
-future Rust crate. Two rules come out of that:
+The shape of `src/engine/` matches a one to one port target for the Rust crate.
+Two rules come out of that:
 
 1. Store IDs, not object references. The graph must never use JavaScript object
    identity to hold a relationship.
 2. Keep graph state plain and serializable. Behaviour lives in functions that
    read that data, not attached to it.
+
+**The released Rust scope.** Build the Rust engine core, the headless runner
+that compares it against the TypeScript engine, the browser binding that hosts
+it, and the adapter through which the application selects an engine. The
+packages of that work are the register in [RUST_PORT.md](RUST_PORT.md), and
+they are the only part of the future stack released from section 17.
+
+Four limits hold over it:
+
+1. TypeScript stays the engine the application runs until the cutover package
+   passes its gates. The Rust engine arrives behind an internal selection, and
+   whichever engine that selection names is the one a released version runs.
+2. The Rust engine answers the behaviour this document already requires. A
+   difference an implementer finds is a change to this document first, and to
+   the Rust register second. Neither engine is the definition of the other.
+3. The TypeScript engine stays complete and selectable through the whole port,
+   and the tests over it stay green. The duplicate implementation goes only
+   after the acceptance period the register names.
+4. Nothing else in section 17 opens with it. A Rust engine core is not a Tauri
+   shell, a WebGPU renderer, or a Python interpreter, and each of those three
+   waits for a release of its own.
 
 ---
 
@@ -1400,8 +1420,10 @@ The team considered each item below and postponed it on purpose.
   Section 12 gives the four properties that keep it safe.
 - **Collaboration.**
 - **Script libraries, export formats, DXF or other interchange formats.**
-- **WebGPU, Rust or Tauri.** That is the later stack. Only the module
-  boundaries anticipate it.
+- **WebGPU or Tauri.** Those two are still the later stack. Drawing stays
+  Canvas2D in one browser process, and the module boundaries anticipate the
+  rest. The Rust engine core is released, under the scope and the four limits
+  in section 2.
 - **Extra command words.** Add a command when a task needs it.
 
 ---

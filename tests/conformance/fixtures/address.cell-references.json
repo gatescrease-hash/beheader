@@ -1,0 +1,306 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "address.cell-references",
+  "sourceTest": "src/engine/address.test.ts",
+  "requirement": "SPEC.md section 7, the table primitive",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "a plain reference",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "A1"
+      }
+    },
+    {
+      "name": "lower case letters",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "aa12"
+      }
+    },
+    {
+      "name": "a zero row",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "A0"
+      }
+    },
+    {
+      "name": "a leading zero in the row",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "A01"
+      }
+    },
+    {
+      "name": "digits before letters",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "1A"
+      }
+    },
+    {
+      "name": "letters alone",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "A"
+      }
+    },
+    {
+      "name": "digits alone",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "1"
+      }
+    },
+    {
+      "name": "an empty segment",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": ""
+      }
+    },
+    {
+      "name": "a trailing letter",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "A1b"
+      }
+    },
+    {
+      "name": "a character outside the basic plane",
+      "call": "isCellReferenceForm",
+      "args": {
+        "segment": "😀1"
+      }
+    },
+    {
+      "name": "the first column",
+      "call": "parseCellReference",
+      "args": {
+        "reference": "A1"
+      }
+    },
+    {
+      "name": "the twenty seventh column",
+      "call": "parseCellReference",
+      "args": {
+        "reference": "AA12"
+      }
+    },
+    {
+      "name": "lower case",
+      "call": "parseCellReference",
+      "args": {
+        "reference": "aa12"
+      }
+    },
+    {
+      "name": "not a reference",
+      "call": "parseCellReference",
+      "args": {
+        "reference": "rows"
+      }
+    },
+    {
+      "name": "a row beyond the safe integers",
+      "call": "parseCellReference",
+      "args": {
+        "reference": "A99999999999999999999"
+      }
+    },
+    {
+      "name": "the first column",
+      "call": "columnLettersToIndex",
+      "args": {
+        "letters": "A"
+      }
+    },
+    {
+      "name": "the last single letter",
+      "call": "columnLettersToIndex",
+      "args": {
+        "letters": "Z"
+      }
+    },
+    {
+      "name": "the first pair",
+      "call": "columnLettersToIndex",
+      "args": {
+        "letters": "AA"
+      }
+    },
+    {
+      "name": "lower case letters",
+      "call": "columnLettersToIndex",
+      "args": {
+        "letters": "az"
+      }
+    },
+    {
+      "name": "no letters at all",
+      "call": "columnLettersToIndex",
+      "args": {
+        "letters": ""
+      }
+    },
+    {
+      "name": "a run long enough to lose precision",
+      "call": "columnLettersToIndex",
+      "args": {
+        "letters": "ZZZZZZZZZZZZZZ"
+      }
+    },
+    {
+      "name": "a letter outside the ASCII alphabet",
+      "call": "columnLettersToIndex",
+      "args": {
+        "letters": "Ä"
+      }
+    },
+    {
+      "name": "the first column",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": 1
+      }
+    },
+    {
+      "name": "the last single letter",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": 26
+      }
+    },
+    {
+      "name": "the first pair",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": 27
+      }
+    },
+    {
+      "name": "the last pair",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": 702
+      }
+    },
+    {
+      "name": "the first triple",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": 703
+      }
+    },
+    {
+      "name": "a zero index",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": 0
+      }
+    },
+    {
+      "name": "a negative index",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": -3
+      }
+    },
+    {
+      "name": "an index that is not whole",
+      "call": "indexToColumnLetters",
+      "args": {
+        "index": 1.5
+      }
+    },
+    {
+      "name": "a plain reference",
+      "call": "formatCellReference",
+      "args": {
+        "column": 27,
+        "row": 12
+      }
+    },
+    {
+      "name": "the first cell",
+      "call": "formatCellReference",
+      "args": {
+        "column": 1,
+        "row": 1
+      }
+    },
+    {
+      "name": "a row that prints with an exponent",
+      "call": "formatCellReference",
+      "args": {
+        "column": 1,
+        "row": 1e+21
+      }
+    },
+    {
+      "name": "a column of zero",
+      "call": "formatCellReference",
+      "args": {
+        "column": 0,
+        "row": 1
+      }
+    },
+    {
+      "name": "a stored cell path",
+      "call": "toSurfacePath",
+      "args": {
+        "type": "table",
+        "path": [
+          "cells",
+          "A1"
+        ]
+      }
+    },
+    {
+      "name": "a stored path that is not a cell",
+      "call": "toSurfacePath",
+      "args": {
+        "type": "table",
+        "path": [
+          "cells",
+          "nope"
+        ]
+      }
+    },
+    {
+      "name": "a table slot that is not a cell",
+      "call": "toSurfacePath",
+      "args": {
+        "type": "table",
+        "path": [
+          "rows"
+        ]
+      }
+    },
+    {
+      "name": "the same path on another type",
+      "call": "toSurfacePath",
+      "args": {
+        "type": "rect",
+        "path": [
+          "cells",
+          "A1"
+        ]
+      }
+    },
+    {
+      "name": "a type nobody declared",
+      "call": "toSurfacePath",
+      "args": {
+        "type": "sphere",
+        "path": [
+          "cells",
+          "A1"
+        ]
+      }
+    }
+  ]
+}

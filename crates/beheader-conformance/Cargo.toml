@@ -1,0 +1,10 @@
+[package]
+name = "beheader-conformance"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Answers the shared conformance fixtures with the Rust engine."
+
+[dependencies]
+beheader-engine = { workspace = true }
+serde_json = { workspace = true }
