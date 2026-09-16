@@ -7,13 +7,13 @@ without reconstructing decisions from conversation history.
 
 **The migration is in implementation.** Section 2 of the spec has released the
 Rust engine core, the runner that compares it against TypeScript, the browser
-binding and the engine selection from the deferred list. `RUST-001` and
-`RUST-002` have landed, so the contract inventory, the Cargo workspace, the two
-runners and the comparator are in the repository and the four commands under
-[proposed checks](#checks-over-the-rust-side) run. The application still runs
-the TypeScript engine, and the browser binding and the application adapter are
-still proposals. A path or a command below that names one of those two is a
-proposal until its own package lands.
+binding and the engine selection from the deferred list. `RUST-001`, `RUST-002`
+and `RUST-003` have landed, so the contract inventory, the Cargo workspace, the
+two runners, the comparator and the browser binding are in the repository and
+the commands under [checks](#checks-over-the-rust-side) run. Gates A and B are
+passed. The application still runs the TypeScript engine and the application
+adapter is still a proposal, so a path or a command below that names the
+adapter is a proposal until `RUST-014` lands.
 
 The plan was written against commit
 `2ba050dd583fcdb67902e51564c6462b538fb5dd`, inspected on 2026-09-14.
@@ -543,7 +543,7 @@ crates/
       address.rs         names, cell references, surface paths
       number.rs          the text JavaScript prints for a number
       wire.rs            the JSON codec the fixtures travel through
-      context.rs         planned
+      measure.rs         the one service the engine takes from its host
       formula/           planned
       math/              planned
       primitives/        planned
@@ -555,18 +555,25 @@ crates/
       complete.rs        planned
   beheader-conformance/
     src/main.rs
-  beheader-wasm/         planned
+  beheader-hostproof/    the disposable graph behind the hosting proof
     src/lib.rs
+    src/exchange.rs      the route that was not chosen, kept as evidence
+    src/main.rs          the cost comparison
+  beheader-wasm/
+    src/lib.rs           the browser binding and its measurement callback
 tests/
   conformance/
     contract/            the frozen boundary and its dispositions
     fixtures/            the questions both engines answer
     comparator/          hand written results the comparator is tested on
     manifest.json
+  hosting/
+    index.html           the page the browser proof drives
 tools/
   engine-contract.mjs    writes the contract inventory
   conformance-runner.mjs the TypeScript side of the comparison
   conformance-compare.mjs runs both engines and reports the difference
+  hosting-proof.mjs      builds the binding and drives it in a browser
 src/
   engine-adapter/        planned
 ```
@@ -869,7 +876,23 @@ cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
 npm run conformance
 ```
 
-The pull request workflow runs all five on Linux and on Windows. macOS joins
+The browser proof is a sixth command, and it is separate because it needs more
+than a Rust toolchain:
+
+```text
+npm install --prefix <scratch> playwright     # once
+PLAYWRIGHT_DIR=<scratch> npm run hosting-proof
+```
+
+It builds `beheader-wasm` for the browser target, runs `wasm-bindgen` over the
+result, copies a font off the system to load at run time, serves
+`tests/hosting`, and drives the page in Chromium. `wasm-bindgen` comes from
+`cargo install wasm-bindgen-cli --version 0.2.128 --locked`, which has to match
+the `wasm-bindgen` crate version the binding depends on. The pull request
+workflow does not run it yet, because a browser and that install add several
+minutes to every pull request and the proof changes only when the binding does.
+
+The pull request workflow runs the other five on Linux and on Windows. macOS joins
 them before a macOS application is supported. The Wasm check compiles the core
 for the browser target, and an executed browser conformance run arrives with
 `RUST-003` rather than standing on a successful compile.
@@ -907,7 +930,7 @@ met, and a package is done only where the status column says so.
 | --- | --- | --- | --- |
 | `RUST-001` | Frozen contract and consumer inventory | Scope activation | done |
 | `RUST-002` | Workspace and conformance runner | `001` | done |
-| `RUST-003` | Hosting and measurement proof | `002` | ready |
+| `RUST-003` | Hosting and measurement proof | `002` | done |
 | `RUST-004` | Model, addresses, context, wire types | `002`, `003` | active |
 | `RUST-005` | Formula syntax, formatting, dependencies | `004` | planned |
 | `RUST-006` | Formula evaluation and functions | `005` | planned |
@@ -1017,6 +1040,41 @@ regression test and specifies actual adapter build commands.
 
 **Boundary.** A recommendation in this document is not acceptance evidence.
 The proof cannot be deferred until after the algorithm port.
+
+**Landed.** `beheader-hostproof` holds the smallest graph that could invalidate
+the proposal: an upstream number makes a piece of text, the width of that text
+sets the width of a box, the width of the box makes another piece of text, and
+that line carries notation beside the words. Each step needs the step above it
+measured before its own text is known, which is what a binding that asks for
+measurements in batches cannot get around. The same graph is evaluated both
+ways, so the two routes differ in how a measurement arrives and in nothing
+else.
+
+`beheader-wasm` is the browser binding, and `npm run hosting-proof` builds it,
+serves `tests/hosting`, and drives it in Chromium. Seventeen checks pass: real
+font metrics reach the values below them, a font that arrives changes those
+values with no input changing, a callback that throws becomes a measurement
+error and leaves the engine usable, an answer that is not a pair of numbers is
+refused, a host that cannot size notation says so rather than answering, and a
+callback that starts another pass is refused while the outer pass finishes
+unharmed. Removing the reentrancy guard turns the proof red, so it is a
+regression test rather than a demonstration.
+
+The measured costs, from a release build of the binding in a container rather
+than on a developer machine: the module starts in about 8 milliseconds, the
+engine is constructed in under 1, one pass over the proof graph takes about 26
+microseconds against real canvas metrics and about 16 against a host that
+answers without measuring, which puts a crossing at roughly 5 microseconds per
+measurement. Those figures establish the shape of the cost rather than a
+budget, and `RUST-015` is where a budget gets numbers from named hardware.
+
+The exchange for the route that was not chosen is implemented and tested
+anyway, in `exchange.rs`, because the decision rests on how it behaves rather
+than on how it was expected to behave. `cargo run -p beheader-hostproof`
+prints the comparison.
+
+**Decisions.** `D-001`, `D-002` and `D-003` are resolved under the decision
+register below.
 
 ### `RUST-004`: Port the data foundation
 
@@ -1209,6 +1267,14 @@ and measurement. The selected route has a failure model and target build.
 Large-scale module translation begins after this gate, so the most uncertain
 integration premise is tested while changing it is still inexpensive.
 
+**Passed.** The comparison runs from one command and reports a match, a
+difference and a call the Rust engine cannot answer. The browser route
+completes a real scenario against real font metrics, with a defined result for
+a host that throws, a host that answers with nothing usable, a host that cannot
+size notation, and a callback that reenters. `D-001`, `D-002` and `D-003` are
+resolved under the decision register, and the target build commands are in the
+checks above.
+
 ### Gate C: engine behavior is equivalent
 
 The work through `RUST-013` covers the full inventory. Bidirectional document
@@ -1293,9 +1359,9 @@ under it. Superseded choices remain linked through Git history.
 
 | ID | Question | Recommendation or required evidence | Needed by |
 | --- | --- | --- | --- |
-| `D-001` | First application runtime | Browser Wasm first, subject to the hosting proof | `RUST-003` |
-| `D-002` | Measurement contract | Synchronous host callbacks for Wasm, proven exchange for native | `RUST-003` |
-| `D-003` | Authoritative state | Host snapshot ownership first, handles only after measurement | `RUST-003` |
+| `D-001` | First application runtime | Resolved: browser Wasm. See below. | `RUST-003` |
+| `D-002` | Measurement contract | Resolved: synchronous host callbacks. See below. | `RUST-003` |
+| `D-003` | Authoritative state | Resolved for the first integration: the host owns the document. See below. | `RUST-003` |
 | `D-004` | Numeric compatibility | Binary64, JavaScript rounding, fixture-specific tolerances | `RUST-004` |
 | `D-005` | String representation | Preserve UTF-16 semantics. Part covered by fixtures, and the lone surrogate case is open. See below. | `RUST-004` |
 | `D-006` | Loaded journal representation | Retain raw entries, validate each on replay | `RUST-012` |
@@ -1304,6 +1370,58 @@ under it. Superseded choices remain linked through Git history.
 | `D-009` | Product baseline drift | Pin each package and synchronize accepted behavior changes | `RUST-001` |
 | `D-010` | Resource budgets | Preserve the TypeScript per-line expression budget. Measure total document workloads on each target before setting broader limits. | `RUST-015` |
 | `D-011` | Cutover acceptance period | Define supported targets and rollback criteria before default switch | `RUST-016` |
+
+`D-001` is resolved as browser Wasm, which is what the recommendation said and
+now has evidence behind it. The deciding quantity is the count of host round
+trips one evaluation needs, which is a property of the graph rather than of the
+machine. A binding in the page makes one call for each measurement and never
+leaves the pass, so it crosses no process boundary at all. A binding that
+measures in rounds runs the whole pass again for each step of the longest
+measured chain, and each of those rounds is a crossing.
+
+The proof graph is three measurements deep, so the exchange settles in four
+passes and three crossings against one pass and none. Two costs follow from
+that and both were measured. The engine work of an evaluation is eight times
+larger in the exchange, because the pass runs four times rather than once, and
+that is before any boundary is crossed. The cost of crossing is not measured
+here, because neither prototype has a real boundary to cross and a made up
+latency would decide the question by assumption.
+
+The second finding is the one that would have been expensive to learn later. A
+pass over a graph with no cycle in it always settles, so the unbounded sequence
+of requests this document worried about does not arise from an ordinary
+document. What does arise is metrics that move faster than the exchange
+settles: a font that finishes loading between a request and its answer moves
+the epoch, the answer is refused because its key belongs to the epoch before,
+and a host whose fonts keep arriving holds the exchange short of its last
+measurement for as long as that goes on. A binding that measures inside the
+pass cannot meet that case, because every measurement of one pass is taken
+under one epoch. Fonts arrive during the first seconds of every document rather than
+rarely, so the exchange would meet that case on an ordinary open.
+
+`D-002` is resolved as synchronous host callbacks, held to four rules that the
+browser proof exercises. A callback that throws becomes a measurement error
+carrying the wording the host threw, and never an exception across the binding.
+An answer that is not a pair of numbers is refused where it arrives rather than
+downstream. A measurer states its capability, so a host that cannot size
+notation says so rather than answering, and a fake that answers every question
+with zero is still not the null measurer. A callback that starts another pass
+against the candidate being measured is refused by a guard, and the outer pass
+finishes with the values it would have had.
+
+A domain refusal crosses the binding as data. Returning a Rust `Result` through
+wasm-bindgen throws on the error side, which would turn every refused
+measurement into a fault the host has to catch and leave a genuine fault of the
+binding looking the same as a table cell holding a division error. The result
+carries the discriminant shape the TypeScript engine already returns, and an
+exception is reserved for a fault of the binding itself, such as a host that
+handed over no measurer.
+
+`D-003` is resolved for the first integration alone: the TypeScript application
+owns the committed document, and the binding holds a candidate for the length
+of one call. The proof needed nothing more, so nothing more was decided. A
+handle based design that moves authoritative state into Rust stays open, and
+`RUST-014` is where the cost of copying a snapshot is measured against it.
 
 `D-005` has its first evidence. Fixtures send a character outside the basic
 plane and a letter carrying a combining mark through slot keys, object names
@@ -1330,20 +1448,20 @@ implemented, then its lasting rationale belongs beside that code.
 
 | Field | Current value |
 | --- | --- |
-| Migration phase | Implementation |
-| Active implementation package | `RUST-004`, begun. `RUST-003` is ready and unstarted |
+| Migration phase | Implementation, through Gate B |
+| Active implementation package | `RUST-004`, begun. `RUST-005` is ready and unstarted |
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
-| Rust artifacts | `beheader-engine` with model, address, number and wire. `beheader-conformance` |
-| Selected runtime | Undecided, Wasm first is recommended, and `RUST-003` decides it |
-| Unresolved architecture decisions | `D-001` through `D-004`, `D-006`, `D-007`, `D-009` through `D-011`. `D-005` and `D-008` are part resolved |
-| Next implementation action | `RUST-003`, the hosting and measurement proof |
-| Completion evidence | `RUST-001` and `RUST-002`, under their headings above |
+| Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
+| Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
+| Unresolved architecture decisions | `D-004`, `D-006`, `D-007`, `D-009`, `D-011`. `D-005` and `D-008` are part resolved, and `D-010` holds a recorded choice |
+| Next implementation action | Finish `RUST-004`, then `RUST-005` |
+| Completion evidence | `RUST-001`, `RUST-002` and `RUST-003`, under their headings above |
 
 ### Handoff record for the active package
 
 ```text
 Package: RUST-004, model, addresses, context and wire types
-Status: active, and its first slice has landed under RUST-002
+Status: active
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -1357,18 +1475,20 @@ Completed contract cases:
   both notation boundaries and the three numbers that are not finite.
   The wire codec in wire.rs, with fixtures over every value shape and six
   shapes no value takes.
+  The measurement contract in measure.rs: the trait, the capability that tells
+  a fake measurer from the null one, and the check that refuses a width the
+  graph could not store.
 Remaining cases:
   Slot, GraphObject, ports and vertex counts, which need the graph package
   beside them.
-  EvalContext and the measurement capability distinction, which wait on the
-  hosting choice in RUST-003.
   Addresses that resolve a name against an object list, which need the object
   record.
   The lone surrogate decision under D-005.
-Open decision IDs: D-001, D-002, D-003 and D-005 all reach this package
+Open decision IDs: D-004 and D-005 reach this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   tests/conformance/contract/inventory.json and dispositions.json
+  tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results:
   npm test                      2743 Vitest tests and 23 tooling tests pass
   npm run typecheck             both configs pass
@@ -1376,18 +1496,20 @@ Commands run and results:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  23 pass
+  cargo test --workspace --locked                                  46 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
   npm run conformance           122 matched, 0 differed, 5 awaiting Rust
+  npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
-  x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown for a compile.
-  No browser run yet, which is what RUST-003 adds.
+  x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
+  Chromium. Windows runs the Rust checks in the pull request workflow and has
+  not run the browser proof.
 Known failures with smallest reproduction: none
-Next concrete action: RUST-003, the hosting and measurement proof
+Next concrete action: finish RUST-004, then RUST-005
 Dependencies that can proceed independently:
-  RUST-005, the formula syntax, needs the model alone and can start beside
-  RUST-003. Its first fixture already exists as formula.parse-awaiting-rust,
-  which the TypeScript engine answers and the Rust engine does not.
+  RUST-005, the formula syntax, needs the model alone. Its first fixture
+  already exists as formula.parse-awaiting-rust, which the TypeScript engine
+  answers and the Rust engine does not.
 ```
 
 A resumed session compares the recorded commits with the current branch,

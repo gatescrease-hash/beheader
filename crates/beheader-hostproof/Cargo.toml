@@ -1,0 +1,9 @@
+[package]
+name = "beheader-hostproof"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "The disposable prototype behind the hosting and measurement proof."
+
+[dependencies]
+beheader-engine = { workspace = true }

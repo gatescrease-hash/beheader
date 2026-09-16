@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 pub mod address;
+pub mod measure;
 pub mod model;
 pub mod number;
 pub mod wire;

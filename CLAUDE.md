@@ -68,6 +68,14 @@ cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
 npm run conformance               # both engines over the shared fixtures
 ```
 
+A change to the browser binding runs the browser proof too. It needs Playwright
+in a scratch directory and the wasm-bindgen command, which `docs/STATUS.md`
+names.
+
+```
+PLAYWRIGHT_DIR=<scratch> npm run hosting-proof
+```
+
 ## Look at it on screen
 
 A green suite says the code does what its author expected. It says nothing

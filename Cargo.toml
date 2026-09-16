@@ -11,7 +11,7 @@
 # accept or reject differently.
 [workspace]
 resolver = "3"
-members = ["crates/beheader-engine", "crates/beheader-conformance"]
+members = ["crates/beheader-engine", "crates/beheader-conformance", "crates/beheader-hostproof", "crates/beheader-wasm"]
 
 [workspace.package]
 version = "0.0.0"

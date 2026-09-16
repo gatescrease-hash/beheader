@@ -5,9 +5,10 @@ code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
 
 [RUST_PORT.md](RUST_PORT.md) holds the engine migration, its work register,
-and its current handoff. The spec has released that scope, and the first two
-packages have landed: the boundary is frozen in a generated inventory, and a
-Rust crate answers the same fixtures the TypeScript engine does.
+and its current handoff. The spec has released that scope, and the first three
+packages have landed: the boundary is frozen in a generated inventory, a Rust
+crate answers the same fixtures the TypeScript engine does, and a browser
+binding takes its measurements from the page.
 
 ---
 
@@ -18,8 +19,9 @@ Rust crate answers the same fixtures the TypeScript engine does.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2743 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 23 tests pass. Formatting, lints and the browser target check are clean. |
+| Rust | 46 tests pass. Formatting, lints and the browser target check are clean. |
 | Conformance | 122 cases match across the two engines, 5 await a Rust implementation. |
+| Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
 ### How to run it
@@ -42,6 +44,14 @@ cargo test --workspace --locked
 cargo check -p beheader-engine --target wasm32-unknown-unknown --locked
 npm run conformance  # both engines over the shared fixtures
 npm run contract     # rewrites the frozen engine boundary
+```
+
+The browser proof needs Playwright and the wasm-bindgen command as well.
+
+```
+npm install --prefix <scratch> playwright
+cargo install wasm-bindgen-cli --version 0.2.128 --locked
+PLAYWRIGHT_DIR=<scratch> npm run hosting-proof
 ```
 
 ---
@@ -192,7 +202,12 @@ file.
 | `beheader-engine/src/address.rs` | Names, cell reference forms, the column arithmetic, and the surface path. |
 | `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
+| `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |
 | `beheader-conformance/src/main.rs` | Answers the shared fixtures with the Rust engine. |
+| `beheader-hostproof/src/lib.rs` | The smallest graph with a measurement in the middle of it. |
+| `beheader-hostproof/src/exchange.rs` | Measurement in rounds, which is the route the proof did not choose. |
+| `beheader-hostproof/src/main.rs` | What the two ways of getting a measurement cost. |
+| `beheader-wasm/src/lib.rs` | The browser binding, its measurement callback and its reentrancy guard. |
 
 ### `tests/conformance/` - what the two engines are compared on
 
@@ -203,6 +218,13 @@ file.
 | `fixtures/` | The questions both engines answer, and the comparison policy of each. |
 | `manifest.json` | Which engine file each fixture reaches, and which files nothing reaches yet. |
 | `comparator/` | Hand written results files that the comparator itself is tested on. |
+
+### `tests/hosting/` - the browser proof
+
+| File | Purpose |
+| --- | --- |
+| `index.html` | The page the proof drives, and the host measurer it answers with. |
+| `tools/hosting-proof.mjs` | Builds the binding, serves the page, and checks what came back. |
 
 ### `src/command/`
 
@@ -356,6 +378,20 @@ the code it constrains.
    `crates/beheader-engine/src/number.rs` implements the ECMAScript rules and
    the Rust engine never uses the Rust formatter for a number an operator
    sees.
+
+21. **A measurement is the one value that arrives from outside the engine, so
+   it is checked where it arrives.** `crates/beheader-engine/src/measure.rs`
+   refuses a width or a height that the graph could not store, and the browser
+   binding refuses an answer that is not a pair of numbers at all. A host that
+   throws becomes a `#MEASURE` value carrying what it threw, rather than an
+   exception crossing the binding, because a refused measurement is an ordinary
+   outcome the application already draws and a thrown one would look the same
+   as a fault of the binding itself.
+
+   A measurement callback runs while a pass is half built, so
+   `crates/beheader-wasm/src/lib.rs` refuses a callback that starts another
+   pass. Without that guard the inner pass reads a candidate that does not
+   exist yet and returns values for it, which `npm run hosting-proof` catches.
 
 ---
 

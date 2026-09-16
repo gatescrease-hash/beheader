@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Beheader hosting proof</title>
+</head>
+<body>
+<canvas id="scratch" width="10" height="10"></canvas>
+<pre id="out">loading</pre>
+<script type="module">
+import init, { ProofEngine } from "./pkg/beheader_wasm.js";
+
+const context = document.querySelector("#scratch").getContext("2d");
+
+// What the host does when the engine asks for a measurement. The flags let one
+// scenario make the next call throw, answer with something that is not a
+// measurement, answer without touching the canvas, or call back into the
+// engine while a pass is running.
+const host = { fail: false, nonsense: false, reenter: false, constant: false, calls: 0 };
+
+function measureText(text, font, fontSize, lineHeight, maxWidth) {
+  host.calls += 1;
+  if (host.fail) {
+    host.fail = false;
+    throw new Error("the canvas went away");
+  }
+  if (host.nonsense) {
+    host.nonsense = false;
+    return { width: "wide", height: 3 };
+  }
+  if (host.constant) {
+    return { width: 40, height: lineHeight };
+  }
+  if (host.reenter) {
+    host.reenter = false;
+    host.reentryOutcome = window.proof.engine.evaluate(1, 1, font, fontSize, lineHeight);
+  }
+  context.font = `${fontSize}px ${font}`;
+  const metrics = context.measureText(text);
+  return {
+    width: maxWidth === undefined ? metrics.width : Math.min(metrics.width, maxWidth),
+    height: lineHeight,
+  };
+}
+
+// A stand-in for MathLive, which the application owns and this page does not
+// load. It answers from the same canvas in a serif face, so the proof has a
+// second measured kind with metrics of its own and a capability a host can
+// lack. The package that ports the math primitive connects the real one.
+function measureMath(latex, fontSize) {
+  host.calls += 1;
+  if (host.constant) {
+    return { width: 50, height: fontSize };
+  }
+  context.font = `${fontSize}px serif`;
+  return { width: context.measureText(latex).width * 1.15, height: fontSize * 1.4 };
+}
+
+window.proof = {
+  host,
+  engine: null,
+  textOnlyEngine: null,
+
+  async init() {
+    const started = performance.now();
+    await init();
+    const ready = performance.now();
+    this.engine = new ProofEngine({ measureText, measureMath });
+    this.textOnlyEngine = new ProofEngine({ measureText });
+    return { startupMs: ready - started, constructMs: performance.now() - ready };
+  },
+
+  evaluate(count, font = "sans-serif", engine = this.engine) {
+    host.calls = 0;
+    const started = performance.now();
+    const values = engine.evaluate(count, 8, font, 16, 20);
+    return { values, hostCalls: host.calls, ms: performance.now() - started };
+  },
+
+  repeat(times, constant = false) {
+    host.constant = constant;
+    const started = performance.now();
+    for (let n = 0; n < times; n += 1) {
+      this.engine.evaluate(7, 8, "sans-serif", 16, 20);
+    }
+    const each = (performance.now() - started) / times;
+    host.constant = false;
+    return each;
+  },
+
+  async loadProofFont() {
+    const face = new FontFace("ProofFont", "url(./proof-font.ttf)");
+    const started = performance.now();
+    await face.load();
+    document.fonts.add(face);
+    await document.fonts.ready;
+    return performance.now() - started;
+  },
+
+  // document.fonts.check answers about the faces the set already holds, so a
+  // family that was never added comes back satisfied rather than missing. The
+  // question this asks is whether a face of the family is in the set and
+  // loaded, which the set itself answers.
+  fontIsLoaded(family) {
+    for (const face of document.fonts) {
+      if (face.family === family && face.status === "loaded") {
+        return true;
+      }
+    }
+    return false;
+  },
+};
+
+document.querySelector("#out").textContent = "ready";
+</script>
+</body>
+</html>

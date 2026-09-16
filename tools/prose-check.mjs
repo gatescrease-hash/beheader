@@ -522,9 +522,17 @@ function checkFile(path) {
   return faults;
 }
 
+/**
+ * Directories holding code that nobody here wrote: a dependency tree, the
+ * history, and the output of the three builds. The prose of a generated file
+ * belongs to whatever generated it, and a rule applied to it reports a fault
+ * that no edit in this repository could fix.
+ */
+const GENERATED = new Set(["node_modules", ".git", "dist", "target", "pkg"]);
+
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === ".git" || name === "dist" || name === "target") continue;
+    if (GENERATED.has(name)) continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) walk(full, out);
     else if ([".ts", ".js", ".mjs", ".md", ".html"].includes(extname(full))) out.push(full);

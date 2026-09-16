@@ -3,3 +3,5 @@ dist/
 *.local
 .claude/settings.local.json
 target/
+tests/hosting/pkg/
+tests/hosting/proof-font.ttf
