@@ -1524,34 +1524,41 @@ Completed dependency:
   edge data, measurement capabilities and the initial wire codec.
   The object and slot records use a generic formula payload. RUST-005 replaces
   that parameter with its validated FormulaAst without a temporary JSON AST.
+Completed cases:
+  The lexer in formula/lexer.rs, over UTF-16 code units so the offset a token
+  carries is the offset the command line marks a faulty field by.
+  The node types, the shape check over a tree that arrived as JSON, and the
+  depth limit, in formula/ast.rs. Both walks over a tree hold their own stack,
+  so the native stack they need does not grow with the tree.
 Remaining cases:
-  Lexing, AST validation, parsing, formatting, dependency extraction and
-  reference rewriting.
+  Parsing, formatting, dependency extraction and reference rewriting.
 Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
   graph.address-key carry the RUST-004 surface
+  formula.lex and formula.ast-shape carry the two stages of RUST-005 that
+  have landed
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
-  npm test                      2743 Vitest tests and 23 tooling tests pass
+  npm test                      2744 Vitest tests and 23 tooling tests pass
   npm run typecheck             both configs pass
   npm run build                 succeeds
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  52 pass
+  cargo test --workspace --locked                                  66 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           164 matched, 0 differed, 5 awaiting Rust
+  npm run conformance           228 matched, 0 differed, 5 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
   Chromium. Windows runs the Rust checks in the pull request workflow and has
   not run the browser proof.
 Known failures with smallest reproduction: none
-Next concrete action: implement the AST and lexer, then make
-  formula.parse-awaiting-rust answer from Rust.
+Next concrete action: port the parser, which resolves a name against the
+  object list, then make formula.parse-awaiting-rust answer from Rust.
 Dependencies that can proceed independently: none
 ```
 
