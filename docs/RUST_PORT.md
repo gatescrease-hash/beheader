@@ -897,6 +897,13 @@ them before a macOS application is supported. The Wasm check compiles the core
 for the browser target, and an executed browser conformance run arrives with
 `RUST-003` rather than standing on a successful compile.
 
+The chosen route into CI, when someone picks this up, is a Linux-only job
+gated on the paths the proof actually covers: the Wasm crate, the binding, and
+`tools/hosting-proof.mjs` itself. A pull request that touches none of those
+pays nothing. One that touches any of them runs the proof and cannot merge
+with a broken browser build. Windows stays manual, matching the fact that it
+has never run the browser proof.
+
 `npm run conformance` needs Cargo, so it is a command of its own rather than a
 step inside `npm test`. A contributor with no Rust toolchain still runs the
 four checks, and the comparator keeps its own tests inside `npm test` by
