@@ -1,0 +1,19 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "address.nearest-name",
+  "sourceTest": "src/engine/address.test.ts",
+  "requirement": "SPEC.md section 5, object names",
+  "comparison": "exact",
+  "cases": [
+    { "name": "an exact name", "call": "nearestName", "args": { "typed": "alpha", "candidates": ["alpha", "beta"] } },
+    { "name": "a difference of case alone", "call": "nearestName", "args": { "typed": "ALPHA", "candidates": ["alpha", "beta"] } },
+    { "name": "one letter dropped", "call": "nearestName", "args": { "typed": "alph", "candidates": ["alpha", "beta"] } },
+    { "name": "one letter added", "call": "nearestName", "args": { "typed": "alphaa", "candidates": ["alpha", "beta"] } },
+    { "name": "two candidates an equal distance away, where the first the document holds wins", "call": "nearestName", "args": { "typed": "gamma", "candidates": ["gammb", "gammc"] } },
+    { "name": "nothing to compare against", "call": "nearestName", "args": { "typed": "alpha", "candidates": [] } },
+    { "name": "an empty name typed", "call": "nearestName", "args": { "typed": "", "candidates": ["alpha", "b"] } },
+    { "name": "a candidate outside the basic plane, which counts as two code units", "call": "nearestName", "args": { "typed": "x", "candidates": ["𝔘", "xy"] } },
+    { "name": "a letter carrying a combining mark", "call": "nearestName", "args": { "typed": "cafe", "candidates": ["café", "cafes"] } }
+  ]
+}

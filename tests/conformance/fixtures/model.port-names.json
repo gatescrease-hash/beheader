@@ -1,0 +1,20 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "model.port-names",
+  "sourceTest": "src/engine/graph/node.test.ts",
+  "requirement": "SPEC.md section 5, object names",
+  "comparison": "exact",
+  "cases": [
+    { "name": "a plain port name", "call": "isLegalPortName", "args": { "name": "factor" } },
+    { "name": "digits and an underscore", "call": "isLegalPortName", "args": { "name": "speed_2" } },
+    { "name": "a leading digit, which a port name allows and an object name does not", "call": "isLegalPortName", "args": { "name": "2fast" } },
+    { "name": "an empty name", "call": "isLegalPortName", "args": { "name": "" } },
+    { "name": "a name holding the path separator", "call": "isLegalPortName", "args": { "name": "a.b" } },
+    { "name": "the separator alone", "call": "isLegalPortName", "args": { "name": "." } },
+    { "name": "a hyphen", "call": "isLegalPortName", "args": { "name": "my-port" } },
+    { "name": "a space", "call": "isLegalPortName", "args": { "name": "my port" } },
+    { "name": "a letter carrying an accent", "call": "isLegalPortName", "args": { "name": "café" } },
+    { "name": "a character outside the basic plane", "call": "isLegalPortName", "args": { "name": "port_𝔘" } }
+  ]
+}

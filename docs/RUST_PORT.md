@@ -1105,10 +1105,30 @@ same diagnostic suggestions as the TypeScript engine. Edge records and their
 stable traversal key complete the graph data foundation. Unit tests distinguish
 a missing slot from a present null and exercise the optional object fields.
 
-`D-004` and `D-005` are resolved below. The existing shared value fixtures
-cover every value variant and numeric boundary. The generic formula payload is
-bound to the persisted AST and gains its wire round trips in `RUST-005`, where
-that type is introduced rather than represented temporarily as raw JSON.
+The slots of an object sit in `SlotMap`, which gives its keys back in the order
+they were written. A sorted map would answer three behaviours
+differently. The topological pass seeds its node map from that order, so it
+settles which of two independent slots reports a cycle first. The schema
+enumerates slot paths in it for completion. A rename rebuilds the map entry by
+entry, which leaves the renamed slot where it was.
+
+A refusal from `parse_address` or `format_address` carries the `#REF` code
+beside its wording, which is the shape `src/engine/address.ts` returns and the
+shape a caller stores when a refusal reaches a slot.
+
+Four fixtures reach the new behaviour: `model.port-names`,
+`address.nearest-name`, `address.resolution` and `graph.address-key`. They take
+the comparison from 122 cases to 164, and `src/engine/graph/edge.ts` leaves the
+list of modules with no fixture. The address fixtures give the slot names of an
+object as an ordered list rather than as a JSON object, because `serde_json`
+holds the members of an object in a sorted map and the order of those names
+decides which spelling of a document variable an address takes.
+
+`D-004` is resolved below, and `D-005` holds a recommendation the operator has
+yet to confirm. The existing shared value fixtures cover every value variant and
+numeric boundary. The generic formula payload is bound to the persisted AST and
+gains its wire round trips in `RUST-005`, where that type is introduced rather
+than represented temporarily as raw JSON.
 
 ### `RUST-005`: Port formula syntax and reference handling
 
@@ -1451,14 +1471,20 @@ remain testable. Operator-facing conversion follows ECMAScript number text.
 A comparison declares an allowed tolerance in its fixture, so exact comparison
 remains the default.
 
-`D-005` is resolved for the runtime and fixture boundary. Fixtures send a
-character outside the basic plane and a letter carrying a combining mark through slot keys, object names
-and text values, and the two engines agree on every one. The name pattern is
-the ASCII alphabet, so neither engine accepts a name outside it. Rust strings
-hold Unicode scalar values, and an unpaired UTF-16 surrogate is refused when
-it crosses into Rust rather than replaced or normalized. The document decoder
-in `RUST-012` applies that boundary rule to escaped JSON input, so a file cannot
-introduce a string that the runtime model cannot preserve.
+`D-005` holds a recommendation that the operator has yet to confirm, because it
+decides which documents the program still opens. Fixtures send a character
+outside the basic plane and a letter carrying a combining mark through slot
+keys, object names and text values, and the two engines agree on every one. The
+name pattern is the ASCII alphabet, so neither engine accepts a name outside it.
+
+What is still open is the lone surrogate, which a JavaScript string holds and a
+Rust `String` cannot. The recommendation is to refuse one where it crosses into
+Rust, rather than replace or normalize it, and for the document decoder in
+`RUST-012` to apply that same rule to escaped JSON input. The cost of that
+choice is that a file holding a lone surrogate stops opening, where today it
+opens, so the choice belongs to whoever owns the documents rather than to the
+port. The alternative is a representation that carries such a string losslessly,
+which every later package then holds. No code implements either yet.
 
 `D-008` is resolved for the part the two adapters own. A refusal of the
 arguments of a case is worded identically by both runners, and the comparator
@@ -1483,7 +1509,7 @@ implemented, then its lasting rationale belongs beside that code.
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
-| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` is part resolved, and `D-010` holds a recorded choice |
+| Unresolved architecture decisions | `D-005`, `D-006`, `D-007`, `D-009`, `D-011`. `D-005` holds a recommendation awaiting the operator, `D-008` is part resolved, and `D-010` holds a recorded choice |
 | Next implementation action | Port formula syntax under `RUST-005` |
 | Completion evidence | `RUST-001` through `RUST-004`, under their headings above |
 
@@ -1506,18 +1532,20 @@ Remaining cases:
 Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
+  model.port-names, address.nearest-name, address.resolution and
+  graph.address-key carry the RUST-004 surface
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
-Commands run and results:
+Commands run and results, all on the pinned 1.94.1 toolchain:
   npm test                      2743 Vitest tests and 23 tooling tests pass
   npm run typecheck             both configs pass
   npm run build                 succeeds
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  46 pass
+  cargo test --workspace --locked                                  52 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           122 matched, 0 differed, 5 awaiting Rust
+  npm run conformance           164 matched, 0 differed, 5 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in

@@ -1,0 +1,15 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "graph.address-key",
+  "sourceTest": "src/engine/graph/edge.test.ts",
+  "requirement": "SPEC.md section 7, the dependency graph",
+  "comparison": "exact",
+  "cases": [
+    { "name": "a table cell", "call": "addressKey", "args": { "address": { "objectId": "obj_3", "path": ["cells", "A1"] } } },
+    { "name": "a single segment", "call": "addressKey", "args": { "address": { "objectId": "obj_1", "path": ["value"] } } },
+    { "name": "an empty path", "call": "addressKey", "args": { "address": { "objectId": "obj_1", "path": [] } } },
+    { "name": "a segment holding the separator, which a key cannot be split back into", "call": "addressKey", "args": { "address": { "objectId": "obj_1", "path": ["a.b", "c"] } } },
+    { "name": "an object id holding the key separator", "call": "addressKey", "args": { "address": { "objectId": "obj::1", "path": ["value"] } } }
+  ]
+}

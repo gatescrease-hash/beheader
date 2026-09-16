@@ -1,0 +1,149 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "address.resolution",
+  "sourceTest": "src/engine/address.test.ts",
+  "requirement": "SPEC.md section 5, addressing a slot",
+  "comparison": "exact",
+  "note": "An object gives its slot names as an ordered list, because the order decides which spelling of a document variable an address takes.",
+  "cases": [
+    {
+      "name": "a table cell written the way an operator writes it",
+      "call": "parseAddress",
+      "args": {
+        "input": "table_x.A1",
+        "objects": [{ "id": "t1", "name": "table_x", "type": "table", "slotKeys": ["cells.A1"] }]
+      }
+    },
+    {
+      "name": "a cell in lower case, and the surrounding space a command line leaves",
+      "call": "parseAddress",
+      "args": {
+        "input": "  TABLE_X.a1  ",
+        "objects": [{ "id": "t1", "name": "table_x", "type": "table", "slotKeys": ["cells.A1"] }]
+      }
+    },
+    {
+      "name": "the stored spelling of a cell, which stays the stored spelling",
+      "call": "parseAddress",
+      "args": {
+        "input": "table_x.cells.b12",
+        "objects": [{ "id": "t1", "name": "table_x", "type": "table", "slotKeys": ["cells.B12"] }]
+      }
+    },
+    {
+      "name": "a path on an object that is not a table, which no cell rule touches",
+      "call": "parseAddress",
+      "args": {
+        "input": "poly.vertices",
+        "objects": [{ "id": "p1", "name": "poly", "type": "polygon", "slotKeys": ["vertices"] }]
+      }
+    },
+    {
+      "name": "a document variable, which is the one address with no object name",
+      "call": "parseAddress",
+      "args": {
+        "input": "Speed",
+        "objects": [{ "id": "d1", "name": "doc", "type": "doc", "slotKeys": ["Speed"] }]
+      }
+    },
+    {
+      "name": "a document variable in another case, which takes the spelling the slot carries",
+      "call": "parseAddress",
+      "args": {
+        "input": "speed",
+        "objects": [{ "id": "d1", "name": "doc", "type": "doc", "slotKeys": ["Speed"] }]
+      }
+    },
+    {
+      "name": "a document variable reached through the doc object name",
+      "call": "parseAddress",
+      "args": {
+        "input": "doc.speed",
+        "objects": [{ "id": "d1", "name": "doc", "type": "doc", "slotKeys": ["Speed"] }]
+      }
+    },
+    {
+      "name": "one segment that names no document variable",
+      "call": "parseAddress",
+      "args": {
+        "input": "missing",
+        "objects": [{ "id": "d1", "name": "doc", "type": "doc", "slotKeys": ["Speed"] }]
+      }
+    },
+    {
+      "name": "one segment where the document holds no doc object",
+      "call": "parseAddress",
+      "args": {
+        "input": "speed",
+        "objects": [{ "id": "p1", "name": "poly", "type": "polygon", "slotKeys": ["vertices"] }]
+      }
+    },
+    {
+      "name": "an empty address",
+      "call": "parseAddress",
+      "args": { "input": "   ", "objects": [] }
+    },
+    {
+      "name": "a trailing separator, which leaves an empty segment",
+      "call": "parseAddress",
+      "args": {
+        "input": "table_x.",
+        "objects": [{ "id": "t1", "name": "table_x", "type": "table", "slotKeys": ["cells.A1"] }]
+      }
+    },
+    {
+      "name": "a path segment holding a character the pattern refuses",
+      "call": "parseAddress",
+      "args": {
+        "input": "poly.ver-tices",
+        "objects": [{ "id": "p1", "name": "poly", "type": "polygon", "slotKeys": ["vertices"] }]
+      }
+    },
+    {
+      "name": "a name that no object carries, near enough to one for a suggestion",
+      "call": "parseAddress",
+      "args": {
+        "input": "polly.vertices",
+        "objects": [{ "id": "p1", "name": "poly", "type": "polygon", "slotKeys": ["vertices"] }]
+      }
+    },
+    {
+      "name": "a name that no object carries, with nothing to suggest",
+      "call": "parseAddress",
+      "args": { "input": "polly.vertices", "objects": [] }
+    },
+    {
+      "name": "a table cell back into the spelling an operator reads",
+      "call": "formatAddress",
+      "args": {
+        "address": { "objectId": "t1", "path": ["cells", "A1"] },
+        "objects": [{ "id": "t1", "name": "Table_X", "type": "table", "slotKeys": ["cells.A1"] }]
+      }
+    },
+    {
+      "name": "a stored cell path that is not a cell reference, which stays as it is",
+      "call": "formatAddress",
+      "args": {
+        "address": { "objectId": "t1", "path": ["cells", "rows"] },
+        "objects": [{ "id": "t1", "name": "table_x", "type": "table", "slotKeys": ["cells.rows"] }]
+      }
+    },
+    {
+      "name": "a path on an object that is not a table",
+      "call": "formatAddress",
+      "args": {
+        "address": { "objectId": "p1", "path": ["vertices"] },
+        "objects": [{ "id": "p1", "name": "poly", "type": "polygon", "slotKeys": ["vertices"] }]
+      }
+    },
+    {
+      "name": "an id that no object carries",
+      "call": "formatAddress",
+      "args": {
+        "address": { "objectId": "gone", "path": ["value"] },
+        "objects": [{ "id": "p1", "name": "poly", "type": "polygon", "slotKeys": ["vertices"] }]
+      }
+    }
+  ]
+}

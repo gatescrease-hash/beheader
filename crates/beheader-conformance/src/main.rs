@@ -22,11 +22,13 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use beheader_engine::address::{
-    CellCoordinates, column_letters_to_index, format_cell_reference, index_to_column_letters,
-    is_cell_reference_form, is_valid_name, parse_cell_reference, to_surface_path,
+    Address, AddressError, AddressableObject, CellCoordinates, column_letters_to_index,
+    format_address, format_cell_reference, index_to_column_letters, is_cell_reference_form,
+    is_valid_name, nearest_name, parse_address, parse_cell_reference, to_surface_path,
 };
+use beheader_engine::graph::address_key;
 use beheader_engine::model::{
-    ObjectType, has_illegal_number, is_error_value, is_illegal_number, slot_key,
+    ObjectType, has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
 };
 use beheader_engine::number::to_javascript_text;
 use beheader_engine::wire::{decode_number, decode_value, encode_number, encode_value};
@@ -42,15 +44,20 @@ const FIXTURE_VERSION: u64 = 1;
 /// unsupported, which is what the comparison report counts as coverage the
 /// port has yet to reach.
 const SUPPORTED_CALLS: &[&str] = &[
+    "addressKey",
     "columnLettersToIndex",
+    "formatAddress",
     "formatCellReference",
     "hasIllegalNumber",
     "indexToColumnLetters",
     "isCellReferenceForm",
     "isErrorValue",
     "isIllegalNumber",
+    "isLegalPortName",
     "isValidName",
+    "nearestName",
     "numberToText",
+    "parseAddress",
     "parseCellReference",
     "slotKey",
     "toSurfacePath",
@@ -78,6 +85,95 @@ impl Outcome {
 }
 
 type Answer = Result<Json, String>;
+
+/// One object an address resolves against. A fixture gives the slot names as a
+/// list, because `serde_json` holds the members of an object in a sorted map
+/// and the order of the slot names is part of what the comparison asks about.
+struct FixtureObject {
+    id: String,
+    name: String,
+    object_type: ObjectType,
+    slot_keys: Vec<String>,
+}
+
+impl AddressableObject for FixtureObject {
+    fn id(&self) -> &str {
+        &self.id
+    }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn object_type(&self) -> ObjectType {
+        self.object_type
+    }
+    fn slot_keys(&self) -> Vec<&str> {
+        self.slot_keys.iter().map(String::as_str).collect()
+    }
+}
+
+fn object_list_argument(
+    args: &Map<String, Json>,
+    name: &str,
+) -> Result<Vec<FixtureObject>, String> {
+    let shape =
+        || format!("the argument \"{name}\" is a list of objects with an id, a name and a type");
+    argument(args, name)?
+        .as_array()
+        .ok_or_else(shape)?
+        .iter()
+        .map(|entry| {
+            let object = entry.as_object().ok_or_else(shape)?;
+            let text = |key: &str| object.get(key).and_then(Json::as_str).ok_or_else(shape);
+            Ok(FixtureObject {
+                id: text("id")?.to_string(),
+                name: text("name")?.to_string(),
+                object_type: ObjectType::parse(text("type")?).ok_or_else(shape)?,
+                slot_keys: match object.get("slotKeys") {
+                    None => Vec::new(),
+                    Some(keys) => keys
+                        .as_array()
+                        .ok_or_else(shape)?
+                        .iter()
+                        .map(|key| key.as_str().map(str::to_string).ok_or_else(shape))
+                        .collect::<Result<Vec<_>, _>>()?,
+                },
+            })
+        })
+        .collect()
+}
+
+fn text_list_argument(args: &Map<String, Json>, name: &str) -> Result<Vec<String>, String> {
+    let shape = || format!("the argument \"{name}\" is a list of strings");
+    argument(args, name)?
+        .as_array()
+        .ok_or_else(shape)?
+        .iter()
+        .map(|entry| entry.as_str().map(str::to_string).ok_or_else(shape))
+        .collect()
+}
+
+fn address_argument(args: &Map<String, Json>, name: &str) -> Result<Address, String> {
+    let shape = || format!("the argument \"{name}\" is an address with an objectId and a path");
+    let object = argument(args, name)?.as_object().ok_or_else(shape)?;
+    Ok(Address {
+        object_id: object
+            .get("objectId")
+            .and_then(Json::as_str)
+            .ok_or_else(shape)?
+            .to_string(),
+        path: path_argument(object, "path")?,
+    })
+}
+
+/// The one shape both spellings of an address answer take, so a comparison of
+/// two engines reads one field set whether the call succeeded or refused.
+fn encode_address_error(error: &AddressError) -> Json {
+    json!({ "error": error.error.as_str(), "message": error.message })
+}
+
+fn encode_address(address: &Address) -> Json {
+    json!({ "objectId": address.object_id, "path": address.path })
+}
 
 fn missing(name: &str) -> String {
     format!("the argument \"{name}\" is missing")
@@ -177,6 +273,36 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
             value_argument(args, "value").map(|value| json!(has_illegal_number(&value)))
         }
         "valueRoundTrip" => value_argument(args, "value").map(|value| encode_value(&value)),
+        "isLegalPortName" => {
+            text_argument(args, "name").map(|name| json!(is_legal_port_name(&name)))
+        }
+        "nearestName" => text_argument(args, "typed").and_then(|typed| {
+            text_list_argument(args, "candidates").map(|candidates| {
+                match nearest_name(&typed, candidates.iter().map(String::as_str)) {
+                    None => Json::Null,
+                    Some(nearest) => json!(nearest),
+                }
+            })
+        }),
+        "addressKey" => {
+            address_argument(args, "address").map(|address| json!(address_key(&address)))
+        }
+        "parseAddress" => text_argument(args, "input").and_then(|input| {
+            object_list_argument(args, "objects").map(|objects| {
+                match parse_address(&input, &objects) {
+                    Ok(address) => encode_address(&address),
+                    Err(error) => encode_address_error(&error),
+                }
+            })
+        }),
+        "formatAddress" => address_argument(args, "address").and_then(|address| {
+            object_list_argument(args, "objects").map(|objects| {
+                match format_address(&address, &objects) {
+                    Ok(text) => json!(text),
+                    Err(error) => encode_address_error(&error),
+                }
+            })
+        }),
         _ => return None,
     };
     Some(result)

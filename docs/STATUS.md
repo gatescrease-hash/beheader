@@ -5,10 +5,11 @@ code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
 
 [RUST_PORT.md](RUST_PORT.md) holds the engine migration, its work register,
-and its current handoff. The spec has released that scope, and the first three
-packages have landed: the boundary is frozen in a generated inventory, a Rust
-crate answers the same fixtures the TypeScript engine does, and a browser
-binding takes its measurements from the page.
+and its current handoff. The spec has released that scope, and the first four
+packages have landed. The boundary is frozen in a generated inventory, a Rust
+crate answers the same fixtures the TypeScript engine does, a browser binding
+takes its measurements from the page, and the data foundation holds values,
+slots, objects, addresses and edges.
 
 ---
 
@@ -19,8 +20,8 @@ binding takes its measurements from the page.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2743 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 46 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 122 cases match across the two engines, 5 await a Rust implementation. |
+| Rust | 52 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 164 cases match across the two engines, 5 await a Rust implementation. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -198,8 +199,9 @@ file.
 
 | File | Purpose |
 | --- | --- |
-| `beheader-engine/src/model.rs` | Values, error codes, object types, and the key a slot path joins into. |
-| `beheader-engine/src/address.rs` | Names, cell reference forms, the column arithmetic, and the surface path. |
+| `beheader-engine/src/model.rs` | Values, error codes, object types, slots, objects, and the key a slot path joins into. |
+| `beheader-engine/src/address.rs` | Names, cell reference forms, the column arithmetic, and the two spellings of a path. |
+| `beheader-engine/src/graph.rs` | A dependency edge, and the key a traversal holds one by. |
 | `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
 | `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |

@@ -13,7 +13,6 @@
 //! the refusal is a check the engine runs rather than a shape the type makes
 //! impossible, and a check that cannot be fed its input cannot be tested.
 
-use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::address::Address;
@@ -109,6 +108,86 @@ impl<A> Slot<A> {
     }
 }
 
+/// The slots of an object, in the order they were added.
+///
+/// `src/engine/graph/node.ts` holds slots in a plain object, and the keys of
+/// one come back in insertion order. Three behaviours read that order. The
+/// topological pass in `src/engine/graph/eval.ts` seeds its node map from it,
+/// so it settles which of two slots that depend on nothing reports a cycle
+/// first. The schema in `src/engine/primitives/schema.ts` enumerates slot
+/// paths in it for completion. A rename in `src/engine/mutation.ts` rebuilds
+/// the map entry by entry, which leaves the renamed slot where it was. A
+/// sorted map answers all three differently, so the order a caller writes is
+/// the order this gives back.
+///
+/// Lookup walks the entries, because a document holds few slots per object and
+/// the simpler structure is the one whose order is easy to see.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SlotMap<A> {
+    entries: Vec<(String, Slot<A>)>,
+}
+
+impl<A> SlotMap<A> {
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Adds a slot, or replaces one that the key already names. A replacement
+    /// stays where the first write to that key put it, which is what an
+    /// assignment to an existing key does in JavaScript.
+    pub fn insert(&mut self, key: impl Into<String>, slot: Slot<A>) -> Option<Slot<A>> {
+        let key = key.into();
+        match self.entries.iter_mut().find(|(held, _)| *held == key) {
+            Some((_, held)) => Some(std::mem::replace(held, slot)),
+            None => {
+                self.entries.push((key, slot));
+                None
+            }
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Slot<A>> {
+        self.entries
+            .iter()
+            .find(|(held, _)| held == key)
+            .map(|(_, slot)| slot)
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.entries.iter().map(|(key, _)| key.as_str())
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Slot<A>)> {
+        self.entries.iter().map(|(key, slot)| (key.as_str(), slot))
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+impl<A> Default for SlotMap<A> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<A, K: Into<String>> FromIterator<(K, Slot<A>)> for SlotMap<A> {
+    fn from_iter<I: IntoIterator<Item = (K, Slot<A>)>>(pairs: I) -> Self {
+        let mut map = Self::new();
+        for (key, slot) in pairs {
+            map.insert(key, slot);
+        }
+        map
+    }
+}
+
 /// Ordered port names carried outside the slot set.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct GraphObjectPorts {
@@ -124,7 +203,7 @@ pub struct GraphObject<A> {
     pub name: String,
     pub object_type: ObjectType,
     pub target: Option<Address>,
-    pub slots: BTreeMap<String, Slot<A>>,
+    pub slots: SlotMap<A>,
     pub ports: Option<GraphObjectPorts>,
     pub vertex_count: Option<f64>,
 }
@@ -146,7 +225,7 @@ impl<A> crate::address::AddressableObject for GraphObject<A> {
         self.object_type
     }
     fn slot_keys(&self) -> Vec<&str> {
-        self.slots.keys().map(String::as_str).collect()
+        self.slots.keys().collect()
     }
 }
 
@@ -272,12 +351,11 @@ pub fn slot_key(path: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, Value,
-        has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, resolve_slot,
-        slot_key,
+        ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap,
+        Value, has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name,
+        resolve_slot, slot_key,
     };
     use crate::address::Address;
-    use std::collections::BTreeMap;
 
     fn path(segments: &[&str]) -> Vec<String> {
         segments
@@ -300,7 +378,7 @@ mod tests {
             name: "value_1".into(),
             object_type: ObjectType::Value,
             target: None,
-            slots: BTreeMap::from([("value".into(), Slot::Literal { value: Value::Null })]),
+            slots: SlotMap::from_iter([("value", Slot::Literal { value: Value::Null })]),
             ports: Some(GraphObjectPorts {
                 input: vec!["factor".into()],
                 output: vec!["result".into()],
@@ -317,6 +395,39 @@ mod tests {
             Some(&Value::Null)
         );
         assert!(object.get_slot(&path(&["missing"])).is_none());
+    }
+
+    #[test]
+    fn slots_come_back_in_the_order_they_were_written() {
+        let mut slots = SlotMap::<()>::new();
+        for key in ["y", "x", "vertices"] {
+            slots.insert(key, Slot::Literal { value: Value::Null });
+        }
+        assert_eq!(slots.keys().collect::<Vec<_>>(), ["y", "x", "vertices"]);
+
+        // A second write to a key reports the slot it displaced and leaves the
+        // key where the first write put it, so a rewritten slot does not move
+        // ahead of one written after it.
+        let displaced = slots.insert(
+            "y",
+            Slot::Literal {
+                value: Value::Number(1.0),
+            },
+        );
+        assert_eq!(displaced, Some(Slot::Literal { value: Value::Null }));
+        assert_eq!(slots.keys().collect::<Vec<_>>(), ["y", "x", "vertices"]);
+
+        // A rename rebuilds the map entry by entry, which is how
+        // `src/engine/mutation.ts` renames a slot, and the new key holds the
+        // place the old one had.
+        let renamed: SlotMap<()> = slots
+            .iter()
+            .map(|(key, slot)| (if key == "x" { "width" } else { key }, slot.clone()))
+            .collect();
+        assert_eq!(
+            renamed.keys().collect::<Vec<_>>(),
+            ["y", "width", "vertices"]
+        );
     }
 
     #[test]

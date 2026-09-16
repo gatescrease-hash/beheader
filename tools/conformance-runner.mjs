@@ -51,6 +51,7 @@ if (major < 22 || (major === 22 && minor < 18)) {
 }
 
 const {
+  addressKey,
   columnLettersToIndex,
   formatCellReference,
   hasIllegalNumber,
@@ -58,7 +59,11 @@ const {
   isCellReferenceForm,
   isErrorValue,
   isIllegalNumber,
+  isLegalPortName,
   isValidName,
+  formatAddress,
+  nearestName,
+  parseAddress,
   parseCellReference,
   parseFormula,
   slotKey,
@@ -291,6 +296,53 @@ function objectListArgument(args, name) {
   return value;
 }
 
+/**
+ * The objects an address resolves against. A fixture gives the slot names of
+ * an object as a list rather than as an object, because a JSON object reaches
+ * the Rust runner through a sorted map, and the order of the slot names is
+ * part of what the two engines are being compared on.
+ */
+function addressableObjectListArgument(args, name) {
+  const objects = objectListArgument(args, name);
+  return objects.map((object) => ({
+    ...object,
+    slots: Object.fromEntries(
+      (object.slotKeys ?? []).map((key) => [key, { kind: "literal", value: null }]),
+    ),
+  }));
+}
+
+function textListArgument(args, name) {
+  const value = argument(args, name);
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
+    throw new BadArgument(`the argument "${name}" is a list of strings`);
+  }
+  return value;
+}
+
+function addressArgument(args, name) {
+  const value = argument(args, name);
+  if (!isPlainObject(value) || typeof value.objectId !== "string") {
+    throw new BadArgument(`the argument "${name}" is an address with an objectId and a path`);
+  }
+  return { objectId: value.objectId, path: pathArgument(value, "path") };
+}
+
+/**
+ * The one shape both spellings of an address answer take. A refusal is an
+ * object carrying its code and its wording, and a success is the address or
+ * the text, so a comparison of two engines reads one field set either way.
+ */
+function encodeAddressResult(result) {
+  if (typeof result === "string") {
+    return result;
+  }
+  if ("error" in result) {
+    return { error: result.error, message: result.message };
+  }
+  return { objectId: result.objectId, path: [...result.path] };
+}
+
 /* ------------------------------------------------------------------ */
 /* The calls                                                           */
 /* ------------------------------------------------------------------ */
@@ -321,6 +373,14 @@ const CALLS = {
   isIllegalNumber: (args) => isIllegalNumber(numberArgument(args, "number")),
   hasIllegalNumber: (args) => hasIllegalNumber(valueArgument(args, "value")),
   valueRoundTrip: (args) => encodeValue(valueArgument(args, "value")),
+  isLegalPortName: (args) => isLegalPortName(textArgument(args, "name")),
+  nearestName: (args) => {
+    const nearest = nearestName(textArgument(args, "typed"), textListArgument(args, "candidates"));
+    return nearest === undefined ? null : nearest;
+  },
+  addressKey: (args) => addressKey(addressArgument(args, "address")),
+  parseAddress: (args) => encodeAddressResult(parseAddress(textArgument(args, "input"), addressableObjectListArgument(args, "objects"))),
+  formatAddress: (args) => encodeAddressResult(formatAddress(addressArgument(args, "address"), addressableObjectListArgument(args, "objects"))),
   parseFormula: (args) => parseFormula(textArgument(args, "source"), objectListArgument(args, "objects")),
 };
 

@@ -15,7 +15,7 @@
 //! way in both engines, and a Rust `u32` that refused it would refuse a
 //! document the TypeScript engine reads.
 
-use crate::model::ObjectType;
+use crate::model::{ErrorCode, ObjectType};
 use crate::number::to_javascript_text;
 
 /// The segment that a stored cell path begins with.
@@ -27,9 +27,22 @@ pub struct Address {
     pub path: Vec<String>,
 }
 
+/// Why a piece of text does not name a slot. The code is always `#REF`,
+/// because `src/engine/address.ts` returns a refusal in the shape of an error
+/// value and every caller that stores one stores it as that code.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AddressError {
+    pub error: ErrorCode,
     pub message: String,
+}
+
+impl AddressError {
+    fn reference(message: String) -> Self {
+        Self {
+            error: ErrorCode::Ref,
+            message,
+        }
+    }
 }
 
 pub trait AddressableObject {
@@ -253,15 +266,13 @@ pub fn parse_address<T: AddressableObject>(
 ) -> Result<Address, AddressError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return Err(AddressError {
-            message: "empty address".to_string(),
-        });
+        return Err(AddressError::reference("empty address".to_string()));
     }
     let segments: Vec<&str> = trimmed.split('.').collect();
     if segments.iter().any(|segment| segment.is_empty()) {
-        return Err(AddressError {
-            message: format!("malformed address \"{input}\" — empty segment"),
-        });
+        return Err(AddressError::reference(format!(
+            "malformed address \"{input}\" — empty segment"
+        )));
     }
     if segments.len() < 2 {
         if let Some(doc) = objects
@@ -277,11 +288,9 @@ pub fn parse_address<T: AddressableObject>(
                 path: vec![key.to_string()],
             });
         }
-        return Err(AddressError {
-            message: format!(
-                "malformed address \"{input}\" — expected \"name.path\", e.g. \"table_x.A1\""
-            ),
-        });
+        return Err(AddressError::reference(format!(
+            "malformed address \"{input}\" — expected \"name.path\", e.g. \"table_x.A1\""
+        )));
     }
     let (name, path) = segments.split_first().expect("the address has segments");
     if let Some(bad) = path.iter().find(|segment| {
@@ -289,18 +298,18 @@ pub fn parse_address<T: AddressableObject>(
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_')
     }) {
-        return Err(AddressError {
-            message: format!("malformed address \"{input}\" — invalid path segment \"{bad}\""),
-        });
+        return Err(AddressError::reference(format!(
+            "malformed address \"{input}\" — invalid path segment \"{bad}\""
+        )));
     }
     let Some(object) = find_object_by_name(name, objects) else {
         let suggestion = nearest_name(name, objects.iter().map(AddressableObject::name))
             .map_or(String::new(), |candidate| {
                 format!(" Did you mean \"{candidate}\"?")
             });
-        return Err(AddressError {
-            message: format!("no object named \"{name}\"{suggestion}"),
-        });
+        return Err(AddressError::reference(format!(
+            "no object named \"{name}\"{suggestion}"
+        )));
     };
     let surface: Vec<String> = path.iter().map(|segment| (*segment).to_string()).collect();
     let mut stored = to_stored_path(object.object_type(), &surface);
@@ -323,8 +332,8 @@ pub fn format_address<T: AddressableObject>(
     address: &Address,
     objects: &[T],
 ) -> Result<String, AddressError> {
-    let object = find_object_by_id(&address.object_id, objects).ok_or_else(|| AddressError {
-        message: format!("no object with id \"{}\"", address.object_id),
+    let object = find_object_by_id(&address.object_id, objects).ok_or_else(|| {
+        AddressError::reference(format!("no object with id \"{}\"", address.object_id))
     })?;
     Ok(std::iter::once(object.name().to_string())
         .chain(to_surface_path(object.object_type(), &address.path))

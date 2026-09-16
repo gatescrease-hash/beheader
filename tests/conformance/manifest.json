@@ -53,6 +53,34 @@
         "src/engine/formula/lexer.ts",
         "src/engine/formula/ast.ts"
       ]
+    },
+    {
+      "id": "model.port-names",
+      "file": "fixtures/model.port-names.json",
+      "covers": [
+        "src/engine/graph/node.ts"
+      ]
+    },
+    {
+      "id": "address.nearest-name",
+      "file": "fixtures/address.nearest-name.json",
+      "covers": [
+        "src/engine/address.ts"
+      ]
+    },
+    {
+      "id": "address.resolution",
+      "file": "fixtures/address.resolution.json",
+      "covers": [
+        "src/engine/address.ts"
+      ]
+    },
+    {
+      "id": "graph.address-key",
+      "file": "fixtures/graph.address-key.json",
+      "covers": [
+        "src/engine/graph/edge.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -63,7 +91,6 @@
     "src/engine/formula/eval.ts",
     "src/engine/formula/functions.ts",
     "src/engine/graph/cycles.ts",
-    "src/engine/graph/edge.ts",
     "src/engine/graph/eval.ts",
     "src/engine/index.ts",
     "src/engine/journal.ts",
