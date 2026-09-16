@@ -1124,8 +1124,7 @@ object as an ordered list rather than as a JSON object, because `serde_json`
 holds the members of an object in a sorted map and the order of those names
 decides which spelling of a document variable an address takes.
 
-`D-004` is resolved below, and `D-005` holds a recommendation the operator has
-yet to confirm. The existing shared value fixtures cover every value variant and
+`D-004` and `D-005` are resolved below. The existing shared value fixtures cover every value variant and
 numeric boundary. The generic formula payload is bound to the persisted AST and
 gains its wire round trips in `RUST-005`, where that type is introduced rather
 than represented temporarily as raw JSON.
@@ -1471,20 +1470,19 @@ remain testable. Operator-facing conversion follows ECMAScript number text.
 A comparison declares an allowed tolerance in its fixture, so exact comparison
 remains the default.
 
-`D-005` holds a recommendation that the operator has yet to confirm, because it
-decides which documents the program still opens. Fixtures send a character
-outside the basic plane and a letter carrying a combining mark through slot
-keys, object names and text values, and the two engines agree on every one. The
-name pattern is the ASCII alphabet, so neither engine accepts a name outside it.
+`D-005` is resolved. Fixtures send a character outside the basic plane and a
+letter carrying a combining mark through slot keys, object names and text
+values, and the two engines agree on every one. The name pattern is the ASCII
+alphabet, so neither engine accepts a name outside it.
 
-What is still open is the lone surrogate, which a JavaScript string holds and a
-Rust `String` cannot. The recommendation is to refuse one where it crosses into
-Rust, rather than replace or normalize it, and for the document decoder in
-`RUST-012` to apply that same rule to escaped JSON input. The cost of that
-choice is that a file holding a lone surrogate stops opening, where today it
-opens, so the choice belongs to whoever owns the documents rather than to the
-port. The alternative is a representation that carries such a string losslessly,
-which every later package then holds. No code implements either yet.
+The lone surrogate, which a JavaScript string holds and a Rust `String` cannot,
+is refused where it crosses into Rust rather than replaced or normalized, and
+the document decoder in `RUST-012` applies that same rule to escaped JSON input.
+The operator took that choice over a representation that carries such a string
+losslessly, which every later package would then hold. The cost is that a file
+holding a lone surrogate stops opening, where today it opens. A lone surrogate
+is half of a character that no editor produces on purpose, so the documents it
+refuses are ones already holding a fault.
 
 `D-008` is resolved for the part the two adapters own. A refusal of the
 arguments of a case is worded identically by both runners, and the comparator
@@ -1509,7 +1507,7 @@ implemented, then its lasting rationale belongs beside that code.
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
-| Unresolved architecture decisions | `D-005`, `D-006`, `D-007`, `D-009`, `D-011`. `D-005` holds a recommendation awaiting the operator, `D-008` is part resolved, and `D-010` holds a recorded choice |
+| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` is part resolved, and `D-010` holds a recorded choice |
 | Next implementation action | Port formula syntax under `RUST-005` |
 | Completion evidence | `RUST-001` through `RUST-004`, under their headings above |
 
