@@ -203,7 +203,7 @@ file.
 | `beheader-engine/src/address.rs` | Names, cell reference forms, the column arithmetic, and the two spellings of a path. |
 | `beheader-engine/src/graph.rs` | A dependency edge, and the key a traversal holds one by. |
 | `beheader-engine/src/formula/lexer.rs` | Formula text to tokens, over the units a JavaScript string counts. |
-| `beheader-engine/src/formula/ast.rs` | The formula node types, the shape a saved tree must have, and the depth limit. |
+| `beheader-engine/src/formula/ast.rs` | The formula node types, the shape check a saved tree passes, and the depth limit. |
 | `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
 | `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |
