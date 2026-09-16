@@ -59,9 +59,11 @@ const {
   isCellReferenceForm,
   isErrorValue,
   isIllegalNumber,
+  exceedsMaxFormulaAstDepth,
   isLegalPortName,
   isValidName,
   lex,
+  validateFormulaAstShape,
   formatAddress,
   nearestName,
   parseAddress,
@@ -318,6 +320,42 @@ function addressableObjectListArgument(args, name) {
  * fixtures use for every other number, so a token holding 1e21 compares by the
  * text both engines print rather than by what JSON does with it.
  */
+/**
+ * A formula tree as JSON, with a literal number carried in the tagged form the
+ * fixtures use so a tree holding 1e21 compares by the text both engines print.
+ */
+function encodeAst(ast) {
+  switch (ast.type) {
+    case "literal":
+      return { type: "literal", value: typeof ast.value === "number" ? encodeNumber(ast.value) : ast.value };
+    case "reference":
+      return { type: "reference", address: { objectId: ast.address.objectId, path: [...ast.address.path] } };
+    case "range":
+      return {
+        type: "range",
+        start: { objectId: ast.start.objectId, path: [...ast.start.path] },
+        end: { objectId: ast.end.objectId, path: [...ast.end.path] },
+      };
+    case "binaryOp":
+      return { type: "binaryOp", operator: ast.operator, left: encodeAst(ast.left), right: encodeAst(ast.right) };
+    case "unaryOp":
+      return { type: "unaryOp", operator: ast.operator, operand: encodeAst(ast.operand) };
+    case "functionCall":
+      return { type: "functionCall", name: ast.name, args: ast.args.map(encodeAst) };
+    default:
+      return { type: "error", error: "#REF" };
+  }
+}
+
+/** A chain of prefix minus nodes that deep, around one literal. */
+function nestedAst(depth) {
+  let ast = { type: "literal", value: 1 };
+  for (let n = 0; n < depth; n += 1) {
+    ast = { type: "unaryOp", operator: "-", operand: ast };
+  }
+  return ast;
+}
+
 function encodeTokenValue(value) {
   return typeof value === "number" ? encodeNumber(value) : value;
 }
@@ -384,6 +422,17 @@ const CALLS = {
   hasIllegalNumber: (args) => hasIllegalNumber(valueArgument(args, "value")),
   valueRoundTrip: (args) => encodeValue(valueArgument(args, "value")),
   isLegalPortName: (args) => isLegalPortName(textArgument(args, "name")),
+  validateFormulaAstShape: (args) => {
+    const result = validateFormulaAstShape(argument(args, "ast"));
+    return result.ok ? { ok: true, ast: encodeAst(result.ast) } : { ok: false, reason: result.reason };
+  },
+  nestedFormulaDepth: (args) => {
+    const raw = nestedAst(safeIntegerArgument(args, "depth"));
+    const shape = validateFormulaAstShape(raw);
+    return shape.ok
+      ? { ok: true, exceeds: exceedsMaxFormulaAstDepth(shape.ast) }
+      : { ok: false, reason: shape.reason };
+  },
   lex: (args) => {
     const result = lex(textArgument(args, "source"));
     if (!Array.isArray(result)) {

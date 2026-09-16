@@ -5,4 +5,5 @@
 //! order a formula meets them, so a stage is testable against the TypeScript
 //! one before the stage after it exists.
 
+pub mod ast;
 pub mod lexer;

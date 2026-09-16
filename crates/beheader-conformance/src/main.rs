@@ -26,6 +26,9 @@ use beheader_engine::address::{
     format_address, format_cell_reference, index_to_column_letters, is_cell_reference_form,
     is_valid_name, nearest_name, parse_address, parse_cell_reference, to_surface_path,
 };
+use beheader_engine::formula::ast::{
+    FormulaAst, LiteralValue, exceeds_max_formula_ast_depth, validate_formula_ast_shape,
+};
 use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::graph::address_key;
 use beheader_engine::model::{
@@ -58,11 +61,13 @@ const SUPPORTED_CALLS: &[&str] = &[
     "isValidName",
     "lex",
     "nearestName",
+    "nestedFormulaDepth",
     "numberToText",
     "parseAddress",
     "parseCellReference",
     "slotKey",
     "toSurfacePath",
+    "validateFormulaAstShape",
     "valueRoundTrip",
 ];
 
@@ -177,6 +182,67 @@ fn encode_address(address: &Address) -> Json {
     json!({ "objectId": address.object_id, "path": address.path })
 }
 
+/// A formula tree as JSON, with a literal number carried in the tagged form the
+/// fixtures use so a tree holding 1e21 compares by the text both engines print.
+fn encode_ast(ast: &FormulaAst) -> Json {
+    fn address(address: &beheader_engine::address::Address) -> Json {
+        json!({ "objectId": address.object_id, "path": address.path })
+    }
+    match ast {
+        FormulaAst::Literal(LiteralValue::Number(number)) => {
+            json!({ "type": "literal", "value": encode_number(*number) })
+        }
+        FormulaAst::Literal(LiteralValue::Text(text)) => {
+            json!({ "type": "literal", "value": text })
+        }
+        FormulaAst::Literal(LiteralValue::Boolean(boolean)) => {
+            json!({ "type": "literal", "value": boolean })
+        }
+        FormulaAst::Reference(reference) => {
+            json!({ "type": "reference", "address": address(reference) })
+        }
+        FormulaAst::Range { start, end } => {
+            json!({ "type": "range", "start": address(start), "end": address(end) })
+        }
+        FormulaAst::BinaryOp {
+            operator,
+            left,
+            right,
+        } => json!({
+            "type": "binaryOp",
+            "operator": operator.as_str(),
+            "left": encode_ast(left),
+            "right": encode_ast(right),
+        }),
+        FormulaAst::UnaryOp { operator, operand } => json!({
+            "type": "unaryOp",
+            "operator": operator.as_str(),
+            "operand": encode_ast(operand),
+        }),
+        FormulaAst::FunctionCall { name, args } => json!({
+            "type": "functionCall",
+            "name": name,
+            "args": args.iter().map(encode_ast).collect::<Vec<_>>(),
+        }),
+        FormulaAst::Error => json!({ "type": "error", "error": "#REF" }),
+    }
+}
+
+/// A chain of prefix minus nodes that deep, around one literal. Each step moves
+/// the tree it has into the next node, because writing it as `json!` with the
+/// tree inside would serialize that tree again for every node.
+fn nested_ast(depth: usize) -> Json {
+    let mut ast = json!({ "type": "literal", "value": 1 });
+    for _ in 0..depth {
+        let mut node = Map::new();
+        node.insert("type".into(), json!("unaryOp"));
+        node.insert("operator".into(), json!("-"));
+        node.insert("operand".into(), ast);
+        ast = Json::Object(node);
+    }
+    ast
+}
+
 fn missing(name: &str) -> String {
     format!("the argument \"{name}\" is missing")
 }
@@ -275,6 +341,18 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
             value_argument(args, "value").map(|value| json!(has_illegal_number(&value)))
         }
         "valueRoundTrip" => value_argument(args, "value").map(|value| encode_value(&value)),
+        "validateFormulaAstShape" => {
+            argument(args, "ast").map(|raw| match validate_formula_ast_shape(raw) {
+                Ok(ast) => json!({ "ok": true, "ast": encode_ast(&ast) }),
+                Err(reason) => json!({ "ok": false, "reason": reason }),
+            })
+        }
+        "nestedFormulaDepth" => safe_integer_argument(args, "depth").map(|depth| {
+            match validate_formula_ast_shape(&nested_ast(depth as usize)) {
+                Ok(ast) => json!({ "ok": true, "exceeds": exceeds_max_formula_ast_depth(&ast) }),
+                Err(reason) => json!({ "ok": false, "reason": reason }),
+            }
+        }),
         "lex" => text_argument(args, "source").map(|source| match lex(&source) {
             Err(error) => json!({
                 "error": "#PARSE",

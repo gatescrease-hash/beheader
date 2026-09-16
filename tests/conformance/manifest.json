@@ -88,6 +88,13 @@
       "covers": [
         "src/engine/formula/lexer.ts"
       ]
+    },
+    {
+      "id": "formula.ast-shape",
+      "file": "fixtures/formula.ast-shape.json",
+      "covers": [
+        "src/engine/formula/ast.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
