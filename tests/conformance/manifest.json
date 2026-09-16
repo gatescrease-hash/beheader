@@ -46,12 +46,11 @@
       ]
     },
     {
-      "id": "formula.parse-awaiting-rust",
-      "file": "fixtures/formula.parse-awaiting-rust.json",
+      "id": "formula.parse",
+      "file": "fixtures/formula.parse.json",
       "covers": [
         "src/engine/formula/parser.ts",
-        "src/engine/formula/lexer.ts",
-        "src/engine/formula/ast.ts"
+        "src/engine/formula/functions.ts"
       ]
     },
     {
@@ -103,7 +102,6 @@
     "src/engine/eval-context.ts",
     "src/engine/formula/deps.ts",
     "src/engine/formula/eval.ts",
-    "src/engine/formula/functions.ts",
     "src/engine/graph/cycles.ts",
     "src/engine/graph/eval.ts",
     "src/engine/index.ts",

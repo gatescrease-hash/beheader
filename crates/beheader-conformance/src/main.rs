@@ -30,6 +30,7 @@ use beheader_engine::formula::ast::{
     FormulaAst, LiteralValue, exceeds_max_formula_ast_depth, validate_formula_ast_shape,
 };
 use beheader_engine::formula::lexer::{TokenKind, lex};
+use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
 use beheader_engine::model::{
     ObjectType, has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
@@ -64,6 +65,7 @@ const SUPPORTED_CALLS: &[&str] = &[
     "nestedFormulaDepth",
     "numberToText",
     "parseAddress",
+    "parseFormula",
     "parseCellReference",
     "slotKey",
     "toSurfacePath",
@@ -352,6 +354,22 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                 Ok(ast) => json!({ "ok": true, "exceeds": exceeds_max_formula_ast_depth(&ast) }),
                 Err(reason) => json!({ "ok": false, "reason": reason }),
             }
+        }),
+        "parseFormula" => text_argument(args, "source").and_then(|source| {
+            object_list_argument(args, "objects").and_then(|objects| {
+                let table = match args.get("tableObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "tableObjectId")?),
+                };
+                Ok(match parse_formula(&source, &objects, table.as_deref()) {
+                    Ok(ast) => encode_ast(&ast),
+                    Err(error) => json!({
+                        "error": error.error.as_str(),
+                        "message": error.message,
+                        "start": error.start,
+                    }),
+                })
+            })
         }),
         "lex" => text_argument(args, "source").map(|source| match lex(&source) {
             Err(error) => json!({

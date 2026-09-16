@@ -61,6 +61,7 @@ const {
   isIllegalNumber,
   exceedsMaxFormulaAstDepth,
   isLegalPortName,
+  isParseError,
   isValidName,
   lex,
   validateFormulaAstShape,
@@ -451,7 +452,11 @@ const CALLS = {
   addressKey: (args) => addressKey(addressArgument(args, "address")),
   parseAddress: (args) => encodeAddressResult(parseAddress(textArgument(args, "input"), addressableObjectListArgument(args, "objects"))),
   formatAddress: (args) => encodeAddressResult(formatAddress(addressArgument(args, "address"), addressableObjectListArgument(args, "objects"))),
-  parseFormula: (args) => parseFormula(textArgument(args, "source"), objectListArgument(args, "objects")),
+  parseFormula: (args) => {
+    const table = "tableObjectId" in args ? textArgument(args, "tableObjectId") : undefined;
+    const result = parseFormula(textArgument(args, "source"), addressableObjectListArgument(args, "objects"), table);
+    return isParseError(result) ? { error: result.error, message: result.message, start: result.start } : encodeAst(result);
+  },
 };
 
 const SUPPORTED_CALLS = Object.keys(CALLS).sort();

@@ -1140,6 +1140,34 @@ rewrite helpers have direct fixtures before mutation consumes them. Unicode
 source offsets match field marking. Malformed and maximum-depth inputs return
 defined results without process failure.
 
+**Landed so far.** The lexer, the node types with their shape and depth checks,
+the parser, and the signature half of the function registry. What a function
+computes arrives with `RUST-006`, because the parser needs only the name, the
+argument count and whether a range may be handed to the function.
+
+The lexer scans UTF-16 code units, so the offset a token carries is the offset
+a JavaScript string gives and the command line marks the faulty field of a
+formula by the same number. Its refusal for an unrecognised character named the
+one unit the scan sat on, which for a character outside the basic plane is the
+lone surrogate that is half of it. Both engines now name the whole code point,
+which is a change to the TypeScript recorded under `D-005`.
+
+Two walks over a tree hold their own stack rather than recursing: the shape
+check in `ast.rs` and the walk in `parser.rs` that places ranges. Both are
+reached with a depth the input decides, and the limit that stops them is only
+met part way down.
+
+The descent in the parser stays recursive, because the nesting limit of 256
+steps bounds it and an explicit stack would cost more than it saves. What that
+costs was measured on this machine, by parsing a formula of nested brackets on
+a thread of a named size. A release build reaches the full limit of 256 inside
+a stack of one mebibyte, which is what the toolchain gives a Wasm module and
+what `npm run hosting-proof` builds. A debug build of the same formula needs
+about twice that, and holds between 64 and 96 bracket levels in one mebibyte,
+which is why the native test threads that carry two mebibytes run it. Frame
+sizes on `wasm32` differ from the native ones, so the figure that governs the
+shipped engine is a browser measurement, and `RUST-015` takes it.
+
 ### `RUST-006`: Port formula evaluation
 
 **Work.** Port the function registry, operator behavior, lazy evaluation,
@@ -1528,17 +1556,22 @@ Completed cases:
   The lexer in formula/lexer.rs, over UTF-16 code units so the offset a token
   carries is the offset the command line marks a faulty field by.
   The node types, the shape check over a tree that arrived as JSON, and the
-  depth limit, in formula/ast.rs. Both walks over a tree hold their own stack,
-  so the native stack they need does not grow with the tree.
+  depth limit, in formula/ast.rs.
+  The signature half of the registry in formula/functions.rs: the name, the
+  argument count and the two habits of all 23 functions.
+  The descent in formula/parser.rs, with precedence, associativity, names
+  resolved to IDs, bare cell references inside a table, range placement, both
+  depth limits and the wording of every refusal.
 Remaining cases:
-  Parsing, formatting, dependency extraction and reference rewriting.
+  Formatting a tree back to source, dependency extraction, and the rewrites a
+  table or vertex resize asks of a stored formula.
 Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
   graph.address-key carry the RUST-004 surface
-  formula.lex and formula.ast-shape carry the two stages of RUST-005 that
-  have landed
+  formula.lex, formula.ast-shape and formula.parse carry the stages of
+  RUST-005 that have landed
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1548,17 +1581,17 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  66 pass
+  cargo test --workspace --locked                                  80 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           228 matched, 0 differed, 5 awaiting Rust
+  npm run conformance           281 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
   Chromium. Windows runs the Rust checks in the pull request workflow and has
   not run the browser proof.
 Known failures with smallest reproduction: none
-Next concrete action: port the parser, which resolves a name against the
-  object list, then make formula.parse-awaiting-rust answer from Rust.
+Next concrete action: port format.ts, which writes a tree back to source, then
+  deps.ts and the rewrites a resize asks of a stored formula.
 Dependencies that can proceed independently: none
 ```
 

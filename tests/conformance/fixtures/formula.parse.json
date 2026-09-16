@@ -1,0 +1,801 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "formula.parse",
+  "sourceTest": "src/engine/formula/parser.test.ts",
+  "requirement": "SPEC.md section 6, the formula language",
+  "comparison": "exact",
+  "cases": [
+    {
+      "name": "a literal",
+      "call": "parseFormula",
+      "args": {
+        "source": "1",
+        "objects": []
+      }
+    },
+    {
+      "name": "a text literal",
+      "call": "parseFormula",
+      "args": {
+        "source": "\"hi\"",
+        "objects": []
+      }
+    },
+    {
+      "name": "a boolean literal",
+      "call": "parseFormula",
+      "args": {
+        "source": "TRUE",
+        "objects": []
+      }
+    },
+    {
+      "name": "precedence between a sum and a product",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 + 2 * 3",
+        "objects": []
+      }
+    },
+    {
+      "name": "precedence the other way round",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 * 2 + 3",
+        "objects": []
+      }
+    },
+    {
+      "name": "power binds tighter than a product",
+      "call": "parseFormula",
+      "args": {
+        "source": "2 * 3 ^ 4",
+        "objects": []
+      }
+    },
+    {
+      "name": "power is read from the left, as the TypeScript reads it",
+      "call": "parseFormula",
+      "args": {
+        "source": "2 ^ 3 ^ 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "subtraction is read from the left",
+      "call": "parseFormula",
+      "args": {
+        "source": "10 - 4 - 3",
+        "objects": []
+      }
+    },
+    {
+      "name": "division is read from the left",
+      "call": "parseFormula",
+      "args": {
+        "source": "100 / 5 / 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "brackets over precedence",
+      "call": "parseFormula",
+      "args": {
+        "source": "(1 + 2) * 3",
+        "objects": []
+      }
+    },
+    {
+      "name": "a comparison under an operator",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 + 2 = 3",
+        "objects": []
+      }
+    },
+    {
+      "name": "AND binds looser than a comparison",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 < 2 AND 3 > 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "OR binds looser than AND",
+      "call": "parseFormula",
+      "args": {
+        "source": "TRUE OR TRUE AND FALSE",
+        "objects": []
+      }
+    },
+    {
+      "name": "a prefix minus",
+      "call": "parseFormula",
+      "args": {
+        "source": "-1",
+        "objects": []
+      }
+    },
+    {
+      "name": "a prefix minus over a power",
+      "call": "parseFormula",
+      "args": {
+        "source": "-2 ^ 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "two prefix minuses",
+      "call": "parseFormula",
+      "args": {
+        "source": "--1",
+        "objects": []
+      }
+    },
+    {
+      "name": "a prefix NOT",
+      "call": "parseFormula",
+      "args": {
+        "source": "NOT TRUE",
+        "objects": []
+      }
+    },
+    {
+      "name": "NOT with a bracket is the function of that name",
+      "call": "parseFormula",
+      "args": {
+        "source": "NOT(TRUE)",
+        "objects": []
+      }
+    },
+    {
+      "name": "AND as a function rather than an operator",
+      "call": "parseFormula",
+      "args": {
+        "source": "AND(TRUE, FALSE)",
+        "objects": []
+      }
+    },
+    {
+      "name": "OR as a function",
+      "call": "parseFormula",
+      "args": {
+        "source": "OR(TRUE, FALSE)",
+        "objects": []
+      }
+    },
+    {
+      "name": "a function with no arguments",
+      "call": "parseFormula",
+      "args": {
+        "source": "PI()",
+        "objects": []
+      }
+    },
+    {
+      "name": "a function with two arguments",
+      "call": "parseFormula",
+      "args": {
+        "source": "POW(2, 3)",
+        "objects": []
+      }
+    },
+    {
+      "name": "a nested function call",
+      "call": "parseFormula",
+      "args": {
+        "source": "SUM(1, ABS(-2))",
+        "objects": []
+      }
+    },
+    {
+      "name": "a function name in the wrong case",
+      "call": "parseFormula",
+      "args": {
+        "source": "sum(1)",
+        "objects": []
+      }
+    },
+    {
+      "name": "a function nothing knows",
+      "call": "parseFormula",
+      "args": {
+        "source": "NOPE(1)",
+        "objects": []
+      }
+    },
+    {
+      "name": "too few arguments",
+      "call": "parseFormula",
+      "args": {
+        "source": "ROUND(1)",
+        "objects": []
+      }
+    },
+    {
+      "name": "too many arguments",
+      "call": "parseFormula",
+      "args": {
+        "source": "NOT(1, 2)",
+        "objects": []
+      }
+    },
+    {
+      "name": "too few arguments for a function taking at least one",
+      "call": "parseFormula",
+      "args": {
+        "source": "SUM()",
+        "objects": []
+      }
+    },
+    {
+      "name": "a reference resolved to an id",
+      "call": "parseFormula",
+      "args": {
+        "source": "poly.vertices",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference in another case",
+      "call": "parseFormula",
+      "args": {
+        "source": "POLY.VERTICES",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a table cell written the way an operator writes it",
+      "call": "parseFormula",
+      "args": {
+        "source": "table_x.A1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a document variable with no object name in front of it",
+      "call": "parseFormula",
+      "args": {
+        "source": "Speed",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a numeric path segment",
+      "call": "parseFormula",
+      "args": {
+        "source": "poly.0.x",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a name nothing resolves to",
+      "call": "parseFormula",
+      "args": {
+        "source": "nope.x",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a name with nothing to resolve against",
+      "call": "parseFormula",
+      "args": {
+        "source": "table_x.A1",
+        "objects": []
+      }
+    },
+    {
+      "name": "a bare cell reference inside its own table",
+      "call": "parseFormula",
+      "args": {
+        "source": "A1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ],
+        "tableObjectId": "t1"
+      }
+    },
+    {
+      "name": "a bare cell reference with no table around it",
+      "call": "parseFormula",
+      "args": {
+        "source": "A1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range as the argument of an aggregate",
+      "call": "parseFormula",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range inside a table, written bare",
+      "call": "parseFormula",
+      "args": {
+        "source": "SUM(A1:B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ],
+        "tableObjectId": "t1"
+      }
+    },
+    {
+      "name": "a range where no aggregate takes it",
+      "call": "parseFormula",
+      "args": {
+        "source": "table_x.A1:table_x.B2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range handed to a function that takes no range",
+      "call": "parseFormula",
+      "args": {
+        "source": "ABS(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range whose ends are in different objects",
+      "call": "parseFormula",
+      "args": {
+        "source": "SUM(table_x.A1:poly.vertices)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an empty formula",
+      "call": "parseFormula",
+      "args": {
+        "source": "",
+        "objects": []
+      }
+    },
+    {
+      "name": "a formula that is space alone",
+      "call": "parseFormula",
+      "args": {
+        "source": "   ",
+        "objects": []
+      }
+    },
+    {
+      "name": "a bracket that never closes",
+      "call": "parseFormula",
+      "args": {
+        "source": "(1 + 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "an argument list that never closes",
+      "call": "parseFormula",
+      "args": {
+        "source": "SUM(1, 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "an operator with nothing after it",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 +",
+        "objects": []
+      }
+    },
+    {
+      "name": "two operators in a row",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 + * 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "trailing input after a whole expression",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "a comma outside an argument list",
+      "call": "parseFormula",
+      "args": {
+        "source": "1, 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "a path segment that is not a name",
+      "call": "parseFormula",
+      "args": {
+        "source": "poly.",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a character the lexer refuses, which reaches the same shape",
+      "call": "parseFormula",
+      "args": {
+        "source": "1 @ 2",
+        "objects": []
+      }
+    },
+    {
+      "name": "an unterminated string, refused by the lexer",
+      "call": "parseFormula",
+      "args": {
+        "source": "\"abc",
+        "objects": []
+      }
+    }
+  ],
+  "note": "An object gives its slot names as an ordered list, the same way the address fixtures do. A case naming a table also gives tableObjectId, which is what makes a bare cell reference resolve."
+}

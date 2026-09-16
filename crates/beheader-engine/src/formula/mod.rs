@@ -6,4 +6,6 @@
 //! one before the stage after it exists.
 
 pub mod ast;
+pub mod functions;
 pub mod lexer;
+pub mod parser;
