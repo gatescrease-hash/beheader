@@ -60,6 +60,7 @@ const {
   isErrorValue,
   isIllegalNumber,
   exceedsMaxFormulaAstDepth,
+  formatFormula,
   isLegalPortName,
   isParseError,
   isValidName,
@@ -452,6 +453,30 @@ const CALLS = {
   addressKey: (args) => addressKey(addressArgument(args, "address")),
   parseAddress: (args) => encodeAddressResult(parseAddress(textArgument(args, "input"), addressableObjectListArgument(args, "objects"))),
   formatAddress: (args) => encodeAddressResult(formatAddress(addressArgument(args, "address"), addressableObjectListArgument(args, "objects"))),
+  formatFormula: (args) => {
+    const shape = validateFormulaAstShape(argument(args, "ast"));
+    if (!shape.ok) {
+      return { ok: false, reason: shape.reason };
+    }
+    const relative = "relativeToObjectId" in args ? textArgument(args, "relativeToObjectId") : undefined;
+    return formatFormula(shape.ast, addressableObjectListArgument(args, "objects"), relative);
+  },
+  parseThenFormat: (args) => {
+    const objects = addressableObjectListArgument(args, "objects");
+    const table = "tableObjectId" in args ? textArgument(args, "tableObjectId") : undefined;
+    const parsed = parseFormula(textArgument(args, "source"), objects, table);
+    if (isParseError(parsed)) {
+      return { error: parsed.error, message: parsed.message, start: parsed.start };
+    }
+    const printed = formatFormula(parsed, objects, table);
+    // Reading the printed text back gives the same tree where the printer put
+    // its brackets in the right places, and a different one where it did not.
+    const again = parseFormula(printed, objects, table);
+    return {
+      printed,
+      reparsedEqual: !isParseError(again) && JSON.stringify(encodeAst(again)) === JSON.stringify(encodeAst(parsed)),
+    };
+  },
   parseFormula: (args) => {
     const table = "tableObjectId" in args ? textArgument(args, "tableObjectId") : undefined;
     const result = parseFormula(textArgument(args, "source"), addressableObjectListArgument(args, "objects"), table);

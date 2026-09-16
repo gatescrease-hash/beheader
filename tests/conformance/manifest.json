@@ -94,6 +94,13 @@
       "covers": [
         "src/engine/formula/ast.ts"
       ]
+    },
+    {
+      "id": "formula.format",
+      "file": "fixtures/formula.format.json",
+      "covers": [
+        "src/engine/formula/format.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [

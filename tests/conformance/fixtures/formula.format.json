@@ -1,0 +1,1282 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "formula.format",
+  "sourceTest": "src/engine/formula/format.test.ts",
+  "requirement": "SPEC.md section 8, the formula language",
+  "comparison": "exact",
+  "note": "A round trip reads the printed text back and compares the tree, so the brackets the printer puts in are neither too few nor in the wrong place. Two cases carry a fault that predates the port and that both engines keep: the printer writes a number the way JavaScript writes one, which uses an exponent past the boundaries, and the lexer has no exponent form to read one back.",
+  "cases": [
+    {
+      "name": "a sum",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "1 + 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a product inside a sum, which needs no brackets",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "1 + 2 * 3",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sum inside a product, which does",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "(1 + 2) * 3",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "subtraction on the right, which keeps its brackets",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "1 - (2 - 3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "subtraction on the left, which drops them",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "(1 - 2) - 3",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "division on the right",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "8 / (4 / 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a power on the right",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "2 ^ (3 ^ 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a comparison under AND",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "1 < 2 AND 3 > 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AND under OR",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "TRUE OR (TRUE AND FALSE)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "OR under AND, which needs brackets",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "(TRUE OR TRUE) AND FALSE",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a prefix minus over a product",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "-(2 * 3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a prefix minus over a literal",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "-2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a prefix NOT, which takes a space",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "NOT TRUE",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a prefix NOT over a comparison",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "NOT (1 = 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "two prefix minuses",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "--1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a function call",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "SUM(1, 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a nested function call",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "SUM(1, ABS(-2))",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a function with no arguments",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "PI()",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an argument that is an operator, which needs no brackets inside a call",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "SUM(1 + 2, 3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference, printed under the name the object carries now",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "poly.vertices",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a table cell",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "table_x.A1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a document variable",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "Speed",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bare cell inside its own table",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "A1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ],
+        "tableObjectId": "t1"
+      }
+    },
+    {
+      "name": "a range inside its own table",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "SUM(A1:B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ],
+        "tableObjectId": "t1"
+      }
+    },
+    {
+      "name": "a range written with object names",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a text literal",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "\"hi\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a text literal holding a quote",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "\"a\\\"b\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an exponent in the source, which the lexer reads as a number and a name",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "1e21 + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a small number, which prints with an exponent that no formula can be read back from",
+      "call": "parseThenFormat",
+      "args": {
+        "source": "0.0000001 + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an error node",
+      "call": "formatFormula",
+      "args": {
+        "ast": {
+          "type": "error",
+          "error": "#REF"
+        },
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference whose object is gone",
+      "call": "formatFormula",
+      "args": {
+        "ast": {
+          "type": "reference",
+          "address": {
+            "objectId": "missing",
+            "path": [
+              "value"
+            ]
+          }
+        },
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range with one end in a table and one outside it",
+      "call": "formatFormula",
+      "args": {
+        "ast": {
+          "type": "range",
+          "start": {
+            "objectId": "t1",
+            "path": [
+              "cells",
+              "A1"
+            ]
+          },
+          "end": {
+            "objectId": "p1",
+            "path": [
+              "vertices"
+            ]
+          }
+        },
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ],
+        "relativeToObjectId": "t1"
+      }
+    },
+    {
+      "name": "a cell of another table while inside one",
+      "call": "formatFormula",
+      "args": {
+        "ast": {
+          "type": "reference",
+          "address": {
+            "objectId": "t1",
+            "path": [
+              "cells",
+              "A1"
+            ]
+          }
+        },
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ],
+        "relativeToObjectId": "p1"
+      }
+    },
+    {
+      "name": "a tree that is not a tree",
+      "call": "formatFormula",
+      "args": {
+        "ast": {
+          "type": "nope"
+        },
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a number literal printed the way JavaScript prints it",
+      "call": "formatFormula",
+      "args": {
+        "ast": {
+          "type": "literal",
+          "value": 1e+21
+        },
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a negative zero literal",
+      "call": "formatFormula",
+      "args": {
+        "ast": {
+          "type": "literal",
+          "value": -0.0
+        },
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slotKeys": [
+              "Speed"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

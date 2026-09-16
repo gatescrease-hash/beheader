@@ -1168,6 +1168,20 @@ which is why the native test threads that carry two mebibytes run it. Frame
 sizes on `wasm32` differ from the native ones, so the figure that governs the
 shipped engine is a browser measurement, and `RUST-015` takes it.
 
+**An existing fault the port keeps.** A round trip over the formatter found a
+fault that predates the port, and both engines answer it the same way. The
+printer writes a number the way JavaScript writes one, which uses an exponent
+at and past 1e21 and below 1e-6, while the lexer has no exponent form. So a
+formula holding a small literal prints as text that will not parse: an
+operator who types `0.0000001 + 1` reads `1e-7 + 1` back from the properties
+panel, and submitting what they read refuses with a parse error. The
+`formula.format` fixture carries the case, so the behaviour is recorded rather
+than discovered again.
+
+Closing it means either a grammar that reads an exponent or a printer that
+writes none, and both change what an operator types or reads. The spec governs
+that, so this is a finding rather than a change made here.
+
 ### `RUST-006`: Port formula evaluation
 
 **Work.** Port the function registry, operator behavior, lazy evaluation,
@@ -1562,16 +1576,18 @@ Completed cases:
   The descent in formula/parser.rs, with precedence, associativity, names
   resolved to IDs, bare cell references inside a table, range placement, both
   depth limits and the wording of every refusal.
+  The printer in formula/format.rs, which brackets by precedence and names an
+  object as the document names it now.
 Remaining cases:
-  Formatting a tree back to source, dependency extraction, and the rewrites a
-  table or vertex resize asks of a stored formula.
+  Dependency extraction, and the rewrites a table or vertex resize asks of a
+  stored formula.
 Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
   graph.address-key carry the RUST-004 surface
-  formula.lex, formula.ast-shape and formula.parse carry the stages of
-  RUST-005 that have landed
+  formula.lex, formula.ast-shape, formula.parse and formula.format carry the
+  stages of RUST-005 that have landed
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1581,17 +1597,21 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  80 pass
+  cargo test --workspace --locked                                  88 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           281 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           317 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
   Chromium. Windows runs the Rust checks in the pull request workflow and has
   not run the browser proof.
-Known failures with smallest reproduction: none
-Next concrete action: port format.ts, which writes a tree back to source, then
-  deps.ts and the rewrites a resize asks of a stored formula.
+Known failures with smallest reproduction:
+  A literal below 1e-6 prints with an exponent that the lexer cannot read back.
+  parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
+  Both engines answer alike, the fault predates the port, and the RUST-005
+  heading above says what closing it would take.
+Next concrete action: port deps.ts, which reads the addresses a formula names,
+  then the rewrites a table or vertex resize asks of a stored formula.
 Dependencies that can proceed independently: none
 ```
 

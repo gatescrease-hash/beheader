@@ -29,6 +29,7 @@ use beheader_engine::address::{
 use beheader_engine::formula::ast::{
     FormulaAst, LiteralValue, exceeds_max_formula_ast_depth, validate_formula_ast_shape,
 };
+use beheader_engine::formula::format::format_formula;
 use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
@@ -52,6 +53,7 @@ const SUPPORTED_CALLS: &[&str] = &[
     "addressKey",
     "columnLettersToIndex",
     "formatAddress",
+    "formatFormula",
     "formatCellReference",
     "hasIllegalNumber",
     "indexToColumnLetters",
@@ -66,6 +68,7 @@ const SUPPORTED_CALLS: &[&str] = &[
     "numberToText",
     "parseAddress",
     "parseFormula",
+    "parseThenFormat",
     "parseCellReference",
     "slotKey",
     "toSurfacePath",
@@ -354,6 +357,41 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                 Ok(ast) => json!({ "ok": true, "exceeds": exceeds_max_formula_ast_depth(&ast) }),
                 Err(reason) => json!({ "ok": false, "reason": reason }),
             }
+        }),
+        "formatFormula" => argument(args, "ast").cloned().and_then(|raw| {
+            object_list_argument(args, "objects").and_then(|objects| {
+                let relative = match args.get("relativeToObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "relativeToObjectId")?),
+                };
+                Ok(match validate_formula_ast_shape(&raw) {
+                    Err(reason) => json!({ "ok": false, "reason": reason }),
+                    Ok(ast) => json!(format_formula(&ast, &objects, relative.as_deref())),
+                })
+            })
+        }),
+        "parseThenFormat" => text_argument(args, "source").and_then(|source| {
+            object_list_argument(args, "objects").and_then(|objects| {
+                let table = match args.get("tableObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "tableObjectId")?),
+                };
+                Ok(match parse_formula(&source, &objects, table.as_deref()) {
+                    Err(error) => json!({
+                        "error": error.error.as_str(),
+                        "message": error.message,
+                        "start": error.start,
+                    }),
+                    Ok(parsed) => {
+                        let printed = format_formula(&parsed, &objects, table.as_deref());
+                        let again = parse_formula(&printed, &objects, table.as_deref());
+                        json!({
+                            "printed": printed,
+                            "reparsedEqual": again.is_ok_and(|again| again == parsed),
+                        })
+                    }
+                })
+            })
         }),
         "parseFormula" => text_argument(args, "source").and_then(|source| {
             object_list_argument(args, "objects").and_then(|objects| {

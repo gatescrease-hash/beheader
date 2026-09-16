@@ -20,8 +20,8 @@ slots, objects, addresses and edges.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 80 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 281 cases match across the two engines, with none awaiting either. |
+| Rust | 88 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 317 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -206,6 +206,7 @@ file.
 | `beheader-engine/src/formula/ast.rs` | The formula node types, the shape check a saved tree passes, and the depth limit. |
 | `beheader-engine/src/formula/functions.rs` | The name, argument count and two habits of every built-in function. |
 | `beheader-engine/src/formula/parser.rs` | Tokens to a tree, with names resolved to IDs and ranges placed. |
+| `beheader-engine/src/formula/format.rs` | A tree back to source text, under the name each object carries now. |
 | `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
 | `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |
