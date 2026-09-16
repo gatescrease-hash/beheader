@@ -1,12 +1,9 @@
 //! How the engine names one slot on one object, and the two spellings a table
 //! cell has.
 //!
-//! This is the Rust side of `src/engine/address.ts`. Resolving a name to an
-//! object needs the object list, so `parse_address` and `format_address`
-//! arrive with the package that ports the graph. What is here is the part that
-//! reads a piece of text on its own: whether a name is well formed, whether a
-//! segment is a cell reference, and the base twenty six arithmetic that turns
-//! column letters into a number and back.
+//! This is the Rust side of `src/engine/address.ts`. An `AddressableObject`
+//! trait gives parsing and formatting only the identity, type, and slot names
+//! they need, so address handling does not depend on an evaluator.
 //!
 //! The patterns are written out as scans rather than as regular expressions,
 //! because the crate has no regular expression dependency and the three
@@ -24,6 +21,24 @@ use crate::number::to_javascript_text;
 /// The segment that a stored cell path begins with.
 pub const TABLE_CELL_PATH_PREFIX: &str = "cells";
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Address {
+    pub object_id: String,
+    pub path: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AddressError {
+    pub message: String,
+}
+
+pub trait AddressableObject {
+    fn id(&self) -> &str;
+    fn name(&self) -> &str;
+    fn object_type(&self) -> ObjectType;
+    fn slot_keys(&self) -> Vec<&str>;
+}
+
 /// The column and the row a cell reference names, counted from one.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellCoordinates {
@@ -40,6 +55,73 @@ pub fn is_valid_name(name: &str) -> bool {
         _ => return false,
     }
     characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
+}
+
+pub fn nearest_name<'a>(
+    typed: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let target: Vec<u16> = typed.to_lowercase().encode_utf16().collect();
+    let mut best = None;
+    let mut best_distance = usize::MAX;
+    for candidate in candidates {
+        let against: Vec<u16> = candidate.to_lowercase().encode_utf16().collect();
+        let mut previous: Vec<usize> = (0..=against.len()).collect();
+        for (row, target_character) in target.iter().enumerate() {
+            let mut current = vec![row + 1];
+            for (column, against_character) in against.iter().enumerate() {
+                current.push(
+                    (current[column] + 1)
+                        .min(previous[column + 1] + 1)
+                        .min(previous[column] + usize::from(target_character != against_character)),
+                );
+            }
+            previous = current;
+        }
+        if previous[against.len()] < best_distance {
+            best_distance = previous[against.len()];
+            best = Some(candidate);
+        }
+    }
+    best
+}
+
+pub fn find_object_by_name<'a, T: AddressableObject>(
+    name: &str,
+    objects: &'a [T],
+) -> Option<&'a T> {
+    objects
+        .iter()
+        .find(|object| object.name().eq_ignore_ascii_case(name))
+}
+
+pub fn find_object_by_id<'a, T: AddressableObject>(id: &str, objects: &'a [T]) -> Option<&'a T> {
+    objects.iter().find(|object| object.id() == id)
+}
+
+pub fn is_name_taken<T: AddressableObject>(
+    name: &str,
+    objects: &[T],
+    exclude_id: Option<&str>,
+) -> bool {
+    objects.iter().any(|object| {
+        (Some(object.id()) != exclude_id && object.name().eq_ignore_ascii_case(name))
+            || (object.object_type() == ObjectType::Doc
+                && object
+                    .slot_keys()
+                    .iter()
+                    .any(|key| key.eq_ignore_ascii_case(name)))
+    })
+}
+
+pub fn generate_default_name<T: AddressableObject>(prefix: &str, objects: &[T]) -> String {
+    for number in 1_u64.. {
+        let candidate = format!("{prefix}_{number}");
+        if !is_name_taken(&candidate, objects, None) {
+            return candidate;
+        }
+    }
+    unreachable!("the name counter cannot exhaust u64")
 }
 
 /// Splits a cell reference into its letters and its digits, where the letters
@@ -139,11 +221,124 @@ pub fn to_surface_path(object_type: ObjectType, stored_path: &[String]) -> Vec<S
     vec![cell_reference.clone()]
 }
 
+pub fn to_stored_path(object_type: ObjectType, surface_path: &[String]) -> Vec<String> {
+    if object_type != ObjectType::Table {
+        return surface_path.to_vec();
+    }
+    match surface_path {
+        [cell] if is_cell_reference_form(cell) => vec![
+            TABLE_CELL_PATH_PREFIX.to_string(),
+            cell.to_ascii_uppercase(),
+        ],
+        [prefix, cell] if prefix == TABLE_CELL_PATH_PREFIX && is_cell_reference_form(cell) => {
+            vec![prefix.clone(), cell.to_ascii_uppercase()]
+        }
+        _ => surface_path.to_vec(),
+    }
+}
+
+pub fn bare_cell_address(table_object_id: &str, cell_reference: &str) -> Address {
+    Address {
+        object_id: table_object_id.to_string(),
+        path: vec![
+            TABLE_CELL_PATH_PREFIX.to_string(),
+            cell_reference.to_ascii_uppercase(),
+        ],
+    }
+}
+
+pub fn parse_address<T: AddressableObject>(
+    input: &str,
+    objects: &[T],
+) -> Result<Address, AddressError> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(AddressError {
+            message: "empty address".to_string(),
+        });
+    }
+    let segments: Vec<&str> = trimmed.split('.').collect();
+    if segments.iter().any(|segment| segment.is_empty()) {
+        return Err(AddressError {
+            message: format!("malformed address \"{input}\" — empty segment"),
+        });
+    }
+    if segments.len() < 2 {
+        if let Some(doc) = objects
+            .iter()
+            .find(|object| object.object_type() == ObjectType::Doc)
+            && let Some(key) = doc
+                .slot_keys()
+                .into_iter()
+                .find(|key| key.eq_ignore_ascii_case(trimmed))
+        {
+            return Ok(Address {
+                object_id: doc.id().to_string(),
+                path: vec![key.to_string()],
+            });
+        }
+        return Err(AddressError {
+            message: format!(
+                "malformed address \"{input}\" — expected \"name.path\", e.g. \"table_x.A1\""
+            ),
+        });
+    }
+    let (name, path) = segments.split_first().expect("the address has segments");
+    if let Some(bad) = path.iter().find(|segment| {
+        !segment
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    }) {
+        return Err(AddressError {
+            message: format!("malformed address \"{input}\" — invalid path segment \"{bad}\""),
+        });
+    }
+    let Some(object) = find_object_by_name(name, objects) else {
+        let suggestion = nearest_name(name, objects.iter().map(AddressableObject::name))
+            .map_or(String::new(), |candidate| {
+                format!(" Did you mean \"{candidate}\"?")
+            });
+        return Err(AddressError {
+            message: format!("no object named \"{name}\"{suggestion}"),
+        });
+    };
+    let surface: Vec<String> = path.iter().map(|segment| (*segment).to_string()).collect();
+    let mut stored = to_stored_path(object.object_type(), &surface);
+    if object.object_type() == ObjectType::Doc
+        && stored.len() == 1
+        && let Some(key) = object
+            .slot_keys()
+            .into_iter()
+            .find(|key| key.eq_ignore_ascii_case(&stored[0]))
+    {
+        stored[0] = key.to_string();
+    }
+    Ok(Address {
+        object_id: object.id().to_string(),
+        path: stored,
+    })
+}
+
+pub fn format_address<T: AddressableObject>(
+    address: &Address,
+    objects: &[T],
+) -> Result<String, AddressError> {
+    let object = find_object_by_id(&address.object_id, objects).ok_or_else(|| AddressError {
+        message: format!("no object with id \"{}\"", address.object_id),
+    })?;
+    Ok(std::iter::once(object.name().to_string())
+        .chain(to_surface_path(object.object_type(), &address.path))
+        .collect::<Vec<_>>()
+        .join("."))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        CellCoordinates, column_letters_to_index, format_cell_reference, index_to_column_letters,
-        is_cell_reference_form, is_valid_name, parse_cell_reference, to_surface_path,
+        Address, AddressableObject, CellCoordinates, bare_cell_address, column_letters_to_index,
+        format_address, format_cell_reference, generate_default_name, index_to_column_letters,
+        is_cell_reference_form, is_name_taken, is_valid_name, nearest_name, parse_address,
+        parse_cell_reference, to_surface_path,
     };
     use crate::model::ObjectType;
 
@@ -152,6 +347,95 @@ mod tests {
             .iter()
             .map(|segment| (*segment).to_string())
             .collect()
+    }
+
+    struct Object {
+        id: &'static str,
+        name: &'static str,
+        kind: ObjectType,
+        slots: Vec<&'static str>,
+    }
+    impl AddressableObject for Object {
+        fn id(&self) -> &str {
+            self.id
+        }
+        fn name(&self) -> &str {
+            self.name
+        }
+        fn object_type(&self) -> ObjectType {
+            self.kind
+        }
+        fn slot_keys(&self) -> Vec<&str> {
+            self.slots.clone()
+        }
+    }
+
+    #[test]
+    fn resolves_names_cells_and_document_variables() {
+        let objects = [
+            Object {
+                id: "table-id",
+                name: "Table_X",
+                kind: ObjectType::Table,
+                slots: vec!["cells.A1"],
+            },
+            Object {
+                id: "doc-id",
+                name: "doc",
+                kind: ObjectType::Doc,
+                slots: vec!["Speed"],
+            },
+        ];
+        assert_eq!(
+            parse_address(" table_x.a1 ", &objects).unwrap(),
+            bare_cell_address("table-id", "A1")
+        );
+        assert_eq!(
+            parse_address("speed", &objects).unwrap().path,
+            path(&["Speed"])
+        );
+        assert_eq!(
+            format_address(
+                &Address {
+                    object_id: "table-id".into(),
+                    path: path(&["cells", "A1"])
+                },
+                &objects
+            )
+            .unwrap(),
+            "Table_X.A1"
+        );
+        assert!(
+            parse_address("missing.x", &objects)
+                .unwrap_err()
+                .message
+                .contains("Did you mean")
+        );
+    }
+
+    #[test]
+    fn name_queries_keep_document_order_and_respect_exclusion() {
+        let objects = [
+            Object {
+                id: "one",
+                name: "alpha",
+                kind: ObjectType::Value,
+                slots: vec![],
+            },
+            Object {
+                id: "doc",
+                name: "doc",
+                kind: ObjectType::Doc,
+                slots: vec!["Speed"],
+            },
+        ];
+        assert_eq!(
+            nearest_name("ALPH", objects.iter().map(AddressableObject::name)),
+            Some("alpha")
+        );
+        assert!(is_name_taken("speed", &objects, None));
+        assert!(!is_name_taken("alpha", &objects, Some("one")));
+        assert_eq!(generate_default_name("alpha", &objects), "alpha_1");
     }
 
     #[test]
