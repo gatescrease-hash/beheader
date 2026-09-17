@@ -59,6 +59,7 @@ const {
   isCellReferenceForm,
   isErrorValue,
   isIllegalNumber,
+  evaluateFormulaAst,
   exceedsMaxFormulaAstDepth,
   extractDependencies,
   formatFormula,
@@ -460,6 +461,38 @@ const CALLS = {
   addressKey: (args) => addressKey(addressArgument(args, "address")),
   parseAddress: (args) => encodeAddressResult(parseAddress(textArgument(args, "input"), addressableObjectListArgument(args, "objects"))),
   formatAddress: (args) => encodeAddressResult(formatAddress(addressArgument(args, "address"), addressableObjectListArgument(args, "objects"))),
+  evaluateFormula: (args) => {
+    const objects = addressableObjectListArgument(args, "objects");
+    const table = "tableObjectId" in args ? textArgument(args, "tableObjectId") : undefined;
+    const parsed = parseFormula(textArgument(args, "source"), objects, table);
+    if (isParseError(parsed)) {
+      return { error: parsed.error, message: parsed.message, start: parsed.start };
+    }
+    // The slots a case declares, keyed the way an address keys one, so both
+    // runners read the same value for the same address.
+    const slots = new Map(
+      (args.slots ?? []).map((entry) => [
+        `${entry.objectId}::${(entry.path ?? []).join(".")}`,
+        decodeValue(entry.value),
+      ]),
+    );
+    const read = (address) => slots.get(`${address.objectId}::${address.path.join(".")}`);
+    const ranges = new Map(
+      (args.ranges ?? []).map((entry) => [
+        `${entry.start.objectId}::${entry.start.path.join(".")}:${entry.end.objectId}::${entry.end.path.join(".")}`,
+        entry.error === undefined ? entry.values.map(decodeValue) : { error: entry.error, message: entry.message },
+      ]),
+    );
+    const readRange =
+      args.ranges === undefined
+        ? undefined
+        : (start, end) =>
+            ranges.get(`${start.objectId}::${start.path.join(".")}:${end.objectId}::${end.path.join(".")}`) ?? {
+              error: "#REF",
+              message: "the case declared no values for this range",
+            };
+    return encodeValue(evaluateFormulaAst(parsed, read, readRange));
+  },
   extractDependencies: (args) => {
     const shape = validateFormulaAstShape(argument(args, "ast"));
     if (!shape.ok) {

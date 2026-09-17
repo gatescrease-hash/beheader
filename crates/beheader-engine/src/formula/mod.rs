@@ -7,6 +7,7 @@
 
 pub mod ast;
 pub mod deps;
+pub mod eval;
 pub mod format;
 pub mod functions;
 pub mod lexer;

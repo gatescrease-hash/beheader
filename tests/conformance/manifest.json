@@ -108,13 +108,20 @@
       "covers": [
         "src/engine/formula/deps.ts"
       ]
+    },
+    {
+      "id": "formula.evaluate",
+      "file": "fixtures/formula.evaluate.json",
+      "covers": [
+        "src/engine/formula/eval.ts",
+        "src/engine/formula/functions.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
     "src/engine/complete.ts",
     "src/engine/document.ts",
     "src/engine/eval-context.ts",
-    "src/engine/formula/eval.ts",
     "src/engine/graph/cycles.ts",
     "src/engine/graph/eval.ts",
     "src/engine/index.ts",

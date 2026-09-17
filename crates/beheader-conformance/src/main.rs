@@ -32,12 +32,14 @@ use beheader_engine::formula::ast::{
 use beheader_engine::formula::deps::{
     Dependency, extract_dependencies, repair_addresses_in_ast, rewrite_addresses_in_ast,
 };
+use beheader_engine::formula::eval::evaluate;
 use beheader_engine::formula::format::format_formula;
 use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
 use beheader_engine::model::{
-    ObjectType, has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
+    ErrorCode, ErrorValue, ObjectType, has_illegal_number, is_error_value, is_illegal_number,
+    is_legal_port_name, slot_key,
 };
 use beheader_engine::number::to_javascript_text;
 use beheader_engine::wire::{decode_number, decode_value, encode_number, encode_value};
@@ -252,6 +254,90 @@ fn nested_ast(depth: usize) -> Json {
     ast
 }
 
+/// The key a case declares a slot or a range end under, which both runners
+/// build the same way so the same address reads the same value.
+fn address_text(address: &Address) -> String {
+    format!("{}::{}", address.object_id, address.path.join("."))
+}
+
+fn declared_slots(
+    args: &Map<String, Json>,
+) -> Result<Vec<(String, beheader_engine::model::Value)>, String> {
+    let mut slots = Vec::new();
+    let Some(Json::Array(declared)) = args.get("slots") else {
+        return Ok(slots);
+    };
+    for entry in declared {
+        let entry = entry.as_object().ok_or_else(|| {
+            "each slot is an object with an objectId, a path and a value".to_string()
+        })?;
+        let address = address_argument_from(entry)?;
+        let value = decode_value(
+            entry
+                .get("value")
+                .ok_or_else(|| "each slot carries a value".to_string())?,
+        )
+        .map_err(|error| format!("a slot holds a value the engine can hold: {error}"))?;
+        slots.push((address_text(&address), value));
+    }
+    Ok(slots)
+}
+
+type RangeAnswer = Result<Vec<beheader_engine::model::Value>, ErrorValue>;
+
+fn declared_ranges(args: &Map<String, Json>) -> Result<Vec<(String, RangeAnswer)>, String> {
+    let mut ranges = Vec::new();
+    let Some(Json::Array(declared)) = args.get("ranges") else {
+        return Ok(ranges);
+    };
+    for entry in declared {
+        let entry = entry
+            .as_object()
+            .ok_or_else(|| "each range is an object with a start and an end".to_string())?;
+        let start = address_argument(entry, "start")?;
+        let end = address_argument(entry, "end")?;
+        let answer = match entry.get("error").and_then(Json::as_str) {
+            Some(code) => Err(ErrorValue {
+                error: ErrorCode::parse(code)
+                    .ok_or_else(|| "a range refusal names one of the error codes".to_string())?,
+                message: entry
+                    .get("message")
+                    .and_then(Json::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+            }),
+            None => Ok(entry
+                .get("values")
+                .and_then(Json::as_array)
+                .ok_or_else(|| "a range that does not refuse carries values".to_string())?
+                .iter()
+                .map(|value| {
+                    decode_value(value).map_err(|error| {
+                        format!("a range holds values the engine can hold: {error}")
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?),
+        };
+        ranges.push((
+            format!("{}:{}", address_text(&start), address_text(&end)),
+            answer,
+        ));
+    }
+    Ok(ranges)
+}
+
+/// An address spelled directly on an object, rather than under a named member.
+fn address_argument_from(object: &Map<String, Json>) -> Result<Address, String> {
+    Ok(Address {
+        object_id: object
+            .get("objectId")
+            .and_then(Json::as_str)
+            .ok_or_else(|| "the slot names an objectId".to_string())?
+            .to_string(),
+        path: path_argument(object, "path")?,
+    })
+}
+
 fn missing(name: &str) -> String {
     format!("the argument \"{name}\" is missing")
 }
@@ -364,6 +450,48 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                     }
                     Err(reason) => json!({ "ok": false, "reason": reason }),
                 }
+            }),
+            "evaluateFormula" => text_argument(args, "source").and_then(|source| {
+                let objects = object_list_argument(args, "objects")?;
+                let table = match args.get("tableObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "tableObjectId")?),
+                };
+                let parsed = match parse_formula(&source, &objects, table.as_deref()) {
+                    Err(error) => {
+                        return Ok(json!({
+                            "error": error.error.as_str(),
+                            "message": error.message,
+                            "start": error.start,
+                        }));
+                    }
+                    Ok(parsed) => parsed,
+                };
+                let slots = declared_slots(args)?;
+                let read = |address: &Address| {
+                    let key = address_text(address);
+                    slots
+                        .iter()
+                        .find(|(held, _)| *held == key)
+                        .map(|(_, value)| value.clone())
+                };
+                let ranges = declared_ranges(args)?;
+                let read_range = |start: &Address, end: &Address| {
+                    let key = format!("{}:{}", address_text(start), address_text(end));
+                    match ranges.iter().find(|(held, _)| *held == key) {
+                        None => Err(ErrorValue {
+                            error: ErrorCode::Ref,
+                            message: "the case declared no values for this range".to_string(),
+                        }),
+                        Some((_, answer)) => answer.clone(),
+                    }
+                };
+                let value = if args.contains_key("ranges") {
+                    evaluate(&parsed, &read, Some(&read_range))
+                } else {
+                    evaluate(&parsed, &read, None)
+                };
+                Ok(encode_value(&value))
             }),
             "extractDependencies" => argument(args, "ast").cloned().map(|raw| {
                 match validate_formula_ast_shape(&raw) {

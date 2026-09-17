@@ -1,0 +1,2791 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "formula.evaluate",
+  "sourceTest": "src/engine/formula/eval.test.ts",
+  "requirement": "SPEC.md section 8, the formula language",
+  "comparison": "exact",
+  "note": "A case declares the slots a reference reads and the values a range covers, so both runners answer the same address with the same value. A case with no ranges member supplies no way to read a range, which is what a caller with no table behind it does.",
+  "cases": [
+    {
+      "name": "addition",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "1 + 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "subtraction",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "5 - 8",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiplication",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "3 * 4",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "division",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "7 / 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a remainder",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "7 % 3",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a remainder with a negative left side",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "-7 % 3",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a remainder with a negative divisor",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "7 % -3",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a power",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "2 ^ 10",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "division by zero",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "1 / 0",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a remainder by zero",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "1 % 0",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a prefix minus",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "-(3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a difference that is zero",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "0 - 0",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a negative zero that becomes a plain zero",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "-0 + 0",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a word on the left of an operator",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "\"a\" + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a word on the right of an operator",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "1 + \"a\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a word on both sides, where the left is the one reported",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "\"a\" + \"b\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a boolean in arithmetic",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "TRUE * 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a prefix minus over a word",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "-\"a\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "numbers compared",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "1 < 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "numbers at the boundary",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "2 <= 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "words compared",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "\"a\" < \"b\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "words equal",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "\"b\" = \"b\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "booleans compared",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "TRUE > FALSE",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "booleans equal",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "TRUE = TRUE",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "not equal",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "1 <> 2",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a number against a word",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "1 = \"1\"",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a boolean against a number",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "TRUE = 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "IF takes the true branch and leaves the other alone",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "IF(TRUE, 1, 1 / 0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "IF takes the false branch and leaves the other alone",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "IF(FALSE, 1 / 0, 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "IF over a condition that is not a boolean",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "IF(1, 2, 3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "IF over a condition that refuses",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "IF(1 / 0 = 1, 2, 3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AND stops at the first false",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "AND(FALSE, 1 / 0 = 1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AND reads on past a true",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "AND(TRUE, TRUE)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "OR stops at the first true",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "OR(TRUE, 1 / 0 = 1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "OR reads on past a false",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "OR(FALSE, FALSE)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AND as an operator stops at the first false",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "FALSE AND 1 / 0 = 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "OR as an operator stops at the first true",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "TRUE OR 1 / 0 = 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AND over something that is not a boolean",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "AND(1, TRUE)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "OR over something that is not a boolean",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "OR(1, TRUE)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NOT over true",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "NOT(TRUE)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NOT over false",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "NOT(FALSE)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NOT as a prefix operator",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "NOT TRUE",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NOT over a number",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "NOT(1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SUM over three numbers",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(1, 2, 3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SUM over one",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SUM over a word",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(1, \"a\")",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "MIN",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "MIN(3, 1, 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "MAX",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "MAX(3, 1, 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AVG",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "AVG(1, 2, 3, 4)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AVG that divides evenly",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "AVG(1, 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ABS",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ABS(-3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ABS of a positive",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ABS(3)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ROUND of a half, which goes toward positive infinity",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ROUND(2.5, 0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ROUND of a negative half, which also goes toward positive infinity",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ROUND(-2.5, 0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ROUND to two digits",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ROUND(3.14159, 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ROUND where the binary value sits below the half",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ROUND(1.005, 2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ROUND of minus a half, which is a negative zero the result turns plain",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ROUND(-0.5, 0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ROUND to a negative number of digits",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ROUND(1234.5678, -2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "FLOOR",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "FLOOR(2.7)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "FLOOR of a negative",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "FLOOR(-2.7)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CEIL",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "CEIL(2.1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CEIL of a negative",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "CEIL(-2.1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SQRT",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SQRT(9)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SQRT of a negative, which is not a legal number",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SQRT(-1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "POW",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "POW(2, 10)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "POW with a fractional exponent",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "POW(2, 0.5)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CONCAT",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "CONCAT(\"a\", \"b\")",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CONCAT of one",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "CONCAT(\"a\")",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CONCAT over a number",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "CONCAT(\"a\", 1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "LEN",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "LEN(\"abc\")",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "LEN of nothing",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "LEN(\"\")",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "PI",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "PI()",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "SIN",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SIN(0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "COS",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "COS(0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "TAN",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "TAN(0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ATAN2",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "ATAN2(1, 1)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "DEG",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "DEG(0)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "RAD",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "RAD(180)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "DEG over RAD, which returns the angle",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "DEG(RAD(90))",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "two calls under an operator",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(1, 2) + MAX(3, 4)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "LEN over a character outside the basic plane, which counts as two units",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "LEN(\"𝔘\")",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "LEN over a letter carrying a combining mark, which counts as two",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "LEN(\"café\")",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference that resolves",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "poly.vertices + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [
+          {
+            "objectId": "p1",
+            "path": [
+              "vertices"
+            ],
+            "value": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference that resolves to nothing",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "poly.vertices + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": []
+      }
+    },
+    {
+      "name": "a reference holding an error",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "poly.vertices + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [
+          {
+            "objectId": "p1",
+            "path": [
+              "vertices"
+            ],
+            "value": {
+              "error": "#TYPE",
+              "message": "held"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference holding a word",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "poly.vertices + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [
+          {
+            "objectId": "p1",
+            "path": [
+              "vertices"
+            ],
+            "value": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference holding null",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "poly.vertices + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [
+          {
+            "objectId": "p1",
+            "path": [
+              "vertices"
+            ],
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference holding a point",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "poly.vertices + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [
+          {
+            "objectId": "p1",
+            "path": [
+              "vertices"
+            ],
+            "value": {
+              "x": 1,
+              "y": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference holding a list of points",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "poly.vertices + 1",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [
+          {
+            "objectId": "p1",
+            "path": [
+              "vertices"
+            ],
+            "value": [
+              {
+                "x": 1,
+                "y": 2
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a reference under IF that is never read",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "IF(TRUE, 1, poly.vertices)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": []
+      }
+    },
+    {
+      "name": "SUM over a range",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [],
+        "ranges": [
+          {
+            "start": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            },
+            "end": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "B2"
+              ]
+            },
+            "values": [
+              1,
+              2,
+              3,
+              4
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "MIN over a range",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "MIN(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [],
+        "ranges": [
+          {
+            "start": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            },
+            "end": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "B2"
+              ]
+            },
+            "values": [
+              3,
+              1,
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "AVG over a range beside a number",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "AVG(table_x.A1:table_x.B2, 10)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [],
+        "ranges": [
+          {
+            "start": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            },
+            "end": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "B2"
+              ]
+            },
+            "values": [
+              1,
+              2,
+              3
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range holding an error, which the aggregate answers with",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [],
+        "ranges": [
+          {
+            "start": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            },
+            "end": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "B2"
+              ]
+            },
+            "values": [
+              1,
+              {
+                "error": "#DIV0",
+                "message": "held"
+              },
+              3
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range holding a word",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [],
+        "ranges": [
+          {
+            "start": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            },
+            "end": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "B2"
+              ]
+            },
+            "values": [
+              1,
+              "a"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range the caller refuses",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [],
+        "ranges": [
+          {
+            "start": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            },
+            "end": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "B2"
+              ]
+            },
+            "error": "#REF",
+            "message": "the table is gone"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a range with no way to read one",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": []
+      }
+    },
+    {
+      "name": "an empty range",
+      "call": "evaluateFormula",
+      "args": {
+        "source": "SUM(table_x.A1:table_x.B2)",
+        "objects": [
+          {
+            "id": "t1",
+            "name": "table_x",
+            "type": "table",
+            "slotKeys": [
+              "cells.A1",
+              "cells.B2"
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "poly",
+            "type": "polygon",
+            "slotKeys": [
+              "vertices"
+            ]
+          }
+        ],
+        "slots": [],
+        "ranges": [
+          {
+            "start": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            },
+            "end": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "B2"
+              ]
+            },
+            "values": []
+          }
+        ]
+      }
+    }
+  ]
+}

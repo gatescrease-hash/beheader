@@ -1,14 +1,168 @@
-//! The name, the argument count and the two habits of every built-in function.
+//! The registry of built-in functions: the name, the argument count, the two
+//! habits, and what each one computes.
 //!
-//! This is the signature half of `src/engine/formula/functions.ts`. What a
-//! function computes arrives with the package that ports evaluation, because
-//! the parser needs only what it checks at parse time: that the name exists,
-//! that the argument count suits it, and whether a range may be handed to it.
+//! This is the Rust side of `src/engine/formula/functions.ts`. Two entries are
+//! lazy rather than eager. `IF` and the two short-circuiting operators take
+//! their arguments unevaluated, because `IF` leaves the branch it does not take
+//! alone, so `formula/eval.rs` holds their bodies and the table holds none.
 //!
 //! The table is written out rather than generated, so a reader sees the whole
 //! surface of the language in one place. The shared fixtures ask both engines
 //! about every name in it, which is what catches the table drifting from the
 //! TypeScript one.
+//!
+//! Three habits of JavaScript are reproduced here on purpose, because a
+//! document carries the answers they gave. `js_round` rounds a half toward
+//! positive infinity where Rust rounds it away from zero, so `ROUND(-2.5, 0)`
+//! is -2 rather than -3. `LEN` counts UTF-16 code units, so a character
+//! outside the basic plane counts as two. `js_min` and `js_max` answer NaN
+//! where either side is NaN, where the Rust methods answer the other side.
+
+use crate::model::{ErrorCode, ErrorValue, Value, is_illegal_number};
+
+/// The word a refusal uses for the kind of value it was handed.
+pub fn describe_value_type(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Points(_) => "a point array",
+        Value::Point(_) => "a point",
+        Value::Number(_) => "number",
+        Value::Text(_) => "string",
+        Value::Boolean(_) => "boolean",
+        Value::Error(_) => "object",
+    }
+}
+
+fn type_error(message: String) -> Value {
+    Value::Error(ErrorValue {
+        error: ErrorCode::Type,
+        message,
+    })
+}
+
+/// The argument as a number, or the refusal that names why it is not one. An
+/// argument that is already an error travels out unchanged, so the first fault
+/// in a formula is the one an operator reads.
+fn as_number(name: &str, index: usize, value: Option<&Value>) -> Result<f64, Value> {
+    match value {
+        None => Err(type_error(format!(
+            "{name}: missing argument {}",
+            index + 1
+        ))),
+        Some(Value::Error(_)) => Err(value.expect("the value is an error").clone()),
+        Some(Value::Number(number)) => Ok(*number),
+        Some(other) => Err(type_error(format!(
+            "{name}: argument {} must be a number, got {}",
+            index + 1,
+            describe_value_type(other)
+        ))),
+    }
+}
+
+fn as_text(name: &str, index: usize, value: Option<&Value>) -> Result<String, Value> {
+    match value {
+        None => Err(type_error(format!(
+            "{name}: missing argument {}",
+            index + 1
+        ))),
+        Some(Value::Error(_)) => Err(value.expect("the value is an error").clone()),
+        Some(Value::Text(text)) => Ok(text.clone()),
+        Some(other) => Err(type_error(format!(
+            "{name}: argument {} must be a string, got {}",
+            index + 1,
+            describe_value_type(other)
+        ))),
+    }
+}
+
+pub fn as_boolean(name: &str, index: usize, value: Option<&Value>) -> Result<bool, Value> {
+    match value {
+        None => Err(type_error(format!(
+            "{name}: missing argument {}",
+            index + 1
+        ))),
+        Some(Value::Error(_)) => Err(value.expect("the value is an error").clone()),
+        Some(Value::Boolean(boolean)) => Ok(*boolean),
+        Some(other) => Err(type_error(format!(
+            "{name}: argument {} must be a boolean, got {}",
+            index + 1,
+            describe_value_type(other)
+        ))),
+    }
+}
+
+fn as_number_list(name: &str, args: &[Value]) -> Result<Vec<f64>, Value> {
+    args.iter()
+        .enumerate()
+        .map(|(index, value)| as_number(name, index, Some(value)))
+        .collect()
+}
+
+/// The value a result takes, where a number the graph cannot store becomes a
+/// refusal. A negative zero is the one such number that becomes a plain zero
+/// instead, because it is a value an operator never asked for and never reads.
+pub fn finite_result(name: &str, value: f64) -> Value {
+    if is_illegal_number(value) {
+        if value == 0.0 {
+            return Value::Number(0.0);
+        }
+        return type_error(format!(
+            "{name}: result is not a legal number ({})",
+            crate::number::to_javascript_text(value)
+        ));
+    }
+    Value::Number(value)
+}
+
+/// Rounds a half toward positive infinity, which is what `Math.round` does and
+/// what `f64::round` does not: the Rust method rounds a half away from zero, so
+/// it answers -3 where JavaScript answers -2 for -2.5.
+pub fn js_round(x: f64) -> f64 {
+    if !x.is_finite() || x == 0.0 {
+        return x;
+    }
+    if x > 0.0 && x < 0.5 {
+        return 0.0;
+    }
+    if (-0.5..0.0).contains(&x) {
+        return -0.0;
+    }
+    let floor = x.floor();
+    if x - floor >= 0.5 { floor + 1.0 } else { floor }
+}
+
+/// The smaller of two numbers, answering NaN where either is NaN. `f64::min`
+/// answers the other side instead, which would hide a NaN that the check for
+/// an illegal number is there to catch.
+fn js_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        return f64::NAN;
+    }
+    if a < b {
+        a
+    } else if b < a {
+        b
+    } else if a.is_sign_negative() {
+        a
+    } else {
+        b
+    }
+}
+
+fn js_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        return f64::NAN;
+    }
+    if a > b {
+        a
+    } else if b > a {
+        b
+    } else if a.is_sign_positive() {
+        a
+    } else {
+        b
+    }
+}
 
 /// How many arguments a function takes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,12 +176,13 @@ pub enum Arity {
 /// error in an untaken branch never reaches a value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EvaluationMode {
-    Strict,
+    Eager,
     Lazy,
 }
 
-/// What the parser knows about one function.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// One function: what the parser checks about it, and what it computes. A lazy
+/// entry carries no body, because the evaluator holds the three that exist.
+#[derive(Clone, Copy, Debug)]
 pub struct FunctionSignature {
     pub name: &'static str,
     pub arity: Arity,
@@ -35,14 +190,31 @@ pub struct FunctionSignature {
     /// aggregates take one, and the parser refuses a range anywhere else.
     pub accepts_range_argument: bool,
     pub evaluation_mode: EvaluationMode,
+    pub implementation: Option<fn(&[Value]) -> Value>,
 }
 
-const fn strict(name: &'static str, arity: Arity) -> FunctionSignature {
+impl PartialEq for FunctionSignature {
+    /// Two entries are the same where the parser cannot tell them apart. A
+    /// function pointer has no equality worth comparing.
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.arity == other.arity
+            && self.accepts_range_argument == other.accepts_range_argument
+            && self.evaluation_mode == other.evaluation_mode
+    }
+}
+
+const fn eager(
+    name: &'static str,
+    arity: Arity,
+    implementation: fn(&[Value]) -> Value,
+) -> FunctionSignature {
     FunctionSignature {
         name,
         arity,
         accepts_range_argument: false,
-        evaluation_mode: EvaluationMode::Strict,
+        evaluation_mode: EvaluationMode::Eager,
+        implementation: Some(implementation),
     }
 }
 
@@ -52,15 +224,44 @@ const fn lazy(name: &'static str, arity: Arity) -> FunctionSignature {
         arity,
         accepts_range_argument: false,
         evaluation_mode: EvaluationMode::Lazy,
+        implementation: None,
     }
 }
 
-const fn aggregate(name: &'static str) -> FunctionSignature {
+const fn aggregate(name: &'static str, implementation: fn(&[Value]) -> Value) -> FunctionSignature {
     FunctionSignature {
         name,
         arity: Arity::AtLeast(1),
         accepts_range_argument: true,
-        evaluation_mode: EvaluationMode::Strict,
+        evaluation_mode: EvaluationMode::Eager,
+        implementation: Some(implementation),
+    }
+}
+
+/// One argument, coerced and handed to a body that takes a single number.
+fn one_number(name: &'static str, args: &[Value], compute: fn(f64) -> f64) -> Value {
+    match as_number(name, 0, args.first()) {
+        Err(error) => error,
+        Ok(x) => finite_result(name, compute(x)),
+    }
+}
+
+/// Two arguments, coerced in order so the first fault is the one reported.
+fn two_numbers(name: &'static str, args: &[Value], compute: fn(f64, f64) -> f64) -> Value {
+    let first = match as_number(name, 0, args.first()) {
+        Err(error) => return error,
+        Ok(x) => x,
+    };
+    match as_number(name, 1, args.get(1)) {
+        Err(error) => error,
+        Ok(second) => finite_result(name, compute(first, second)),
+    }
+}
+
+fn fold_numbers(name: &'static str, args: &[Value], fold: fn(&[f64]) -> f64) -> Value {
+    match as_number_list(name, args) {
+        Err(error) => error,
+        Ok(numbers) => finite_result(name, fold(&numbers)),
     }
 }
 
@@ -70,26 +271,97 @@ pub const FUNCTION_REGISTRY: [FunctionSignature; 23] = [
     lazy("IF", Arity::Exact(3)),
     lazy("AND", Arity::AtLeast(1)),
     lazy("OR", Arity::AtLeast(1)),
-    strict("NOT", Arity::Exact(1)),
-    aggregate("SUM"),
-    aggregate("MIN"),
-    aggregate("MAX"),
-    aggregate("AVG"),
-    strict("ABS", Arity::Exact(1)),
-    strict("ROUND", Arity::Exact(2)),
-    strict("FLOOR", Arity::Exact(1)),
-    strict("CEIL", Arity::Exact(1)),
-    strict("SQRT", Arity::Exact(1)),
-    strict("POW", Arity::Exact(2)),
-    strict("CONCAT", Arity::AtLeast(1)),
-    strict("LEN", Arity::Exact(1)),
-    strict("PI", Arity::Exact(0)),
-    strict("SIN", Arity::Exact(1)),
-    strict("COS", Arity::Exact(1)),
-    strict("TAN", Arity::Exact(1)),
-    strict("ATAN2", Arity::Exact(2)),
-    strict("DEG", Arity::Exact(1)),
-    strict("RAD", Arity::Exact(1)),
+    eager("NOT", Arity::Exact(1), |args| {
+        match as_boolean("NOT", 0, args.first()) {
+            Err(error) => error,
+            Ok(boolean) => Value::Boolean(!boolean),
+        }
+    }),
+    aggregate("SUM", |args| {
+        fold_numbers("SUM", args, |numbers| numbers.iter().sum())
+    }),
+    aggregate("MIN", |args| {
+        fold_numbers("MIN", args, |numbers| {
+            numbers.iter().fold(f64::INFINITY, |min, n| js_min(min, *n))
+        })
+    }),
+    aggregate("MAX", |args| {
+        fold_numbers("MAX", args, |numbers| {
+            numbers
+                .iter()
+                .fold(f64::NEG_INFINITY, |max, n| js_max(max, *n))
+        })
+    }),
+    aggregate("AVG", |args| {
+        fold_numbers("AVG", args, |numbers| {
+            numbers.iter().sum::<f64>() / numbers.len() as f64
+        })
+    }),
+    eager("ABS", Arity::Exact(1), |args| {
+        one_number("ABS", args, f64::abs)
+    }),
+    eager("ROUND", Arity::Exact(2), |args| {
+        two_numbers("ROUND", args, |n, digits| {
+            let factor = 10f64.powf(digits);
+            js_round(n * factor) / factor
+        })
+    }),
+    eager("FLOOR", Arity::Exact(1), |args| {
+        one_number("FLOOR", args, f64::floor)
+    }),
+    eager("CEIL", Arity::Exact(1), |args| {
+        one_number("CEIL", args, f64::ceil)
+    }),
+    eager("SQRT", Arity::Exact(1), |args| {
+        one_number("SQRT", args, f64::sqrt)
+    }),
+    eager("POW", Arity::Exact(2), |args| {
+        two_numbers("POW", args, f64::powf)
+    }),
+    eager("CONCAT", Arity::AtLeast(1), |args| {
+        let mut joined = String::new();
+        for (index, value) in args.iter().enumerate() {
+            match as_text("CONCAT", index, Some(value)) {
+                Err(error) => return error,
+                Ok(text) => joined.push_str(&text),
+            }
+        }
+        Value::Text(joined)
+    }),
+    eager("LEN", Arity::Exact(1), |args| {
+        match as_text("LEN", 0, args.first()) {
+            Err(error) => error,
+            // A JavaScript string counts its length in UTF-16 code units, so a
+            // character outside the basic plane counts as the two it is
+            // written with.
+            Ok(text) => finite_result("LEN", text.encode_utf16().count() as f64),
+        }
+    }),
+    eager("PI", Arity::Exact(0), |_| {
+        Value::Number(std::f64::consts::PI)
+    }),
+    eager("SIN", Arity::Exact(1), |args| {
+        one_number("SIN", args, f64::sin)
+    }),
+    eager("COS", Arity::Exact(1), |args| {
+        one_number("COS", args, f64::cos)
+    }),
+    eager("TAN", Arity::Exact(1), |args| {
+        one_number("TAN", args, f64::tan)
+    }),
+    eager("ATAN2", Arity::Exact(2), |args| {
+        two_numbers("ATAN2", args, |y, x| y.atan2(x))
+    }),
+    eager("DEG", Arity::Exact(1), |args| {
+        one_number("DEG", args, |radians| {
+            radians * 180.0 / std::f64::consts::PI
+        })
+    }),
+    eager("RAD", Arity::Exact(1), |args| {
+        one_number("RAD", args, |degrees| {
+            degrees * std::f64::consts::PI / 180.0
+        })
+    }),
 ];
 
 /// The function of that name, where the spelling matches exactly. A name in

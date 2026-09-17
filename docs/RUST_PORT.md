@@ -1578,18 +1578,27 @@ Completed dependencies:
   RUST-005 supplies the lexer, the tree with its shape and depth checks, the
   parser, the printer, dependency extraction, the two resize rewrites, and the
   name, argument count and two habits of all 23 functions.
+Completed cases:
+  What each of the 23 functions computes, in formula/functions.rs, with the
+  bodies of the three lazy ones held by the evaluator instead.
+  Operator behaviour, the lazy reading that leaves an untaken branch alone,
+  argument validation, reads over a range, and the path an error takes up a
+  tree, in formula/eval.rs.
+  Three habits of JavaScript reproduced on purpose: a half rounds toward
+  positive infinity rather than away from zero, so ROUND(-2.5, 0) is -2; LEN
+  counts UTF-16 code units, so a character outside the basic plane counts as
+  two; and the smaller or larger of two numbers answers NaN where either side
+  is NaN, which is what keeps the check for an illegal number reachable.
 Remaining cases:
-  What each of the 23 functions computes, operator behaviour, the lazy reading
-  that leaves an untaken branch unevaluated, argument validation, reads over a
-  range, and how an error travels up a tree. JavaScript rounding and string
-  length are compatibility choices this package makes deliberately.
+  None. The package is ready for its evidence to be read against the criteria
+  under its heading above.
 Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
   graph.address-key carry the RUST-004 surface
   formula.lex, formula.ast-shape, formula.parse, formula.format and
-  formula.dependencies carry RUST-005
+  formula.dependencies carry RUST-005, and formula.evaluate carries RUST-006
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1599,9 +1608,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  96 pass
+  cargo test --workspace --locked                                  106 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           356 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           454 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1612,8 +1621,8 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port formula/eval.ts and the bodies of the 23 functions
-  in formula/functions.ts.
+Next concrete action: read the RUST-006 evidence against its criteria, then
+  start RUST-007 or RUST-008.
 Dependencies that can proceed independently:
   RUST-008, the math language, needs the model and the formula syntax, and both
   have landed.
