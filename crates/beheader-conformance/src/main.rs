@@ -42,9 +42,11 @@ use beheader_engine::math::eval::evaluate_math_object;
 use beheader_engine::math::lexer::tokenize_math;
 use beheader_engine::math::names::resolve_math_names;
 use beheader_engine::math::parser::parse_math;
-use beheader_engine::measure::{MeasureCapability, MeasureError, Measurement, Measurer, TextStyle};
+use beheader_engine::measure::{
+    MathStyle, MeasureCapability, MeasureError, Measurement, Measurer, TextStyle,
+};
 use beheader_engine::model::{
-    ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap,
+    ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap, Value,
     has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
 };
 use beheader_engine::number::{
@@ -67,6 +69,11 @@ use beheader_engine::primitives::geometry::{
     explode_object_to_polyline, insert_vertex_into_object, path_edges_of_object,
     polyline_edge_count, repair_vertex_address_for_delete, shift_vertex_address_for_delete,
     shift_vertex_address_for_insert, split_polyline_edge,
+};
+use beheader_engine::primitives::math::{
+    apply_math_source, create_math_object, math_source_references, math_source_with_ids,
+    math_source_with_names, read_math_display_latex, read_math_names, rewrite_math_references,
+    unresolved_math_references,
 };
 use beheader_engine::primitives::schema::{
     SlotComputeInputs, SlotFormat, derived_slot_dependency_addresses, find_slot_format,
@@ -764,7 +771,15 @@ fn shape_object_argument(
             GraphObjectPorts {
                 input: named("in"),
                 output: named("out"),
-                seed: None,
+                // A source that solves for nothing arrives with no seed
+                // family, so an absent list stays absent rather than becoming
+                // an empty one.
+                seed: ports.get("seed").and_then(Json::as_array).map(|names| {
+                    names
+                        .iter()
+                        .filter_map(|name| name.as_str().map(str::to_string))
+                        .collect()
+                }),
             }
         }),
         vertex_count,
@@ -843,7 +858,7 @@ struct FakeMeasurer;
 
 impl Measurer for FakeMeasurer {
     fn capability(&self) -> MeasureCapability {
-        MeasureCapability::Text
+        MeasureCapability::TextAndMath
     }
 
     fn measure(
@@ -855,6 +870,13 @@ impl Measurer for FakeMeasurer {
         Ok(Measurement {
             width: text.encode_utf16().count() as f64 * style.font_size * 0.6,
             height: style.line_height,
+        })
+    }
+
+    fn measure_math(&self, latex: &str, style: &MathStyle) -> Result<Measurement, MeasureError> {
+        Ok(Measurement {
+            width: latex.encode_utf16().count() as f64 * style.font_size * 0.5,
+            height: style.font_size * 1.5,
         })
     }
 }
@@ -914,6 +936,69 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "mathNames" => text_argument(args, "source").map(|source| match read_math_names(&source) {
+            Err(failure) => json!({
+                "ok": false,
+                "message": failure.message,
+                "line": failure.line,
+            }),
+            Ok(names) => json!({
+                "ok": true,
+                "references": names.references.iter().map(encode_address).collect::<Vec<_>>(),
+                "exports": names.exports,
+                "inputs": names.inputs,
+                "functions": names.functions,
+                "seeds": names.seeds,
+            }),
+        }),
+        "mathApplySource" => shape_object_argument(args, "object").and_then(|object| {
+            let source = text_argument(args, "source")?;
+            Ok(match read_math_names(&source) {
+                Err(failure) => json!({
+                    "ok": false,
+                    "message": failure.message,
+                    "line": failure.line,
+                }),
+                Ok(names) => json!({
+                    "ok": true,
+                    "object": encode_shape_object(&apply_math_source(&object, &source, &names)),
+                }),
+            })
+        }),
+        "mathDisplay" => shape_object_argument(args, "object")
+            .map(|object| json!(read_math_display_latex(&object))),
+        "mathSourceAddresses" => shape_object_argument(args, "object").and_then(|object| {
+            let objects = shape_object_list_argument(args, "objects")?;
+            let source = match object.get_slot(&["source".to_string()]).map(Slot::value) {
+                Some(Value::Text(text)) => text.clone(),
+                _ => String::new(),
+            };
+            Ok(json!({
+                "references": math_source_references(&object)
+                    .iter()
+                    .map(encode_address)
+                    .collect::<Vec<_>>(),
+                "unresolved": unresolved_math_references(&source, &objects),
+            }))
+        }),
+        "mathSourceSpelling" => text_argument(args, "source").and_then(|source| {
+            let objects = shape_object_list_argument(args, "objects")?;
+            Ok(json!({
+                "withNames": math_source_with_names(&source, &objects),
+                "withIds": math_source_with_ids(&source, &objects),
+                "shifted": rewrite_math_references(&source, |address| {
+                    let mut path = address.path.clone();
+                    path.push("moved".to_string());
+                    Address {
+                        object_id: address.object_id.clone(),
+                        path,
+                    }
+                }),
+            }))
+        }),
+        "mathNewObject" => text_argument(args, "name").map(|name| {
+            encode_shape_object(&create_math_object::<FormulaAst>("m1", &name, 0.0, 0.0))
+        }),
         "parseTextContent" => text_argument(args, "content").and_then(|content| {
             let objects = shape_object_list_argument(args, "objects")?;
             Ok(json!(

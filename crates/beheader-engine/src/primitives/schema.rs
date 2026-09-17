@@ -20,9 +20,8 @@
 //! operator can create, and no command word makes one. They stay because they
 //! are the smallest case that exercises a derived slot.
 //!
-//! The math entry arrives with the math primitive. The registry answers nothing
-//! for a type with no entry, which is the same answer the TypeScript gives for a
-//! type it has yet to declare.
+//! The registry answers nothing for a type with no entry, which is the same
+//! answer the TypeScript gives for a type it has yet to declare.
 //!
 //! The port of `src/engine/primitives/schema.ts`.
 
@@ -256,7 +255,13 @@ fn reference_error(message: impl Into<String>) -> Value {
     })
 }
 
-/// The schema for a type, or nothing for a type with no entry yet.
+/// The schema for a type.
+///
+/// Every object type now declares one, so the answer is never nothing. The
+/// match below names each of the thirteen rather than ending in a catch-all, so
+/// a type added later will not compile until it declares which slots it
+/// carries. The answer stays optional because the TypeScript registry is a
+/// partial record and a caller of either engine reads the same shape.
 pub fn get_object_schema<A: 'static>(object_type: ObjectType) -> Option<ObjectSchema<A>> {
     match object_type {
         ObjectType::Value => Some(value_schema()),
@@ -269,6 +274,7 @@ pub fn get_object_schema<A: 'static>(object_type: ObjectType) -> Option<ObjectSc
         ObjectType::Polyline => Some(polyline_schema()),
         ObjectType::Script => Some(script_schema()),
         ObjectType::Text => Some(text_schema()),
+        ObjectType::Math => Some(math_schema()),
         // A variable is a slot an operator named, so the doc object declares
         // whatever slots it holds rather than a fixed set. That makes the set
         // dynamic without breaking the rule that evaluation never changes the
@@ -302,7 +308,6 @@ pub fn get_object_schema<A: 'static>(object_type: ObjectType) -> Option<ObjectSc
             slot_options: Vec::new(),
             slot_formats: Vec::new(),
         }),
-        _ => None,
     }
 }
 
@@ -603,6 +608,44 @@ fn text_schema<A: 'static>() -> ObjectSchema<A> {
     }
 }
 
+fn math_schema<A: 'static>() -> ObjectSchema<A> {
+    use crate::primitives::geometry::{origin_x_path, origin_y_path};
+    use crate::primitives::math::{
+        MATH_DISPLAY_VALUES, enumerate_math_in_paths, enumerate_math_out_derived_slots,
+        enumerate_math_seed_paths, math_display_path, math_measured_slots, math_source_path,
+    };
+    ObjectSchema {
+        object_type: ObjectType::Math,
+        non_derived_slot_paths: vec![
+            NonDerivedSlotPathGroup::Static(vec![
+                origin_x_path(),
+                origin_y_path(),
+                math_source_path(),
+                math_display_path(),
+            ]),
+            NonDerivedSlotPathGroup::Dynamic(Box::new(enumerate_math_in_paths)),
+            NonDerivedSlotPathGroup::Dynamic(Box::new(enumerate_math_seed_paths)),
+        ],
+        derived_slots: vec![
+            DerivedSlotGroup::Static(math_measured_slots()),
+            DerivedSlotGroup::Dynamic(Box::new(enumerate_math_out_derived_slots)),
+        ],
+        slot_options: vec![SlotOptionSet {
+            path: math_display_path(),
+            values: MATH_DISPLAY_VALUES
+                .iter()
+                .map(|display| Value::Text(display.as_str().to_string()))
+                .collect(),
+            labels: Some(vec![
+                "the formula".to_string(),
+                "the result".to_string(),
+                "the formula and its result".to_string(),
+            ]),
+        }],
+        slot_formats: Vec::new(),
+    }
+}
+
 fn script_schema<A: 'static>() -> ObjectSchema<A> {
     use crate::primitives::geometry::{origin_x_path, origin_y_path};
     use crate::script::stub::{
@@ -684,14 +727,33 @@ mod tests {
             .collect()
     }
 
-    /// A type with no entry answers nothing rather than an empty schema, so a
-    /// caller can tell a type the registry has yet to declare from one that
-    /// declares no slots.
+    /// Every object type declares a schema. The match in the registry names
+    /// each one rather than ending in a catch-all, so a type added later fails
+    /// to compile until it says which slots it carries, and this test says what
+    /// that match is for.
     #[test]
-    fn an_undeclared_type_answers_nothing() {
-        assert!(get_object_schema::<()>(ObjectType::Math).is_none());
-        assert!(get_object_schema::<()>(ObjectType::Value).is_some());
-        assert!(get_object_schema::<()>(ObjectType::Text).is_some());
+    fn every_object_type_is_declared() {
+        for object_type in [
+            ObjectType::Circle,
+            ObjectType::Polygon,
+            ObjectType::Polyline,
+            ObjectType::Rect,
+            ObjectType::Text,
+            ObjectType::Table,
+            ObjectType::Script,
+            ObjectType::Image,
+            ObjectType::Math,
+            ObjectType::Value,
+            ObjectType::Doc,
+            ObjectType::Docref,
+            ObjectType::Add,
+        ] {
+            assert!(
+                get_object_schema::<()>(object_type).is_some(),
+                "{} declares a schema",
+                object_type.as_str()
+            );
+        }
     }
 
     /// The colour rule takes the three hex forms and null, and nothing else. A

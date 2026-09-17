@@ -943,7 +943,7 @@ met, and a package is done only where the status column says so.
 | `RUST-006` | Formula evaluation and functions | `005` | active |
 | `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | done |
 | `RUST-008` | Math language and evaluator | `004`, `005` | done |
-| `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | planned |
+| `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | done |
 | `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | planned |
 | `RUST-011` | Atomic mutations and repairs | `010` | planned |
 | `RUST-012` | Document persistence and journal replay | `011` | planned |
@@ -1345,6 +1345,35 @@ selected host measurement contract.
 math source leaves previous ports intact. Renames preserve stored references
 and update display spelling. Text, standalone notation, and embedded notation
 pass deterministic measurement fixtures and the browser proof.
+
+**Landed.** `primitives::text` carries the block tree, the dependency walker
+over it, and the three compute functions behind the resolved content and the two
+measured slots. `primitives::math` carries the slots a math object declares, what
+each export computes, and the notation it draws, and both types now have an entry
+in the registry.
+
+`primitives.text` asks both engines 154 questions and `primitives.math` 123, and
+they answer alike on every one. Three of them needed measuring rather than
+assuming.
+
+The scanner walks the units a JavaScript string counts. The offset an error block
+carries after a clef sign is 3 rather than 2, and a text box holding one measures
+four units wide rather than three.
+
+A run of notation is trimmed with the whitespace JavaScript trims, which holds
+the byte order mark and leaves the next line character alone. The Rust
+`char::is_whitespace` property is the other way round on both, so a run written
+after a byte order mark would have kept it here and lost it in the other engine.
+
+A displayed result carries six significant digits, which the TypeScript reaches
+through `Number(x.toPrecision(6))`. Writing the digits and reading them back
+reproduces that exactly over 20,017 measured values, including the two halves
+that land on the sixth digit, where scaling by a power of ten would not.
+
+Making the registry complete turned its match exhaustive, so the catch-all that
+answered nothing for an undeclared type is gone. A type added later fails to
+compile until it declares which slots it carries, which is a check the TypeScript
+partial record cannot make.
 
 ### `RUST-010`: Complete graph evaluation
 
@@ -1775,12 +1804,14 @@ implemented, then its lasting rationale belongs beside that code.
 ### Handoff record for the active package
 
 ```text
-Package: RUST-009, text and math primitive integration
+Package: RUST-010, complete schemas and graph evaluation
 Status: ready, unstarted
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
 Completed dependencies:
+  RUST-009 supplies the text and math primitives, so every object type now
+  declares a schema and the registry match is exhaustive.
   RUST-007 supplies the shape maths, the table arithmetic, the schema registry
   and the measurer seam a derived slot computes against.
   RUST-004 supplies values, slots, objects, ports, vertex counts, addresses,
@@ -1790,10 +1821,10 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  primitives::text and primitives::math, and the two registry entries they
-  declare. Both read through the measurer seam SlotComputeInputs now carries,
-  which RUST-007 put there for the docref slots. The schema is shared with
-  RUST-010, which completes it.
+  graph::cycles, graph::eval and the derivation half of mutation. The schema
+  registry is complete, so RUST-010 completes the evaluation around it rather
+  than the declarations inside it. D-013 lands here, because the evaluation pass
+  is what rules on a compute that fails.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1803,8 +1834,9 @@ Fixture and evidence paths:
   formula.dependencies carry RUST-005, formula.evaluate carries RUST-006, and
   math.lex, math.parse, math.names and math.evaluate carry RUST-008
   number.javascript-arithmetic pins the seven functions D-012 found agreeing,
-  and primitives.edge, primitives.geometry, primitives.table, primitives.doc
-  and primitives.schema carry RUST-007
+  primitives.edge, primitives.geometry, primitives.table, primitives.doc and
+  primitives.schema carry RUST-007, and primitives.text and primitives.math
+  carry RUST-009
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1814,9 +1846,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  206 pass
+  cargo test --workspace --locked                                  228 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1424 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1701 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1832,9 +1864,9 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port primitives/text.ts, whose resolved content slot
-  resolves its own dependency addresses, then primitives/math.ts, which calls
-  the math language RUST-008 landed.
+Next concrete action: port graph/cycles.ts, then graph/eval.ts, which reads the
+  schema registry for every derived slot of every object and is where rule 4 is
+  enforced rather than only respected.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```

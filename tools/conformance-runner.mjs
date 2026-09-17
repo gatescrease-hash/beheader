@@ -149,6 +149,17 @@ const {
   matchMathMarkerAt,
   parseTextContent,
   resolveTextDependencyAddresses,
+  applyMathSource,
+  createMathObject,
+  isMathSourceError,
+  mathDisplayLatex,
+  mathSourceReferences,
+  mathSourceWithIds,
+  mathSourceWithNames,
+  readMathDisplayLatex,
+  readMathNames,
+  rewriteMathReferences,
+  unresolvedMathReferences,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -644,7 +655,15 @@ function shapeObjectArgument(args, name) {
     name: typeof value.name === "string" ? value.name : value.id,
     type: value.type,
     vertexCount: value.vertexCount === undefined ? undefined : decodeNumber(value.vertexCount),
-    ports: value.ports === undefined ? undefined : { in: named("in") ?? [], out: named("out") ?? [] },
+    ports: value.ports === undefined
+      ? undefined
+      : {
+          in: named("in") ?? [],
+          out: named("out") ?? [],
+          // A source that solves for nothing arrives with no seed family, so
+          // an absent list stays absent rather than becoming an empty one.
+          ...(named("seed") === undefined ? {} : { seed: named("seed") }),
+        },
     target: value.target === undefined || value.target === null
       ? undefined
       : addressArgument({ target: value.target }, "target"),
@@ -662,6 +681,10 @@ const FAKE_MEASURER = {
   measure: (text, style) => ({
     width: text.length * style.fontSize * 0.6,
     height: style.lineHeight,
+  }),
+  measureMath: (latex, style) => ({
+    width: latex.length * style.fontSize * 0.5,
+    height: style.fontSize * 1.5,
   }),
 };
 
@@ -796,6 +819,54 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  mathNames: (args) => {
+    const reading = readMathNames(textArgument(args, "source"));
+    if (isMathSourceError(reading)) {
+      return { ok: false, message: reading.message, line: reading.line };
+    }
+    return {
+      ok: true,
+      references: reading.names.references.map(encodeAddress),
+      exports: [...reading.names.exports],
+      inputs: [...reading.names.inputs],
+      functions: [...reading.names.functions],
+      seeds: [...(reading.names.seeds ?? [])],
+    };
+  },
+  mathApplySource: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    const source = textArgument(args, "source");
+    const reading = readMathNames(source);
+    if (isMathSourceError(reading)) {
+      return { ok: false, message: reading.message, line: reading.line };
+    }
+    return { ok: true, object: encodeShapeObject(applyMathSource(object, source, reading.names)) };
+  },
+  mathDisplay: (args) => readMathDisplayLatex(shapeObjectArgument(args, "object")),
+  mathSourceAddresses: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    return {
+      references: mathSourceReferences(object).map(encodeAddress),
+      unresolved: unresolvedMathReferences(
+        object.slots[slotKey(["source"])]?.value ?? "",
+        shapeObjectListArgument(args, "objects"),
+      ),
+    };
+  },
+  mathSourceSpelling: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const source = textArgument(args, "source");
+    return {
+      withNames: mathSourceWithNames(source, objects),
+      withIds: mathSourceWithIds(source, objects),
+      shifted: rewriteMathReferences(source, (address) => ({
+        objectId: address.objectId,
+        path: [...address.path, "moved"],
+      })),
+    };
+  },
+  mathNewObject: (args) =>
+    encodeShapeObject(createMathObject("m1", textArgument(args, "name"), 0, 0)),
   parseTextContent: (args) =>
     parseTextContent(textArgument(args, "content"), shapeObjectListArgument(args, "objects")).map(encodeBlock),
   textDependencies: (args) => {

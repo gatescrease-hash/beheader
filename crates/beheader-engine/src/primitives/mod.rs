@@ -9,6 +9,7 @@ pub mod doc;
 pub mod edge;
 pub mod geometry;
 pub mod image;
+pub mod math;
 pub mod schema;
 pub mod table;
 pub mod text;

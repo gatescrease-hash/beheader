@@ -1,0 +1,5520 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "primitives.math",
+  "sourceTest": "src/engine/primitives/math.test.ts",
+  "requirement": "SPEC.md section 12, the math object",
+  "comparison": "exact",
+  "note": "How a source becomes a slot set, what each export computes, and what the object draws. The applied cases are the ones that matter for the slot set: a port that survives an edit keeps the slot it had, so a link an operator made to a table cell outlives an edit to an unrelated line, and a source that does not parse never reaches the object at all. The displayed results are rounded to six significant digits the way Number(x.toPrecision(6)) rounds, and the one third case is where that shows.",
+  "cases": [
+    {
+      "name": "source 0, its names",
+      "call": "mathNames",
+      "args": {
+        "source": ""
+      }
+    },
+    {
+      "name": "source 1, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=42"
+      }
+    },
+    {
+      "name": "source 2, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=1+2"
+      }
+    },
+    {
+      "name": "source 3, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=x+1"
+      }
+    },
+    {
+      "name": "source 4, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=x+z"
+      }
+    },
+    {
+      "name": "source 5, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "a=2\nb=a*3"
+      }
+    },
+    {
+      "name": "source 6, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "f(t)=t^2\ny=f(3)"
+      }
+    },
+    {
+      "name": "source 7, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\sqrt{2}"
+      }
+    },
+    {
+      "name": "source 8, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\frac{1}{0}"
+      }
+    },
+    {
+      "name": "source 9, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "\\solve{x}x^2=4"
+      }
+    },
+    {
+      "name": "source 10, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "\\solve{x}2x=10\nd=x+1"
+      }
+    },
+    {
+      "name": "source 11, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\int_0^\\pi \\sin(t) dt"
+      }
+    },
+    {
+      "name": "source 12, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\sum_{k=1}^{5} k"
+      }
+    },
+    {
+      "name": "source 13, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y="
+      }
+    },
+    {
+      "name": "source 14, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "=4"
+      }
+    },
+    {
+      "name": "source 15, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=1+"
+      }
+    },
+    {
+      "name": "source 16, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\unknown(2)"
+      }
+    },
+    {
+      "name": "source 17, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=x\ny=2"
+      }
+    },
+    {
+      "name": "source 18, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\gpref{v1.value}+1"
+      }
+    },
+    {
+      "name": "source 19, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\gpref{v1.value}+\\gpref{t1.cells.A1}"
+      }
+    },
+    {
+      "name": "source 20, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\gpref{gone.value}"
+      }
+    },
+    {
+      "name": "source 21, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\gpref{v1.missing}"
+      }
+    },
+    {
+      "name": "source 22, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "x_{ans}=5"
+      }
+    },
+    {
+      "name": "source 23, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "\\operatorname{speed}=10"
+      }
+    },
+    {
+      "name": "source 24, its names",
+      "call": "mathNames",
+      "args": {
+        "source": "y=\\cos(0.1)"
+      }
+    },
+    {
+      "name": "source 0 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": ""
+      }
+    },
+    {
+      "name": "source 1 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=42"
+      }
+    },
+    {
+      "name": "source 2 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=1+2"
+      }
+    },
+    {
+      "name": "source 3 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=x+1"
+      }
+    },
+    {
+      "name": "source 4 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=x+z"
+      }
+    },
+    {
+      "name": "source 5 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "a=2\nb=a*3"
+      }
+    },
+    {
+      "name": "source 6 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "f(t)=t^2\ny=f(3)"
+      }
+    },
+    {
+      "name": "source 7 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\sqrt{2}"
+      }
+    },
+    {
+      "name": "source 8 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\frac{1}{0}"
+      }
+    },
+    {
+      "name": "source 9 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "\\solve{x}x^2=4"
+      }
+    },
+    {
+      "name": "source 10 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "\\solve{x}2x=10\nd=x+1"
+      }
+    },
+    {
+      "name": "source 11 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\int_0^\\pi \\sin(t) dt"
+      }
+    },
+    {
+      "name": "source 12 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\sum_{k=1}^{5} k"
+      }
+    },
+    {
+      "name": "source 13 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y="
+      }
+    },
+    {
+      "name": "source 14 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "=4"
+      }
+    },
+    {
+      "name": "source 15 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=1+"
+      }
+    },
+    {
+      "name": "source 16 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\unknown(2)"
+      }
+    },
+    {
+      "name": "source 17 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=x\ny=2"
+      }
+    },
+    {
+      "name": "source 18 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\gpref{v1.value}+1"
+      }
+    },
+    {
+      "name": "source 19 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\gpref{v1.value}+\\gpref{t1.cells.A1}"
+      }
+    },
+    {
+      "name": "source 20 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\gpref{gone.value}"
+      }
+    },
+    {
+      "name": "source 21 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\gpref{v1.missing}"
+      }
+    },
+    {
+      "name": "source 22 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "x_{ans}=5"
+      }
+    },
+    {
+      "name": "source 23 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "\\operatorname{speed}=10"
+      }
+    },
+    {
+      "name": "source 24 applied to an empty object",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "source": "y=\\cos(0.1)"
+      }
+    },
+    {
+      "name": "an edit that keeps a linked port",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "source": "y=x+2"
+      }
+    },
+    {
+      "name": "an edit that drops a port",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "source": "y=1"
+      }
+    },
+    {
+      "name": "an edit that adds a port",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "source": "y=x+w"
+      }
+    },
+    {
+      "name": "an edit that keeps a moved seed",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "out.x",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        },
+        "source": "\\solve{x}x^2=9"
+      }
+    },
+    {
+      "name": "an edit that drops the seed family",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "out.x",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        },
+        "source": "y=1"
+      }
+    },
+    {
+      "name": "a source that does not parse",
+      "call": "mathApplySource",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "source": "y="
+      }
+    },
+    {
+      "name": "a source display of \"y=1+2\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1+2"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"a=2\\nb=a*3\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "a=2\nb=a*3"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.a",
+              "kind": "derived",
+              "value": 2
+            },
+            {
+              "key": "out.b",
+              "kind": "derived",
+              "value": 6
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"\\\\solve{x}x^2=4\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.x",
+              "kind": "derived",
+              "value": 2
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"x_{ans}=5\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "x_{ans}=5"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.x_ans",
+              "kind": "derived",
+              "value": 5
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x_ans"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"\\\\operatorname{speed}=10\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\operatorname{speed}=10"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.speed",
+              "kind": "derived",
+              "value": 10
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "speed"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"y=1/3\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1/3"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 0.3333333333333333
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"y=1\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": {
+                "error": "#MATH",
+                "message": "no"
+              }
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"y=1\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a source display of \"\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"y=1+2\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1+2"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"a=2\\nb=a*3\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "a=2\nb=a*3"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.a",
+              "kind": "derived",
+              "value": 2
+            },
+            {
+              "key": "out.b",
+              "kind": "derived",
+              "value": 6
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"\\\\solve{x}x^2=4\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.x",
+              "kind": "derived",
+              "value": 2
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"x_{ans}=5\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "x_{ans}=5"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.x_ans",
+              "kind": "derived",
+              "value": 5
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x_ans"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"\\\\operatorname{speed}=10\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\operatorname{speed}=10"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.speed",
+              "kind": "derived",
+              "value": 10
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "speed"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"y=1/3\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1/3"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 0.3333333333333333
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"y=1\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": {
+                "error": "#MATH",
+                "message": "no"
+              }
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"y=1\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a value display of \"\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "value"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"y=1+2\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1+2"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"a=2\\nb=a*3\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "a=2\nb=a*3"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.a",
+              "kind": "derived",
+              "value": 2
+            },
+            {
+              "key": "out.b",
+              "kind": "derived",
+              "value": 6
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"\\\\solve{x}x^2=4\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.x",
+              "kind": "derived",
+              "value": 2
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"x_{ans}=5\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "x_{ans}=5"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.x_ans",
+              "kind": "derived",
+              "value": 5
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x_ans"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"\\\\operatorname{speed}=10\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\operatorname{speed}=10"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.speed",
+              "kind": "derived",
+              "value": 10
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "speed"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"y=1/3\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1/3"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 0.3333333333333333
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"y=1\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": {
+                "error": "#MATH",
+                "message": "no"
+              }
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"y=1\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a both display of \"\"",
+      "call": "mathDisplay",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "both"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        }
+      }
+    },
+    {
+      "name": "a math object of \"y=1+2\" measured with fake",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1+2"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 3
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a math object of \"\" measured with fake",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a math object of \"   \" measured with fake",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "   "
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a math object of \"y=1+2\" measured with nothing",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1+2"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 3
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a math object of \"\" measured with nothing",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        }
+      }
+    },
+    {
+      "name": "a math object of \"   \" measured with nothing",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "   "
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        }
+      }
+    },
+    {
+      "name": "an export from a number",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=42"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from an input that is filled",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": 4
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from an input nobody has filled",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from an input holding text",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": "four"
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from an input holding an error",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": {
+                "error": "#DIV0",
+                "message": "divide by zero"
+              }
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from a seed",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": 1
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from a seed holding text",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": "one"
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from a port the source no longer defines",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y",
+              "gone"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from a source that does not parse",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y="
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "an export from a source holding a number",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": 42
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a math object, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=x+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "in.x",
+              "kind": "literal",
+              "value": 1
+            }
+          ],
+          "ports": {
+            "in": [
+              "x"
+            ],
+            "out": [
+              "y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a math object with a seed, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "\\solve{x}x^2=4"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "seed.x",
+              "kind": "literal",
+              "value": 0
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": [
+              "x"
+            ],
+            "seed": [
+              "x"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a math display slot, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "math",
+        "path": [
+          "display"
+        ]
+      }
+    },
+    {
+      "name": "a new math object",
+      "call": "mathNewObject",
+      "args": {
+        "name": "eq"
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{v1.value}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{v1.value}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{v1.value}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{v1.value}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{total.value}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{total.value}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{total.value}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{total.value}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{t1.cells.A1}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{t1.cells.A1}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{t1.cells.A1}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{t1.cells.A1}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{grid.A1}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{grid.A1}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{grid.A1}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{grid.A1}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{gone.value}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{gone.value}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{gone.value}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{gone.value}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{v1}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{v1}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{v1}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{v1}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{v1.value\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{v1.value",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{v1.value\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{v1.value"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=1\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=1",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=1\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the spelling of \"y=\\\\gpref{v1.value}+\\\\gpref{t1.cells.A1}\"",
+      "call": "mathSourceSpelling",
+      "args": {
+        "source": "y=\\gpref{v1.value}+\\gpref{t1.cells.A1}",
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the addresses of \"y=\\\\gpref{v1.value}+\\\\gpref{t1.cells.A1}\"",
+      "call": "mathSourceAddresses",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{v1.value}+\\gpref{t1.cells.A1}"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "ports": {
+            "in": [],
+            "out": []
+          }
+        },
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
