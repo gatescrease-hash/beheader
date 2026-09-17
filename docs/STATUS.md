@@ -17,6 +17,7 @@ register, and its current handoff. Rust implementation remains deferred.
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2750 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built, except the parts section 17 postpones. |
+| Workspace | Compact typography, a profile helmet, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
 

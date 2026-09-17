@@ -27,6 +27,7 @@
  * the tests run headless and the file can move to Rust later.
  */
 import type { Address } from "../address.ts";
+import { STYLE_PATHS, VIEW_PATHS } from "../layers.ts";
 import { DOCREF_DERIVED_SLOTS } from "./doc.ts";
 import type { EvalContext } from "../eval-context.ts";
 import type { ReadRange } from "../formula/eval.ts";
@@ -388,28 +389,30 @@ const TEXT_SCHEMA: ObjectSchema = {
     {
       path: TEXT_MEASURED_HEIGHT_PATH,
       dependencies: {
-        kind: "static",
-        paths: [
+        kind: "dynamic",
+        resolve: (object) => [
           TEXT_RESOLVED_CONTENT_PATH,
           TEXT_WIDTH_PATH,
           TEXT_STYLE_FONT_PATH,
           TEXT_STYLE_FONT_SIZE_PATH,
           TEXT_STYLE_LINE_HEIGHT_PATH,
-        ],
+          ...["bold", "italic"].filter(key => object.slots[`style.${key}`] !== undefined).map(key => ["style", key]),
+        ].map(path => ({ objectId: object.id, path })),
       },
       compute: computeMeasuredHeight,
     },
     {
       path: TEXT_MEASURED_WIDTH_PATH,
       dependencies: {
-        kind: "static",
-        paths: [
+        kind: "dynamic",
+        resolve: (object) => [
           TEXT_RESOLVED_CONTENT_PATH,
           TEXT_WIDTH_PATH,
           TEXT_STYLE_FONT_PATH,
           TEXT_STYLE_FONT_SIZE_PATH,
           TEXT_STYLE_LINE_HEIGHT_PATH,
-        ],
+          ...["bold", "italic"].filter(key => object.slots[`style.${key}`] !== undefined).map(key => ["style", key]),
+        ].map(path => ({ objectId: object.id, path })),
       },
       compute: computeMeasuredWidth,
     },
@@ -475,6 +478,10 @@ const MATH_SCHEMA: ObjectSchema = {
 };
 
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
+  layer: {
+    type: "layer", nonDerivedSlotPaths: [{ kind: "static", paths: STYLE_PATHS }], derivedSlots: [],
+    slotFormats: [...GEOMETRY_COLOR_FORMATS, { path: ["style", "color"], format: "color" }],
+  },
   // A variable is a slot an operator named, so the doc object declares
   // whatever slots it holds rather than a fixed set. That makes the set
   // dynamic without breaking Rule 6: only a mutation writes a variable, and
@@ -507,7 +514,17 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
 
 /** The schema for a type, or undefined for a type with no entry yet. */
 export function getObjectSchema(type: ObjectType): ObjectSchema | undefined {
-  return SCHEMAS[type];
+  const schema = SCHEMAS[type];
+  if (!schema || type === "doc" || type === "value" || type === "add") return schema;
+  const extra = type === "text" ? [["style", "bold"], ["style", "italic"]] : type === "table" ? STYLE_PATHS : [];
+  return { ...schema, nonDerivedSlotPaths: [...schema.nonDerivedSlotPaths,
+    { kind: "dynamic", enumerate: (object) => [...VIEW_PATHS, ...extra].filter(path => object.slots[slotKey(path)] !== undefined) },
+    ...(type === "table" ? [{ kind: "dynamic" as const, enumerate: tablePresentationPaths }] : []),
+  ] };
+}
+
+function tablePresentationPaths(object: GraphObject): readonly (readonly string[])[] {
+  return Object.keys(object.slots).filter(key => /^(columns\.[1-9]\d*\.width|rowsizes\.[1-9]\d*\.height|cellStyle\.[A-Z]+[1-9]\d*\.(bold|italic|fontSize|color|fillColor|align|format))$/.test(key)).map(key => key.split("."));
 }
 
 export function findSlotOptions(type: ObjectType, path: readonly string[]): SlotOptionSet | undefined {

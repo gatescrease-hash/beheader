@@ -89,6 +89,8 @@ import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREE
 import { EDGE_GRIP_SIZE_SCREEN, hasPathGrips, pathGrips, sameGrip, VERTEX_GRIP_SIZE_SCREEN, type PathGrip } from "./grips.ts";
 import { layOutText } from "./measure.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
+import { tableLayout, cellStyle, formattedCell } from "./table-layout.ts";
+import { displayObjects } from "../engine/index.ts";
 import { textBoxSize } from "./textbox.ts";
 import { objectExtent } from "./extent.ts";
 
@@ -344,6 +346,7 @@ export function renderDocument(
   focusedGrip: PathGrip | undefined = undefined,
   measureMath: MathRunMeasurer | undefined = undefined,
 ): RenderReport {
+  objects = displayObjects(objects);
   clearScreen(ctx, viewportWidth, viewportHeight);
   const mathRuns: TextMathRun[] = [];
 
@@ -508,6 +511,7 @@ function drawObject(
   switch (object.type) {
     // The doc object has no origin and nothing to draw. Its variables reach
     // the screen through the panel and through the copies of them.
+    case "layer":
     case "doc":
       return;
     case "docref": {
@@ -679,41 +683,57 @@ function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject, editingCe
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
   const { rows, cols } = getTableDimensions(object);
+  const layout = tableLayout(object);
 
   ctx.font = TABLE_CELL_FONT;
   for (let row = 1; row <= rows; row += 1) {
     for (let column = 1; column <= cols; column += 1) {
-      const cellLeft = originX + (column - 1) * TABLE_CELL_WIDTH;
-      const cellTop = originY + (row - 1) * TABLE_CELL_HEIGHT;
+      const cellLeft = originX + layout.x[column - 1]!;
+      const cellTop = originY + layout.y[row - 1]!;
+      const width = layout.widths[column - 1]!, height = layout.heights[row - 1]!;
+      const style = cellStyle(object, formatCellReference({ column, row }));
+      if (style.fillColor !== "transparent") {
+        ctx.fillStyle = style.fillColor;
+        ctx.fillRect(cellLeft, cellTop, width, height);
+      }
 
-      ctx.strokeStyle = TABLE_GRID_STROKE_STYLE;
-      ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
-      ctx.strokeRect(cellLeft, cellTop, TABLE_CELL_WIDTH, TABLE_CELL_HEIGHT);
+      ctx.strokeStyle = readText(object, ["style", "strokeColor"]) ?? TABLE_GRID_STROKE_STYLE;
+      ctx.lineWidth = readNumber(object, ["style", "strokeWidth"]) ?? DEFAULT_SHAPE_STROKE_WIDTH;
+      ctx.strokeRect(cellLeft, cellTop, width, height);
 
       const reference = formatCellReference({ column, row });
       if (reference === editingCell) {
         continue;
       }
       const cellPath = [TABLE_CELL_PATH_PREFIX, reference];
-      drawCellText(ctx, getSlot(object, cellPath)?.value, cellLeft, cellTop);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cellLeft, cellTop, width, height);
+      ctx.clip();
+      ctx.font = `${style.italic ? "italic " : ""}${style.bold ? "bold " : ""}${style.fontSize}px ${style.font}`;
+      drawCellText(ctx, getSlot(object, cellPath)?.value, cellLeft, cellTop, width, height, style);
+      ctx.restore();
     }
   }
 }
 
-function drawCellText(ctx: CanvasRenderingContext2D, value: Value | undefined, cellLeft: number, cellTop: number): void {
+function drawCellText(ctx: CanvasRenderingContext2D, value: Value | undefined, cellLeft: number, cellTop: number, width: number, height: number, style: ReturnType<typeof cellStyle>): void {
   if (value === undefined) {
     return;
   }
-  const formatted = formatCellValue(value);
+  const formatted = formattedCell(value, style.format) ?? formatCellValue(value);
   if (formatted === null) {
     return;
   }
-  ctx.fillStyle = TABLE_CELL_TEXT_STYLE;
+  ctx.fillStyle = style.color;
   ctx.textBaseline = "middle";
-  const y = cellTop + TABLE_CELL_HEIGHT / 2;
-  if (typeof value === "number") {
+  const y = cellTop + height / 2;
+  if (style.align === "center") {
+    ctx.textAlign = "center";
+    ctx.fillText(formatted, cellLeft + width / 2, y);
+  } else if (style.align === "right" || (style.align === "auto" && typeof value === "number")) {
     ctx.textAlign = "right";
-    ctx.fillText(formatted, cellLeft + TABLE_CELL_WIDTH - TABLE_CELL_TEXT_PADDING, y);
+    ctx.fillText(formatted, cellLeft + width - TABLE_CELL_TEXT_PADDING, y);
   } else {
     ctx.textAlign = "left";
     ctx.fillText(formatted, cellLeft + TABLE_CELL_TEXT_PADDING, y);
@@ -792,7 +812,7 @@ function drawText(
   const wrapWidth = fixedWidth !== undefined && fixedWidth > 0 ? fixedWidth : undefined;
   const layout = layOutText({
     text: resolved,
-    style: { font: style.family, fontSize: style.fontSize, lineHeight: style.lineHeight },
+    style: { font: style.family, fontSize: style.fontSize, lineHeight: style.lineHeight, bold: readBoolean(object, ["style", "bold"]), italic: readBoolean(object, ["style", "italic"]) },
     wrapWidth,
     markup: true,
     measureRun: (text, font) => {
@@ -846,6 +866,7 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
   switch (object.type) {
     // The doc object has no box to outline. `vars` names it in the panel
     // header instead, which is the whole of what selecting it shows.
+    case "layer":
     case "doc":
       return;
     case "circle": {
@@ -871,8 +892,7 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
       const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
       const { rows, cols } = getTableDimensions(object);
-      const width = cols * TABLE_CELL_WIDTH;
-      const height = rows * TABLE_CELL_HEIGHT;
+      const { width, height } = tableLayout(object);
       if (width <= 0 || height <= 0) {
         return;
       }
@@ -971,6 +991,7 @@ function drawTableHeaders(ctx: CanvasRenderingContext2D, camera: CameraState, ob
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
   const { rows, cols } = getTableDimensions(object);
   const topLeft = worldToScreen(camera, { x: originX, y: originY });
+  const layout = tableLayout(object);
   const cellCorner = worldToScreen(camera, { x: originX + TABLE_CELL_WIDTH, y: originY + TABLE_CELL_HEIGHT });
   const cellWidthScreen = cellCorner.x - topLeft.x;
   const cellHeightScreen = cellCorner.y - topLeft.y;
@@ -982,7 +1003,7 @@ function drawTableHeaders(ctx: CanvasRenderingContext2D, camera: CameraState, ob
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
     for (let column = 1; column <= cols; column += 1) {
-      const centreX = topLeft.x + (column - 0.5) * cellWidthScreen;
+      const centreX = topLeft.x + (layout.x[column - 1]! + layout.widths[column - 1]! / 2) * camera.zoom;
       ctx.fillText(indexToColumnLetters(column), centreX, topLeft.y - TABLE_HEADER_MARGIN_SCREEN);
     }
   }
@@ -991,7 +1012,7 @@ function drawTableHeaders(ctx: CanvasRenderingContext2D, camera: CameraState, ob
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     for (let row = 1; row <= rows; row += 1) {
-      const centreY = topLeft.y + (row - 0.5) * cellHeightScreen;
+      const centreY = topLeft.y + (layout.y[row - 1]! + layout.heights[row - 1]! / 2) * camera.zoom;
       ctx.fillText(String(row), topLeft.x - TABLE_HEADER_MARGIN_SCREEN, centreY);
     }
   }

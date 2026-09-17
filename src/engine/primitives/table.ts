@@ -175,6 +175,8 @@ export function shiftCellAddressForInsert(address: Address, tableId: string, axi
   if (address.objectId !== tableId) {
     return address;
   }
+  const presentation = shiftPresentationPath(address.path, axis, index, false);
+  if (presentation) return { ...address, path: presentation };
   const coordinates = cellAddressToCoordinates(address);
   if (coordinates === undefined) {
     return address;
@@ -213,6 +215,8 @@ export function insertTableLine(object: GraphObject, axis: "row" | "column", ind
   }
   Object.assign(newSlots, shiftedCells);
 
+  shiftPresentationSlots(object, newSlots, axis, clampedIndex, false);
+
   return { ...object, slots: newSlots };
 }
 
@@ -237,6 +241,9 @@ export function repairCellAddressForDelete(address: Address, tableId: string, ax
   if (address.objectId !== tableId) {
     return address;
   }
+  const presentation = shiftPresentationPath(address.path, axis, index, true);
+  if (presentation === "deleted") return "deleted";
+  if (presentation) return { ...address, path: presentation };
   const coordinates = cellAddressToCoordinates(address);
   if (coordinates === undefined) {
     return address;
@@ -326,5 +333,36 @@ export function deleteTableLine(object: GraphObject, axis: "row" | "column", ind
   }
   Object.assign(newSlots, shiftedCells);
 
+  shiftPresentationSlots(object, newSlots, axis, index, true);
+
   return { ...object, slots: newSlots };
+}
+
+function shiftPresentationPath(path: readonly string[], axis: "row" | "column", index: number, deleting: false): readonly string[] | undefined;
+function shiftPresentationPath(path: readonly string[], axis: "row" | "column", index: number, deleting: boolean): readonly string[] | "deleted" | undefined;
+function shiftPresentationPath(path: readonly string[], axis: "row" | "column", index: number, deleting: boolean): readonly string[] | "deleted" | undefined {
+  if (path[0] === "cellStyle" && path[1]) {
+    const coordinates = parseCellReference(path[1]);
+    if (!coordinates) return undefined;
+    const shifted = deleting ? shiftCoordinatesForDelete(coordinates, axis, index) : shiftCoordinates(coordinates, axis, index);
+    return shifted === "deleted" ? shifted : ["cellStyle", formatCellReference(shifted), ...path.slice(2)];
+  }
+  if ((axis === "column" && path[0] === "columns") || (axis === "row" && path[0] === "rowsizes")) {
+    const position = Number(path[1]);
+    if (deleting && position === index) return "deleted";
+    return [path[0]!, String(position >= index ? position + (deleting ? -1 : 1) : position), ...path.slice(2)];
+  }
+  return undefined;
+}
+
+function shiftPresentationSlots(object: GraphObject, slots: Record<string, Slot>, axis: "row" | "column", index: number, deleting: boolean): void {
+  const moved: Record<string, Slot> = {};
+  for (const [key, slot] of Object.entries(object.slots)) {
+    if (!/^(columns|rowsizes|cellStyle)\./.test(key)) continue;
+    const path = shiftPresentationPath(key.split("."), axis, index, deleting);
+    if (!path) continue;
+    delete slots[key];
+    if (path !== "deleted") moved[slotKey(path)] = slot;
+  }
+  Object.assign(slots, moved);
 }

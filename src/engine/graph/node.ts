@@ -64,6 +64,7 @@ export function hasIllegalNumber(value: Value): boolean {
 }
 
 export type ObjectType =
+  | "layer"
   | "circle"
   | "polygon"
   | "polyline"

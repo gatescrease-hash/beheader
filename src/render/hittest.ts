@@ -43,6 +43,8 @@ import {
 } from "../engine/index.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { objectExtent } from "./extent.ts";
+import { tableLayout } from "./table-layout.ts";
+import { displayObjects } from "../engine/index.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 export const STROKE_HIT_TOLERANCE_SCREEN_PIXELS = 5;
@@ -100,8 +102,7 @@ function hitTestTable(object: GraphObject, worldPoint: WorldPoint): boolean {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
   const { rows, cols } = getTableDimensions(object);
-  const width = cols * TABLE_CELL_WIDTH;
-  const height = rows * TABLE_CELL_HEIGHT;
+  const { width, height } = tableLayout(object);
   if (width <= 0 || height <= 0) {
     return false;
   }
@@ -120,6 +121,7 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
   switch (object.type) {
     // The doc object draws nothing, so nothing on the canvas can hit it and
     // `vars` is the way to reach it.
+    case "layer":
     case "doc":
       return false;
     // A copy is a line of text, and its box is what an operator aims at, the
@@ -190,6 +192,7 @@ export function pathSegmentUnder(
 
 /** The topmost object under a screen point, or undefined. */
 export function hitTest(screenPoint: ScreenPoint, objects: readonly GraphObject[], camera: CameraState): GraphObject | undefined {
+  objects = displayObjects(objects);
   const worldPoint = screenToWorld(camera, screenPoint);
   const strokeToleranceWorld = STROKE_HIT_TOLERANCE_SCREEN_PIXELS / camera.zoom;
   for (let i = objects.length - 1; i >= 0; i -= 1) {

@@ -13,6 +13,7 @@
  * from the engine and from its own layer.
  */
 import {
+  enumerateTableCellSlotPaths,
   findSlotFormat,
   findSlotOptions,
   type SlotFormat,
@@ -57,7 +58,7 @@ export function buildSlotDescriptors(object: GraphObject, objects: readonly Grap
   const descriptors: SlotDescriptor[] = [];
   for (const group of schema.nonDerivedSlotPaths) {
     if (group.kind === "dynamic") {
-      if (object.type === TABLE_TYPE) {
+      if (object.type === TABLE_TYPE && group.enumerate === enumerateTableCellSlotPaths) {
         descriptors.push(tableCellsSummary(object));
         continue;
       }

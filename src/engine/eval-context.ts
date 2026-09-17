@@ -17,6 +17,8 @@
  * tests run headless and the file can move to Rust later.
  */
 export interface TextStyle {
+  readonly bold?: boolean;
+  readonly italic?: boolean;
   readonly font: string;
   readonly fontSize: number;
   readonly lineHeight: number;

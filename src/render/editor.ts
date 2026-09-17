@@ -34,6 +34,7 @@ import {
   type TextMeasurer,
 } from "../engine/index.ts";
 import { screenToWorld, worldToScreen, type ScreenPoint } from "./camera.ts";
+import { tableLayout, tableCellAt, cellStyle } from "./table-layout.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { hitTest } from "./hittest.ts";
 import { readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
@@ -95,13 +96,7 @@ function cellReferenceAt(object: GraphObject, screenPoint: ScreenPoint, camera: 
   const world = screenToWorld(camera, screenPoint);
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-  const { rows, cols } = getTableDimensions(object);
-  const column = Math.floor((world.x - originX) / TABLE_CELL_WIDTH) + 1;
-  const row = Math.floor((world.y - originY) / TABLE_CELL_HEIGHT) + 1;
-  if (column < 1 || column > cols || row < 1 || row > rows) {
-    return undefined;
-  }
-  return formatCellReference({ column, row });
+  return tableCellAt(object, world.x - originX, world.y - originY);
 }
 
 export function editorPlacement(
@@ -154,12 +149,14 @@ export function editorTextStyle(
 ): EditorTextStyle {
   if (target.kind === "docref") return { fontSize: 16, fontFamily: "monospace", lineHeight: 20, textAlign: "left", color: "#1a1a1a", wraps: false };
   if (target.kind === "cell") {
+    const style = cellStyle(object, target.cell);
+    const row = parseCellReference(target.cell)?.row ?? 1;
     return {
-      fontSize: CELL_EDITOR_FONT_SIZE,
-      fontFamily: CELL_EDITOR_FONT_FAMILY,
-      lineHeight: TABLE_CELL_HEIGHT,
-      textAlign: "left",
-      color: CELL_EDITOR_COLOR,
+      fontSize: style.fontSize,
+      fontFamily: style.font,
+      lineHeight: tableLayout(object).heights[row - 1] ?? 24,
+      textAlign: style.align === "center" || style.align === "right" ? style.align : "left",
+      color: style.color,
       wraps: false,
     };
   }
@@ -206,7 +203,8 @@ function cellEditorBox(object: GraphObject, cell: string): WorldExtent {
   const row = coordinates?.row ?? 1;
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-  const left = originX + (column - 1) * TABLE_CELL_WIDTH;
-  const top = originY + (row - 1) * TABLE_CELL_HEIGHT;
-  return { minX: left, minY: top, maxX: left + TABLE_CELL_WIDTH, maxY: top + TABLE_CELL_HEIGHT };
+  const layout = tableLayout(object);
+  const left = originX + (layout.x[column - 1] ?? 0);
+  const top = originY + (layout.y[row - 1] ?? 0);
+  return { minX: left, minY: top, maxX: left + (layout.widths[column - 1] ?? 80), maxY: top + (layout.heights[row - 1] ?? 24) };
 }

@@ -613,7 +613,10 @@ function measureTextBox(
       },
     };
   }
-  const style: TextStyle = { font, fontSize, lineHeight };
+  const style: TextStyle = { font, fontSize, lineHeight,
+    ...(read({ objectId: object.id, path: ["style", "bold"] }) === true ? { bold: true } : {}),
+    ...(read({ objectId: object.id, path: ["style", "italic"] }) === true ? { italic: true } : {}),
+  };
 
   const text = typeof resolved === "string" ? resolved : "";
   const maxWidth = typeof width === "number" ? width : undefined;

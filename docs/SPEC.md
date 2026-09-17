@@ -409,7 +409,7 @@ rewrites each inbound reference to `#REF` and reports every slot it broke. This
 is the one place where a deletion can break another formula. It is legal here
 because `#REF` is what a spreadsheet operator expects.
 
-**Drawing.** Fixed size cells and grid lines. Numbers align right. Strings align
+**Drawing.** Resizable columns and rows with grid lines. Numbers align right. Strings align
 left. The selected cell edits in place.
 
 ---
@@ -1286,6 +1286,11 @@ selected object shows a floating properties panel beside it. The panel lists the
 slots of the object. It shows the modifiable slots above a thick rule and the
 derived slots below it. The panel can edit a value and can unlink a slot.
 
+The sidebar has full, compact and hidden modes, selected with visible buttons.
+Compact mode puts the tools in one closely spaced column. A header button
+restores a hidden sidebar. Its edge supports pointer and keyboard resizing.
+The shell uses small type and a helmet in profile with a limited palette.
+
 **Every part of the shell reaches the document through the command line.** A
 button sends the same line an operator could type, through the same parser and
 the same handlers. So the shell shortens the path to a command word and shows
@@ -1416,7 +1421,30 @@ The team considered each item below and postponed it on purpose.
 
 ---
 
-## 18. When the spec is silent
+## 18. Direct editing and layers
+
+The canvas has a world-aligned grid that changes spacing with zoom, a grid
+toggle, and a subtle persistent cursor. Quick properties stay at a fixed screen
+position. Dragged property panels remain open and have a thin connection to
+their objects. Text and table formatting lives in a separate floating toolbar.
+
+Text edits show formatted text. Bold and italic act on the selection through
+the toolbar or Ctrl/Cmd+B and Ctrl/Cmd+I. Embedded values appear as atomic
+chips while editing and resolve to plain values on the canvas. Existing markdown
+content remains readable and editable. Tables support cell formatting, column
+and row resizing, and keyboard movement between cells.
+
+A layer is a named graph object with addressable style, visibility and order
+slots. Objects have one organizational layer. Style slots can read that layer,
+read a different layer, or hold a local value or formula. The layer manager
+shows membership and each property's source, supports multiple selected objects,
+and restores inheritance without moving an object to another layer. A layer
+slot accepts ordinary formulas, including references to table cells. Hidden
+objects still evaluate and remain listed. Drawing and picking use the same
+visibility and ordering rules. Layers are released from the group deferral
+above, with compound geometry and script containers still deferred.
+
+## 19. When the spec is silent
 
 Prefer, in this order:
 

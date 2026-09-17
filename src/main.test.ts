@@ -662,6 +662,10 @@ describe("a table, a shape and the canvas together, end to end", () => {
       stroke: record("stroke"),
       arc: record("arc"),
       strokeRect: record("strokeRect"),
+      save: record("save"),
+      restore: record("restore"),
+      rect: record("rect"),
+      clip: record("clip"),
       fillText: record("fillText"),
       measureText: (text: string) => ({ width: text.length * 7 }),
     };

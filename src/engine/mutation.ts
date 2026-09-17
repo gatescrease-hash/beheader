@@ -52,6 +52,7 @@ import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
+import { layerProblem } from "./layers.ts";
 import {
   addVertexToObject,
   deleteVertexFromObject,
@@ -157,6 +158,8 @@ export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false;
  * later cycle check over an edge set that nobody trusts proves nothing.
  */
 export function validateIntegrity(objects: readonly GraphObject[], edges: readonly Edge[]): IntegrityCheckResult {
+  const problem = layerProblem(objects);
+  if (problem) return { ok: false, message: problem };
   // The doc object is a singleton under a fixed name, because a bare name
   // resolves against it and a second one would make that resolution a choice.
   // A variable name is checked here as well as at the command, so a document

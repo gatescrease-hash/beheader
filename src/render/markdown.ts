@@ -138,7 +138,9 @@ function closesEmphasis(line: string, index: number): boolean {
 function closerIndex(line: string, marker: string, from: number): number {
   let at = line.indexOf(marker, from);
   while (at !== -1) {
-    if (closesEmphasis(line, at)) {
+    let escapes = 0;
+    for (let before = at - 1; before >= 0 && line[before] === "\\"; before--) escapes++;
+    if (escapes % 2 === 0 && closesEmphasis(line, at)) {
       return at;
     }
     at = line.indexOf(marker, at + 1);
@@ -169,6 +171,9 @@ function parseInlineRuns(line: string): readonly MarkdownRun[] {
   };
 
   while (index < line.length) {
+    if (line[index] === "\\" && ["\\", "*", "`"].includes(line[index + 1] ?? "")) {
+      pending += line[index + 1]; index += 2; continue;
+    }
     const innermost = open[open.length - 1];
     if (innermost !== undefined && line.startsWith(innermost.closer, index) && closesEmphasis(line, index)) {
       flush();

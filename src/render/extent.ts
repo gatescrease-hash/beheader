@@ -36,6 +36,8 @@ import {
 import { mathWorldBox } from "./math.ts";
 import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDTH, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
+import { tableLayout } from "./table-layout.ts";
+import { displayObjects } from "../engine/index.ts";
 
 export interface WorldExtent {
   readonly minX: number;
@@ -72,6 +74,7 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
     // The doc object has no origin and never draws, so it has no box. Every
     // caller already handles an object with no extent.
     case "doc":
+    case "layer":
       return undefined;
     case "circle":
       return circleExtent(object);
@@ -154,8 +157,7 @@ function tableExtent(object: GraphObject): WorldExtent | undefined {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
   const { rows, cols } = getTableDimensions(object);
-  const width = cols * TABLE_CELL_WIDTH;
-  const height = rows * TABLE_CELL_HEIGHT;
+  const { width, height } = tableLayout(object);
   if (width <= 0 || height <= 0) {
     return undefined;
   }
@@ -206,7 +208,7 @@ function scriptExtent(object: GraphObject): WorldExtent | undefined {
 /** The world box that holds every object. The fit command uses it. */
 export function documentExtent(objects: readonly GraphObject[]): WorldExtent | undefined {
   let extent: WorldExtent | undefined;
-  for (const object of objects) {
+  for (const object of displayObjects(objects)) {
     const objectBox = objectExtent(object);
     if (objectBox === undefined) {
       continue;

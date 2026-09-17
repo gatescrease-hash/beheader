@@ -131,11 +131,11 @@ describe("getObjectSchema", () => {
     const textDerivedSlots = resolveDerivedSlots(stubObject("text"), schema?.derivedSlots ?? []);
     expect(textDerivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"], ["measuredWidth"]]);
     expect(textDerivedSlots[0]?.dependencies.kind).toBe("dynamic");
-    expect(textDerivedSlots[1]?.dependencies).toEqual({
-      kind: "static",
-      paths: [["resolvedContent"], ["width"], ["style", "font"], ["style", "fontSize"], ["style", "lineHeight"]],
-    });
-    expect(textDerivedSlots[2]?.dependencies).toEqual(textDerivedSlots[1]?.dependencies);
+    const dependencies = textDerivedSlots.slice(1).map(slot => derivedSlotDependencyAddresses(stubObject("text"), slot.dependencies));
+    expect(dependencies[0]).toEqual([["resolvedContent"], ["width"], ["style", "font"], ["style", "fontSize"], ["style", "lineHeight"]].map(path => ({ objectId: "stub", path })));
+    expect(dependencies[1]).toEqual(dependencies[0]);
+    const bold: GraphObject = { ...stubObject("text"), slots: { "style.bold": { kind: "literal", value: true } } };
+    expect(derivedSlotDependencyAddresses(bold, textDerivedSlots[1]!.dependencies)).toEqual([...dependencies[0]!, { objectId: "stub", path: ["style", "bold"] }]);
   });
 
   it("returns a real entry for 'image', with eight static non-derived paths and NO derived slots", () => {
@@ -152,7 +152,9 @@ describe("getObjectSchema", () => {
       ["pictureAspect"],
     ]);
     expect(resolveDerivedSlots(stubObject("image"), schema?.derivedSlots ?? [])).toEqual([]);
-    expect(schema?.nonDerivedSlotPaths.every((group) => group.kind === "static")).toBe(true);
+    expect(schema?.nonDerivedSlotPaths.map(group => group.kind)).toEqual(["static", "dynamic"]);
+    const visible: GraphObject = { ...stubObject("image"), slots: { "view.visible": { kind: "literal", value: false } } };
+    expect(resolveNonDerivedSlotPaths(visible, schema!.nonDerivedSlotPaths).at(-1)).toEqual(["view", "visible"]);
   });
 
   it("returns a real entry for 'script', with two static + two dynamic non-derived groups and one dynamic derived group", () => {

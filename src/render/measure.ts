@@ -4,11 +4,9 @@
  * The real Canvas2D implementation of TextMeasurer, and layOutText, which
  * breaks a run of text into lines.
  *
- * There are two measurers in this file and they are not interchangeable. The
- * one the engine uses honours markup, so bold text measures wider. The one the
- * editor overlay uses does not, because the overlay shows raw source while the
- * operator types. Passing the wrong one produces text that is the wrong size,
- * and nothing reports it.
+ * The engine and the direct editor use the markup measurer, so bold text
+ * measures wider in both. The source measurer sizes literal syntax for callers
+ * that show source. Both return world units before the camera transform.
  *
  * This file and renderer.ts have to change together. One layout function with
  * two readers is the only reason the drawn text and the measured height agree,
@@ -274,7 +272,7 @@ export function layOutText(request: TextLayoutRequest): TextLayout {
   }
   const lineHeight = finitePositive(request.style.lineHeight) ?? fontSize;
   const wrapWidth = request.wrapWidth === undefined ? undefined : finitePositive(request.wrapWidth);
-  const sourceLines = request.markup ? parseMarkdownLite(request.text) : verbatimLines(request.text);
+  const sourceLines = (request.markup ? parseMarkdownLite(request.text) : verbatimLines(request.text)).map(line => ({ ...line, runs: line.runs.map(run => ({ ...run, bold: run.bold || request.style.bold === true, italic: run.italic || request.style.italic === true })) }));
 
   const lines: LaidOutLine[] = [];
   let top = 0;

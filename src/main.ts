@@ -29,6 +29,8 @@
  */
 import {
   type CameraState,
+  assignLayer, createLayer, displayObjects, inheritStyle, layerId, mintObjectId, setLiteral, stylePaths,
+  type Operation, formatCellReference, parseCellReference, getTableDimensions,
   createEmptyDocument,
   computePolygonVertices,
   deriveValidateAndEvaluate,
@@ -85,6 +87,10 @@ import {
   type InteractionState,
 } from "./render/interaction.ts";
 import { resizeCursor } from "./render/handles.ts";
+import { gridGeometry } from "./render/grid.ts";
+import { tableLayout, tableCellAt, cellStyle } from "./render/table-layout.ts";
+import { writeLayerTree } from "./render/layer-manager.ts";
+import { createRichText, insertVariable, type RichTextElement } from "./render/rich-text.ts";
 import { placePropertiesPanel, type PanelPlacement } from "./render/panel.ts";
 import { fitBitmapIntoBox, renderDocument, type PathPreview } from "./render/renderer.ts";
 import { menuCommandLine, pathMenuAt, type PathMenu } from "./render/menu.ts";
@@ -1079,7 +1085,19 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let panelDrag: PanelDragGesture | undefined;
   let openEditor: { readonly objectId: string; readonly path: string } | undefined;
   let inPlaceEditor: EditorTarget | undefined;
-  let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let inPlaceElement: HTMLTextAreaElement | HTMLInputElement | RichTextElement | undefined;
+  let activeCell: { objectId: string; cell: string } | undefined;
+  let tableResize: { objectId: string; axis: "column" | "row"; index: number; start: number; size: number; value: number } | undefined;
+  let quickObjectId: string | undefined;
+  const pinnedPanels = new Map<string, PanelPlacement>();
+  const threads = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  threads.classList.add("property-threads");
+  panelsContainer.append(threads);
+  const cursor = document.createElement("div"); cursor.className = "canvas-cursor";
+  canvas.parentElement?.append(cursor);
+  const cellHighlight = document.createElement("div"); cellHighlight.className = "cell-highlight";
+  canvas.parentElement?.append(cellHighlight);
+  let gridVisible = true;
   let inPlaceMirror: HTMLElement | undefined;
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
@@ -1110,12 +1128,20 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       canvas.width = backingWidth;
       canvas.height = backingHeight;
     }
+    const grid = gridGeometry(state.document.camera, ratio);
+    const stage = canvas.parentElement!;
+    stage.style.setProperty("--grid-step", `${grid.spacing}px`);
+    stage.style.setProperty("--grid-major", `${grid.spacing * 10}px`);
+    stage.style.setProperty("--grid-opacity", String(grid.opacity * 0.12));
+    stage.style.setProperty("--grid-x", `${grid.x}px`);
+    stage.style.setProperty("--grid-y", `${grid.y}px`);
+    stage.classList.toggle("grid-off", !gridVisible);
     const panelledIds = panelledObjectIds();
     const report = renderDocument(
       context,
       canvas.width,
       canvas.height,
-      state.document.objects,
+      tableResize ? state.document.objects.map(object => object.id === tableResize!.objectId ? { ...object, slots: { ...object.slots, [`${tableResize!.axis === "column" ? "columns" : "rowsizes"}.${tableResize!.index}.${tableResize!.axis === "column" ? "width" : "height"}`]: { kind: "literal" as const, value: tableResize!.value } } } : object) : state.document.objects,
       state.document.camera,
       state.interaction.selectedObjectIds,
       panelledIds,
@@ -1130,6 +1156,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     updateEditor();
     paintCommandLine();
     updateWorkspace();
+    updateFormatToolbar();
+    cellHighlight.hidden = true;
+    const cellObject = activeCell && displayObjects(state.document.objects).find(object => object.id === activeCell.objectId && state.interaction.selectedObjectIds.includes(object.id));
+    if (activeCell && cellObject && !tableResize) {
+      const placement = editorPlacement({ kind: "cell", ...activeCell }, cellObject, state.document.camera, ratio);
+      cellHighlight.hidden = false;
+      cellHighlight.style.left = `${placement.left}px`; cellHighlight.style.top = `${placement.top}px`;
+      cellHighlight.style.width = `${placement.width * placement.scale}px`; cellHighlight.style.height = `${placement.height * placement.scale}px`;
+    }
   };
 
   /**
@@ -1141,7 +1176,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const ratio = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
     const live = new Set<string>();
 
-    for (const object of state.document.objects) {
+    for (const object of displayObjects(state.document.objects)) {
       if (object.type !== "math") {
         continue;
       }
@@ -1331,9 +1366,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   const panelledObjectIds = (): readonly string[] => {
     const ids: string[] = [];
-    for (const objectId of state.interaction.selectedObjectIds) {
+    const selected = state.interaction.selectedObjectIds;
+    if (selected.length) quickObjectId = selected[selected.length - 1];
+    const candidates = [...new Set([...pinnedPanels.keys(), ...(quickObjectId ? [quickObjectId] : [])])];
+    for (const objectId of candidates) {
       const object = state.document.objects.find((candidate) => candidate.id === objectId);
-      const extent = object === undefined ? undefined : object.type === "doc" ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : objectExtent(object);
+      const extent = object === undefined ? undefined : (object.type === "doc" || object.type === "layer") ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : objectExtent(object);
       if (object === undefined || extent === undefined || panelUiState(state, objectId).dismissed) {
         continue;
       }
@@ -1344,12 +1382,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   const updatePanels = (panelledIds: readonly string[]): void => {
     const shown = new Set(panelledIds);
+    threads.replaceChildren();
     if (openEditor !== undefined && !shown.has(openEditor.objectId)) {
       openEditor = undefined;
     }
     for (const objectId of panelledIds) {
       const object = state.document.objects.find((candidate) => candidate.id === objectId);
-      const extent = object === undefined ? undefined : object.type === "doc" ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : objectExtent(object);
+      const extent = object === undefined ? undefined : (object.type === "doc" || object.type === "layer") ? { minX: 0, minY: 0, maxX: 0, maxY: 0 } : objectExtent(object);
       if (object === undefined || extent === undefined) {
         continue;
       }
@@ -1366,6 +1405,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       if (!alreadyShowingThisEditor && !holdsFocusedChoice) {
         const focus = state.interaction.focus?.objectId === objectId ? state.interaction.focus.grip : undefined;
         writePanel(element, buildPanelModel(object, state.document.objects, focus), editing);
+        addStyleSources(element, object);
         element.dataset.editingPath = editing?.path ?? "";
         if (editing !== undefined) {
           const opened = element.querySelector<HTMLInputElement>(".panel-row__input");
@@ -1377,7 +1417,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
           }
         }
       }
-      placePanelElement(element, extent, panelUiState(state, objectId).manualPosition ?? (object.type === "doc" ? { left: 8, top: 8 } : undefined));
+      const bounds = canvas.getBoundingClientRect();
+      const position = pinnedPanels.get(objectId) ?? { left: Math.max(8, bounds.width - Math.min(320, bounds.width - 16) - 12), top: 12 };
+      placePanelElement(element, extent, { left: Math.max(0, Math.min(position.left, bounds.width - element.offsetWidth)), top: Math.max(0, Math.min(position.top, bounds.height - Math.min(element.offsetHeight, bounds.height))) });
+      if (pinnedPanels.has(objectId) && displayObjects(state.document.objects).some(item => item.id === objectId)) {
+        const ratio = canvas.width / bounds.width;
+        const anchor = worldToScreen(state.document.camera, { x: (extent.minX + extent.maxX) / 2, y: (extent.minY + extent.maxY) / 2 });
+        const rect = element.getBoundingClientRect();
+        const line = document.createElementNS(threads.namespaceURI, "line");
+        line.setAttribute("x1", String(anchor.x / ratio)); line.setAttribute("y1", String(anchor.y / ratio));
+        line.setAttribute("x2", String(rect.left - bounds.left + rect.width / 2)); line.setAttribute("y2", String(rect.top - bounds.top + 14));
+        threads.append(line);
+      }
     }
     for (const [objectId, element] of panelElements) {
       if (!shown.has(objectId)) {
@@ -1494,9 +1545,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     paint();
   };
 
-  const buildInPlaceElement = (target: EditorTarget, style: EditorTextStyle): HTMLTextAreaElement | HTMLInputElement => {
+  const buildInPlaceElement = (target: EditorTarget, style: EditorTextStyle): HTMLTextAreaElement | HTMLInputElement | RichTextElement => {
     const keydown = (event: KeyboardEvent): void => {
       event.stopPropagation();
+      if ((event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
+        event.preventDefault(); formatEmphasis(event.key.toLowerCase() === "b" ? "bold" : "italic"); return;
+      }
+      if ((event.key === "Tab" || event.key === "Enter") && target.kind === "cell" && !inPlaceElement?.value.trim().startsWith("=")) {
+        event.preventDefault(); navigateCell(target, event.key === "Tab" ? "column" : "row", event.shiftKey ? -1 : 1); return;
+      }
       if (event.key === "Tab" && target.kind !== "text") {
         event.preventDefault();
         applyFieldCompletion(event.currentTarget as HTMLInputElement, (value, cursor) =>
@@ -1522,13 +1579,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
     };
     if (target.kind === "text") {
-      const area = document.createElement("textarea");
-      area.className = "text-editor";
-      area.wrap = style.wraps ? "soft" : "off";
-      area.value = editorSeed(state, target);
+      const area = createRichText(editorSeed(state, target));
       area.addEventListener("keydown", keydown);
       area.addEventListener("input", grow);
-      area.addEventListener("blur", commitInPlace);
+      area.addEventListener("blur", event => {
+        if (area.contains(event.relatedTarget as Node) || (event.relatedTarget as HTMLElement | null)?.closest(".format-toolbar, .variable-picker")) return;
+        commitInPlace();
+      });
       return area;
     }
     const field = document.createElement("input");
@@ -1538,7 +1595,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     field.addEventListener("keydown", keydown);
     field.addEventListener("input", markAsTyped);
     field.addEventListener("scroll", followScroll);
-    field.addEventListener("blur", commitInPlace);
+    field.addEventListener("blur", event => { if (!(event.relatedTarget as HTMLElement | null)?.closest(".format-toolbar")) commitInPlace(); });
     return field;
   };
 
@@ -1569,7 +1626,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     const liveSize =
       inPlaceEditor.kind === "text"
-        ? editorTextBoxSize(object, inPlaceElement.value, style, sourceMeasurer)
+        ? editorTextBoxSize(object, inPlaceElement.value, style, evalContext.measurer)
         : undefined;
     const placement = editorPlacement(inPlaceEditor, object, state.document.camera, ratio, liveSize);
     inPlaceElement.style.left = `${placement.left}px`;
@@ -1581,13 +1638,16 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     inPlaceElement.style.lineHeight = `${style.lineHeight}px`;
     inPlaceElement.style.textAlign = style.textAlign;
     inPlaceElement.style.color = style.color;
+    const cellFormatting = inPlaceEditor.kind === "cell" ? cellStyle(object, inPlaceEditor.cell) : undefined;
+    inPlaceElement.style.fontWeight = (cellFormatting?.bold ?? object.slots["style.bold"]?.value) === true ? "bold" : "normal";
+    inPlaceElement.style.fontStyle = (cellFormatting?.italic ?? object.slots["style.italic"]?.value) === true ? "italic" : "normal";
     inPlaceElement.style.transformOrigin = "0 0";
     inPlaceElement.style.transform = `scale(${placement.scale})`;
 
     if (inPlaceMirror !== undefined) {
       // Every property that decides where a glyph falls is copied from the
       // field rather than worked out again, so the two cannot disagree.
-      for (const property of ["left", "top", "width", "height", "fontSize", "fontFamily", "lineHeight", "textAlign", "transformOrigin", "transform"] as const) {
+      for (const property of ["left", "top", "width", "height", "fontSize", "fontFamily", "fontWeight", "fontStyle", "lineHeight", "textAlign", "transformOrigin", "transform"] as const) {
         inPlaceMirror.style[property] = inPlaceElement.style[property];
       }
       paintCellEditor();
@@ -1643,6 +1703,159 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
   };
 
+  const applyOperations = (operations: readonly Operation[]): void => {
+    if (!operations.length) return;
+    const result = mutate(state.document.objects, operations, state.document.journal, evalContext);
+    apply(result.ok ? { ...state, document: { ...state.document, objects: result.objects, journal: result.journal } } : logLine(state, result.message));
+  };
+
+  const addStyleSources = (element: HTMLElement, object: GraphObject): void => {
+    for (const path of stylePaths(object)) {
+      const key = path.join(".");
+      const row = element.querySelector<HTMLElement>(`.panel-row[data-path="${key}"]`);
+      if (!row) continue;
+      const select = document.createElement("select");
+      select.className = "property-source";
+      select.setAttribute("aria-label", `Source for ${object.name}.${key}`);
+      select.add(new Option("Local override", "local"));
+      const own = layerId(object);
+      for (const layer of state.document.objects.filter(item => item.type === "layer" && item.id !== object.id)) {
+        select.add(new Option(`${layer.id === own ? "By layer" : "From"}: ${layer.name}`, layer.id));
+      }
+      const slot = getSlot(object, path);
+      select.value = slot?.kind === "formula" && slot.ast.type === "reference" && state.document.objects.some(item => item.type === "layer" && item.id === (slot.ast.type === "reference" ? slot.ast.address.objectId : "")) ? slot.ast.address.objectId : "local";
+      select.addEventListener("change", () => {
+        const selected = state.interaction.selectedObjectIds.includes(object.id) ? state.document.objects.filter(item => state.interaction.selectedObjectIds.includes(item.id) && stylePaths(item).some(candidate => candidate.join(".") === key)) : [object];
+        applyOperations(selected.map(item => select.value === "local" ? setLiteral(item.id, path, getSlot(item, path)?.value ?? null) : inheritStyle(item.id, path, select.value)));
+      });
+      row.append(select);
+    }
+  };
+
+  const formatToolbar = document.createElement("div");
+  formatToolbar.className = "format-toolbar";
+  formatToolbar.setAttribute("role", "toolbar");
+  formatToolbar.setAttribute("aria-label", "Text and table formatting");
+  formatToolbar.innerHTML = `<span class="format-target"></span>
+    <button type="button" data-format="bold" aria-label="Bold (Ctrl+B)"><b>B</b></button>
+    <button type="button" data-format="italic" aria-label="Italic (Ctrl+I)"><i>I</i></button>
+    <input type="number" min="1" max="300" step="1" data-format="fontSize" aria-label="Font size" title="Font size">
+    <select data-format="align" aria-label="Text alignment"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
+    <input type="color" data-format="color" aria-label="Text color" title="Text color">
+    <input type="color" data-format="fillColor" aria-label="Cell fill color" title="Cell fill color">
+    <select data-format="format" aria-label="Number format"><option value="general">General</option><option value="decimal">0.00</option><option value="percent">0.0%</option></select>
+    <button type="button" data-format="variable">ƒx</button>`;
+  editorLayer.append(formatToolbar);
+  let savedTextRange: Range | undefined;
+  const formattingTarget = (): GraphObject | undefined => {
+    const id = inPlaceEditor?.objectId ?? state.interaction.selectedObjectIds[state.interaction.selectedObjectIds.length - 1];
+    return state.document.objects.find(object => object.id === id && (object.type === "text" || object.type === "table"));
+  };
+  const formatPath = (object: GraphObject, key: string): readonly string[] => object.type === "table" && activeCell?.objectId === object.id ? ["cellStyle", activeCell.cell, key] : ["style", key];
+  const restoreTextSelection = (): void => {
+    if (inPlaceEditor?.kind !== "text" || !inPlaceElement) return;
+    inPlaceElement.focus();
+    if (savedTextRange && inPlaceElement.contains(savedTextRange.commonAncestorContainer)) {
+      const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(savedTextRange);
+    }
+  };
+  const formatEmphasis = (key: "bold" | "italic"): void => {
+    if (inPlaceEditor?.kind === "text") {
+      restoreTextSelection(); document.execCommand(key); savedTextRange = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0).cloneRange() : undefined;
+      updateFormatToolbar(); return;
+    }
+    const object = formattingTarget();
+    if (!object) return;
+    const path = formatPath(object, key);
+    const value = getSlot(object, path)?.value ?? (object.type === "table" && activeCell?.objectId === object.id ? cellStyle(object, activeCell.cell)[key] : false);
+    applyOperations([setLiteral(object.id, path, value !== true)]);
+  };
+  formatToolbar.addEventListener("pointerdown", event => {
+    if (inPlaceEditor?.kind === "text") {
+      const selection = window.getSelection();
+      savedTextRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : undefined;
+    }
+    if ((event.target as HTMLElement).closest("button")) event.preventDefault();
+  });
+  formatToolbar.addEventListener("click", event => {
+    const key = (event.target as HTMLElement).closest<HTMLElement>("[data-format]")?.dataset.format;
+    if (key === "bold" || key === "italic") formatEmphasis(key);
+    if (key === "variable" && inPlaceEditor?.kind === "text") openVariablePicker();
+  });
+  formatToolbar.addEventListener("change", event => {
+    const field = event.target as HTMLInputElement;
+    const object = formattingTarget();
+    if (!object || !field.dataset.format) return;
+    const key = field.dataset.format;
+    const value = key === "fontSize" ? Number(field.value) : field.value;
+    if (key === "fontSize" && (!(Number(value) > 0) || Number(value) > 300)) return;
+    const operations: Operation[] = [setLiteral(object.id, formatPath(object, key), value)];
+    if (key === "fontSize" && object.type === "text") operations.push(setLiteral(object.id, ["style", "lineHeight"], Number(value) * 1.25));
+    applyOperations(operations);
+    restoreTextSelection();
+    inPlaceElement?.focus();
+  });
+  const updateFormatToolbar = (): void => {
+    const object = formattingTarget();
+    formatToolbar.hidden = object === undefined;
+    if (!object) return;
+    formatToolbar.querySelector(".format-target")!.textContent = object.type === "table" && activeCell?.objectId === object.id ? `${object.name} · ${activeCell.cell}` : object.name;
+    for (const field of Array.from(formatToolbar.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>("[data-format]"))) {
+      const key = field.dataset.format!;
+      const value = getSlot(object, formatPath(object, key))?.value ?? object.slots[`style.${key}`]?.value;
+      if (field instanceof HTMLButtonElement) {
+        field.hidden = key === "variable" && inPlaceEditor?.kind !== "text";
+        field.title = key === "variable" ? "Insert a live value" : field.getAttribute("aria-label") ?? "";
+        if (key !== "variable") field.setAttribute("aria-pressed", String(inPlaceEditor?.kind === "text" ? document.queryCommandState(key) : value === true));
+      } else {
+        field.hidden = object.type !== "table" && ["fillColor", "format"].includes(key);
+        if (document.activeElement !== field) field.value = String(value ?? (key === "fontSize" ? object.type === "table" ? 14 : 16 : key === "align" ? "left" : key === "format" ? "general" : "#1a1a1a"));
+      }
+    }
+  };
+  const openVariablePicker = (): void => {
+    if (!inPlaceElement || inPlaceEditor?.kind !== "text") return;
+    const area = inPlaceElement;
+    const selection = window.getSelection();
+    if (selection?.rangeCount) savedTextRange = selection.getRangeAt(0).cloneRange();
+    const picker = document.createElement("form"); picker.className = "variable-picker";
+    const field = document.createElement("input"); field.placeholder = "table_1.A1 or an expression"; field.setAttribute("aria-label", "Insert live value");
+    const choices = document.createElement("div"); choices.className = "variable-choices";
+    const insert = document.createElement("button"); insert.textContent = "Insert value";
+    const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "Cancel";
+    const close = () => { picker.remove(); restoreTextSelection(); };
+    cancel.addEventListener("click", close);
+    field.addEventListener("keydown", event => { event.stopPropagation(); if (event.key === "Escape") { event.preventDefault(); close(); } });
+    const updateChoices = () => {
+      choices.replaceChildren();
+      const completion = completeInFormulaField(`= ${field.value}`, field.value.length + 2, state.document.objects);
+      for (const value of completion?.candidates.slice(0, 12) ?? []) {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = value;
+        button.addEventListener("click", () => { field.value = value; field.focus(); updateChoices(); }); choices.append(button);
+      }
+    };
+    field.addEventListener("input", updateChoices);
+    picker.append(field, choices, insert, cancel); editorLayer.append(picker); field.focus(); updateChoices();
+    picker.addEventListener("submit", event => { event.preventDefault(); if (!field.value.trim()) return; const expression = field.value.trim(); close(); insertVariable(area, expression); paint(); });
+  };
+  const navigateCell = (target: Extract<EditorTarget, { kind: "cell" }>, axis: "column" | "row", delta: number): void => {
+    const object = state.document.objects.find(item => item.id === target.objectId);
+    if (!object) return;
+    const { rows, cols } = getTableDimensions(object);
+    const coordinates = parseCellReference(target.cell)!;
+    let index = (coordinates.row - 1) * cols + coordinates.column - 1 + (axis === "column" ? delta : delta * cols);
+    index = Math.max(0, Math.min(rows * cols - 1, index));
+    commitInPlace();
+    const cell = formatCellReference({ column: index % cols + 1, row: Math.floor(index / cols) + 1 });
+    activeCell = { objectId: object.id, cell }; inPlaceEditor = { kind: "cell", ...activeCell }; paint();
+  };
+
+  document.addEventListener("selectionchange", () => {
+    if (inPlaceEditor?.kind === "text" && document.activeElement === inPlaceElement) { savedTextRange = undefined; updateFormatToolbar(); }
+  });
+  document.querySelector("#grid-toggle")?.addEventListener("click", event => {
+    gridVisible = !gridVisible; (event.currentTarget as HTMLElement).setAttribute("aria-pressed", String(gridVisible)); paint();
+  });
   window.addEventListener("resize", paint);
 
   const objectList = document.querySelector<HTMLElement>("#object-list");
@@ -1679,28 +1892,26 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const count = document.querySelector<HTMLElement>("#object-count");
     if (count) count.textContent = String(state.document.objects.length);
     const query = objectSearch?.value.toLowerCase().trim() ?? "";
-    const key = JSON.stringify([state.document.objects.map(({ id, name, type }) => [id, name, type]), selected, query]);
+    const key = JSON.stringify([state.document.objects.map(({ id, name, type, slots }) => [id, name, type, slots["view.layer"], slots["view.visible"], slots["view.order"]]), selected, query]);
     if (objectList && key !== objectListKey) {
       objectListKey = key;
-      objectList.replaceChildren();
-      for (const object of state.document.objects.filter((item) => `${item.name} ${item.type}`.toLowerCase().includes(query))) {
-        const button = document.createElement("button");
-        button.className = "object-item";
-        button.setAttribute("aria-pressed", String(selected.includes(object.id)));
-        const name = document.createElement("span");
-        name.textContent = object.name;
-        const type = document.createElement("small");
-        type.textContent = object.type;
-        button.append(name, type);
-        button.addEventListener("click", () => runWorkspaceCommand(`select ${object.name}`));
-        objectList.append(button);
-      }
-      if (!objectList.childElementCount) {
-        const empty = document.createElement("p");
-        empty.className = "object-empty";
-        empty.textContent = query ? "No matches." : "No objects yet.";
-        objectList.append(empty);
-      }
+      writeLayerTree(objectList, state.document.objects, selected, query, {
+        select: (id, extend) => {
+          commitInPlace();
+          const ids = extend ? selected.includes(id) ? selected.filter(item => item !== id) : [...selected, id] : [id];
+          apply(withInteraction(state, { ...state.interaction, selectedObjectIds: ids }));
+        },
+        mutate: applyOperations,
+        create: name => {
+          const minted = mintObjectId(state.document);
+          if ("ok" in minted) { apply(logLine(state, minted.message)); return; }
+          const result = mutate(state.document.objects, [{ kind: "createObject", object: createLayer(minted.id, name) }], state.document.journal, evalContext);
+          if (!result.ok) { apply(logLine(state, result.message)); return; }
+          apply({ ...state, document: { ...state.document, objects: result.objects, journal: result.journal, nextObjectId: minted.nextObjectId }, interaction: { ...state.interaction, selectedObjectIds: [minted.id] } });
+        },
+        rename: (id, name) => { objectListKey = ""; applyOperations([{ kind: "renameObject", objectId: id, name }]); },
+      });
+
     }
   };
 
@@ -1731,6 +1942,67 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     apply(escape(state));
     input.focus();
   });
+  const sidebar = document.querySelector<HTMLElement>("#sidebar")!;
+  const sidebarShow = document.querySelector<HTMLButtonElement>("#sidebar-show")!;
+  const sidebarResize = document.querySelector<HTMLElement>("#sidebar-resize")!;
+  let sidebarMode = window.innerWidth <= 560 ? "compact" : "full";
+  const sidebarWidths: Record<string, number> = { full: 208, compact: 140 };
+  const sizeSidebar = (): void => {
+    const minimum = sidebarMode === "full" ? 184 : 120;
+    const maximum = Math.min(420, Math.max(minimum, window.innerWidth - 220));
+    const width = Math.min(maximum, sidebarWidths[sidebarMode] ?? 208);
+    sidebar.style.width = `${width}px`;
+    sidebarResize.setAttribute("aria-valuemax", String(maximum));
+    sidebarResize.setAttribute("aria-valuemin", String(minimum));
+    sidebarResize.setAttribute("aria-valuenow", String(width));
+    requestAnimationFrame(paint);
+  };
+  const setSidebarMode = (mode: string): void => {
+    sidebar.hidden = mode === "hidden";
+    if (!sidebar.hidden) sidebarMode = mode;
+    sidebar.dataset.mode = sidebarMode;
+    sidebarShow.setAttribute("aria-expanded", String(!sidebar.hidden));
+    for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-sidebar-mode]"))) {
+      button.setAttribute("aria-pressed", String(button.dataset.sidebarMode === mode));
+    }
+    sizeSidebar();
+  };
+  document.querySelectorAll<HTMLButtonElement>("[data-sidebar-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+      setSidebarMode(button.dataset.sidebarMode!);
+      if (sidebar.hidden) sidebarShow.focus();
+    });
+  });
+  sidebarShow.addEventListener("click", () => setSidebarMode(sidebar.hidden ? sidebarMode : "hidden"));
+  let sidebarDragOffset = 0;
+  sidebarResize.addEventListener("pointerdown", event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    sidebarResize.focus();
+    sidebarDragOffset = sidebar.getBoundingClientRect().right - event.clientX;
+    sidebarResize.setPointerCapture(event.pointerId);
+  });
+  sidebarResize.addEventListener("pointermove", event => {
+    if (!sidebarResize.hasPointerCapture(event.pointerId)) return;
+    sidebarWidths[sidebarMode] = Math.max(Number(sidebarResize.getAttribute("aria-valuemin")), Math.min(Number(sidebarResize.getAttribute("aria-valuemax")), event.clientX + sidebarDragOffset - sidebar.getBoundingClientRect().left));
+    sizeSidebar();
+  });
+  sidebarResize.addEventListener("pointerup", event => {
+    if (sidebarResize.hasPointerCapture(event.pointerId)) sidebarResize.releasePointerCapture(event.pointerId);
+  });
+  sidebarResize.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const maximum = Number(sidebarResize.getAttribute("aria-valuemax"));
+    const minimum = Number(sidebarResize.getAttribute("aria-valuemin"));
+    const width = sidebar.getBoundingClientRect().width;
+    sidebarWidths[sidebarMode] = event.key === "Home" ? minimum : event.key === "End" ? maximum
+      : Math.max(minimum, Math.min(maximum, width + (event.key === "ArrowLeft" ? -10 : 10)));
+    sizeSidebar();
+  });
+  window.addEventListener("resize", sizeSidebar);
+  setSidebarMode(sidebarMode);
   const help = document.querySelector<HTMLElement>("#help-panel");
   const helpToggle = document.querySelector<HTMLButtonElement>("#help-toggle");
   const setHelp = (open: boolean): void => {
@@ -1849,9 +2121,21 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       candidateList.hidden = true;
       return;
     }
-    candidateList.textContent = candidates.slice(0, CANDIDATE_LIMIT).join("   ");
+    candidateList.replaceChildren();
+    for (const candidate of candidates.slice(0, CANDIDATE_LIMIT)) {
+      const button = document.createElement("button"); button.type = "button"; button.textContent = candidate;
+      button.addEventListener("pointerdown", event => event.preventDefault());
+      button.addEventListener("click", () => {
+        const completion = completeCommandLine(input.value, input.selectionStart ?? input.value.length, state.document.objects);
+        if (!completion) return;
+        input.value = input.value.slice(0, completion.from) + candidate + input.value.slice(completion.to);
+        const caret = completion.from + candidate.length; input.setSelectionRange(caret, caret);
+        input.focus(); showCandidates([]); paintCommandLine();
+      });
+      candidateList.append(button);
+    }
     if (candidates.length > CANDIDATE_LIMIT) {
-      candidateList.textContent += `   and ${candidates.length - CANDIDATE_LIMIT} more`;
+      candidateList.append(document.createTextNode(`   and ${candidates.length - CANDIDATE_LIMIT} more`));
     }
     candidateList.hidden = false;
   };
@@ -1868,6 +2152,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     const target = event.target as HTMLElement;
     const editing = target.matches("input, textarea, select, math-field, [contenteditable]");
+    if ((!editing || (target === input && input.value === "")) && (event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
+      event.preventDefault(); formatEmphasis(event.key.toLowerCase() === "b" ? "bold" : "italic"); return;
+    }
+    if (activeCell && state.interaction.selectedObjectIds.includes(activeCell.objectId) && (!editing || (target === input && input.value === "")) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "F2"].includes(event.key)) {
+      event.preventDefault();
+      if (event.key === "F2") { inPlaceEditor = { kind: "cell", ...activeCell }; paint(); }
+      else navigateCell({ kind: "cell", ...activeCell }, ["ArrowLeft", "ArrowRight"].includes(event.key) ? "column" : "row", ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1);
+      return;
+    }
     if (event.key === " " && input.value === "" && (!editing || target === input)) {
       event.preventDefault();
       spaceHeld = true;
@@ -1878,6 +2171,26 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       spaceHeld = false;
     }
   });
+
+  const tableBoundaryAt = (point: ScreenPoint): typeof tableResize => {
+    const world = screenToWorld(state.document.camera, point);
+    const tolerance = 5 * window.devicePixelRatio / state.document.camera.zoom;
+    for (const object of [...displayObjects(state.document.objects)].reverse()) {
+      if (object.type !== "table" || !state.interaction.selectedObjectIds.includes(object.id)) continue;
+      const layout = tableLayout(object);
+      const x = world.x - (readNumber(object, ["origin", "x"]) ?? 0);
+      const y = world.y - (readNumber(object, ["origin", "y"]) ?? 0);
+      if (y >= 0 && y <= layout.height) {
+        const index = layout.x.findIndex((edge, i) => i > 0 && Math.abs(x - edge) < tolerance);
+        if (index > 0 && object.slots[`columns.${index}.width`]?.kind !== "formula") return { objectId: object.id, axis: "column", index, start: world.x, size: layout.widths[index - 1]!, value: layout.widths[index - 1]! };
+      }
+      if (x >= 0 && x <= layout.width) {
+        const index = layout.y.findIndex((edge, i) => i > 0 && Math.abs(y - edge) < tolerance);
+        if (index > 0 && object.slots[`rowsizes.${index}.height`]?.kind !== "formula") return { objectId: object.id, axis: "row", index, start: world.y, size: layout.heights[index - 1]!, value: layout.heights[index - 1]! };
+      }
+    }
+    return undefined;
+  };
 
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
     event.preventDefault();
@@ -1894,6 +2207,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (inPlaceEditor !== undefined) {
       commitInPlace();
     }
+    if (event.button !== 0) return;
+    tableResize = tableBoundaryAt(point);
+    if (tableResize) return;
+    const cell = editorTargetAt(point, state.document.objects, state.document.camera);
+    activeCell = cell?.kind === "cell" ? { objectId: cell.objectId, cell: cell.cell } : undefined;
     applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey, evalContext));
   });
 
@@ -1914,6 +2232,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     inPlaceEditor = target;
+    if (target.kind === "cell") activeCell = { objectId: target.objectId, cell: target.cell };
     inPlaceEditorFromCreation = false;
     paint();
   });
@@ -1955,6 +2274,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
     const point = screenPointOf(event);
+    const bounds = canvas.getBoundingClientRect();
+    cursor.style.left = `${event.clientX - bounds.left}px`;
+    cursor.style.top = `${event.clientY - bounds.top}px`;
+    if (tableResize) {
+      const world = screenToWorld(state.document.camera, point);
+      tableResize.value = Math.max(tableResize.axis === "column" ? 24 : 20, Math.round(tableResize.size + (tableResize.axis === "column" ? world.x : world.y) - tableResize.start));
+      paint(); return;
+    }
     if (pan !== undefined) {
       apply(panByScreen(state, point.x - pan.lastScreenX, point.y - pan.lastScreenY));
       pan = { lastScreenX: point.x, lastScreenY: point.y };
@@ -1962,12 +2289,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     const overHandle = resizeHandleUnder(state.interaction, point, state.document.objects, state.document.camera);
     const overGrip = pathGripUnder(state.interaction, point, state.document.objects, state.document.camera);
-    canvas.style.cursor = overHandle !== undefined ? resizeCursor(overHandle) : overGrip === undefined ? "" : "pointer";
+    const boundary = tableBoundaryAt(point);
+    canvas.style.cursor = boundary ? boundary.axis === "column" ? "col-resize" : "row-resize" : overHandle !== undefined ? resizeCursor(overHandle) : overGrip === undefined ? "" : "pointer";
     apply(pointerMoveTo(state, point, evalContext));
   });
 
   const endGesture = (event: PointerEvent): void => {
-    canvas.releasePointerCapture(event.pointerId);
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    if (tableResize) {
+      const resize = tableResize; tableResize = undefined;
+      if (event.type !== "pointercancel" && resize.value !== resize.size) applyOperations([setLiteral(resize.objectId, [resize.axis === "column" ? "columns" : "rowsizes", String(resize.index), resize.axis === "column" ? "width" : "height"], resize.value)]);
+    }
     pan = undefined;
     apply(pointerUpNow(state));
   };
@@ -1991,7 +2323,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   panelsContainer.addEventListener("pointerdown", (event: PointerEvent) => {
     const target = event.target as HTMLElement;
-    const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice, .panel-row__color") !== null;
+    const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice, .panel-row__color, .property-source") !== null;
     if (!insideOpenEditor) {
       event.preventDefault();
     }
@@ -2016,6 +2348,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       return;
     }
     const bounds = canvas.getBoundingClientRect();
+    pinnedPanels.set(panelDrag.objectId, { left: event.clientX - bounds.left - panelDrag.offsetLeft, top: event.clientY - bounds.top - panelDrag.offsetTop });
     apply(
       movePanel(state, panelDrag.objectId, {
         left: event.clientX - bounds.left - panelDrag.offsetLeft,
@@ -2047,6 +2380,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       const element = dismissButton.closest(".panel") as HTMLElement | null;
       const objectId = element?.dataset.objectId;
       if (objectId !== undefined) {
+        pinnedPanels.delete(objectId);
+        if (quickObjectId === objectId) quickObjectId = undefined;
         apply(dismissPanel(state, objectId));
       }
       return;

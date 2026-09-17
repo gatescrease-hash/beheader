@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Beheader</title>
+    <link rel="icon" href="data:," />
     <!--
       The furniture of the page: the header and its wordmark, the sidebar that
       holds the creation tools and the object navigator, the canvas with the
@@ -566,21 +567,31 @@
     <div id="app">
       <header class="app-header">
         <div class="brand" aria-label="Beheader">
-          <svg class="brand-mark" viewBox="5 2 34 38" role="img" aria-label="Knight helmet in profile">
-            <path class="brand-knight" d="M8 39h26l-4-6v-6l7-4-3-13-8-5-11 3-5 9 2 8-5 5 5 2z" />
-            <path class="brand-visor" d="M17 15h17l2 4H18zm11 4-2 7 7-3" />
-            <path class="brand-plume" d="M15 10c2-6 8-8 14-6-6 0-10 3-11 8" />
+          <svg class="brand-mark" viewBox="0 0 64 72" role="img" aria-label="Knight helmet in profile">
+            <path fill="var(--clay)" d="M22 14C24 3 36 1 42 6c6-3 11 1 11 6 8 2 10 9 8 16l-7-3C52 14 41 9 22 14Z" />
+            <path class="brand-knight" d="M17 26C20 13 33 9 43 14c14 6 17 22 10 34l-7 11 9 8-24-4-20 7 12-17-6-9Z" />
+            <path fill="var(--paper-light)" d="M18 26c5-11 17-14 25-9 8 4 12 13 11 21l-8-5-10 3Z" />
+            <path class="brand-knight" d="m16 25 21 9 7 11-24 10L5 39l9-7Z" />
+            <path class="brand-visor" d="m16 29 20 8M14 36l-3 4 9 10 19-8M19 37l-3 5m10-3-3 6m10-5-2 3M25 54l16-6-6 12" />
+            <path fill="var(--paper-light)" stroke="var(--ink)" stroke-width="2" d="M49 38a5 7 0 1 1-10 0 5 7 0 1 1 10 0" />
+            <path class="brand-knight" d="M46 38a2 3 0 1 1-4 0 2 3 0 1 1 4 0" />
           </svg>
           <span class="brand-word">Beheader</span>
         </div>
         <nav aria-label="Workspace actions">
+          <button id="sidebar-show" aria-controls="sidebar" aria-expanded="true" title="Show or hide sidebar">Tools</button>
           <button id="help-toggle" aria-expanded="false" aria-controls="help-panel">Help</button>
           <button data-command="load">Open</button>
           <button class="primary" data-command="save" title="Download this document">Save</button>
         </nav>
       </header>
       <div class="workspace">
-        <aside class="sidebar" aria-label="Workspace tools">
+        <aside id="sidebar" class="sidebar" data-mode="full" aria-label="Workspace tools">
+          <div class="sidebar-controls" aria-label="Sidebar layout">
+            <button data-sidebar-mode="full" aria-pressed="true" title="Full sidebar">Full</button>
+            <button data-sidebar-mode="compact" aria-pressed="false" title="Compact sidebar">Compact</button>
+            <button data-sidebar-mode="hidden" title="Hide sidebar" aria-label="Hide sidebar">Hide</button>
+          </div>
           <div class="section-heading">CREATE</div>
           <div class="tool-grid">
             <button data-command="rect"><span>▭</span>Rectangle</button>
@@ -593,9 +604,10 @@
             <button data-command="image"><span>▧</span>Image</button>
             <button data-command="script"><span>⌘</span>Script</button>
           </div>
-          <div class="section-heading objects-heading">OBJECTS <span id="object-count">0</span></div>
+          <div class="section-heading objects-heading">LAYERS &amp; OBJECTS <span id="object-count">0</span></div>
           <input id="object-search" type="search" placeholder="Find an object…" aria-label="Find an object" />
           <div id="object-list" aria-label="Objects"></div>
+          <div id="sidebar-resize" role="separator" tabindex="0" aria-label="Resize sidebar" aria-orientation="vertical" aria-controls="sidebar" aria-valuemin="120" aria-valuemax="420" aria-valuenow="208" title="Drag to resize. Arrow keys adjust width."></div>
         </aside>
         <div id="stage">
           <canvas id="canvas" aria-label="Spatial canvas. Choose a creation tool to begin."></canvas>
@@ -621,6 +633,7 @@
             </dl>
           </aside>
           <div class="view-controls" aria-label="Canvas view">
+            <button id="grid-toggle" aria-pressed="true" title="Toggle canvas grid">Grid</button>
             <button data-command="zoom 0.8" aria-label="Zoom out">−</button>
             <span id="zoom-level">100%</span>
             <button data-command="zoom 1.25" aria-label="Zoom in">+</button>

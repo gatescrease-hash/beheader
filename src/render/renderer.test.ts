@@ -58,6 +58,10 @@ function createFakeContext(): {
   const strokeColors: string[] = [];
   let strokeStyle = "";
   const ctx = {
+    save() {},
+    restore() {},
+    rect() {},
+    clip() {},
     fillStyle: "",
     get strokeStyle() {
       return strokeStyle;
