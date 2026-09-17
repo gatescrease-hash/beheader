@@ -1344,6 +1344,12 @@ in the retained TypeScript engine, preserves graph meaning and journal policy,
 and continues editing. The release has no unresolved compatibility blocker,
 and engine selection has a defined startup-failure behavior.
 
+`D-012` arrives here for its remaining part. Nine transcendental functions
+answer one unit in the last place apart in the two engines, so a document saved
+by one of them can hold a number the other would not have written. The
+rehearsal above is where that shows, and the acceptance criteria say whether
+the difference blocks the default switch or travels with it.
+
 ### `RUST-017`: Retire the duplicate implementation
 
 **Work.** This package removes TypeScript engine algorithms only after the
@@ -1482,7 +1488,7 @@ under it. Superseded choices remain linked through Git history.
 | `D-009` | Product baseline drift | Pin each package and synchronize accepted behavior changes | `RUST-001` |
 | `D-010` | Resource budgets | Preserve the TypeScript per-line expression budget. Measure total document workloads on each target before setting broader limits. | `RUST-015` |
 | `D-011` | Cutover acceptance period | Define supported targets and rollback criteria before default switch | `RUST-016` |
-| `D-012` | Transcendental function agreement | Part resolved: one wrapper for each call, reaching `libm` on every target. The nine functions that still differ wait on the operator. See below. | `RUST-007` |
+| `D-012` | Transcendental function agreement | Part resolved: one wrapper for each call, reaching `libm` on every target. The nine that still differ carry into `RUST-016`. See below. | `RUST-007`, `RUST-016` |
 
 `D-001` is resolved as browser Wasm, which is what the recommendation said and
 now has evidence behind it. The deciding quantity is the count of host round
@@ -1557,7 +1563,7 @@ holding a lone surrogate stops opening, where today it opens. A lone surrogate
 is half of a character that no editor produces on purpose, so the documents it
 refuses are ones already holding a fault.
 
-`D-012` is part resolved, and the part left open is for the operator.
+`D-012` is part resolved, and the rest of it carries into `RUST-016`.
 
 A sine is not one function. V8 carries its own implementation, a native Rust
 build reaches the system library, and a `wasm32-unknown-unknown` build reaches
@@ -1599,15 +1605,19 @@ both engines answer through the shipped path: a math object holding
 `y=\cos(0.1)` exports `0.9950041652780257` from TypeScript and
 `0.9950041652780258` from Rust.
 
-The part left open: whether to close the nine. Closing them means porting V8's
+The operator chose to leave the nine as they are and to carry the difference
+into `RUST-016`, where the acceptance criteria for the default switch are set.
+So bit identity across the two engines is a condition of cutover rather than of
+this package, and the paragraphs below are what that decision costs and what
+paying it later would take. Closing the nine means porting V8's
 own implementations, which are its `src/base/ieee754.cc`, into Rust and calling
 those instead. That is a known body of public-domain code of a few thousand
 lines, mechanical to port and testable against a fixture of V8 answers, and it
-would make every number in a document identical across the two engines. Leaving
-them open means a shape, a math export or a `ROUND` result can differ in its
-last digit between the two engines, which an operator sees in the properties
-panel and in a saved file, and which stops the port from proving that a document
-survives a change of engine unchanged.
+would make every number in a document identical across the two engines. Leaving them as they are, which is the choice on record, means a
+shape, a math export or a `ROUND` result can differ in its last digit between
+the two engines, which an operator sees in the properties panel and in a saved
+file, and which stands between the port and a proof that a document survives a
+change of engine unchanged.
 
 `tanh`, `log10` and `pow` carry the three highest rates, and one argument in
 eleven reaches a difference in the first of them. The measurement above is the
@@ -1641,7 +1651,7 @@ implemented, then its lasting rationale belongs beside that code.
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
-| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`, `D-012`. `D-008` is part resolved, and `D-010` holds a recorded choice |
+| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` and `D-012` are part resolved, and `D-010` holds a recorded choice |
 | Next implementation action | Port the primitives and the schema under `RUST-007` |
 | Completion evidence | `RUST-001` through `RUST-006` and `RUST-008`, under their headings above |
 
