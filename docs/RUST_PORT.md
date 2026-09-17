@@ -1235,10 +1235,33 @@ now goes through one wrapper for each function, so a native run and a browser
 run agree, and `number.javascript-arithmetic` pins the seven that also agree
 with the answers a document carries.
 
-**Still to come in this package.** `primitives::geometry` and the vertex
-enumeration behind it, `primitives::table`, `primitives::image`,
-`primitives::doc`, the schema the five resolve their slots through, and the
-script stub.
+`primitives::geometry` carries the rest of the shape layer that stands with no
+schema under it: where the corners of a polygon and a rect fall, what a list of points
+measures, the seven slots of a vertex and the two enumerations over them, the
+three storage changes a path can take, the four address rewrites that keep a
+reference pointing at the vertex it meant, and the explode that snapshots a
+preset into a polyline.
+
+`primitives.geometry` asks both engines 155 questions and they answer alike on
+every one. Two of the cases carry the reason the fixture states a shape's slots
+as an ordered list rather than as a JSON object. A delete takes every vertex
+slot out of the map and writes the survivors back, so they return renumbered
+and in their new order, with the slots that are not vertices keeping their
+places at the front. An engine that wrote them back where they were would part
+from the other one there and nowhere else.
+
+Two findings came out of the fixture. A vertex count is a number rather than a
+whole one, and a count of two and a half reaches three vertices in the
+TypeScript loop, so the port carries the count as `f64` and names a slot through
+`to_javascript_text` rather than rounding first. And the area of an exploded
+circle comes within a part in 10^15 of pi r squared rather than landing on it,
+because a lune contributes r squared times the sweep less its sine and the sine
+of a sweep of pi is 1.2e-16 rather than 0. The residue rounds away at a radius
+of five and shifts the last digit at a radius of three.
+
+**Still to come in this package.** The derived slot schemas of a circle, a path
+and a preset, which wait on the schema module, along with `primitives::table`,
+`primitives::image`, `primitives::doc` and the script stub.
 
 ### `RUST-008`: Port the math language
 
@@ -1695,10 +1718,11 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  primitives::geometry, primitives::table, primitives::image, primitives::doc,
-  the dynamic slot families the schema resolves per object, and the stub the
-  script node arrives behind. The schema is shared with RUST-010, which
-  completes it. primitives::edge is landed and its fixture is primitives.edge.
+  primitives::table, primitives::image, primitives::doc, the dynamic slot
+  families the schema resolves per object, the derived slot schemas of a
+  circle, a path and a preset, and the stub the script node arrives behind.
+  The schema is shared with RUST-010, which completes it. primitives::edge and
+  primitives::geometry are landed, under the fixtures of the same names.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1708,7 +1732,7 @@ Fixture and evidence paths:
   formula.dependencies carry RUST-005, formula.evaluate carries RUST-006, and
   math.lex, math.parse, math.names and math.evaluate carry RUST-008
   number.javascript-arithmetic pins the seven functions D-012 found agreeing,
-  and primitives.edge carries the edge maths of RUST-007
+  and primitives.edge and primitives.geometry carry RUST-007 so far
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1718,9 +1742,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  172 pass
+  cargo test --workspace --locked                                  183 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           926 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1081 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1736,9 +1760,8 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port primitives/geometry.ts, which reads primitives::edge
-  for every derived value a shape carries, then primitives/table.ts and the
-  schema the two resolve their slots through.
+Next concrete action: port primitives/schema.ts, which the derived slots left
+  out of primitives::geometry resolve through, then primitives/table.ts.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```

@@ -158,6 +158,13 @@
       "covers": [
         "src/engine/primitives/edge.ts"
       ]
+    },
+    {
+      "id": "primitives.geometry",
+      "file": "fixtures/primitives.geometry.json",
+      "covers": [
+        "src/engine/primitives/geometry.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -170,7 +177,6 @@
     "src/engine/journal.ts",
     "src/engine/mutation.ts",
     "src/engine/primitives/doc.ts",
-    "src/engine/primitives/geometry.ts",
     "src/engine/primitives/image.ts",
     "src/engine/primitives/math.ts",
     "src/engine/primitives/schema.ts",

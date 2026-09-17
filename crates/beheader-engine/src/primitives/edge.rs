@@ -1101,7 +1101,12 @@ mod tests {
     /// Two vertices and two bulges of one. The header calls this the case that
     /// proves no curve turns into sample points: a sampled circle would answer
     /// a little under the true area and a little under the true perimeter, and
-    /// these are the exact answers to the last digit.
+    /// these land on the nearest double to each.
+    ///
+    /// The area is exact at this radius rather than at every radius. A lune
+    /// contributes r squared times the sweep less its sine, and the sine of a
+    /// sweep of pi is 1.2e-16 rather than 0 because pi is not a double, so the
+    /// residue rounds away here and shifts the last digit at a radius of three.
     #[test]
     fn the_circle_of_two_vertices_answers_exactly() {
         let edges = build_path_edges(

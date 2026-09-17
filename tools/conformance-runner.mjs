@@ -103,6 +103,26 @@ const {
   pathLength,
   splitEdgeAt,
   sweepCoversAngle,
+  addVertexToObject,
+  computeArea,
+  computeBounds,
+  computeCentroid,
+  computeOpenPathLength,
+  computePerimeterLength,
+  computePolygonVertices,
+  computeRectVertices,
+  computeVertexMean,
+  deleteVertexFromObject,
+  enumeratePolylineCoordinateSlotPaths,
+  enumeratePolylineVertexSlotPaths,
+  explodeObjectToPolyline,
+  insertVertexIntoObject,
+  pathEdgesOfObject,
+  polylineEdgeCount,
+  repairVertexAddressForDelete,
+  shiftVertexAddressForDelete,
+  shiftVertexAddressForInsert,
+  splitPolylineEdge,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -568,6 +588,60 @@ function encodeArc(arc) {
       };
 }
 
+
+/**
+ * A shape as a fixture states it: the object fields, and the slots as an
+ * ordered list rather than as a JSON object. Slot order is observable in
+ * drawing and completion, one engine keeps the order a JSON object was written
+ * in and the other sorts it, so a fixture that wrote the slots as an object
+ * would compare the two JSON readers rather than the two engines.
+ */
+function shapeObjectArgument(args, name) {
+  const value = argument(args, name);
+  if (!isPlainObject(value) || typeof value.id !== "string" || !OBJECT_TYPES.has(value.type)) {
+    throw new BadArgument(`the argument "${name}" is an object with an id and a type`);
+  }
+  const entries = Array.isArray(value.slots) ? value.slots : [];
+  const slots = {};
+  for (const entry of entries) {
+    if (!isPlainObject(entry) || typeof entry.key !== "string") {
+      throw new BadArgument(`the argument "${name}" carries slots with a key each`);
+    }
+    slots[entry.key] = { kind: entry.kind ?? "literal", value: decodeValue(entry.value ?? null) };
+  }
+  return {
+    id: value.id,
+    name: typeof value.name === "string" ? value.name : value.id,
+    type: value.type,
+    vertexCount: value.vertexCount === undefined ? undefined : decodeNumber(value.vertexCount),
+    slots,
+  };
+}
+
+/** A shape back out, with its slots in the order they sit in. */
+function encodeShapeObject(object) {
+  return {
+    id: object.id,
+    name: object.name,
+    type: object.type,
+    vertexCount: object.vertexCount === undefined ? null : encodeNumber(object.vertexCount),
+    slots: Object.entries(object.slots).map(([key, slot]) => ({
+      key,
+      kind: slot.kind,
+      value: encodeValue(slot.value),
+    })),
+  };
+}
+
+function encodeEdge(edge) {
+  return {
+    start: encodePoint(edge.start),
+    end: encodePoint(edge.end),
+    bulge: encodeNumber(edge.bulge),
+    controls: edge.controls === undefined ? null : edge.controls.map(encodePoint),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* The calls                                                           */
 /* ------------------------------------------------------------------ */
@@ -603,6 +677,82 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  computePresetVertices: (args) => {
+    const kind = textArgument(args, "shape");
+    if (kind === "polygon") {
+      return computePolygonVertices(
+        numberArgument(args, "sides"),
+        numberArgument(args, "radius"),
+        pointArgument(args, "origin"),
+        numberArgument(args, "rotation"),
+      ).map(encodePoint);
+    }
+    if (kind === "rect") {
+      return computeRectVertices(
+        pointArgument(args, "origin"),
+        numberArgument(args, "width"),
+        numberArgument(args, "height"),
+      ).map(encodePoint);
+    }
+    throw new BadArgument('the argument "shape" is "polygon" or "rect"');
+  },
+  verticesMetrics: (args) => {
+    const vertices = pointListArgument(args, "vertices");
+    const bounds = computeBounds(vertices);
+    return {
+      area: encodeNumber(computeArea(vertices)),
+      centroid: encodePoint(computeCentroid(vertices)),
+      vertexMean: encodePoint(computeVertexMean(vertices)),
+      perimeterLength: encodeNumber(computePerimeterLength(vertices)),
+      openPathLength: encodeNumber(computeOpenPathLength(vertices)),
+      bounds: {
+        minX: encodeNumber(bounds.minX),
+        minY: encodeNumber(bounds.minY),
+        maxX: encodeNumber(bounds.maxX),
+        maxY: encodeNumber(bounds.maxY),
+      },
+    };
+  },
+  vertexSlotPaths: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    return {
+      everyPart: enumeratePolylineVertexSlotPaths(object),
+      coordinates: enumeratePolylineCoordinateSlotPaths(object),
+      edgeCount: encodeNumber(polylineEdgeCount(object)),
+      edges: pathEdgesOfObject(object).map(encodeEdge),
+    };
+  },
+  addVertex: (args) =>
+    encodeShapeObject(addVertexToObject(shapeObjectArgument(args, "object"), pointArgument(args, "point"))),
+  deleteVertex: (args) =>
+    encodeShapeObject(deleteVertexFromObject(shapeObjectArgument(args, "object"), numberArgument(args, "index"))),
+  insertVertex: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    const edgeIndex = numberArgument(args, "edgeIndex");
+    const split = splitPolylineEdge(object, edgeIndex, pointArgument(args, "near"));
+    if (split === undefined) {
+      return { split: false };
+    }
+    return { split: true, object: encodeShapeObject(insertVertexIntoObject(object, edgeIndex, split)) };
+  },
+  explodeObject: (args) => {
+    const result = explodeObjectToPolyline(shapeObjectArgument(args, "object"), textArgument(args, "label"));
+    return result.ok
+      ? { ok: true, object: encodeShapeObject(result.object) }
+      : { ok: false, message: result.message };
+  },
+  vertexAddressRewrite: (args) => {
+    const address = addressArgument(args, "address");
+    const objectId = textArgument(args, "objectId");
+    const index = numberArgument(args, "index");
+    const repaired = repairVertexAddressForDelete(address, objectId, index);
+    return {
+      forInsert: encodeAddress(shiftVertexAddressForInsert(address, objectId, index)),
+      forDelete: encodeAddress(shiftVertexAddressForDelete(address, objectId, index)),
+      repaired: repaired === "deleted" ? "deleted" : encodeAddress(repaired),
+    };
+  },
+
   edgeAnswers: (args) => {
     const edge = edgeArgument(args, "edge");
     const handles = cubicHandlesForEdge(edge);

@@ -43,8 +43,8 @@ use beheader_engine::math::lexer::tokenize_math;
 use beheader_engine::math::names::resolve_math_names;
 use beheader_engine::math::parser::parse_math;
 use beheader_engine::model::{
-    ErrorCode, ErrorValue, ObjectType, Point, has_illegal_number, is_error_value,
-    is_illegal_number, is_legal_port_name, slot_key,
+    ErrorCode, ErrorValue, GraphObject, ObjectType, Point, Slot, SlotMap, has_illegal_number,
+    is_error_value, is_illegal_number, is_legal_port_name, slot_key,
 };
 use beheader_engine::number::{
     js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
@@ -56,6 +56,15 @@ use beheader_engine::primitives::edge::{
     distance_to_segment, edge_doubled_area_over_chord, edge_end_direction, edge_extreme_points,
     edge_length, edge_midpoint, path_area, path_bounds, path_centroid, path_contains,
     path_doubled_signed_area, path_length, split_edge_at, sweep_covers_angle,
+};
+use beheader_engine::primitives::geometry::{
+    ExplodeResult, VertexRepair, add_vertex_to_object, compute_area, compute_bounds,
+    compute_centroid, compute_open_path_length, compute_perimeter_length, compute_polygon_vertices,
+    compute_rect_vertices, compute_vertex_mean, delete_vertex_from_object,
+    enumerate_polyline_coordinate_slot_paths, enumerate_polyline_vertex_slot_paths,
+    explode_object_to_polyline, insert_vertex_into_object, path_edges_of_object,
+    polyline_edge_count, repair_vertex_address_for_delete, shift_vertex_address_for_delete,
+    shift_vertex_address_for_insert, split_polyline_edge,
 };
 use beheader_engine::wire::{
     decode_number, decode_point, decode_value, encode_number, encode_point, encode_value,
@@ -659,11 +668,212 @@ fn encode_arc(arc: Option<ArcGeometry>) -> Json {
     }
 }
 
+/// A shape as a fixture states it: the object fields, and the slots as an
+/// ordered list rather than as a JSON object. Slot order is observable in
+/// drawing and completion, `serde_json` holds the
+/// members of an object in a sorted map and JavaScript keeps the order they
+/// were written in, so a fixture that wrote the slots as an object would
+/// compare the two JSON readers rather than the two engines.
+fn shape_object_argument(
+    args: &Map<String, Json>,
+    name: &str,
+) -> Result<GraphObject<FormulaAst>, String> {
+    let object = argument(args, name)?
+        .as_object()
+        .ok_or_else(|| format!("the argument \"{name}\" is an object with an id and a type"))?;
+    let id = object
+        .get("id")
+        .and_then(Json::as_str)
+        .ok_or_else(|| format!("the argument \"{name}\" is an object with an id and a type"))?;
+    let object_type = object
+        .get("type")
+        .and_then(Json::as_str)
+        .and_then(ObjectType::parse)
+        .ok_or_else(|| format!("the argument \"{name}\" is an object with an id and a type"))?;
+    let mut slots = SlotMap::new();
+    if let Some(entries) = object.get("slots").and_then(Json::as_array) {
+        for entry in entries {
+            let entry = entry
+                .as_object()
+                .ok_or_else(|| format!("the argument \"{name}\" carries slots with a key each"))?;
+            let key = entry
+                .get("key")
+                .and_then(Json::as_str)
+                .ok_or_else(|| format!("the argument \"{name}\" carries slots with a key each"))?;
+            let value = decode_value(entry.get("value").unwrap_or(&Json::Null))
+                .map_err(|failure| failure.message)?;
+            let slot = match entry.get("kind").and_then(Json::as_str) {
+                Some("derived") => Slot::Derived { value },
+                _ => Slot::Literal { value },
+            };
+            slots.insert(key, slot);
+        }
+    }
+    let vertex_count = match object.get("vertexCount") {
+        None | Some(Json::Null) => None,
+        Some(json) => Some(decode_number(json).map_err(|failure| failure.message)?),
+    };
+    Ok(GraphObject {
+        id: id.to_string(),
+        name: object
+            .get("name")
+            .and_then(Json::as_str)
+            .unwrap_or(id)
+            .to_string(),
+        object_type,
+        target: None,
+        slots,
+        ports: None,
+        vertex_count,
+    })
+}
+
+/// A shape back out, with its slots in the order they sit in.
+fn encode_shape_object(object: &GraphObject<FormulaAst>) -> Json {
+    json!({
+        "id": object.id,
+        "name": object.name,
+        "type": object.object_type.as_str(),
+        "vertexCount": match object.vertex_count {
+            None => Json::Null,
+            Some(count) => encode_number(count),
+        },
+        "slots": object
+            .slots
+            .iter()
+            .map(|(key, slot)| json!({
+                "key": key,
+                "kind": match slot {
+                    Slot::Literal { .. } => "literal",
+                    Slot::Formula { .. } => "formula",
+                    Slot::Derived { .. } => "derived",
+                },
+                "value": encode_value(slot.value()),
+            }))
+            .collect::<Vec<_>>(),
+    })
+}
+
+fn encode_edge(edge: &PathEdge) -> Json {
+    json!({
+        "start": encode_point(edge.start),
+        "end": encode_point(edge.end),
+        "bulge": encode_number(edge.bulge),
+        "controls": match edge.controls {
+            None => Json::Null,
+            Some([one, two]) => json!([encode_point(one), encode_point(two)]),
+        },
+    })
+}
+
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
     let result: Answer = match call {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "computePresetVertices" => text_argument(args, "shape").and_then(|shape| {
+            let vertices = match shape.as_str() {
+                "polygon" => compute_polygon_vertices(
+                    number_argument(args, "sides")?,
+                    number_argument(args, "radius")?,
+                    point_argument(args, "origin")?,
+                    number_argument(args, "rotation")?,
+                ),
+                "rect" => compute_rect_vertices(
+                    point_argument(args, "origin")?,
+                    number_argument(args, "width")?,
+                    number_argument(args, "height")?,
+                ),
+                _ => return Err("the argument \"shape\" is \"polygon\" or \"rect\"".to_string()),
+            };
+            Ok(json!(
+                vertices.into_iter().map(encode_point).collect::<Vec<_>>()
+            ))
+        }),
+        "verticesMetrics" => point_list_argument(args, "vertices").map(|vertices| {
+            let bounds = compute_bounds(&vertices);
+            json!({
+                "area": encode_number(compute_area(&vertices)),
+                "centroid": encode_point(compute_centroid(&vertices)),
+                "vertexMean": encode_point(compute_vertex_mean(&vertices)),
+                "perimeterLength": encode_number(compute_perimeter_length(&vertices)),
+                "openPathLength": encode_number(compute_open_path_length(&vertices)),
+                "bounds": {
+                    "minX": encode_number(bounds.min_x),
+                    "minY": encode_number(bounds.min_y),
+                    "maxX": encode_number(bounds.max_x),
+                    "maxY": encode_number(bounds.max_y),
+                },
+            })
+        }),
+        "vertexSlotPaths" => shape_object_argument(args, "object").map(|object| {
+            json!({
+                "everyPart": enumerate_polyline_vertex_slot_paths(&object),
+                "coordinates": enumerate_polyline_coordinate_slot_paths(&object),
+                "edgeCount": encode_number(polyline_edge_count(&object)),
+                "edges": path_edges_of_object(&object)
+                    .iter()
+                    .map(encode_edge)
+                    .collect::<Vec<_>>(),
+            })
+        }),
+        "addVertex" => shape_object_argument(args, "object").and_then(|object| {
+            Ok(encode_shape_object(&add_vertex_to_object(
+                &object,
+                point_argument(args, "point")?,
+            )))
+        }),
+        "deleteVertex" => shape_object_argument(args, "object").and_then(|object| {
+            Ok(encode_shape_object(&delete_vertex_from_object(
+                &object,
+                number_argument(args, "index")?,
+            )))
+        }),
+        "insertVertex" => shape_object_argument(args, "object").and_then(|object| {
+            let edge_index = number_argument(args, "edgeIndex")?;
+            let near = point_argument(args, "near")?;
+            // The index reaches the list as a whole number or not at all, and a
+            // fixture that names a fractional edge finds no edge there, which
+            // is what the TypeScript indexing answers for one too.
+            let found = usize::try_from(edge_index as i64)
+                .ok()
+                .filter(|_| edge_index.fract() == 0.0 && edge_index >= 0.0)
+                .and_then(|index| split_polyline_edge(&object, index, near));
+            Ok(match found {
+                None => json!({ "split": false }),
+                Some(split) => json!({
+                    "split": true,
+                    "object": encode_shape_object(&insert_vertex_into_object(
+                        &object, edge_index, &split,
+                    )),
+                }),
+            })
+        }),
+        "explodeObject" => shape_object_argument(args, "object").and_then(|object| {
+            let label = text_argument(args, "label")?;
+            Ok(match explode_object_to_polyline(&object, &label) {
+                ExplodeResult::Exploded(exploded) => {
+                    json!({ "ok": true, "object": encode_shape_object(&exploded) })
+                }
+                ExplodeResult::Refused(message) => json!({ "ok": false, "message": message }),
+            })
+        }),
+        "vertexAddressRewrite" => address_argument(args, "address").and_then(|address| {
+            let object_id = text_argument(args, "objectId")?;
+            let index = number_argument(args, "index")?;
+            Ok(json!({
+                "forInsert": encode_address(&shift_vertex_address_for_insert(
+                    &address, &object_id, index,
+                )),
+                "forDelete": encode_address(&shift_vertex_address_for_delete(
+                    &address, &object_id, index,
+                )),
+                "repaired": match repair_vertex_address_for_delete(&address, &object_id, index) {
+                    VertexRepair::Deleted => Json::String("deleted".to_string()),
+                    VertexRepair::Address(found) => encode_address(&found),
+                },
+            }))
+        }),
         "edgeAnswers" => edge_argument(args, "edge").map(|edge| {
             let handles = cubic_handles_for_edge(&edge);
             json!({

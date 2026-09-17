@@ -148,6 +148,16 @@ impl<A> SlotMap<A> {
         }
     }
 
+    /// Takes a slot out, so a later write of the same key lands at the end
+    /// rather than where the first one was. That is what `delete` followed by
+    /// an assignment does in JavaScript, and a vertex renumbering leans on it:
+    /// the surviving vertices come back in their new order rather than staying
+    /// where the old order left them.
+    pub fn remove(&mut self, key: &str) -> Option<Slot<A>> {
+        let found = self.entries.iter().position(|(held, _)| held == key)?;
+        Some(self.entries.remove(found).1)
+    }
+
     pub fn get(&self, key: &str) -> Option<&Slot<A>> {
         self.entries
             .iter()
