@@ -11,3 +11,4 @@ pub mod geometry;
 pub mod image;
 pub mod schema;
 pub mod table;
+pub mod text;

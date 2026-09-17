@@ -187,6 +187,13 @@
       "covers": [
         "src/engine/primitives/doc.ts"
       ]
+    },
+    {
+      "id": "primitives.text",
+      "file": "fixtures/primitives.text.json",
+      "covers": [
+        "src/engine/primitives/text.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -199,7 +206,6 @@
     "src/engine/journal.ts",
     "src/engine/mutation.ts",
     "src/engine/primitives/image.ts",
-    "src/engine/primitives/math.ts",
-    "src/engine/primitives/text.ts"
+    "src/engine/primitives/math.ts"
   ]
 }

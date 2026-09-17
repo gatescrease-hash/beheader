@@ -80,6 +80,10 @@ use beheader_engine::primitives::table::{
     repair_cell_address_for_delete, repair_range_endpoints_for_delete,
     shift_cell_address_for_insert,
 };
+use beheader_engine::primitives::text::{
+    Block, evaluate_block_tree, extract_text_dependencies, match_math_marker_at,
+    parse_text_content, resolve_text_dependency_addresses,
+};
 use beheader_engine::wire::{
     decode_number, decode_point, decode_value, encode_number, encode_point, encode_value,
 };
@@ -855,11 +859,112 @@ impl Measurer for FakeMeasurer {
     }
 }
 
+/// A block tree as JSON, with each node naming its own kind.
+fn encode_block(block: &Block) -> Json {
+    match block {
+        Block::Text(value) => json!({ "type": "text", "value": value }),
+        Block::Math(run) => json!({
+            "type": "math",
+            "latex": run.latex,
+            "display": run.display,
+            "source": run.source,
+        }),
+        Block::Formula(ast) => json!({ "type": "formula", "ast": encode_ast(ast) }),
+        Block::Conditional {
+            condition,
+            true_branch,
+            false_branch,
+        } => json!({
+            "type": "conditional",
+            "condition": encode_ast(condition),
+            "trueBranch": true_branch.iter().map(encode_block).collect::<Vec<_>>(),
+            "falseBranch": false_branch.iter().map(encode_block).collect::<Vec<_>>(),
+        }),
+        Block::Error {
+            message,
+            source,
+            start,
+            orphaned,
+        } => json!({
+            "type": "error",
+            "message": message,
+            "source": source,
+            "start": start,
+            "orphaned": orphaned.iter().map(encode_block).collect::<Vec<_>>(),
+        }),
+    }
+}
+
+fn encode_dependency(dependency: &Dependency) -> Json {
+    match dependency {
+        Dependency::Reference(address) => json!({
+            "kind": "reference",
+            "address": encode_address(address),
+        }),
+        Dependency::Range { start, end } => json!({
+            "kind": "range",
+            "start": encode_address(start),
+            "end": encode_address(end),
+        }),
+    }
+}
+
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
     let result: Answer = match call {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "parseTextContent" => text_argument(args, "content").and_then(|content| {
+            let objects = shape_object_list_argument(args, "objects")?;
+            Ok(json!(
+                parse_text_content(&content, &objects)
+                    .iter()
+                    .map(encode_block)
+                    .collect::<Vec<_>>()
+            ))
+        }),
+        "textDependencies" => text_argument(args, "content").and_then(|content| {
+            let objects = shape_object_list_argument(args, "objects")?;
+            let blocks = parse_text_content(&content, &objects);
+            Ok(json!(
+                extract_text_dependencies(&blocks)
+                    .iter()
+                    .map(encode_dependency)
+                    .collect::<Vec<_>>()
+            ))
+        }),
+        "resolveTextDependencies" => shape_object_argument(args, "object").and_then(|object| {
+            let objects = shape_object_list_argument(args, "objects")?;
+            Ok(json!(
+                resolve_text_dependency_addresses(&object, &objects)
+                    .iter()
+                    .map(encode_address)
+                    .collect::<Vec<_>>()
+            ))
+        }),
+        "evaluateTextContent" => text_argument(args, "content").and_then(|content| {
+            let objects = shape_object_list_argument(args, "objects")?;
+            let blocks = parse_text_content(&content, &objects);
+            let read = |address: &Address| {
+                objects
+                    .iter()
+                    .find(|candidate| candidate.id == address.object_id)
+                    .and_then(|object| object.get_slot(&address.path))
+                    .map(|slot| slot.value().clone())
+            };
+            Ok(json!(evaluate_block_tree(&blocks, &read, None)))
+        }),
+        "mathMarker" => text_argument(args, "content").and_then(|content| {
+            let at = safe_integer_argument(args, "at")?;
+            Ok(match match_math_marker_at(&content, at as usize) {
+                None => Json::Null,
+                Some(found) => json!({
+                    "latex": found.latex,
+                    "display": found.display,
+                    "end": found.end,
+                }),
+            })
+        }),
         "documentVariableName" => text_argument(args, "name").and_then(|name| {
             let objects = shape_object_list_argument(args, "objects")?;
             let exclude = match args.get("exclude") {
@@ -943,6 +1048,7 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
             let fake = FakeMeasurer;
             let inputs = SlotComputeInputs {
                 read: &read,
+                read_range: None,
                 objects: &objects,
                 // A case naming no measurer gets none, which is what leaves a
                 // measured slot reporting a measurement error rather than a

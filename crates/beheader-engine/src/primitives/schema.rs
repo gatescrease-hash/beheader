@@ -20,13 +20,14 @@
 //! operator can create, and no command word makes one. They stay because they
 //! are the smallest case that exercises a derived slot.
 //!
-//! The text and math entries arrive with `RUST-009`. The registry answers
-//! nothing for a type with no entry, which is the same answer the TypeScript
-//! gives for a type it has yet to declare.
+//! The math entry arrives with the math primitive. The registry answers nothing
+//! for a type with no entry, which is the same answer the TypeScript gives for a
+//! type it has yet to declare.
 //!
 //! The port of `src/engine/primitives/schema.ts`.
 
 use crate::address::Address;
+use crate::formula::eval::ReadRange;
 use crate::measure::{MeasureCapability, Measurer};
 use crate::model::{ErrorCode, ErrorValue, GraphObject, ObjectType, Value, slot_key};
 
@@ -40,6 +41,10 @@ use crate::model::{ErrorCode, ErrorValue, GraphObject, ObjectType, Value, slot_k
 /// would disagree with.
 pub struct SlotComputeInputs<'a, A> {
     pub read: &'a dyn Fn(&Address) -> Option<Value>,
+    /// The cells of a range, for a slot holding a formula that names one. A
+    /// pass with none refuses such a formula rather than reading the two
+    /// endpoints and guessing what lies between them.
+    pub read_range: Option<ReadRange<'a>>,
     pub objects: &'a [GraphObject<A>],
     pub measurer: Option<&'a dyn Measurer>,
 }
@@ -263,6 +268,7 @@ pub fn get_object_schema<A: 'static>(object_type: ObjectType) -> Option<ObjectSc
         ObjectType::Rect => Some(rect_schema()),
         ObjectType::Polyline => Some(polyline_schema()),
         ObjectType::Script => Some(script_schema()),
+        ObjectType::Text => Some(text_schema()),
         // A variable is a slot an operator named, so the doc object declares
         // whatever slots it holds rather than a fixed set. That makes the set
         // dynamic without breaking the rule that evaluation never changes the
@@ -516,6 +522,87 @@ fn polyline_schema<A: 'static>() -> ObjectSchema<A> {
     }
 }
 
+fn text_schema<A: 'static>() -> ObjectSchema<A> {
+    use crate::primitives::geometry::{origin_x_path, origin_y_path};
+    use crate::primitives::text::{
+        compute_measured_height, compute_measured_width, compute_resolved_content,
+        resolve_text_dependency_addresses, text_autoresize_path, text_content_path,
+        text_height_path, text_measured_height_path, text_measured_width_path,
+        text_resolved_content_path, text_style_align_path, text_style_color_path,
+        text_style_font_path, text_style_font_size_path, text_style_line_height_path,
+        text_width_path,
+    };
+    // Both measured slots read the same five, so a change to any one of them
+    // resizes the box on the next pass.
+    let measured_from = || {
+        DerivedSlotDependencies::Static(vec![
+            text_resolved_content_path(),
+            text_width_path(),
+            text_style_font_path(),
+            text_style_font_size_path(),
+            text_style_line_height_path(),
+        ])
+    };
+    ObjectSchema {
+        object_type: ObjectType::Text,
+        non_derived_slot_paths: vec![NonDerivedSlotPathGroup::Static(vec![
+            origin_x_path(),
+            origin_y_path(),
+            text_content_path(),
+            text_width_path(),
+            text_height_path(),
+            text_autoresize_path(),
+            text_style_font_path(),
+            text_style_font_size_path(),
+            text_style_line_height_path(),
+            text_style_color_path(),
+            text_style_align_path(),
+        ])],
+        derived_slots: vec![DerivedSlotGroup::Static(vec![
+            DerivedSlotSchema {
+                path: text_resolved_content_path(),
+                dependencies: DerivedSlotDependencies::Dynamic(Box::new(
+                    resolve_text_dependency_addresses,
+                )),
+                compute: Box::new(compute_resolved_content),
+            },
+            DerivedSlotSchema {
+                path: text_measured_height_path(),
+                dependencies: measured_from(),
+                compute: Box::new(compute_measured_height),
+            },
+            DerivedSlotSchema {
+                path: text_measured_width_path(),
+                dependencies: measured_from(),
+                compute: Box::new(compute_measured_width),
+            },
+        ])],
+        slot_options: vec![
+            SlotOptionSet {
+                path: text_style_align_path(),
+                values: vec![
+                    Value::Text("left".to_string()),
+                    Value::Text("center".to_string()),
+                    Value::Text("right".to_string()),
+                ],
+                labels: None,
+            },
+            SlotOptionSet {
+                path: text_autoresize_path(),
+                values: vec![Value::Boolean(true), Value::Boolean(false)],
+                labels: Some(vec![
+                    "shrink to fit text".to_string(),
+                    "keep the size I set".to_string(),
+                ]),
+            },
+        ],
+        slot_formats: vec![SlotFormatSet {
+            path: text_style_color_path(),
+            format: SlotFormat::Color,
+        }],
+    }
+}
+
 fn script_schema<A: 'static>() -> ObjectSchema<A> {
     use crate::primitives::geometry::{origin_x_path, origin_y_path};
     use crate::script::stub::{
@@ -587,6 +674,7 @@ mod tests {
         };
         let inputs = SlotComputeInputs {
             read: &read,
+            read_range: None,
             objects: &objects,
             measurer: None,
         };
@@ -601,9 +689,9 @@ mod tests {
     /// declares no slots.
     #[test]
     fn an_undeclared_type_answers_nothing() {
-        assert!(get_object_schema::<()>(ObjectType::Text).is_none());
         assert!(get_object_schema::<()>(ObjectType::Math).is_none());
         assert!(get_object_schema::<()>(ObjectType::Value).is_some());
+        assert!(get_object_schema::<()>(ObjectType::Text).is_some());
     }
 
     /// The colour rule takes the three hex forms and null, and nothing else. A

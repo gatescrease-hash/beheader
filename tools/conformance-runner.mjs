@@ -144,6 +144,11 @@ const {
   resolveNonDerivedSlotPaths,
   docrefLabel,
   documentVariableNameProblem,
+  evaluateBlockTree,
+  extractTextDependencies,
+  matchMathMarkerAt,
+  parseTextContent,
+  resolveTextDependencyAddresses,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -711,6 +716,51 @@ function encodeEdge(edge) {
   };
 }
 
+
+/** A block tree as JSON, with each node naming its own kind. */
+function encodeBlock(block) {
+  switch (block.type) {
+    case "text":
+      return { type: "text", value: block.value };
+    case "math":
+      return { type: "math", latex: block.latex, display: block.display, source: block.source };
+    case "formula":
+      return { type: "formula", ast: encodeAst(block.ast) };
+    case "conditional":
+      return {
+        type: "conditional",
+        condition: encodeAst(block.condition),
+        trueBranch: block.trueBranch.map(encodeBlock),
+        falseBranch: block.falseBranch.map(encodeBlock),
+      };
+    default:
+      return {
+        type: "error",
+        message: block.message,
+        source: block.source,
+        start: block.start,
+        orphaned: block.orphaned.map(encodeBlock),
+      };
+  }
+}
+
+function encodeDependency(dependency) {
+  return dependency.kind === "reference"
+    ? { kind: "reference", address: encodeAddress(dependency.address) }
+    : { kind: "range", start: encodeAddress(dependency.start), end: encodeAddress(dependency.end) };
+}
+
+/**
+ * A reader over the slots of the objects a case declares, which is what a text
+ * block resolves its references against.
+ */
+function slotReaderFor(objects) {
+  return (address) => {
+    const object = objects.find((candidate) => candidate.id === address.objectId);
+    return object?.slots[slotKey(address.path)]?.value;
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* The calls                                                           */
 /* ------------------------------------------------------------------ */
@@ -746,6 +796,26 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  parseTextContent: (args) =>
+    parseTextContent(textArgument(args, "content"), shapeObjectListArgument(args, "objects")).map(encodeBlock),
+  textDependencies: (args) => {
+    const blocks = parseTextContent(textArgument(args, "content"), shapeObjectListArgument(args, "objects"));
+    return extractTextDependencies(blocks).map(encodeDependency);
+  },
+  resolveTextDependencies: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const object = shapeObjectArgument(args, "object");
+    return resolveTextDependencyAddresses(object, objects).map(encodeAddress);
+  },
+  evaluateTextContent: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const blocks = parseTextContent(textArgument(args, "content"), objects);
+    return evaluateBlockTree(blocks, slotReaderFor(objects));
+  },
+  mathMarker: (args) => {
+    const found = matchMathMarkerAt(textArgument(args, "content"), safeIntegerArgument(args, "at"));
+    return found === undefined ? null : { latex: found.latex, display: found.display, end: found.end };
+  },
   documentVariableName: (args) => {
     const problem = documentVariableNameProblem(
       textArgument(args, "name"),
