@@ -38,7 +38,9 @@ use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
 use beheader_engine::math::ast::{MathAst, MathLine, MathProgram};
+use beheader_engine::math::eval::evaluate_math_object;
 use beheader_engine::math::lexer::tokenize_math;
+use beheader_engine::math::names::resolve_math_names;
 use beheader_engine::math::parser::parse_math;
 use beheader_engine::model::{
     ErrorCode, ErrorValue, ObjectType, has_illegal_number, is_error_value, is_illegal_number,
@@ -79,6 +81,7 @@ const SUPPORTED_CALLS: &[&str] = &[
     "parseCellReference",
     "parseFormula",
     "parseMath",
+    "resolveMathNames",
     "parseThenFormat",
     "repairAddressesInAst",
     "rewriteAddressesInAst",
@@ -502,134 +505,203 @@ fn value_argument(
 }
 
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
-    let result: Answer =
-        match call {
-            "numberToText" => {
-                number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
+    let result: Answer = match call {
+        "numberToText" => {
+            number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
+        }
+        "slotKey" => path_argument(args, "path").map(|path| json!(slot_key(&path))),
+        "isValidName" => text_argument(args, "name").map(|name| json!(is_valid_name(&name))),
+        "isCellReferenceForm" => {
+            text_argument(args, "segment").map(|segment| json!(is_cell_reference_form(&segment)))
+        }
+        "parseCellReference" => text_argument(args, "reference").map(|reference| {
+            match parse_cell_reference(&reference) {
+                None => Json::Null,
+                Some(coordinates) => json!({
+                    "column": encode_number(coordinates.column),
+                    "row": encode_number(coordinates.row),
+                }),
             }
-            "slotKey" => path_argument(args, "path").map(|path| json!(slot_key(&path))),
-            "isValidName" => text_argument(args, "name").map(|name| json!(is_valid_name(&name))),
-            "isCellReferenceForm" => text_argument(args, "segment")
-                .map(|segment| json!(is_cell_reference_form(&segment))),
-            "parseCellReference" => text_argument(args, "reference").map(|reference| {
-                match parse_cell_reference(&reference) {
-                    None => Json::Null,
-                    Some(coordinates) => json!({
-                        "column": encode_number(coordinates.column),
-                        "row": encode_number(coordinates.row),
+        }),
+        "formatCellReference" => safe_integer_argument(args, "column").and_then(|column| {
+            number_argument(args, "row")
+                .map(|row| json!(format_cell_reference(CellCoordinates { column, row })))
+        }),
+        "columnLettersToIndex" => ascii_letters_argument(args, "letters")
+            .map(|letters| encode_number(column_letters_to_index(&letters))),
+        "indexToColumnLetters" => {
+            safe_integer_argument(args, "index").map(|index| json!(index_to_column_letters(index)))
+        }
+        "toSurfacePath" => object_type_argument(args, "type").and_then(|object_type| {
+            path_argument(args, "path").map(|path| json!(to_surface_path(object_type, &path)))
+        }),
+        "isErrorValue" => value_argument(args, "value").map(|value| json!(is_error_value(&value))),
+        "isIllegalNumber" => {
+            number_argument(args, "number").map(|number| json!(is_illegal_number(number)))
+        }
+        "hasIllegalNumber" => {
+            value_argument(args, "value").map(|value| json!(has_illegal_number(&value)))
+        }
+        "valueRoundTrip" => value_argument(args, "value").map(|value| encode_value(&value)),
+        "validateFormulaAstShape" => {
+            argument(args, "ast").map(|raw| match validate_formula_ast_shape(raw) {
+                Ok(ast) => json!({ "ok": true, "ast": encode_ast(&ast) }),
+                Err(reason) => json!({ "ok": false, "reason": reason }),
+            })
+        }
+        "nestedFormulaDepth" => safe_integer_argument(args, "depth").map(|depth| {
+            match validate_formula_ast_shape(&nested_ast(depth as usize)) {
+                Ok(ast) => {
+                    json!({ "ok": true, "exceeds": exceeds_max_formula_ast_depth(&ast) })
+                }
+                Err(reason) => json!({ "ok": false, "reason": reason }),
+            }
+        }),
+        "evaluateFormula" => text_argument(args, "source").and_then(|source| {
+            let objects = object_list_argument(args, "objects")?;
+            let table = match args.get("tableObjectId") {
+                None => None,
+                Some(_) => Some(text_argument(args, "tableObjectId")?),
+            };
+            let parsed = match parse_formula(&source, &objects, table.as_deref()) {
+                Err(error) => {
+                    return Ok(json!({
+                        "error": error.error.as_str(),
+                        "message": error.message,
+                        "start": error.start,
+                    }));
+                }
+                Ok(parsed) => parsed,
+            };
+            let slots = declared_slots(args)?;
+            let read = |address: &Address| {
+                let key = address_text(address);
+                slots
+                    .iter()
+                    .find(|(held, _)| *held == key)
+                    .map(|(_, value)| value.clone())
+            };
+            let ranges = declared_ranges(args)?;
+            let read_range = |start: &Address, end: &Address| {
+                let key = format!("{}:{}", address_text(start), address_text(end));
+                match ranges.iter().find(|(held, _)| *held == key) {
+                    None => Err(ErrorValue {
+                        error: ErrorCode::Ref,
+                        message: "the case declared no values for this range".to_string(),
                     }),
+                    Some((_, answer)) => answer.clone(),
                 }
-            }),
-            "formatCellReference" => safe_integer_argument(args, "column").and_then(|column| {
-                number_argument(args, "row")
-                    .map(|row| json!(format_cell_reference(CellCoordinates { column, row })))
-            }),
-            "columnLettersToIndex" => ascii_letters_argument(args, "letters")
-                .map(|letters| encode_number(column_letters_to_index(&letters))),
-            "indexToColumnLetters" => safe_integer_argument(args, "index")
-                .map(|index| json!(index_to_column_letters(index))),
-            "toSurfacePath" => object_type_argument(args, "type").and_then(|object_type| {
-                path_argument(args, "path").map(|path| json!(to_surface_path(object_type, &path)))
-            }),
-            "isErrorValue" => {
-                value_argument(args, "value").map(|value| json!(is_error_value(&value)))
-            }
-            "isIllegalNumber" => {
-                number_argument(args, "number").map(|number| json!(is_illegal_number(number)))
-            }
-            "hasIllegalNumber" => {
-                value_argument(args, "value").map(|value| json!(has_illegal_number(&value)))
-            }
-            "valueRoundTrip" => value_argument(args, "value").map(|value| encode_value(&value)),
-            "validateFormulaAstShape" => {
-                argument(args, "ast").map(|raw| match validate_formula_ast_shape(raw) {
-                    Ok(ast) => json!({ "ok": true, "ast": encode_ast(&ast) }),
-                    Err(reason) => json!({ "ok": false, "reason": reason }),
-                })
-            }
-            "nestedFormulaDepth" => safe_integer_argument(args, "depth").map(|depth| {
-                match validate_formula_ast_shape(&nested_ast(depth as usize)) {
-                    Ok(ast) => {
-                        json!({ "ok": true, "exceeds": exceeds_max_formula_ast_depth(&ast) })
-                    }
-                    Err(reason) => json!({ "ok": false, "reason": reason }),
+            };
+            let value = if args.contains_key("ranges") {
+                evaluate(&parsed, &read, Some(&read_range))
+            } else {
+                evaluate(&parsed, &read, None)
+            };
+            Ok(encode_value(&value))
+        }),
+        "evaluateMathObject" => text_argument(args, "source").and_then(|source| {
+            let program = match parse_math(&source) {
+                Err(error) => {
+                    return Ok(json!({
+                        "error": "#PARSE",
+                        "message": error.message,
+                        "line": error.line,
+                    }));
                 }
-            }),
-            "evaluateFormula" => text_argument(args, "source").and_then(|source| {
-                let objects = object_list_argument(args, "objects")?;
-                let table = match args.get("tableObjectId") {
-                    None => None,
-                    Some(_) => Some(text_argument(args, "tableObjectId")?),
-                };
-                let parsed = match parse_formula(&source, &objects, table.as_deref()) {
-                    Err(error) => {
-                        return Ok(json!({
-                            "error": error.error.as_str(),
-                            "message": error.message,
-                            "start": error.start,
-                        }));
-                    }
-                    Ok(parsed) => parsed,
-                };
-                let slots = declared_slots(args)?;
-                let read = |address: &Address| {
-                    let key = address_text(address);
-                    slots
+                Ok(program) => program,
+            };
+            let numbers = |name: &str| -> Result<std::collections::HashMap<String, f64>, String> {
+                match args.get(name) {
+                    None => Ok(std::collections::HashMap::new()),
+                    Some(Json::Object(held)) => held
                         .iter()
-                        .find(|(held, _)| *held == key)
-                        .map(|(_, value)| value.clone())
-                };
-                let ranges = declared_ranges(args)?;
-                let read_range = |start: &Address, end: &Address| {
-                    let key = format!("{}:{}", address_text(start), address_text(end));
-                    match ranges.iter().find(|(held, _)| *held == key) {
-                        None => Err(ErrorValue {
-                            error: ErrorCode::Ref,
-                            message: "the case declared no values for this range".to_string(),
-                        }),
-                        Some((_, answer)) => answer.clone(),
-                    }
-                };
-                let value = if args.contains_key("ranges") {
-                    evaluate(&parsed, &read, Some(&read_range))
-                } else {
-                    evaluate(&parsed, &read, None)
-                };
-                Ok(encode_value(&value))
-            }),
-            "parseMath" => text_argument(args, "source").map(|source| match parse_math(&source) {
+                        .map(|(key, value)| {
+                            decode_number(value)
+                                .map(|number| (key.clone(), number))
+                                .map_err(|error| {
+                                    format!("the argument \"{name}\" holds numbers: {error}")
+                                })
+                        })
+                        .collect(),
+                    Some(_) => Err(format!("the argument \"{name}\" is an object of numbers")),
+                }
+            };
+            let evaluation = evaluate_math_object(
+                &program,
+                &numbers("inputs")?,
+                &numbers("references")?,
+                &numbers("seeds")?,
+            );
+            Ok(Json::Array(
+                evaluation
+                    .exports
+                    .iter()
+                    .map(|(name, value)| json!([name, encode_value(value)]))
+                    .collect(),
+            ))
+        }),
+        "resolveMathNames" => text_argument(args, "source").map(|source| {
+            let program = match parse_math(&source) {
+                Err(error) => {
+                    return json!({
+                        "error": "#PARSE",
+                        "message": error.message,
+                        "line": error.line,
+                    });
+                }
+                Ok(program) => program,
+            };
+            match resolve_math_names(&program) {
                 Err(error) => json!({
                     "error": "#PARSE",
                     "message": error.message,
                     "line": error.line,
                 }),
-                Ok(program) => encode_math_program(&program),
-            }),
-            "tokenizeMath" => {
-                text_argument(args, "source").map(|source| match tokenize_math(&source) {
-                    Err(error) => json!({
-                        "error": "#PARSE",
-                        "message": error.message,
-                        "start": error.start,
-                    }),
-                    Ok(tokens) => Json::Array(
-                        tokens
-                            .iter()
-                            .map(|token| {
-                                json!({
-                                    "type": token.kind.as_str(),
-                                    "text": token.text,
-                                    "start": token.start,
-                                    "value": encode_number(token.value),
-                                    "name": token.name,
-                                })
-                            })
-                            .collect(),
-                    ),
-                })
+                Ok(names) => json!({
+                    "references": names.references.iter().map(encode_address).collect::<Vec<_>>(),
+                    "exports": names.exports,
+                    "inputs": names.inputs,
+                    "functions": names.functions,
+                    "seeds": names.seeds,
+                }),
             }
-            "extractDependencies" => argument(args, "ast").cloned().map(|raw| {
-                match validate_formula_ast_shape(&raw) {
+        }),
+        "parseMath" => text_argument(args, "source").map(|source| match parse_math(&source) {
+            Err(error) => json!({
+                "error": "#PARSE",
+                "message": error.message,
+                "line": error.line,
+            }),
+            Ok(program) => encode_math_program(&program),
+        }),
+        "tokenizeMath" => {
+            text_argument(args, "source").map(|source| match tokenize_math(&source) {
+                Err(error) => json!({
+                    "error": "#PARSE",
+                    "message": error.message,
+                    "start": error.start,
+                }),
+                Ok(tokens) => Json::Array(
+                    tokens
+                        .iter()
+                        .map(|token| {
+                            json!({
+                                "type": token.kind.as_str(),
+                                "text": token.text,
+                                "start": token.start,
+                                "value": encode_number(token.value),
+                                "name": token.name,
+                            })
+                        })
+                        .collect(),
+                ),
+            })
+        }
+        "extractDependencies" => {
+            argument(args, "ast")
+                .cloned()
+                .map(|raw| {
+                    match validate_formula_ast_shape(&raw) {
                 Err(reason) => json!({ "ok": false, "reason": reason }),
                 Ok(ast) => Json::Array(
                     extract_dependencies(&ast)
@@ -647,161 +719,162 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                         .collect(),
                 ),
             }
-            }),
-            "rewriteAddressesInAst" => argument(args, "ast").cloned().and_then(|raw| {
-                let from = text_argument(args, "fromObjectId")?;
-                let to = text_argument(args, "toObjectId")?;
-                Ok(match validate_formula_ast_shape(&raw) {
-                    Err(reason) => json!({ "ok": false, "reason": reason }),
-                    Ok(ast) => encode_ast(&rewrite_addresses_in_ast(&ast, &|address: &Address| {
-                        if address.object_id == from {
-                            Address {
-                                object_id: to.clone(),
-                                path: address.path.clone(),
-                            }
+                })
+        }
+        "rewriteAddressesInAst" => argument(args, "ast").cloned().and_then(|raw| {
+            let from = text_argument(args, "fromObjectId")?;
+            let to = text_argument(args, "toObjectId")?;
+            Ok(match validate_formula_ast_shape(&raw) {
+                Err(reason) => json!({ "ok": false, "reason": reason }),
+                Ok(ast) => encode_ast(&rewrite_addresses_in_ast(&ast, &|address: &Address| {
+                    if address.object_id == from {
+                        Address {
+                            object_id: to.clone(),
+                            path: address.path.clone(),
+                        }
+                    } else {
+                        address.clone()
+                    }
+                })),
+            })
+        }),
+        "repairAddressesInAst" => argument(args, "ast").cloned().and_then(|raw| {
+            let deleted = text_argument(args, "deletedObjectId")?;
+            Ok(match validate_formula_ast_shape(&raw) {
+                Err(reason) => json!({ "ok": false, "reason": reason }),
+                Ok(ast) => encode_ast(&repair_addresses_in_ast(
+                    &ast,
+                    &|address: &Address| {
+                        if address.object_id == deleted {
+                            None
                         } else {
-                            address.clone()
+                            Some(address.clone())
                         }
-                    })),
-                })
-            }),
-            "repairAddressesInAst" => argument(args, "ast").cloned().and_then(|raw| {
-                let deleted = text_argument(args, "deletedObjectId")?;
+                    },
+                    &|start: &Address, end: &Address| {
+                        if start.object_id == deleted || end.object_id == deleted {
+                            None
+                        } else {
+                            Some((start.clone(), end.clone()))
+                        }
+                    },
+                )),
+            })
+        }),
+        "formatFormula" => argument(args, "ast").cloned().and_then(|raw| {
+            object_list_argument(args, "objects").and_then(|objects| {
+                let relative = match args.get("relativeToObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "relativeToObjectId")?),
+                };
                 Ok(match validate_formula_ast_shape(&raw) {
                     Err(reason) => json!({ "ok": false, "reason": reason }),
-                    Ok(ast) => encode_ast(&repair_addresses_in_ast(
-                        &ast,
-                        &|address: &Address| {
-                            if address.object_id == deleted {
-                                None
-                            } else {
-                                Some(address.clone())
-                            }
-                        },
-                        &|start: &Address, end: &Address| {
-                            if start.object_id == deleted || end.object_id == deleted {
-                                None
-                            } else {
-                                Some((start.clone(), end.clone()))
-                            }
-                        },
-                    )),
+                    Ok(ast) => json!(format_formula(&ast, &objects, relative.as_deref())),
                 })
-            }),
-            "formatFormula" => argument(args, "ast").cloned().and_then(|raw| {
-                object_list_argument(args, "objects").and_then(|objects| {
-                    let relative = match args.get("relativeToObjectId") {
-                        None => None,
-                        Some(_) => Some(text_argument(args, "relativeToObjectId")?),
-                    };
-                    Ok(match validate_formula_ast_shape(&raw) {
-                        Err(reason) => json!({ "ok": false, "reason": reason }),
-                        Ok(ast) => json!(format_formula(&ast, &objects, relative.as_deref())),
-                    })
-                })
-            }),
-            "parseThenFormat" => text_argument(args, "source").and_then(|source| {
-                object_list_argument(args, "objects").and_then(|objects| {
-                    let table = match args.get("tableObjectId") {
-                        None => None,
-                        Some(_) => Some(text_argument(args, "tableObjectId")?),
-                    };
-                    Ok(match parse_formula(&source, &objects, table.as_deref()) {
-                        Err(error) => json!({
-                            "error": error.error.as_str(),
-                            "message": error.message,
-                            "start": error.start,
-                        }),
-                        Ok(parsed) => {
-                            let printed = format_formula(&parsed, &objects, table.as_deref());
-                            let again = parse_formula(&printed, &objects, table.as_deref());
-                            json!({
-                                "printed": printed,
-                                "reparsedEqual": again.is_ok_and(|again| again == parsed),
-                            })
-                        }
-                    })
-                })
-            }),
-            "parseFormula" => text_argument(args, "source").and_then(|source| {
-                object_list_argument(args, "objects").and_then(|objects| {
-                    let table = match args.get("tableObjectId") {
-                        None => None,
-                        Some(_) => Some(text_argument(args, "tableObjectId")?),
-                    };
-                    Ok(match parse_formula(&source, &objects, table.as_deref()) {
-                        Ok(ast) => encode_ast(&ast),
-                        Err(error) => json!({
-                            "error": error.error.as_str(),
-                            "message": error.message,
-                            "start": error.start,
-                        }),
-                    })
-                })
-            }),
-            "lex" => text_argument(args, "source").map(|source| match lex(&source) {
-                Err(error) => json!({
-                    "error": "#PARSE",
-                    "message": error.message,
-                    "start": error.start,
-                }),
-                Ok(tokens) => Json::Array(
-                    tokens
-                        .iter()
-                        .map(|token| {
-                            let mut held = Map::new();
-                            held.insert("type".into(), json!(token.kind.as_str()));
-                            held.insert("text".into(), json!(token.text));
-                            held.insert("start".into(), json!(token.start));
-                            match &token.kind {
-                                TokenKind::Number(number) => {
-                                    held.insert("value".into(), encode_number(*number));
-                                }
-                                TokenKind::Text(text) => {
-                                    held.insert("value".into(), json!(text));
-                                }
-                                TokenKind::Boolean(boolean) => {
-                                    held.insert("value".into(), json!(boolean));
-                                }
-                                _ => {}
-                            }
-                            Json::Object(held)
+            })
+        }),
+        "parseThenFormat" => text_argument(args, "source").and_then(|source| {
+            object_list_argument(args, "objects").and_then(|objects| {
+                let table = match args.get("tableObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "tableObjectId")?),
+                };
+                Ok(match parse_formula(&source, &objects, table.as_deref()) {
+                    Err(error) => json!({
+                        "error": error.error.as_str(),
+                        "message": error.message,
+                        "start": error.start,
+                    }),
+                    Ok(parsed) => {
+                        let printed = format_formula(&parsed, &objects, table.as_deref());
+                        let again = parse_formula(&printed, &objects, table.as_deref());
+                        json!({
+                            "printed": printed,
+                            "reparsedEqual": again.is_ok_and(|again| again == parsed),
                         })
-                        .collect(),
-                ),
-            }),
-            "isLegalPortName" => {
-                text_argument(args, "name").map(|name| json!(is_legal_port_name(&name)))
-            }
-            "nearestName" => text_argument(args, "typed").and_then(|typed| {
-                text_list_argument(args, "candidates").map(|candidates| {
-                    match nearest_name(&typed, candidates.iter().map(String::as_str)) {
-                        None => Json::Null,
-                        Some(nearest) => json!(nearest),
                     }
                 })
-            }),
-            "addressKey" => {
-                address_argument(args, "address").map(|address| json!(address_key(&address)))
-            }
-            "parseAddress" => text_argument(args, "input").and_then(|input| {
-                object_list_argument(args, "objects").map(|objects| {
-                    match parse_address(&input, &objects) {
-                        Ok(address) => encode_address(&address),
-                        Err(error) => encode_address_error(&error),
-                    }
+            })
+        }),
+        "parseFormula" => text_argument(args, "source").and_then(|source| {
+            object_list_argument(args, "objects").and_then(|objects| {
+                let table = match args.get("tableObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "tableObjectId")?),
+                };
+                Ok(match parse_formula(&source, &objects, table.as_deref()) {
+                    Ok(ast) => encode_ast(&ast),
+                    Err(error) => json!({
+                        "error": error.error.as_str(),
+                        "message": error.message,
+                        "start": error.start,
+                    }),
                 })
+            })
+        }),
+        "lex" => text_argument(args, "source").map(|source| match lex(&source) {
+            Err(error) => json!({
+                "error": "#PARSE",
+                "message": error.message,
+                "start": error.start,
             }),
-            "formatAddress" => address_argument(args, "address").and_then(|address| {
-                object_list_argument(args, "objects").map(|objects| {
-                    match format_address(&address, &objects) {
-                        Ok(text) => json!(text),
-                        Err(error) => encode_address_error(&error),
-                    }
-                })
-            }),
-            _ => return None,
-        };
+            Ok(tokens) => Json::Array(
+                tokens
+                    .iter()
+                    .map(|token| {
+                        let mut held = Map::new();
+                        held.insert("type".into(), json!(token.kind.as_str()));
+                        held.insert("text".into(), json!(token.text));
+                        held.insert("start".into(), json!(token.start));
+                        match &token.kind {
+                            TokenKind::Number(number) => {
+                                held.insert("value".into(), encode_number(*number));
+                            }
+                            TokenKind::Text(text) => {
+                                held.insert("value".into(), json!(text));
+                            }
+                            TokenKind::Boolean(boolean) => {
+                                held.insert("value".into(), json!(boolean));
+                            }
+                            _ => {}
+                        }
+                        Json::Object(held)
+                    })
+                    .collect(),
+            ),
+        }),
+        "isLegalPortName" => {
+            text_argument(args, "name").map(|name| json!(is_legal_port_name(&name)))
+        }
+        "nearestName" => text_argument(args, "typed").and_then(|typed| {
+            text_list_argument(args, "candidates").map(|candidates| {
+                match nearest_name(&typed, candidates.iter().map(String::as_str)) {
+                    None => Json::Null,
+                    Some(nearest) => json!(nearest),
+                }
+            })
+        }),
+        "addressKey" => {
+            address_argument(args, "address").map(|address| json!(address_key(&address)))
+        }
+        "parseAddress" => text_argument(args, "input").and_then(|input| {
+            object_list_argument(args, "objects").map(|objects| {
+                match parse_address(&input, &objects) {
+                    Ok(address) => encode_address(&address),
+                    Err(error) => encode_address_error(&error),
+                }
+            })
+        }),
+        "formatAddress" => address_argument(args, "address").and_then(|address| {
+            object_list_argument(args, "objects").map(|objects| {
+                match format_address(&address, &objects) {
+                    Ok(text) => json!(text),
+                    Err(error) => encode_address_error(&error),
+                }
+            })
+        }),
+        _ => return None,
+    };
     Some(result)
 }
 

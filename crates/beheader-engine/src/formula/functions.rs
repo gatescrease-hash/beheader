@@ -19,6 +19,7 @@
 //! where either side is NaN, where the Rust methods answer the other side.
 
 use crate::model::{ErrorCode, ErrorValue, Value, is_illegal_number};
+use crate::number::{js_max, js_min, js_round};
 
 /// The word a refusal uses for the kind of value it was handed.
 pub fn describe_value_type(value: &Value) -> &'static str {
@@ -112,56 +113,6 @@ pub fn finite_result(name: &str, value: f64) -> Value {
         ));
     }
     Value::Number(value)
-}
-
-/// Rounds a half toward positive infinity, which is what `Math.round` does and
-/// what `f64::round` does not: the Rust method rounds a half away from zero, so
-/// it answers -3 where JavaScript answers -2 for -2.5.
-pub fn js_round(x: f64) -> f64 {
-    if !x.is_finite() || x == 0.0 {
-        return x;
-    }
-    if x > 0.0 && x < 0.5 {
-        return 0.0;
-    }
-    if (-0.5..0.0).contains(&x) {
-        return -0.0;
-    }
-    let floor = x.floor();
-    if x - floor >= 0.5 { floor + 1.0 } else { floor }
-}
-
-/// The smaller of two numbers, answering NaN where either is NaN. `f64::min`
-/// answers the other side instead, which would hide a NaN that the check for
-/// an illegal number is there to catch.
-fn js_min(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() {
-        return f64::NAN;
-    }
-    if a < b {
-        a
-    } else if b < a {
-        b
-    } else if a.is_sign_negative() {
-        a
-    } else {
-        b
-    }
-}
-
-fn js_max(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() {
-        return f64::NAN;
-    }
-    if a > b {
-        a
-    } else if b > a {
-        b
-    } else if a.is_sign_positive() {
-        a
-    } else {
-        b
-    }
 }
 
 /// How many arguments a function takes.

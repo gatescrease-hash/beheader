@@ -1,0 +1,506 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "math.evaluate",
+  "sourceTest": "src/engine/math/eval.test.ts",
+  "requirement": "SPEC.md section 12, the math object",
+  "comparison": "exact",
+  "note": "The exports come back as a list of pairs, because a JSON object reaches the Rust runner through a sorted map and the order the lines define the names in is part of what is compared. An integral is compared exactly, because both engines run the same fixed number of intervals of Simpson's rule over binary64.",
+  "cases": [
+    {
+      "name": "a number",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=42"
+      }
+    },
+    {
+      "name": "a sum",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=1+2"
+      }
+    },
+    {
+      "name": "a product",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=3*4"
+      }
+    },
+    {
+      "name": "a quotient",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=7/2"
+      }
+    },
+    {
+      "name": "a division by zero",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=1/0"
+      }
+    },
+    {
+      "name": "a power",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=2^10"
+      }
+    },
+    {
+      "name": "a negation",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=-5"
+      }
+    },
+    {
+      "name": "a fraction",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\frac{3}{4}"
+      }
+    },
+    {
+      "name": "a value read from an input",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=x*2",
+        "inputs": {
+          "x": 3
+        }
+      }
+    },
+    {
+      "name": "a name with no value here",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=x"
+      }
+    },
+    {
+      "name": "a later line reading an earlier one",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "a=2\nb=a*3"
+      }
+    },
+    {
+      "name": "a negative zero that comes back plain",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=0*-1"
+      }
+    },
+    {
+      "name": "an address carrying a number",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\gpref{o.v}+1",
+        "references": {
+          "o.v": 41
+        }
+      }
+    },
+    {
+      "name": "an address carrying nothing",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\gpref{o.v}+1"
+      }
+    },
+    {
+      "name": "sin of zero",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sin(0)"
+      }
+    },
+    {
+      "name": "cos of zero",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\cos(0)"
+      }
+    },
+    {
+      "name": "the natural logarithm",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\ln(1)"
+      }
+    },
+    {
+      "name": "the base ten logarithm",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\log(100)"
+      }
+    },
+    {
+      "name": "a square root",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sqrt{9}"
+      }
+    },
+    {
+      "name": "a square root of a negative",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sqrt{-1}"
+      }
+    },
+    {
+      "name": "an absolute value",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=|{-3}|"
+      }
+    },
+    {
+      "name": "a floor",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\floor(2.7)"
+      }
+    },
+    {
+      "name": "a ceiling",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\ceil(2.1)"
+      }
+    },
+    {
+      "name": "round of a half, which goes toward positive infinity",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\round(2.5)"
+      }
+    },
+    {
+      "name": "round of a negative half",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\round(-2.5)"
+      }
+    },
+    {
+      "name": "the sign of a positive",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sign(3)"
+      }
+    },
+    {
+      "name": "the sign of a negative",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sign(-3)"
+      }
+    },
+    {
+      "name": "the sign of zero",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sign(0)"
+      }
+    },
+    {
+      "name": "the smaller of two",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\min(3,1)"
+      }
+    },
+    {
+      "name": "the larger of two",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\max(3,1)"
+      }
+    },
+    {
+      "name": "a modulus",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\mod(7,3)"
+      }
+    },
+    {
+      "name": "a modulus with a negative left side",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\mod(-7,3)"
+      }
+    },
+    {
+      "name": "an exponential",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\exp(0)"
+      }
+    },
+    {
+      "name": "an arctangent",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\arctan(0)"
+      }
+    },
+    {
+      "name": "a hyperbolic sine of zero",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sinh(0)"
+      }
+    },
+    {
+      "name": "a function of one parameter",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "f(t)=t*2\ny=f(3)"
+      }
+    },
+    {
+      "name": "a function of two parameters",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "f(a,b)=a+b\ny=f(2,3)"
+      }
+    },
+    {
+      "name": "a function reading an input",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "f(t)=t*k\ny=f(3)",
+        "inputs": {
+          "k": 5
+        }
+      }
+    },
+    {
+      "name": "a function calling an earlier function",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "f(t)=t*2\ng(t)=f(t)+1\ny=g(3)"
+      }
+    },
+    {
+      "name": "a sum over a range",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sum_{i=1}^{5}i"
+      }
+    },
+    {
+      "name": "a product over a range",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\prod_{i=1}^{5}i"
+      }
+    },
+    {
+      "name": "an empty sum, where the upper bound is below the lower",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sum_{i=5}^{1}i"
+      }
+    },
+    {
+      "name": "an empty product",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\prod_{i=5}^{1}i"
+      }
+    },
+    {
+      "name": "a sum of one term",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sum_{i=3}^{3}i"
+      }
+    },
+    {
+      "name": "a sum whose bounds are not whole",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sum_{i=1}^{n}i",
+        "inputs": {
+          "n": 2.5
+        }
+      }
+    },
+    {
+      "name": "a sum wider than the limit",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sum_{i=1}^{n}i",
+        "inputs": {
+          "n": 200000
+        }
+      }
+    },
+    {
+      "name": "a sum reading an input in its body",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\sum_{i=1}^{3}i*k",
+        "inputs": {
+          "k": 2
+        }
+      }
+    },
+    {
+      "name": "an integral of a constant",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\int_{0}^{2}1\\,dx"
+      }
+    },
+    {
+      "name": "an integral of the identity",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\int_{0}^{1}x\\,dx"
+      }
+    },
+    {
+      "name": "an integral of a square",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\int_{0}^{1}x^2\\,dx"
+      }
+    },
+    {
+      "name": "an integral of a sine over a half turn",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\int_{0}^{\\pi}\\sin(x)\\,dx"
+      }
+    },
+    {
+      "name": "an integral whose bounds are equal",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\int_{2}^{2}x\\,dx"
+      }
+    },
+    {
+      "name": "an integral running backwards",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "y=\\int_{1}^{0}x\\,dx"
+      }
+    },
+    {
+      "name": "a solve with a root above the seed",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}x^2=4",
+        "seeds": {
+          "x": 1
+        }
+      }
+    },
+    {
+      "name": "a solve with a root below the seed",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}x^2=4",
+        "seeds": {
+          "x": -1
+        }
+      }
+    },
+    {
+      "name": "a solve whose seed is already the root",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}x=3",
+        "seeds": {
+          "x": 3
+        }
+      }
+    },
+    {
+      "name": "a solve with no seed given, which starts at zero",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}x+2=5"
+      }
+    },
+    {
+      "name": "a solve over a linear equation",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}2*x+1=7"
+      }
+    },
+    {
+      "name": "a root the curve touches without crossing",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}(x-2)^2=0",
+        "seeds": {
+          "x": 0
+        }
+      }
+    },
+    {
+      "name": "a solve with no root anywhere",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}x^2+1=0"
+      }
+    },
+    {
+      "name": "a solve reading an input",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}x+y=10",
+        "inputs": {
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a solve whose value a later line reads",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "\\solve{x}x+2=5\nz=x*10"
+      }
+    },
+    {
+      "name": "one line failing leaves the others alone",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "a=1/0\nb=2"
+      }
+    },
+    {
+      "name": "several exports in order",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "a=1\nb=2\nc=3"
+      }
+    },
+    {
+      "name": "an expression line exports nothing",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": "1+1"
+      }
+    },
+    {
+      "name": "a source with no lines",
+      "call": "evaluateMathObject",
+      "args": {
+        "source": ""
+      }
+    }
+  ]
+}

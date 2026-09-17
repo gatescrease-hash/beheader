@@ -131,6 +131,20 @@
         "src/engine/math/parser.ts",
         "src/engine/math/ast.ts"
       ]
+    },
+    {
+      "id": "math.names",
+      "file": "fixtures/math.names.json",
+      "covers": [
+        "src/engine/math/names.ts"
+      ]
+    },
+    {
+      "id": "math.evaluate",
+      "file": "fixtures/math.evaluate.json",
+      "covers": [
+        "src/engine/math/eval.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -141,8 +155,6 @@
     "src/engine/graph/eval.ts",
     "src/engine/index.ts",
     "src/engine/journal.ts",
-    "src/engine/math/eval.ts",
-    "src/engine/math/names.ts",
     "src/engine/mutation.ts",
     "src/engine/primitives/doc.ts",
     "src/engine/primitives/edge.ts",

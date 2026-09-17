@@ -5,5 +5,7 @@
 //! on a derived slot and nowhere else.
 
 pub mod ast;
+pub mod eval;
 pub mod lexer;
+pub mod names;
 pub mod parser;

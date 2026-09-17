@@ -5,12 +5,13 @@ code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
 
 [RUST_PORT.md](RUST_PORT.md) holds the engine migration, its work register,
-and its current handoff. The spec has released that scope, and the first five
-packages have landed. The boundary is frozen in a generated inventory, a Rust
+and its current handoff. The spec has released that scope, and seven of the
+seventeen packages have landed. The boundary is frozen in a generated inventory, a Rust
 crate answers the same fixtures the TypeScript engine does, a browser binding
 takes its measurements from the page, the data foundation holds values, slots,
-objects, addresses and edges, and the formula language reaches from source text
-to a tree and back.
+objects, addresses and edges, and both languages run end to end: a formula from
+source text to a value, and a math source to the value of every name it
+defines.
 
 ---
 
@@ -21,8 +22,8 @@ to a tree and back.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 132 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 561 cases match across the two engines, with none awaiting either. |
+| Rust | 154 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 662 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -213,7 +214,9 @@ file.
 | `beheader-engine/src/math/ast.rs` | The node and line types of the math language, and its depth limit. |
 | `beheader-engine/src/math/lexer.rs` | The LaTeX a math field writes, turned into tokens. |
 | `beheader-engine/src/math/parser.rs` | Tokens to a program, over two passes, with juxtaposition as multiplication. |
-| `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
+| `beheader-engine/src/math/names.rs` | Which of the four groups each bare name falls into, and so the slot set. |
+| `beheader-engine/src/math/eval.rs` | A program over its inputs, with a fixed quadrature and a search for a root. |
+| `beheader-engine/src/number.rs` | The text JavaScript prints for a number, and the arithmetic whose Rust answer differs. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
 | `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |
 | `beheader-conformance/src/main.rs` | Answers the shared fixtures with the Rust engine. |

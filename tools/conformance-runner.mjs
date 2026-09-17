@@ -75,7 +75,9 @@ const {
   parseAddress,
   parseCellReference,
   parseFormula,
+  evaluateMathObject,
   parseMath,
+  resolveMathNames,
   slotKey,
   tokenizeMath,
   toSurfacePath,
@@ -542,6 +544,36 @@ const CALLS = {
               message: "the case declared no values for this range",
             };
     return encodeValue(evaluateFormulaAst(parsed, read, readRange));
+  },
+  evaluateMathObject: (args) => {
+    const program = parseMath(textArgument(args, "source"));
+    if ("error" in program) {
+      return { error: program.error, message: program.message, line: program.line };
+    }
+    const numbers = (name) =>
+      Object.fromEntries(Object.entries(args[name] ?? {}).map(([key, value]) => [key, decodeNumber(value)]));
+    const evaluation = evaluateMathObject(program, numbers("inputs"), numbers("references"), numbers("seeds"));
+    // The exports go out as a list of pairs, because a JSON object reaches the
+    // Rust runner through a sorted map and the order the lines define the
+    // names in is part of what the comparison asks about.
+    return Object.entries(evaluation.exports).map(([name, value]) => [name, encodeValue(value)]);
+  },
+  resolveMathNames: (args) => {
+    const program = parseMath(textArgument(args, "source"));
+    if ("error" in program) {
+      return { error: program.error, message: program.message, line: program.line };
+    }
+    const names = resolveMathNames(program);
+    if ("error" in names) {
+      return { error: names.error, message: names.message, line: names.line };
+    }
+    return {
+      references: names.references.map(encodeAddress),
+      exports: [...names.exports],
+      inputs: [...names.inputs],
+      functions: [...names.functions],
+      seeds: [...names.seeds],
+    };
   },
   parseMath: (args) => {
     const result = parseMath(textArgument(args, "source"));

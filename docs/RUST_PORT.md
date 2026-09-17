@@ -942,7 +942,7 @@ met, and a package is done only where the status column says so.
 | `RUST-005` | Formula syntax, formatting, dependencies | `004` | done |
 | `RUST-006` | Formula evaluation and functions | `005` | active |
 | `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | planned |
-| `RUST-008` | Math language and evaluator | `004`, `005` | planned |
+| `RUST-008` | Math language and evaluator | `004`, `005` | done |
 | `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | planned |
 | `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | planned |
 | `RUST-011` | Atomic mutations and repairs | `010` | planned |
@@ -1226,6 +1226,25 @@ references, seeds, and every existing bounded-loop parameter.
 sums supplement baseline comparisons. Solver fixtures cover seed-selected
 roots, no sign change, invalid domains, discontinuities, and exhausted bounds.
 The parser, binder, and evaluator agree on reachable names.
+
+**Landed.** All four stages, and the seam the graph calls the language through.
+The lexer answers to the editor that writes its LaTeX rather than to a person,
+so a subscript belongs to the name in front of it and a name of more than one
+letter arrives wrapped. The parser runs two passes, because whether a name in
+front of a bracket calls a function or multiplies by one rests on a definition
+that may sit further down. The binder sorts every bare name into bound,
+defined, free or called, which is what decides the slot set. The evaluator
+reads inputs, references and seeds, integrates by a fixed rule, and solves an
+implicit line by looking outward from its seed for a sign change.
+
+Four fixtures carry it: `math.lex`, `math.parse`, `math.names` and
+`math.evaluate`. The quadrature agrees to the last digit across the two
+engines, because both run the same count of Simpson intervals over binary64 in
+the same order.
+
+`round`, `sign`, `min` and `max` answer the way JavaScript answers rather than
+the way Rust does. Those four moved into `number.rs` with the number text, so
+both languages read one copy of each and neither can drift from the other.
 
 ### `RUST-009`: Integrate text and math primitives
 
@@ -1556,61 +1575,53 @@ implemented, then its lasting rationale belongs beside that code.
 | Field | Current value |
 | --- | --- |
 | Migration phase | Implementation, through Gate B |
-| Active implementation package | `RUST-006`. `RUST-008` is ready and unstarted |
+| Active implementation package | `RUST-007`, ready and unstarted |
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
 | Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` is part resolved, and `D-010` holds a recorded choice |
-| Next implementation action | Port formula syntax under `RUST-005` |
-| Completion evidence | `RUST-001` through `RUST-005`, under their headings above |
+| Next implementation action | Port the primitives and the schema under `RUST-007` |
+| Completion evidence | `RUST-001` through `RUST-006` and `RUST-008`, under their headings above |
 
 ### Handoff record for the active package
 
 ```text
-Package: RUST-006, formula evaluation and functions
-Status: active
+Package: RUST-007, geometry, tables, basic schemas and the script stub
+Status: ready, unstarted
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
 Completed dependencies:
   RUST-004 supplies values, slots, objects, ports, vertex counts, addresses,
   edge data, measurement capabilities and the initial wire codec.
-  RUST-005 supplies the lexer, the tree with its shape and depth checks, the
-  parser, the printer, dependency extraction, the two resize rewrites, and the
-  name, argument count and two habits of all 23 functions.
-Completed cases:
-  What each of the 23 functions computes, in formula/functions.rs, with the
-  bodies of the three lazy ones held by the evaluator instead.
-  Operator behaviour, the lazy reading that leaves an untaken branch alone,
-  argument validation, reads over a range, and the path an error takes up a
-  tree, in formula/eval.rs.
-  Three habits of JavaScript reproduced on purpose: a half rounds toward
-  positive infinity rather than away from zero, so ROUND(-2.5, 0) is -2; LEN
-  counts UTF-16 code units, so a character outside the basic plane counts as
-  two; and the smaller or larger of two numbers answers NaN where either side
-  is NaN, which is what keeps the check for an illegal number reachable.
+  RUST-005 and RUST-006 supply the whole formula language, from source text to
+  a value, with the 23 function bodies.
+  RUST-008 supplies the whole math language and the one seam the graph calls it
+  through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  None. The package is ready for its evidence to be read against the criteria
-  under its heading above.
+  The five primitives, the dynamic slot families the schema resolves per
+  object, and the stub the script node arrives behind. The schema is shared
+  with RUST-010, which completes it.
 Open decision IDs: none specific to this package
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
   graph.address-key carry the RUST-004 surface
   formula.lex, formula.ast-shape, formula.parse, formula.format and
-  formula.dependencies carry RUST-005, and formula.evaluate carries RUST-006
+  formula.dependencies carry RUST-005, formula.evaluate carries RUST-006, and
+  math.lex, math.parse, math.names and math.evaluate carry RUST-008
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
-  npm test                      2744 Vitest tests and 23 tooling tests pass
+  npm test                      2745 Vitest tests and 23 tooling tests pass
   npm run typecheck             both configs pass
   npm run build                 succeeds
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  106 pass
+  cargo test --workspace --locked                                  154 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           454 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           662 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1621,11 +1632,10 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: read the RUST-006 evidence against its criteria, then
-  start RUST-007 or RUST-008.
-Dependencies that can proceed independently:
-  RUST-008, the math language, needs the model and the formula syntax, and both
-  have landed.
+Next concrete action: port primitives/geometry.ts and primitives/table.ts,
+  then the schema they resolve their slots through.
+Dependencies that can proceed independently: none. RUST-009 needs this package
+  and RUST-008, and RUST-010 needs the schema this one begins.
 ```
 
 A resumed session compares the recorded commits with the current branch,

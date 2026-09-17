@@ -1,0 +1,256 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "math.names",
+  "sourceTest": "src/engine/math/names.test.ts",
+  "requirement": "SPEC.md section 12, the math object",
+  "comparison": "exact",
+  "note": "Every bare name is bound by an enclosing form, defined by an earlier line, free and so an input port, or called as a function. The order of the lists is the order the source reads the names in, because the slot set is built from it.",
+  "cases": [
+    {
+      "name": "a free name becomes an input",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=x"
+      }
+    },
+    {
+      "name": "two free names, in the order they are first read",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=x+z"
+      }
+    },
+    {
+      "name": "a name read twice is listed once",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=x+x"
+      }
+    },
+    {
+      "name": "a defined name read below its line",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "a=1\nb=a+1"
+      }
+    },
+    {
+      "name": "a name read above the line that defines it",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "b=a+1\na=1"
+      }
+    },
+    {
+      "name": "a defined name is not also an input",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "a=1\nb=a"
+      }
+    },
+    {
+      "name": "an address becomes a reference",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\gpref{obj_1.value}"
+      }
+    },
+    {
+      "name": "the same address twice, listed once",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\gpref{obj_1.value}+\\gpref{obj_1.value}"
+      }
+    },
+    {
+      "name": "two addresses in the order they are read",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\gpref{b.v}+\\gpref{a.v}"
+      }
+    },
+    {
+      "name": "an integral variable is bound and brings no port",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\int_{0}^{1}x\\,dx"
+      }
+    },
+    {
+      "name": "an integral over a free name, which does bring one",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\int_{0}^{1}\\sin(x_{in})\\,dx"
+      }
+    },
+    {
+      "name": "an integral bound reading a free name",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\int_{0}^{n}x\\,dx"
+      }
+    },
+    {
+      "name": "a series variable is bound over its body alone",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\sum_{i=1}^{n}i"
+      }
+    },
+    {
+      "name": "a series body reading a free name",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\sum_{i=1}^{n}i*k"
+      }
+    },
+    {
+      "name": "a function parameter is bound over its body",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "f(t)=t*2\ny=f(3)"
+      }
+    },
+    {
+      "name": "a function body reading a free name",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "f(t)=t*k\ny=f(3)"
+      }
+    },
+    {
+      "name": "an implicit line exports and seeds its unknown",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "\\solve{x}x^2=4"
+      }
+    },
+    {
+      "name": "an implicit line reading a free name",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "\\solve{x}x+1=y"
+      }
+    },
+    {
+      "name": "an implicit line whose unknown is read below it",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "\\solve{x}x^2=4\ny=x+1"
+      }
+    },
+    {
+      "name": "an implicit line whose equation never reads its unknown",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "\\solve{x}1=2"
+      }
+    },
+    {
+      "name": "an implicit line whose unknown only appears bound",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "\\solve{x}\\sum_{x=1}^{2}x=4"
+      }
+    },
+    {
+      "name": "a function defined twice",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "f(t)=t\nf(t)=t"
+      }
+    },
+    {
+      "name": "a function called before it is defined",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=f(1)\nf(t)=t"
+      }
+    },
+    {
+      "name": "a function called with the wrong count",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "f(a,b)=a\ny=f(1)"
+      }
+    },
+    {
+      "name": "a built-in called with the wrong count",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\sin(1,2)"
+      }
+    },
+    {
+      "name": "a built-in of two arguments",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\min(1,2)"
+      }
+    },
+    {
+      "name": "a call of something nothing defines",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "y=\\operatorname{nope}(1)"
+      }
+    },
+    {
+      "name": "a function name read as a value",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "f(t)=t\ny=f"
+      }
+    },
+    {
+      "name": "a function and a value sharing a name",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "f(t)=t\nf=1"
+      }
+    },
+    {
+      "name": "a name defined twice",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "a=1\na=2"
+      }
+    },
+    {
+      "name": "an expression line contributes inputs but exports nothing",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "x+y"
+      }
+    },
+    {
+      "name": "several exports in line order",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "a=1\nb=2\nc=3"
+      }
+    },
+    {
+      "name": "an export and a seed together",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "a=1\n\\solve{x}x=a"
+      }
+    },
+    {
+      "name": "an empty source",
+      "call": "resolveMathNames",
+      "args": {
+        "source": ""
+      }
+    },
+    {
+      "name": "a source of one number",
+      "call": "resolveMathNames",
+      "args": {
+        "source": "42"
+      }
+    }
+  ]
+}

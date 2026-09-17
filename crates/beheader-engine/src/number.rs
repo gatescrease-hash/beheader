@@ -7,8 +7,14 @@
 //! content of a text object and the wording of a diagnostic. A port that used
 //! the Rust `Display` output would change all three.
 //!
-//! The rules here are the ones ECMAScript gives for `Number::toString` with
-//! radix ten. The shortest run of digits that reads back as the same number
+//! The file also holds the arithmetic whose JavaScript answer differs from the
+//! Rust one. Both languages hold binary64, so they agree on what a number is,
+//! and they disagree on what some operations over one give back. A document
+//! carries the answers JavaScript gave, so the engines agree only where these
+//! are used in place of the Rust methods.
+//!
+//! The rules for the text are the ones ECMAScript gives for `Number::toString`
+//! with radix ten. The shortest run of digits that reads back as the same number
 //! comes from the Rust `{:e}` formatter, which already produces exactly that
 //! run, and the rules below decide where the decimal point goes and whether an
 //! exponent appears at all.
@@ -79,6 +85,66 @@ fn place_point(digits: &str, point: i32) -> String {
         &digits[..1],
         &digits[1..]
     )
+}
+
+/// Rounds a half toward positive infinity, which is what `Math.round` does and
+/// what `f64::round` does not: the Rust method rounds a half away from zero, so
+/// it answers -3 where JavaScript answers -2 for -2.5.
+pub fn js_round(x: f64) -> f64 {
+    if !x.is_finite() || x == 0.0 {
+        return x;
+    }
+    if x > 0.0 && x < 0.5 {
+        return 0.0;
+    }
+    if (-0.5..0.0).contains(&x) {
+        return -0.0;
+    }
+    let floor = x.floor();
+    if x - floor >= 0.5 { floor + 1.0 } else { floor }
+}
+
+/// The sign of a number as JavaScript gives it: -1, 0 or 1, with a zero
+/// keeping its sign and a NaN answering NaN. `f64::signum` answers 1 for a
+/// positive zero and -1 for a negative one, and never NaN.
+pub fn js_sign(x: f64) -> f64 {
+    if x.is_nan() || x == 0.0 {
+        return x;
+    }
+    if x > 0.0 { 1.0 } else { -1.0 }
+}
+
+/// The smaller of two numbers, answering NaN where either is NaN. `f64::min`
+/// answers the other side instead, which would hide a NaN that the check for
+/// an illegal number is there to catch.
+pub fn js_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        return f64::NAN;
+    }
+    if a < b {
+        a
+    } else if b < a {
+        b
+    } else if a.is_sign_negative() {
+        a
+    } else {
+        b
+    }
+}
+
+pub fn js_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        return f64::NAN;
+    }
+    if a > b {
+        a
+    } else if b > a {
+        b
+    } else if a.is_sign_positive() {
+        a
+    } else {
+        b
+    }
 }
 
 #[cfg(test)]
