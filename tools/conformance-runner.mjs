@@ -75,6 +75,7 @@ const {
   parseAddress,
   parseCellReference,
   parseFormula,
+  parseMath,
   slotKey,
   tokenizeMath,
   toSurfacePath,
@@ -331,6 +332,54 @@ function addressableObjectListArgument(args, name) {
  * A formula tree as JSON, with a literal number carried in the tagged form the
  * fixtures use so a tree holding 1e21 compares by the text both engines print.
  */
+/** A math expression as JSON, with every number in the tagged form. */
+function encodeMathAst(ast) {
+  switch (ast.type) {
+    case "number":
+      return { type: "number", value: encodeNumber(ast.value) };
+    case "name":
+      return { type: "name", name: ast.name };
+    case "reference":
+      return { type: "reference", address: encodeAddress(ast.address) };
+    case "binary":
+      return { type: "binary", operator: ast.operator, left: encodeMathAst(ast.left), right: encodeMathAst(ast.right) };
+    case "negate":
+      return { type: "negate", operand: encodeMathAst(ast.operand) };
+    case "call":
+      return { type: "call", name: ast.name, args: ast.args.map(encodeMathAst) };
+    case "integral":
+      return {
+        type: "integral",
+        variable: ast.variable,
+        lower: encodeMathAst(ast.lower),
+        upper: encodeMathAst(ast.upper),
+        body: encodeMathAst(ast.body),
+      };
+    default:
+      return {
+        type: "series",
+        operation: ast.operation,
+        variable: ast.variable,
+        lower: encodeMathAst(ast.lower),
+        upper: encodeMathAst(ast.upper),
+        body: encodeMathAst(ast.body),
+      };
+  }
+}
+
+function encodeMathLine(line) {
+  switch (line.type) {
+    case "definition":
+      return { type: "definition", name: line.name, value: encodeMathAst(line.value), sourceLine: line.sourceLine };
+    case "functionDefinition":
+      return { type: "functionDefinition", name: line.name, parameters: [...line.parameters], body: encodeMathAst(line.body) };
+    case "solve":
+      return { type: "solve", unknown: line.unknown, left: encodeMathAst(line.left), right: encodeMathAst(line.right), sourceLine: line.sourceLine };
+    default:
+      return { type: "expression", value: encodeMathAst(line.value) };
+  }
+}
+
 function encodeAddress(address) {
   return { objectId: address.objectId, path: [...address.path] };
 }
@@ -493,6 +542,13 @@ const CALLS = {
               message: "the case declared no values for this range",
             };
     return encodeValue(evaluateFormulaAst(parsed, read, readRange));
+  },
+  parseMath: (args) => {
+    const result = parseMath(textArgument(args, "source"));
+    if ("error" in result) {
+      return { error: result.error, message: result.message, line: result.line };
+    }
+    return { lines: result.lines.map(encodeMathLine) };
   },
   tokenizeMath: (args) => {
     const result = tokenizeMath(textArgument(args, "source"));

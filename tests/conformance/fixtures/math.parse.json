@@ -1,0 +1,466 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "math.parse",
+  "sourceTest": "src/engine/math/parser.test.ts",
+  "requirement": "SPEC.md section 12, the math object",
+  "comparison": "exact",
+  "note": "Juxtaposition is multiplication, so a case that looks like two things beside each other is a product. The two passes are what make a call of a function defined further down readable.",
+  "cases": [
+    {
+      "name": "a definition",
+      "call": "parseMath",
+      "args": {
+        "source": "y=2"
+      }
+    },
+    {
+      "name": "a definition reading a name",
+      "call": "parseMath",
+      "args": {
+        "source": "y=x"
+      }
+    },
+    {
+      "name": "a definition with a subscripted name",
+      "call": "parseMath",
+      "args": {
+        "source": "x_{ans}=2"
+      }
+    },
+    {
+      "name": "a wrapped name defined",
+      "call": "parseMath",
+      "args": {
+        "source": "\\operatorname{speed}=2"
+      }
+    },
+    {
+      "name": "an expression line with no name",
+      "call": "parseMath",
+      "args": {
+        "source": "2+2"
+      }
+    },
+    {
+      "name": "a blank line between two, which is dropped",
+      "call": "parseMath",
+      "args": {
+        "source": "y=1\n\nz=2"
+      }
+    },
+    {
+      "name": "several lines, which keep their source line numbers",
+      "call": "parseMath",
+      "args": {
+        "source": "y=1\nz=2\nw=3"
+      }
+    },
+    {
+      "name": "a line that is space alone",
+      "call": "parseMath",
+      "args": {
+        "source": "y=1\n   \nz=2"
+      }
+    },
+    {
+      "name": "a number beside a name, which multiplies",
+      "call": "parseMath",
+      "args": {
+        "source": "2x"
+      }
+    },
+    {
+      "name": "two names beside each other",
+      "call": "parseMath",
+      "args": {
+        "source": "xy"
+      }
+    },
+    {
+      "name": "a number beside a bracket",
+      "call": "parseMath",
+      "args": {
+        "source": "2(x+1)"
+      }
+    },
+    {
+      "name": "a name beside a bracket, where nothing defines it",
+      "call": "parseMath",
+      "args": {
+        "source": "x(y+1)"
+      }
+    },
+    {
+      "name": "a call of a function defined further down, which the first pass finds",
+      "call": "parseMath",
+      "args": {
+        "source": "f(x+1)\nf(t)=t"
+      }
+    },
+    {
+      "name": "a call of a built-in",
+      "call": "parseMath",
+      "args": {
+        "source": "\\sin(x)"
+      }
+    },
+    {
+      "name": "a built-in written bare",
+      "call": "parseMath",
+      "args": {
+        "source": "sin(x)"
+      }
+    },
+    {
+      "name": "a number beside a built-in call",
+      "call": "parseMath",
+      "args": {
+        "source": "2\\sin(x)"
+      }
+    },
+    {
+      "name": "a sum and a product",
+      "call": "parseMath",
+      "args": {
+        "source": "1+2*3"
+      }
+    },
+    {
+      "name": "a product written with cdot",
+      "call": "parseMath",
+      "args": {
+        "source": "2\\cdot 3"
+      }
+    },
+    {
+      "name": "a product written with times",
+      "call": "parseMath",
+      "args": {
+        "source": "2\\times 3"
+      }
+    },
+    {
+      "name": "a quotient written with div",
+      "call": "parseMath",
+      "args": {
+        "source": "6\\div 2"
+      }
+    },
+    {
+      "name": "a fraction",
+      "call": "parseMath",
+      "args": {
+        "source": "\\frac{1}{2}"
+      }
+    },
+    {
+      "name": "a display fraction",
+      "call": "parseMath",
+      "args": {
+        "source": "\\dfrac{1}{2}"
+      }
+    },
+    {
+      "name": "a power",
+      "call": "parseMath",
+      "args": {
+        "source": "2^3"
+      }
+    },
+    {
+      "name": "a power read from the right",
+      "call": "parseMath",
+      "args": {
+        "source": "2^3^2"
+      }
+    },
+    {
+      "name": "a power beside a factor, which stays outside it",
+      "call": "parseMath",
+      "args": {
+        "source": "2^2x"
+      }
+    },
+    {
+      "name": "a prefix minus",
+      "call": "parseMath",
+      "args": {
+        "source": "-x"
+      }
+    },
+    {
+      "name": "a prefix plus, which is dropped",
+      "call": "parseMath",
+      "args": {
+        "source": "+x"
+      }
+    },
+    {
+      "name": "two prefix minuses",
+      "call": "parseMath",
+      "args": {
+        "source": "--x"
+      }
+    },
+    {
+      "name": "a bracketed sum times a factor",
+      "call": "parseMath",
+      "args": {
+        "source": "(1+2)3"
+      }
+    },
+    {
+      "name": "a square root",
+      "call": "parseMath",
+      "args": {
+        "source": "\\sqrt{4}"
+      }
+    },
+    {
+      "name": "a root of a given degree",
+      "call": "parseMath",
+      "args": {
+        "source": "\\sqrt[3]{8}"
+      }
+    },
+    {
+      "name": "an absolute value",
+      "call": "parseMath",
+      "args": {
+        "source": "|x|"
+      }
+    },
+    {
+      "name": "an absolute value of a difference",
+      "call": "parseMath",
+      "args": {
+        "source": "|x-y|"
+      }
+    },
+    {
+      "name": "a bar inside a bar, which closes the pair",
+      "call": "parseMath",
+      "args": {
+        "source": "|x|+|y|"
+      }
+    },
+    {
+      "name": "an integral",
+      "call": "parseMath",
+      "args": {
+        "source": "\\int_{0}^{1}x\\,dx"
+      }
+    },
+    {
+      "name": "an integral with bare bounds",
+      "call": "parseMath",
+      "args": {
+        "source": "\\int_0^1x\\,dx"
+      }
+    },
+    {
+      "name": "an integral with no differential",
+      "call": "parseMath",
+      "args": {
+        "source": "\\int_{0}^{1}x"
+      }
+    },
+    {
+      "name": "a sum over a range",
+      "call": "parseMath",
+      "args": {
+        "source": "\\sum_{i=1}^{n}i"
+      }
+    },
+    {
+      "name": "a product over a range",
+      "call": "parseMath",
+      "args": {
+        "source": "\\prod_{i=1}^{n}i"
+      }
+    },
+    {
+      "name": "a sum with no equals in its bound",
+      "call": "parseMath",
+      "args": {
+        "source": "\\sum_{i}^{n}i"
+      }
+    },
+    {
+      "name": "a sum whose body stops at a plus",
+      "call": "parseMath",
+      "args": {
+        "source": "\\sum_{i=1}^{n}i+1"
+      }
+    },
+    {
+      "name": "pi",
+      "call": "parseMath",
+      "args": {
+        "source": "\\pi"
+      }
+    },
+    {
+      "name": "tau",
+      "call": "parseMath",
+      "args": {
+        "source": "\\tau"
+      }
+    },
+    {
+      "name": "a command the language does not read",
+      "call": "parseMath",
+      "args": {
+        "source": "\\zeta"
+      }
+    },
+    {
+      "name": "an address",
+      "call": "parseMath",
+      "args": {
+        "source": "\\gpref{obj_1.value}"
+      }
+    },
+    {
+      "name": "an address with a longer path",
+      "call": "parseMath",
+      "args": {
+        "source": "\\gpref{obj_1.cells.A1}"
+      }
+    },
+    {
+      "name": "an address with no dot",
+      "call": "parseMath",
+      "args": {
+        "source": "\\gpref{obj_1}"
+      }
+    },
+    {
+      "name": "an address whose dot opens it",
+      "call": "parseMath",
+      "args": {
+        "source": "\\gpref{.value}"
+      }
+    },
+    {
+      "name": "an address whose dot closes it",
+      "call": "parseMath",
+      "args": {
+        "source": "\\gpref{obj_1.}"
+      }
+    },
+    {
+      "name": "a function of one parameter",
+      "call": "parseMath",
+      "args": {
+        "source": "f(t)=t*2"
+      }
+    },
+    {
+      "name": "a function of two parameters",
+      "call": "parseMath",
+      "args": {
+        "source": "f(a,b)=a+b"
+      }
+    },
+    {
+      "name": "a function whose parameters repeat",
+      "call": "parseMath",
+      "args": {
+        "source": "f(a,a)=a"
+      }
+    },
+    {
+      "name": "a function with no parameters, which is a definition instead",
+      "call": "parseMath",
+      "args": {
+        "source": "f()=2"
+      }
+    },
+    {
+      "name": "an implicit line",
+      "call": "parseMath",
+      "args": {
+        "source": "\\solve{x}x^2=4"
+      }
+    },
+    {
+      "name": "an implicit line with both sides",
+      "call": "parseMath",
+      "args": {
+        "source": "\\solve{x}x+1=y"
+      }
+    },
+    {
+      "name": "an implicit line with no equals sign",
+      "call": "parseMath",
+      "args": {
+        "source": "\\solve{x}x+1"
+      }
+    },
+    {
+      "name": "a definition naming two letters",
+      "call": "parseMath",
+      "args": {
+        "source": "xy=2"
+      }
+    },
+    {
+      "name": "a definition naming three letters",
+      "call": "parseMath",
+      "args": {
+        "source": "abc=2"
+      }
+    },
+    {
+      "name": "a bracket that never closes",
+      "call": "parseMath",
+      "args": {
+        "source": "(1+2"
+      }
+    },
+    {
+      "name": "a brace that never closes",
+      "call": "parseMath",
+      "args": {
+        "source": "\\frac{1}{2"
+      }
+    },
+    {
+      "name": "an operator with nothing after it",
+      "call": "parseMath",
+      "args": {
+        "source": "1+"
+      }
+    },
+    {
+      "name": "an empty source",
+      "call": "parseMath",
+      "args": {
+        "source": ""
+      }
+    },
+    {
+      "name": "a source of blank lines alone",
+      "call": "parseMath",
+      "args": {
+        "source": "\n\n"
+      }
+    },
+    {
+      "name": "a bar that never closes",
+      "call": "parseMath",
+      "args": {
+        "source": "|x"
+      }
+    },
+    {
+      "name": "a line that nests past the limit",
+      "call": "parseMath",
+      "args": {
+        "source": "((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+      }
+    }
+  ]
+}

@@ -37,7 +37,9 @@ use beheader_engine::formula::format::format_formula;
 use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
+use beheader_engine::math::ast::{MathAst, MathLine, MathProgram};
 use beheader_engine::math::lexer::tokenize_math;
+use beheader_engine::math::parser::parse_math;
 use beheader_engine::model::{
     ErrorCode, ErrorValue, ObjectType, has_illegal_number, is_error_value, is_illegal_number,
     is_legal_port_name, slot_key,
@@ -76,6 +78,7 @@ const SUPPORTED_CALLS: &[&str] = &[
     "parseAddress",
     "parseCellReference",
     "parseFormula",
+    "parseMath",
     "parseThenFormat",
     "repairAddressesInAst",
     "rewriteAddressesInAst",
@@ -191,6 +194,105 @@ fn address_argument(args: &Map<String, Json>, name: &str) -> Result<Address, Str
 /// two engines reads one field set whether the call succeeded or refused.
 fn encode_address_error(error: &AddressError) -> Json {
     json!({ "error": error.error.as_str(), "message": error.message })
+}
+
+/// A math expression as JSON, with every number in the tagged form.
+fn encode_math_ast(ast: &MathAst) -> Json {
+    match ast {
+        MathAst::Number(value) => json!({ "type": "number", "value": encode_number(*value) }),
+        MathAst::Name(name) => json!({ "type": "name", "name": name }),
+        MathAst::Reference(address) => {
+            json!({ "type": "reference", "address": encode_address(address) })
+        }
+        MathAst::Binary {
+            operator,
+            left,
+            right,
+        } => json!({
+            "type": "binary",
+            "operator": operator.as_str(),
+            "left": encode_math_ast(left),
+            "right": encode_math_ast(right),
+        }),
+        MathAst::Negate(operand) => {
+            json!({ "type": "negate", "operand": encode_math_ast(operand) })
+        }
+        MathAst::Call { name, args } => json!({
+            "type": "call",
+            "name": name,
+            "args": args.iter().map(encode_math_ast).collect::<Vec<_>>(),
+        }),
+        MathAst::Integral {
+            variable,
+            lower,
+            upper,
+            body,
+        } => json!({
+            "type": "integral",
+            "variable": variable,
+            "lower": encode_math_ast(lower),
+            "upper": encode_math_ast(upper),
+            "body": encode_math_ast(body),
+        }),
+        MathAst::Series {
+            operation,
+            variable,
+            lower,
+            upper,
+            body,
+        } => json!({
+            "type": "series",
+            "operation": operation.as_str(),
+            "variable": variable,
+            "lower": encode_math_ast(lower),
+            "upper": encode_math_ast(upper),
+            "body": encode_math_ast(body),
+        }),
+    }
+}
+
+fn encode_math_line(line: &MathLine) -> Json {
+    match line {
+        MathLine::Definition {
+            name,
+            value,
+            source_line,
+        } => json!({
+            "type": "definition",
+            "name": name,
+            "value": encode_math_ast(value),
+            "sourceLine": source_line,
+        }),
+        MathLine::FunctionDefinition {
+            name,
+            parameters,
+            body,
+        } => json!({
+            "type": "functionDefinition",
+            "name": name,
+            "parameters": parameters,
+            "body": encode_math_ast(body),
+        }),
+        MathLine::Solve {
+            unknown,
+            left,
+            right,
+            source_line,
+        } => json!({
+            "type": "solve",
+            "unknown": unknown,
+            "left": encode_math_ast(left),
+            "right": encode_math_ast(right),
+            "sourceLine": source_line,
+        }),
+        MathLine::Expression { value } => {
+            json!({ "type": "expression", "value": encode_math_ast(value) })
+        }
+    }
+}
+
+fn encode_math_program(program: &MathProgram) -> Json {
+    json!({ "lines": program.lines.iter().map(encode_math_line).collect::<Vec<_>>() })
 }
 
 fn encode_address(address: &Address) -> Json {
@@ -494,6 +596,14 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                     evaluate(&parsed, &read, None)
                 };
                 Ok(encode_value(&value))
+            }),
+            "parseMath" => text_argument(args, "source").map(|source| match parse_math(&source) {
+                Err(error) => json!({
+                    "error": "#PARSE",
+                    "message": error.message,
+                    "line": error.line,
+                }),
+                Ok(program) => encode_math_program(&program),
             }),
             "tokenizeMath" => {
                 text_argument(args, "source").map(|source| match tokenize_math(&source) {

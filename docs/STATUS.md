@@ -21,8 +21,8 @@ to a tree and back.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 117 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 496 cases match across the two engines, with none awaiting either. |
+| Rust | 132 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 561 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -212,6 +212,7 @@ file.
 | `beheader-engine/src/formula/eval.rs` | A tree down to one value, reading only the branches it takes. |
 | `beheader-engine/src/math/ast.rs` | The node and line types of the math language, and its depth limit. |
 | `beheader-engine/src/math/lexer.rs` | The LaTeX a math field writes, turned into tokens. |
+| `beheader-engine/src/math/parser.rs` | Tokens to a program, over two passes, with juxtaposition as multiplication. |
 | `beheader-engine/src/number.rs` | The text JavaScript prints for a number. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
 | `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |
