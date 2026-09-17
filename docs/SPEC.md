@@ -526,6 +526,11 @@ Any style field can become a formula slot bound elsewhere.
 `` `code` ``, `# heading` at levels 1 to 3, `- list item`, and a blank line for
 a paragraph break. No tables, images, links, quotes or nested lists.
 
+A backslash before a backslash, an asterisk or a `` `code` `` marker escapes that
+character, which then draws as itself and opens or closes no span. A backslash
+before any other character draws as a backslash, so an operator writing a
+Windows path needs no escape.
+
 **Formula syntax in text.** Text is literal by default. Computation is opt in:
 
 ```

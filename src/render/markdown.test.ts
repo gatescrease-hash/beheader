@@ -169,11 +169,21 @@ describe("parseMarkdownLite — the list of markup is exact, and nothing else co
     expect(texts(onlyLine("_soft_").runs)).toEqual(["_soft_"]);
   });
 
-  it("has no escaping: a backslash is an ordinary character and does not disarm a marker", () => {
-    expect(onlyLine("\\*soft\\*").runs).toEqual([
-      { text: "\\", ...PLAIN },
-      { text: "soft\\", bold: false, italic: true, code: false },
-    ]);
+  it("reads a backslash before a marker as an escape, so the marker draws as a character", () => {
+    expect(onlyLine("\\*soft\\*").runs).toEqual([{ text: "*soft*", ...PLAIN }]);
+  });
+
+  it("escapes the backslash and the code marker as well, because those three are the escapable set", () => {
+    expect(texts(onlyLine("a\\\\b").runs)).toEqual(["a\\b"]);
+    expect(texts(onlyLine("a\\`b").runs)).toEqual(["a`b"]);
+  });
+
+  it("draws a backslash before any other character verbatim, because that pair is not an escape", () => {
+    expect(texts(onlyLine("a\\b").runs)).toEqual(["a\\b"]);
+  });
+
+  it("takes an escaped marker out of the running for a closer, so emphasis reaches the unescaped one", () => {
+    expect(onlyLine("*a\\*b*").runs).toEqual([{ text: "a*b", bold: false, italic: true, code: false }]);
   });
 });
 

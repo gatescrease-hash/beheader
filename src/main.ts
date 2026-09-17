@@ -1158,7 +1158,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     updateWorkspace();
     updateFormatToolbar();
     cellHighlight.hidden = true;
-    const cellObject = activeCell && displayObjects(state.document.objects).find(object => object.id === activeCell.objectId && state.interaction.selectedObjectIds.includes(object.id));
+    const editedCell = activeCell;
+    const cellObject = editedCell && displayObjects(state.document.objects).find(object => object.id === editedCell.objectId && state.interaction.selectedObjectIds.includes(object.id));
     if (activeCell && cellObject && !tableResize) {
       const placement = editorPlacement({ kind: "cell", ...activeCell }, cellObject, state.document.camera, ratio);
       cellHighlight.hidden = false;
