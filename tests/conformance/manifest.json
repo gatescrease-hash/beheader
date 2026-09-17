@@ -145,6 +145,12 @@
       "covers": [
         "src/engine/math/eval.ts"
       ]
+    },
+    {
+      "id": "number.javascript-arithmetic",
+      "file": "fixtures/number.javascript-arithmetic.json",
+      "covers": [],
+      "coversNoModule": "The arithmetic here belongs to the JavaScript library rather than to a file under src/engine, and every engine module that reaches it takes its answers from these functions. So the entry covers no module and the modules that call them keep their own fixtures."
     }
   ],
   "modulesWithoutFixtures": [

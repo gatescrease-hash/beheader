@@ -19,7 +19,7 @@
 //! where either side is NaN, where the Rust methods answer the other side.
 
 use crate::model::{ErrorCode, ErrorValue, Value, is_illegal_number};
-use crate::number::{js_max, js_min, js_round};
+use crate::number::{js_atan2, js_cos, js_max, js_min, js_pow, js_round, js_sin, js_tan};
 
 /// The word a refusal uses for the kind of value it was handed.
 pub fn describe_value_type(value: &Value) -> &'static str {
@@ -253,7 +253,7 @@ pub const FUNCTION_REGISTRY: [FunctionSignature; 23] = [
     }),
     eager("ROUND", Arity::Exact(2), |args| {
         two_numbers("ROUND", args, |n, digits| {
-            let factor = 10f64.powf(digits);
+            let factor = js_pow(10.0, digits);
             js_round(n * factor) / factor
         })
     }),
@@ -267,7 +267,7 @@ pub const FUNCTION_REGISTRY: [FunctionSignature; 23] = [
         one_number("SQRT", args, f64::sqrt)
     }),
     eager("POW", Arity::Exact(2), |args| {
-        two_numbers("POW", args, f64::powf)
+        two_numbers("POW", args, js_pow)
     }),
     eager("CONCAT", Arity::AtLeast(1), |args| {
         let mut joined = String::new();
@@ -292,16 +292,16 @@ pub const FUNCTION_REGISTRY: [FunctionSignature; 23] = [
         Value::Number(std::f64::consts::PI)
     }),
     eager("SIN", Arity::Exact(1), |args| {
-        one_number("SIN", args, f64::sin)
+        one_number("SIN", args, js_sin)
     }),
     eager("COS", Arity::Exact(1), |args| {
-        one_number("COS", args, f64::cos)
+        one_number("COS", args, js_cos)
     }),
     eager("TAN", Arity::Exact(1), |args| {
-        one_number("TAN", args, f64::tan)
+        one_number("TAN", args, js_tan)
     }),
     eager("ATAN2", Arity::Exact(2), |args| {
-        two_numbers("ATAN2", args, |y, x| y.atan2(x))
+        two_numbers("ATAN2", args, js_atan2)
     }),
     eager("DEG", Arity::Exact(1), |args| {
         one_number("DEG", args, |radians| {

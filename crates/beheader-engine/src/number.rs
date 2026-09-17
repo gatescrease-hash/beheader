@@ -13,6 +13,23 @@
 //! carries the answers JavaScript gave, so the engines agree only where these
 //! are used in place of the Rust methods.
 //!
+//! The transcendental functions divide into three groups, and every one of
+//! them reaches JavaScript through a wrapper here so that a call site names
+//! which group it is in. Some the binary64 rules fix, so they agree everywhere,
+//! and `js_sqrt` is one of those. Some follow an algorithm of plain arithmetic
+//! this file carries out itself, and `js_hypot` is the one of those. The rest
+//! come from `libm`, in place of the method the target supplies: a native build
+//! otherwise reaches the system library and a `wasm32-unknown-unknown` build
+//! reaches a different implementation compiled in, so a conformance run on the
+//! native target would say nothing about the engine an operator loads.
+//!
+//! Of the sixteen functions the engine reaches, seven answer exactly what V8
+//! answers and nine part from it by one unit in the last place, at rates from
+//! one argument in four thousand to one in eleven. `D-012` in
+//! `docs/RUST_PORT.md` holds the measurement and what closing the difference
+//! would take. Each function below says which of the two groups it is in, so a
+//! call site that needs agreement can see whether it has it.
+//!
 //! The rules for the text are the ones ECMAScript gives for `Number::toString`
 //! with radix ten. The shortest run of digits that reads back as the same number
 //! comes from the Rust `{:e}` formatter, which already produces exactly that
@@ -193,5 +210,201 @@ mod tests {
         assert_eq!(to_javascript_text(f64::NAN), "NaN");
         assert_eq!(to_javascript_text(f64::INFINITY), "Infinity");
         assert_eq!(to_javascript_text(f64::NEG_INFINITY), "-Infinity");
+    }
+}
+
+/// The distance JavaScript gives for a right triangle, which is neither
+/// `f64::hypot` nor the square root of a sum of squares.
+///
+/// `Math.hypot` divides both legs by the larger magnitude and then sums the
+/// squares with a compensation term, so a long leg beside a short one does not
+/// round the short one away. Each step is an addition, a multiplication, a
+/// division or a square root, and the binary64 rules fix the result of every one of
+/// those, so this answer is the same on each target the engine builds for and
+/// the same as the one V8 gives. The routine behind `f64::hypot` follows a
+/// different algorithm and parts from it for about a third of pairs.
+pub fn js_hypot(a: f64, b: f64) -> f64 {
+    // An infinite leg answers before a NaN one, in the order the ECMAScript
+    // algorithm tests them.
+    if a.is_infinite() || b.is_infinite() {
+        return f64::INFINITY;
+    }
+    if a.is_nan() || b.is_nan() {
+        return f64::NAN;
+    }
+    let largest = js_max(a.abs(), b.abs());
+    if largest == 0.0 {
+        return 0.0;
+    }
+    let mut sum = 0.0f64;
+    let mut compensation = 0.0f64;
+    for leg in [a, b] {
+        let scaled = leg / largest;
+        let summand = scaled * scaled - compensation;
+        let running = sum + summand;
+        compensation = (running - sum) - summand;
+        sum = running;
+    }
+    sum.sqrt() * largest
+}
+
+/// The square root, which the binary64 rules fix. It has a wrapper of its own so
+/// the whole set a formula function can reach reads from one place.
+pub fn js_sqrt(x: f64) -> f64 {
+    x.sqrt()
+}
+
+/// The tangent, which agreed with V8 over every one of the 220,005 measured
+/// arguments.
+pub fn js_tan(x: f64) -> f64 {
+    libm::tan(x)
+}
+
+/// The arc sine, which agreed with V8 over every measured argument inside the
+/// range where it has a value.
+pub fn js_asin(x: f64) -> f64 {
+    libm::asin(x)
+}
+
+/// The arc cosine, which agreed with V8 over every measured argument inside the
+/// range where it has a value.
+pub fn js_acos(x: f64) -> f64 {
+    libm::acos(x)
+}
+
+/// The arc tangent, which agreed with V8 over every one of the 220,005 measured
+/// arguments.
+pub fn js_atan(x: f64) -> f64 {
+    libm::atan(x)
+}
+
+/// The two argument arc tangent, which agreed with V8 over every one of the
+/// 220,005 measured pairs.
+pub fn js_atan2(y: f64, x: f64) -> f64 {
+    libm::atan2(y, x)
+}
+
+/// The sine. It parts from V8 by one unit in the last place for about one
+/// argument in a hundred and twenty, under `D-012`.
+pub fn js_sin(x: f64) -> f64 {
+    libm::sin(x)
+}
+
+/// The cosine. It parts from V8 by one unit in the last place for about one
+/// argument in a hundred and twenty, under `D-012`.
+pub fn js_cos(x: f64) -> f64 {
+    libm::cos(x)
+}
+
+/// The hyperbolic sine. It parts from V8 for about one argument in a hundred
+/// and thirty, under `D-012`.
+pub fn js_sinh(x: f64) -> f64 {
+    libm::sinh(x)
+}
+
+/// The hyperbolic cosine. It parts from V8 for about one argument in a hundred,
+/// under `D-012`.
+pub fn js_cosh(x: f64) -> f64 {
+    libm::cosh(x)
+}
+
+/// The hyperbolic tangent. It parts from V8 for about one argument in eleven
+/// over a wide sweep, which is the loosest of the set, under `D-012`.
+pub fn js_tanh(x: f64) -> f64 {
+    libm::tanh(x)
+}
+
+/// The natural logarithm. It parts from V8 for about one argument in two
+/// hundred, under `D-012`.
+pub fn js_ln(x: f64) -> f64 {
+    libm::log(x)
+}
+
+/// The base ten logarithm. It parts from V8 for about one argument in fourteen,
+/// under `D-012`.
+pub fn js_log10(x: f64) -> f64 {
+    libm::log10(x)
+}
+
+/// The exponential. It parts from V8 for about one argument in four thousand,
+/// which is the tightest of the nine and still includes `exp(1)`, under
+/// `D-012`.
+pub fn js_exp(x: f64) -> f64 {
+    libm::exp(x)
+}
+
+/// The power. It parts from V8 for about one pair in twenty three, under
+/// `D-012`. The `**` operator and `Math.pow` are the same operation in
+/// JavaScript, so a formula written with either one reaches this.
+pub fn js_pow(base: f64, exponent: f64) -> f64 {
+    libm::pow(base, exponent)
+}
+
+#[cfg(test)]
+mod javascript_arithmetic_tests {
+    use super::*;
+
+    /// The pairs come from `Math.hypot` in V8. The first two are the ordinary
+    /// case, and the last is the one that separates the two algorithms: a leg
+    /// far larger than the other rounds the smaller one away under a plain sum
+    /// of squares, and survives the scaling this one does first.
+    #[test]
+    fn hypot_answers_what_javascript_answers() {
+        assert_eq!(js_hypot(3.0, 4.0), 5.0);
+        assert_eq!(js_hypot(0.0, 0.0), 0.0);
+        assert_eq!(
+            js_hypot(1e300, 1e300).to_bits(),
+            1.4142135623730952e300f64.to_bits()
+        );
+        assert_eq!(js_hypot(-0.0, -0.0), 0.0);
+    }
+
+    /// An infinite leg answers before a NaN one, so a NaN beside an infinity
+    /// gives the infinity rather than the NaN a plain comparison would keep.
+    #[test]
+    fn hypot_puts_an_infinity_before_a_not_a_number() {
+        assert_eq!(js_hypot(f64::INFINITY, f64::NAN), f64::INFINITY);
+        assert_eq!(js_hypot(f64::NAN, f64::NEG_INFINITY), f64::INFINITY);
+        assert!(js_hypot(f64::NAN, 1.0).is_nan());
+    }
+
+    /// The results come from V8. Each one is a function the measurement found
+    /// no difference in over 220,005 arguments, so a change in the
+    /// implementation behind the wrapper shows up here rather than waiting for
+    /// a conformance run to meet the argument that exposes it.
+    #[test]
+    fn the_agreeing_functions_answer_what_javascript_answers() {
+        // Each right side is the V8 answer, and the four written as a
+        // constant are cases where that answer is the nearest double to the
+        // exact one. A half has an arc sine of a sixth of a turn either way.
+        assert_eq!(js_tan(0.171).to_bits(), 0.1726864653232263f64.to_bits());
+        assert_eq!(js_atan(0.5).to_bits(), 0.4636476090008061f64.to_bits());
+        assert_eq!(
+            js_atan2(1.0, 2.0).to_bits(),
+            0.4636476090008061f64.to_bits()
+        );
+        assert_eq!(
+            js_asin(0.5).to_bits(),
+            std::f64::consts::FRAC_PI_6.to_bits()
+        );
+        assert_eq!(
+            js_acos(0.5).to_bits(),
+            std::f64::consts::FRAC_PI_3.to_bits()
+        );
+        assert_eq!(js_sqrt(2.0).to_bits(), std::f64::consts::SQRT_2.to_bits());
+    }
+
+    /// `exp(1)` is the argument that showed the measurement of the agreeing
+    /// group was drawn too narrowly: a sweep of random arguments met no
+    /// difference in the exponential, and the one constant most likely to reach
+    /// it carries one. The test holds the V8 answer rather than the `libm` one,
+    /// so it fails on the day `D-012` closes and the wrapper starts agreeing.
+    #[test]
+    fn the_exponential_of_one_still_parts_from_javascript() {
+        // V8 answers the nearest double to e, and this wrapper answers the one
+        // above it.
+        let javascript = std::f64::consts::E;
+        assert_ne!(js_exp(1.0).to_bits(), javascript.to_bits());
+        assert_eq!(js_exp(1.0).to_bits() - javascript.to_bits(), 1);
     }
 }

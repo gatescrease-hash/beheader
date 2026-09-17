@@ -7,3 +7,4 @@ description = "The Beheader engine, ported from src/engine."
 
 [dependencies]
 serde_json = { workspace = true }
+libm = { workspace = true }

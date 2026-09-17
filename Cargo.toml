@@ -5,10 +5,16 @@
 # The browser binding and the application adapter arrive with the hosting
 # proof rather than as empty crates ahead of it.
 #
-# serde_json is the only dependency. Its derive companion is a proposal in
-# RUST_PORT.md rather than a decision, and the wire codec here is written out
-# by hand because the document format has shapes that a derived one would
-# accept or reject differently.
+# serde_json carries the wire codec. Its derive companion is a proposal in
+# RUST_PORT.md rather than a decision, and the codec here is written out by
+# hand because the document format has shapes that a derived one would accept
+# or reject differently.
+#
+# libm supplies the transcendental functions in place of the ones the target
+# brings. A native build otherwise reaches the system library and a
+# wasm32-unknown-unknown build reaches a different implementation compiled in,
+# and the two disagree on the last digit of a sine, so a conformance run on the
+# native target would say nothing about the engine an operator loads.
 [workspace]
 resolver = "3"
 members = ["crates/beheader-engine", "crates/beheader-conformance", "crates/beheader-hostproof", "crates/beheader-wasm"]
@@ -21,3 +27,4 @@ publish = false
 [workspace.dependencies]
 beheader-engine = { path = "crates/beheader-engine" }
 serde_json = "1.0.145"
+libm = "0.2.15"

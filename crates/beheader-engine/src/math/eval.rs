@@ -39,7 +39,10 @@ use std::collections::HashMap;
 use crate::address::Address;
 use crate::math::ast::{MathAst, MathBinaryOperator, MathLine, MathProgram, SeriesOperation};
 use crate::model::{ErrorCode, ErrorValue, Value};
-use crate::number::{js_max, js_min, js_round, js_sign, to_javascript_text};
+use crate::number::{
+    js_acos, js_asin, js_atan, js_cos, js_cosh, js_exp, js_ln, js_log10, js_max, js_min, js_pow,
+    js_round, js_sign, js_sin, js_sinh, js_sqrt, js_tan, js_tanh, to_javascript_text,
+};
 
 /// The number of intervals Simpson's rule divides an integral into.
 pub const MATH_QUADRATURE_INTERVALS: usize = 512;
@@ -115,19 +118,19 @@ fn check_finite(result: f64, what: &str) -> Evaluated {
 
 fn unary_function(name: &str) -> Option<fn(f64) -> f64> {
     Some(match name {
-        "sin" => f64::sin,
-        "cos" => f64::cos,
-        "tan" => f64::tan,
-        "arcsin" => f64::asin,
-        "arccos" => f64::acos,
-        "arctan" => f64::atan,
-        "sinh" => f64::sinh,
-        "cosh" => f64::cosh,
-        "tanh" => f64::tanh,
-        "ln" => f64::ln,
-        "log" => f64::log10,
-        "exp" => f64::exp,
-        "sqrt" => f64::sqrt,
+        "sin" => js_sin,
+        "cos" => js_cos,
+        "tan" => js_tan,
+        "arcsin" => js_asin,
+        "arccos" => js_acos,
+        "arctan" => js_atan,
+        "sinh" => js_sinh,
+        "cosh" => js_cosh,
+        "tanh" => js_tanh,
+        "ln" => js_ln,
+        "log" => js_log10,
+        "exp" => js_exp,
+        "sqrt" => js_sqrt,
         "abs" => f64::abs,
         "floor" => f64::floor,
         "ceil" => f64::ceil,
@@ -243,7 +246,7 @@ impl Evaluator<'_> {
                         }
                         check_finite(a / b, "a division")
                     }
-                    MathBinaryOperator::Power => check_finite(a.powf(b), "a power"),
+                    MathBinaryOperator::Power => check_finite(js_pow(a, b), "a power"),
                 }
             }
             MathAst::Call { name, args } => self.eval_call(name, args, values, depth),

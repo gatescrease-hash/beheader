@@ -1,0 +1,368 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "number.javascript-arithmetic",
+  "sourceTest": "crates/beheader-engine/src/number.rs",
+  "requirement": "RUST_PORT.md decision D-012",
+  "comparison": "exact",
+  "note": "The arithmetic under the geometry, asked of both engines directly rather than through a shape. Seven functions are here because a measurement over 220,005 arguments found the two engines agreeing on every one of them, and the distance for a right triangle is here because this engine carries out the JavaScript algorithm itself rather than calling a library. The nine functions D-012 records a difference in are deliberately absent, because a case for one of them would differ rather than match, and D-012 holds the reproduction until it is decided whether to close the difference.",
+  "cases": [
+    {
+      "name": "the tangent of 0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "tan",
+        "x": 0.0
+      }
+    },
+    {
+      "name": "the tangent of 0.171",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "tan",
+        "x": 0.171
+      }
+    },
+    {
+      "name": "the tangent of 0.5",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "tan",
+        "x": 0.5
+      }
+    },
+    {
+      "name": "the tangent of 1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "tan",
+        "x": 1.0
+      }
+    },
+    {
+      "name": "the tangent of -3.7",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "tan",
+        "x": -3.7
+      }
+    },
+    {
+      "name": "the tangent of 100.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "tan",
+        "x": 100.0
+      }
+    },
+    {
+      "name": "the tangent of -0.25",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "tan",
+        "x": -0.25
+      }
+    },
+    {
+      "name": "the arc tangent of 0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan",
+        "x": 0.0
+      }
+    },
+    {
+      "name": "the arc tangent of 0.5",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan",
+        "x": 0.5
+      }
+    },
+    {
+      "name": "the arc tangent of 1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan",
+        "x": 1.0
+      }
+    },
+    {
+      "name": "the arc tangent of -2.25",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan",
+        "x": -2.25
+      }
+    },
+    {
+      "name": "the arc tangent of 100000000.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan",
+        "x": 100000000.0
+      }
+    },
+    {
+      "name": "the arc sine of -1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "asin",
+        "x": -1.0
+      }
+    },
+    {
+      "name": "the arc sine of -0.5",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "asin",
+        "x": -0.5
+      }
+    },
+    {
+      "name": "the arc sine of 0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "asin",
+        "x": 0.0
+      }
+    },
+    {
+      "name": "the arc sine of 0.25",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "asin",
+        "x": 0.25
+      }
+    },
+    {
+      "name": "the arc sine of 0.5",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "asin",
+        "x": 0.5
+      }
+    },
+    {
+      "name": "the arc sine of 1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "asin",
+        "x": 1.0
+      }
+    },
+    {
+      "name": "the arc cosine of -1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "acos",
+        "x": -1.0
+      }
+    },
+    {
+      "name": "the arc cosine of -0.5",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "acos",
+        "x": -0.5
+      }
+    },
+    {
+      "name": "the arc cosine of 0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "acos",
+        "x": 0.0
+      }
+    },
+    {
+      "name": "the arc cosine of 0.25",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "acos",
+        "x": 0.25
+      }
+    },
+    {
+      "name": "the arc cosine of 0.5",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "acos",
+        "x": 0.5
+      }
+    },
+    {
+      "name": "the arc cosine of 1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "acos",
+        "x": 1.0
+      }
+    },
+    {
+      "name": "the arc tangent of 1.0 over 2.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan2",
+        "x": 1.0,
+        "y": 2.0
+      }
+    },
+    {
+      "name": "the arc tangent of -1.0 over -1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan2",
+        "x": -1.0,
+        "y": -1.0
+      }
+    },
+    {
+      "name": "the arc tangent of 0.0 over -1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan2",
+        "x": 0.0,
+        "y": -1.0
+      }
+    },
+    {
+      "name": "the arc tangent of -0.0 over -1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan2",
+        "x": -0.0,
+        "y": -1.0
+      }
+    },
+    {
+      "name": "the arc tangent of 3.0 over 0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan2",
+        "x": 3.0,
+        "y": 0.0
+      }
+    },
+    {
+      "name": "the arc tangent of -0.0 over 1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "atan2",
+        "x": -0.0,
+        "y": 1.0
+      }
+    },
+    {
+      "name": "the square root of 0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "sqrt",
+        "x": 0.0
+      }
+    },
+    {
+      "name": "the square root of -0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "sqrt",
+        "x": -0.0
+      }
+    },
+    {
+      "name": "the square root of 2.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "sqrt",
+        "x": 2.0
+      }
+    },
+    {
+      "name": "the square root of 9.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "sqrt",
+        "x": 9.0
+      }
+    },
+    {
+      "name": "the square root of 1e-300",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "sqrt",
+        "x": 1e-300
+      }
+    },
+    {
+      "name": "the square root of 1e+300",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "sqrt",
+        "x": 1e+300
+      }
+    },
+    {
+      "name": "the distance for 3.0 and 4.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "hypot",
+        "x": 3.0,
+        "y": 4.0
+      }
+    },
+    {
+      "name": "the distance for 0.0 and 0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "hypot",
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "name": "the distance for -0.0 and -0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "hypot",
+        "x": -0.0,
+        "y": -0.0
+      }
+    },
+    {
+      "name": "the distance for 1e+300 and 1e+300",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "hypot",
+        "x": 1e+300,
+        "y": 1e+300
+      }
+    },
+    {
+      "name": "the distance for 1e-300 and 1e+300",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "hypot",
+        "x": 1e-300,
+        "y": 1e+300
+      }
+    },
+    {
+      "name": "the distance for 5.0 and -0.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "hypot",
+        "x": 5.0,
+        "y": -0.0
+      }
+    },
+    {
+      "name": "the distance for 1e-160 and 1.0",
+      "call": "javascriptArithmetic",
+      "args": {
+        "function": "hypot",
+        "x": 1e-160,
+        "y": 1.0
+      }
+    }
+  ]
+}

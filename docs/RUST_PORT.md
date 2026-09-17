@@ -1482,6 +1482,7 @@ under it. Superseded choices remain linked through Git history.
 | `D-009` | Product baseline drift | Pin each package and synchronize accepted behavior changes | `RUST-001` |
 | `D-010` | Resource budgets | Preserve the TypeScript per-line expression budget. Measure total document workloads on each target before setting broader limits. | `RUST-015` |
 | `D-011` | Cutover acceptance period | Define supported targets and rollback criteria before default switch | `RUST-016` |
+| `D-012` | Transcendental function agreement | Part resolved: one wrapper for each call, reaching `libm` on every target. The nine functions that still differ wait on the operator. See below. | `RUST-007` |
 
 `D-001` is resolved as browser Wasm, which is what the recommendation said and
 now has evidence behind it. The deciding quantity is the count of host round
@@ -1556,6 +1557,67 @@ holding a lone surrogate stops opening, where today it opens. A lone surrogate
 is half of a character that no editor produces on purpose, so the documents it
 refuses are ones already holding a fault.
 
+`D-012` is part resolved, and the part left open is for the operator.
+
+A sine is not one function. V8 carries its own implementation, a native Rust
+build reaches the system library, and a `wasm32-unknown-unknown` build reaches
+a third one compiled in, and the three disagree about the last digit. The
+engine an operator loads is the third of those, and every conformance run so
+far has measured the second, so a green run said nothing about the browser.
+
+The part that is resolved: every transcendental call in the engine now goes
+through a named wrapper in `number.rs`, and each wrapper reaches `libm` rather
+than the method its target supplies. A native run and a browser run now give
+the same answer, so a conformance result means what it appeared to mean.
+`js_hypot` carries out the ECMAScript algorithm here instead, because that
+algorithm is plain arithmetic whose every step the binary64 rules fix, and the
+library routine behind `f64::hypot` follows a different one and parts from V8
+for about
+a third of pairs.
+
+The measurement, over 220,005 arguments in two populations: one of the numbers
+a document actually carries, being integers, halves, quarters, tenths and
+hundredths from -2000 to 2000, and one a wide pseudo-random sweep.
+
+| Function | Differences | Rate |
+| --- | --- | --- |
+| `tan`, `atan`, `asin`, `acos`, `atan2` | none | 0 |
+| `sqrt` | none, and binary64 fixes it | 0 |
+| `hypot`, carried out here | none | 0 |
+| `exp` | 5 | 1 in 44,000, and `exp(1)` is one of them |
+| `cosh` | 2,123 | 1 in 104 |
+| `tanh` | 19,208 | 1 in 11 |
+| `ln` | 603 | 1 in 182 |
+| `sin` | 1,331 | 1 in 165 |
+| `cos` | 1,739 | 1 in 126 |
+| `sinh` | 1,527 | 1 in 144 |
+| `log10` | 9,021 | 1 in 12 |
+| `pow` | 16,070 | 1 in 23 |
+
+Every difference is one unit in the last place. The smallest reproduction, which
+both engines answer through the shipped path: a math object holding
+`y=\cos(0.1)` exports `0.9950041652780257` from TypeScript and
+`0.9950041652780258` from Rust.
+
+The part left open: whether to close the nine. Closing them means porting V8's
+own implementations, which are its `src/base/ieee754.cc`, into Rust and calling
+those instead. That is a known body of public-domain code of a few thousand
+lines, mechanical to port and testable against a fixture of V8 answers, and it
+would make every number in a document identical across the two engines. Leaving
+them open means a shape, a math export or a `ROUND` result can differ in its
+last digit between the two engines, which an operator sees in the properties
+panel and in a saved file, and which stops the port from proving that a document
+survives a change of engine unchanged.
+
+`tanh`, `log10` and `pow` carry the three highest rates, and one argument in
+eleven reaches a difference in the first of them. The measurement above is the
+ground for choosing, in place of the estimate that stood here before it ran.
+
+Until it is decided, `number.javascript-arithmetic` pins the seven functions
+that agree, so a change that broke one of them fails a conformance run. The
+nine are deliberately absent from it, because a case for one of them would
+report a difference rather than a match.
+
 `D-008` is resolved for the part the two adapters own. A refusal of the
 arguments of a case is worded identically by both runners, and the comparator
 compares that wording exactly, so a difference in it is a difference between
@@ -1579,7 +1641,7 @@ implemented, then its lasting rationale belongs beside that code.
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
-| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` is part resolved, and `D-010` holds a recorded choice |
+| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`, `D-012`. `D-008` is part resolved, and `D-010` holds a recorded choice |
 | Next implementation action | Port the primitives and the schema under `RUST-007` |
 | Completion evidence | `RUST-001` through `RUST-006` and `RUST-008`, under their headings above |
 

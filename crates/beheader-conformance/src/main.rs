@@ -46,7 +46,10 @@ use beheader_engine::model::{
     ErrorCode, ErrorValue, ObjectType, has_illegal_number, is_error_value, is_illegal_number,
     is_legal_port_name, slot_key,
 };
-use beheader_engine::number::to_javascript_text;
+use beheader_engine::number::{
+    js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
+    js_pow, js_sin, js_sinh, js_sqrt, js_tan, js_tanh, to_javascript_text,
+};
 use beheader_engine::wire::{decode_number, decode_value, encode_number, encode_value};
 use serde_json::{Map, Value as Json, json};
 
@@ -504,11 +507,52 @@ fn value_argument(
         .map_err(|error| format!("the argument \"{name}\" is a value the engine can hold: {error}"))
 }
 
+/// The arithmetic behind a named function, as one of the two shapes a caller
+/// can apply. The engine reaches each of these through a wrapper rather than
+/// through the method its target supplies, so this runner asks the same
+/// question the engine would.
+enum Arithmetic {
+    OfOne(fn(f64) -> f64),
+    OfTwo(fn(f64, f64) -> f64),
+}
+
+fn arithmetic(name: &str) -> Option<Arithmetic> {
+    Some(match name {
+        "sin" => Arithmetic::OfOne(js_sin),
+        "cos" => Arithmetic::OfOne(js_cos),
+        "tan" => Arithmetic::OfOne(js_tan),
+        "asin" => Arithmetic::OfOne(js_asin),
+        "acos" => Arithmetic::OfOne(js_acos),
+        "atan" => Arithmetic::OfOne(js_atan),
+        "sinh" => Arithmetic::OfOne(js_sinh),
+        "cosh" => Arithmetic::OfOne(js_cosh),
+        "tanh" => Arithmetic::OfOne(js_tanh),
+        "ln" => Arithmetic::OfOne(js_ln),
+        "log10" => Arithmetic::OfOne(js_log10),
+        "exp" => Arithmetic::OfOne(js_exp),
+        "sqrt" => Arithmetic::OfOne(js_sqrt),
+        "atan2" => Arithmetic::OfTwo(js_atan2),
+        "hypot" => Arithmetic::OfTwo(js_hypot),
+        "pow" => Arithmetic::OfTwo(js_pow),
+        _ => return None,
+    })
+}
+
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
     let result: Answer = match call {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "javascriptArithmetic" => text_argument(args, "function").and_then(|name| {
+            let implementation =
+                arithmetic(&name).ok_or_else(|| format!("no arithmetic named \"{name}\""))?;
+            let x = number_argument(args, "x")?;
+            let value = match implementation {
+                Arithmetic::OfOne(of_one) => of_one(x),
+                Arithmetic::OfTwo(of_two) => of_two(x, number_argument(args, "y")?),
+            };
+            Ok(encode_number(value))
+        }),
         "slotKey" => path_argument(args, "path").map(|path| json!(slot_key(&path))),
         "isValidName" => text_argument(args, "name").map(|name| json!(is_valid_name(&name))),
         "isCellReferenceForm" => {

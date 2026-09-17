@@ -457,8 +457,48 @@ function encodeAddressResult(result) {
 /* The calls                                                           */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The arithmetic each engine has to agree on before any geometry can be
+ * compared. The Rust side reaches these through named wrappers rather than
+ * through the methods its target supplies, because a native build and a
+ * wasm32-unknown-unknown build otherwise answer differently and only the
+ * second one is what an operator loads.
+ */
+const JAVASCRIPT_ARITHMETIC = {
+  sin: Math.sin,
+  cos: Math.cos,
+  tan: Math.tan,
+  asin: Math.asin,
+  acos: Math.acos,
+  atan: Math.atan,
+  sinh: Math.sinh,
+  cosh: Math.cosh,
+  tanh: Math.tanh,
+  ln: Math.log,
+  log10: Math.log10,
+  exp: Math.exp,
+  sqrt: Math.sqrt,
+  atan2: Math.atan2,
+  hypot: Math.hypot,
+  pow: Math.pow,
+};
+
+/** The three that read a second argument. The rest take one. */
+const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
+
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  javascriptArithmetic: (args) => {
+    const name = textArgument(args, "function");
+    const implementation = JAVASCRIPT_ARITHMETIC[name];
+    if (implementation === undefined) {
+      throw new Error(`no arithmetic named "${name}"`);
+    }
+    const x = numberArgument(args, "x");
+    return encodeNumber(
+      TWO_ARGUMENT_ARITHMETIC.has(name) ? implementation(x, numberArgument(args, "y")) : implementation(x),
+    );
+  },
   slotKey: (args) => slotKey(pathArgument(args, "path")),
   isValidName: (args) => isValidName(textArgument(args, "name")),
   isCellReferenceForm: (args) => isCellReferenceForm(textArgument(args, "segment")),
