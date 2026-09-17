@@ -104,7 +104,7 @@ pub fn encode_number(number: f64) -> Json {
     }
 }
 
-fn decode_point(json: &Json) -> Result<Point, WireError> {
+pub fn decode_point(json: &Json) -> Result<Point, WireError> {
     let object = json
         .as_object()
         .ok_or_else(|| WireError::new(POINT_SHAPE))?;
@@ -121,7 +121,7 @@ fn decode_point(json: &Json) -> Result<Point, WireError> {
     })
 }
 
-fn encode_point(point: Point) -> Json {
+pub fn encode_point(point: Point) -> Json {
     let mut object = Map::new();
     object.insert("x".to_string(), encode_number(point.x));
     object.insert("y".to_string(), encode_number(point.y));

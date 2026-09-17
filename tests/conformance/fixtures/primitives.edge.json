@@ -1,0 +1,5505 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "primitives.edge",
+  "sourceTest": "src/engine/primitives/edge.test.ts",
+  "requirement": "SPEC.md section 7, shapes and their derived values",
+  "comparison": "exact",
+  "note": "The maths of one path edge and of a whole path, asked of both engines. The comparison is exact because every answer here is built from the arithmetic number.javascript-arithmetic pins, and an arc answers in closed form rather than by sampling. The circle of two vertices and two bulges of one is the case the module header names: its area, length, centroid and bounds come from the true curve, so an engine that quietly sampled the arc would part from the other here.",
+  "cases": [
+    {
+      "name": "a straight edge, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        }
+      }
+    },
+    {
+      "name": "a half circle, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        }
+      }
+    },
+    {
+      "name": "a minor arc, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        }
+      }
+    },
+    {
+      "name": "a major arc, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        }
+      }
+    },
+    {
+      "name": "a cubic, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a sloped arc, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        }
+      }
+    },
+    {
+      "name": "an edge with no length, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        }
+      }
+    },
+    {
+      "name": "a very short arc, every answer",
+      "call": "edgeAnswers",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        }
+      }
+    },
+    {
+      "name": "a straight edge split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a straight edge measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a straight edge split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a straight edge measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a straight edge split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a straight edge measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a straight edge split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a straight edge measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a straight edge split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a straight edge measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a half circle split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a half circle measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a half circle split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a half circle measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a half circle split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a half circle measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a half circle split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a half circle measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a half circle split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a half circle measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a minor arc split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a minor arc measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a minor arc split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a minor arc measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a minor arc split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a minor arc measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a minor arc split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a minor arc measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a minor arc split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a minor arc measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0.25
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a major arc split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a major arc measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a major arc split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a major arc measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a major arc split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a major arc measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a major arc split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a major arc measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a major arc split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a major arc measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "an arc turning the other way measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a cubic split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a cubic measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a cubic split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a cubic measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a cubic split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a cubic measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a cubic split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a cubic measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a cubic split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a cubic measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 0,
+          "controls": [
+            {
+              "x": 0,
+              "y": 8
+            },
+            {
+              "x": 10,
+              "y": 8
+            }
+          ]
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a sloped arc split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a sloped arc measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a sloped arc split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a sloped arc measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a sloped arc split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a sloped arc measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a sloped arc split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a sloped arc measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a sloped arc split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a sloped arc measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": -3,
+            "y": 2.5
+          },
+          "end": {
+            "x": 4,
+            "y": -1.5
+          },
+          "bulge": 0.4
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "an edge with no length split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "an edge with no length measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "an edge with no length split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an edge with no length measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an edge with no length split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an edge with no length measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an edge with no length split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "an edge with no length measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "an edge with no length split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "an edge with no length measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 2,
+            "y": 2
+          },
+          "end": {
+            "x": 2,
+            "y": 2
+          },
+          "bulge": 0.5
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a very short arc split near 5 1",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "near": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a very short arc measured from 5 1",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "point": {
+          "x": 5,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "a very short arc split near 0 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "near": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a very short arc measured from 0 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a very short arc split near 10 0",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "near": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a very short arc measured from 10 0",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "point": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a very short arc split near -4 6",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "near": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a very short arc measured from -4 6",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "point": {
+          "x": -4,
+          "y": 6
+        }
+      }
+    },
+    {
+      "name": "a very short arc split near 5 -20",
+      "call": "splitEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "near": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "a very short arc measured from 5 -20",
+      "call": "distanceToEdge",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 1e-08,
+            "y": 0
+          },
+          "bulge": 0.3
+        },
+        "point": {
+          "x": 5,
+          "y": -20
+        }
+      }
+    },
+    {
+      "name": "the exact circle, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true
+      }
+    },
+    {
+      "name": "a square, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true
+      }
+    },
+    {
+      "name": "an open polyline, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false
+      }
+    },
+    {
+      "name": "a square with two bent edges, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true
+      }
+    },
+    {
+      "name": "a path pulled by handles, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "a square wound the other way, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true
+      }
+    },
+    {
+      "name": "no vertices, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false
+      }
+    },
+    {
+      "name": "one vertex, every answer",
+      "call": "pathAnswers",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false
+      }
+    },
+    {
+      "name": "the exact circle contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "the exact circle measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "the exact circle contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "the exact circle measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "the exact circle contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "the exact circle measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "the exact circle contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "the exact circle measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "the exact circle contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "the exact circle measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": -5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          1,
+          1
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a square contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a square measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a square contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a square measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a square contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a square measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a square contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a square measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a square contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a square measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "an open polyline contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an open polyline measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "an open polyline contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "an open polyline measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "an open polyline contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "an open polyline measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "an open polyline contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "an open polyline measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "an open polyline contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "an open polyline measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a square with two bent edges measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "bulges": [
+          0.5,
+          0,
+          -0.25,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a path pulled by handles measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 10
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "handlesOut": [
+          {
+            "x": 2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "handlesIn": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": -2,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "a square wound the other way measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 0
+          }
+        ],
+        "bulges": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "closed": true,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "no vertices contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "no vertices measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "no vertices contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "no vertices measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "no vertices contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "no vertices measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "no vertices contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "no vertices measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "no vertices contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "no vertices measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [],
+        "bulges": [],
+        "closed": false,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "one vertex contains 0 0",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "one vertex measured from 0 0",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "one vertex contains 2 2",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "one vertex measured from 2 2",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 2,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "one vertex contains -10 -10",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "one vertex measured from -10 -10",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": -10,
+          "y": -10
+        }
+      }
+    },
+    {
+      "name": "one vertex contains 4 4",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "one vertex measured from 4 4",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 4,
+          "y": 4
+        }
+      }
+    },
+    {
+      "name": "one vertex contains 5 0.0001",
+      "call": "pathContains",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "one vertex measured from 5 0.0001",
+      "call": "distanceToPath",
+      "args": {
+        "vertices": [
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "bulges": [
+          0
+        ],
+        "closed": false,
+        "point": {
+          "x": 5,
+          "y": 0.0001
+        }
+      }
+    },
+    {
+      "name": "the bulge through 5 2",
+      "call": "bulgeForMidpoint",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "midpoint": {
+          "x": 5,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "the bulge through 5 -2",
+      "call": "bulgeForMidpoint",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "midpoint": {
+          "x": 5,
+          "y": -2
+        }
+      }
+    },
+    {
+      "name": "the bulge through 5 0",
+      "call": "bulgeForMidpoint",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "midpoint": {
+          "x": 5,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "the bulge through 1 1",
+      "call": "bulgeForMidpoint",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 0,
+          "y": 0
+        },
+        "midpoint": {
+          "x": 1,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "the bulge through 1 1",
+      "call": "bulgeForMidpoint",
+      "args": {
+        "start": {
+          "x": -2,
+          "y": 3
+        },
+        "end": {
+          "x": 7,
+          "y": -4
+        },
+        "midpoint": {
+          "x": 1,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "the bulge leaving along 1 0",
+      "call": "bulgeForTangentArc",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "direction": {
+          "x": 1,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "the bulge leaving along 0 1",
+      "call": "bulgeForTangentArc",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "direction": {
+          "x": 0,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "the bulge leaving along -1 0",
+      "call": "bulgeForTangentArc",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "direction": {
+          "x": -1,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "the bulge leaving along 1 1",
+      "call": "bulgeForTangentArc",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "direction": {
+          "x": 1,
+          "y": 1
+        }
+      }
+    },
+    {
+      "name": "the bulge leaving along 0 0",
+      "call": "bulgeForTangentArc",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "direction": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "the bulge leaving along -1 1e-07",
+      "call": "bulgeForTangentArc",
+      "args": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        },
+        "direction": {
+          "x": -1,
+          "y": 1e-07
+        }
+      }
+    },
+    {
+      "name": "a half circle covers 0",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "angle": 0
+      }
+    },
+    {
+      "name": "a major arc covers 0",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "angle": 0
+      }
+    },
+    {
+      "name": "an arc turning the other way covers 0",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "angle": 0
+      }
+    },
+    {
+      "name": "a half circle covers 1.5707963267948966",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "angle": 1.5707963267948966
+      }
+    },
+    {
+      "name": "a major arc covers 1.5707963267948966",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "angle": 1.5707963267948966
+      }
+    },
+    {
+      "name": "an arc turning the other way covers 1.5707963267948966",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "angle": 1.5707963267948966
+      }
+    },
+    {
+      "name": "a half circle covers 3.141592653589793",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "angle": 3.141592653589793
+      }
+    },
+    {
+      "name": "a major arc covers 3.141592653589793",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "angle": 3.141592653589793
+      }
+    },
+    {
+      "name": "an arc turning the other way covers 3.141592653589793",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "angle": 3.141592653589793
+      }
+    },
+    {
+      "name": "a half circle covers 4.71238898038469",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "angle": 4.71238898038469
+      }
+    },
+    {
+      "name": "a major arc covers 4.71238898038469",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "angle": 4.71238898038469
+      }
+    },
+    {
+      "name": "an arc turning the other way covers 4.71238898038469",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "angle": 4.71238898038469
+      }
+    },
+    {
+      "name": "a half circle covers -1.0",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "angle": -1.0
+      }
+    },
+    {
+      "name": "a major arc covers -1.0",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "angle": -1.0
+      }
+    },
+    {
+      "name": "an arc turning the other way covers -1.0",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "angle": -1.0
+      }
+    },
+    {
+      "name": "a half circle covers 6.5",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 1
+        },
+        "angle": 6.5
+      }
+    },
+    {
+      "name": "a major arc covers 6.5",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": 2
+        },
+        "angle": 6.5
+      }
+    },
+    {
+      "name": "an arc turning the other way covers 6.5",
+      "call": "sweepCoversAngle",
+      "args": {
+        "edge": {
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 10,
+            "y": 0
+          },
+          "bulge": -0.5
+        },
+        "angle": 6.5
+      }
+    },
+    {
+      "name": "a segment measured from 5 5",
+      "call": "distanceToSegment",
+      "args": {
+        "point": {
+          "x": 5,
+          "y": 5
+        },
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a segment measured from -1 0",
+      "call": "distanceToSegment",
+      "args": {
+        "point": {
+          "x": -1,
+          "y": 0
+        },
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a segment measured from 11 0",
+      "call": "distanceToSegment",
+      "args": {
+        "point": {
+          "x": 11,
+          "y": 0
+        },
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a segment measured from 5 0",
+      "call": "distanceToSegment",
+      "args": {
+        "point": {
+          "x": 5,
+          "y": 0
+        },
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 10,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "a segment of no length",
+      "call": "distanceToSegment",
+      "args": {
+        "point": {
+          "x": 3,
+          "y": 4
+        },
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    }
+  ]
+}

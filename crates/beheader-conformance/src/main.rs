@@ -43,14 +43,23 @@ use beheader_engine::math::lexer::tokenize_math;
 use beheader_engine::math::names::resolve_math_names;
 use beheader_engine::math::parser::parse_math;
 use beheader_engine::model::{
-    ErrorCode, ErrorValue, ObjectType, has_illegal_number, is_error_value, is_illegal_number,
-    is_legal_port_name, slot_key,
+    ErrorCode, ErrorValue, ObjectType, Point, has_illegal_number, is_error_value,
+    is_illegal_number, is_legal_port_name, slot_key,
 };
 use beheader_engine::number::{
     js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
     js_pow, js_sin, js_sinh, js_sqrt, js_tan, js_tanh, to_javascript_text,
 };
-use beheader_engine::wire::{decode_number, decode_value, encode_number, encode_value};
+use beheader_engine::primitives::edge::{
+    ArcGeometry, PathEdge, arc_of_edge, bezier_of_edge, build_path_edges, bulge_for_midpoint,
+    bulge_for_tangent_arc, cubic_handles_for_edge, distance_to_edge, distance_to_path,
+    distance_to_segment, edge_doubled_area_over_chord, edge_end_direction, edge_extreme_points,
+    edge_length, edge_midpoint, path_area, path_bounds, path_centroid, path_contains,
+    path_doubled_signed_area, path_length, split_edge_at, sweep_covers_angle,
+};
+use beheader_engine::wire::{
+    decode_number, decode_point, decode_value, encode_number, encode_point, encode_value,
+};
 use serde_json::{Map, Value as Json, json};
 
 /// The version of the results shape this runner writes.
@@ -538,11 +547,213 @@ fn arithmetic(name: &str) -> Option<Arithmetic> {
     })
 }
 
+/* ------------------------------------------------------------------ */
+/* Geometry arguments and answers                                      */
+/* ------------------------------------------------------------------ */
+
+fn point_from(json: &Json, name: &str) -> Result<Point, String> {
+    decode_point(json).map_err(|_| format!("the argument \"{name}\" is a point"))
+}
+
+fn point_argument(args: &Map<String, Json>, name: &str) -> Result<Point, String> {
+    point_from(argument(args, name)?, name)
+}
+
+fn point_list_argument(args: &Map<String, Json>, name: &str) -> Result<Vec<Point>, String> {
+    let Some(value) = args.get(name) else {
+        return Ok(Vec::new());
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("the argument \"{name}\" is a list of points"))?;
+    items.iter().map(|entry| point_from(entry, name)).collect()
+}
+
+fn number_list_argument(args: &Map<String, Json>, name: &str) -> Result<Vec<f64>, String> {
+    let Some(value) = args.get(name) else {
+        return Ok(Vec::new());
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("the argument \"{name}\" is a list of numbers"))?;
+    items
+        .iter()
+        .map(|entry| {
+            decode_number(entry)
+                .map_err(|_| format!("the argument \"{name}\" is a list of numbers"))
+        })
+        .collect()
+}
+
+fn boolean_argument(args: &Map<String, Json>, name: &str) -> Result<bool, String> {
+    argument(args, name)?
+        .as_bool()
+        .ok_or_else(|| format!("the argument \"{name}\" is a boolean"))
+}
+
+/// One edge from its four fields. The controls are absent for a straight edge
+/// and an arc, because a pair of control points wins over a bulge and an edge
+/// that carries both would never reach its bulge.
+fn edge_argument(args: &Map<String, Json>, name: &str) -> Result<PathEdge, String> {
+    let object = argument(args, name)?
+        .as_object()
+        .ok_or_else(|| format!("the argument \"{name}\" is an edge"))?;
+    let start = point_from(
+        object
+            .get("start")
+            .ok_or_else(|| format!("the argument \"{name}\" is an edge"))?,
+        name,
+    )?;
+    let end = point_from(
+        object
+            .get("end")
+            .ok_or_else(|| format!("the argument \"{name}\" is an edge"))?,
+        name,
+    )?;
+    let bulge = match object.get("bulge") {
+        None => 0.0,
+        Some(json) => {
+            decode_number(json).map_err(|_| format!("the argument \"{name}\" is an edge"))?
+        }
+    };
+    let controls = match object.get("controls") {
+        None | Some(Json::Null) => None,
+        Some(json) => {
+            let items = json
+                .as_array()
+                .filter(|items| items.len() == 2)
+                .ok_or_else(|| {
+                    format!("the argument \"{name}\" carries two control points or none")
+                })?;
+            Some([point_from(&items[0], name)?, point_from(&items[1], name)?])
+        }
+    };
+    Ok(PathEdge {
+        start,
+        end,
+        bulge,
+        controls,
+    })
+}
+
+/// The edges of a path, from the slots a polyline stores.
+fn path_edges_argument(args: &Map<String, Json>) -> Result<Vec<PathEdge>, String> {
+    Ok(build_path_edges(
+        &point_list_argument(args, "vertices")?,
+        &number_list_argument(args, "bulges")?,
+        boolean_argument(args, "closed")?,
+        &point_list_argument(args, "handlesIn")?,
+        &point_list_argument(args, "handlesOut")?,
+    ))
+}
+
+fn encode_arc(arc: Option<ArcGeometry>) -> Json {
+    match arc {
+        None => Json::Null,
+        Some(arc) => json!({
+            "center": encode_point(arc.center),
+            "radius": encode_number(arc.radius),
+            "startAngle": encode_number(arc.start_angle),
+            "sweep": encode_number(arc.sweep),
+        }),
+    }
+}
+
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
     let result: Answer = match call {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "edgeAnswers" => edge_argument(args, "edge").map(|edge| {
+            let handles = cubic_handles_for_edge(&edge);
+            json!({
+                "arc": encode_arc(arc_of_edge(&edge)),
+                "isBezier": bezier_of_edge(&edge).is_some(),
+                "length": encode_number(edge_length(&edge)),
+                "doubledAreaOverChord": encode_number(edge_doubled_area_over_chord(&edge)),
+                "midpoint": encode_point(edge_midpoint(&edge)),
+                "endDirection": encode_point(edge_end_direction(&edge)),
+                "handleOut": encode_point(handles.out),
+                "handleIn": encode_point(handles.into),
+                "extremePoints": edge_extreme_points(&edge)
+                    .into_iter()
+                    .map(encode_point)
+                    .collect::<Vec<_>>(),
+            })
+        }),
+        "pathAnswers" => path_edges_argument(args).map(|edges| {
+            let bounds = path_bounds(&edges);
+            json!({
+                "edgeCount": edges.len(),
+                "length": encode_number(path_length(&edges)),
+                "area": encode_number(path_area(&edges)),
+                "doubledSignedArea": encode_number(path_doubled_signed_area(&edges)),
+                "centroid": encode_point(path_centroid(&edges)),
+                "bounds": {
+                    "minX": encode_number(bounds.min_x),
+                    "minY": encode_number(bounds.min_y),
+                    "maxX": encode_number(bounds.max_x),
+                    "maxY": encode_number(bounds.max_y),
+                },
+            })
+        }),
+        "splitEdge" => edge_argument(args, "edge").and_then(|edge| {
+            let split = split_edge_at(&edge, point_argument(args, "near")?);
+            Ok(json!({
+                "point": encode_point(split.at),
+                "fraction": encode_number(split.fraction),
+                "firstBulge": encode_number(split.first_bulge),
+                "secondBulge": encode_number(split.second_bulge),
+                "startOutHandle": encode_point(split.start_out_handle),
+                "newInHandle": encode_point(split.new_in_handle),
+                "newOutHandle": encode_point(split.new_out_handle),
+                "endInHandle": encode_point(split.end_in_handle),
+            }))
+        }),
+        "pathContains" => point_argument(args, "point")
+            .and_then(|at| Ok(json!(path_contains(at, &path_edges_argument(args)?)))),
+        "distanceToPath" => point_argument(args, "point").and_then(|at| {
+            Ok(encode_number(distance_to_path(
+                at,
+                &path_edges_argument(args)?,
+            )))
+        }),
+        "distanceToEdge" => point_argument(args, "point").and_then(|at| {
+            Ok(encode_number(distance_to_edge(
+                at,
+                &edge_argument(args, "edge")?,
+            )))
+        }),
+        "distanceToSegment" => point_argument(args, "point").and_then(|at| {
+            Ok(encode_number(distance_to_segment(
+                at,
+                point_argument(args, "start")?,
+                point_argument(args, "end")?,
+            )))
+        }),
+        "bulgeForMidpoint" => point_argument(args, "start").and_then(|start| {
+            Ok(encode_number(bulge_for_midpoint(
+                start,
+                point_argument(args, "end")?,
+                point_argument(args, "midpoint")?,
+            )))
+        }),
+        "bulgeForTangentArc" => point_argument(args, "start").and_then(|start| {
+            Ok(encode_number(bulge_for_tangent_arc(
+                start,
+                point_argument(args, "end")?,
+                point_argument(args, "direction")?,
+            )))
+        }),
+        "sweepCoversAngle" => edge_argument(args, "edge").and_then(|edge| {
+            let arc = arc_of_edge(&edge).ok_or_else(|| {
+                "the argument \"edge\" is an edge that rides on a circle".to_string()
+            })?;
+            Ok(json!(sweep_covers_angle(
+                &arc,
+                number_argument(args, "angle")?
+            )))
+        }),
         "javascriptArithmetic" => text_argument(args, "function").and_then(|name| {
             let implementation =
                 arithmetic(&name).ok_or_else(|| format!("no arithmetic named \"{name}\""))?;

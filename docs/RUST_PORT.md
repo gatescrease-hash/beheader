@@ -941,7 +941,7 @@ met, and a package is done only where the status column says so.
 | `RUST-004` | Model, addresses, context, wire types | `002`, `003` | done |
 | `RUST-005` | Formula syntax, formatting, dependencies | `004` | done |
 | `RUST-006` | Formula evaluation and functions | `005` | active |
-| `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | planned |
+| `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | in progress |
 | `RUST-008` | Math language and evaluator | `004`, `005` | done |
 | `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | planned |
 | `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | planned |
@@ -1215,6 +1215,30 @@ cubic edges. Edge splitting preserves the curve. Sparse empty cells remain
 absent from storage and correctly readable. Table insertion and deletion
 helpers preserve or repair references as specified. Script outputs remain
 placeholders, with no interpreter execution.
+
+**Landed so far.** `primitives::edge` carries the maths of one path edge and of
+a path of them: the circle under a bulge, the cubic under a pair of control
+points, length, the area over a chord, the lune moment behind a centroid, the
+extreme points behind a bounding box, the split that leaves two edges holding
+the shape of the one they replace, and the nonzero winding rule behind a hit
+test.
+
+`primitives.edge` asks both engines 221 questions about nine edges and eight
+paths, and they answer alike on every one, exactly. The circle of two vertices
+and two bulges of one is the case that shows nothing samples a curve: its area
+comes back as the double nearest to twenty five pi and its perimeter as the
+double nearest to ten pi, where a sampled circle would fall short of both.
+
+`D-012` arrived with this package, because a shape reaches more of the
+transcendental functions than any earlier one. The arithmetic under the geometry
+now goes through one wrapper for each function, so a native run and a browser
+run agree, and `number.javascript-arithmetic` pins the seven that also agree
+with the answers a document carries.
+
+**Still to come in this package.** `primitives::geometry` and the vertex
+enumeration behind it, `primitives::table`, `primitives::image`,
+`primitives::doc`, the schema the five resolve their slots through, and the
+script stub.
 
 ### `RUST-008`: Port the math language
 
@@ -1659,7 +1683,7 @@ implemented, then its lasting rationale belongs beside that code.
 
 ```text
 Package: RUST-007, geometry, tables, basic schemas and the script stub
-Status: ready, unstarted
+Status: in progress, with primitives::edge landed
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -1671,10 +1695,11 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  The five primitives, the dynamic slot families the schema resolves per
-  object, and the stub the script node arrives behind. The schema is shared
-  with RUST-010, which completes it.
-Open decision IDs: none specific to this package
+  primitives::geometry, primitives::table, primitives::image, primitives::doc,
+  the dynamic slot families the schema resolves per object, and the stub the
+  script node arrives behind. The schema is shared with RUST-010, which
+  completes it. primitives::edge is landed and its fixture is primitives.edge.
+Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
@@ -1682,6 +1707,8 @@ Fixture and evidence paths:
   formula.lex, formula.ast-shape, formula.parse, formula.format and
   formula.dependencies carry RUST-005, formula.evaluate carries RUST-006, and
   math.lex, math.parse, math.names and math.evaluate carry RUST-008
+  number.javascript-arithmetic pins the seven functions D-012 found agreeing,
+  and primitives.edge carries the edge maths of RUST-007
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1691,21 +1718,27 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  154 pass
+  cargo test --workspace --locked                                  172 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           662 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           926 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
   Chromium. Windows runs the Rust checks in the pull request workflow and has
   not run the browser proof.
 Known failures with smallest reproduction:
+  Nine transcendental functions answer one unit in the last place apart in the
+  two engines, under D-012, which the operator moved to RUST-016. A math object
+  holding y=\cos(0.1) exports 0.9950041652780257 from TypeScript and
+  0.9950041652780258 from Rust.
+
   A literal below 1e-6 prints with an exponent that the lexer cannot read back.
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port primitives/geometry.ts and primitives/table.ts,
-  then the schema they resolve their slots through.
+Next concrete action: port primitives/geometry.ts, which reads primitives::edge
+  for every derived value a shape carries, then primitives/table.ts and the
+  schema the two resolve their slots through.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```

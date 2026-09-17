@@ -22,8 +22,8 @@ defines.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 158 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 705 cases match across the two engines, with none awaiting either. |
+| Rust | 172 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 926 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -216,6 +216,7 @@ file.
 | `beheader-engine/src/math/parser.rs` | Tokens to a program, over two passes, with juxtaposition as multiplication. |
 | `beheader-engine/src/math/names.rs` | Which of the four groups each bare name falls into, and so the slot set. |
 | `beheader-engine/src/math/eval.rs` | A program over its inputs, with a fixed quadrature and a search for a root. |
+| `beheader-engine/src/primitives/edge.rs` | One path edge as a line, an arc or a cubic, and the area, length, centroid and bounds a path of them answers. |
 | `beheader-engine/src/number.rs` | The text JavaScript prints for a number, and the arithmetic whose Rust answer differs. |
 | `beheader-engine/src/wire.rs` | The JSON codec the fixtures travel through, tagged numbers included. |
 | `beheader-engine/src/measure.rs` | The one service the engine takes from its host, and the capability it states. |

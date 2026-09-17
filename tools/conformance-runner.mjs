@@ -81,6 +81,28 @@ const {
   slotKey,
   tokenizeMath,
   toSurfacePath,
+  arcOfEdge,
+  bezierOfEdge,
+  buildPathEdges,
+  bulgeForMidpoint,
+  bulgeForTangentArc,
+  cubicHandlesForEdge,
+  distanceToEdge,
+  distanceToPath,
+  distanceToSegment,
+  edgeDoubledAreaOverChord,
+  edgeEndDirection,
+  edgeExtremePoints,
+  edgeLength,
+  edgeMidpoint,
+  pathArea,
+  pathBounds,
+  pathCentroid,
+  pathContains,
+  pathDoubledSignedArea,
+  pathLength,
+  splitEdgeAt,
+  sweepCoversAngle,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -238,6 +260,14 @@ function textArgument(args, name) {
   const value = argument(args, name);
   if (typeof value !== "string") {
     throw new BadArgument(`the argument "${name}" is text`);
+  }
+  return value;
+}
+
+function booleanArgument(args, name) {
+  const value = argument(args, name);
+  if (typeof value !== "boolean") {
+    throw new BadArgument(`the argument "${name}" is a boolean`);
   }
   return value;
 }
@@ -453,6 +483,91 @@ function encodeAddressResult(result) {
   return { objectId: result.objectId, path: [...result.path] };
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Geometry arguments and answers                                      */
+/* ------------------------------------------------------------------ */
+
+function pointFrom(value, name) {
+  try {
+    return decodePoint(value);
+  } catch {
+    throw new BadArgument(`the argument "${name}" is a point`);
+  }
+}
+
+function pointArgument(args, name) {
+  return pointFrom(argument(args, name), name);
+}
+
+function pointListArgument(args, name) {
+  const value = args[name];
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new BadArgument(`the argument "${name}" is a list of points`);
+  }
+  return value.map((entry) => pointFrom(entry, name));
+}
+
+function numberListArgument(args, name) {
+  const value = args[name];
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new BadArgument(`the argument "${name}" is a list of numbers`);
+  }
+  return value.map((entry) => decodeNumber(entry));
+}
+
+/**
+ * One edge from its four fields. The controls are absent for a straight edge
+ * and an arc, because a pair of control points wins over a bulge and an edge
+ * that carries both would never reach its bulge.
+ */
+function edgeArgument(args, name) {
+  const value = argument(args, name);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new BadArgument(`the argument "${name}" is an edge`);
+  }
+  const edge = {
+    start: pointFrom(value.start, name),
+    end: pointFrom(value.end, name),
+    bulge: decodeNumber(value.bulge ?? 0),
+  };
+  if (value.controls === undefined || value.controls === null) {
+    return edge;
+  }
+  if (!Array.isArray(value.controls) || value.controls.length !== 2) {
+    throw new BadArgument(`the argument "${name}" carries two control points or none`);
+  }
+  return { ...edge, controls: value.controls.map((entry) => pointFrom(entry, name)) };
+}
+
+/** The edges of a path, from the slots a polyline stores. */
+function pathEdgesArgument(args) {
+  return buildPathEdges(
+    pointListArgument(args, "vertices"),
+    numberListArgument(args, "bulges"),
+    booleanArgument(args, "closed"),
+    pointListArgument(args, "handlesIn"),
+    pointListArgument(args, "handlesOut"),
+  );
+}
+
+function encodeArc(arc) {
+  return arc === undefined
+    ? null
+    : {
+        center: encodePoint(arc.center),
+        radius: encodeNumber(arc.radius),
+        startAngle: encodeNumber(arc.startAngle),
+        sweep: encodeNumber(arc.sweep),
+      };
+}
+
 /* ------------------------------------------------------------------ */
 /* The calls                                                           */
 /* ------------------------------------------------------------------ */
@@ -488,6 +603,87 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  edgeAnswers: (args) => {
+    const edge = edgeArgument(args, "edge");
+    const handles = cubicHandlesForEdge(edge);
+    return {
+      arc: encodeArc(arcOfEdge(edge)),
+      isBezier: bezierOfEdge(edge) !== undefined,
+      length: encodeNumber(edgeLength(edge)),
+      doubledAreaOverChord: encodeNumber(edgeDoubledAreaOverChord(edge)),
+      midpoint: encodePoint(edgeMidpoint(edge)),
+      endDirection: encodePoint(edgeEndDirection(edge)),
+      handleOut: encodePoint(handles.out),
+      handleIn: encodePoint(handles.in),
+      extremePoints: edgeExtremePoints(edge).map(encodePoint),
+    };
+  },
+  pathAnswers: (args) => {
+    const edges = pathEdgesArgument(args);
+    const bounds = pathBounds(edges);
+    return {
+      edgeCount: edges.length,
+      length: encodeNumber(pathLength(edges)),
+      area: encodeNumber(pathArea(edges)),
+      doubledSignedArea: encodeNumber(pathDoubledSignedArea(edges)),
+      centroid: encodePoint(pathCentroid(edges)),
+      bounds: {
+        minX: encodeNumber(bounds.minX),
+        minY: encodeNumber(bounds.minY),
+        maxX: encodeNumber(bounds.maxX),
+        maxY: encodeNumber(bounds.maxY),
+      },
+    };
+  },
+  splitEdge: (args) => {
+    const split = splitEdgeAt(edgeArgument(args, "edge"), pointArgument(args, "near"));
+    return {
+      point: encodePoint(split.point),
+      fraction: encodeNumber(split.fraction),
+      firstBulge: encodeNumber(split.firstBulge),
+      secondBulge: encodeNumber(split.secondBulge),
+      startOutHandle: encodePoint(split.startOutHandle),
+      newInHandle: encodePoint(split.newInHandle),
+      newOutHandle: encodePoint(split.newOutHandle),
+      endInHandle: encodePoint(split.endInHandle),
+    };
+  },
+  pathContains: (args) => pathContains(pointArgument(args, "point"), pathEdgesArgument(args)),
+  distanceToPath: (args) =>
+    encodeNumber(distanceToPath(pointArgument(args, "point"), pathEdgesArgument(args))),
+  distanceToEdge: (args) =>
+    encodeNumber(distanceToEdge(pointArgument(args, "point"), edgeArgument(args, "edge"))),
+  distanceToSegment: (args) =>
+    encodeNumber(
+      distanceToSegment(
+        pointArgument(args, "point"),
+        pointArgument(args, "start"),
+        pointArgument(args, "end"),
+      ),
+    ),
+  bulgeForMidpoint: (args) =>
+    encodeNumber(
+      bulgeForMidpoint(
+        pointArgument(args, "start"),
+        pointArgument(args, "end"),
+        pointArgument(args, "midpoint"),
+      ),
+    ),
+  bulgeForTangentArc: (args) =>
+    encodeNumber(
+      bulgeForTangentArc(
+        pointArgument(args, "start"),
+        pointArgument(args, "end"),
+        pointArgument(args, "direction"),
+      ),
+    ),
+  sweepCoversAngle: (args) => {
+    const arc = arcOfEdge(edgeArgument(args, "edge"));
+    if (arc === undefined) {
+      throw new BadArgument("the argument \"edge\" is an edge that rides on a circle");
+    }
+    return sweepCoversAngle(arc, numberArgument(args, "angle"));
+  },
   javascriptArithmetic: (args) => {
     const name = textArgument(args, "function");
     const implementation = JAVASCRIPT_ARITHMETIC[name];
