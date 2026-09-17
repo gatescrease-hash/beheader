@@ -20,4 +20,5 @@ pub mod measure;
 pub mod model;
 pub mod number;
 pub mod primitives;
+pub mod script;
 pub mod wire;

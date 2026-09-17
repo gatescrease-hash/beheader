@@ -123,6 +123,25 @@ const {
   shiftVertexAddressForDelete,
   shiftVertexAddressForInsert,
   splitPolylineEdge,
+  cellAddressToCoordinates,
+  deleteTableLine,
+  enumerateRangeCellAddresses,
+  enumerateTableCellSlotPaths,
+  getTableDimensions,
+  insertTableLine,
+  isInExtentTableCellAddress,
+  isRangeEnumerationError,
+  isTableDimensionResizable,
+  repairCellAddressForDelete,
+  repairRangeEndpointsForDelete,
+  shiftCellAddressForInsert,
+  derivedSlotDependencyAddresses,
+  findSlotFormat,
+  findSlotOptions,
+  getObjectSchema,
+  isColorValue,
+  resolveDerivedSlots,
+  resolveNonDerivedSlotPaths,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -609,13 +628,27 @@ function shapeObjectArgument(args, name) {
     }
     slots[entry.key] = { kind: entry.kind ?? "literal", value: decodeValue(entry.value ?? null) };
   }
+  const named = (key) => {
+    const held = value.ports?.[key];
+    return Array.isArray(held) && held.every((name) => typeof name === "string") ? held : undefined;
+  };
   return {
     id: value.id,
     name: typeof value.name === "string" ? value.name : value.id,
     type: value.type,
     vertexCount: value.vertexCount === undefined ? undefined : decodeNumber(value.vertexCount),
+    ports: value.ports === undefined ? undefined : { in: named("in") ?? [], out: named("out") ?? [] },
     slots,
   };
+}
+
+/** The axis a table resize runs along. */
+function tableAxisArgument(args) {
+  const axis = textArgument(args, "axis");
+  if (axis !== "row" && axis !== "column") {
+    throw new BadArgument('the argument "axis" is "row" or "column"');
+  }
+  return axis;
 }
 
 /** A shape back out, with its slots in the order they sit in. */
@@ -677,6 +710,115 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  objectSchema: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    const schema = getObjectSchema(object.type);
+    if (schema === undefined) {
+      return { declared: false };
+    }
+    const derived = resolveDerivedSlots(object, schema.derivedSlots);
+    return {
+      declared: true,
+      nonDerived: resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths),
+      derived: derived.map((entry) => ({
+        path: entry.path,
+        dependencies: derivedSlotDependencyAddresses(object, entry.dependencies, [object]).map(encodeAddress),
+      })),
+      options: (schema.slotOptions ?? []).map((entry) => ({
+        path: entry.path,
+        values: entry.values.map(encodeValue),
+        labels: entry.labels ?? null,
+      })),
+      formats: (schema.slotFormats ?? []).map((entry) => ({ path: entry.path, format: entry.format })),
+    };
+  },
+  computeDerivedSlots: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    const schema = getObjectSchema(object.type);
+    if (schema === undefined) {
+      return { declared: false };
+    }
+    const read = (address) =>
+      address.objectId === object.id ? object.slots[slotKey(address.path)]?.value : undefined;
+    return {
+      declared: true,
+      values: resolveDerivedSlots(object, schema.derivedSlots).map((entry) => ({
+        path: entry.path,
+        value: encodeValue(entry.compute(object, read, undefined, { objects: [object] })),
+      })),
+    };
+  },
+  slotNarrowing: (args) => {
+    const type = objectTypeArgument(args, "type");
+    const path = pathArgument(args, "path");
+    const options = findSlotOptions(type, path);
+    return {
+      format: findSlotFormat(type, path) ?? null,
+      options: options === undefined
+        ? null
+        : { values: options.values.map(encodeValue), labels: options.labels ?? null },
+    };
+  },
+  colorValue: (args) => isColorValue(valueArgument(args, "value")),
+  tableCellPaths: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    const size = getTableDimensions(object);
+    return {
+      rows: encodeNumber(size.rows),
+      cols: encodeNumber(size.cols),
+      cells: enumerateTableCellSlotPaths(object),
+      rowsResizable: isTableDimensionResizable(object, "row"),
+      columnsResizable: isTableDimensionResizable(object, "column"),
+    };
+  },
+  tableRange: (args) => {
+    const result = enumerateRangeCellAddresses(
+      addressArgument(args, "start"),
+      addressArgument(args, "end"),
+      shapeObjectArgument(args, "object"),
+    );
+    return isRangeEnumerationError(result)
+      ? { error: result.error, message: result.message }
+      : { cells: result.map(encodeAddress) };
+  },
+  tableResize: (args) => {
+    const object = shapeObjectArgument(args, "object");
+    const axis = tableAxisArgument(args);
+    const index = numberArgument(args, "index");
+    return {
+      inserted: encodeShapeObject(insertTableLine(object, axis, index)),
+      deleted: encodeShapeObject(deleteTableLine(object, axis, index)),
+    };
+  },
+  tableAddressRewrite: (args) => {
+    const address = addressArgument(args, "address");
+    const tableId = textArgument(args, "tableId");
+    const axis = tableAxisArgument(args);
+    const index = numberArgument(args, "index");
+    const repaired = repairCellAddressForDelete(address, tableId, axis, index);
+    const range = repairRangeEndpointsForDelete(
+      address,
+      addressArgument(args, "end"),
+      tableId,
+      axis,
+      index,
+    );
+    return {
+      coordinates: (() => {
+        const found = cellAddressToCoordinates(address);
+        return found === undefined
+          ? null
+          : { column: encodeNumber(found.column), row: encodeNumber(found.row) };
+      })(),
+      forInsert: encodeAddress(shiftCellAddressForInsert(address, tableId, axis, index)),
+      repaired: repaired === "deleted" ? "deleted" : encodeAddress(repaired),
+      range: range === "deleted"
+        ? "deleted"
+        : { start: encodeAddress(range.start), end: encodeAddress(range.end) },
+    };
+  },
+  tableCellInExtent: (args) =>
+    isInExtentTableCellAddress(addressArgument(args, "address"), [shapeObjectArgument(args, "object")]),
   computePresetVertices: (args) => {
     const kind = textArgument(args, "shape");
     if (kind === "polygon") {

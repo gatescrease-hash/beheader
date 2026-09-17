@@ -165,6 +165,21 @@
       "covers": [
         "src/engine/primitives/geometry.ts"
       ]
+    },
+    {
+      "id": "primitives.table",
+      "file": "fixtures/primitives.table.json",
+      "covers": [
+        "src/engine/primitives/table.ts"
+      ]
+    },
+    {
+      "id": "primitives.schema",
+      "file": "fixtures/primitives.schema.json",
+      "covers": [
+        "src/engine/primitives/schema.ts",
+        "src/engine/script/stub.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -179,9 +194,6 @@
     "src/engine/primitives/doc.ts",
     "src/engine/primitives/image.ts",
     "src/engine/primitives/math.ts",
-    "src/engine/primitives/schema.ts",
-    "src/engine/primitives/table.ts",
-    "src/engine/primitives/text.ts",
-    "src/engine/script/stub.ts"
+    "src/engine/primitives/text.ts"
   ]
 }

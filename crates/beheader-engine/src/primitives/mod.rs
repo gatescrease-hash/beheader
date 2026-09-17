@@ -7,3 +7,6 @@
 
 pub mod edge;
 pub mod geometry;
+pub mod image;
+pub mod schema;
+pub mod table;

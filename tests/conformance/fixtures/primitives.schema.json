@@ -1,0 +1,3405 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "primitives.schema",
+  "sourceTest": "src/engine/primitives/schema.test.ts",
+  "requirement": "SPEC.md section 7, and the compatibility contract above",
+  "comparison": "exact",
+  "note": "What each object type declares, what each derived slot depends on, and what each one computes from the slots the object carries. The dependency lists are the part edge derivation and the two integrity checks all read, so a dynamic group that resolved differently in the two engines would leave one of them with a graph that is not total. The text, math and docref types are absent because their schemas arrive with RUST-009, along with the measurer their derived slots read through, and an engine that declared them here would be compared against one that has yet to.",
+  "cases": [
+    {
+      "name": "a circle, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "c1",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": -2
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "c1",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": -2
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle with a negative radius, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "c2",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle with a negative radius, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "c2",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle whose radius is text, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "c3",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": "wide"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle whose radius is text, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "c3",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": "wide"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle missing its radius, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "c4",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle missing its radius, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "c4",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle whose radius holds an error, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "c5",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": {
+                "error": "#DIV0",
+                "message": "divide by zero"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a circle whose radius holds an error, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "c5",
+          "type": "circle",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": {
+                "error": "#DIV0",
+                "message": "divide by zero"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "g1",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 6
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "g1",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 6
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon of two sides, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "g2",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon of two sides, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "g2",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon of five and a half sides, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "g3",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 5.5
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon of five and a half sides, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "g3",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 5.5
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon of negative radius, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "g4",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": -2
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polygon of negative radius, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "g4",
+          "type": "polygon",
+          "slots": [
+            {
+              "key": "sides",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "radius",
+              "kind": "literal",
+              "value": -2
+            },
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rotation",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a rect, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "r1",
+          "type": "rect",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "width",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "height",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a rect, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "type": "rect",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "width",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "height",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a rect of negative width, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "r2",
+          "type": "rect",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "width",
+              "kind": "literal",
+              "value": -4
+            },
+            {
+              "key": "height",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a rect of negative width, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r2",
+          "type": "rect",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "width",
+              "kind": "literal",
+              "value": -4
+            },
+            {
+              "key": "height",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a closed polyline, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 4,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.x",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.3.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "x": 4,
+                  "y": 0
+                },
+                {
+                  "x": 4,
+                  "y": 4
+                },
+                {
+                  "x": 0,
+                  "y": 4
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a closed polyline, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 4,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.x",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.3.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.3.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "x": 4,
+                  "y": 0
+                },
+                {
+                  "x": 4,
+                  "y": 4
+                },
+                {
+                  "x": 0,
+                  "y": 4
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an open polyline, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 3,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.x",
+              "kind": "literal",
+              "value": 9
+            },
+            {
+              "key": "vertex.2.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": false
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "x": 3,
+                  "y": 4
+                },
+                {
+                  "x": 9,
+                  "y": 4
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an open polyline, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 3,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.x",
+              "kind": "literal",
+              "value": 9
+            },
+            {
+              "key": "vertex.2.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": false
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "x": 3,
+                  "y": 4
+                },
+                {
+                  "x": 9,
+                  "y": 4
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polyline with no closed slot, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 3,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.x",
+              "kind": "literal",
+              "value": 9
+            },
+            {
+              "key": "vertex.2.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "x": 3,
+                  "y": 4
+                },
+                {
+                  "x": 9,
+                  "y": 4
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polyline with no closed slot, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 3,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.x",
+              "kind": "literal",
+              "value": 9
+            },
+            {
+              "key": "vertex.2.y",
+              "kind": "literal",
+              "value": 4
+            },
+            {
+              "key": "vertex.2.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.2.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "x": 3,
+                  "y": 4
+                },
+                {
+                  "x": 9,
+                  "y": 4
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polyline of two bulges, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 2,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": -5
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": -5,
+                  "y": 0
+                },
+                {
+                  "x": 5,
+                  "y": 0
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polyline of two bulges, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 2,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": -5
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.x",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "vertex.1.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.bulge",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.1.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.1.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": -5,
+                  "y": 0
+                },
+                {
+                  "x": 5,
+                  "y": 0
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polyline of one vertex, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 1,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 1,
+                  "y": 1
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polyline of one vertex, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "p1",
+          "type": "polyline",
+          "vertexCount": 1,
+          "slots": [
+            {
+              "key": "vertex.0.x",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.0.y",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "vertex.0.bulge",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.in.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "vertex.0.handle.out.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "closed",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "vertices",
+              "kind": "derived",
+              "value": [
+                {
+                  "x": 1,
+                  "y": 1
+                }
+              ]
+            },
+            {
+              "key": "style.strokeColor",
+              "kind": "literal",
+              "value": "#1a1a1a"
+            },
+            {
+              "key": "style.strokeWidth",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "style.fillColor",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "t1",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "t1",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 5
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a value, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "v1",
+          "type": "value",
+          "slots": [
+            {
+              "key": "value",
+              "kind": "literal",
+              "value": 42
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a value, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "v1",
+          "type": "value",
+          "slots": [
+            {
+              "key": "value",
+              "kind": "literal",
+              "value": 42
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "a1",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "a1",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add of text, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "a2",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": "two"
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add of text, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "a2",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": "two"
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add missing a side, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "a3",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add missing a side, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "a3",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add that overflows, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "a4",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1e+308
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 1e+308
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add that overflows, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "a4",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1e+308
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 1e+308
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add whose side holds an error, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "a5",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": {
+                "error": "#REF",
+                "message": "gone"
+              }
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an add whose side holds an error, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "a5",
+          "type": "add",
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": {
+                "error": "#REF",
+                "message": "gone"
+              }
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an image, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "i1",
+          "type": "image",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "width",
+              "kind": "literal",
+              "value": 100
+            },
+            {
+              "key": "height",
+              "kind": "literal",
+              "value": 50
+            },
+            {
+              "key": "opacity",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "data:,"
+            },
+            {
+              "key": "preserveAspect",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "pictureAspect",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an image, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "i1",
+          "type": "image",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "width",
+              "kind": "literal",
+              "value": 100
+            },
+            {
+              "key": "height",
+              "kind": "literal",
+              "value": 50
+            },
+            {
+              "key": "opacity",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "data:,"
+            },
+            {
+              "key": "preserveAspect",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "pictureAspect",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a doc, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "d1",
+          "type": "doc",
+          "slots": [
+            {
+              "key": "alpha",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "beta",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a doc, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "d1",
+          "type": "doc",
+          "slots": [
+            {
+              "key": "alpha",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "beta",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a polyline closed slot, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "polyline",
+        "path": [
+          "closed"
+        ]
+      }
+    },
+    {
+      "name": "a polyline stroke colour, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "polyline",
+        "path": [
+          "style",
+          "strokeColor"
+        ]
+      }
+    },
+    {
+      "name": "a polyline fill colour, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "polyline",
+        "path": [
+          "style",
+          "fillColor"
+        ]
+      }
+    },
+    {
+      "name": "a polyline stroke width, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "polyline",
+        "path": [
+          "style",
+          "strokeWidth"
+        ]
+      }
+    },
+    {
+      "name": "a circle radius, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "circle",
+        "path": [
+          "radius"
+        ]
+      }
+    },
+    {
+      "name": "an image aspect, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "image",
+        "path": [
+          "preserveAspect"
+        ]
+      }
+    },
+    {
+      "name": "an image source, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "image",
+        "path": [
+          "source"
+        ]
+      }
+    },
+    {
+      "name": "a table rows slot, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "table",
+        "path": [
+          "rows"
+        ]
+      }
+    },
+    {
+      "name": "a value slot, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "value",
+        "path": [
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "the colour \"#fff\"",
+      "call": "colorValue",
+      "args": {
+        "value": "#fff"
+      }
+    },
+    {
+      "name": "the colour \"#FFF\"",
+      "call": "colorValue",
+      "args": {
+        "value": "#FFF"
+      }
+    },
+    {
+      "name": "the colour \"#1a1a1a\"",
+      "call": "colorValue",
+      "args": {
+        "value": "#1a1a1a"
+      }
+    },
+    {
+      "name": "the colour \"#1A1A1AFF\"",
+      "call": "colorValue",
+      "args": {
+        "value": "#1A1A1AFF"
+      }
+    },
+    {
+      "name": "the colour \"#12345\"",
+      "call": "colorValue",
+      "args": {
+        "value": "#12345"
+      }
+    },
+    {
+      "name": "the colour \"#ggg\"",
+      "call": "colorValue",
+      "args": {
+        "value": "#ggg"
+      }
+    },
+    {
+      "name": "the colour \"none\"",
+      "call": "colorValue",
+      "args": {
+        "value": "none"
+      }
+    },
+    {
+      "name": "the colour \"\"",
+      "call": "colorValue",
+      "args": {
+        "value": ""
+      }
+    },
+    {
+      "name": "the colour \"red\"",
+      "call": "colorValue",
+      "args": {
+        "value": "red"
+      }
+    },
+    {
+      "name": "the colour \"#1a1a1a \"",
+      "call": "colorValue",
+      "args": {
+        "value": "#1a1a1a "
+      }
+    },
+    {
+      "name": "the colour null",
+      "call": "colorValue",
+      "args": {
+        "value": null
+      }
+    },
+    {
+      "name": "the colour 5",
+      "call": "colorValue",
+      "args": {
+        "value": 5
+      }
+    },
+    {
+      "name": "the colour true",
+      "call": "colorValue",
+      "args": {
+        "value": true
+      }
+    },
+    {
+      "name": "a script with two ports each way, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s1",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a",
+              "b"
+            ],
+            "out": [
+              "out1",
+              "out2"
+            ]
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "pass"
+            },
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": 7
+            },
+            {
+              "key": "placeholder.out2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script with two ports each way, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s1",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a",
+              "b"
+            ],
+            "out": [
+              "out1",
+              "out2"
+            ]
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "pass"
+            },
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "in.b",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": 7
+            },
+            {
+              "key": "placeholder.out2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script with no ports, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s2",
+          "type": "script",
+          "ports": {
+            "in": [],
+            "out": []
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script with no ports, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s2",
+          "type": "script",
+          "ports": {
+            "in": [],
+            "out": []
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script with no ports member at all, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s3",
+          "type": "script",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script with no ports member at all, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s3",
+          "type": "script",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose input is missing, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s4",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose input is missing, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s4",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "language",
+              "kind": "literal",
+              "value": "python"
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose placeholder is missing, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s5",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose placeholder is missing, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s5",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose input holds an error, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s6",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": {
+                "error": "#DIV0",
+                "message": "divide by zero"
+              }
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose input holds an error, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s6",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": {
+                "error": "#DIV0",
+                "message": "divide by zero"
+              }
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose placeholder holds an error, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s7",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": {
+                "error": "#REF",
+                "message": "gone"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose placeholder holds an error, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s7",
+          "type": "script",
+          "ports": {
+            "in": [
+              "a"
+            ],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "in.a",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": {
+                "error": "#REF",
+                "message": "gone"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose placeholder is a point, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "s8",
+          "type": "script",
+          "ports": {
+            "in": [],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": {
+                "x": 3,
+                "y": 4
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script whose placeholder is a point, its derived values",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "s8",
+          "type": "script",
+          "ports": {
+            "in": [],
+            "out": [
+              "out1"
+            ]
+          },
+          "slots": [
+            {
+              "key": "placeholder.out1",
+              "kind": "literal",
+              "value": {
+                "x": 3,
+                "y": 4
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a script language, how it is narrowed",
+      "call": "slotNarrowing",
+      "args": {
+        "type": "script",
+        "path": [
+          "language"
+        ]
+      }
+    }
+  ]
+}

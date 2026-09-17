@@ -1259,9 +1259,31 @@ because a lune contributes r squared times the sweep less its sine and the sine
 of a sweep of pi is 1.2e-16 rather than 0. The residue rounds away at a radius
 of five and shifts the last digit at a radius of three.
 
-**Still to come in this package.** The derived slot schemas of a circle, a path
-and a preset, which wait on the schema module, along with `primitives::table`,
-`primitives::image`, `primitives::doc` and the script stub.
+`schema`, `table`, `image` and `script::stub` complete the rest of the package
+that stands clear of text measurement. The schema is the piece the contract
+above singles out: edge derivation and the two integrity checks all resolve a
+slot group through one resolver, and a dynamic group's size comes from the
+object rather than from the type. `primitives.schema` asks both engines what
+each type declares, what each derived slot reads, and what each one computes,
+over 89 cases covering nine types, and they answer alike on every one.
+
+The three dynamic groups are the ones worth naming. A table declares a slot for
+each cell inside the size it holds now. A script node declares one slot for each
+port it carries, and each output names every input of the node, so adding an
+input recomputes all of them. A doc object declares the variables an operator
+has written rather than a fixed set. None of the three lets evaluation change
+the slot set, because each reads what a mutation already wrote.
+
+`primitives.table` carries 169 more cases over cell arithmetic, range expansion
+and the two resizes. A dimension slot holding a formula, a number that is not
+whole, a negative number or text all read as no lines at all, which is what
+stops a table from declaring cells out of a size that evaluation has yet to
+settle.
+
+**Still to come in this package.** `primitives::doc` and the `docref` schema,
+which read through the measurer, and the text and math schema entries that
+`RUST-009` owns. The registry answers nothing for a type it has yet to declare,
+so a caller can tell that apart from a type declaring no slots.
 
 ### `RUST-008`: Port the math language
 
@@ -1718,11 +1740,13 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  primitives::table, primitives::image, primitives::doc, the dynamic slot
-  families the schema resolves per object, the derived slot schemas of a
-  circle, a path and a preset, and the stub the script node arrives behind.
-  The schema is shared with RUST-010, which completes it. primitives::edge and
-  primitives::geometry are landed, under the fixtures of the same names.
+  primitives::doc and the docref schema, which read through the measurer, and
+  the text and math entries of the registry, which RUST-009 owns. The schema is
+  shared with RUST-010, which completes it. primitives::edge,
+  primitives::geometry, primitives::table, primitives::image,
+  primitives::schema and script::stub are landed, under the fixtures
+  primitives.edge, primitives.geometry, primitives.table and
+  primitives.schema.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1732,7 +1756,8 @@ Fixture and evidence paths:
   formula.dependencies carry RUST-005, formula.evaluate carries RUST-006, and
   math.lex, math.parse, math.names and math.evaluate carry RUST-008
   number.javascript-arithmetic pins the seven functions D-012 found agreeing,
-  and primitives.edge and primitives.geometry carry RUST-007 so far
+  and primitives.edge, primitives.geometry, primitives.table and
+  primitives.schema carry RUST-007 so far
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1742,9 +1767,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  183 pass
+  cargo test --workspace --locked                                  199 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1081 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1339 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1760,8 +1785,9 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port primitives/schema.ts, which the derived slots left
-  out of primitives::geometry resolve through, then primitives/table.ts.
+Next concrete action: port primitives/doc.ts with the docref derived slots,
+  which needs the measurer seam of measure.rs wired into SlotComputeInputs,
+  then hand the text and math registry entries to RUST-009.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```

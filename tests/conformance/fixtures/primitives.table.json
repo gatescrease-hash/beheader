@@ -1,0 +1,7534 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "primitives.table",
+  "sourceTest": "src/engine/primitives/table.test.ts",
+  "requirement": "SPEC.md section 9, tables and ranges",
+  "comparison": "exact",
+  "note": "Cell address arithmetic, range expansion and the two resizes, asked of both engines. A resize answers the whole object because a resize moves cell slots about, and the order they come back in is observable. A dimension slot that holds a formula, a number that is not whole, a negative number or text all read as no lines at all, and the cases here carry each of those, because a table that declared cells from a size evaluation had yet to settle would break the rule that evaluation never changes the slot set.",
+  "cases": [
+    {
+      "name": "a three by three table, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of one cell, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of no lines, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are negative, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are text, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a wide table, its cells",
+      "call": "tableCellPaths",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a three by three table, the range A1 to C3",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of one cell, the range A1 to C3",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of no lines, the range A1 to C3",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, the range A1 to C3",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a three by three table, the range C3 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of one cell, the range C3 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of no lines, the range C3 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, the range C3 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a three by three table, the range A1 to Z9",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "Z9"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of one cell, the range A1 to Z9",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "Z9"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of no lines, the range A1 to Z9",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "Z9"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, the range A1 to Z9",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "Z9"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a three by three table, the range B2 to B2",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of one cell, the range B2 to B2",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of no lines, the range B2 to B2",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, the range B2 to B2",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a three by three table, the range A1 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of one cell, the range A1 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table of no lines, the range A1 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, the range A1 to A1",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a range across two tables",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a range whose endpoint is not a cell",
+      "call": "tableRange",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "start": {
+          "objectId": "t1",
+          "path": [
+            "rows"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a three by three table, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a three by three table, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a three by three table, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a three by three table, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a three by three table, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a three by three table, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a three by three table, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a three by three table, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a three by three table, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a three by three table, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table of one cell, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table of one cell, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table of one cell, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table of one cell, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table of one cell, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table of one cell, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table of one cell, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table of one cell, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table of one cell, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table of one cell, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 9
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table of no lines, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table of no lines, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table of no lines, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table of no lines, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table of no lines, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table of no lines, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table of no lines, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table of no lines, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table of no lines, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table of no lines, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 0
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are a formula, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are not whole, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2.5
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are negative, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are negative, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are negative, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are negative, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are negative, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are negative, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are negative, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are negative, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are negative, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are negative, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": -1
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are text, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are text, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are text, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are text, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are text, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a table whose rows are text, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a table whose rows are text, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a table whose rows are text, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a table whose rows are text, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a table whose rows are text, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": "many"
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "a wide table, row 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a wide table, row 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a wide table, row 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a wide table, row 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 0
+      }
+    },
+    {
+      "name": "a wide table, row 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "row",
+        "index": 99
+      }
+    },
+    {
+      "name": "a wide table, column 1 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a wide table, column 2 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a wide table, column 3 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a wide table, column 0 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 0
+      }
+    },
+    {
+      "name": "a wide table, column 99 resized",
+      "call": "tableResize",
+      "args": {
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 30
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.AD2",
+              "kind": "literal",
+              "value": 2
+            }
+          ]
+        },
+        "axis": "column",
+        "index": 99
+      }
+    },
+    {
+      "name": "cell A1 against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell A1 against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell A1 against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell A1 against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell A1 against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell A1 against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell B2 against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell B2 against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell B2 against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell B2 against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell B2 against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell B2 against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell C3 against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell C3 against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell C3 against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell C3 against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell C3 against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell C3 against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell AD10 against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "AD10"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell AD10 against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "AD10"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell AD10 against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "AD10"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell AD10 against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "AD10"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "cell AD10 against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "AD10"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "cell AD10 against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "AD10"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a cell of another table against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a cell of another table against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a cell of another table against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a cell of another table against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a cell of another table against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a cell of another table against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a slot that is not a cell against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "rows"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a slot that is not a cell against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "rows"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a slot that is not a cell against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "rows"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a slot that is not a cell against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "rows"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a slot that is not a cell against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "rows"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a slot that is not a cell against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "rows"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a cell path with no reference against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a cell path with no reference against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a cell path with no reference against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a cell path with no reference against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a cell path with no reference against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a cell path with no reference against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a cell path of the wrong shape against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1",
+            "x"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a cell path of the wrong shape against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1",
+            "x"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a cell path of the wrong shape against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1",
+            "x"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a cell path of the wrong shape against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1",
+            "x"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a cell path of the wrong shape against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1",
+            "x"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a cell path of the wrong shape against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1",
+            "x"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "a malformed reference against row 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "1A"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 1
+      }
+    },
+    {
+      "name": "a malformed reference against row 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "1A"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 2
+      }
+    },
+    {
+      "name": "a malformed reference against row 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "1A"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "row",
+        "index": 3
+      }
+    },
+    {
+      "name": "a malformed reference against column 1",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "1A"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 1
+      }
+    },
+    {
+      "name": "a malformed reference against column 2",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "1A"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 2
+      }
+    },
+    {
+      "name": "a malformed reference against column 3",
+      "call": "tableAddressRewrite",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "1A"
+          ]
+        },
+        "end": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "tableId": "t1",
+        "axis": "column",
+        "index": 3
+      }
+    },
+    {
+      "name": "cell A1 inside the extent",
+      "call": "tableCellInExtent",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "cell B2 inside the extent",
+      "call": "tableCellInExtent",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "B2"
+          ]
+        },
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "cell C3 inside the extent",
+      "call": "tableCellInExtent",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "C3"
+          ]
+        },
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "cell AD10 inside the extent",
+      "call": "tableCellInExtent",
+      "args": {
+        "address": {
+          "objectId": "t1",
+          "path": [
+            "cells",
+            "AD10"
+          ]
+        },
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a cell of another table inside the extent",
+      "call": "tableCellInExtent",
+      "args": {
+        "address": {
+          "objectId": "t2",
+          "path": [
+            "cells",
+            "A1"
+          ]
+        },
+        "object": {
+          "id": "t1",
+          "name": "grid",
+          "type": "table",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "rows",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cols",
+              "kind": "literal",
+              "value": 3
+            },
+            {
+              "key": "cells.A1",
+              "kind": "literal",
+              "value": 1
+            },
+            {
+              "key": "cells.B1",
+              "kind": "literal",
+              "value": 2
+            },
+            {
+              "key": "cells.A2",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "cells.C3",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "cells.B2",
+              "kind": "literal",
+              "value": null
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

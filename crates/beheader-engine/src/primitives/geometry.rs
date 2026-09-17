@@ -37,10 +37,14 @@
 //! that file describes at greater length.
 
 use crate::address::Address;
-use crate::model::{GraphObject, ObjectType, Point, Slot, Value, slot_key};
+use crate::model::{ErrorCode, ErrorValue, GraphObject, ObjectType, Point, Slot, Value, slot_key};
 use crate::number::{js_cos, js_hypot, js_sin, to_javascript_text};
 use crate::primitives::edge::{
-    EdgeSplit, HALF_CIRCLE_BULGE, PathEdge, build_path_edges, split_edge_at,
+    EdgeSplit, HALF_CIRCLE_BULGE, PathEdge, build_path_edges, path_area, path_bounds,
+    path_centroid, path_length, split_edge_at,
+};
+use crate::primitives::schema::{
+    DerivedSlotCompute, DerivedSlotDependencies, DerivedSlotSchema, SlotComputeInputs,
 };
 
 pub const VERTEX_PATH_PREFIX: &str = "vertex";
@@ -866,6 +870,587 @@ fn build_exploded_polyline<A: Clone>(
         ports: None,
         vertex_count: Some(vertices.len() as f64),
     }
+}
+
+pub fn polygon_sides_path() -> Vec<String> {
+    path(&["sides"])
+}
+
+pub fn polygon_rotation_path() -> Vec<String> {
+    path(&["rotation"])
+}
+
+pub fn rect_width_path() -> Vec<String> {
+    path(&["width"])
+}
+
+pub fn rect_height_path() -> Vec<String> {
+    path(&["height"])
+}
+
+pub fn centroid_x_path() -> Vec<String> {
+    path(&["centroid", "x"])
+}
+
+pub fn centroid_y_path() -> Vec<String> {
+    path(&["centroid", "y"])
+}
+
+pub fn area_path() -> Vec<String> {
+    path(&["area"])
+}
+
+pub fn length_path() -> Vec<String> {
+    path(&["length"])
+}
+
+pub fn bounds_paths() -> [Vec<String>; 4] {
+    [
+        path(&["bounds", "minX"]),
+        path(&["bounds", "minY"]),
+        path(&["bounds", "maxX"]),
+        path(&["bounds", "maxY"]),
+    ]
+}
+
+fn type_error(message: impl Into<String>) -> Value {
+    Value::Error(ErrorValue {
+        error: ErrorCode::Type,
+        message: message.into(),
+    })
+}
+
+fn reference_error(message: impl Into<String>) -> Value {
+    Value::Error(ErrorValue {
+        error: ErrorCode::Ref,
+        message: message.into(),
+    })
+}
+
+/// A number that reached a slot, with a negative zero turned back into zero and
+/// a non-finite one refused. A negative zero is illegal document state, and an
+/// infinity reaching a slot would leave every reader of it holding one.
+fn finite_or_type_error(value: f64, label: &str) -> Value {
+    if !value.is_finite() {
+        return type_error(format!(
+            "{label} produced a non-finite number ({})",
+            to_javascript_text(value)
+        ));
+    }
+    Value::Number(if value == 0.0 { 0.0 } else { value })
+}
+
+fn finalize_vertices(vertices: Vec<Point>, label: &str) -> Value {
+    for vertex in &vertices {
+        if !vertex.x.is_finite() || !vertex.y.is_finite() {
+            return type_error(format!(
+                "{label} produced a non-finite vertex ({}, {})",
+                to_javascript_text(vertex.x),
+                to_javascript_text(vertex.y)
+            ));
+        }
+    }
+    Value::Points(vertices)
+}
+
+/// The numbers at a list of paths, or the first reason one of them did not
+/// arrive. The order of the paths is the order of the answers.
+fn read_numeric_slots<A>(
+    object: &GraphObject<A>,
+    inputs: &SlotComputeInputs<A>,
+    label: &str,
+    named: &[(&str, Vec<String>)],
+) -> Result<Vec<f64>, Value> {
+    let mut found = Vec::new();
+    for (name, at) in named {
+        let Some(value) = inputs.at(object, at) else {
+            return Err(reference_error(format!(
+                "{label}: {name} did not resolve to a value"
+            )));
+        };
+        match value {
+            Value::Error(_) => return Err(value),
+            Value::Number(held) => found.push(held),
+            _ => return Err(type_error(format!("{label}: {name} must be a number"))),
+        }
+    }
+    Ok(found)
+}
+
+/// Gathers a polygon's five parameters into the one point list every consumer
+/// reads.
+pub fn compute_polygon_vertices_slot<A>(
+    object: &GraphObject<A>,
+    inputs: &SlotComputeInputs<A>,
+) -> Value {
+    let read = read_numeric_slots(
+        object,
+        inputs,
+        "polygon.vertices",
+        &[
+            ("sides", polygon_sides_path()),
+            ("radius", radius_path()),
+            ("originX", origin_x_path()),
+            ("originY", origin_y_path()),
+            ("rotation", polygon_rotation_path()),
+        ],
+    );
+    let found = match read {
+        Err(failure) => return failure,
+        Ok(found) => found,
+    };
+    let [sides, radius, origin_x, origin_y, rotation] = found[..] else {
+        return type_error("polygon.vertices: the parameters did not arrive");
+    };
+    if sides.fract() != 0.0 || !sides.is_finite() || sides < MIN_POLYGON_SIDES {
+        return type_error(format!(
+            "polygon.vertices: sides must be an integer >= {}",
+            to_javascript_text(MIN_POLYGON_SIDES)
+        ));
+    }
+    if radius < 0.0 {
+        return type_error("polygon.vertices: radius must not be negative");
+    }
+    finalize_vertices(
+        compute_polygon_vertices(
+            sides,
+            radius,
+            Point {
+                x: origin_x,
+                y: origin_y,
+            },
+            rotation,
+        ),
+        "polygon.vertices",
+    )
+}
+
+pub fn compute_rect_vertices_slot<A>(
+    object: &GraphObject<A>,
+    inputs: &SlotComputeInputs<A>,
+) -> Value {
+    let read = read_numeric_slots(
+        object,
+        inputs,
+        "rect.vertices",
+        &[
+            ("originX", origin_x_path()),
+            ("originY", origin_y_path()),
+            ("width", rect_width_path()),
+            ("height", rect_height_path()),
+        ],
+    );
+    let found = match read {
+        Err(failure) => return failure,
+        Ok(found) => found,
+    };
+    let [origin_x, origin_y, width, height] = found[..] else {
+        return type_error("rect.vertices: the parameters did not arrive");
+    };
+    if width < 0.0 || height < 0.0 {
+        return type_error("rect.vertices: width and height must not be negative");
+    }
+    finalize_vertices(
+        compute_rect_vertices(
+            Point {
+                x: origin_x,
+                y: origin_y,
+            },
+            width,
+            height,
+        ),
+        "rect.vertices",
+    )
+}
+
+/// The vertices slot of a polyline depends on the two coordinate slots of each
+/// vertex and on no bulge, because bending an edge moves no point.
+pub fn polyline_vertices_dependencies<A>() -> DerivedSlotDependencies<A> {
+    DerivedSlotDependencies::Dynamic(Box::new(|object, _objects| {
+        enumerate_polyline_coordinate_slot_paths(object)
+            .into_iter()
+            .map(|at| Address {
+                object_id: object.id.clone(),
+                path: at,
+            })
+            .collect()
+    }))
+}
+
+/// Gathers a polyline's per vertex slots into the one point list every consumer
+/// reads.
+pub fn compute_polyline_vertices_slot<A>(
+    object: &GraphObject<A>,
+    inputs: &SlotComputeInputs<A>,
+) -> Value {
+    let count = vertex_count_of(object);
+    if count < MIN_POLYLINE_VERTICES {
+        return type_error(format!(
+            "polyline.vertices: a polyline needs at least {} vertices",
+            to_javascript_text(MIN_POLYLINE_VERTICES)
+        ));
+    }
+    let mut vertices = Vec::new();
+    for index in vertex_indices(count) {
+        let (Some(x), Some(y)) = (
+            inputs.at(object, &vertex_x_path(index)),
+            inputs.at(object, &vertex_y_path(index)),
+        ) else {
+            return reference_error(format!(
+                "polyline.vertices: vertex {} did not resolve to a value",
+                to_javascript_text(index)
+            ));
+        };
+        if let Value::Error(_) = x {
+            return x;
+        }
+        if let Value::Error(_) = y {
+            return y;
+        }
+        let (Value::Number(x), Value::Number(y)) = (&x, &y) else {
+            return type_error(format!(
+                "polyline.vertices: vertex {} must be a pair of numbers",
+                to_javascript_text(index)
+            ));
+        };
+        vertices.push(Point { x: *x, y: *y });
+    }
+    finalize_vertices(vertices, "polyline.vertices")
+}
+
+/// True when the object carries a closed slot. A path built before the closed
+/// slot existed carries none. The dependency list and the flag reader ask this
+/// one question. Two answers that drift would produce a reference error at
+/// every derived slot of the path.
+fn has_closed_slot<A>(object: &GraphObject<A>) -> bool {
+    object.get_slot(&closed_path()).is_some()
+}
+
+/// The vertices slot, the closed slot when the object carries one, and every
+/// bulge and handle slot it carries now.
+pub fn path_dependencies<A>() -> DerivedSlotDependencies<A> {
+    DerivedSlotDependencies::Dynamic(Box::new(|object, _objects| {
+        let mut addresses = vec![Address {
+            object_id: object.id.clone(),
+            path: vertices_path(),
+        }];
+        if has_closed_slot(object) {
+            addresses.push(Address {
+                object_id: object.id.clone(),
+                path: closed_path(),
+            });
+        }
+        for at in existing_curve_paths(object) {
+            addresses.push(Address {
+                object_id: object.id.clone(),
+                path: at,
+            });
+        }
+        addresses
+    }))
+}
+
+/// The bulge and the two handles of every vertex, in the order the vertices sit
+/// in. An edge reads the outgoing handle of the vertex it leaves and the
+/// incoming handle of the one it arrives at.
+struct CurveParts {
+    bulges: Vec<f64>,
+    handles_in: Vec<Point>,
+    handles_out: Vec<Point>,
+}
+
+/// A path as its slots describe it now: the placed points, the edges and the
+/// closed flag.
+pub struct PathShape {
+    pub vertices: Vec<Point>,
+    pub edges: Vec<PathEdge>,
+    pub closed: bool,
+}
+
+/// True when the path closes back to its first vertex. An absent slot reads as
+/// an open path, so a document written before the closed slot still loads.
+pub fn read_closed_flag<A>(
+    object: &GraphObject<A>,
+    inputs: &SlotComputeInputs<A>,
+    label: &str,
+) -> Result<bool, Value> {
+    if !has_closed_slot(object) {
+        return Ok(false);
+    }
+    match inputs.at(object, &closed_path()) {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Error(failure)) => Err(Value::Error(failure)),
+        Some(Value::Boolean(held)) => Ok(held),
+        Some(_) => Err(type_error(format!("{label}: closed must be true or false"))),
+    }
+}
+
+/// The bulge and the two handles of every vertex, in order. An absent slot
+/// reads as 0, which leaves the edge straight, so a path built before one of
+/// these slots existed still measures. This test for an absent slot matches the
+/// one [`existing_curve_paths`] uses.
+fn read_curve_parts<A>(
+    object: &GraphObject<A>,
+    inputs: &SlotComputeInputs<A>,
+    count: f64,
+    label: &str,
+) -> Result<CurveParts, Value> {
+    let mut bulges = Vec::new();
+    let mut handles_in = Vec::new();
+    let mut handles_out = Vec::new();
+    for index in vertex_indices(count) {
+        let read_at = |at: Vec<String>, what: &str| -> Result<f64, Value> {
+            if object.get_slot(&at).is_none() {
+                return Ok(0.0);
+            }
+            match inputs.at(object, &at) {
+                None | Some(Value::Null) => Ok(0.0),
+                Some(Value::Error(failure)) => Err(Value::Error(failure)),
+                Some(Value::Number(held)) if held.is_finite() => Ok(held),
+                Some(_) => Err(type_error(format!(
+                    "{label}: {what} of vertex {} must be a number",
+                    to_javascript_text(index)
+                ))),
+            }
+        };
+        let handle_in = vertex_handle_in_paths(index);
+        let handle_out = vertex_handle_out_paths(index);
+        bulges.push(read_at(vertex_bulge_path(index), "the bulge")?);
+        let in_x = read_at(handle_in.x, "the incoming handle")?;
+        let in_y = read_at(handle_in.y, "the incoming handle")?;
+        let out_x = read_at(handle_out.x, "the outgoing handle")?;
+        let out_y = read_at(handle_out.y, "the outgoing handle")?;
+        handles_in.push(Point { x: in_x, y: in_y });
+        handles_out.push(Point { x: out_x, y: out_y });
+    }
+    Ok(CurveParts {
+        bulges,
+        handles_in,
+        handles_out,
+    })
+}
+
+fn read_vertices<A>(
+    object: &GraphObject<A>,
+    inputs: &SlotComputeInputs<A>,
+    label: &str,
+) -> Result<Vec<Point>, Value> {
+    match inputs.at(object, &vertices_path()) {
+        None => Err(reference_error(format!(
+            "{label}: vertices did not resolve to a value"
+        ))),
+        Some(Value::Error(failure)) => Err(Value::Error(failure)),
+        Some(Value::Points(vertices)) if !vertices.is_empty() => Ok(vertices),
+        Some(Value::Points(_)) => Err(type_error(format!("{label}: vertices is empty"))),
+        Some(_) => Err(type_error(format!(
+            "{label}: vertices must be a list of points"
+        ))),
+    }
+}
+
+/// One measure of a path. A measure that answers nothing is refused with the
+/// wording below, and the area of an open path is the only one that does: the
+/// slot is declared either way, so a formula can drive `closed` and evaluation
+/// then changes a value rather than the slot set.
+type PathMeasure = fn(&PathShape) -> Option<f64>;
+
+fn derive_path_number<A: 'static>(label: String, measure: PathMeasure) -> DerivedSlotCompute<A> {
+    Box::new(move |object, inputs| {
+        let closed = match read_closed_flag(object, inputs, &label) {
+            Err(failure) => return failure,
+            Ok(closed) => closed,
+        };
+        let vertices = match read_vertices(object, inputs, &label) {
+            Err(failure) => return failure,
+            Ok(vertices) => vertices,
+        };
+        let parts = match read_curve_parts(object, inputs, vertices.len() as f64, &label) {
+            Err(failure) => return failure,
+            Ok(parts) => parts,
+        };
+        let edges = build_path_edges(
+            &vertices,
+            &parts.bulges,
+            closed,
+            &parts.handles_in,
+            &parts.handles_out,
+        );
+        let shape = PathShape {
+            vertices,
+            edges,
+            closed,
+        };
+        match measure(&shape) {
+            None => type_error(format!(
+                "{label}: an open path has no area. Set closed to true first"
+            )),
+            Some(number) => finite_or_type_error(number, &label),
+        }
+    })
+}
+
+fn derive_number_from_vertices<A: 'static>(
+    label: String,
+    measure: fn(&[Point]) -> f64,
+) -> DerivedSlotCompute<A> {
+    Box::new(
+        move |object, inputs| match read_vertices(object, inputs, &label) {
+            Err(failure) => failure,
+            Ok(vertices) => finite_or_type_error(measure(&vertices), &label),
+        },
+    )
+}
+
+fn derive_circle_number<A: 'static>(
+    label: String,
+    measure: fn(Point, f64) -> f64,
+) -> DerivedSlotCompute<A> {
+    Box::new(move |object, inputs| {
+        let read = read_numeric_slots(
+            object,
+            inputs,
+            &label,
+            &[
+                ("originX", origin_x_path()),
+                ("originY", origin_y_path()),
+                ("radius", radius_path()),
+            ],
+        );
+        let found = match read {
+            Err(failure) => return failure,
+            Ok(found) => found,
+        };
+        let [origin_x, origin_y, radius] = found[..] else {
+            return type_error(format!("{label}: the parameters did not arrive"));
+        };
+        if radius < 0.0 {
+            return type_error(format!("{label}: radius must not be negative"));
+        }
+        finite_or_type_error(
+            measure(
+                Point {
+                    x: origin_x,
+                    y: origin_y,
+                },
+                radius,
+            ),
+            &label,
+        )
+    })
+}
+
+/// The derived slots of a circle, each one exact. A circle does not need a
+/// vertices slot now that an arc exists. Two vertices and two bulges of 1 hold a
+/// circle exactly, and an explode makes that path.
+pub fn circle_derived_slots<A: 'static>(label: &str) -> Vec<DerivedSlotSchema<A>> {
+    let dependencies =
+        || DerivedSlotDependencies::Static(vec![origin_x_path(), origin_y_path(), radius_path()]);
+    let [min_x, min_y, max_x, max_y] = bounds_paths();
+    vec![
+        (
+            centroid_x_path(),
+            "centroid.x",
+            (|origin, _radius| origin.x) as fn(Point, f64) -> f64,
+        ),
+        (centroid_y_path(), "centroid.y", |origin, _radius| origin.y),
+        (area_path(), "area", |_origin, radius| {
+            std::f64::consts::PI * radius * radius
+        }),
+        (length_path(), "length", |_origin, radius| {
+            2.0 * std::f64::consts::PI * radius
+        }),
+        (min_x, "bounds.minX", |origin, radius| origin.x - radius),
+        (min_y, "bounds.minY", |origin, radius| origin.y - radius),
+        (max_x, "bounds.maxX", |origin, radius| origin.x + radius),
+        (max_y, "bounds.maxY", |origin, radius| origin.y + radius),
+    ]
+    .into_iter()
+    .map(|(at, name, measure)| DerivedSlotSchema {
+        path: at,
+        dependencies: dependencies(),
+        compute: derive_circle_number(format!("{label}.{name}"), measure),
+    })
+    .collect()
+}
+
+/// The derived slots of a shape that carries a point list. The maths walks the
+/// chords, because a preset has no bulge to bend one.
+pub fn vertices_derived_slots<A: 'static>(label: &str) -> Vec<DerivedSlotSchema<A>> {
+    let [min_x, min_y, max_x, max_y] = bounds_paths();
+    vec![
+        (
+            centroid_x_path(),
+            "centroid.x",
+            (|v: &[Point]| compute_centroid(v).x) as fn(&[Point]) -> f64,
+        ),
+        (centroid_y_path(), "centroid.y", |v: &[Point]| {
+            compute_centroid(v).y
+        }),
+        (area_path(), "area", compute_area),
+        (length_path(), "length", compute_perimeter_length),
+        (min_x, "bounds.minX", |v: &[Point]| compute_bounds(v).min_x),
+        (min_y, "bounds.minY", |v: &[Point]| compute_bounds(v).min_y),
+        (max_x, "bounds.maxX", |v: &[Point]| compute_bounds(v).max_x),
+        (max_y, "bounds.maxY", |v: &[Point]| compute_bounds(v).max_y),
+    ]
+    .into_iter()
+    .map(|(at, name, measure)| DerivedSlotSchema {
+        path: at,
+        dependencies: DerivedSlotDependencies::Static(vec![vertices_path()]),
+        compute: derive_number_from_vertices(format!("{label}.{name}"), measure),
+    })
+    .collect()
+}
+
+/// The derived slots of a path. The closed slot picks the maths for each one. A
+/// closed path gets the shoelace area, the area weighted centroid and the full
+/// perimeter. An open path gets the plain vertex mean, the length of the
+/// segments it has, and an error at area. Both sets sit at the same paths. So a
+/// write to closed changes values, and never the slot set.
+pub fn path_derived_slots<A: 'static>(label: &str) -> Vec<DerivedSlotSchema<A>> {
+    let [min_x, min_y, max_x, max_y] = bounds_paths();
+    let measures: Vec<(Vec<String>, &str, PathMeasure)> = vec![
+        (centroid_x_path(), "centroid.x", |shape| {
+            Some(if shape.closed {
+                path_centroid(&shape.edges).x
+            } else {
+                compute_vertex_mean(&shape.vertices).x
+            })
+        }),
+        (centroid_y_path(), "centroid.y", |shape| {
+            Some(if shape.closed {
+                path_centroid(&shape.edges).y
+            } else {
+                compute_vertex_mean(&shape.vertices).y
+            })
+        }),
+        (area_path(), "area", |shape| {
+            shape.closed.then(|| path_area(&shape.edges))
+        }),
+        (length_path(), "length", |shape| {
+            Some(path_length(&shape.edges))
+        }),
+        (min_x, "bounds.minX", |shape| {
+            Some(path_bounds(&shape.edges).min_x)
+        }),
+        (min_y, "bounds.minY", |shape| {
+            Some(path_bounds(&shape.edges).min_y)
+        }),
+        (max_x, "bounds.maxX", |shape| {
+            Some(path_bounds(&shape.edges).max_x)
+        }),
+        (max_y, "bounds.maxY", |shape| {
+            Some(path_bounds(&shape.edges).max_y)
+        }),
+    ];
+    measures
+        .into_iter()
+        .map(|(at, name, measure)| DerivedSlotSchema {
+            path: at,
+            dependencies: path_dependencies(),
+            compute: derive_path_number(format!("{label}.{name}"), measure),
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -43,8 +43,8 @@ use beheader_engine::math::lexer::tokenize_math;
 use beheader_engine::math::names::resolve_math_names;
 use beheader_engine::math::parser::parse_math;
 use beheader_engine::model::{
-    ErrorCode, ErrorValue, GraphObject, ObjectType, Point, Slot, SlotMap, has_illegal_number,
-    is_error_value, is_illegal_number, is_legal_port_name, slot_key,
+    ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap,
+    has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
 };
 use beheader_engine::number::{
     js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
@@ -65,6 +65,18 @@ use beheader_engine::primitives::geometry::{
     explode_object_to_polyline, insert_vertex_into_object, path_edges_of_object,
     polyline_edge_count, repair_vertex_address_for_delete, shift_vertex_address_for_delete,
     shift_vertex_address_for_insert, split_polyline_edge,
+};
+use beheader_engine::primitives::schema::{
+    SlotComputeInputs, SlotFormat, derived_slot_dependency_addresses, find_slot_format,
+    find_slot_options, get_object_schema, is_color_value, resolve_derived_slots,
+    resolve_non_derived_slot_paths,
+};
+use beheader_engine::primitives::table::{
+    CellRepair, RangeRepair, TableAxis, cell_address_to_coordinates, delete_table_line,
+    enumerate_range_cell_addresses, enumerate_table_cell_slot_paths, get_table_dimensions,
+    insert_table_line, is_in_extent_table_cell_address, is_table_dimension_resizable,
+    repair_cell_address_for_delete, repair_range_endpoints_for_delete,
+    shift_cell_address_for_insert,
 };
 use beheader_engine::wire::{
     decode_number, decode_point, decode_value, encode_number, encode_point, encode_value,
@@ -723,7 +735,25 @@ fn shape_object_argument(
         object_type,
         target: None,
         slots,
-        ports: None,
+        ports: object.get("ports").and_then(Json::as_object).map(|ports| {
+            let named = |key: &str| {
+                ports
+                    .get(key)
+                    .and_then(Json::as_array)
+                    .map(|names| {
+                        names
+                            .iter()
+                            .filter_map(|name| name.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            GraphObjectPorts {
+                input: named("in"),
+                output: named("out"),
+                seed: None,
+            }
+        }),
         vertex_count,
     })
 }
@@ -766,11 +796,182 @@ fn encode_edge(edge: &PathEdge) -> Json {
     })
 }
 
+/// The axis a table resize runs along.
+fn table_axis_argument(args: &Map<String, Json>) -> Result<TableAxis, String> {
+    match text_argument(args, "axis")?.as_str() {
+        "row" => Ok(TableAxis::Row),
+        "column" => Ok(TableAxis::Column),
+        _ => Err("the argument \"axis\" is \"row\" or \"column\"".to_string()),
+    }
+}
+
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
     let result: Answer = match call {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "objectSchema" => shape_object_argument(args, "object").map(|object| {
+            let Some(schema) = get_object_schema::<FormulaAst>(object.object_type) else {
+                return json!({ "declared": false });
+            };
+            let objects = [object.clone()];
+            let derived = resolve_derived_slots(&object, schema.derived_slots)
+                .into_iter()
+                .map(|entry| {
+                    json!({
+                        "path": entry.path,
+                        "dependencies": derived_slot_dependency_addresses(
+                            &object, &entry.dependencies, &objects,
+                        )
+                        .iter()
+                        .map(encode_address)
+                        .collect::<Vec<_>>(),
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "declared": true,
+                "nonDerived": resolve_non_derived_slot_paths(
+                    &object, &schema.non_derived_slot_paths,
+                ),
+                "derived": derived,
+                "options": schema
+                    .slot_options
+                    .iter()
+                    .map(|entry| json!({
+                        "path": entry.path,
+                        "values": entry.values.iter().map(encode_value).collect::<Vec<_>>(),
+                        "labels": match &entry.labels {
+                            None => Json::Null,
+                            Some(labels) => json!(labels),
+                        },
+                    }))
+                    .collect::<Vec<_>>(),
+                "formats": schema
+                    .slot_formats
+                    .iter()
+                    .map(|entry| json!({
+                        "path": entry.path,
+                        "format": match entry.format { SlotFormat::Color => "color" },
+                    }))
+                    .collect::<Vec<_>>(),
+            })
+        }),
+        "computeDerivedSlots" => shape_object_argument(args, "object").map(|object| {
+            let Some(schema) = get_object_schema::<FormulaAst>(object.object_type) else {
+                return json!({ "declared": false });
+            };
+            let objects = [object.clone()];
+            let read = |address: &Address| {
+                if address.object_id != object.id {
+                    return None;
+                }
+                object
+                    .get_slot(&address.path)
+                    .map(|slot| slot.value().clone())
+            };
+            let inputs = SlotComputeInputs {
+                read: &read,
+                objects: &objects,
+            };
+            json!({
+                "declared": true,
+                "values": resolve_derived_slots(&object, schema.derived_slots)
+                    .into_iter()
+                    .map(|entry| json!({
+                        "path": entry.path,
+                        "value": encode_value(&(entry.compute)(&object, &inputs)),
+                    }))
+                    .collect::<Vec<_>>(),
+            })
+        }),
+        "slotNarrowing" => object_type_argument(args, "type").and_then(|object_type| {
+            let at = path_argument(args, "path")?;
+            Ok(json!({
+                "format": match find_slot_format(object_type, &at) {
+                    None => Json::Null,
+                    Some(SlotFormat::Color) => Json::String("color".to_string()),
+                },
+                "options": match find_slot_options(object_type, &at) {
+                    None => Json::Null,
+                    Some(found) => json!({
+                        "values": found.values.iter().map(encode_value).collect::<Vec<_>>(),
+                        "labels": match found.labels {
+                            None => Json::Null,
+                            Some(labels) => json!(labels),
+                        },
+                    }),
+                },
+            }))
+        }),
+        "colorValue" => value_argument(args, "value").map(|value| json!(is_color_value(&value))),
+        "tableCellPaths" => shape_object_argument(args, "object").map(|object| {
+            let size = get_table_dimensions(&object);
+            json!({
+                "rows": encode_number(size.rows),
+                "cols": encode_number(size.cols),
+                "cells": enumerate_table_cell_slot_paths(&object),
+                "rowsResizable": is_table_dimension_resizable(&object, TableAxis::Row),
+                "columnsResizable": is_table_dimension_resizable(&object, TableAxis::Column),
+            })
+        }),
+        "tableRange" => shape_object_argument(args, "object").and_then(|object| {
+            let start = address_argument(args, "start")?;
+            let end = address_argument(args, "end")?;
+            Ok(
+                match enumerate_range_cell_addresses(&start, &end, &object) {
+                    Err(failure) => json!({ "error": "#REF", "message": failure.message }),
+                    Ok(cells) => json!({
+                        "cells": cells.iter().map(encode_address).collect::<Vec<_>>(),
+                    }),
+                },
+            )
+        }),
+        "tableResize" => shape_object_argument(args, "object").and_then(|object| {
+            let axis = table_axis_argument(args)?;
+            let index = number_argument(args, "index")?;
+            Ok(json!({
+                "inserted": encode_shape_object(&insert_table_line(&object, axis, index)),
+                "deleted": encode_shape_object(&delete_table_line(&object, axis, index)),
+            }))
+        }),
+        "tableAddressRewrite" => address_argument(args, "address").and_then(|address| {
+            let table_id = text_argument(args, "tableId")?;
+            let axis = table_axis_argument(args)?;
+            let index = number_argument(args, "index")?;
+            let end = address_argument(args, "end")?;
+            Ok(json!({
+                "coordinates": match cell_address_to_coordinates(&address) {
+                    None => Json::Null,
+                    Some(found) => json!({
+                        "column": encode_number(found.column),
+                        "row": encode_number(found.row),
+                    }),
+                },
+                "forInsert": encode_address(&shift_cell_address_for_insert(
+                    &address, &table_id, axis, index,
+                )),
+                "repaired": match repair_cell_address_for_delete(&address, &table_id, axis, index) {
+                    CellRepair::Deleted => Json::String("deleted".to_string()),
+                    CellRepair::Address(found) => encode_address(&found),
+                },
+                "range": match repair_range_endpoints_for_delete(
+                    &address, &end, &table_id, axis, index,
+                ) {
+                    RangeRepair::Deleted => Json::String("deleted".to_string()),
+                    RangeRepair::Endpoints { start, end } => json!({
+                        "start": encode_address(&start),
+                        "end": encode_address(&end),
+                    }),
+                },
+            }))
+        }),
+        "tableCellInExtent" => address_argument(args, "address").and_then(|address| {
+            Ok(json!(is_in_extent_table_cell_address(
+                &address,
+                &[shape_object_argument(args, "object")?]
+            )))
+        }),
         "computePresetVertices" => text_argument(args, "shape").and_then(|shape| {
             let vertices = match shape.as_str() {
                 "polygon" => compute_polygon_vertices(
