@@ -180,6 +180,13 @@
         "src/engine/primitives/schema.ts",
         "src/engine/script/stub.ts"
       ]
+    },
+    {
+      "id": "primitives.doc",
+      "file": "fixtures/primitives.doc.json",
+      "covers": [
+        "src/engine/primitives/doc.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -191,7 +198,6 @@
     "src/engine/index.ts",
     "src/engine/journal.ts",
     "src/engine/mutation.ts",
-    "src/engine/primitives/doc.ts",
     "src/engine/primitives/image.ts",
     "src/engine/primitives/math.ts",
     "src/engine/primitives/text.ts"

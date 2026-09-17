@@ -42,6 +42,7 @@ use beheader_engine::math::eval::evaluate_math_object;
 use beheader_engine::math::lexer::tokenize_math;
 use beheader_engine::math::names::resolve_math_names;
 use beheader_engine::math::parser::parse_math;
+use beheader_engine::measure::{MeasureCapability, MeasureError, Measurement, Measurer, TextStyle};
 use beheader_engine::model::{
     ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap,
     has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
@@ -50,6 +51,7 @@ use beheader_engine::number::{
     js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
     js_pow, js_sin, js_sinh, js_sqrt, js_tan, js_tanh, to_javascript_text,
 };
+use beheader_engine::primitives::doc::{docref_label, document_variable_name_problem};
 use beheader_engine::primitives::edge::{
     ArcGeometry, PathEdge, arc_of_edge, bezier_of_edge, build_path_edges, bulge_for_midpoint,
     bulge_for_tangent_arc, cubic_handles_for_edge, distance_to_edge, distance_to_path,
@@ -733,7 +735,14 @@ fn shape_object_argument(
             .unwrap_or(id)
             .to_string(),
         object_type,
-        target: None,
+        target: match object.get("target") {
+            None | Some(Json::Null) => None,
+            Some(held) => {
+                let mut one = Map::new();
+                one.insert("target".to_string(), held.clone());
+                Some(address_argument(&one, "target")?)
+            }
+        },
         slots,
         ports: object.get("ports").and_then(Json::as_object).map(|ports| {
             let named = |key: &str| {
@@ -756,6 +765,23 @@ fn shape_object_argument(
         }),
         vertex_count,
     })
+}
+
+/// Several shapes, read the same way one is.
+fn shape_object_list_argument(
+    args: &Map<String, Json>,
+    name: &str,
+) -> Result<Vec<GraphObject<FormulaAst>>, String> {
+    let items = argument(args, name)?
+        .as_array()
+        .ok_or_else(|| format!("the argument \"{name}\" is a list of objects"))?;
+    let mut objects = Vec::new();
+    for (index, _) in items.iter().enumerate() {
+        let mut one = Map::new();
+        one.insert("object".to_string(), items[index].clone());
+        objects.push(shape_object_argument(&one, "object")?);
+    }
+    Ok(objects)
 }
 
 /// A shape back out, with its slots in the order they sit in.
@@ -805,11 +831,55 @@ fn table_axis_argument(args: &Map<String, Json>) -> Result<TableAxis, String> {
     }
 }
 
+/// A measurer whose answer follows from the text alone, so both engines can be
+/// asked what a copy of a variable measures. A width counts the units a
+/// JavaScript string counts, so a label holding a character outside the basic
+/// plane measures two units wide rather than one.
+struct FakeMeasurer;
+
+impl Measurer for FakeMeasurer {
+    fn capability(&self) -> MeasureCapability {
+        MeasureCapability::Text
+    }
+
+    fn measure(
+        &self,
+        text: &str,
+        style: &TextStyle,
+        _max_width: Option<f64>,
+    ) -> Result<Measurement, MeasureError> {
+        Ok(Measurement {
+            width: text.encode_utf16().count() as f64 * style.font_size * 0.6,
+            height: style.line_height,
+        })
+    }
+}
+
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
     let result: Answer = match call {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "documentVariableName" => text_argument(args, "name").and_then(|name| {
+            let objects = shape_object_list_argument(args, "objects")?;
+            let exclude = match args.get("exclude") {
+                None | Some(Json::Null) => None,
+                Some(_) => Some(text_argument(args, "exclude")?),
+            };
+            Ok(
+                match document_variable_name_problem(&name, &objects, exclude.as_deref()) {
+                    None => Json::Null,
+                    Some(problem) => Json::String(problem),
+                },
+            )
+        }),
+        "docrefLabel" => value_argument(args, "value").and_then(|value| {
+            let target = match args.get("target") {
+                None | Some(Json::Null) => None,
+                Some(_) => Some(address_argument(args, "target")?),
+            };
+            Ok(json!(docref_label(target.as_ref(), &value)))
+        }),
         "objectSchema" => shape_object_argument(args, "object").map(|object| {
             let Some(schema) = get_object_schema::<FormulaAst>(object.object_type) else {
                 return json!({ "declared": false });
@@ -870,9 +940,17 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                     .get_slot(&address.path)
                     .map(|slot| slot.value().clone())
             };
+            let fake = FakeMeasurer;
             let inputs = SlotComputeInputs {
                 read: &read,
                 objects: &objects,
+                // A case naming no measurer gets none, which is what leaves a
+                // measured slot reporting a measurement error rather than a
+                // guessed size.
+                measurer: match args.get("measurer").and_then(Json::as_str) {
+                    Some("fake") => Some(&fake),
+                    _ => None,
+                },
             };
             json!({
                 "declared": true,

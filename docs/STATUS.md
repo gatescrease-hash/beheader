@@ -22,8 +22,8 @@ defines.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 199 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 1339 cases match across the two engines, with none awaiting either. |
+| Rust | 206 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 1424 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -218,6 +218,7 @@ file.
 | `beheader-engine/src/math/eval.rs` | A program over its inputs, with a fixed quadrature and a search for a root. |
 | `beheader-engine/src/primitives/edge.rs` | One path edge as a line, an arc or a cubic, and the area, length, centroid and bounds a path of them answers. |
 | `beheader-engine/src/primitives/geometry.rs` | Where the corners of a preset fall, what a list of points measures, and what growing or shrinking a path does to its slots. |
+| `beheader-engine/src/primitives/doc.rs` | Which names a document variable may take, and the line a copy of one draws. |
 | `beheader-engine/src/primitives/table.rs` | Cell address arithmetic, range expansion, and the two passes that resize a table by a line. |
 | `beheader-engine/src/primitives/schema.rs` | Which slots each object type declares, what each derived one reads, and what narrows a free value. |
 | `beheader-engine/src/primitives/image.rs` | The slot paths of the image type, and nothing else. |

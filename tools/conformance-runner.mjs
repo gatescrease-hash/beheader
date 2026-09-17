@@ -142,6 +142,8 @@ const {
   isColorValue,
   resolveDerivedSlots,
   resolveNonDerivedSlotPaths,
+  docrefLabel,
+  documentVariableNameProblem,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -638,8 +640,33 @@ function shapeObjectArgument(args, name) {
     type: value.type,
     vertexCount: value.vertexCount === undefined ? undefined : decodeNumber(value.vertexCount),
     ports: value.ports === undefined ? undefined : { in: named("in") ?? [], out: named("out") ?? [] },
+    target: value.target === undefined || value.target === null
+      ? undefined
+      : addressArgument({ target: value.target }, "target"),
     slots,
   };
+}
+
+/**
+ * A measurer whose answer follows from the text alone, so both engines can be
+ * asked what a copy of a variable measures. A width counts the units a
+ * JavaScript string counts, so a label holding a character outside the basic
+ * plane measures two units wide rather than one.
+ */
+const FAKE_MEASURER = {
+  measure: (text, style) => ({
+    width: text.length * style.fontSize * 0.6,
+    height: style.lineHeight,
+  }),
+};
+
+/**
+ * The context a derived slot computes against. A case naming no measurer gets
+ * none, which is what leaves a measured slot reporting a measurement error
+ * rather than a guessed size.
+ */
+function evalContextArgument(args) {
+  return args.measurer === "fake" ? { measurer: FAKE_MEASURER } : undefined;
 }
 
 /** The axis a table resize runs along. */
@@ -649,6 +676,15 @@ function tableAxisArgument(args) {
     throw new BadArgument('the argument "axis" is "row" or "column"');
   }
   return axis;
+}
+
+/** Several shapes, read the same way one is. */
+function shapeObjectListArgument(args, name) {
+  const items = argument(args, name);
+  if (!Array.isArray(items)) {
+    throw new BadArgument(`the argument "${name}" is a list of objects`);
+  }
+  return items.map((entry) => shapeObjectArgument({ object: entry }, "object"));
 }
 
 /** A shape back out, with its slots in the order they sit in. */
@@ -710,6 +746,19 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  documentVariableName: (args) => {
+    const problem = documentVariableNameProblem(
+      textArgument(args, "name"),
+      shapeObjectListArgument(args, "objects"),
+      args.exclude === undefined ? undefined : textArgument(args, "exclude"),
+    );
+    return problem ?? null;
+  },
+  docrefLabel: (args) =>
+    docrefLabel(
+      args.target === undefined || args.target === null ? undefined : addressArgument(args, "target"),
+      valueArgument(args, "value"),
+    ),
   objectSchema: (args) => {
     const object = shapeObjectArgument(args, "object");
     const schema = getObjectSchema(object.type);
@@ -740,11 +789,12 @@ const CALLS = {
     }
     const read = (address) =>
       address.objectId === object.id ? object.slots[slotKey(address.path)]?.value : undefined;
+    const context = evalContextArgument(args);
     return {
       declared: true,
       values: resolveDerivedSlots(object, schema.derivedSlots).map((entry) => ({
         path: entry.path,
-        value: encodeValue(entry.compute(object, read, undefined, { objects: [object] })),
+        value: encodeValue(entry.compute(object, read, context, { objects: [object] })),
       })),
     };
   },

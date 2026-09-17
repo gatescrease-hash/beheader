@@ -1,0 +1,2846 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "primitives.doc",
+  "sourceTest": "src/engine/primitives/doc.test.ts",
+  "requirement": "SPEC.md section 13, document variables",
+  "comparison": "exact",
+  "note": "Which names a variable may take, and the line a copy of one draws. The measured cases run against a fake measurer whose width counts the units a JavaScript string counts, so a label holding a character outside the basic plane measures two units wide in both engines rather than one. The cases naming no measurer are the headless ones, where a measured slot reports a measurement error rather than a guessed size.",
+  "cases": [
+    {
+      "name": "the name \"alpha\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "alpha",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"ALPHA\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "ALPHA",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"Alpha\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "Alpha",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"beta\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "beta",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"gamma\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "gamma",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"delta\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "delta",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"wheel\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "wheel",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"WHEEL\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "WHEEL",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"grid\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "grid",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"doc\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "doc",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"DOC\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "DOC",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"SUM\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "SUM",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"sum\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "sum",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"AND\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "AND",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"and\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "and",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"not\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "not",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"TRUE\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "TRUE",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"false\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "false",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"PI\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "PI",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"A1\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "A1",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"b12\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "b12",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"AA10\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "AA10",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"ZZ999\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "ZZ999",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"constructor\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "constructor",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"toString\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "toString",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"valueOf\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "valueOf",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"hasOwnProperty\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "hasOwnProperty",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"__proto__\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "__proto__",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"__defineGetter__\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "__defineGetter__",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"isPrototypeOf\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "isPrototypeOf",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"propertyIsEnumerable\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "propertyIsEnumerable",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"toLocaleString\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "toLocaleString",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"1abc\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "1abc",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"a b\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "a b",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"a-b\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "a-b",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"_leading\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "_leading",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"with_underscore\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "with_underscore",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"a1\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "a1",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"x\"",
+      "call": "documentVariableName",
+      "args": {
+        "name": "x",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "the name \"alpha\" renaming itself",
+      "call": "documentVariableName",
+      "args": {
+        "name": "alpha",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ],
+        "exclude": "alpha"
+      }
+    },
+    {
+      "name": "the name \"alpha\" renaming another",
+      "call": "documentVariableName",
+      "args": {
+        "name": "alpha",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ],
+        "exclude": "gamma"
+      }
+    },
+    {
+      "name": "the name \"Beta\" renaming itself",
+      "call": "documentVariableName",
+      "args": {
+        "name": "Beta",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ],
+        "exclude": "Beta"
+      }
+    },
+    {
+      "name": "the name \"Beta\" renaming another",
+      "call": "documentVariableName",
+      "args": {
+        "name": "Beta",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ],
+        "exclude": "gamma"
+      }
+    },
+    {
+      "name": "the name \"gamma\" renaming itself",
+      "call": "documentVariableName",
+      "args": {
+        "name": "gamma",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ],
+        "exclude": "gamma"
+      }
+    },
+    {
+      "name": "the name \"gamma\" renaming another",
+      "call": "documentVariableName",
+      "args": {
+        "name": "gamma",
+        "objects": [
+          {
+            "id": "doc",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "Beta",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "gamma",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ],
+        "exclude": "gamma"
+      }
+    },
+    {
+      "name": "a name with no doc object",
+      "call": "documentVariableName",
+      "args": {
+        "name": "alpha",
+        "objects": [
+          {
+            "id": "o1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": []
+          },
+          {
+            "id": "o2",
+            "name": "Grid",
+            "type": "table",
+            "slots": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "a copy showing value 0",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": null
+      }
+    },
+    {
+      "name": "a copy showing value 1",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": 42
+      }
+    },
+    {
+      "name": "a copy showing value 2",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": 0
+      }
+    },
+    {
+      "name": "a copy showing value 3",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": -0.0
+      }
+    },
+    {
+      "name": "a copy showing value 4",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": 1e+21
+      }
+    },
+    {
+      "name": "a copy showing value 5",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": 1e-07
+      }
+    },
+    {
+      "name": "a copy showing value 6",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": 0.1
+      }
+    },
+    {
+      "name": "a copy showing value 7",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": true
+      }
+    },
+    {
+      "name": "a copy showing value 8",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": false
+      }
+    },
+    {
+      "name": "a copy showing value 9",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": "plain"
+      }
+    },
+    {
+      "name": "a copy showing value 10",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": "with\na break"
+      }
+    },
+    {
+      "name": "a copy showing value 11",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": "with\ta tab"
+      }
+    },
+    {
+      "name": "a copy showing value 12",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": "with\ra return"
+      }
+    },
+    {
+      "name": "a copy showing value 13",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": "with all\r\n\tthree"
+      }
+    },
+    {
+      "name": "a copy showing value 14",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": {
+          "x": 1,
+          "y": 2
+        }
+      }
+    },
+    {
+      "name": "a copy showing value 15",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": {
+          "x": -0.0,
+          "y": 1e+21
+        }
+      }
+    },
+    {
+      "name": "a copy showing value 16",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": [
+          {
+            "x": 1,
+            "y": 2
+          },
+          {
+            "x": 3,
+            "y": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "a copy showing value 17",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": []
+      }
+    },
+    {
+      "name": "a copy showing value 18",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": {
+          "error": "#REF",
+          "message": "a long message that would stretch the box"
+        }
+      }
+    },
+    {
+      "name": "a copy showing value 19",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": "a character outside the basic plane \ud834\udd1e"
+      }
+    },
+    {
+      "name": "a copy showing value 20",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha"
+          ]
+        },
+        "value": "a letter with a mark e\u0301"
+      }
+    },
+    {
+      "name": "a copy with no target",
+      "call": "docrefLabel",
+      "args": {
+        "target": null,
+        "value": 42
+      }
+    },
+    {
+      "name": "a copy whose target has a long path",
+      "call": "docrefLabel",
+      "args": {
+        "target": {
+          "objectId": "doc",
+          "path": [
+            "alpha",
+            "deeper"
+          ]
+        },
+        "value": 1
+      }
+    },
+    {
+      "name": "a copy of a number, measured",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": 42
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a copy of a number, with no measurer",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": 42
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a copy of nothing, measured",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a copy of nothing, with no measurer",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": null
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a copy of text, measured",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": "hello"
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a copy of text, with no measurer",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": "hello"
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a copy of a point, measured",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": {
+                "x": 1,
+                "y": 2
+              }
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a copy of a point, with no measurer",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": {
+                "x": 1,
+                "y": 2
+              }
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a copy of an error, measured",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": {
+                "error": "#DIV0",
+                "message": "divide by zero"
+              }
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a copy of an error, with no measurer",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": {
+                "error": "#DIV0",
+                "message": "divide by zero"
+              }
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a copy of a character outside the basic plane, measured",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": "\ud834\udd1e"
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a copy of a character outside the basic plane, with no measurer",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": "\ud834\udd1e"
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a copy with no target, measured",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": 42
+            }
+          ]
+        },
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "a copy, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": 42
+            }
+          ],
+          "target": {
+            "objectId": "doc",
+            "path": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a copy with no target, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": 42
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

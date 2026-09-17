@@ -20,22 +20,28 @@
 //! operator can create, and no command word makes one. They stay because they
 //! are the smallest case that exercises a derived slot.
 //!
-//! The text, math, doc and docref entries arrive with `RUST-009`, along with
-//! the measurer a derived slot of each of those reads through. The registry
-//! answers nothing for a type with no entry, which is the same answer the
-//! TypeScript gives for a type it has yet to declare.
+//! The text and math entries arrive with `RUST-009`. The registry answers
+//! nothing for a type with no entry, which is the same answer the TypeScript
+//! gives for a type it has yet to declare.
 //!
 //! The port of `src/engine/primitives/schema.ts`.
 
 use crate::address::Address;
+use crate::measure::{MeasureCapability, Measurer};
 use crate::model::{ErrorCode, ErrorValue, GraphObject, ObjectType, Value, slot_key};
 
-/// What a derived slot can read while it computes. The measurer a text or a
-/// math slot needs arrives with `RUST-009`, beside the first slot that reads
-/// one.
+/// What a derived slot can read while it computes.
+///
+/// The measurer is the one service the engine takes from its host, under rule
+/// 1, and a slot that draws text reads its size through this rather than
+/// through a canvas. A pass with no measurer, or one carrying a measurer that
+/// answers for nothing, leaves such a slot reporting a measurement error rather
+/// than a guessed size, so a headless evaluation cannot leave a box a browser
+/// would disagree with.
 pub struct SlotComputeInputs<'a, A> {
     pub read: &'a dyn Fn(&Address) -> Option<Value>,
     pub objects: &'a [GraphObject<A>],
+    pub measurer: Option<&'a dyn Measurer>,
 }
 
 impl<A> SlotComputeInputs<'_, A> {
@@ -45,6 +51,15 @@ impl<A> SlotComputeInputs<'_, A> {
             object_id: object.id.clone(),
             path: path.to_vec(),
         })
+    }
+
+    /// The measurer, when one is present that answers for something. The
+    /// TypeScript tests the context against its null measurer, and the null
+    /// measurer here is the one that reports no capability, so the two agree
+    /// about which passes can measure.
+    pub fn real_measurer(&self) -> Option<&dyn Measurer> {
+        self.measurer
+            .filter(|measurer| measurer.capability() != MeasureCapability::None)
     }
 }
 
@@ -253,6 +268,21 @@ pub fn get_object_schema<A: 'static>(object_type: ObjectType) -> Option<ObjectSc
         // dynamic without breaking the rule that evaluation never changes the
         // slot set: only a mutation writes a variable, and this enumeration
         // reads the slots the object already carries.
+        // A copy carries a position and nothing else it could hold a value in.
+        // Its address lives in `target`, outside the slot set, so nothing here
+        // declares it and the integrity check is what pairs it with a variable.
+        ObjectType::Docref => Some(ObjectSchema {
+            object_type,
+            non_derived_slot_paths: vec![NonDerivedSlotPathGroup::Static(vec![
+                crate::primitives::geometry::origin_x_path(),
+                crate::primitives::geometry::origin_y_path(),
+            ])],
+            derived_slots: vec![DerivedSlotGroup::Static(
+                crate::primitives::doc::docref_derived_slots(),
+            )],
+            slot_options: Vec::new(),
+            slot_formats: Vec::new(),
+        }),
         ObjectType::Doc => Some(ObjectSchema {
             object_type,
             non_derived_slot_paths: vec![NonDerivedSlotPathGroup::Dynamic(Box::new(|object| {
@@ -558,6 +588,7 @@ mod tests {
         let inputs = SlotComputeInputs {
             read: &read,
             objects: &objects,
+            measurer: None,
         };
         resolve_derived_slots(object, schema.derived_slots)
             .into_iter()

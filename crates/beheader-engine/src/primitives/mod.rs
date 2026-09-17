@@ -5,6 +5,7 @@
 //! `geometry` the shapes built from them, and the table and schema modules
 //! that read both arrive with the rest of `RUST-007`.
 
+pub mod doc;
 pub mod edge;
 pub mod geometry;
 pub mod image;
