@@ -116,6 +116,13 @@
         "src/engine/formula/eval.ts",
         "src/engine/formula/functions.ts"
       ]
+    },
+    {
+      "id": "math.lex",
+      "file": "fixtures/math.lex.json",
+      "covers": [
+        "src/engine/math/lexer.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -128,7 +135,6 @@
     "src/engine/journal.ts",
     "src/engine/math/ast.ts",
     "src/engine/math/eval.ts",
-    "src/engine/math/lexer.ts",
     "src/engine/math/names.ts",
     "src/engine/math/parser.ts",
     "src/engine/mutation.ts",

@@ -1,0 +1,305 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "math.lex",
+  "sourceTest": "src/engine/math/lexer.test.ts",
+  "requirement": "SPEC.md section 12, the math object",
+  "comparison": "exact",
+  "note": "The source is the LaTeX a math field writes, so the cases are what a generator produces rather than what a person would type.",
+  "cases": [
+    {
+      "name": "a sum",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1+2"
+      }
+    },
+    {
+      "name": "every symbol the language spells",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "+-*/^=,_|{}()[]"
+      }
+    },
+    {
+      "name": "a number with a fraction",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "3.5"
+      }
+    },
+    {
+      "name": "a number that opens with a stop",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "0.5"
+      }
+    },
+    {
+      "name": "a stop with no digit after it, which is a bare address",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1."
+      }
+    },
+    {
+      "name": "a single letter",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x"
+      }
+    },
+    {
+      "name": "a letter with a braced subscript, which is one name",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x_{ans}"
+      }
+    },
+    {
+      "name": "a letter with a single character subscript",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x_1"
+      }
+    },
+    {
+      "name": "a subscript holding a digit and a letter",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x_{a1}"
+      }
+    },
+    {
+      "name": "a subscript that never closes",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x_{ans"
+      }
+    },
+    {
+      "name": "a subscript with nothing in it",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x_{}"
+      }
+    },
+    {
+      "name": "a subscript holding something that is not a name character",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x_{a.b}"
+      }
+    },
+    {
+      "name": "a subscript with nothing after the low line",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "x_"
+      }
+    },
+    {
+      "name": "a name wrapped in operatorname",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\operatorname{speed}"
+      }
+    },
+    {
+      "name": "a name wrapped in mathrm",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\mathrm{speed}"
+      }
+    },
+    {
+      "name": "a wrapped name carrying a subscript",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\operatorname{speed}_{max}"
+      }
+    },
+    {
+      "name": "a wrapped name that never closes",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\operatorname{speed"
+      }
+    },
+    {
+      "name": "a wrapped name with nothing in it",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\operatorname{}"
+      }
+    },
+    {
+      "name": "a wrapped name holding a stop",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\operatorname{a.b}"
+      }
+    },
+    {
+      "name": "a name command with no brace after it",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\mathrm x"
+      }
+    },
+    {
+      "name": "an address",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\gpref{table_x.A1}"
+      }
+    },
+    {
+      "name": "an address holding a low line and a dot",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\gpref{poly_1.vertices}"
+      }
+    },
+    {
+      "name": "an address that never closes",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\gpref{table_x.A1"
+      }
+    },
+    {
+      "name": "an address with nothing in it",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\gpref{}"
+      }
+    },
+    {
+      "name": "an address holding something it may not",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\gpref{a b}"
+      }
+    },
+    {
+      "name": "an address with no brace after it",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\gpref x"
+      }
+    },
+    {
+      "name": "the unknown of an implicit line",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\solve{x}"
+      }
+    },
+    {
+      "name": "the unknown with nothing in it",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\solve{}"
+      }
+    },
+    {
+      "name": "a command the evaluator has no meaning for",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\left(1\\right)"
+      }
+    },
+    {
+      "name": "the spacing commands, which are dropped",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1\\,+\\;2\\:+\\!3"
+      }
+    },
+    {
+      "name": "a backslash and a space",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1\\ +2"
+      }
+    },
+    {
+      "name": "a backslash with no command after it",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1\\"
+      }
+    },
+    {
+      "name": "a command nothing knows, which reaches the parser",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\sin"
+      }
+    },
+    {
+      "name": "an integral",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\int_{0}^{1}x"
+      }
+    },
+    {
+      "name": "a sum over a range",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "\\sum_{i=1}^{n}i"
+      }
+    },
+    {
+      "name": "a bare dotted address, which notation cannot spell",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "table_x.A1"
+      }
+    },
+    {
+      "name": "a character the language has no meaning for",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1 @ 2"
+      }
+    },
+    {
+      "name": "a letter carrying an accent",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "café"
+      }
+    },
+    {
+      "name": "a character outside the basic plane, named whole",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1 + 𝔘"
+      }
+    },
+    {
+      "name": "an empty source",
+      "call": "tokenizeMath",
+      "args": {
+        "source": ""
+      }
+    },
+    {
+      "name": "space alone",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "   "
+      }
+    },
+    {
+      "name": "a tab and a carriage return between tokens",
+      "call": "tokenizeMath",
+      "args": {
+        "source": "1\t+\r2"
+      }
+    }
+  ]
+}

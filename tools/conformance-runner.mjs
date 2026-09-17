@@ -76,6 +76,7 @@ const {
   parseCellReference,
   parseFormula,
   slotKey,
+  tokenizeMath,
   toSurfacePath,
 } = await import("../src/engine/index.ts");
 
@@ -492,6 +493,19 @@ const CALLS = {
               message: "the case declared no values for this range",
             };
     return encodeValue(evaluateFormulaAst(parsed, read, readRange));
+  },
+  tokenizeMath: (args) => {
+    const result = tokenizeMath(textArgument(args, "source"));
+    if (!Array.isArray(result)) {
+      return { error: result.error, message: result.message, start: result.start };
+    }
+    return result.map((token) => ({
+      type: token.type,
+      text: token.text,
+      start: token.start,
+      value: encodeNumber(token.value),
+      name: token.name,
+    }));
   },
   extractDependencies: (args) => {
     const shape = validateFormulaAstShape(argument(args, "ast"));

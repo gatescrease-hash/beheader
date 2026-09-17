@@ -15,6 +15,7 @@
 pub mod address;
 pub mod formula;
 pub mod graph;
+pub mod math;
 pub mod measure;
 pub mod model;
 pub mod number;

@@ -346,7 +346,12 @@ export function tokenizeMath(source: string): readonly MathToken[] | MathLexErro
       continue;
     }
 
-    return failure(`"${character}" has no meaning in a formula`, at);
+    // The message names the whole code point, not the one UTF-16 unit the
+    // scan is sitting on, so a character outside the basic plane reads as
+    // itself rather than as the lone surrogate that is half of it. The offset
+    // stays the unit offset, because that is what marks the faulty field.
+    const whole = String.fromCodePoint(source.codePointAt(at) as number);
+    return failure(`"${whole}" has no meaning in a formula`, at);
   }
 
   tokens.push(token("eof", "", source.length));

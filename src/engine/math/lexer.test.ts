@@ -111,4 +111,12 @@ describe("tokenizeMath — the solve command", () => {
   it("refuses a solve command with nothing between its braces", () => {
     expect(failure("\\solve{}x=1")).toContain("nothing in it");
   });
+
+  it("names a character outside the basic plane whole, rather than half of it", () => {
+    expect(tokenizeMath("1 + \u{1D518}")).toEqual({
+      error: "#PARSE",
+      message: '"\u{1D518}" has no meaning in a formula',
+      start: 4,
+    });
+  });
 });

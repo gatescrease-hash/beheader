@@ -37,6 +37,7 @@ use beheader_engine::formula::format::format_formula;
 use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
+use beheader_engine::math::lexer::tokenize_math;
 use beheader_engine::model::{
     ErrorCode, ErrorValue, ObjectType, has_illegal_number, is_error_value, is_illegal_number,
     is_legal_port_name, slot_key,
@@ -79,6 +80,7 @@ const SUPPORTED_CALLS: &[&str] = &[
     "repairAddressesInAst",
     "rewriteAddressesInAst",
     "slotKey",
+    "tokenizeMath",
     "toSurfacePath",
     "validateFormulaAstShape",
     "valueRoundTrip",
@@ -493,6 +495,29 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                 };
                 Ok(encode_value(&value))
             }),
+            "tokenizeMath" => {
+                text_argument(args, "source").map(|source| match tokenize_math(&source) {
+                    Err(error) => json!({
+                        "error": "#PARSE",
+                        "message": error.message,
+                        "start": error.start,
+                    }),
+                    Ok(tokens) => Json::Array(
+                        tokens
+                            .iter()
+                            .map(|token| {
+                                json!({
+                                    "type": token.kind.as_str(),
+                                    "text": token.text,
+                                    "start": token.start,
+                                    "value": encode_number(token.value),
+                                    "name": token.name,
+                                })
+                            })
+                            .collect(),
+                    ),
+                })
+            }
             "extractDependencies" => argument(args, "ast").cloned().map(|raw| {
                 match validate_formula_ast_shape(&raw) {
                 Err(reason) => json!({ "ok": false, "reason": reason }),
