@@ -35,6 +35,26 @@ takes one idea from each:
 The goal is a substrate. An operator must be able to assemble small, live,
 data driven machines from a few good primitives plus wiring.
 
+### The scope this targets
+
+The reference points are Excel, Desmos and diagrams.net. The target is a generic
+two dimensional tool for calculation, notation, diagrams and layout, where one
+shared dependency graph across all four is what those three reference points
+each lack. A document at that scale holds objects and cells in the thousands.
+
+An earlier plan aimed much wider, at a single substrate that also covered CAD
+drafting, signal and media processing, and music. Using the program for real
+work established the narrower goal, and the wider one is retired as a product
+target. The parts of it that stay interesting arrive later as ordinary features
+against the primitives that already exist, rather than as a reason to choose a
+stack.
+
+Retiring that wider goal withdraws two requirements which had shaped earlier
+decisions about the stack. A document of hundreds of thousands of entities is
+out of scope, and so is coordinate precision beyond binary64 at a floating
+origin. CAD drafting was the only source of either one. Section 2 records the
+stack decisions that those two requirements had selected.
+
 ### The philosophy
 
 Keep the core simple and safe. Push complexity to the edges.
@@ -68,12 +88,31 @@ Keep the core simple and safe. Push complexity to the edges.
 nodes tempt a writer to put drawing state back into the data model. That is the
 exact coupling this design avoids.
 
-**The planned future stack.** A Rust engine core, a Tauri shell, a
-TypeScript and WebGPU front end, and a local Python interpreter as a subprocess.
-The migration plan and work register are in [RUST_PORT.md](RUST_PORT.md).
-That document plans the engine port without starting the deferred implementation.
-Do not implement the future stack yet. The shape of `src/engine/` matches a one to one port target for a
-future Rust crate. Two rules come out of that:
+**The desktop direction.** A Tauri shell and a local Python interpreter as a
+subprocess. A browser cannot spawn a process, so the script nodes of section 11
+stay stubs until the program has a native host. A Tauri shell runs the existing
+TypeScript and Canvas2D front end inside a webview, so packaging the program for
+the desktop does not depend on the language the engine is written in. Do not
+implement it yet.
+
+**A Rust engine is a deferred option rather than a plan.** Rust was selected
+while the product aimed at CAD scale, where a document holds hundreds of
+thousands of entities and coordinates need more precision than binary64 gives at
+a large offset from the origin. Section 1 retires that goal. At the sizes the
+current goal describes, measurement of the TypeScript engine attributes most of
+the cost of a mutation to bookkeeping over the whole document rather than to
+arithmetic, so a change of language moves a constant factor and leaves the
+growth curve unchanged. [RUST_PORT.md](RUST_PORT.md) holds those measurements,
+the migration plan, the work register, and the conditions that would reopen the
+choice. Do not implement it yet.
+
+**WebGPU** replaces the drawing layer when a measured drawing cost calls for it.
+It depends on no decision about the engine. Do not implement it yet.
+
+The shape of `src/engine/` still matches a one to one port target for a Rust
+crate, and two rules come out of that. They also serve headless testing and the
+document format on their own, which is why they hold whether or not a port ever
+happens:
 
 1. Store IDs, not object references. The graph must never use JavaScript object
    identity to hold a relationship.
@@ -130,6 +169,15 @@ Write the simplest correct code:
   clone in on success.
 
 At a few hundred objects this is fast enough and it is easy to prove correct.
+
+Each of those three costs is proportional to the size of the whole document
+rather than to the part of it that one mutation changes, so the cost of a single
+edit grows with the document. [RUST_PORT.md](RUST_PORT.md) records the measured
+growth and which of the phases carries it. The generic two dimensional tool that
+section 1 describes reaches document sizes where that growth becomes visible to
+an operator, so whether this rule still holds at those sizes is an open product
+question. Answering it changes this specification and the hard rules in
+`CLAUDE.md` together, rather than one file at a time.
 
 ### Rule 6. Evaluation never changes the slot set
 
@@ -1409,8 +1457,9 @@ The team considered each item below and postponed it on purpose.
   upstream literal. The behaviour has no definition when the upstream is itself a
   formula. The per component rule of section 14 is the answer for now.
 - **More than one viewport.** One canvas. Off screen is off screen.
-- **64 bit precision or a floating origin.** Plain JavaScript numbers are fine
-  at this scale.
+- **64 bit precision or a floating origin.** A plain JavaScript number is a
+  binary64 already. More precision than that at a large offset from the origin
+  was a CAD drafting requirement, and section 1 retires that goal.
 - **Graphing a function as a curve.** A math object gives numbers, and drawing
   one as a curve is geometry. The primitives and the ports it would read exist
   already, so this waits on want rather than on design.
@@ -1420,8 +1469,17 @@ The team considered each item below and postponed it on purpose.
   Section 12 gives the four properties that keep it safe.
 - **Collaboration.**
 - **Script libraries, export formats, DXF or other interchange formats.**
-- **WebGPU, Rust or Tauri.** That is the later stack. Only the module
-  boundaries anticipate it.
+- **A Rust engine.** Section 2 records it as a deferred option rather than a
+  plan. `RUST_PORT.md` holds the measurements behind that, and the conditions
+  that would reopen the choice. The module boundaries keep it available at a low
+  cost, which is the one part of it that the current code carries.
+- **WebGPU.** The Canvas2D renderer draws the current document at the sizes
+  section 1 describes. A GPU renderer replaces the drawing layer when a measured
+  drawing cost calls for it, and it depends on no decision about the engine.
+- **A Tauri shell, and Python as a subprocess.** These two arrive together,
+  because a native host is what allows a script node to run. Neither waits on a
+  Rust engine, because a Tauri shell runs the TypeScript front end that already
+  exists.
 - **Extra command words.** Add a command when a task needs it.
 
 ---
@@ -1458,5 +1516,7 @@ Prefer, in this order:
 3. Whatever protects Rule 6.
 4. Whatever is simplest to delete later.
 
-The renderer is short lived. A GPU renderer replaces it later. The engine has
-to survive, and to become Rust. Invest to match.
+The renderer is short lived. A GPU renderer replaces it later. The engine
+outlives both the renderer and whatever host surrounds it, and a port of it to
+another language stays available for as long as its state is plain and its logic
+is free of the browser. Invest to match.

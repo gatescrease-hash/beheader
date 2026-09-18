@@ -5,10 +5,75 @@ from TypeScript to Rust. It gives each piece a stable name, a dependency, and
 evidence that will establish completion. A session can resume from the handoff
 without reconstructing decisions from conversation history.
 
-**The migration is currently in planning.** The application still runs the TypeScript
-engine. The repository has no Rust engine, transport adapter, or differential
-test runner. All paths and commands below that name those artifacts are
-proposals until their work packages land.
+**The port is a deferred option rather than a plan.** The application runs the
+TypeScript engine. The repository has no Rust engine, transport adapter, or
+differential test runner. All paths and commands below that name those artifacts
+are proposals until their work packages land. The section immediately below
+records why the work is unscheduled and what would reopen it. Everything after
+that section remains an accurate plan, and it stays here so that a later
+decision starts from it rather than from nothing.
+
+## Why the port is unscheduled
+
+Rust was selected while the product aimed at CAD scale. SPEC.md retires that
+goal in favour of a generic two dimensional tool in the space of Excel, Desmos
+and diagrams.net. Three of the requirements that selected Rust went with it: a
+document of hundreds of thousands of entities, coordinate precision beyond
+binary64 at a large offset from the origin, and constraint solving across
+objects.
+
+Measurement of the TypeScript engine at the sizes the current goal describes
+supplies the rest of the reasoning. One `setSlot` through the whole mutation
+channel costs the following, in milliseconds, against a chain of objects where
+each one reads the object before it:
+
+| Objects | Whole mutation | Clone | Edge derivation | Integrity | Cycles | Evaluation |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1,000 | 8.99 | 3.29 | 1.72 | 2.06 | 1.49 | 1.79 |
+| 3,000 | 42.54 | 12.14 | 14.15 | 14.14 | 3.86 | 3.45 |
+
+One table of many cells, which is the shape a spreadsheet document takes,
+distributes a similar total across the phases differently:
+
+| Cells | Whole mutation | Clone | Edge derivation | Integrity | Cycles | Evaluation |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4,000 | 38.4 | 14.2 | 3.6 | 4.4 | 9.2 | 10.2 |
+| 10,000 | 104.6 | 50.8 | 9.5 | 12.6 | 26.5 | 30.8 |
+
+Arithmetic is the smallest phase in the first shape and under a third of the
+total in the second. The remainder is bookkeeping over the whole document, and
+its shape follows from the three simplicity choices that SPEC.md records under
+the rule that speed is not a goal. Edge derivation and integrity validation also
+grow quadratically in the object count, because each formula reference scans the
+object array to resolve an address. In the chain shape of the first table,
+doubling the object count from 4,000 to 8,000 multiplies each of those two
+phases by about four.
+
+A port that preserves the full evaluation pass and the atomic mutation model,
+which the compatibility contract below requires of the first port, reproduces
+that bookkeeping in another language. It moves a constant factor and leaves the
+growth curve as it is. Removing the quadratic scan, evaluating the part of the
+graph that a mutation dirties instead of all of it, and compiling an AST to a
+closure instead of walking it per evaluation are each available in TypeScript,
+and each one changes the growth curve rather than a constant.
+
+Those figures came from the null measurement context on one development
+machine. They compare the phases against each other, and they are not a
+statement about the speed of the program in a browser.
+
+### What would reopen the choice
+
+- Document sizes that stay slow after the growth curve has been addressed in
+  TypeScript.
+- A headless use for the engine, such as a command line or a server, where
+  shipping a JavaScript runtime is unattractive.
+- The return of a requirement that the current product goal retired, such as CAD
+  scale or constraint solving across objects.
+
+A desktop build is absent from that list. A Tauri shell runs the existing
+TypeScript front end inside a webview, so packaging for the desktop and running
+Python as a subprocess both depend on a native host rather than on the language
+the engine is written in.
 
 The source baseline for this plan is commit
 `2ba050dd583fcdb67902e51564c6462b538fb5dd`, inspected on 2026-09-14.
@@ -19,6 +84,7 @@ describe the whole application, not the number of Rust tests to produce.
 
 | Section | Purpose |
 | --- | --- |
+| [Why the port is unscheduled](#why-the-port-is-unscheduled) | Measurements and the conditions that would reopen it |
 | [Document ownership](#document-ownership) | Responsibilities of the project documents |
 | [Scope and existing boundary](#scope-and-existing-boundary) | Source inventory and migration scope |
 | [Compatibility contract](#compatibility-contract) | Behavior that survives the port |
@@ -1143,13 +1209,13 @@ implemented, then its lasting rationale belongs beside that code.
 
 | Field | Current value |
 | --- | --- |
-| Migration phase | Planning |
+| Migration phase | Deferred, with the reasoning above |
 | Active implementation package | None |
 | Last inspected source commit | `2ba050dd583fcdb67902e51564c6462b538fb5dd` |
 | Rust artifacts | None |
 | Selected runtime | Undecided, Wasm first is recommended |
 | Unresolved architecture decisions | `D-001` through `D-011`, with TypeScript counter and per-line budget choices recorded under `D-007` and `D-010` |
-| Next implementation action | Activate scope and complete `RUST-001` |
+| Next implementation action | None. A reopening condition above is what precedes `RUST-001`. |
 | Existing product dependency | Include the counter, graph traversal and math workload fixes in the frozen baseline |
 | Completion evidence | None for Rust implementation |
 

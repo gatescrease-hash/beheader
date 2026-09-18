@@ -4,8 +4,8 @@
 code. This file also holds the structure map of the repository, and the reason
 each file exists. `TODO.md` holds the work that is open.
 
-[RUST_PORT.md](RUST_PORT.md) holds the planned engine migration, its work
-register, and its current handoff. Rust implementation remains deferred.
+[RUST_PORT.md](RUST_PORT.md) holds the engine migration plan, its work
+register, and the measurements behind leaving that migration unscheduled.
 
 ---
 
@@ -15,7 +15,7 @@ register, and its current handoff. Rust implementation remains deferred.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2750 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2763 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built, except the parts section 17 postpones. |
 | Workspace | Compact typography, a profile helmet, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
@@ -48,10 +48,12 @@ The repository has four layers. The import direction is one way.
 formula language, the primitives and the mutation channel. It does not touch
 the DOM, `window`, `document`, a canvas or `src/render/`.
 
-Why. The plan is to port this directory to a Rust crate. The separation keeps
-host services explicit and makes the engine testable with no browser. The
-port still needs a host adapter and tests that establish equivalent behavior,
-which `RUST_PORT.md` plans.
+Why. The separation keeps host services explicit and makes the engine testable
+with no browser, and it keeps a port of the directory to another language
+available. A port to a Rust crate is a deferred option rather than a plan.
+`RUST_PORT.md` holds the measurements behind that, the work register a later
+decision would start from, and the host adapter and equivalence tests such a
+port would still need.
 
 The one hard case is text measurement. Layout needs glyph widths, and a glyph
 width needs a canvas. The engine declares a `TextMeasurer` interface and takes
