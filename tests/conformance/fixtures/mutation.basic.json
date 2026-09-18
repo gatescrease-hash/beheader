@@ -5,7 +5,7 @@
   "sourceTest": "src/engine/mutation.test.ts",
   "requirement": "SPEC.md section 4, and the compatibility contract above",
   "comparison": "exact",
-  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set. A forced delete rewrites every reference into the object it removes to a reference error and reports the addresses it rewrote, so the cases carry a reader, two readers of one object, and a range whose table goes. The two resizes move cell slots about and rewrite the addresses of every formula that named one, so the cases carry a formula reading a cell before the moved line, one reading a cell after it, one reading the line that goes, and a range straddling it. A size slot is checked apart from the resize, because a formula there would let evaluation decide how many cells a table declares.",
+  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set. A forced delete rewrites every reference into the object it removes to a reference error and reports the addresses it rewrote, so the cases carry a reader, two readers of one object, and a range whose table goes. The two resizes move cell slots about and rewrite the addresses of every formula that named one, so the cases carry a formula reading a cell before the moved line, one reading a cell after it, one reading the line that goes, and a range straddling it. A size slot is checked apart from the resize, because a formula there would let evaluation decide how many cells a table declares. The port and source cases are the two operations that change the slot set from text an operator typed. A port and the value it holds land in one batch, because the moment an out port exists the integrity check demands the addresses it declares resolve, and a source is checked against the objects the batch has reached so it can name one the same batch creates.",
   "cases": [
     {
       "name": "an empty batch",
@@ -5341,6 +5341,1890 @@
             },
             "slot": {
               "value": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding an input port with its value",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "in",
+                "a"
+              ]
+            },
+            "slot": {
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding an input port without its value",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding an output port with its placeholder",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "out",
+            "name": "r"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "placeholder",
+                "r"
+              ]
+            },
+            "slot": {
+              "value": 5
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding an output port on its own",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "out",
+            "name": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a port that already exists",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [
+                "a"
+              ],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              },
+              {
+                "key": "in.a",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a port named \"a b\"",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a port named \"a-b\"",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a-b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a port named \"\"",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a port named \"a.b\"",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a.b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a port named \"1a\"",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "1a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding the same port twice in one batch",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          },
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding one name to each family",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "in",
+                "a"
+              ]
+            },
+            "slot": {
+              "value": 1
+            }
+          },
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "out",
+            "name": "a"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "placeholder",
+                "a"
+              ]
+            },
+            "slot": {
+              "value": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "removing a port",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [
+                "a"
+              ],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              },
+              {
+                "key": "in.a",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "removePort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "removing a port that is not there",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "removePort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "removing a port from the other family",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [
+                "a"
+              ],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              },
+              {
+                "key": "in.a",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "removePort",
+            "objectId": "s1",
+            "family": "out",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding then removing in one batch",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          },
+          {
+            "kind": "removePort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a port to an object the batch creates",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "s1",
+              "name": "node",
+              "type": "script",
+              "ports": {
+                "in": [],
+                "out": []
+              },
+              "slots": [
+                {
+                  "key": "origin.x",
+                  "kind": "literal",
+                  "value": 0
+                },
+                {
+                  "key": "origin.y",
+                  "kind": "literal",
+                  "value": 0
+                },
+                {
+                  "key": "language",
+                  "kind": "literal",
+                  "value": "python"
+                },
+                {
+                  "key": "source",
+                  "kind": "literal",
+                  "value": "pass"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "in",
+            "name": "a"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "in",
+                "a"
+              ]
+            },
+            "slot": {
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=x+1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source that keeps a linked port",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [
+                "x"
+              ],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=x+1"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "in.x",
+                "kind": "literal",
+                "value": 5
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=x+2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source that drops a port",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [
+                "x"
+              ],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=x+1"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "in.x",
+                "kind": "literal",
+                "value": 5
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source that does not parse",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y="
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source whose second line fails",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=1\ny="
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source naming something absent",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=\\gpref{gone.value}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source naming something present",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=\\gpref{v1.value}+1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source naming an object the batch creates",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v1",
+              "name": "total",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 7
+                }
+              ]
+            }
+          },
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=\\gpref{v1.value}+1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source onto something that is not a math object",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "v1",
+            "source": "y=1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing the source slot directly",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "m1",
+              "path": [
+                "source"
+              ]
+            },
+            "slot": {
+              "value": "y=9"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a source slot on something that is not a math object",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 7
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing a math source that solves",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "\\solve{x}2x=10"
+          }
+        ]
+      }
+    },
+    {
+      "name": "two math sources in one batch",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=1+2"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=x+1"
+          },
+          {
+            "kind": "setMathSource",
+            "objectId": "m1",
+            "source": "y=2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding an output port with its placeholder and its slot",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "out",
+            "name": "r"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "placeholder",
+                "r"
+              ]
+            },
+            "slot": {
+              "value": 5
+            }
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "out",
+                "r"
+              ]
+            },
+            "slot": {
+              "kind": "derived",
+              "value": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding an output port and reading it from elsewhere",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "s1",
+            "name": "node",
+            "type": "script",
+            "ports": {
+              "in": [],
+              "out": []
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "language",
+                "kind": "literal",
+                "value": "python"
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "pass"
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addPort",
+            "objectId": "s1",
+            "family": "out",
+            "name": "r"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "placeholder",
+                "r"
+              ]
+            },
+            "slot": {
+              "value": 5
+            }
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "s1",
+              "path": [
+                "out",
+                "r"
+              ]
+            },
+            "slot": {
+              "kind": "derived",
+              "value": null
+            }
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "formula": "node.out.r"
             }
           }
         ]

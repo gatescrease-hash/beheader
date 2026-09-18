@@ -847,6 +847,11 @@ function operationsArgument(args, objects) {
       case "insertTableLine":
       case "deleteTableLine":
         return { kind: entry.kind, objectId: entry.objectId, axis: entry.axis, index: decodeNumber(entry.index) };
+      case "addPort":
+      case "removePort":
+        return { kind: entry.kind, objectId: entry.objectId, family: entry.family, name: entry.name };
+      case "setMathSource":
+        return { kind: "setMathSource", objectId: entry.objectId, source: entry.source };
       case "renameObject":
         return { kind: "renameObject", objectId: entry.objectId, name: entry.name };
       case "renameVariable":

@@ -51,7 +51,7 @@ use beheader_engine::model::{
     has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
 };
 use beheader_engine::mutation::{
-    Operation, derive_edges, derive_validate_and_evaluate, mutate, validate_integrity,
+    Operation, PortFamily, derive_edges, derive_validate_and_evaluate, mutate, validate_integrity,
 };
 use beheader_engine::number::{
     js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
@@ -1076,6 +1076,32 @@ fn operations_argument(
             "renameVariable" => Operation::RenameVariable {
                 address: address_argument(held, "address")?,
                 name: text_argument(held, "name")?,
+            },
+            "addPort" | "removePort" => {
+                let object_id = text_argument(held, "objectId")?;
+                let family = match text_argument(held, "family")?.as_str() {
+                    "in" => PortFamily::In,
+                    "out" => PortFamily::Out,
+                    _ => return Err("a port family is \"in\" or \"out\"".to_string()),
+                };
+                let name = text_argument(held, "name")?;
+                if kind == "addPort" {
+                    Operation::AddPort {
+                        object_id,
+                        family,
+                        name,
+                    }
+                } else {
+                    Operation::RemovePort {
+                        object_id,
+                        family,
+                        name,
+                    }
+                }
+            }
+            "setMathSource" => Operation::SetMathSource {
+                object_id: text_argument(held, "objectId")?,
+                source: text_argument(held, "source")?,
             },
             other => return Err(format!("no operation named \"{other}\"")),
         });

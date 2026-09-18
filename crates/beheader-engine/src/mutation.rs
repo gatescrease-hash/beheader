@@ -32,13 +32,16 @@ use crate::graph::eval::evaluate;
 use crate::graph::{Edge, address_key};
 use crate::measure::Measurer;
 use crate::model::{
-    GraphObject, ObjectType, Point, Slot, SlotMap, Value, has_illegal_number, is_illegal_number,
-    resolve_slot, slot_key,
+    GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap, Value, has_illegal_number,
+    is_illegal_number, is_legal_port_name, resolve_slot, slot_key,
 };
 use crate::number::to_javascript_text;
 use crate::number::{js_max, js_min};
 use crate::primitives::doc::document_variable_name_problem;
-use crate::primitives::math::rewrite_math_references;
+use crate::primitives::math::{
+    apply_math_source, math_source_path, read_math_names, rewrite_math_references,
+    unresolved_math_references,
+};
 use crate::primitives::schema::{
     derived_slot_dependency_addresses, get_object_schema, resolve_derived_slots,
     resolve_non_derived_slot_paths,
@@ -575,6 +578,48 @@ pub enum Operation {
         axis: TableAxis,
         index: f64,
     },
+    /// Adds one port to a node. The name and the value it holds land in one
+    /// batch, because the moment an out port exists the integrity check demands
+    /// that every address it declares resolves to a real slot.
+    AddPort {
+        object_id: String,
+        family: PortFamily,
+        name: String,
+    },
+    RemovePort {
+        object_id: String,
+        family: PortFamily,
+        name: String,
+    },
+    /// Writes the source of a math object and rebuilds the slots that source
+    /// implies: an input slot for each free name and an export slot for each
+    /// name the source defines.
+    ///
+    /// The slot set changes here, inside a mutation, rather than during
+    /// evaluation, so rule 4 holds for an object whose slots come from text an
+    /// operator typed. A source that does not parse fails the whole mutation, so
+    /// the exports of the last source that did parse stay where their readers
+    /// expect them.
+    SetMathSource {
+        object_id: String,
+        source: String,
+    },
+}
+
+/// Which side of a node a port sits on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PortFamily {
+    In,
+    Out,
+}
+
+impl PortFamily {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PortFamily::In => "in",
+            PortFamily::Out => "out",
+        }
+    }
 }
 
 impl Operation {
@@ -589,7 +634,10 @@ impl Operation {
             Operation::RenameObject { object_id, .. }
             | Operation::DeleteObject { object_id, .. }
             | Operation::InsertTableLine { object_id, .. }
-            | Operation::DeleteTableLine { object_id, .. } => object_id,
+            | Operation::DeleteTableLine { object_id, .. }
+            | Operation::AddPort { object_id, .. }
+            | Operation::RemovePort { object_id, .. }
+            | Operation::SetMathSource { object_id, .. } => object_id,
         }
     }
 
@@ -617,6 +665,25 @@ impl Operation {
                 "attempts to delete a {} from object id \"{object_id}\"",
                 axis.as_str()
             ),
+            Operation::AddPort {
+                object_id,
+                family,
+                name,
+            } => format!(
+                "attempts to add {} port \"{name}\" to object id \"{object_id}\"",
+                family.as_str()
+            ),
+            Operation::RemovePort {
+                object_id,
+                family,
+                name,
+            } => format!(
+                "attempts to remove {} port \"{name}\" from object id \"{object_id}\"",
+                family.as_str()
+            ),
+            Operation::SetMathSource { object_id, .. } => {
+                format!("attempts to write the source of object id \"{object_id}\"")
+            }
             Operation::SetSlot { address, .. }
             | Operation::ClearSlot { address }
             | Operation::RenameVariable { address, .. } => format!(
@@ -668,6 +735,8 @@ pub fn mutate(
     join_problems(find_illegal_slot_clears(operations, objects))?;
     join_problems(find_invalid_dimension_writes(operations, objects))?;
     join_problems(find_invalid_names(operations, objects))?;
+    join_problems(find_invalid_port_operations(operations, objects))?;
+    join_problems(find_invalid_math_sources(operations, objects))?;
 
     // The fold runs one operation at a time against the objects the last one
     // produced, because the refusals below read the state a batch has reached
@@ -988,6 +1057,177 @@ fn rewrite_object_formula_addresses(
         slots,
         ..object.clone()
     }
+}
+
+/// The ports a node carries part way through a batch, so two port operations on
+/// one node each see what the other left.
+struct TrackedPorts {
+    input: Vec<String>,
+    output: Vec<String>,
+}
+
+impl TrackedPorts {
+    fn of<A>(object: &GraphObject<A>) -> TrackedPorts {
+        let held = object.ports.as_ref();
+        TrackedPorts {
+            input: held.map(|ports| ports.input.clone()).unwrap_or_default(),
+            output: held.map(|ports| ports.output.clone()).unwrap_or_default(),
+        }
+    }
+
+    fn family(&mut self, family: PortFamily) -> &mut Vec<String> {
+        match family {
+            PortFamily::In => &mut self.input,
+            PortFamily::Out => &mut self.output,
+        }
+    }
+}
+
+/// A port name is one a slot path can carry, and a family holds each name once.
+fn find_invalid_port_operations(
+    operations: &[Operation],
+    objects: &[GraphObject<FormulaAst>],
+) -> Vec<String> {
+    let mut tracked: Vec<(String, TrackedPorts)> = objects
+        .iter()
+        .map(|object| (object.id.clone(), TrackedPorts::of(object)))
+        .collect();
+    let mut problems = Vec::new();
+    for (index, operation) in operations.iter().enumerate() {
+        match operation {
+            Operation::CreateObject { object } => {
+                tracked.retain(|(held, _)| held != &object.id);
+                tracked.push((object.id.clone(), TrackedPorts::of(object.as_ref())));
+                continue;
+            }
+            Operation::DeleteObject { object_id, .. } => {
+                tracked.retain(|(held, _)| held != object_id);
+                continue;
+            }
+            _ => {}
+        }
+        let (object_id, family, name, is_add) = match operation {
+            Operation::AddPort {
+                object_id,
+                family,
+                name,
+            } => (object_id, *family, name, true),
+            Operation::RemovePort {
+                object_id,
+                family,
+                name,
+            } => (object_id, *family, name, false),
+            _ => continue,
+        };
+        let prefix = format!("operation {} of {}", index + 1, operations.len());
+        let Some((_, ports)) = tracked.iter_mut().find(|(held, _)| held == object_id) else {
+            continue;
+        };
+        let held = ports.family(family);
+        if is_add {
+            if !is_legal_port_name(name) {
+                problems.push(format!(
+                    "{prefix} attempts to add a port named \"{name}\", which is not a legal port name (letters, digits and underscore only)"
+                ));
+                continue;
+            }
+            if held.iter().any(|existing| existing == name) {
+                problems.push(format!(
+                    "{prefix} attempts to add {} port \"{name}\", which already exists",
+                    family.as_str()
+                ));
+                continue;
+            }
+            held.push(name.clone());
+            continue;
+        }
+        if !held.iter().any(|existing| existing == name) {
+            problems.push(format!(
+                "{prefix} attempts to remove {} port \"{name}\", which does not exist",
+                family.as_str()
+            ));
+            continue;
+        }
+        held.retain(|existing| existing != name);
+    }
+    problems
+}
+
+/// Checks every math source in the batch before any of it applies. A source that
+/// does not parse names the line it failed on, because an operator reading the
+/// message is looking at the source in front of them.
+///
+/// A write to the source slot that is not a source operation is refused here
+/// too. A plain write would leave the ports of the last source behind, so the
+/// object would export names its source no longer defines.
+fn find_invalid_math_sources(
+    operations: &[Operation],
+    objects: &[GraphObject<FormulaAst>],
+) -> Vec<String> {
+    // The batch is walked in order, because a source can name an object the same
+    // batch creates, and a check against the document as it stood before would
+    // refuse it for naming something that is about to exist.
+    let mut present: Vec<GraphObject<FormulaAst>> = objects.to_vec();
+    let mut problems = Vec::new();
+    for (index, operation) in operations.iter().enumerate() {
+        let prefix = format!("operation {} of {}", index + 1, operations.len());
+        match operation {
+            Operation::CreateObject { object } => {
+                present.retain(|held| held.id != object.id);
+                present.push(object.as_ref().clone());
+            }
+            Operation::DeleteObject { object_id, .. } => {
+                present.retain(|held| &held.id != object_id);
+            }
+            Operation::SetSlot { address, .. }
+                if slot_key(&address.path) == slot_key(&math_source_path()) =>
+            {
+                if let Some(target) = present
+                    .iter()
+                    .find(|held| held.id == address.object_id)
+                    .filter(|held| held.object_type == ObjectType::Math)
+                {
+                    problems.push(format!(
+                        "{prefix} writes {}.source directly, which would leave its ports behind. Editing the equations rebuilds them",
+                        target.name
+                    ));
+                }
+            }
+            Operation::SetMathSource { object_id, source } => {
+                let object_type = present
+                    .iter()
+                    .find(|held| &held.id == object_id)
+                    .map(|held| held.object_type);
+                if let Some(object_type) = object_type
+                    && object_type != ObjectType::Math
+                {
+                    problems.push(format!(
+                        "{prefix} attempts to write a math source onto an object of type \"{}\", which holds no equations",
+                        object_type.as_str()
+                    ));
+                    continue;
+                }
+                match read_math_names(source) {
+                    Err(failure) => problems.push(format!(
+                        "{prefix} carries a source that does not read: line {}, {}",
+                        failure.line + 1,
+                        failure.message
+                    )),
+                    Ok(_) => {
+                        let missing = unresolved_math_references(source, &present);
+                        if !missing.is_empty() {
+                            problems.push(format!(
+                                "{prefix} names {}, which this document does not carry",
+                                missing.join(", ")
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    problems
 }
 
 /// The object an operation names, whether it is already in the document or is
@@ -1350,6 +1590,89 @@ fn apply_operation(
                 Vec::new(),
             )
         }
+        Operation::AddPort {
+            object_id,
+            family,
+            name,
+        } => (
+            objects
+                .iter()
+                .map(|object| {
+                    if object.id != *object_id {
+                        return object.clone();
+                    }
+                    let mut ports = object.ports.clone().unwrap_or(GraphObjectPorts {
+                        input: Vec::new(),
+                        output: Vec::new(),
+                        seed: None,
+                    });
+                    match family {
+                        PortFamily::In => ports.input.push(name.clone()),
+                        PortFamily::Out => ports.output.push(name.clone()),
+                    }
+                    GraphObject {
+                        ports: Some(ports),
+                        ..object.clone()
+                    }
+                })
+                .collect(),
+            Vec::new(),
+        ),
+        Operation::RemovePort {
+            object_id,
+            family,
+            name,
+        } => {
+            let key = slot_key(&[family.as_str().to_string(), name.clone()]);
+            (
+                objects
+                    .iter()
+                    .map(|object| {
+                        if object.id != *object_id {
+                            return object.clone();
+                        }
+                        let mut ports = object.ports.clone().unwrap_or(GraphObjectPorts {
+                            input: Vec::new(),
+                            output: Vec::new(),
+                            seed: None,
+                        });
+                        match family {
+                            PortFamily::In => ports.input.retain(|held| held != name),
+                            PortFamily::Out => ports.output.retain(|held| held != name),
+                        }
+                        let mut slots = SlotMap::new();
+                        for (held, slot) in object.slots.iter() {
+                            if held != key {
+                                slots.insert(held, slot.clone());
+                            }
+                        }
+                        GraphObject {
+                            ports: Some(ports),
+                            slots,
+                            ..object.clone()
+                        }
+                    })
+                    .collect(),
+                Vec::new(),
+            )
+        }
+        Operation::SetMathSource { object_id, source } => (
+            objects
+                .iter()
+                .map(|object| {
+                    if object.id != *object_id {
+                        return object.clone();
+                    }
+                    match read_math_names(source) {
+                        // A source that does not read never reaches here,
+                        // because the check above refuses the whole batch.
+                        Err(_) => object.clone(),
+                        Ok(names) => apply_math_source(object, source, &names),
+                    }
+                })
+                .collect(),
+            Vec::new(),
+        ),
         Operation::InsertTableLine {
             object_id,
             axis,
@@ -2265,5 +2588,216 @@ mod tests {
                 "{failure}"
             );
         }
+    }
+
+    fn script_node(input: &[&str], output: &[&str]) -> GraphObject<FormulaAst> {
+        let mut slots = SlotMap::new();
+        for (key, value) in [("language", "python"), ("source", "pass")] {
+            slots.insert(
+                key,
+                Slot::Literal {
+                    value: Value::Text(value.to_string()),
+                },
+            );
+        }
+        GraphObject {
+            id: "s1".to_string(),
+            name: "node".to_string(),
+            object_type: ObjectType::Script,
+            target: None,
+            slots,
+            ports: Some(GraphObjectPorts {
+                input: input.iter().map(|name| (*name).to_string()).collect(),
+                output: output.iter().map(|name| (*name).to_string()).collect(),
+                seed: None,
+            }),
+            vertex_count: None,
+        }
+    }
+
+    fn at(object_id: &str, path: &[&str]) -> Address {
+        Address {
+            object_id: object_id.to_string(),
+            path: path.iter().map(|part| (*part).to_string()).collect(),
+        }
+    }
+
+    /// Adding a port is two operations that have to land in one batch: the name
+    /// and the value. The moment an out port exists the integrity check demands
+    /// every address it declares resolves, so adding one on its own fails.
+    #[test]
+    fn a_port_and_what_it_holds_land_together() {
+        let objects = vec![script_node(&[], &[])];
+        let name_only = mutate(
+            &objects,
+            &[Operation::AddPort {
+                object_id: "s1".to_string(),
+                family: PortFamily::Out,
+                name: "r".to_string(),
+            }],
+            &[],
+            None,
+        );
+        assert!(
+            name_only.is_err(),
+            "a name on its own leaves a slot missing"
+        );
+
+        let together = mutate(
+            &objects,
+            &[
+                Operation::AddPort {
+                    object_id: "s1".to_string(),
+                    family: PortFamily::Out,
+                    name: "r".to_string(),
+                },
+                Operation::SetSlot {
+                    address: at("s1", &["placeholder", "r"]),
+                    slot: Slot::Literal {
+                        value: Value::Number(5.0),
+                    },
+                },
+                Operation::SetSlot {
+                    address: at("s1", &["out", "r"]),
+                    slot: Slot::Derived { value: Value::Null },
+                },
+            ],
+            &[],
+            None,
+        )
+        .expect("the three together commit");
+        assert_eq!(
+            together.objects[0].slots.get("out.r").map(Slot::value),
+            Some(&Value::Number(5.0)),
+            "the stub answers the placeholder"
+        );
+    }
+
+    /// A family holds each name once, and the two families are separate, so one
+    /// name can sit on each side of a node.
+    #[test]
+    fn a_family_holds_each_name_once() {
+        let objects = vec![script_node(&["a"], &[])];
+        let again = mutate(
+            &objects,
+            &[Operation::AddPort {
+                object_id: "s1".to_string(),
+                family: PortFamily::In,
+                name: "a".to_string(),
+            }],
+            &[],
+            None,
+        )
+        .expect_err("a name twice in one family is refused");
+        assert!(again.contains("already exists"), "{again}");
+
+        let other_family = mutate(
+            &objects,
+            &[Operation::RemovePort {
+                object_id: "s1".to_string(),
+                family: PortFamily::Out,
+                name: "a".to_string(),
+            }],
+            &[],
+            None,
+        )
+        .expect_err("the other family does not hold it");
+        assert!(other_family.contains("does not exist"), "{other_family}");
+    }
+
+    /// Writing a math source rebuilds the slots that source implies, and a port
+    /// that survives the edit keeps the slot it had.
+    #[test]
+    fn a_math_source_rebuilds_the_slots_it_implies() {
+        let mut node: GraphObject<FormulaAst> =
+            crate::primitives::math::create_math_object("m1", "eq", 0.0, 0.0);
+        node.ports = Some(GraphObjectPorts {
+            input: vec!["x".to_string()],
+            output: vec!["y".to_string()],
+            seed: None,
+        });
+        node.slots.insert(
+            "in.x",
+            Slot::Literal {
+                value: Value::Number(5.0),
+            },
+        );
+        node.slots
+            .insert("out.y", Slot::Derived { value: Value::Null });
+        node.slots.insert(
+            "source",
+            Slot::Literal {
+                value: Value::Text("y=x+1".to_string()),
+            },
+        );
+        let objects = vec![node];
+        let result = mutate(
+            &objects,
+            &[Operation::SetMathSource {
+                object_id: "m1".to_string(),
+                source: "y=x+2".to_string(),
+            }],
+            &[],
+            None,
+        )
+        .expect("the source commits");
+        assert_eq!(
+            result.objects[0].slots.get("in.x").map(Slot::value),
+            Some(&Value::Number(5.0)),
+            "the link an operator made outlives the edit"
+        );
+        assert_eq!(
+            result.objects[0].slots.get("out.y").map(Slot::value),
+            Some(&Value::Number(7.0))
+        );
+    }
+
+    /// A source that does not read fails the whole mutation, so the exports of
+    /// the last source that did read stay where their readers expect them.
+    #[test]
+    fn a_source_that_does_not_read_changes_nothing() {
+        let node: GraphObject<FormulaAst> =
+            crate::primitives::math::create_math_object("m1", "eq", 0.0, 0.0);
+        let objects = vec![node];
+        let failure = mutate(
+            &objects,
+            &[Operation::SetMathSource {
+                object_id: "m1".to_string(),
+                source: "y=1\ny=".to_string(),
+            }],
+            &[],
+            None,
+        )
+        .expect_err("a source that does not read is refused");
+        assert!(
+            failure.contains("carries a source that does not read: line 2"),
+            "the message names the line an operator is looking at: {failure}"
+        );
+    }
+
+    /// Only the source operation may write that slot. A plain write would leave
+    /// the ports of the last source behind, so the object would export names its
+    /// source no longer defines.
+    #[test]
+    fn the_source_slot_takes_no_plain_write() {
+        let node: GraphObject<FormulaAst> =
+            crate::primitives::math::create_math_object("m1", "eq", 0.0, 0.0);
+        let objects = vec![node];
+        let failure = mutate(
+            &objects,
+            &[Operation::SetSlot {
+                address: at("m1", &["source"]),
+                slot: Slot::Literal {
+                    value: Value::Text("y=9".to_string()),
+                },
+            }],
+            &[],
+            None,
+        )
+        .expect_err("a plain write is refused");
+        assert!(
+            failure.contains("would leave its ports behind"),
+            "{failure}"
+        );
     }
 }

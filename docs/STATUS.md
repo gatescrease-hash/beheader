@@ -22,8 +22,8 @@ defines.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 257 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 1863 cases match across the two engines, with none awaiting either. |
+| Rust | 262 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 1895 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 

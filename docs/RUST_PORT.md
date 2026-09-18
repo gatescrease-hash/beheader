@@ -1470,8 +1470,22 @@ that is out of range for a table of three is inside the range of the four the
 first insert leaves. A size slot is checked apart from the resize, because a
 formula there would let evaluation decide how many cells a table declares.
 
-**Still to come in this package.** Ports and math source, then vertex changes,
-explode and split.
+The ports and the math source came next, which are the two operations that
+change the slot set from text an operator typed. A port and the value it holds
+land in one batch, because the moment an out port exists the integrity check
+demands that every address it declares resolves to a real slot: the fixture
+carries the name on its own, which is refused, and the three together, which
+commit and leave the stub answering its placeholder for a formula elsewhere to
+read.
+
+A math source is checked against the objects the batch has reached rather than
+the document it started from, so a source can name an object the same batch
+creates. A source that does not read fails the whole mutation with the line an
+operator is looking at, and the source slot takes no plain write, because one
+would leave the ports of the last source behind and the object would export
+names its source no longer defines.
+
+**Still to come in this package.** Vertex changes, explode and split.
 
 ### `RUST-012`: Port files and replay
 
@@ -1873,7 +1887,7 @@ implemented, then its lasting rationale belongs beside that code.
 
 ```text
 Package: RUST-011, atomic mutations and repairs
-Status: in progress, with the batch and three families landed
+Status: in progress, with the batch and four families landed
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -1891,9 +1905,9 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  Seven of the fifteen operations: the two port operations, the math source, the
-  two vertex changes, explode and split. The batch, the journal entry and the
-  first three families are landed, under mutation.basic.
+  Four of the fifteen operations: the two vertex changes, explode and split. The
+  batch, the journal entry and the first four families are landed, under
+  mutation.basic.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1916,9 +1930,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  257 pass
+  cargo test --workspace --locked                                  262 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1863 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1895 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1934,8 +1948,8 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port the port family and the math source, which are the
-  two operations that change the slot set from text an operator typed.
+Next concrete action: port the vertex family, then explode and split, which are
+  the last four operations of the inventory.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```
