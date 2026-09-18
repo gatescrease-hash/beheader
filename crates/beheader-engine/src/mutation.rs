@@ -38,6 +38,12 @@ use crate::model::{
 use crate::number::to_javascript_text;
 use crate::number::{js_max, js_min};
 use crate::primitives::doc::document_variable_name_problem;
+use crate::primitives::geometry::{
+    ExplodeResult, VertexRepair, add_vertex_to_object, delete_vertex_from_object,
+    explode_object_to_polyline, insert_vertex_into_object, is_explodable, polyline_edge_count,
+    repair_vertex_address_for_delete, shift_vertex_address_for_delete,
+    shift_vertex_address_for_insert, split_polyline_edge, vertex_part_paths,
+};
 use crate::primitives::math::{
     apply_math_source, math_source_path, read_math_names, rewrite_math_references,
     unresolved_math_references,
@@ -604,6 +610,34 @@ pub enum Operation {
         object_id: String,
         source: String,
     },
+    AddVertex {
+        object_id: String,
+        point: Point,
+    },
+    /// Removes one vertex and renumbers every later one. Without the force flag
+    /// a formula naming the exact vertex leaves the batch refused, and with it
+    /// that reference becomes a reference error and is reported.
+    DeleteVertex {
+        object_id: String,
+        index: f64,
+        force: bool,
+    },
+    /// Snapshots a preset into an editable polyline. Without the force flag a
+    /// formula naming a parameter slot the snapshot drops leaves the batch
+    /// refused.
+    Explode {
+        object_id: String,
+        force: bool,
+    },
+    /// Cuts one edge at the point on it nearest the given point, and puts a
+    /// vertex there. An arc becomes two arcs of the same circle, so the shape on
+    /// screen holds still. There is no force flag, because an insert loses no
+    /// vertex.
+    SplitEdge {
+        object_id: String,
+        index: f64,
+        point: Point,
+    },
 }
 
 /// Which side of a node a port sits on.
@@ -637,7 +671,11 @@ impl Operation {
             | Operation::DeleteTableLine { object_id, .. }
             | Operation::AddPort { object_id, .. }
             | Operation::RemovePort { object_id, .. }
-            | Operation::SetMathSource { object_id, .. } => object_id,
+            | Operation::SetMathSource { object_id, .. }
+            | Operation::AddVertex { object_id, .. }
+            | Operation::DeleteVertex { object_id, .. }
+            | Operation::Explode { object_id, .. }
+            | Operation::SplitEdge { object_id, .. } => object_id,
         }
     }
 
@@ -684,6 +722,24 @@ impl Operation {
             Operation::SetMathSource { object_id, .. } => {
                 format!("attempts to write the source of object id \"{object_id}\"")
             }
+            Operation::AddVertex { object_id, .. } => {
+                format!("attempts to add a vertex to object id \"{object_id}\"")
+            }
+            Operation::DeleteVertex {
+                object_id, index, ..
+            } => format!(
+                "attempts to delete vertex {} from object id \"{object_id}\"",
+                to_javascript_text(*index)
+            ),
+            Operation::Explode { object_id, .. } => {
+                format!("attempts to explode object id \"{object_id}\"")
+            }
+            Operation::SplitEdge {
+                object_id, index, ..
+            } => format!(
+                "attempts to split edge {} of object id \"{object_id}\"",
+                to_javascript_text(*index)
+            ),
             Operation::SetSlot { address, .. }
             | Operation::ClearSlot { address }
             | Operation::RenameVariable { address, .. } => format!(
@@ -737,6 +793,9 @@ pub fn mutate(
     join_problems(find_invalid_names(operations, objects))?;
     join_problems(find_invalid_port_operations(operations, objects))?;
     join_problems(find_invalid_math_sources(operations, objects))?;
+    join_problems(find_invalid_vertex_operations(operations, objects))?;
+    join_problems(find_invalid_explode_operations(operations, objects))?;
+    join_problems(find_invalid_split_operations(operations, objects))?;
 
     // The fold runs one operation at a time against the objects the last one
     // produced, because the refusals below read the state a batch has reached
@@ -951,6 +1010,14 @@ fn find_illegal_operation_payloads(
                     }
                 }
             }
+            Operation::AddVertex { point, .. } => {
+                if has_illegal_number(&Value::Point(*point)) {
+                    problems.push(format!(
+                        "{prefix}: the new vertex would hold an illegal value ({}), which is not legal document state",
+                        describe_illegal_value(&Value::Point(*point))
+                    ));
+                }
+            }
             _ => {}
         }
     }
@@ -1057,6 +1124,236 @@ fn rewrite_object_formula_addresses(
         slots,
         ..object.clone()
     }
+}
+
+/// The vertices a path carries part way through a batch.
+struct TrackedVertices {
+    name: String,
+    object_type: ObjectType,
+    count: f64,
+}
+
+/// The slots that name one exact vertex, so a delete can say what still reads
+/// it. A range never spans a vertex, so only a plain reference is looked for.
+fn find_live_vertex_dependents(
+    objects: &[GraphObject<FormulaAst>],
+    target_object_id: &str,
+    index: f64,
+) -> Vec<String> {
+    let wanted: Vec<String> = vertex_part_paths(index)
+        .iter()
+        .map(|path| slot_key(path))
+        .collect();
+    let mut names = Vec::new();
+    for object in objects {
+        let Some(schema) = get_object_schema::<FormulaAst>(object.object_type) else {
+            continue;
+        };
+        for path in resolve_non_derived_slot_paths(object, &schema.non_derived_slot_paths) {
+            let Some(Slot::Formula { ast, .. }) = object.get_slot(&path) else {
+                continue;
+            };
+            let names_this_vertex = extract_dependencies(ast).iter().any(|dependency| {
+                matches!(dependency, Dependency::Reference(address)
+                    if address.object_id == target_object_id
+                        && wanted.contains(&slot_key(&address.path)))
+            });
+            if names_this_vertex {
+                names.push(named(
+                    &Address {
+                        object_id: object.id.clone(),
+                        path,
+                    },
+                    objects,
+                ));
+            }
+        }
+    }
+    names
+}
+
+fn find_invalid_vertex_operations(
+    operations: &[Operation],
+    objects: &[GraphObject<FormulaAst>],
+) -> Vec<String> {
+    let mut tracked: Vec<(String, TrackedVertices)> = Vec::new();
+    let mut problems = Vec::new();
+    for (index, operation) in operations.iter().enumerate() {
+        let (object_id, adding, at, force) = match operation {
+            Operation::AddVertex { object_id, .. } => (object_id, true, 0.0, false),
+            Operation::DeleteVertex {
+                object_id,
+                index,
+                force,
+            } => (object_id, false, *index, *force),
+            _ => continue,
+        };
+        if !tracked.iter().any(|(held, _)| held == object_id) {
+            let Some(source) = target_of(objects, operations, object_id) else {
+                continue;
+            };
+            tracked.push((
+                object_id.clone(),
+                TrackedVertices {
+                    name: source.name.clone(),
+                    object_type: source.object_type,
+                    count: source.vertex_count.unwrap_or(0.0),
+                },
+            ));
+        }
+        let state = tracked
+            .iter_mut()
+            .find(|(held, _)| held == object_id)
+            .map(|(_, state)| state)
+            .expect("the path was just tracked");
+        let prefix = format!("operation {} of {}", index + 1, operations.len());
+        if state.object_type != ObjectType::Polyline {
+            let verb = if adding { "add" } else { "delete" };
+            problems.push(format!(
+                "{prefix}: object \"{}\" is a \"{}\", not a polyline, so it has no vertices to {verb}",
+                state.name,
+                state.object_type.as_str()
+            ));
+            continue;
+        }
+        if adding {
+            state.count += 1.0;
+            continue;
+        }
+        if at.fract() != 0.0 || !at.is_finite() || at < 0.0 || at >= state.count {
+            let bound = if state.count == 0.0 {
+                "it has no vertices".to_string()
+            } else {
+                format!(
+                    "must be an integer from 0 to {}",
+                    to_javascript_text(state.count - 1.0)
+                )
+            };
+            problems.push(format!(
+                "{prefix}: vertex index {} is out of range for \"{}\" (currently {} vertices; {bound})",
+                to_javascript_text(at),
+                state.name,
+                to_javascript_text(state.count)
+            ));
+            continue;
+        }
+        if !force {
+            let dependents = find_live_vertex_dependents(objects, object_id, at);
+            if !dependents.is_empty() {
+                let verb = if dependents.len() == 1 {
+                    "references"
+                } else {
+                    "reference"
+                };
+                problems.push(format!(
+                    "{prefix}: {} still {verb} vertex {} of \"{}\"",
+                    dependents.join(", "),
+                    to_javascript_text(at),
+                    state.name
+                ));
+            }
+        }
+        state.count -= 1.0;
+    }
+    problems
+}
+
+/// An explode takes a snapshot, so it is refused when there is nothing to
+/// snapshot rather than leaving an object with no vertices behind.
+fn find_invalid_explode_operations(
+    operations: &[Operation],
+    objects: &[GraphObject<FormulaAst>],
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (index, operation) in operations.iter().enumerate() {
+        let Operation::Explode { object_id, .. } = operation else {
+            continue;
+        };
+        let prefix = format!("operation {} of {}", index + 1, operations.len());
+        let Some(target) = objects.iter().find(|candidate| &candidate.id == object_id) else {
+            continue;
+        };
+        if !is_explodable(target.object_type) {
+            problems.push(format!(
+                "{prefix}: object \"{}\" is a \"{}\" — only a circle, a polygon or a rect can be exploded",
+                target.name,
+                target.object_type.as_str()
+            ));
+            continue;
+        }
+        if let ExplodeResult::Refused(message) = explode_object_to_polyline(target, &target.name) {
+            problems.push(format!("{prefix}: {message}"));
+        }
+    }
+    problems
+}
+
+/// A split reads the vertices a path carries now, the way an explode does, so
+/// it is refused rather than doing nothing when that value is not a point list.
+fn find_invalid_split_operations(
+    operations: &[Operation],
+    objects: &[GraphObject<FormulaAst>],
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (index, operation) in operations.iter().enumerate() {
+        let Operation::SplitEdge {
+            object_id,
+            index: at,
+            point,
+        } = operation
+        else {
+            continue;
+        };
+        let prefix = format!("operation {} of {}", index + 1, operations.len());
+        let Some(target) = objects.iter().find(|candidate| &candidate.id == object_id) else {
+            continue;
+        };
+        if target.object_type != ObjectType::Polyline {
+            problems.push(format!(
+                "{prefix}: object \"{}\" is a \"{}\", not a polyline, so it has no edge to split",
+                target.name,
+                target.object_type.as_str()
+            ));
+            continue;
+        }
+        let edges = polyline_edge_count(target);
+        if at.fract() != 0.0 || !at.is_finite() || *at < 0.0 || *at >= edges {
+            let bound = if edges == 0.0 {
+                "it has no edges".to_string()
+            } else {
+                format!(
+                    "must be an integer from 0 to {}",
+                    to_javascript_text(edges - 1.0)
+                )
+            };
+            problems.push(format!(
+                "{prefix}: edge index {} is out of range for \"{}\" (currently {} edges; {bound})",
+                to_javascript_text(*at),
+                target.name,
+                to_javascript_text(edges)
+            ));
+            continue;
+        }
+        if split_polyline_edge(target, *at as usize, *point).is_none() {
+            problems.push(format!(
+                "{prefix}: \"{}\".vertices did not resolve to a point list, so edge {} cannot be cut",
+                target.name,
+                to_javascript_text(*at)
+            ));
+        }
+    }
+    problems
+}
+
+/// The slot keys an object carried and no longer does, which an explode uses to
+/// find the references its snapshot left pointing at nothing.
+fn removed_slot_keys<A>(before: &GraphObject<A>, after: &GraphObject<A>) -> Vec<String> {
+    before
+        .slots
+        .keys()
+        .filter(|key| after.slots.get(key).is_none())
+        .map(str::to_string)
+        .collect()
 }
 
 /// The ports a node carries part way through a batch, so two port operations on
@@ -1589,6 +1886,147 @@ fn apply_operation(
                     .collect(),
                 Vec::new(),
             )
+        }
+        Operation::AddVertex { object_id, point } => (
+            objects
+                .iter()
+                .map(|object| {
+                    if object.id == *object_id {
+                        add_vertex_to_object(object, *point)
+                    } else {
+                        object.clone()
+                    }
+                })
+                .collect(),
+            Vec::new(),
+        ),
+        Operation::DeleteVertex {
+            object_id,
+            index,
+            force,
+        } => {
+            let Some(target) = objects.iter().find(|object| object.id == *object_id) else {
+                return (objects.to_vec(), Vec::new());
+            };
+            let resized = delete_vertex_from_object(target, *index);
+            if !force {
+                let shift =
+                    |address: &Address| shift_vertex_address_for_delete(address, object_id, *index);
+                return (
+                    objects
+                        .iter()
+                        .map(|object| {
+                            let held = if object.id == *object_id {
+                                resized.clone()
+                            } else {
+                                object.clone()
+                            };
+                            rewrite_object_formula_addresses(&held, &shift)
+                        })
+                        .collect(),
+                    Vec::new(),
+                );
+            }
+            let repair_reference = |address: &Address| match repair_vertex_address_for_delete(
+                address, object_id, *index,
+            ) {
+                VertexRepair::Deleted => None,
+                VertexRepair::Address(found) => Some(found),
+            };
+            // A vertex address never spans a range, so a range passes through.
+            let pass_through = |start: &Address, end: &Address| Some((start.clone(), end.clone()));
+            let mut after = Vec::new();
+            let mut broken = Vec::new();
+            for object in objects {
+                let held = if object.id == *object_id {
+                    resized.clone()
+                } else {
+                    object.clone()
+                };
+                let repaired =
+                    repair_object_formula_addresses(&held, &repair_reference, &pass_through);
+                broken.extend(repaired.1);
+                after.push(repaired.0);
+            }
+            (after, broken)
+        }
+        Operation::SplitEdge {
+            object_id,
+            index,
+            point,
+        } => {
+            let Some(target) = objects.iter().find(|object| object.id == *object_id) else {
+                return (objects.to_vec(), Vec::new());
+            };
+            let Some(split) = split_polyline_edge(target, *index as usize, *point) else {
+                return (objects.to_vec(), Vec::new());
+            };
+            let inserted = index + 1.0;
+            let grown = insert_vertex_into_object(target, *index, &split);
+            let shift =
+                |address: &Address| shift_vertex_address_for_insert(address, object_id, inserted);
+            (
+                objects
+                    .iter()
+                    .map(|object| {
+                        let held = if object.id == *object_id {
+                            grown.clone()
+                        } else {
+                            object.clone()
+                        };
+                        rewrite_object_formula_addresses(&held, &shift)
+                    })
+                    .collect(),
+                Vec::new(),
+            )
+        }
+        Operation::Explode { object_id, force } => {
+            let Some(target) = objects.iter().find(|object| object.id == *object_id) else {
+                return (objects.to_vec(), Vec::new());
+            };
+            let ExplodeResult::Exploded(exploded) =
+                explode_object_to_polyline(target, &target.name)
+            else {
+                return (objects.to_vec(), Vec::new());
+            };
+            if !force {
+                return (
+                    objects
+                        .iter()
+                        .map(|object| {
+                            if object.id == *object_id {
+                                *exploded.clone()
+                            } else {
+                                object.clone()
+                            }
+                        })
+                        .collect(),
+                    Vec::new(),
+                );
+            }
+            let removed = removed_slot_keys(target, exploded.as_ref());
+            let repair_reference = |address: &Address| {
+                if address.object_id == *object_id && removed.contains(&slot_key(&address.path)) {
+                    None
+                } else {
+                    Some(address.clone())
+                }
+            };
+            let pass_through = |start: &Address, end: &Address| Some((start.clone(), end.clone()));
+            let mut after = Vec::new();
+            let mut broken = Vec::new();
+            for object in objects {
+                let held = if object.id == *object_id {
+                    *exploded.clone()
+                } else {
+                    object.clone()
+                };
+                let repaired =
+                    repair_object_formula_addresses(&held, &repair_reference, &pass_through);
+                broken.extend(repaired.1);
+                after.push(repaired.0);
+            }
+            (after, broken)
         }
         Operation::AddPort {
             object_id,
@@ -2799,5 +3237,226 @@ mod tests {
             failure.contains("would leave its ports behind"),
             "{failure}"
         );
+    }
+
+    fn square() -> GraphObject<FormulaAst> {
+        let corners = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
+        let mut slots = SlotMap::new();
+        for (index, (x, y)) in corners.iter().enumerate() {
+            for (suffix, held) in [
+                ("x", *x),
+                ("y", *y),
+                ("bulge", 0.0),
+                ("handle.in.x", 0.0),
+                ("handle.in.y", 0.0),
+                ("handle.out.x", 0.0),
+                ("handle.out.y", 0.0),
+            ] {
+                slots.insert(
+                    format!("vertex.{index}.{suffix}"),
+                    Slot::Literal {
+                        value: Value::Number(held),
+                    },
+                );
+            }
+        }
+        slots.insert(
+            "closed",
+            Slot::Literal {
+                value: Value::Boolean(true),
+            },
+        );
+        slots.insert(
+            "vertices",
+            Slot::Derived {
+                value: Value::Points(
+                    corners
+                        .iter()
+                        .map(|(x, y)| Point { x: *x, y: *y })
+                        .collect(),
+                ),
+            },
+        );
+        for key in [
+            "centroid.x",
+            "centroid.y",
+            "area",
+            "length",
+            "bounds.minX",
+            "bounds.minY",
+            "bounds.maxX",
+            "bounds.maxY",
+            "style.strokeColor",
+            "style.strokeWidth",
+            "style.fillColor",
+        ] {
+            let slot = if key.starts_with("style") {
+                Slot::Literal { value: Value::Null }
+            } else {
+                Slot::Derived { value: Value::Null }
+            };
+            slots.insert(key, slot);
+        }
+        GraphObject {
+            id: "p1".to_string(),
+            name: "path".to_string(),
+            object_type: ObjectType::Polyline,
+            target: None,
+            slots,
+            ports: None,
+            vertex_count: Some(4.0),
+        }
+    }
+
+    /// A vertex a formula names cannot go without the force flag, and with it
+    /// the reference becomes a reference error and is reported.
+    #[test]
+    fn a_vertex_something_names_needs_the_force_flag() {
+        let path = square();
+        let reader = formula_object(
+            "v1",
+            "total",
+            "path.vertex.2.x",
+            std::slice::from_ref(&path),
+        );
+        let objects = vec![path, reader];
+        let refused = mutate(
+            &objects,
+            &[Operation::DeleteVertex {
+                object_id: "p1".to_string(),
+                index: 2.0,
+                force: false,
+            }],
+            &[],
+            None,
+        )
+        .expect_err("a named vertex stays");
+        assert!(
+            refused.contains("still references vertex 2"),
+            "the reader is named: {refused}"
+        );
+
+        let forced = mutate(
+            &objects,
+            &[Operation::DeleteVertex {
+                object_id: "p1".to_string(),
+                index: 2.0,
+                force: true,
+            }],
+            &[],
+            None,
+        )
+        .expect("a forced delete commits");
+        assert_eq!(
+            forced
+                .broken_slots
+                .iter()
+                .map(|address| address.object_id.clone())
+                .collect::<Vec<_>>(),
+            vec!["v1"]
+        );
+    }
+
+    /// A reference to a vertex after the one that went moves down an index
+    /// rather than breaking, so a formula that named a survivor keeps reading it.
+    #[test]
+    fn a_reference_past_the_deleted_vertex_moves_down() {
+        let path = square();
+        let reader = formula_object(
+            "v1",
+            "total",
+            "path.vertex.2.x",
+            std::slice::from_ref(&path),
+        );
+        let objects = vec![path, reader];
+        let result = mutate(
+            &objects,
+            &[Operation::DeleteVertex {
+                object_id: "p1".to_string(),
+                index: 0.0,
+                force: false,
+            }],
+            &[],
+            None,
+        )
+        .expect("the delete commits");
+        assert!(result.broken_slots.is_empty());
+        assert_eq!(
+            result
+                .objects
+                .iter()
+                .find(|object| object.id == "v1")
+                .and_then(|object| object.slots.get("value"))
+                .map(Slot::value),
+            Some(&Value::Number(4.0)),
+            "the formula follows the vertex it named, now at index 1 rather than 2"
+        );
+    }
+
+    /// A split cuts one edge at the point on it nearest the one given, and puts
+    /// a vertex there, so an insert loses no vertex and needs no force flag.
+    #[test]
+    fn a_split_puts_a_vertex_on_the_edge() {
+        let objects = vec![square()];
+        let result = mutate(
+            &objects,
+            &[Operation::SplitEdge {
+                object_id: "p1".to_string(),
+                index: 0.0,
+                point: Point { x: 2.0, y: -1.0 },
+            }],
+            &[],
+            None,
+        )
+        .expect("the split commits");
+        assert_eq!(result.objects[0].vertex_count, Some(5.0));
+        assert_eq!(
+            result.objects[0].slots.get("vertex.1.x").map(Slot::value),
+            Some(&Value::Number(2.0)),
+            "the new vertex sits on the edge it cut"
+        );
+    }
+
+    /// Only the three closed presets explode, and an explode reads the vertices
+    /// the object carries now, so one with nothing to snapshot is refused.
+    #[test]
+    fn only_a_closed_preset_explodes() {
+        let objects = vec![square()];
+        let failure = mutate(
+            &objects,
+            &[Operation::Explode {
+                object_id: "p1".to_string(),
+                force: false,
+            }],
+            &[],
+            None,
+        )
+        .expect_err("a polyline is already an editable path");
+        assert!(
+            failure.contains("only a circle, a polygon or a rect can be exploded"),
+            "{failure}"
+        );
+    }
+
+    /// A vertex count is tracked through the batch, so a delete past what the
+    /// batch has left is refused against the count it reached.
+    #[test]
+    fn a_batch_counts_the_vertices_it_has_left() {
+        let objects = vec![square()];
+        let operations = vec![
+            Operation::DeleteVertex {
+                object_id: "p1".to_string(),
+                index: 0.0,
+                force: false,
+            },
+            Operation::DeleteVertex {
+                object_id: "p1".to_string(),
+                index: 3.0,
+                force: false,
+            },
+        ];
+        let failure = mutate(&objects, &operations, &[], None)
+            .expect_err("three vertices have no index three");
+        assert!(failure.contains("currently 3 vertices"), "{failure}");
     }
 }

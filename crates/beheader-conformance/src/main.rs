@@ -1103,6 +1103,24 @@ fn operations_argument(
                 object_id: text_argument(held, "objectId")?,
                 source: text_argument(held, "source")?,
             },
+            "addVertex" => Operation::AddVertex {
+                object_id: text_argument(held, "objectId")?,
+                point: point_argument(held, "point")?,
+            },
+            "deleteVertex" => Operation::DeleteVertex {
+                object_id: text_argument(held, "objectId")?,
+                index: number_argument(held, "index")?,
+                force: held.get("force").and_then(Json::as_bool).unwrap_or(false),
+            },
+            "explode" => Operation::Explode {
+                object_id: text_argument(held, "objectId")?,
+                force: held.get("force").and_then(Json::as_bool).unwrap_or(false),
+            },
+            "splitEdge" => Operation::SplitEdge {
+                object_id: text_argument(held, "objectId")?,
+                index: number_argument(held, "index")?,
+                point: point_argument(held, "point")?,
+            },
             other => return Err(format!("no operation named \"{other}\"")),
         });
     }

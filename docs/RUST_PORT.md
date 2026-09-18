@@ -945,7 +945,7 @@ met, and a package is done only where the status column says so.
 | `RUST-008` | Math language and evaluator | `004`, `005` | done |
 | `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | done |
 | `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | done |
-| `RUST-011` | Atomic mutations and repairs | `010` | in progress |
+| `RUST-011` | Atomic mutations and repairs | `010` | done |
 | `RUST-012` | Document persistence and journal replay | `011` | planned |
 | `RUST-013` | Completion and consumer facade | `005`, `010`, `012` | planned |
 | `RUST-014` | Application integration behind engine selection | `003`, `013` | planned |
@@ -1431,7 +1431,7 @@ one entry, and host measurements cannot expose a partially applied graph.
 **Boundary.** Subpackages can finish independently, but the parent remains
 incomplete until the operation inventory has no missing family.
 
-**Landed so far.** The batch itself, and the first family: create, set, clear,
+**Landed.** The batch itself, and the first family: create, set, clear,
 rename an object and rename a variable. A batch commits in full or leaves the
 objects and the journal exactly as they arrived, and `mutation.basic` asks that
 of both engines with a case whose last operation is refused and another whose
@@ -1481,11 +1481,33 @@ read.
 A math source is checked against the objects the batch has reached rather than
 the document it started from, so a source can name an object the same batch
 creates. A source that does not read fails the whole mutation with the line an
-operator is looking at, and the source slot takes no plain write, because one
+operator is looking at, and a plain write to the source slot is refused, because one
 would leave the ports of the last source behind and the object would export
 names its source no longer defines.
 
-**Still to come in this package.** Vertex changes, explode and split.
+The vertex family closed the inventory. A vertex that goes takes its seven
+slots with it, and the references that named a vertex after it move down an
+index rather than breaking, so a formula reading the third corner of a square
+reads the third corner of the triangle that is left. The fixture follows a
+delete of the first vertex with a formula on `vertex.2.x`, and both engines
+answer with the survivor's own number rather than with a reference error.
+
+Explode turns a shape into the polyline that traces it, so a circle leaves four
+vertices carrying the bulge that bends each quarter back into its arc. The
+slots the shape declared go, and a formula that read one of them is what the
+unforced refusal names. Forced, the addresses that broke come back for the
+caller, and the refusal message carries the nearest surviving name so an
+operator reading it sees `Did you mean "wheel.area"?` rather than only that
+the radius has gone.
+
+Split cuts one edge in two at the point it is given, which is the one vertex
+operation that raises the count rather than lowering it. The point an operator
+names is projected onto the edge rather than taken as given, so splitting the
+bottom of a square near (2, -1) puts the new vertex at exactly (2, 0) and the
+count goes from four to five.
+
+Fifteen operations now stand in the `Operation` union, which is the whole
+inventory `mutation.ts` carries, so the type has no family left to name.
 
 ### `RUST-012`: Port files and replay
 
@@ -1875,19 +1897,19 @@ implemented, then its lasting rationale belongs beside that code.
 | Field | Current value |
 | --- | --- |
 | Migration phase | Implementation, through Gate B |
-| Active implementation package | `RUST-007`, ready and unstarted |
+| Active implementation package | `RUST-012`, ready and unstarted |
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
 | Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` and `D-012` are part resolved, and `D-010` holds a recorded choice |
-| Next implementation action | Port the primitives and the schema under `RUST-007` |
-| Completion evidence | `RUST-001` through `RUST-006` and `RUST-008`, under their headings above |
+| Next implementation action | Port version 1 decoding and journal replay under `RUST-012` |
+| Completion evidence | `RUST-001` through `RUST-011`, under their headings above |
 
 ### Handoff record for the active package
 
 ```text
 Package: RUST-011, atomic mutations and repairs
-Status: in progress, with the batch and four families landed
+Status: done, with the batch and all fifteen operations landed
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -1905,9 +1927,8 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  Four of the fifteen operations: the two vertex changes, explode and split. The
-  batch, the journal entry and the first four families are landed, under
-  mutation.basic.
+  None. The fifteen operations, the batch and the journal entry are landed,
+  under mutation.basic, which carries 167 cases.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1920,7 +1941,7 @@ Fixture and evidence paths:
   primitives.edge, primitives.geometry, primitives.table, primitives.doc and
   primitives.schema carry RUST-007, and primitives.text and primitives.math
   carry RUST-009, graph.evaluation carries RUST-010, and mutation.basic carries
-  the first family of RUST-011
+  the whole operation inventory of RUST-011
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1930,10 +1951,12 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  262 pass
+  cargo test --workspace --locked                                  267 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1895 matched, 0 differed, 0 awaiting Rust
-  npm run hosting-proof         17 checks pass in Chromium
+  npm run conformance           1928 matched, 0 differed, 0 awaiting Rust
+  npm run hosting-proof         last run at RUST-010, 17 checks in Chromium.
+    This package leaves beheader-wasm untouched, so the proof drives the same
+    binding it drove there.
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
   Chromium. Windows runs the Rust checks in the pull request workflow and has
@@ -1948,10 +1971,11 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port the vertex family, then explode and split, which are
-  the last four operations of the inventory.
-Dependencies that can proceed independently: none. RUST-009 needs this package
-  and RUST-008, and RUST-010 needs the schema this one begins.
+Next concrete action: begin RUST-012, which decodes a version 1 file,
+  reconstructs it through the mutations this package supplies, and replays a
+  journal.
+Dependencies that can proceed independently: none. RUST-012 needs the
+  mutations this package lands, because a file reconstructs through them.
 ```
 
 A resumed session compares the recorded commits with the current branch,

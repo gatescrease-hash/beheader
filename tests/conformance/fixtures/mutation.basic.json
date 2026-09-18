@@ -5,7 +5,7 @@
   "sourceTest": "src/engine/mutation.test.ts",
   "requirement": "SPEC.md section 4, and the compatibility contract above",
   "comparison": "exact",
-  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set. A forced delete rewrites every reference into the object it removes to a reference error and reports the addresses it rewrote, so the cases carry a reader, two readers of one object, and a range whose table goes. The two resizes move cell slots about and rewrite the addresses of every formula that named one, so the cases carry a formula reading a cell before the moved line, one reading a cell after it, one reading the line that goes, and a range straddling it. A size slot is checked apart from the resize, because a formula there would let evaluation decide how many cells a table declares. The port and source cases are the two operations that change the slot set from text an operator typed. A port and the value it holds land in one batch, because the moment an out port exists the integrity check demands the addresses it declares resolve, and a source is checked against the objects the batch has reached so it can name one the same batch creates.",
+  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set. A forced delete rewrites every reference into the object it removes to a reference error and reports the addresses it rewrote, so the cases carry a reader, two readers of one object, and a range whose table goes. The two resizes move cell slots about and rewrite the addresses of every formula that named one, so the cases carry a formula reading a cell before the moved line, one reading a cell after it, one reading the line that goes, and a range straddling it. A size slot is checked apart from the resize, because a formula there would let evaluation decide how many cells a table declares. The port and source cases are the two operations that change the slot set from text an operator typed. A port and the value it holds land in one batch, because the moment an out port exists the integrity check demands the addresses it declares resolve, and a source is checked against the objects the batch has reached so it can name one the same batch creates. The last four operations close the inventory. A vertex delete and an explode each carry a forced and an unforced case, because an unforced one is refused with the reader named and a forced one rewrites that reference to a reference error and reports it.",
   "cases": [
     {
       "name": "an empty batch",
@@ -7225,6 +7225,6757 @@
             },
             "slot": {
               "formula": "node.out.r"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a vertex",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addVertex",
+            "objectId": "p1",
+            "point": {
+              "x": 2,
+              "y": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a vertex holding an illegal value",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addVertex",
+            "objectId": "p1",
+            "point": {
+              "x": 1,
+              "y": {
+                "$number": "NaN"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding a vertex to something that is not a path",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v3",
+            "name": "n",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addVertex",
+            "objectId": "v3",
+            "point": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting vertex 0",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting vertex 2",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting vertex 3",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting vertex 4",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting vertex -1",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": -1
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting vertex 1.5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 1.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a vertex a formula names",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "path.vertex.2.x",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a vertex a formula names, forced",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "path.vertex.2.x",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 2,
+            "force": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a vertex before the one a formula names",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "path.vertex.2.x",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a vertex before one a formula names",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "path.vertex.2.x",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting two vertices in one batch",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 0
+          },
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting past what the batch has left",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 0
+          },
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "adding then deleting the added vertex",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "addVertex",
+            "objectId": "p1",
+            "point": {
+              "x": 2,
+              "y": 2
+            }
+          },
+          {
+            "kind": "deleteVertex",
+            "objectId": "p1",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting edge 0",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 0,
+            "point": {
+              "x": 2,
+              "y": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting edge 1",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 1,
+            "point": {
+              "x": 2,
+              "y": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting edge 3",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 3,
+            "point": {
+              "x": 2,
+              "y": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting edge 4",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 4,
+            "point": {
+              "x": 2,
+              "y": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting edge -1",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": -1,
+            "point": {
+              "x": 2,
+              "y": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting edge 1.5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 1.5,
+            "point": {
+              "x": 2,
+              "y": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting an edge of an open path",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 3,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 9
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": false
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 3,
+                    "y": 4
+                  },
+                  {
+                    "x": 9,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 1,
+            "point": {
+              "x": 6,
+              "y": 5
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting the edge home to the first vertex of an open path",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 3,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 9
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": false
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 3,
+                    "y": 4
+                  },
+                  {
+                    "x": 9,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 2,
+            "point": {
+              "x": 6,
+              "y": 5
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting an edge a formula reads past",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "path.vertex.2.x",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "p1",
+            "index": 0,
+            "point": {
+              "x": 2,
+              "y": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "splitting something that is not a path",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v3",
+            "name": "n",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "splitEdge",
+            "objectId": "v3",
+            "index": 0,
+            "point": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "exploding a circle",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "c1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": -2
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "explode",
+            "objectId": "c1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "exploding a circle a formula reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "c1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": -2
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "r",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "wheel.radius",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "explode",
+            "objectId": "c1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "exploding a circle a formula reads, forced",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "c1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": -2
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "r",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "wheel.radius",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "explode",
+            "objectId": "c1",
+            "force": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "exploding a circle of no radius",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "c1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "explode",
+            "objectId": "c1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "exploding a polyline",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "p1",
+            "name": "path",
+            "type": "polyline",
+            "vertexCount": 4,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.y",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "vertex.3.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.3.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "closed",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "vertices",
+                "kind": "derived",
+                "value": [
+                  {
+                    "x": 0,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 0
+                  },
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "x": 0,
+                    "y": 4
+                  }
+                ]
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "explode",
+            "objectId": "p1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "exploding something with no vertices to snapshot",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v3",
+            "name": "n",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "explode",
+            "objectId": "v3"
+          }
+        ]
+      }
+    },
+    {
+      "name": "exploding then adding a vertex",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "c1",
+            "name": "wheel",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 4
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": -2
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "style.strokeColor",
+                "kind": "literal",
+                "value": "#1a1a1a"
+              },
+              {
+                "key": "style.strokeWidth",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "style.fillColor",
+                "kind": "literal",
+                "value": null
+              },
+              {
+                "key": "centroid.x",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "centroid.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "area",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "length",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.minY",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxX",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "bounds.maxY",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "explode",
+            "objectId": "c1"
+          },
+          {
+            "kind": "addVertex",
+            "objectId": "c1",
+            "point": {
+              "x": 9,
+              "y": 9
             }
           }
         ]

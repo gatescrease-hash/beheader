@@ -852,6 +852,14 @@ function operationsArgument(args, objects) {
         return { kind: entry.kind, objectId: entry.objectId, family: entry.family, name: entry.name };
       case "setMathSource":
         return { kind: "setMathSource", objectId: entry.objectId, source: entry.source };
+      case "addVertex":
+        return { kind: "addVertex", objectId: entry.objectId, point: pointFrom(entry.point, "point") };
+      case "deleteVertex":
+        return { kind: "deleteVertex", objectId: entry.objectId, index: decodeNumber(entry.index), force: entry.force === true };
+      case "explode":
+        return { kind: "explode", objectId: entry.objectId, force: entry.force === true };
+      case "splitEdge":
+        return { kind: "splitEdge", objectId: entry.objectId, index: decodeNumber(entry.index), point: pointFrom(entry.point, "point") };
       case "renameObject":
         return { kind: "renameObject", objectId: entry.objectId, name: entry.name };
       case "renameVariable":
