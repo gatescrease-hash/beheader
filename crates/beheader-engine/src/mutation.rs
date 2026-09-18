@@ -24,7 +24,9 @@ use crate::address::{
     Address, TABLE_CELL_PATH_PREFIX, check_name_available, format_address, name_suggestion,
 };
 use crate::formula::ast::{FormulaAst, LiteralValue};
-use crate::formula::deps::{Dependency, extract_dependencies, rewrite_addresses_in_ast};
+use crate::formula::deps::{
+    Dependency, extract_dependencies, repair_addresses_in_ast, rewrite_addresses_in_ast,
+};
 use crate::graph::cycles::{CycleCheck, detect_cycle};
 use crate::graph::eval::evaluate;
 use crate::graph::{Edge, address_key};
@@ -543,6 +545,15 @@ pub enum Operation {
         address: Address,
         name: String,
     },
+    /// Removes an object. Without the force flag a formula that read it leaves
+    /// the batch refused with the reader named, which is the refusal path of
+    /// section 4. With it, every reference into the object is rewritten to a
+    /// reference error and the addresses that were rewritten come back for the
+    /// caller to report.
+    DeleteObject {
+        object_id: String,
+        force: bool,
+    },
 }
 
 impl Operation {
@@ -554,7 +565,8 @@ impl Operation {
             Operation::SetSlot { address, .. }
             | Operation::ClearSlot { address }
             | Operation::RenameVariable { address, .. } => &address.object_id,
-            Operation::RenameObject { object_id, .. } => object_id,
+            Operation::RenameObject { object_id, .. }
+            | Operation::DeleteObject { object_id, .. } => object_id,
         }
     }
 
@@ -566,6 +578,9 @@ impl Operation {
             }
             Operation::RenameObject { object_id, name } => {
                 format!("attempts to rename object id \"{object_id}\" to \"{name}\"")
+            }
+            Operation::DeleteObject { object_id, .. } => {
+                format!("attempts to delete object id \"{object_id}\"")
             }
             Operation::SetSlot { address, .. }
             | Operation::ClearSlot { address }
@@ -628,6 +643,16 @@ pub fn mutate(
             .iter()
             .find(|object| object.id == operation.target_id())
             .cloned();
+        // Deleting the doc object would take every variable with it under a
+        // command that names none of them, so a variable is removed one at a
+        // time instead.
+        if let Operation::DeleteObject { .. } = operation
+            && target
+                .as_ref()
+                .is_some_and(|held| held.object_type == ObjectType::Doc)
+        {
+            return Err("document variables are removed individually with delvar".to_string());
+        }
         if let Operation::RenameVariable { address, name } = operation {
             let names_a_variable = target.as_ref().is_some_and(|held| {
                 held.object_type == ObjectType::Doc
@@ -759,6 +784,10 @@ fn check_targets_exist(
                 "{prefix} {}, which does not exist in this document",
                 operation.describe()
             ));
+            continue;
+        }
+        if let Operation::DeleteObject { .. } = operation {
+            surviving_ids.retain(|held| held != &target);
         }
     }
     join_problems(problems)
@@ -882,6 +911,9 @@ fn find_invalid_names(
                     Ok(()) => tracked.push(object.as_ref().clone()),
                 }
             }
+            Operation::DeleteObject { object_id, .. } => {
+                tracked.retain(|held| held.id != *object_id);
+            }
             Operation::RenameObject { object_id, name } => {
                 match check_name_available(name, &tracked, Some(object_id)) {
                     Err(message) => problems.push(format!("{prefix} cannot rename: {message}")),
@@ -919,6 +951,74 @@ fn rewrite_object_formula_addresses(
         slots,
         ..object.clone()
     }
+}
+
+/// The declared path a stored key names, which a broken slot is reported under.
+///
+/// A key is the path joined by dots, and a path is what an address carries, so
+/// the schema is asked which declared path this key spells rather than the key
+/// being taken apart on a dot that a segment could hold.
+fn resolve_slot_path_for_key(object: &GraphObject<FormulaAst>, key: &str) -> Option<Vec<String>> {
+    let schema = get_object_schema::<FormulaAst>(object.object_type)?;
+    resolve_non_derived_slot_paths(object, &schema.non_derived_slot_paths)
+        .into_iter()
+        .find(|path| slot_key(path) == key)
+}
+
+/// Rewrites every address a stored tree holds, turning one that cannot be
+/// repaired into a reference error, and reports each slot that lost one.
+fn repair_object_formula_addresses(
+    object: &GraphObject<FormulaAst>,
+    repair_reference: &impl Fn(&Address) -> Option<Address>,
+    repair_range: &impl Fn(&Address, &Address) -> Option<(Address, Address)>,
+) -> (GraphObject<FormulaAst>, Vec<Address>) {
+    let mut slots = SlotMap::new();
+    let mut broken = Vec::new();
+    for (key, slot) in object.slots.iter() {
+        let Slot::Formula { ast, value } = slot else {
+            slots.insert(key, slot.clone());
+            continue;
+        };
+        // The two repairs report through a cell rather than a return, because a
+        // tree is walked once and a slot is broken by any one address in it.
+        let broke = std::cell::Cell::new(false);
+        let tracked_reference = |address: &Address| {
+            let repaired = repair_reference(address);
+            if repaired.is_none() {
+                broke.set(true);
+            }
+            repaired
+        };
+        let tracked_range = |start: &Address, end: &Address| {
+            let repaired = repair_range(start, end);
+            if repaired.is_none() {
+                broke.set(true);
+            }
+            repaired
+        };
+        slots.insert(
+            key,
+            Slot::Formula {
+                ast: repair_addresses_in_ast(ast, &tracked_reference, &tracked_range),
+                value: value.clone(),
+            },
+        );
+        if broke.get()
+            && let Some(path) = resolve_slot_path_for_key(object, key)
+        {
+            broken.push(Address {
+                object_id: object.id.clone(),
+                path,
+            });
+        }
+    }
+    (
+        GraphObject {
+            slots,
+            ..object.clone()
+        },
+        broken,
+    )
 }
 
 /// Applies one operation to the objects the last one produced, and reports any
@@ -1002,6 +1102,43 @@ fn apply_operation(
                     .collect(),
                 Vec::new(),
             )
+        }
+        Operation::DeleteObject { object_id, force } => {
+            if !force {
+                return (
+                    objects
+                        .iter()
+                        .filter(|object| object.id != *object_id)
+                        .cloned()
+                        .collect(),
+                    Vec::new(),
+                );
+            }
+            let repair_reference = |address: &Address| {
+                if address.object_id == *object_id {
+                    None
+                } else {
+                    Some(address.clone())
+                }
+            };
+            let repair_range = |start: &Address, end: &Address| {
+                if start.object_id == *object_id || end.object_id == *object_id {
+                    None
+                } else {
+                    Some((start.clone(), end.clone()))
+                }
+            };
+            let mut after = Vec::new();
+            let mut broken = Vec::new();
+            for object in objects {
+                let repaired =
+                    repair_object_formula_addresses(object, &repair_reference, &repair_range);
+                broken.extend(repaired.1);
+                if repaired.0.id != *object_id {
+                    after.push(repaired.0);
+                }
+            }
+            (after, broken)
         }
         Operation::RenameVariable { address, name } => {
             let own = address_key(address);
@@ -1484,5 +1621,134 @@ mod tests {
             failure,
             "operation 1 of 1: a.value would hold an illegal value (-0), which is not legal document state"
         );
+    }
+
+    /// Deleting an object a formula reads is refused with the reader named,
+    /// which is the refusal path of section 4 rather than a reference quietly
+    /// going nowhere.
+    #[test]
+    fn deleting_something_that_is_read_is_refused() {
+        let first = value_object("v1", "a", Value::Number(1.0));
+        let reader = formula_object("v2", "b", "a.value + 1", std::slice::from_ref(&first));
+        let objects = vec![first, reader];
+        let failure = mutate(
+            &objects,
+            &[Operation::DeleteObject {
+                object_id: "v1".to_string(),
+                force: false,
+            }],
+            &[],
+            None,
+        )
+        .expect_err("a read object stays");
+        assert!(
+            failure.contains("b.value"),
+            "the reader is named: {failure}"
+        );
+    }
+
+    /// A forced delete rewrites every reference into the object to a reference
+    /// error and reports the addresses it rewrote, so the caller can tell an
+    /// operator which formulas it broke.
+    #[test]
+    fn a_forced_delete_reports_what_it_broke() {
+        let first = value_object("v1", "a", Value::Number(1.0));
+        let one = formula_object("v2", "b", "a.value + 1", std::slice::from_ref(&first));
+        let two = formula_object("v3", "c", "a.value * 2", std::slice::from_ref(&first));
+        let objects = vec![first, one, two];
+        let result = mutate(
+            &objects,
+            &[Operation::DeleteObject {
+                object_id: "v1".to_string(),
+                force: true,
+            }],
+            &[],
+            None,
+        )
+        .expect("a forced delete commits");
+        let broken: Vec<String> = result
+            .broken_slots
+            .iter()
+            .map(|address| format!("{}.{}", address.object_id, slot_key(&address.path)))
+            .collect();
+        assert_eq!(broken, vec!["v2.value", "v3.value"]);
+        assert!(result.objects.iter().all(|object| object.id != "v1"));
+    }
+
+    /// A broken slot that went with its own object is left out of the report,
+    /// because a caller cannot show an operator a slot that is no longer there.
+    #[test]
+    fn a_broken_slot_that_went_is_not_reported() {
+        let first = value_object("v1", "a", Value::Number(1.0));
+        let reader = formula_object("v2", "b", "a.value + 1", std::slice::from_ref(&first));
+        let objects = vec![first, reader];
+        let result = mutate(
+            &objects,
+            &[
+                Operation::DeleteObject {
+                    object_id: "v1".to_string(),
+                    force: true,
+                },
+                Operation::DeleteObject {
+                    object_id: "v2".to_string(),
+                    force: false,
+                },
+            ],
+            &[],
+            None,
+        )
+        .expect("both deletes commit");
+        assert!(result.objects.is_empty());
+        assert!(
+            result.broken_slots.is_empty(),
+            "nothing is left to report on"
+        );
+    }
+
+    /// Deleting the doc object would take every variable with it under a
+    /// command that names none of them.
+    #[test]
+    fn the_doc_object_is_not_deleted_whole() {
+        let objects = vec![doc_object(&[("alpha", 1.0)])];
+        let failure = mutate(
+            &objects,
+            &[Operation::DeleteObject {
+                object_id: "d1".to_string(),
+                force: false,
+            }],
+            &[],
+            None,
+        )
+        .expect_err("the doc object stays");
+        assert_eq!(
+            failure,
+            "document variables are removed individually with delvar"
+        );
+    }
+
+    /// A name freed by a delete is available to a create in the same batch,
+    /// because the check tracks the names through the batch rather than reading
+    /// the document it started from.
+    #[test]
+    fn a_delete_frees_its_name_for_the_same_batch() {
+        let objects = vec![value_object("v1", "a", Value::Number(1.0))];
+        let result = mutate(
+            &objects,
+            &[
+                Operation::DeleteObject {
+                    object_id: "v1".to_string(),
+                    force: false,
+                },
+                Operation::CreateObject {
+                    object: Box::new(value_object("v2", "a", Value::Number(5.0))),
+                },
+            ],
+            &[],
+            None,
+        )
+        .expect("the batch commits");
+        assert_eq!(result.objects.len(), 1);
+        assert_eq!(result.objects[0].id, "v2");
+        assert_eq!(result.objects[0].name, "a");
     }
 }

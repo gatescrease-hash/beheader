@@ -1047,6 +1047,10 @@ fn operations_argument(
             "clearSlot" => Operation::ClearSlot {
                 address: address_argument(held, "address")?,
             },
+            "deleteObject" => Operation::DeleteObject {
+                object_id: text_argument(held, "objectId")?,
+                force: held.get("force").and_then(Json::as_bool).unwrap_or(false),
+            },
             "renameObject" => Operation::RenameObject {
                 object_id: text_argument(held, "objectId")?,
                 name: text_argument(held, "name")?,

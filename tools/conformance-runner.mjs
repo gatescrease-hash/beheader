@@ -842,6 +842,8 @@ function operationsArgument(args, objects) {
       }
       case "clearSlot":
         return { kind: "clearSlot", address: addressArgument(entry, "address") };
+      case "deleteObject":
+        return { kind: "deleteObject", objectId: entry.objectId, force: entry.force === true };
       case "renameObject":
         return { kind: "renameObject", objectId: entry.objectId, name: entry.name };
       case "renameVariable":

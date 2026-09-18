@@ -5,7 +5,7 @@
   "sourceTest": "src/engine/mutation.test.ts",
   "requirement": "SPEC.md section 4, and the compatibility contract above",
   "comparison": "exact",
-  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set.",
+  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set. A forced delete rewrites every reference into the object it removes to a reference error and reports the addresses it rewrote, so the cases carry a reader, two readers of one object, and a range whose table goes.",
   "cases": [
     {
       "name": "an empty batch",
@@ -1728,6 +1728,636 @@
             "kind": "renameObject",
             "objectId": "v2",
             "name": "z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting an object nothing reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v3",
+            "name": "c",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v3"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting an object a formula reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting an object a formula reads, forced",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v1",
+            "force": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting an object two formulas read, forced",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": "v3",
+            "name": "c",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value * 2",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v1",
+            "force": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a table a range reads, forced",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "id": "v4",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "SUM(grid.A1:grid.B2)",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "t1",
+            "force": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a table a range reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "id": "v4",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "SUM(grid.A1:grid.B2)",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "t1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting an object that is not there",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v9"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting the doc object",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "d1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a copy",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "r1",
+            "name": "copy",
+            "type": "docref",
+            "target": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "value",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "r1"
+          }
+        ],
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "deleting the reader rather than the read",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting then creating under the freed name",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v1"
+          },
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "a",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting an object a later operation names",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v1"
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting two objects where the second reads the first, forced",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v1",
+            "force": true
+          },
+          {
+            "kind": "deleteObject",
+            "objectId": "v2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a forced delete of an object nothing reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v3",
+            "name": "c",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteObject",
+            "objectId": "v3",
+            "force": true
           }
         ]
       }
