@@ -945,7 +945,7 @@ met, and a package is done only where the status column says so.
 | `RUST-008` | Math language and evaluator | `004`, `005` | done |
 | `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | done |
 | `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | done |
-| `RUST-011` | Atomic mutations and repairs | `010` | planned |
+| `RUST-011` | Atomic mutations and repairs | `010` | in progress |
 | `RUST-012` | Document persistence and journal replay | `011` | planned |
 | `RUST-013` | Completion and consumer facade | `005`, `010`, `012` | planned |
 | `RUST-014` | Application integration behind engine selection | `003`, `013` | planned |
@@ -1431,6 +1431,29 @@ one entry, and host measurements cannot expose a partially applied graph.
 **Boundary.** Subpackages can finish independently, but the parent remains
 incomplete until the operation inventory has no missing family.
 
+**Landed so far.** The batch itself, and the first family: create, set, clear,
+rename an object and rename a variable. A batch commits in full or leaves the
+objects and the journal exactly as they arrived, and `mutation.basic` asks that
+of both engines with a case whose last operation is refused and another whose
+last operation makes a cycle. A refused batch answers with the objects it was
+given rather than with what it had reached, so the comparison reads the proof
+that nothing was written.
+
+The `Operation` union carries the families that have landed rather than all
+fifteen names with bodies that answer nothing, so what is missing is visible in
+the type rather than at the first call that meets it.
+
+Renaming a variable is the operation that reaches furthest, and the fixture
+follows it into all four places: the slot moves, the trees of every formula that
+read it move, the markers inside a text object are reparsed and written back
+under the new name, the address macros of a math source are rewritten, and the
+target a copy carries outside the slot set moves with them. `rewrite_text_references`
+arrived with it, having been left out of `RUST-009` because nothing called it
+until now.
+
+**Still to come in this package.** Deletion and forced repairs, table structure,
+ports and math source, then vertex changes, explode and split.
+
 ### `RUST-012`: Port files and replay
 
 **Work.** Implement version 1 decoding, reconstruction through mutation,
@@ -1831,7 +1854,7 @@ implemented, then its lasting rationale belongs beside that code.
 
 ```text
 Package: RUST-011, atomic mutations and repairs
-Status: ready, unstarted
+Status: in progress, with the batch and the first family landed
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -1849,9 +1872,10 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  The fifteen operations of the inventory, the batch that commits them in full
-  or leaves the input alone, the forced repairs that report what they broke, and
-  the journal entry one successful batch appends.
+  Ten of the fifteen operations: deletion and its forced repairs, the two table
+  resizes, the two port operations, the math source, the two vertex changes,
+  explode and split. The batch, the journal entry and the first five operations
+  are landed, under mutation.basic.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1863,7 +1887,8 @@ Fixture and evidence paths:
   number.javascript-arithmetic pins the seven functions D-012 found agreeing,
   primitives.edge, primitives.geometry, primitives.table, primitives.doc and
   primitives.schema carry RUST-007, and primitives.text and primitives.math
-  carry RUST-009, and graph.evaluation carries RUST-010
+  carry RUST-009, graph.evaluation carries RUST-010, and mutation.basic carries
+  the first family of RUST-011
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1873,9 +1898,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  240 pass
+  cargo test --workspace --locked                                  247 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1761 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1799 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1891,9 +1916,9 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port the operation union and the batch loop of
-  mutation.ts, which runs derive, validate and evaluate between operations and
-  commits in full or not at all.
+Next concrete action: port the deletion family, which is the first to report
+  broken slots, and the forced repairs that rewrite a reference to a deleted
+  object into a reference error.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```

@@ -1,0 +1,1736 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "mutation.basic",
+  "sourceTest": "src/engine/mutation.test.ts",
+  "requirement": "SPEC.md section 4, and the compatibility contract above",
+  "comparison": "exact",
+  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set.",
+  "cases": [
+    {
+      "name": "an empty batch",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": []
+      }
+    },
+    {
+      "name": "setting a literal",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "setting a formula",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v2",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "formula": "a.value * 10"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "setting a slot on an object that is not there",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v9",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "setting an illegal value",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": {
+                "$number": "-0"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "setting an infinity",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": {
+                "$number": "Infinity"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "setting a value that breaks a reader",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": "text"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating an object",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "c",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating an object whose id is taken",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v1",
+              "name": "c",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating an object whose name is taken",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "a",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating an object with a reserved name",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "AND",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating an object with an illegal name",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "1bad",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating an object holding an illegal value",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "c",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": {
+                    "$number": "NaN"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating then setting in one batch",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "c",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v3",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 6
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating two objects with one name",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "c",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          },
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v4",
+              "name": "c",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 6
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming an object",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameObject",
+            "objectId": "v1",
+            "name": "z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming to a name in use",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameObject",
+            "objectId": "v1",
+            "name": "b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming to its own name",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameObject",
+            "objectId": "v1",
+            "name": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming an object that is not there",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameObject",
+            "objectId": "v9",
+            "name": "z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming then creating under the freed name",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameObject",
+            "objectId": "v1",
+            "name": "z"
+          },
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "v3",
+              "name": "a",
+              "type": "value",
+              "slots": [
+                {
+                  "key": "value",
+                  "kind": "literal",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "clearing a table cell",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 4
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "clearSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "A1"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "clearing a cell outside the extent",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 4
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "clearSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "cells",
+                "Z9"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "clearing a slot that is not a cell",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "clearSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "clearing a document variable",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "clearSlot",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "clearing a variable something reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "alpha + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "clearSlot",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "clearing a variable a copy draws",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "id": "r1",
+            "name": "copy",
+            "type": "docref",
+            "target": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "value",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "clearSlot",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            }
+          }
+        ],
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "renaming a variable",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "name": "gamma"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming a variable a formula reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "alpha + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "name": "gamma"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming a variable a text object reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "id": "x1",
+            "name": "label",
+            "type": "text",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "content",
+                "kind": "literal",
+                "value": "value {= alpha } here"
+              },
+              {
+                "key": "width",
+                "kind": "literal",
+                "value": 200
+              },
+              {
+                "key": "height",
+                "kind": "literal",
+                "value": 50
+              },
+              {
+                "key": "autoresize",
+                "kind": "literal",
+                "value": true
+              },
+              {
+                "key": "style.font",
+                "kind": "literal",
+                "value": "monospace"
+              },
+              {
+                "key": "style.fontSize",
+                "kind": "literal",
+                "value": 16
+              },
+              {
+                "key": "style.lineHeight",
+                "kind": "literal",
+                "value": 20
+              },
+              {
+                "key": "style.color",
+                "kind": "literal",
+                "value": "#111111"
+              },
+              {
+                "key": "style.align",
+                "kind": "literal",
+                "value": "left"
+              },
+              {
+                "key": "resolvedContent",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "name": "gamma"
+          }
+        ],
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "renaming a variable a math source reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "id": "m1",
+            "name": "eq",
+            "type": "math",
+            "ports": {
+              "in": [],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=\\gpref{d1.alpha}+1"
+              },
+              {
+                "key": "display",
+                "kind": "literal",
+                "value": "source"
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "name": "gamma"
+          }
+        ],
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "renaming a variable a copy draws",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "id": "r1",
+            "name": "copy",
+            "type": "docref",
+            "target": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "value",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredWidth",
+                "kind": "derived",
+                "value": null
+              },
+              {
+                "key": "measuredHeight",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "name": "gamma"
+          }
+        ],
+        "measurer": "fake"
+      }
+    },
+    {
+      "name": "renaming a variable to one that exists",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "name": "beta"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming a variable to a reserved word",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "alpha"
+              ]
+            },
+            "name": "SUM"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming a variable that is not there",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "alpha",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "beta",
+                "kind": "literal",
+                "value": 2
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "d1",
+              "path": [
+                "gone"
+              ]
+            },
+            "name": "gamma"
+          }
+        ]
+      }
+    },
+    {
+      "name": "renaming a variable on an object that is not the doc",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "renameVariable",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "name": "gamma"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a batch whose last operation is refused",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 9
+            }
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v9",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a batch whose last operation makes a cycle",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 9
+            }
+          },
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "formula": "b.value"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a batch that ends sound",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "v1",
+            "name": "a",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "b",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "a.value + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "v1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 9
+            }
+          },
+          {
+            "kind": "renameObject",
+            "objectId": "v2",
+            "name": "z"
+          }
+        ]
+      }
+    }
+  ]
+}

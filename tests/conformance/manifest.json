@@ -209,6 +209,13 @@
         "src/engine/graph/cycles.ts",
         "src/engine/graph/eval.ts"
       ]
+    },
+    {
+      "id": "mutation.basic",
+      "file": "fixtures/mutation.basic.json",
+      "covers": [
+        "src/engine/mutation.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
@@ -217,7 +224,6 @@
     "src/engine/eval-context.ts",
     "src/engine/index.ts",
     "src/engine/journal.ts",
-    "src/engine/mutation.ts",
     "src/engine/primitives/image.ts"
   ]
 }

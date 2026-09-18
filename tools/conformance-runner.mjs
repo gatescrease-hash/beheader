@@ -164,6 +164,7 @@ const {
   detectCycle,
   deriveValidateAndEvaluate,
   validateIntegrity,
+  mutate,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -818,6 +819,47 @@ function slotReaderFor(objects) {
   };
 }
 
+
+/**
+ * The operations a case asks for. A slot or an object inside one is read the
+ * same way a case reads one on its own, and a formula is parsed against the
+ * objects the batch starts from.
+ */
+function operationsArgument(args, objects) {
+  const listed = argument(args, "operations");
+  if (!Array.isArray(listed)) {
+    throw new BadArgument('the argument "operations" is a list of operations');
+  }
+  return listed.map((entry) => {
+    switch (entry.kind) {
+      case "createObject":
+        return { kind: "createObject", object: shapeObjectListArgument({ o: [entry.object] }, "o")[0] };
+      case "setSlot": {
+        const slot = entry.slot.formula === undefined
+          ? { kind: entry.slot.kind ?? "literal", value: decodeValue(entry.slot.value ?? null) }
+          : { kind: "formula", ast: parseFormulaOrRefuse(entry.slot.formula, objects), value: null };
+        return { kind: "setSlot", address: addressArgument(entry, "address"), slot };
+      }
+      case "clearSlot":
+        return { kind: "clearSlot", address: addressArgument(entry, "address") };
+      case "renameObject":
+        return { kind: "renameObject", objectId: entry.objectId, name: entry.name };
+      case "renameVariable":
+        return { kind: "renameVariable", address: addressArgument(entry, "address"), name: entry.name };
+      default:
+        throw new BadArgument(`no operation named "${entry.kind}"`);
+    }
+  });
+}
+
+function parseFormulaOrRefuse(source, objects) {
+  const parsed = parseFormula(source, objects);
+  if (isParseError(parsed)) {
+    throw new BadArgument(`the formula "${source}" does not parse: ${parsed.message}`);
+  }
+  return parsed;
+}
+
 /* ------------------------------------------------------------------ */
 /* The calls                                                           */
 /* ------------------------------------------------------------------ */
@@ -853,6 +895,19 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  mutateBatch: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const result = mutate(objects, operationsArgument(args, objects), [], evalContextArgument(args));
+    if (!result.ok) {
+      return { ok: false, message: result.message, objects: objects.map(encodeShapeObject) };
+    }
+    return {
+      ok: true,
+      objects: result.objects.map(encodeShapeObject),
+      journalLength: result.journal.length,
+      brokenSlots: result.brokenSlots.map(encodeAddress),
+    };
+  },
   graphEdges: (args) =>
     deriveEdges(shapeObjectListArgument(args, "objects")).map((edge) => ({
       source: encodeAddress(edge.sourceSlot),

@@ -28,8 +28,9 @@
 
 use crate::address::{Address, AddressableObject};
 use crate::formula::ast::FormulaAst;
-use crate::formula::deps::{Dependency, extract_dependencies};
+use crate::formula::deps::{Dependency, extract_dependencies, rewrite_addresses_in_ast};
 use crate::formula::eval::{ReadRange, ReadSlot, evaluate as evaluate_formula_ast};
+use crate::formula::format::format_formula;
 use crate::formula::parser::parse_formula;
 use crate::measure::{Measurement, TextStyle};
 use crate::model::{
@@ -805,6 +806,55 @@ pub fn compute_measured_width<A>(object: &GraphObject<A>, inputs: &SlotComputeIn
         Ok(measured) => Value::Number(measured.width),
         Err(failure) => Value::Error(failure),
     }
+}
+
+/// Rewrites addresses inside formula markers while leaving prose and notation
+/// as they were.
+///
+/// A marker is reparsed against the objects as they stood before the change and
+/// written back under the names they carry after it, so a rename reaches the
+/// text an operator typed rather than only the trees a formula slot holds. A
+/// marker whose tree the rewrite leaves alone is left exactly as it was written,
+/// spacing and all, because reformatting a marker nobody touched would rewrite
+/// text an operator chose.
+pub fn rewrite_text_references<T: AddressableObject>(
+    content: &str,
+    before: &[T],
+    after: &[T],
+    rewrite: &impl Fn(&Address) -> Address,
+) -> String {
+    const OPEN: u16 = b'{' as u16;
+    let units = units_of(content);
+    let mut output = String::new();
+    let mut copied = 0usize;
+    let mut at = 0usize;
+    while at < units.len() {
+        if units[at] != OPEN {
+            at += 1;
+            continue;
+        }
+        let Some(marker) = match_marker_at(&units, at) else {
+            at += 1;
+            continue;
+        };
+        if let Marker::FormulaOpen { source, end } | Marker::ConditionalOpen { source, end } =
+            &marker
+            && let Ok(ast) = parse_formula(source, before, None)
+        {
+            let rewritten = rewrite_addresses_in_ast(&ast, rewrite);
+            if rewritten != ast {
+                output.push_str(&text_of(&units[copied..at + 2]));
+                output.push(' ');
+                // A text block names no enclosing table, the same as when it was parsed.
+                output.push_str(&format_formula(&rewritten, after, None));
+                output.push_str(" }");
+                copied = *end;
+            }
+        }
+        at = marker.end();
+    }
+    output.push_str(&text_of(&units[copied..]));
+    output
 }
 
 #[cfg(test)]

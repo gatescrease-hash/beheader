@@ -15,6 +15,7 @@
 //! way in both engines, and a Rust `u32` that refused it would refuse a
 //! document the TypeScript engine reads.
 
+use crate::formula::lexer::RESERVED_WORDS;
 use crate::model::{ErrorCode, ObjectType};
 use crate::number::to_javascript_text;
 
@@ -68,6 +69,29 @@ pub fn is_valid_name(name: &str) -> bool {
         _ => return false,
     }
     characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
+}
+
+/// Why a name cannot be given to an object, or nothing when it can.
+pub fn check_name_available<T: AddressableObject>(
+    name: &str,
+    objects: &[T],
+    exclude_id: Option<&str>,
+) -> Result<(), String> {
+    if !is_valid_name(name) {
+        return Err(format!(
+            "\"{name}\" is not a valid name — names must match [a-zA-Z_][a-zA-Z0-9_]*"
+        ));
+    }
+    if RESERVED_WORDS.contains(&name.to_uppercase().as_str()) {
+        return Err(format!(
+            "\"{name}\" is a reserved word — the formula language reads {} as formula keywords in any case, so no formula could reference this object; choose another name",
+            RESERVED_WORDS.join(", ")
+        ));
+    }
+    if is_name_taken(name, objects, exclude_id) {
+        return Err(format!("the name \"{name}\" is already in use"));
+    }
+    Ok(())
 }
 
 /// The tail of a message that offers the nearest name, or nothing when no

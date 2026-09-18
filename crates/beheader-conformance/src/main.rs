@@ -50,7 +50,9 @@ use beheader_engine::model::{
     ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap, Value,
     has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
 };
-use beheader_engine::mutation::{derive_edges, derive_validate_and_evaluate, validate_integrity};
+use beheader_engine::mutation::{
+    Operation, derive_edges, derive_validate_and_evaluate, mutate, validate_integrity,
+};
 use beheader_engine::number::{
     js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
     js_pow, js_sin, js_sinh, js_sqrt, js_tan, js_tanh, to_javascript_text,
@@ -984,11 +986,109 @@ fn encode_dependency(dependency: &Dependency) -> Json {
     }
 }
 
+/// The operations a case asks for. A slot or an object inside one is read the
+/// same way a case reads one on its own, and a formula is parsed against the
+/// objects the batch starts from.
+fn operations_argument(
+    args: &Map<String, Json>,
+    objects: &[GraphObject<FormulaAst>],
+) -> Result<Vec<Operation>, String> {
+    let listed = argument(args, "operations")?
+        .as_array()
+        .ok_or_else(|| "the argument \"operations\" is a list of operations".to_string())?;
+    let mut operations = Vec::new();
+    for entry in listed {
+        let held = entry
+            .as_object()
+            .ok_or_else(|| "an operation is an object with a kind".to_string())?;
+        let kind = held
+            .get("kind")
+            .and_then(Json::as_str)
+            .ok_or_else(|| "an operation is an object with a kind".to_string())?;
+        operations.push(match kind {
+            "createObject" => {
+                let mut one = Map::new();
+                one.insert(
+                    "o".to_string(),
+                    Json::Array(vec![held.get("object").cloned().unwrap_or(Json::Null)]),
+                );
+                let built = shape_object_list_argument(&one, "o")?;
+                Operation::CreateObject {
+                    object: Box::new(built.into_iter().next().expect("one object")),
+                }
+            }
+            "setSlot" => {
+                let address = address_argument(held, "address")?;
+                let slot_json = held
+                    .get("slot")
+                    .and_then(Json::as_object)
+                    .ok_or_else(|| "a setSlot operation carries a slot".to_string())?;
+                let slot = match slot_json.get("formula").and_then(Json::as_str) {
+                    Some(source) => Slot::Formula {
+                        ast: parse_formula(source, objects, None).map_err(|failure| {
+                            format!(
+                                "the formula \"{source}\" does not parse: {}",
+                                failure.message
+                            )
+                        })?,
+                        value: Value::Null,
+                    },
+                    None => {
+                        let value = decode_value(slot_json.get("value").unwrap_or(&Json::Null))
+                            .map_err(|failure| failure.message)?;
+                        match slot_json.get("kind").and_then(Json::as_str) {
+                            Some("derived") => Slot::Derived { value },
+                            _ => Slot::Literal { value },
+                        }
+                    }
+                };
+                Operation::SetSlot { address, slot }
+            }
+            "clearSlot" => Operation::ClearSlot {
+                address: address_argument(held, "address")?,
+            },
+            "renameObject" => Operation::RenameObject {
+                object_id: text_argument(held, "objectId")?,
+                name: text_argument(held, "name")?,
+            },
+            "renameVariable" => Operation::RenameVariable {
+                address: address_argument(held, "address")?,
+                name: text_argument(held, "name")?,
+            },
+            other => return Err(format!("no operation named \"{other}\"")),
+        });
+    }
+    Ok(operations)
+}
+
 fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
     let result: Answer = match call {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "mutateBatch" => shape_object_list_argument(args, "objects").and_then(|objects| {
+            let operations = operations_argument(args, &objects)?;
+            let fake = FakeMeasurer;
+            let failing = FailingMeasurer;
+            let measurer: Option<&dyn Measurer> = match args.get("measurer").and_then(Json::as_str) {
+                Some("fake") => Some(&fake),
+                Some("failing") => Some(&failing),
+                _ => None,
+            };
+            Ok(match mutate(&objects, &operations, &[], measurer) {
+                Err(message) => json!({
+                    "ok": false,
+                    "message": message,
+                    "objects": objects.iter().map(encode_shape_object).collect::<Vec<_>>(),
+                }),
+                Ok(result) => json!({
+                    "ok": true,
+                    "objects": result.objects.iter().map(encode_shape_object).collect::<Vec<_>>(),
+                    "journalLength": result.journal.len(),
+                    "brokenSlots": result.broken_slots.iter().map(encode_address).collect::<Vec<_>>(),
+                }),
+            })
+        }),
         "graphEdges" => shape_object_list_argument(args, "objects").map(|objects| {
             json!(
                 derive_edges(&objects)
