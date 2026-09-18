@@ -307,7 +307,16 @@ function makeMathMeasureCompute(axis: "width" | "height"): DerivedSlotCompute {
       };
     }
     const measurer = (context as EvalContext).measurer;
-    const measured = measurer.measureMath?.(latex, { fontSize: MATH_FONT_SIZE });
+    let measured;
+    try {
+      measured = measurer.measureMath?.(latex, { fontSize: MATH_FONT_SIZE });
+    } catch {
+      // A measurer that throws is a fault in the host rather than in the
+      // document, and an error value leaves the rest of the graph evaluating.
+      // The same wrapper sits under the text object and under a copy of a
+      // variable, under D-013.
+      measured = undefined;
+    }
     if (measured === undefined) {
       return { error: "#MEASURE", message: `math: ${object.name} could not be measured` };
     }

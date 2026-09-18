@@ -766,12 +766,15 @@ fn measure_text_box<A>(
         _ => None,
     };
 
-    // A measurer that fails is a fault in the host, and one that answers with a
-    // box the graph could not store is a fault in what it answered. The two
-    // read differently to an operator, so they are reported apart.
-    let measured = measurer
-        .measure(text, &style, max_width)
-        .map_err(|failure| failure.to_value())?;
+    // A measurer that fails is a fault in the host rather than in the document,
+    // and an error value leaves the rest of the graph evaluating. A variable
+    // copy answers the same way, under `D-013`.
+    let Ok(measured) = measurer.measure(text, &style, max_width) else {
+        return Err(ErrorValue {
+            error: ErrorCode::Measure,
+            message: format!("{slot_label}: {} could not be measured", object.name),
+        });
+    };
     if has_illegal_number(&Value::Number(measured.width))
         || has_illegal_number(&Value::Number(measured.height))
     {

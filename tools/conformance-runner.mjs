@@ -692,13 +692,26 @@ const FAKE_MEASURER = {
   }),
 };
 
+/** A measurer whose host has gone, which is what a closed page looks like. */
+const FAILING_MEASURER = {
+  measure: () => {
+    throw new Error("the host has gone");
+  },
+  measureMath: () => {
+    throw new Error("the host has gone");
+  },
+};
+
 /**
  * The context a derived slot computes against. A case naming no measurer gets
  * none, which is what leaves a measured slot reporting a measurement error
  * rather than a guessed size.
  */
 function evalContextArgument(args) {
-  return args.measurer === "fake" ? { measurer: FAKE_MEASURER } : undefined;
+  if (args.measurer === "fake") {
+    return { measurer: FAKE_MEASURER };
+  }
+  return args.measurer === "failing" ? { measurer: FAILING_MEASURER } : undefined;
 }
 
 /** The axis a table resize runs along. */

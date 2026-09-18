@@ -872,6 +872,28 @@ fn encode_edge(edge: &PathEdge) -> Json {
     })
 }
 
+/// A measurer whose host has gone, which is what a closed page looks like.
+struct FailingMeasurer;
+
+impl Measurer for FailingMeasurer {
+    fn capability(&self) -> MeasureCapability {
+        MeasureCapability::TextAndMath
+    }
+
+    fn measure(
+        &self,
+        _text: &str,
+        _style: &TextStyle,
+        _max_width: Option<f64>,
+    ) -> Result<Measurement, MeasureError> {
+        Err(MeasureError::HostFailed("the host has gone".to_string()))
+    }
+
+    fn measure_math(&self, _latex: &str, _style: &MathStyle) -> Result<Measurement, MeasureError> {
+        Err(MeasureError::HostFailed("the host has gone".to_string()))
+    }
+}
+
 /// The axis a table resize runs along.
 fn table_axis_argument(args: &Map<String, Json>) -> Result<TableAxis, String> {
     match text_argument(args, "axis")?.as_str() {
@@ -1205,17 +1227,21 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                     .map(|slot| slot.value().clone())
             };
             let fake = FakeMeasurer;
+            let failing = FailingMeasurer;
+            // A case naming no measurer gets none, which is what leaves a
+            // measured slot reporting a measurement error rather than a guessed
+            // size.
+            let measurer: Option<&dyn Measurer> = match args.get("measurer").and_then(Json::as_str)
+            {
+                Some("fake") => Some(&fake),
+                Some("failing") => Some(&failing),
+                _ => None,
+            };
             let inputs = SlotComputeInputs {
                 read: &read,
                 read_range: None,
                 objects: &objects,
-                // A case naming no measurer gets none, which is what leaves a
-                // measured slot reporting a measurement error rather than a
-                // guessed size.
-                measurer: match args.get("measurer").and_then(Json::as_str) {
-                    Some("fake") => Some(&fake),
-                    _ => None,
-                },
+                measurer,
             };
             json!({
                 "declared": true,

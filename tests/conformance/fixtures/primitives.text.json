@@ -5,7 +5,7 @@
   "sourceTest": "src/engine/primitives/text.test.ts",
   "requirement": "SPEC.md section 8, the text object",
   "comparison": "exact",
-  "note": "The block tree, the addresses it names, and the string it resolves to. The dependency cases carry both arms of every conditional, because flipping a condition would otherwise leave the object subscribed to the arm it no longer draws. The offset an error block carries counts the units a JavaScript string counts, so the cases holding a character outside the basic plane are the ones that would part if either engine counted characters instead. A run of notation is trimmed with the whitespace JavaScript trims, which holds the byte order mark and leaves the next line character alone, and the two marker cases carrying those characters pin the difference.",
+  "note": "The block tree, the addresses it names, and the string it resolves to. The dependency cases carry both arms of every conditional, because flipping a condition would otherwise leave the object subscribed to the arm it no longer draws. The offset an error block carries counts the units a JavaScript string counts, so the cases holding a character outside the basic plane are the ones that would part if either engine counted characters instead. A run of notation is trimmed with the whitespace JavaScript trims, which holds the byte order mark and leaves the next line character alone, and the two marker cases carrying those characters pin the difference. The case whose host has gone is D-013: a measurer that fails leaves a measurement error in the slot rather than carrying a failure out of the pass, which is what a copy of a variable already did before the two were brought together.",
   "cases": [
     {
       "name": "content 0, its blocks",
@@ -11637,6 +11637,65 @@
         "path": [
           "content"
         ]
+      }
+    },
+    {
+      "name": "a text box whose host has gone",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "x1",
+          "name": "label",
+          "type": "text",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "content",
+              "kind": "literal",
+              "value": "hello"
+            },
+            {
+              "key": "resolvedContent",
+              "kind": "derived",
+              "value": "hello"
+            },
+            {
+              "key": "style.font",
+              "kind": "literal",
+              "value": "monospace"
+            },
+            {
+              "key": "style.fontSize",
+              "kind": "literal",
+              "value": 16
+            },
+            {
+              "key": "style.lineHeight",
+              "kind": "literal",
+              "value": 20
+            },
+            {
+              "key": "style.color",
+              "kind": "literal",
+              "value": "#111111"
+            },
+            {
+              "key": "style.align",
+              "kind": "literal",
+              "value": "left"
+            }
+          ]
+        },
+        "measurer": "failing"
       }
     }
   ]

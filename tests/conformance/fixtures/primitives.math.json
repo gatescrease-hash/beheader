@@ -5515,6 +5515,61 @@
           }
         ]
       }
+    },
+    {
+      "name": "a math object whose host has gone",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=1+2"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": 3
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ]
+        },
+        "measurer": "failing"
+      }
     }
   ]
 }

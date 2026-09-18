@@ -25,7 +25,7 @@
  */
 
 import type { Address, AddressableObject } from "../address.ts";
-import { hasRealMeasurer, type EvalContext, type TextStyle } from "../eval-context.ts";
+import { hasRealMeasurer, type EvalContext, type TextMeasurement, type TextStyle } from "../eval-context.ts";
 import type { FormulaAst } from "../formula/ast.ts";
 import { extractDependencies, rewriteAddressesInAst, type Dependency } from "../formula/deps.ts";
 import { formatFormula } from "../formula/format.ts";
@@ -618,7 +618,19 @@ function measureTextBox(
   const text = typeof resolved === "string" ? resolved : "";
   const maxWidth = typeof width === "number" ? width : undefined;
 
-  const measured = context.measurer.measure(text, style, maxWidth);
+  let measured: TextMeasurement;
+  try {
+    measured = context.measurer.measure(text, style, maxWidth);
+  } catch {
+    // A measurer that throws is a fault in the host rather than in the
+    // document, and an error value leaves the rest of the graph evaluating. A
+    // variable copy answers the same way, in doc.ts, and the two agreed on
+    // everything else about a failed measurement before this line existed.
+    return {
+      ok: false,
+      error: { error: "#MEASURE", message: `${slotLabel}: ${object.name} could not be measured` },
+    };
+  }
   if (hasIllegalNumber(measured.width) || hasIllegalNumber(measured.height)) {
     return {
       ok: false,

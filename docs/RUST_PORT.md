@@ -1636,7 +1636,7 @@ under it. Superseded choices remain linked through Git history.
 | `D-009` | Product baseline drift | Pin each package and synchronize accepted behavior changes | `RUST-001` |
 | `D-010` | Resource budgets | Preserve the TypeScript per-line expression budget. Measure total document workloads on each target before setting broader limits. | `RUST-015` |
 | `D-011` | Cutover acceptance period | Define supported targets and rollback criteria before default switch | `RUST-016` |
-| `D-013` | A measurer that fails under a text slot | The port answers with an error value. The operator has yet to rule. See below. | `RUST-009`, `RUST-010` |
+| `D-013` | A measurer that fails under a text slot | Resolved: an error value, in both engines and at all three call sites. See below. | `RUST-009` |
 | `D-012` | Transcendental function agreement | Part resolved: one wrapper for each call, reaching `libm` on every target. The nine that still differ carry into `RUST-016`. See below. | `RUST-007`, `RUST-016` |
 
 `D-001` is resolved as browser Wasm, which is what the recommendation said and
@@ -1777,32 +1777,28 @@ that agree, so a change that broke one of them fails a conformance run. The
 nine are deliberately absent from it, because a case for one of them would
 report a difference rather than a match.
 
-`D-013` is open, and the port carries a recommendation rather than a guess.
+`D-013` is resolved as an error value, which the operator chose.
 
-The two measured slots of a text object call the host measurer with nothing
-around the call, so a measurer that throws carries the exception out of the
-compute and out of the evaluation pass with it. The two measured slots of a copy
-of a variable, two files away, wrap the same call and answer `#MEASURE` instead.
-The TypeScript holds both behaviours at once, so neither one can be called the
+The two measured slots of a text object called the host measurer with nothing
+around the call, so a measurer that threw carried the failure out of the compute
+and out of the evaluation pass with it. The two measured slots of a copy of a
+variable, two files away, wrapped the same call and answered `#MEASURE`. The
+TypeScript held both behaviours at once, so neither one could be called the
 intended one from reading it.
 
-The Rust engine cannot carry an exception out of a compute, because a compute
-answers a value. So both slots answer `#MEASURE`, which is what the copy of a
-variable already does here and in the TypeScript, and what the browser binding
-already reports for a callback that fails: the hosting proof names that among
-its checks.
+A Rust compute answers a value and cannot carry a failure out that way, so the
+port had already taken the second. The TypeScript now takes it too, at all three
+call sites: the text object, the math object and the copy of a variable. The math
+object was the third, found while writing the fixture for the first two, and it
+had the same shape: it handled a measurer that arrives with no `measureMath`
+method and not one that throws.
 
-What the difference costs, if it is left as it is: a document holding a text
-object measures differently under a failing host. The TypeScript loses the whole
-evaluation pass, and the Rust engine loses one slot and evaluates the rest.
-A host fails when the page it draws into has gone, so the case an operator meets
-is a tab closing under a running pass rather than a document that is wrong.
-
-Closing it the other way means giving the TypeScript text slots the same wrapper
-the copy of a variable has, which is four lines and makes both engines answer
-`#MEASURE`. That is the recommendation. `RUST-010` is where the evaluation pass
-decides what a compute that fails does to the pass around it, so the decision
-lands there whichever way it goes.
+A host fails when the page it draws into has gone, so what an operator meets is a
+tab closing under a running pass. The document is not wrong, and the answer now
+says so in the slot rather than losing the pass around it. `primitives.text`,
+`primitives.doc` and `primitives.math` each carry a case whose host has gone, and
+the math one shows the rest of the object still evaluating beside the two slots
+that could not be measured.
 
 `D-008` is resolved for the part the two adapters own. A refusal of the
 arguments of a case is worded identically by both runners, and the comparator
@@ -1827,7 +1823,7 @@ implemented, then its lasting rationale belongs beside that code.
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
-| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`, `D-013`. `D-008` and `D-012` are part resolved, and `D-010` holds a recorded choice |
+| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` and `D-012` are part resolved, and `D-010` holds a recorded choice |
 | Next implementation action | Port the primitives and the schema under `RUST-007` |
 | Completion evidence | `RUST-001` through `RUST-006` and `RUST-008`, under their headings above |
 
@@ -1879,7 +1875,7 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
   cargo test --workspace --locked                                  240 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1758 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1761 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in

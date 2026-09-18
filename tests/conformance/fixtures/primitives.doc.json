@@ -2841,6 +2841,41 @@
           ]
         }
       }
+    },
+    {
+      "name": "a copy whose host has gone",
+      "call": "computeDerivedSlots",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "target": {
+            "objectId": "d1",
+            "path": [
+              "alpha"
+            ]
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": 42
+            }
+          ]
+        },
+        "measurer": "failing"
+      }
     }
   ]
 }
