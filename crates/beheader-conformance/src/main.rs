@@ -37,6 +37,7 @@ use beheader_engine::formula::format::format_formula;
 use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
+use beheader_engine::graph::cycles::{CycleCheck, detect_cycle};
 use beheader_engine::math::ast::{MathAst, MathLine, MathProgram};
 use beheader_engine::math::eval::evaluate_math_object;
 use beheader_engine::math::lexer::tokenize_math;
@@ -49,6 +50,7 @@ use beheader_engine::model::{
     ErrorCode, ErrorValue, GraphObject, GraphObjectPorts, ObjectType, Point, Slot, SlotMap, Value,
     has_illegal_number, is_error_value, is_illegal_number, is_legal_port_name, slot_key,
 };
+use beheader_engine::mutation::{derive_edges, derive_validate_and_evaluate, validate_integrity};
 use beheader_engine::number::{
     js_acos, js_asin, js_atan, js_atan2, js_cos, js_cosh, js_exp, js_hypot, js_ln, js_log10,
     js_pow, js_sin, js_sinh, js_sqrt, js_tan, js_tanh, to_javascript_text,
@@ -786,19 +788,48 @@ fn shape_object_argument(
     })
 }
 
-/// Several shapes, read the same way one is.
+/// Several shapes, read the same way one is, and then a second pass that parses
+/// every formula against the whole list. A formula names objects by the names
+/// they carry, so it cannot be parsed until every object in the case exists.
 fn shape_object_list_argument(
     args: &Map<String, Json>,
     name: &str,
 ) -> Result<Vec<GraphObject<FormulaAst>>, String> {
     let items = argument(args, name)?
         .as_array()
-        .ok_or_else(|| format!("the argument \"{name}\" is a list of objects"))?;
+        .ok_or_else(|| format!("the argument \"{name}\" is a list of objects"))?
+        .clone();
     let mut objects = Vec::new();
-    for (index, _) in items.iter().enumerate() {
+    for item in &items {
         let mut one = Map::new();
-        one.insert("object".to_string(), items[index].clone());
+        one.insert("object".to_string(), item.clone());
         objects.push(shape_object_argument(&one, "object")?);
+    }
+    for (index, item) in items.iter().enumerate() {
+        let Some(slots) = item.get("slots").and_then(Json::as_array) else {
+            continue;
+        };
+        for slot in slots {
+            let (Some(key), Some(source)) = (
+                slot.get("key").and_then(Json::as_str),
+                slot.get("formula").and_then(Json::as_str),
+            ) else {
+                continue;
+            };
+            let ast = parse_formula(source, &objects, None).map_err(|failure| {
+                format!(
+                    "the formula \"{source}\" does not parse: {}",
+                    failure.message
+                )
+            })?;
+            objects[index].slots.insert(
+                key,
+                Slot::Formula {
+                    ast,
+                    value: Value::Null,
+                },
+            );
+        }
     }
     Ok(objects)
 }
@@ -936,6 +967,49 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
         "numberToText" => {
             number_argument(args, "number").map(|number| json!(to_javascript_text(number)))
         }
+        "graphEdges" => shape_object_list_argument(args, "objects").map(|objects| {
+            json!(
+                derive_edges(&objects)
+                    .iter()
+                    .map(|edge| json!({
+                        "source": encode_address(&edge.source_slot),
+                        "dependent": encode_address(&edge.dependent_slot),
+                    }))
+                    .collect::<Vec<_>>()
+            )
+        }),
+        "graphIntegrity" => shape_object_list_argument(args, "objects").map(|objects| {
+            let edges = derive_edges(&objects);
+            match validate_integrity(&objects, &edges) {
+                Ok(()) => json!({ "ok": true }),
+                Err(message) => json!({ "ok": false, "message": message }),
+            }
+        }),
+        "graphCycle" => {
+            shape_object_list_argument(args, "objects").map(|objects| {
+                match detect_cycle(&derive_edges(&objects)) {
+                    CycleCheck::None => json!({ "cycle": Json::Null }),
+                    CycleCheck::Found(cycle) => json!({
+                        "cycle": cycle.iter().map(encode_address).collect::<Vec<_>>(),
+                    }),
+                }
+            })
+        }
+        "graphPass" => shape_object_list_argument(args, "objects").map(|objects| {
+            let fake = FakeMeasurer;
+            let measurer: Option<&dyn Measurer> = match args.get("measurer").and_then(Json::as_str)
+            {
+                Some("fake") => Some(&fake),
+                _ => None,
+            };
+            match derive_validate_and_evaluate(&objects, measurer) {
+                Ok(evaluated) => json!({
+                    "ok": true,
+                    "objects": evaluated.iter().map(encode_shape_object).collect::<Vec<_>>(),
+                }),
+                Err(message) => json!({ "ok": false, "message": message }),
+            }
+        }),
         "mathNames" => text_argument(args, "source").map(|source| match read_math_names(&source) {
             Err(failure) => json!({
                 "ok": false,

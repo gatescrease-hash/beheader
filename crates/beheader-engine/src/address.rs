@@ -70,6 +70,15 @@ pub fn is_valid_name(name: &str) -> bool {
     characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
+/// The tail of a message that offers the nearest name, or nothing when no
+/// candidate is near enough to offer.
+pub fn name_suggestion<'a>(typed: &str, candidates: impl IntoIterator<Item = &'a str>) -> String {
+    match nearest_name(typed, candidates) {
+        None => String::new(),
+        Some(nearest) => format!(" Did you mean \"{nearest}\"?"),
+    }
+}
+
 pub fn nearest_name<'a>(
     typed: &str,
     candidates: impl IntoIterator<Item = &'a str>,

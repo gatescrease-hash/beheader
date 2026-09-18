@@ -944,7 +944,7 @@ met, and a package is done only where the status column says so.
 | `RUST-007` | Geometry, tables, basic schemas, script stub | `004`, `006` | done |
 | `RUST-008` | Math language and evaluator | `004`, `005` | done |
 | `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | done |
-| `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | planned |
+| `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | done |
 | `RUST-011` | Atomic mutations and repairs | `010` | planned |
 | `RUST-012` | Document persistence and journal replay | `011` | planned |
 | `RUST-013` | Completion and consumer facade | `005`, `010`, `012` | planned |
@@ -1386,6 +1386,36 @@ table, geometry, text, and math graph reevaluates in one pass. Integrity errors
 precede cycle errors. Evaluation preserves the slot set. Long-chain tests
 exercise traversal and teardown on both targets.
 
+**Landed.** `graph::cycles` finds a loop and names every slot around it.
+`graph::eval` sorts every slot into dependency order and evaluates each one, and
+`mutation` carries the edge set derived from the schema, the four integrity
+checks and the pass that joins the three.
+
+`graph.evaluation` asks both engines 57 questions and they answer alike on every
+one. The mixed document is the one the evidence above asks for: a table cell
+holding a formula over two others, a circle whose radius reads that cell, a text
+object reading the circle's derived area and a range across the table, and a math
+object reading a cell of its own. One pass settles all of it, so a derived value
+is never one evaluation behind the literal that feeds it.
+
+The chain of four hundred objects is what shows the sort carries its own stack.
+Both engines answer 400, where a recursive sort would run out of frames.
+
+Three findings came out of writing the fixture. A loop is reported from the first
+slot the edge set names as a dependent rather than as a source, because each edge
+notes its dependent first, and which slot a refusal starts from follows from
+that. An empty cell inside the extent of a real table arrives with no edge and
+reads as zero, so a sum across a sparse row answers rather than refusing. And the check
+for an illegal number literal inside a stored tree has no case in the fixture,
+because every formula there is parsed from source and no source spells one: a
+tree carrying one arrives through the document decoder, so `RUST-012` is where
+that check gets a case.
+
+`D-013` stands as it was. The evaluation pass does not catch a compute that
+fails, because a compute in this engine answers a value and cannot fail that way.
+The decision is about what the TypeScript does, so it stays open for the
+operator rather than being settled by the port.
+
 ### `RUST-011`: Port mutations
 
 **Work.** Port operations in reviewable families: basic create/set/clear/rename,
@@ -1804,12 +1834,14 @@ implemented, then its lasting rationale belongs beside that code.
 ### Handoff record for the active package
 
 ```text
-Package: RUST-010, complete schemas and graph evaluation
+Package: RUST-011, atomic mutations and repairs
 Status: ready, unstarted
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
 Completed dependencies:
+  RUST-010 supplies edge derivation, the four integrity checks, cycle reporting
+  and the evaluation pass, which is what a batch runs between its operations.
   RUST-009 supplies the text and math primitives, so every object type now
   declares a schema and the registry match is exhaustive.
   RUST-007 supplies the shape maths, the table arithmetic, the schema registry
@@ -1821,10 +1853,9 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  graph::cycles, graph::eval and the derivation half of mutation. The schema
-  registry is complete, so RUST-010 completes the evaluation around it rather
-  than the declarations inside it. D-013 lands here, because the evaluation pass
-  is what rules on a compute that fails.
+  The fifteen operations of the inventory, the batch that commits them in full
+  or leaves the input alone, the forced repairs that report what they broke, and
+  the journal entry one successful batch appends.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1836,7 +1867,7 @@ Fixture and evidence paths:
   number.javascript-arithmetic pins the seven functions D-012 found agreeing,
   primitives.edge, primitives.geometry, primitives.table, primitives.doc and
   primitives.schema carry RUST-007, and primitives.text and primitives.math
-  carry RUST-009
+  carry RUST-009, and graph.evaluation carries RUST-010
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -1846,9 +1877,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  228 pass
+  cargo test --workspace --locked                                  240 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1701 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1758 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1864,9 +1895,9 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port graph/cycles.ts, then graph/eval.ts, which reads the
-  schema registry for every derived slot of every object and is where rule 4 is
-  enforced rather than only respected.
+Next concrete action: port the operation union and the batch loop of
+  mutation.ts, which runs derive, validate and evaluate between operations and
+  commits in full or not at all.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```

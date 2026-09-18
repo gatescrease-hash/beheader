@@ -18,6 +18,7 @@ pub mod graph;
 pub mod math;
 pub mod measure;
 pub mod model;
+pub mod mutation;
 pub mod number;
 pub mod primitives;
 pub mod script;

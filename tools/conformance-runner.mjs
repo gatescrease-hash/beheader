@@ -160,6 +160,10 @@ const {
   readMathNames,
   rewriteMathReferences,
   unresolvedMathReferences,
+  deriveEdges,
+  detectCycle,
+  deriveValidateAndEvaluate,
+  validateIntegrity,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -706,13 +710,30 @@ function tableAxisArgument(args) {
   return axis;
 }
 
-/** Several shapes, read the same way one is. */
+/**
+ * Several shapes, read the same way one is, and then a second pass that parses
+ * every formula against the whole list. A formula names objects by the names
+ * they carry, so it cannot be parsed until every object in the case exists.
+ */
 function shapeObjectListArgument(args, name) {
   const items = argument(args, name);
   if (!Array.isArray(items)) {
     throw new BadArgument(`the argument "${name}" is a list of objects`);
   }
-  return items.map((entry) => shapeObjectArgument({ object: entry }, "object"));
+  const objects = items.map((entry) => shapeObjectArgument({ object: entry }, "object"));
+  for (const [index, entry] of items.entries()) {
+    for (const slot of Array.isArray(entry.slots) ? entry.slots : []) {
+      if (typeof slot.formula !== "string") {
+        continue;
+      }
+      const parsed = parseFormula(slot.formula, objects);
+      if (isParseError(parsed)) {
+        throw new BadArgument(`the formula "${slot.formula}" does not parse: ${parsed.message}`);
+      }
+      objects[index].slots[slot.key] = { kind: "formula", ast: parsed, value: null };
+    }
+  }
+  return objects;
 }
 
 /** A shape back out, with its slots in the order they sit in. */
@@ -819,6 +840,28 @@ const TWO_ARGUMENT_ARITHMETIC = new Set(["atan2", "hypot", "pow"]);
 
 const CALLS = {
   numberToText: (args) => String(numberArgument(args, "number")),
+  graphEdges: (args) =>
+    deriveEdges(shapeObjectListArgument(args, "objects")).map((edge) => ({
+      source: encodeAddress(edge.sourceSlot),
+      dependent: encodeAddress(edge.dependentSlot),
+    })),
+  graphIntegrity: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const result = validateIntegrity(objects, deriveEdges(objects));
+    return result.ok ? { ok: true } : { ok: false, message: result.message };
+  },
+  graphCycle: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const found = detectCycle(deriveEdges(objects));
+    return found.hasCycle ? { cycle: found.cycle.map(encodeAddress) } : { cycle: null };
+  },
+  graphPass: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const result = deriveValidateAndEvaluate(objects, evalContextArgument(args));
+    return result.ok
+      ? { ok: true, objects: result.objects.map(encodeShapeObject) }
+      : { ok: false, message: result.message };
+  },
   mathNames: (args) => {
     const reading = readMathNames(textArgument(args, "source"));
     if (isMathSourceError(reading)) {

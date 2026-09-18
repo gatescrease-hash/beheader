@@ -1,5 +1,8 @@
 //! Dependency edge data and the stable key used by graph traversals.
 
+pub mod cycles;
+pub mod eval;
+
 use crate::address::Address;
 use crate::model::slot_key;
 

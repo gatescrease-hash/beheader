@@ -22,8 +22,8 @@ defines.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 228 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 1701 cases match across the two engines, with none awaiting either. |
+| Rust | 240 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 1758 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -203,7 +203,10 @@ file.
 | --- | --- |
 | `beheader-engine/src/model.rs` | Values, error codes, object types, slots, objects, and the key a slot path joins into. |
 | `beheader-engine/src/address.rs` | Names, cell reference forms, the column arithmetic, and the two spellings of a path. |
-| `beheader-engine/src/graph.rs` | A dependency edge, and the key a traversal holds one by. |
+| `beheader-engine/src/graph/mod.rs` | A dependency edge, and the key a traversal holds one by. |
+| `beheader-engine/src/graph/cycles.rs` | The depth first search that finds a loop, and the slots around it. |
+| `beheader-engine/src/graph/eval.rs` | One pass over every slot in dependency order, reading the schema for each derived one. |
+| `beheader-engine/src/mutation.rs` | The edge set derived from the schema, the four integrity checks, and the pass that joins them. |
 | `beheader-engine/src/formula/lexer.rs` | Formula text to tokens, over the units a JavaScript string counts. |
 | `beheader-engine/src/formula/ast.rs` | The formula node types, the shape check a saved tree passes, and the depth limit. |
 | `beheader-engine/src/formula/functions.rs` | Every built-in function: its argument count, its two habits, and what it computes. |

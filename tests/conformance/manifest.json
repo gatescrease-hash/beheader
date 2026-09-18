@@ -201,14 +201,20 @@
       "covers": [
         "src/engine/primitives/math.ts"
       ]
+    },
+    {
+      "id": "graph.evaluation",
+      "file": "fixtures/graph.evaluation.json",
+      "covers": [
+        "src/engine/graph/cycles.ts",
+        "src/engine/graph/eval.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
     "src/engine/complete.ts",
     "src/engine/document.ts",
     "src/engine/eval-context.ts",
-    "src/engine/graph/cycles.ts",
-    "src/engine/graph/eval.ts",
     "src/engine/index.ts",
     "src/engine/journal.ts",
     "src/engine/mutation.ts",
