@@ -948,7 +948,7 @@ met, and a package is done only where the status column says so.
 | `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | done |
 | `RUST-011` | Atomic mutations and repairs | `010` | done |
 | `RUST-012` | Document persistence and journal replay | `011` | done |
-| `RUST-013` | Completion and consumer facade | `005`, `010`, `012` | planned |
+| `RUST-013` | Completion and consumer facade | `005`, `010`, `012` | done |
 | `RUST-014` | Application integration behind engine selection | `003`, `013` | planned |
 | `RUST-015` | Stress, robustness, and workload measurements | `012`, `014` | planned |
 | `RUST-016` | Cutover and rollback rehearsal | `014`, `015` | planned |
@@ -1582,6 +1582,54 @@ or documented host disposition. Candidate order and source spans match.
 Type checks cover the facade, and runtime fixtures cover its conversions.
 No schema callback or Rust implementation object leaks into serialized state.
 
+**Landed.** `complete` carries the completion, and `complete.address` asks both
+engines 63 questions about it. Candidate order is compared, because the answer
+carries the candidates as a list: a document variable is offered ahead of an
+object name, and the cells of a table arrive in the order the schema enumerates
+them rather than sorted.
+
+Every offset in this package counts UTF-16 code units, which is what a
+JavaScript string counts and what a host highlights a run of a formula by. The
+case whose source opens with a character outside the basic plane puts the run
+that follows at offset 7 rather than at 6. The fill is measured the same way,
+and so is the prefix test, which cuts the value to the length of what was typed
+and folds that rather than folding first. The two orders part where a character
+folds to a different number of units, and `İ` is the case that shows it.
+
+The folding itself was measured rather than assumed. Every character of the
+basic plane and of the two planes above it folds alike in the two engines,
+across 1488 mappings with no difference, so the candidate that carries the
+spelling a document holds rests on a measured agreement.
+
+Three names the host imports have no Rust function and want none.
+`isAddressError`, `isParseError` and `isReferenceNode` tell one member of a
+union from another, which TypeScript needs a predicate for and Rust reads off
+an enum. They carry the `type-narrowing` disposition, which arrived with this
+package, so the inventory says why they are absent rather than leaving them
+looking unported. With them classified, every name dispositioned
+`host-query` or `core-operation` has a Rust function behind it.
+
+`objectSchema` now reaches all thirteen types. It answered ten, and the three
+it missed are the ones whose own fixtures cover their behaviour rather than
+their schema: a text object, a math object and a copy of a variable. That
+comparison is what holds the slot path constants to one spelling across the two
+engines, and it was checked by breaking one: a circle whose Rust radius path
+reads `radiusTypo` is reported by the schema cases and by the completion cases
+together.
+
+A module with no fixture now carries the reason it has none, which the
+comparison refuses to run without. Two modules carry one. `eval-context.ts`
+declares the seam a host measures through, so a fixture would compare two
+declarations rather than two answers, and `index.ts` is the barrel, whose
+contents `tests/conformance/contract` checks instead.
+
+**Measured and left alone.** The slot path constants are a single source
+already. `schema.ts` builds each schema from them, so a check comparing a
+constant against the schema compares it against itself. One was written, seen
+to pass against a constant deliberately spelled wrong, and taken out again: a
+test that cannot fail reads as coverage and is worse than none. What holds the
+two engines together on those paths is the `objectSchema` comparison above.
+
 ### `RUST-014`: Run the application against Rust
 
 **Work.** This package adds an internal engine selection mechanism with
@@ -1997,19 +2045,19 @@ implemented, then its lasting rationale belongs beside that code.
 | Field | Current value |
 | --- | --- |
 | Migration phase | Implementation, through Gate B |
-| Active implementation package | `RUST-013`, ready and unstarted |
+| Active implementation package | `RUST-014`, ready and unstarted |
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
 | Unresolved architecture decisions | `D-009` and `D-011`. `D-008` and `D-012` are part resolved, and `D-010` holds a recorded choice |
-| Next implementation action | Complete the consumer facade under `RUST-013` |
-| Completion evidence | `RUST-001` through `RUST-012`, under their headings above |
+| Next implementation action | Route the application through a selected engine under `RUST-014` |
+| Completion evidence | `RUST-001` through `RUST-013`, under their headings above |
 
 ### Handoff record for the active package
 
 ```text
-Package: RUST-012, files and replay
-Status: done, with the file and the replay landed
+Package: RUST-013, completion and the consumer facade
+Status: done, with the completion landed and the inventory closed
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -2027,8 +2075,9 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  None. The decoder, the writer, the counter and the replay are landed, under
-  document.basic, which carries 126 cases.
+  None. The completion is landed under complete.address, which carries 63
+  cases, and every name dispositioned host-query or core-operation has a Rust
+  function behind it.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016.
   D-006 and D-007 were resolved in this package, the second of them with two
   divergences the operator chose, which the heading above names.
@@ -2043,8 +2092,9 @@ Fixture and evidence paths:
   primitives.edge, primitives.geometry, primitives.table, primitives.doc and
   primitives.schema carry RUST-007, and primitives.text and primitives.math
   carry RUST-009, graph.evaluation carries RUST-010, and mutation.basic carries
-  the whole operation inventory of RUST-011, and document.basic carries the
-  file and the replay of RUST-012
+  the whole operation inventory of RUST-011, document.basic carries the file
+  and the replay of RUST-012, and complete.address carries the completion of
+  RUST-013
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
@@ -2054,14 +2104,14 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  286 pass
+  cargo test --workspace --locked                                  297 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           2054 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           2120 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         last run at RUST-010, 17 checks in Chromium.
     This package leaves beheader-wasm untouched, so the proof drives the same
-    binding it drove there. Nothing an operator sees changed either: the one
-    piece of TypeScript this package touched is the wording a replay refuses
-    with, and no production code replays a journal yet.
+    binding it drove there. Nothing an operator sees changed either: this
+    package touched no TypeScript the application runs, only the tooling that
+    compares the two engines.
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
   Chromium. Windows runs the Rust checks in the pull request workflow and has
@@ -2076,11 +2126,11 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: begin RUST-013, which completes the consumer facade:
-  completion, source classification, metadata queries and the public adapter
-  inventory.
-Dependencies that can proceed independently: none. RUST-013 reads the whole
-  engine surface the packages above it land.
+Next concrete action: begin RUST-014, which adds the engine selection and
+  routes command execution, gestures, file operations, properties, completion
+  and font refresh through the selected adapter.
+Dependencies that can proceed independently: none. RUST-014 runs the
+  application against the surface the packages above it land.
 ```
 
 A resumed session compares the recorded commits with the current branch,

@@ -1,0 +1,4650 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "complete.address",
+  "sourceTest": "src/engine/complete.test.ts",
+  "requirement": "SPEC.md section 4, and the compatibility contract above",
+  "comparison": "exact",
+  "note": "What an operator part way through typing an address could have meant, and the runs of a formula that read like one. Completion runs against the schema rather than against the slots an object carries, so the case whose object is missing a slot the schema declares still offers it, and a refusal later names a real problem rather than the completion hiding it. The candidates are a list, so their order is compared: a document variable is offered ahead of an object name, and the cells of a table come back in the order the schema enumerates them rather than sorted. The fill is the run every candidate starts with, measured in the units a JavaScript string counts. So is every offset a run of a formula reports, which is what a host highlights by. The case whose source opens with a character outside the basic plane puts the run that follows at offset 7 rather than at 6, and a byte offset or a character offset would put it somewhere else again. Matching ignores case by cutting the value to the length of what was typed and folding that, rather than folding first. The two part where a character folds to a different number of units. The whole of the folding the two engines do agrees: every character of the basic plane and of the two planes above it folds alike in both, measured over 1488 mappings, and the case that completes against a name spelled in capitals rests on that.",
+  "cases": [
+    {
+      "name": "the longest common prefix of a run every string shares",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": [
+          "circle_1",
+          "circle_2"
+        ]
+      }
+    },
+    {
+      "name": "the longest common prefix of a lone string",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": [
+          "only"
+        ]
+      }
+    },
+    {
+      "name": "the longest common prefix of strings sharing no start",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": [
+          "alpha",
+          "beta"
+        ]
+      }
+    },
+    {
+      "name": "the longest common prefix of no strings at all",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": []
+      }
+    },
+    {
+      "name": "the longest common prefix of one empty string among them",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": [
+          "abc",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "the longest common prefix of strings that are all equal",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": [
+          "same",
+          "same",
+          "same"
+        ]
+      }
+    },
+    {
+      "name": "the longest common prefix of a shared run that is the whole of the shortest",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": [
+          "ab",
+          "abc",
+          "abcd"
+        ]
+      }
+    },
+    {
+      "name": "the longest common prefix of names differing only in case",
+      "call": "longestCommonPrefix",
+      "args": {
+        "values": [
+          "Alpha",
+          "alpha"
+        ]
+      }
+    },
+    {
+      "name": "completing an object name: every name starting with what was typed",
+      "call": "completeObjectName",
+      "args": {
+        "partial": "circle",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an object name: a fill that stops where the names part",
+      "call": "completeObjectName",
+      "args": {
+        "partial": "circle",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an object name: a lone match filling the whole name",
+      "call": "completeObjectName",
+      "args": {
+        "partial": "table",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an object name: an empty word offering everything",
+      "call": "completeObjectName",
+      "args": {
+        "partial": "",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an object name: a name no object starts with",
+      "call": "completeObjectName",
+      "args": {
+        "partial": "zzz",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an object name: a match ignoring case, writing the document's spelling",
+      "call": "completeObjectName",
+      "args": {
+        "partial": "TAB",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "Table_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "tab_other",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an object name: a match ignoring case the other way",
+      "call": "completeObjectName",
+      "args": {
+        "partial": "tab",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "Table_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "tab_other",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the slot paths of a circle, as an operator writes them",
+      "call": "objectSlotPaths",
+      "args": {
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ],
+        "objectId": "obj_1"
+      }
+    },
+    {
+      "name": "the slot paths of a table, whose cells carry their surface spelling",
+      "call": "objectSlotPaths",
+      "args": {
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ],
+        "objectId": "obj_3"
+      }
+    },
+    {
+      "name": "the slot paths of a math object, whose ports the source declares",
+      "call": "objectSlotPaths",
+      "args": {
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "m1",
+            "name": "math_1",
+            "type": "math",
+            "ports": {
+              "in": [
+                "x"
+              ],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=x*2"
+              },
+              {
+                "key": "in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "objectId": "m1"
+      }
+    },
+    {
+      "name": "the slot paths of a polyline, whose vertices the count declares",
+      "call": "objectSlotPaths",
+      "args": {
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "path_1",
+            "type": "polyline",
+            "vertexCount": 3,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ],
+        "objectId": "p1"
+      }
+    },
+    {
+      "name": "the slot paths of a doc, whose variables are its slots",
+      "call": "objectSlotPaths",
+      "args": {
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "speed",
+                "kind": "literal",
+                "value": 12
+              },
+              {
+                "key": "spin",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "objectId": "d1"
+      }
+    },
+    {
+      "name": "completing an address: an object name before the first dot",
+      "call": "completeAddress",
+      "args": {
+        "partial": "circ",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a slot after the dot, carrying the object name",
+      "call": "completeAddress",
+      "args": {
+        "partial": "circle_1.or",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a fill that stops where the slots part",
+      "call": "completeAddress",
+      "args": {
+        "partial": "circle_1.origin.",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: every slot for a bare dot",
+      "call": "completeAddress",
+      "args": {
+        "partial": "circle_1.",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: an object that does not exist",
+      "call": "completeAddress",
+      "args": {
+        "partial": "nowhere.x",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: an object found without regard to case",
+      "call": "completeAddress",
+      "args": {
+        "partial": "CIRCLE_1.rad",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a whole name moving on to the slots",
+      "call": "completeAddress",
+      "args": {
+        "partial": "table_1",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a whole name that also starts a longer one",
+      "call": "completeAddress",
+      "args": {
+        "partial": "tab",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "Table_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "tab_other",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a slot no path starts with",
+      "call": "completeAddress",
+      "args": {
+        "partial": "circle_1.zzz",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a table cell after the dot",
+      "call": "completeAddress",
+      "args": {
+        "partial": "table_1.A",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a document variable before any dot",
+      "call": "completeAddress",
+      "args": {
+        "partial": "sp",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "speed",
+                "kind": "literal",
+                "value": 12
+              },
+              {
+                "key": "spin",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a document variable that is whole",
+      "call": "completeAddress",
+      "args": {
+        "partial": "speed",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "speed",
+                "kind": "literal",
+                "value": 12
+              },
+              {
+                "key": "spin",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a math port after the dot",
+      "call": "completeAddress",
+      "args": {
+        "partial": "math_1.in.",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "m1",
+            "name": "math_1",
+            "type": "math",
+            "ports": {
+              "in": [
+                "x"
+              ],
+              "out": [
+                "y"
+              ]
+            },
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "source",
+                "kind": "literal",
+                "value": "y=x*2"
+              },
+              {
+                "key": "in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "out.y",
+                "kind": "derived",
+                "value": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a vertex path after the dot",
+      "call": "completeAddress",
+      "args": {
+        "partial": "path_1.vertex.1.",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "p1",
+            "name": "path_1",
+            "type": "polyline",
+            "vertexCount": 3,
+            "slots": [
+              {
+                "key": "vertex.0.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.0.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.x",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "vertex.1.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.1.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.x",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "vertex.2.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.bulge",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.in.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "vertex.2.handle.out.y",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: nothing typed at all",
+      "call": "completeAddress",
+      "args": {
+        "partial": "",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: a dot with nothing before it",
+      "call": "completeAddress",
+      "args": {
+        "partial": ".x",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing an address: two dots",
+      "call": "completeAddress",
+      "args": {
+        "partial": "circle_1.origin.x.y",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the address-like runs of a bare name",
+      "call": "formulaReferences",
+      "args": {
+        "source": "speed"
+      }
+    },
+    {
+      "name": "the address-like runs of a dotted address",
+      "call": "formulaReferences",
+      "args": {
+        "source": "circle_1.radius"
+      }
+    },
+    {
+      "name": "the address-like runs of two addresses in a sum",
+      "call": "formulaReferences",
+      "args": {
+        "source": "circle_1.radius + circle_2.radius"
+      }
+    },
+    {
+      "name": "the address-like runs of a vertex index, which lexes as a number",
+      "call": "formulaReferences",
+      "args": {
+        "source": "path_1.vertex.0.x"
+      }
+    },
+    {
+      "name": "the address-like runs of a function call around an address",
+      "call": "formulaReferences",
+      "args": {
+        "source": "SUM(table_1.A1)"
+      }
+    },
+    {
+      "name": "the address-like runs of a formula that will not lex",
+      "call": "formulaReferences",
+      "args": {
+        "source": "circle_1.radius + \"unterminated"
+      }
+    },
+    {
+      "name": "the address-like runs of nothing at all",
+      "call": "formulaReferences",
+      "args": {
+        "source": ""
+      }
+    },
+    {
+      "name": "the address-like runs of a number on its own",
+      "call": "formulaReferences",
+      "args": {
+        "source": "42"
+      }
+    },
+    {
+      "name": "the address-like runs of a trailing dot",
+      "call": "formulaReferences",
+      "args": {
+        "source": "circle_1."
+      }
+    },
+    {
+      "name": "the address-like runs of a name outside the basic plane",
+      "call": "formulaReferences",
+      "args": {
+        "source": "\ud83d\ude00x + circle_1.radius"
+      }
+    },
+    {
+      "name": "the address-like runs of an address after one outside the basic plane",
+      "call": "formulaReferences",
+      "args": {
+        "source": "\"\ud83d\ude00\" + circle_1.radius"
+      }
+    },
+    {
+      "name": "the address-like runs of a range",
+      "call": "formulaReferences",
+      "args": {
+        "source": "table_1.A1:table_1.B2"
+      }
+    },
+    {
+      "name": "the address-like runs of a dotted address inside brackets",
+      "call": "formulaReferences",
+      "args": {
+        "source": "(circle_1.radius)"
+      }
+    },
+    {
+      "name": "whether a run resolves: a real dotted address",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "circle_1.radius",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a dotted address on no object",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "nowhere.radius",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a slot the object does not carry",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "circle_1.zzz",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a dotted address ignoring case",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "CIRCLE_1.RADIUS",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a bare name with no table in hand",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "A1",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a cell of the table in hand",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "A1",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ],
+        "tableObjectId": "obj_3"
+      }
+    },
+    {
+      "name": "whether a run resolves: a cell outside the table in hand",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "Z9",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ],
+        "tableObjectId": "obj_3"
+      }
+    },
+    {
+      "name": "whether a run resolves: a bare name that is not a cell reference",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "speed",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ],
+        "tableObjectId": "obj_3"
+      }
+    },
+    {
+      "name": "whether a run resolves: a document variable",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "speed",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "speed",
+                "kind": "literal",
+                "value": 12
+              },
+              {
+                "key": "spin",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a document variable ignoring case",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "SPEED",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "speed",
+                "kind": "literal",
+                "value": 12
+              },
+              {
+                "key": "spin",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a name no document variable carries",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "nothing",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": "d1",
+            "name": "doc",
+            "type": "doc",
+            "slots": [
+              {
+                "key": "speed",
+                "kind": "literal",
+                "value": 12
+              },
+              {
+                "key": "spin",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a table cell by its surface spelling",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "table_1.A1",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "whether a run resolves: a table cell by the key the slot map uses",
+      "call": "formulaReferenceResolves",
+      "args": {
+        "text": "table_1.cells.A1",
+        "objects": [
+          {
+            "id": "obj_1",
+            "name": "circle_1",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_2",
+            "name": "circle_2",
+            "type": "circle",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "radius",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "obj_3",
+            "name": "table_1",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B1",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.A2",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

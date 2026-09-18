@@ -946,6 +946,62 @@ mod tests {
         );
     }
 
+    /// A saved object carries the six members of the file format and nothing
+    /// else. A schema resolves a dynamic slot group through a function, and a
+    /// derived slot computes through another, so the check is that neither
+    /// reaches the file: an object writes the data it holds, and the schema it
+    /// was read against stays behind.
+    #[test]
+    fn a_saved_object_carries_the_members_of_the_format_and_no_others() {
+        let raw = json!({
+            "formatVersion": 1,
+            "nextObjectId": 2,
+            "camera": { "x": 0, "y": 0, "zoom": 1 },
+            "journal": [],
+            "objects": [{
+                "id": "obj_1",
+                "name": "node",
+                "type": "script",
+                "ports": { "in": [], "out": [] },
+                "slots": {
+                    "origin.x": { "kind": "literal", "value": 0 },
+                    "origin.y": { "kind": "literal", "value": 0 },
+                    "language": { "kind": "literal", "value": "python" },
+                    "source": { "kind": "literal", "value": "pass" },
+                },
+            }],
+        });
+        let document = deserialize_document(&raw, None).expect("the document loads");
+        let written = super::serialize_document(&document);
+
+        let members: Vec<&str> = written["objects"][0]
+            .as_object()
+            .expect("an object is written as a JSON object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(members, vec!["id", "name", "type", "slots", "ports"]);
+
+        for slot in written["objects"][0]["slots"]
+            .as_object()
+            .expect("the slots are written as a JSON object")
+            .values()
+        {
+            let keys: Vec<&str> = slot
+                .as_object()
+                .expect("a slot is written as a JSON object")
+                .keys()
+                .map(String::as_str)
+                .collect();
+            assert!(
+                keys == vec!["kind", "value"]
+                    || keys == vec!["kind"]
+                    || keys == vec!["kind", "ast", "value"],
+                "a slot carries its kind and what that kind holds, and carried {keys:?}"
+            );
+        }
+    }
+
     /// A document with no object skips the mutation channel, because a batch
     /// with no operation is one `mutate` refuses.
     #[test]

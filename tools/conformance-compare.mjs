@@ -165,7 +165,17 @@ function checkManifest(fixturesDirectory) {
   }
 
   const covered = new Set(manifest.fixtures.flatMap((entry) => entry.covers));
-  const uncovered = new Set(manifest.modulesWithoutFixtures);
+  // A module with no fixture carries the reason it has none, so a reader of
+  // the manifest can tell a module the port has not reached from one that no
+  // fixture could ask a question of.
+  const uncovered = new Set();
+  for (const entry of manifest.modulesWithoutFixtures) {
+    if (typeof entry?.file !== "string" || typeof entry?.reason !== "string" || entry.reason === "") {
+      problems.push(`a module without a fixture is written as a file and the reason it has none, and one is written as ${JSON.stringify(entry)}`);
+      continue;
+    }
+    uncovered.add(entry.file);
+  }
   const modules = readJson(resolve(ROOT, INVENTORY)).modules.map((entry) => entry.file);
   for (const module of modules) {
     const inCovered = covered.has(module);

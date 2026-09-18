@@ -26,6 +26,10 @@ use beheader_engine::address::{
     format_address, format_cell_reference, index_to_column_letters, is_cell_reference_form,
     is_valid_name, nearest_name, parse_address, parse_cell_reference, to_surface_path,
 };
+use beheader_engine::complete::{
+    complete_address, complete_object_name, formula_reference_resolves, formula_references,
+    longest_common_prefix, object_slot_paths,
+};
 use beheader_engine::document::{
     Document, deserialize_document, load_document, mint_object_id, save_document,
 };
@@ -115,12 +119,18 @@ const FIXTURE_VERSION: u64 = 1;
 /// port has yet to reach.
 const SUPPORTED_CALLS: &[&str] = &[
     "addressKey",
+    "completeAddress",
+    "completeObjectName",
     "documentLoad",
     "documentLoadText",
     "documentMint",
     "documentRoundTrip",
+    "formulaReferenceResolves",
+    "formulaReferences",
     "journalComplete",
     "journalReplay",
+    "longestCommonPrefix",
+    "objectSlotPaths",
     "columnLettersToIndex",
     "extractDependencies",
     "formatAddress",
@@ -2084,6 +2094,48 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                 }
             })
         }),
+        "completeObjectName" => text_argument(args, "partial").and_then(|partial| {
+            shape_object_list_argument(args, "objects")
+                .map(|objects| encode_completion(&complete_object_name(&partial, &objects)))
+        }),
+        "completeAddress" => text_argument(args, "partial").and_then(|partial| {
+            shape_object_list_argument(args, "objects")
+                .map(|objects| encode_completion(&complete_address(&partial, &objects)))
+        }),
+        "objectSlotPaths" => shape_object_list_argument(args, "objects").and_then(|objects| {
+            let wanted = text_argument(args, "objectId")?;
+            let object = objects
+                .iter()
+                .find(|candidate| candidate.id == wanted)
+                .ok_or_else(|| {
+                    "the argument \"objectId\" names no object in \"objects\"".to_string()
+                })?;
+            Ok(json!(object_slot_paths(object)))
+        }),
+        "longestCommonPrefix" => {
+            text_list_argument(args, "values").map(|values| json!(longest_common_prefix(&values)))
+        }
+        "formulaReferences" => text_argument(args, "source").map(|source| {
+            Json::Array(
+                formula_references(&source)
+                    .iter()
+                    .map(|run| json!({ "start": run.start, "end": run.end, "text": run.text }))
+                    .collect(),
+            )
+        }),
+        "formulaReferenceResolves" => text_argument(args, "text").and_then(|text| {
+            shape_object_list_argument(args, "objects").and_then(|objects| {
+                let table = match args.get("tableObjectId") {
+                    None => None,
+                    Some(_) => Some(text_argument(args, "tableObjectId")?),
+                };
+                Ok(json!(formula_reference_resolves(
+                    &text,
+                    &objects,
+                    table.as_deref()
+                )))
+            })
+        }),
         "documentLoad" => raw_argument(args, "raw").map(|raw| {
             encode_load_result(deserialize_document(&raw, measurer_argument(args).as_deref()))
         }),
@@ -2168,6 +2220,18 @@ fn measurer_argument(args: &Map<String, Json>) -> Option<Box<dyn Measurer>> {
         Some("failing") => Some(Box::new(FailingMeasurer)),
         _ => None,
     }
+}
+
+/// A completion result as the answer carries it, with the candidates in their own order.
+fn encode_completion(result: &beheader_engine::complete::CompletionResult) -> Json {
+    json!({
+        "candidates": result
+            .candidates
+            .iter()
+            .map(|candidate| json!({ "text": candidate.text, "kind": candidate.kind.as_str() }))
+            .collect::<Vec<_>>(),
+        "fill": result.fill,
+    })
 }
 
 /// A fixture member taken as the JSON it is, for a call that decodes raw JSON itself.

@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 pub mod address;
+pub mod complete;
 pub mod document;
 pub mod formula;
 pub mod graph;

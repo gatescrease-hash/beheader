@@ -22,8 +22,8 @@ defines.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 286 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 2054 cases match across the two engines, with none awaiting either. |
+| Rust | 297 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 2120 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -207,6 +207,7 @@ file.
 | `beheader-engine/src/graph/mod.rs` | A dependency edge, and the key a traversal holds one by. |
 | `beheader-engine/src/graph/cycles.rs` | The depth first search that finds a loop, and the slots around it. |
 | `beheader-engine/src/graph/eval.rs` | One pass over every slot in dependency order, reading the schema for each derived one. |
+| `beheader-engine/src/complete.rs` | What a part-typed address could mean, and the runs of a formula that read like one. |
 | `beheader-engine/src/document.rs` | A file: the JSON on disk to a document and back, the counter, and what a load refuses. |
 | `beheader-engine/src/journal.rs` | The replay that rebuilds the objects behind any entry, and the shape one loaded entry has to hold. |
 | `beheader-engine/src/mutation.rs` | The derived edge set, the four integrity checks, the fifteen operations, and the batch that commits in full or not at all. |

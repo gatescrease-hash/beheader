@@ -3366,6 +3366,187 @@
       }
     },
     {
+      "name": "a text object, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "x1",
+          "name": "label",
+          "type": "text",
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "content",
+              "kind": "literal",
+              "value": "value {= alpha } here"
+            },
+            {
+              "key": "width",
+              "kind": "literal",
+              "value": 200
+            },
+            {
+              "key": "height",
+              "kind": "literal",
+              "value": 50
+            },
+            {
+              "key": "autoresize",
+              "kind": "literal",
+              "value": true
+            },
+            {
+              "key": "style.font",
+              "kind": "literal",
+              "value": "monospace"
+            },
+            {
+              "key": "style.fontSize",
+              "kind": "literal",
+              "value": 16
+            },
+            {
+              "key": "style.lineHeight",
+              "kind": "literal",
+              "value": 20
+            },
+            {
+              "key": "style.color",
+              "kind": "literal",
+              "value": "#111111"
+            },
+            {
+              "key": "style.align",
+              "kind": "literal",
+              "value": "left"
+            },
+            {
+              "key": "resolvedContent",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a math object, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "m1",
+          "name": "eq",
+          "type": "math",
+          "ports": {
+            "in": [],
+            "out": [
+              "y"
+            ]
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "source",
+              "kind": "literal",
+              "value": "y=\\gpref{d1.alpha}+1"
+            },
+            {
+              "key": "display",
+              "kind": "literal",
+              "value": "source"
+            },
+            {
+              "key": "out.y",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a copy of a variable, its schema",
+      "call": "objectSchema",
+      "args": {
+        "object": {
+          "id": "r1",
+          "name": "copy",
+          "type": "docref",
+          "target": {
+            "objectId": "d1",
+            "path": [
+              "alpha"
+            ]
+          },
+          "slots": [
+            {
+              "key": "origin.x",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "origin.y",
+              "kind": "literal",
+              "value": 0
+            },
+            {
+              "key": "value",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredWidth",
+              "kind": "derived",
+              "value": null
+            },
+            {
+              "key": "measuredHeight",
+              "kind": "derived",
+              "value": null
+            }
+          ]
+        }
+      }
+    },
+    {
       "name": "a script whose placeholder is a point, its derived values",
       "call": "computeDerivedSlots",
       "args": {

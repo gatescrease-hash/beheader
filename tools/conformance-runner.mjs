@@ -165,6 +165,12 @@ const {
   deriveValidateAndEvaluate,
   validateIntegrity,
   mutate,
+  completeAddress,
+  completeObjectName,
+  formulaReferenceResolves,
+  formulaReferences,
+  longestCommonPrefix,
+  objectSlotPaths,
   deserializeDocument,
   loadDocument,
   saveDocument,
@@ -768,6 +774,14 @@ function encodeShapeObject(object) {
       kind: slot.kind,
       value: encodeValue(slot.value),
     })),
+  };
+}
+
+/** A completion result as the answer carries it, with the candidates in their own order. */
+function encodeCompletion(result) {
+  return {
+    candidates: result.candidates.map((candidate) => ({ text: candidate.text, kind: candidate.kind })),
+    fill: result.fill,
   };
 }
 
@@ -1570,6 +1584,28 @@ const CALLS = {
     const result = parseFormula(textArgument(args, "source"), addressableObjectListArgument(args, "objects"), table);
     return isParseError(result) ? { error: result.error, message: result.message, start: result.start } : encodeAst(result);
   },
+  completeObjectName: (args) =>
+    encodeCompletion(completeObjectName(textArgument(args, "partial"), shapeObjectListArgument(args, "objects"))),
+  completeAddress: (args) =>
+    encodeCompletion(completeAddress(textArgument(args, "partial"), shapeObjectListArgument(args, "objects"))),
+  objectSlotPaths: (args) => {
+    const objects = shapeObjectListArgument(args, "objects");
+    const wanted = textArgument(args, "objectId");
+    const object = objects.find((candidate) => candidate.id === wanted);
+    if (object === undefined) {
+      throw new BadArgument(`the argument "objectId" names no object in "objects"`);
+    }
+    return objectSlotPaths(object);
+  },
+  longestCommonPrefix: (args) => longestCommonPrefix(textListArgument(args, "values")),
+  formulaReferences: (args) =>
+    formulaReferences(textArgument(args, "source")).map((run) => ({ start: run.start, end: run.end, text: run.text })),
+  formulaReferenceResolves: (args) =>
+    formulaReferenceResolves(
+      textArgument(args, "text"),
+      shapeObjectListArgument(args, "objects"),
+      "tableObjectId" in args ? textArgument(args, "tableObjectId") : undefined,
+    ),
   documentLoad: (args) => encodeLoadResult(deserializeDocument(rawArgument(args, "raw"), evalContextArgument(args))),
   documentLoadText: (args) => encodeLoadResult(loadDocument(textArgument(args, "text"), evalContextArgument(args))),
   documentRoundTrip: (args) => {

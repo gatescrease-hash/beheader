@@ -62,6 +62,11 @@ const DISPOSITIONS_PATH = "tests/conformance/contract/dispositions.json";
  * type                A declaration with no runtime value of its own.
  * compatibility-helper A name that exists to bridge the two engines, and that
  *                     goes when the older one does.
+ * type-narrowing      A predicate that tells one member of a union from
+ *                     another. TypeScript needs one because its unions are
+ *                     open shapes read at runtime; Rust reads the same
+ *                     question off an enum, so the name has no Rust
+ *                     counterpart and wants none.
  * unused-export       The barrel carries it and no production file imports it.
  *
  * The line between a query and a descriptor is whether an object reaches the
@@ -75,6 +80,7 @@ const DISPOSITIONS = new Set([
   "descriptor",
   "type",
   "compatibility-helper",
+  "type-narrowing",
   "unused-export",
 ]);
 

@@ -177,6 +177,7 @@
       "id": "primitives.schema",
       "file": "fixtures/primitives.schema.json",
       "covers": [
+        "src/engine/primitives/image.ts",
         "src/engine/primitives/schema.ts",
         "src/engine/script/stub.ts"
       ]
@@ -225,12 +226,23 @@
         "src/engine/journal.ts",
         "src/engine/journal-entry.ts"
       ]
+    },
+    {
+      "id": "complete.address",
+      "file": "fixtures/complete.address.json",
+      "covers": [
+        "src/engine/complete.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
-    "src/engine/complete.ts",
-    "src/engine/eval-context.ts",
-    "src/engine/index.ts",
-    "src/engine/primitives/image.ts"
+    {
+      "file": "src/engine/eval-context.ts",
+      "reason": "The seam the host measures text through. It declares an interface and a null implementation, so a fixture would compare two declarations rather than two answers. The Rust side is crate::measure, and the measurements themselves are compared wherever a fixture names a measurer."
+    },
+    {
+      "file": "src/engine/index.ts",
+      "reason": "The barrel. It re-exports and holds no behaviour of its own, and tests/conformance/contract checks what it carries."
+    }
   ]
 }

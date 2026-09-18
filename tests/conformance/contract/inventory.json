@@ -1880,7 +1880,7 @@
       "runtime": true,
       "declaration": "function",
       "consumed": true,
-      "disposition": "host-query"
+      "disposition": "type-narrowing"
     },
     {
       "name": "isCellReferenceForm",
@@ -1988,7 +1988,7 @@
       "runtime": true,
       "declaration": "function",
       "consumed": true,
-      "disposition": "host-query"
+      "disposition": "type-narrowing"
     },
     {
       "name": "isRangeEnumerationError",
@@ -2006,7 +2006,7 @@
       "runtime": true,
       "declaration": "function",
       "consumed": true,
-      "disposition": "host-query"
+      "disposition": "type-narrowing"
     },
     {
       "name": "isTableDimensionResizable",
