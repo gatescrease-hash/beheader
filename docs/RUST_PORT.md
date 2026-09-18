@@ -1458,8 +1458,20 @@ come back for the caller to report, except the ones that went with an object of
 their own: a batch that force deletes an object and then deletes its reader
 reports nothing, because there is no slot left to show an operator.
 
-**Still to come in this package.** Table structure, ports and math source, then
-vertex changes, explode and split.
+The table family followed it. A resize moves cell slots about and rewrites the
+addresses of every formula that named one, so the fixture carries a formula
+reading a cell before the moved line, one reading a cell after it, one reading
+the line that goes, and a range straddling it. Deleting a line something reads
+repairs rather than refusing, because refusing would leave an operator unable to
+delete a row that anything reads.
+
+Two resizes of one table in one batch each see what the other left, so a row 5
+that is out of range for a table of three is inside the range of the four the
+first insert leaves. A size slot is checked apart from the resize, because a
+formula there would let evaluation decide how many cells a table declares.
+
+**Still to come in this package.** Ports and math source, then vertex changes,
+explode and split.
 
 ### `RUST-012`: Port files and replay
 
@@ -1861,7 +1873,7 @@ implemented, then its lasting rationale belongs beside that code.
 
 ```text
 Package: RUST-011, atomic mutations and repairs
-Status: in progress, with the batch and two families landed
+Status: in progress, with the batch and three families landed
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -1879,10 +1891,9 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  Nine of the fifteen operations: the two table resizes, the two port
-  operations, the math source, the two vertex changes, explode and split. The
-  batch, the journal entry, the first family and the deletion family are landed,
-  under mutation.basic.
+  Seven of the fifteen operations: the two port operations, the math source, the
+  two vertex changes, explode and split. The batch, the journal entry and the
+  first three families are landed, under mutation.basic.
 Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
@@ -1905,9 +1916,9 @@ Commands run and results, all on the pinned 1.94.1 toolchain:
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  252 pass
+  cargo test --workspace --locked                                  257 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1813 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           1863 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         17 checks pass in Chromium
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
@@ -1923,8 +1934,8 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: port the table family, whose two resizes move cell slots
-  about and rewrite the addresses of every formula that read them.
+Next concrete action: port the port family and the math source, which are the
+  two operations that change the slot set from text an operator typed.
 Dependencies that can proceed independently: none. RUST-009 needs this package
   and RUST-008, and RUST-010 needs the schema this one begins.
 ```

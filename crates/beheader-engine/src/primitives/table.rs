@@ -40,6 +40,15 @@ pub enum TableAxis {
     Column,
 }
 
+impl TableAxis {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TableAxis::Row => "row",
+            TableAxis::Column => "column",
+        }
+    }
+}
+
 /// Why a range did not expand to a list of cells.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RangeEnumerationError {

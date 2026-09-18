@@ -5,7 +5,7 @@
   "sourceTest": "src/engine/mutation.test.ts",
   "requirement": "SPEC.md section 4, and the compatibility contract above",
   "comparison": "exact",
-  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set. A forced delete rewrites every reference into the object it removes to a reference error and reports the addresses it rewrote, so the cases carry a reader, two readers of one object, and a range whose table goes.",
+  "note": "The first family of operations: create, set, clear and the two renames. A refused batch answers with the objects it was given rather than with what it had reached, so a case that refuses reads as the proof that nothing was written. A rename of a variable is the one that reaches furthest: the slot moves, and so do the trees of every formula that read it, the markers inside a text object, the address macros of a math source, and the target a copy carries outside the slot set. A forced delete rewrites every reference into the object it removes to a reference error and reports the addresses it rewrote, so the cases carry a reader, two readers of one object, and a range whose table goes. The two resizes move cell slots about and rewrite the addresses of every formula that named one, so the cases carry a formula reading a cell before the moved line, one reading a cell after it, one reading the line that goes, and a range straddling it. A size slot is checked apart from the resize, because a formula there would let evaluation decide how many cells a table declares.",
   "cases": [
     {
       "name": "an empty batch",
@@ -2358,6 +2358,2990 @@
             "kind": "deleteObject",
             "objectId": "v3",
             "force": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row at 1",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row at 1",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row at 2",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row at 2",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row at 3",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row at 3",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row at 4",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row at 4",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row at 0",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row at 0",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row at 5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row at 5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row at 1.5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row at 1.5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a column at 1",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a column at 1",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a column at 2",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a column at 2",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a column at 3",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a column at 3",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a column at 4",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a column at 4",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a column at 0",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a column at 0",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a column at 5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a column at 5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a column at 1.5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 1.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a column at 1.5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 1.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "inserting a row a formula reads past",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "grid.C3 + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row a formula reads",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "grid.C3 + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row a formula reads past",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "grid.C3 + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting a row inside a range",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "sum",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "SUM(grid.A1:grid.C3)",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleting the only row a range covers",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "v2",
+            "name": "sum",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "SUM(grid.A1:grid.A1)",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "resizing a table whose rows are a formula",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "derived",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "column",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "resizing something that is not a table",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "two inserts in one batch",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          },
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "an insert then a delete past the new extent",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          },
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "a delete then an insert past the old extent",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "deleteTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          },
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "creating a table then resizing it",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [],
+        "operations": [
+          {
+            "kind": "createObject",
+            "object": {
+              "id": "t1",
+              "name": "grid",
+              "type": "table",
+              "slots": [
+                {
+                  "key": "origin.x",
+                  "kind": "literal",
+                  "value": 0
+                },
+                {
+                  "key": "origin.y",
+                  "kind": "literal",
+                  "value": 0
+                },
+                {
+                  "key": "rows",
+                  "kind": "literal",
+                  "value": 3
+                },
+                {
+                  "key": "cols",
+                  "kind": "literal",
+                  "value": 3
+                }
+              ]
+            }
+          },
+          {
+            "kind": "insertTableLine",
+            "objectId": "t1",
+            "axis": "row",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as 0",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as 1001",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": 1001
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as 2.5",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": 2.5
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as \"four\"",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": "four"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as null",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as true",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as {\"x\": 1, \"y\": 2}",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": {
+                "x": 1,
+                "y": 2
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as {\"$number\": \"-0\"}",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": {
+                "$number": "-0"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as a formula",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "id": "v1",
+            "name": "total",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "formula",
+                "formula": "grid.C3 + 1",
+                "value": null
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "formula": "total.value"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows as a sound number",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "table",
+            "slots": [
+              {
+                "key": "origin.x",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "origin.y",
+                "kind": "literal",
+                "value": 0
+              },
+              {
+                "key": "rows",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cols",
+                "kind": "literal",
+                "value": 3
+              },
+              {
+                "key": "cells.A1",
+                "kind": "literal",
+                "value": 1
+              },
+              {
+                "key": "cells.B2",
+                "kind": "literal",
+                "value": 2
+              },
+              {
+                "key": "cells.C3",
+                "kind": "literal",
+                "value": 3
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "rows"
+              ]
+            },
+            "slot": {
+              "value": 4
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "writing rows on something that is not a table",
+      "call": "mutateBatch",
+      "args": {
+        "objects": [
+          {
+            "id": "t1",
+            "name": "grid",
+            "type": "value",
+            "slots": [
+              {
+                "key": "value",
+                "kind": "literal",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "kind": "setSlot",
+            "address": {
+              "objectId": "t1",
+              "path": [
+                "value"
+              ]
+            },
+            "slot": {
+              "value": 2
+            }
           }
         ]
       }

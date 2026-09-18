@@ -36,13 +36,19 @@ use crate::model::{
     resolve_slot, slot_key,
 };
 use crate::number::to_javascript_text;
+use crate::number::{js_max, js_min};
 use crate::primitives::doc::document_variable_name_problem;
 use crate::primitives::math::rewrite_math_references;
 use crate::primitives::schema::{
     derived_slot_dependency_addresses, get_object_schema, resolve_derived_slots,
     resolve_non_derived_slot_paths,
 };
-use crate::primitives::table::{enumerate_range_cell_addresses, is_in_extent_table_cell_address};
+use crate::primitives::table::{
+    CellRepair, MAX_TABLE_LINES, MIN_TABLE_LINES, RangeRepair, TableAxis, delete_table_line,
+    enumerate_range_cell_addresses, get_table_dimensions, insert_table_line,
+    is_in_extent_table_cell_address, is_table_dimension_resizable, repair_cell_address_for_delete,
+    repair_range_endpoints_for_delete, shift_cell_address_for_insert,
+};
 use crate::primitives::text::rewrite_text_references;
 
 /// Rebuilds the whole edge set from stored trees and from the schema. It reads
@@ -554,6 +560,21 @@ pub enum Operation {
         object_id: String,
         force: bool,
     },
+    /// Adds one row or column and shifts every cell after it, rewriting the
+    /// addresses of every formula that named one of those cells.
+    InsertTableLine {
+        object_id: String,
+        axis: TableAxis,
+        index: f64,
+    },
+    /// Removes one row or column. Every reference into the line that went
+    /// becomes a reference error and is reported, because refusing would leave
+    /// an operator unable to delete a row that anything reads.
+    DeleteTableLine {
+        object_id: String,
+        axis: TableAxis,
+        index: f64,
+    },
 }
 
 impl Operation {
@@ -566,7 +587,9 @@ impl Operation {
             | Operation::ClearSlot { address }
             | Operation::RenameVariable { address, .. } => &address.object_id,
             Operation::RenameObject { object_id, .. }
-            | Operation::DeleteObject { object_id, .. } => object_id,
+            | Operation::DeleteObject { object_id, .. }
+            | Operation::InsertTableLine { object_id, .. }
+            | Operation::DeleteTableLine { object_id, .. } => object_id,
         }
     }
 
@@ -582,6 +605,18 @@ impl Operation {
             Operation::DeleteObject { object_id, .. } => {
                 format!("attempts to delete object id \"{object_id}\"")
             }
+            Operation::InsertTableLine {
+                object_id, axis, ..
+            } => format!(
+                "attempts to insert a {} into object id \"{object_id}\"",
+                axis.as_str()
+            ),
+            Operation::DeleteTableLine {
+                object_id, axis, ..
+            } => format!(
+                "attempts to delete a {} from object id \"{object_id}\"",
+                axis.as_str()
+            ),
             Operation::SetSlot { address, .. }
             | Operation::ClearSlot { address }
             | Operation::RenameVariable { address, .. } => format!(
@@ -629,7 +664,9 @@ pub fn mutate(
 
     check_targets_exist(objects, operations)?;
     join_problems(find_illegal_operation_payloads(operations, objects))?;
+    join_problems(find_invalid_table_resizes(operations, objects))?;
     join_problems(find_illegal_slot_clears(operations, objects))?;
+    join_problems(find_invalid_dimension_writes(operations, objects))?;
     join_problems(find_invalid_names(operations, objects))?;
 
     // The fold runs one operation at a time against the objects the last one
@@ -953,6 +990,216 @@ fn rewrite_object_formula_addresses(
     }
 }
 
+/// The object an operation names, whether it is already in the document or is
+/// being created by an earlier operation of the same batch.
+fn target_of<'a>(
+    objects: &'a [GraphObject<FormulaAst>],
+    operations: &'a [Operation],
+    object_id: &str,
+) -> Option<&'a GraphObject<FormulaAst>> {
+    objects
+        .iter()
+        .find(|candidate| candidate.id == object_id)
+        .or_else(|| {
+            operations.iter().find_map(|candidate| match candidate {
+                Operation::CreateObject { object } if object.id == object_id => {
+                    Some(object.as_ref())
+                }
+                _ => None,
+            })
+        })
+}
+
+/// The size a table has reached partway through a batch, so two resizes of one
+/// table in one batch each see what the other left.
+struct TrackedTable {
+    name: String,
+    is_table: bool,
+    rows_resizable: bool,
+    cols_resizable: bool,
+    rows: f64,
+    cols: f64,
+}
+
+/// A resize names a table, an axis it can still resize, and a line inside the
+/// extent that axis has when the operation runs.
+fn find_invalid_table_resizes(
+    operations: &[Operation],
+    objects: &[GraphObject<FormulaAst>],
+) -> Vec<String> {
+    let mut tracked: Vec<(String, TrackedTable)> = Vec::new();
+    let mut problems = Vec::new();
+    for (index, operation) in operations.iter().enumerate() {
+        let (object_id, axis, at, is_insert) = match operation {
+            Operation::InsertTableLine {
+                object_id,
+                axis,
+                index,
+            } => (object_id, *axis, *index, true),
+            Operation::DeleteTableLine {
+                object_id,
+                axis,
+                index,
+            } => (object_id, *axis, *index, false),
+            _ => continue,
+        };
+        if !tracked.iter().any(|(held, _)| held == object_id) {
+            let Some(source) = target_of(objects, operations, object_id) else {
+                continue;
+            };
+            let size = get_table_dimensions(source);
+            tracked.push((
+                object_id.clone(),
+                TrackedTable {
+                    name: source.name.clone(),
+                    is_table: source.object_type == ObjectType::Table,
+                    rows_resizable: is_table_dimension_resizable(source, TableAxis::Row),
+                    cols_resizable: is_table_dimension_resizable(source, TableAxis::Column),
+                    rows: size.rows,
+                    cols: size.cols,
+                },
+            ));
+        }
+        let state = tracked
+            .iter_mut()
+            .find(|(held, _)| held == object_id)
+            .map(|(_, state)| state)
+            .expect("the table was just tracked");
+        let prefix = format!("operation {} of {}", index + 1, operations.len());
+        let verb = if is_insert { "insertion" } else { "deletion" };
+        if !state.is_table {
+            problems.push(format!(
+                "{prefix}: object \"{}\" is not a table, so its {}s cannot be resized",
+                state.name,
+                axis.as_str()
+            ));
+            continue;
+        }
+        let mut immovable: Vec<&str> = Vec::new();
+        if !state.rows_resizable {
+            immovable.push("rows");
+        }
+        if !state.cols_resizable {
+            immovable.push("cols");
+        }
+        if !immovable.is_empty() {
+            let agreement = if immovable.len() > 1 {
+                "slots are"
+            } else {
+                "slot is"
+            };
+            problems.push(format!(
+                "{prefix}: \"{}\"'s {} {agreement} not \"literal\" — its extent cannot be coherently resized on any axis",
+                state.name,
+                immovable.join(" and ")
+            ));
+            continue;
+        }
+        let bound = match axis {
+            TableAxis::Row => state.rows,
+            TableAxis::Column => state.cols,
+        };
+        let highest = if is_insert { bound + 1.0 } else { bound };
+        if at.fract() != 0.0 || !at.is_finite() || at < 1.0 || at > highest {
+            problems.push(format!(
+                "{prefix}: {} {verb} index {} is out of range for \"{}\" (currently {} {}s; must be an integer from 1 to {})",
+                axis.as_str(),
+                to_javascript_text(at),
+                state.name,
+                to_javascript_text(bound),
+                axis.as_str(),
+                to_javascript_text(highest)
+            ));
+            continue;
+        }
+        let delta = if is_insert { 1.0 } else { -1.0 };
+        match axis {
+            TableAxis::Row => state.rows += delta,
+            TableAxis::Column => state.cols += delta,
+        }
+    }
+    problems
+}
+
+/// Which dimension a path names, when it names one.
+fn dimension_path_name(path: &[String]) -> Option<&'static str> {
+    if path.len() != 1 {
+        return None;
+    }
+    match path[0].as_str() {
+        "rows" => Some("rows"),
+        "cols" => Some("cols"),
+        _ => None,
+    }
+}
+
+/// A size slot holds a whole number inside the allowed range, as a literal. A
+/// formula there would let evaluation resize the table, which would make the
+/// slot set follow a value rather than a mutation.
+fn describe_dimension_write_problem(slot: &Slot<FormulaAst>) -> Option<String> {
+    let Slot::Literal { value } = slot else {
+        return Some(match slot {
+            Slot::Formula { .. } => "a formula".to_string(),
+            other => format!("a \"{}\" slot", kind_of(other)),
+        });
+    };
+    match value {
+        Value::Number(number)
+            if number.fract() == 0.0
+                && number.is_finite()
+                && *number >= MIN_TABLE_LINES
+                && *number <= MAX_TABLE_LINES =>
+        {
+            None
+        }
+        other => Some(describe_dimension_slot_value(other)),
+    }
+}
+
+fn describe_dimension_slot_value(value: &Value) -> String {
+    match value {
+        Value::Number(number) => format_illegal_number(*number),
+        Value::Text(text) => serde_json::Value::String(text.clone()).to_string(),
+        Value::Point(_) | Value::Points(_) => "a point value".to_string(),
+        Value::Null => "null".to_string(),
+        Value::Boolean(boolean) => boolean.to_string(),
+        Value::Error(_) => "[object Object]".to_string(),
+    }
+}
+
+fn find_invalid_dimension_writes(
+    operations: &[Operation],
+    objects: &[GraphObject<FormulaAst>],
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (index, operation) in operations.iter().enumerate() {
+        let Operation::SetSlot { address, slot } = operation else {
+            continue;
+        };
+        let Some(axis_name) = dimension_path_name(&address.path) else {
+            continue;
+        };
+        let Some(target) = target_of(objects, operations, &address.object_id) else {
+            continue;
+        };
+        if target.object_type != ObjectType::Table {
+            continue;
+        }
+        let Some(problem) = describe_dimension_write_problem(slot) else {
+            continue;
+        };
+        problems.push(format!(
+            "operation {} of {}: {}.{axis_name} must be a whole number from {} to {} held as a literal. A formula there would let evaluation resize the table. Got: {problem}",
+            index + 1,
+            operations.len(),
+            target.name,
+            to_javascript_text(MIN_TABLE_LINES),
+            to_javascript_text(MAX_TABLE_LINES)
+        ));
+    }
+    problems
+}
+
 /// The declared path a stored key names, which a broken slot is reported under.
 ///
 /// A key is the path joined by dots, and a path is what an address carries, so
@@ -1102,6 +1349,74 @@ fn apply_operation(
                     .collect(),
                 Vec::new(),
             )
+        }
+        Operation::InsertTableLine {
+            object_id,
+            axis,
+            index,
+        } => {
+            let Some(target) = objects.iter().find(|object| object.id == *object_id) else {
+                return (objects.to_vec(), Vec::new());
+            };
+            let size = get_table_dimensions(target);
+            let bound = match axis {
+                TableAxis::Row => size.rows,
+                TableAxis::Column => size.cols,
+            };
+            let clamped = js_max(1.0, js_min(*index, bound + 1.0));
+            let shift = |address: &Address| {
+                shift_cell_address_for_insert(address, object_id, *axis, clamped)
+            };
+            (
+                objects
+                    .iter()
+                    .map(|object| {
+                        let resized = if object.id == *object_id {
+                            insert_table_line(object, *axis, clamped)
+                        } else {
+                            object.clone()
+                        };
+                        rewrite_object_formula_addresses(&resized, &shift)
+                    })
+                    .collect(),
+                Vec::new(),
+            )
+        }
+        Operation::DeleteTableLine {
+            object_id,
+            axis,
+            index,
+        } => {
+            if !objects.iter().any(|object| object.id == *object_id) {
+                return (objects.to_vec(), Vec::new());
+            }
+            let repair_reference = |address: &Address| match repair_cell_address_for_delete(
+                address, object_id, *axis, *index,
+            ) {
+                CellRepair::Deleted => None,
+                CellRepair::Address(found) => Some(found),
+            };
+            let repair_range =
+                |start: &Address, end: &Address| match repair_range_endpoints_for_delete(
+                    start, end, object_id, *axis, *index,
+                ) {
+                    RangeRepair::Deleted => None,
+                    RangeRepair::Endpoints { start, end } => Some((start, end)),
+                };
+            let mut after = Vec::new();
+            let mut broken = Vec::new();
+            for object in objects {
+                let resized = if object.id == *object_id {
+                    delete_table_line(object, *axis, *index)
+                } else {
+                    object.clone()
+                };
+                let repaired =
+                    repair_object_formula_addresses(&resized, &repair_reference, &repair_range);
+                broken.extend(repaired.1);
+                after.push(repaired.0);
+            }
+            (after, broken)
         }
         Operation::DeleteObject { object_id, force } => {
             if !force {
@@ -1750,5 +2065,205 @@ mod tests {
         assert_eq!(result.objects.len(), 1);
         assert_eq!(result.objects[0].id, "v2");
         assert_eq!(result.objects[0].name, "a");
+    }
+
+    fn grid() -> GraphObject<FormulaAst> {
+        let mut slots = SlotMap::new();
+        for (key, held) in [("rows", 3.0), ("cols", 3.0)] {
+            slots.insert(
+                key,
+                Slot::Literal {
+                    value: Value::Number(held),
+                },
+            );
+        }
+        for (key, held) in [("cells.A1", 1.0), ("cells.B2", 2.0), ("cells.C3", 3.0)] {
+            slots.insert(
+                key,
+                Slot::Literal {
+                    value: Value::Number(held),
+                },
+            );
+        }
+        GraphObject {
+            id: "t1".to_string(),
+            name: "grid".to_string(),
+            object_type: ObjectType::Table,
+            target: None,
+            slots,
+            ports: None,
+            vertex_count: None,
+        }
+    }
+
+    fn cell_keys(objects: &[GraphObject<FormulaAst>]) -> Vec<String> {
+        objects
+            .iter()
+            .find(|object| object.id == "t1")
+            .map(|object| {
+                object
+                    .slots
+                    .keys()
+                    .filter(|key| key.starts_with("cells."))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// An insert moves every cell at or after the line down one, and a delete
+    /// drops the line and pulls the rest up.
+    #[test]
+    fn a_resize_moves_the_cells_on_one_side_of_the_line() {
+        let objects = vec![grid()];
+        let inserted = mutate(
+            &objects,
+            &[Operation::InsertTableLine {
+                object_id: "t1".to_string(),
+                axis: TableAxis::Row,
+                index: 1.0,
+            }],
+            &[],
+            None,
+        )
+        .expect("the insert commits");
+        assert_eq!(
+            cell_keys(&inserted.objects),
+            ["cells.A2", "cells.B3", "cells.C4"]
+        );
+
+        let deleted = mutate(
+            &objects,
+            &[Operation::DeleteTableLine {
+                object_id: "t1".to_string(),
+                axis: TableAxis::Row,
+                index: 2.0,
+            }],
+            &[],
+            None,
+        )
+        .expect("the delete commits");
+        assert_eq!(cell_keys(&deleted.objects), ["cells.A1", "cells.C2"]);
+    }
+
+    /// A formula that read a cell the resize moved is rewritten, so it goes on
+    /// reading the same cell under its new name.
+    #[test]
+    fn a_resize_rewrites_the_formulas_that_read_it() {
+        let table = grid();
+        let reader = formula_object("v1", "total", "grid.C3 + 1", std::slice::from_ref(&table));
+        let objects = vec![table, reader];
+        let result = mutate(
+            &objects,
+            &[Operation::InsertTableLine {
+                object_id: "t1".to_string(),
+                axis: TableAxis::Row,
+                index: 1.0,
+            }],
+            &[],
+            None,
+        )
+        .expect("the insert commits");
+        assert!(result.broken_slots.is_empty());
+        assert_eq!(
+            result
+                .objects
+                .iter()
+                .find(|object| object.id == "v1")
+                .and_then(|object| object.slots.get("value"))
+                .map(Slot::value),
+            Some(&Value::Number(4.0)),
+            "the formula follows the cell it read"
+        );
+    }
+
+    /// Deleting a line something reads repairs rather than refusing, because
+    /// refusing would leave an operator unable to delete a row that anything
+    /// reads. The address that broke comes back for the caller to report.
+    #[test]
+    fn deleting_a_line_that_is_read_repairs_and_reports() {
+        let table = grid();
+        let reader = formula_object("v1", "total", "grid.C3 + 1", std::slice::from_ref(&table));
+        let objects = vec![table, reader];
+        let result = mutate(
+            &objects,
+            &[Operation::DeleteTableLine {
+                object_id: "t1".to_string(),
+                axis: TableAxis::Row,
+                index: 3.0,
+            }],
+            &[],
+            None,
+        )
+        .expect("the delete commits");
+        let broken: Vec<String> = result
+            .broken_slots
+            .iter()
+            .map(|address| format!("{}.{}", address.object_id, slot_key(&address.path)))
+            .collect();
+        assert_eq!(broken, vec!["v1.value"]);
+    }
+
+    /// Two resizes of one table in one batch each see what the other left, so
+    /// the second is checked against the extent the first produced.
+    #[test]
+    fn two_resizes_in_one_batch_see_each_other() {
+        let objects = vec![grid()];
+        let operations = vec![
+            Operation::InsertTableLine {
+                object_id: "t1".to_string(),
+                axis: TableAxis::Row,
+                index: 1.0,
+            },
+            Operation::InsertTableLine {
+                object_id: "t1".to_string(),
+                axis: TableAxis::Row,
+                index: 5.0,
+            },
+        ];
+        // A row 5 is past the extent of three, and inside the extent of four the
+        // first insert leaves.
+        assert!(mutate(&objects, &operations, &[], None).is_ok());
+        assert!(
+            mutate(&objects, std::slice::from_ref(&operations[1]), &[], None).is_err(),
+            "on its own the second insert is out of range"
+        );
+    }
+
+    /// A size slot holds a literal whole number inside the range. A formula
+    /// there would let evaluation resize the table, which would make the slot
+    /// set follow a value rather than a mutation.
+    #[test]
+    fn a_size_slot_takes_a_literal_whole_number() {
+        let objects = vec![grid()];
+        let write = |value: Value| {
+            mutate(
+                &objects,
+                &[Operation::SetSlot {
+                    address: Address {
+                        object_id: "t1".to_string(),
+                        path: vec!["rows".to_string()],
+                    },
+                    slot: Slot::Literal { value },
+                }],
+                &[],
+                None,
+            )
+        };
+        assert!(write(Value::Number(4.0)).is_ok());
+        for refused in [
+            Value::Number(0.0),
+            Value::Number(1001.0),
+            Value::Number(2.5),
+            Value::Text("four".to_string()),
+            Value::Null,
+            Value::Boolean(true),
+        ] {
+            let failure = write(refused.clone()).expect_err("{refused:?} is refused");
+            assert!(
+                failure.contains("must be a whole number from 1 to 1000 held as a literal"),
+                "{failure}"
+            );
+        }
     }
 }

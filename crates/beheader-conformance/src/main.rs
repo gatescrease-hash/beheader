@@ -1051,6 +1051,24 @@ fn operations_argument(
                 object_id: text_argument(held, "objectId")?,
                 force: held.get("force").and_then(Json::as_bool).unwrap_or(false),
             },
+            "insertTableLine" | "deleteTableLine" => {
+                let object_id = text_argument(held, "objectId")?;
+                let axis = table_axis_argument(held)?;
+                let index = number_argument(held, "index")?;
+                if kind == "insertTableLine" {
+                    Operation::InsertTableLine {
+                        object_id,
+                        axis,
+                        index,
+                    }
+                } else {
+                    Operation::DeleteTableLine {
+                        object_id,
+                        axis,
+                        index,
+                    }
+                }
+            }
             "renameObject" => Operation::RenameObject {
                 object_id: text_argument(held, "objectId")?,
                 name: text_argument(held, "name")?,
