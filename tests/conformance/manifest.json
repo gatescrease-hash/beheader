@@ -216,14 +216,21 @@
       "covers": [
         "src/engine/mutation.ts"
       ]
+    },
+    {
+      "id": "document.basic",
+      "file": "fixtures/document.basic.json",
+      "covers": [
+        "src/engine/document.ts",
+        "src/engine/journal.ts",
+        "src/engine/journal-entry.ts"
+      ]
     }
   ],
   "modulesWithoutFixtures": [
     "src/engine/complete.ts",
-    "src/engine/document.ts",
     "src/engine/eval-context.ts",
     "src/engine/index.ts",
-    "src/engine/journal.ts",
     "src/engine/primitives/image.ts"
   ]
 }

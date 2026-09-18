@@ -420,6 +420,107 @@ pub fn exceeds_max_formula_ast_depth(ast: &FormulaAst) -> bool {
     exceeds(ast, 1)
 }
 
+/// A tree back to the JSON a saved file holds, with `write_number` deciding
+/// how a literal number is spelled.
+///
+/// A document writes a number as ordinary JSON, because a document holds no
+/// number that ordinary JSON cannot carry. The fixtures write one in the
+/// tagged form of `crate::wire`, so a tree holding a negative zero arrives at
+/// the other engine as the number it left as. The two callers differ in that
+/// alone, so the walk is written once and takes the difference as an argument.
+pub fn encode_formula_ast_with(ast: &FormulaAst, write_number: &dyn Fn(f64) -> Json) -> Json {
+    let mut object = Map::new();
+    match ast {
+        FormulaAst::Literal(literal) => {
+            object.insert("type".to_string(), Json::String("literal".to_string()));
+            object.insert(
+                "value".to_string(),
+                match literal {
+                    LiteralValue::Number(number) => write_number(*number),
+                    LiteralValue::Text(text) => Json::String(text.clone()),
+                    LiteralValue::Boolean(boolean) => Json::Bool(*boolean),
+                },
+            );
+        }
+        FormulaAst::Reference(address) => {
+            object.insert("type".to_string(), Json::String("reference".to_string()));
+            object.insert("address".to_string(), encode_address(address));
+        }
+        FormulaAst::Range { start, end } => {
+            object.insert("type".to_string(), Json::String("range".to_string()));
+            object.insert("start".to_string(), encode_address(start));
+            object.insert("end".to_string(), encode_address(end));
+        }
+        FormulaAst::BinaryOp {
+            operator,
+            left,
+            right,
+        } => {
+            object.insert("type".to_string(), Json::String("binaryOp".to_string()));
+            object.insert(
+                "operator".to_string(),
+                Json::String(operator.as_str().to_string()),
+            );
+            object.insert(
+                "left".to_string(),
+                encode_formula_ast_with(left, write_number),
+            );
+            object.insert(
+                "right".to_string(),
+                encode_formula_ast_with(right, write_number),
+            );
+        }
+        FormulaAst::UnaryOp { operator, operand } => {
+            object.insert("type".to_string(), Json::String("unaryOp".to_string()));
+            object.insert(
+                "operator".to_string(),
+                Json::String(operator.as_str().to_string()),
+            );
+            object.insert(
+                "operand".to_string(),
+                encode_formula_ast_with(operand, write_number),
+            );
+        }
+        FormulaAst::FunctionCall { name, args } => {
+            object.insert("type".to_string(), Json::String("functionCall".to_string()));
+            object.insert("name".to_string(), Json::String(name.clone()));
+            object.insert(
+                "args".to_string(),
+                Json::Array(
+                    args.iter()
+                        .map(|arg| encode_formula_ast_with(arg, write_number))
+                        .collect(),
+                ),
+            );
+        }
+        FormulaAst::Error => {
+            object.insert("type".to_string(), Json::String("error".to_string()));
+            object.insert("error".to_string(), Json::String("#REF".to_string()));
+        }
+    }
+    Json::Object(object)
+}
+
+/// An address as the two members a saved file carries it in.
+pub fn encode_address(address: &Address) -> Json {
+    let mut object = Map::new();
+    object.insert(
+        "objectId".to_string(),
+        Json::String(address.object_id.clone()),
+    );
+    object.insert(
+        "path".to_string(),
+        Json::Array(
+            address
+                .path
+                .iter()
+                .map(|part| Json::String(part.clone()))
+                .collect(),
+        ),
+    );
+    Json::Object(object)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

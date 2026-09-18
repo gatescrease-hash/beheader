@@ -22,8 +22,8 @@ defines.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2744 Vitest tests and 23 tooling tests pass, with 0 skipped. |
-| Rust | 267 tests pass. Formatting, lints and the browser target check are clean. |
-| Conformance | 1928 cases match across the two engines, with none awaiting either. |
+| Rust | 286 tests pass. Formatting, lints and the browser target check are clean. |
+| Conformance | 2054 cases match across the two engines, with none awaiting either. |
 | Hosting | 17 checks pass in Chromium against the browser binding. |
 | Spec | Built, except the parts section 17 postpones. |
 
@@ -173,6 +173,7 @@ file.
 | `script/stub.ts` | The script node and its ports. |
 | `mutation.ts` | The one channel for state change, and every operation it accepts. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
+| `journal-entry.ts` | The shape one loaded entry holds before a replay hands it to `mutate`. |
 | `document.ts` | Save and load, and the versioned JSON format. |
 | `index.ts` | The public surface of the engine. |
 
@@ -206,6 +207,8 @@ file.
 | `beheader-engine/src/graph/mod.rs` | A dependency edge, and the key a traversal holds one by. |
 | `beheader-engine/src/graph/cycles.rs` | The depth first search that finds a loop, and the slots around it. |
 | `beheader-engine/src/graph/eval.rs` | One pass over every slot in dependency order, reading the schema for each derived one. |
+| `beheader-engine/src/document.rs` | A file: the JSON on disk to a document and back, the counter, and what a load refuses. |
+| `beheader-engine/src/journal.rs` | The replay that rebuilds the objects behind any entry, and the shape one loaded entry has to hold. |
 | `beheader-engine/src/mutation.rs` | The derived edge set, the four integrity checks, the fifteen operations, and the batch that commits in full or not at all. |
 | `beheader-engine/src/formula/lexer.rs` | Formula text to tokens, over the units a JavaScript string counts. |
 | `beheader-engine/src/formula/ast.rs` | The formula node types, the shape check a saved tree passes, and the depth limit. |

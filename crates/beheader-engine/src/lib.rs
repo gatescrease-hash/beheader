@@ -13,8 +13,10 @@
 #![forbid(unsafe_code)]
 
 pub mod address;
+pub mod document;
 pub mod formula;
 pub mod graph;
+pub mod journal;
 pub mod math;
 pub mod measure;
 pub mod model;

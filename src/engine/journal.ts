@@ -25,6 +25,7 @@
  */
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { GraphObject } from "./graph/node.ts";
+import { journalEntryProblem } from "./journal-entry.ts";
 import { mutate, type MutationJournalEntry } from "./mutation.ts";
 
 export type JournalReplayResult =
@@ -57,6 +58,14 @@ export function replayJournal(
     if (entry === undefined) {
       return { ok: false, message: `journal entry ${index} is missing`, entry: index };
     }
+    // A loaded entry can be any JSON the file held, so its shape is read here
+    // rather than left to fail inside mutate(), where the refusal would be the
+    // text of a JavaScript TypeError.
+    const problem = journalEntryProblem(entry);
+    if (problem !== undefined) {
+      return { ok: false, message: `journal entry ${index} did not replay: ${problem}`, entry: index };
+    }
+
     // Each mutate() call is given an empty journal to append to, and what it
     // appends is thrown away. A replay only rebuilds objects, and letting the
     // journal accumulate would allocate a fresh array per entry for nothing.

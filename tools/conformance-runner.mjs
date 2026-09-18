@@ -165,6 +165,12 @@ const {
   deriveValidateAndEvaluate,
   validateIntegrity,
   mutate,
+  deserializeDocument,
+  loadDocument,
+  saveDocument,
+  mintObjectId,
+  replayJournal,
+  journalIsComplete,
 } = await import("../src/engine/index.ts");
 
 /** The version of the results shape this runner writes. */
@@ -763,6 +769,58 @@ function encodeShapeObject(object) {
       value: encodeValue(slot.value),
     })),
   };
+}
+
+/** A fixture member taken as the JSON it is, for a call that decodes raw JSON itself. */
+function rawArgument(args, name) {
+  if (!(name in args)) {
+    throw new BadArgument(`the argument "${name}" is missing`);
+  }
+  return args[name];
+}
+
+/**
+ * A loaded object as the answer carries it. It parts from encodeShapeObject by
+ * naming the ports and the target, which a saved file holds and a load has to
+ * rebuild, and it keeps the slots in a list so their order is compared.
+ */
+function encodeDocumentObject(object) {
+  return {
+    id: object.id,
+    name: object.name,
+    type: object.type,
+    vertexCount: object.vertexCount === undefined ? null : encodeNumber(object.vertexCount),
+    ports: object.ports === undefined ? null : {
+      in: object.ports.in,
+      out: object.ports.out,
+      seed: object.ports.seed === undefined ? null : object.ports.seed,
+    },
+    target: object.target === undefined ? null : encodeAddress(object.target),
+    slots: Object.entries(object.slots).map(([key, slot]) => ({
+      key,
+      kind: slot.kind,
+      value: encodeValue(slot.value),
+    })),
+  };
+}
+
+/** A document as the answer carries it, with the journal as the raw JSON it arrived as. */
+function encodeDocument(document) {
+  return {
+    formatVersion: document.formatVersion,
+    nextObjectId: encodeNumber(document.nextObjectId),
+    objects: document.objects.map(encodeDocumentObject),
+    journal: document.journal,
+    camera: {
+      x: encodeNumber(document.camera.x),
+      y: encodeNumber(document.camera.y),
+      zoom: encodeNumber(document.camera.zoom),
+    },
+  };
+}
+
+function encodeLoadResult(result) {
+  return result.ok ? { ok: true, document: encodeDocument(result.document) } : { ok: false, message: result.message };
 }
 
 function encodeEdge(edge) {
@@ -1511,6 +1569,52 @@ const CALLS = {
     const table = "tableObjectId" in args ? textArgument(args, "tableObjectId") : undefined;
     const result = parseFormula(textArgument(args, "source"), addressableObjectListArgument(args, "objects"), table);
     return isParseError(result) ? { error: result.error, message: result.message, start: result.start } : encodeAst(result);
+  },
+  documentLoad: (args) => encodeLoadResult(deserializeDocument(rawArgument(args, "raw"), evalContextArgument(args))),
+  documentLoadText: (args) => encodeLoadResult(loadDocument(textArgument(args, "text"), evalContextArgument(args))),
+  documentRoundTrip: (args) => {
+    const loaded = deserializeDocument(rawArgument(args, "raw"), evalContextArgument(args));
+    if (!loaded.ok) {
+      return { ok: false, message: loaded.message };
+    }
+    // The document that comes back from its own saved text, rather than the
+    // text itself. What the two engines owe each other is a file the other
+    // reads to the same document, and the spelling JSON gives a number is the
+    // JSON writer of each language rather than anything the engine decides.
+    // The slots come back in the order the saved text listed them, so their
+    // order is still part of what is compared.
+    return encodeLoadResult(loadDocument(saveDocument(loaded.document), evalContextArgument(args)));
+  },
+  documentMint: (args) => {
+    const loaded = deserializeDocument(rawArgument(args, "raw"), evalContextArgument(args));
+    if (!loaded.ok) {
+      return { ok: false, message: loaded.message };
+    }
+    const minted = mintObjectId(loaded.document);
+    return minted.ok === false
+      ? { ok: false, message: minted.message }
+      : { ok: true, id: minted.id, nextObjectId: encodeNumber(minted.nextObjectId) };
+  },
+  journalReplay: (args) => {
+    const loaded = deserializeDocument(rawArgument(args, "raw"), evalContextArgument(args));
+    if (!loaded.ok) {
+      return { ok: false, message: loaded.message };
+    }
+    const through = "through" in args ? numberArgument(args, "through") : loaded.document.journal.length;
+    const replayed = replayJournal(loaded.document.journal, through, evalContextArgument(args));
+    return replayed.ok
+      ? { ok: true, objects: replayed.objects.map(encodeDocumentObject) }
+      : { ok: false, message: replayed.message, entry: replayed.entry };
+  },
+  journalComplete: (args) => {
+    const loaded = deserializeDocument(rawArgument(args, "raw"), evalContextArgument(args));
+    if (!loaded.ok) {
+      return { ok: false, message: loaded.message };
+    }
+    return {
+      ok: true,
+      complete: journalIsComplete(loaded.document.objects, loaded.document.journal, evalContextArgument(args)),
+    };
   },
 };
 

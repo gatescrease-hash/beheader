@@ -1,0 +1,4644 @@
+{
+  "fixtureVersion": 1,
+  "baselineCommit": "0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3",
+  "id": "document.basic",
+  "sourceTest": "src/engine/document.test.ts, src/engine/journal.test.ts and src/engine/journal-entry.test.ts",
+  "requirement": "SPEC.md section 4, and the compatibility contract above",
+  "comparison": "exact",
+  "note": "A file, from the JSON on disk to the objects a document holds, and the replay that reads its journal back. A load goes through the mutation channel, so the refusals here run past the shape of the file into the integrity checks and the cycle check, and a document that decodes cleanly can still be refused for what it means. A derived value never reaches a file, so the cases carrying a rect ask both engines to build nine derived slots that the JSON never held, and read the arithmetic back. The slots of an answer are a list rather than an object, so their order is part of what is compared: the case that lists \"area\" before the slots the schema declares after it would catch a load that rebuilt the map in schema order instead of the order the file wrote. A round trip answers with the document that comes back from its own saved text rather than with the text, because the spelling JSON gives a number belongs to the JSON writer of each language. The two writers agree on every number a document can hold, which the unit tests beside each engine pin, and this fixture asks the question a file actually raises: whether the other engine reads it back to the same document. A loaded journal is deliberately permissive, so the entries travel as the JSON they arrived as and each one is read only when a replay reaches it. The malformed entries here are refused in written sentences rather than by whatever the runtime throws, which is what D-006 and D-007 in docs/RUST_PORT.md settle. Two cases a file can carry are missing from this fixture on purpose, both recorded under D-007. An object whose type names no schema loads in TypeScript and is refused in Rust, and a literal past the range of a binary64 is read as infinity by one JSON parser and refused by the other. Each engine's own tests carry those.",
+  "cases": [
+    {
+      "name": "an empty document",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 1,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "one value object",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a rect, whose derived slots the file never held",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_2",
+              "name": "box",
+              "type": "rect",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "width": {
+                  "kind": "literal",
+                  "value": 4
+                },
+                "height": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formula reading another object",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            },
+            {
+              "id": "obj_2",
+              "name": "twice",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "binaryOp",
+                    "operator": "*",
+                    "left": {
+                      "type": "reference",
+                      "address": {
+                        "objectId": "obj_1",
+                        "path": [
+                          "value"
+                        ]
+                      }
+                    },
+                    "right": {
+                      "type": "literal",
+                      "value": 2
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formula carrying the value it last had",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            },
+            {
+              "id": "obj_2",
+              "name": "twice",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "reference",
+                    "address": {
+                      "objectId": "obj_1",
+                      "path": [
+                        "value"
+                      ]
+                    }
+                  },
+                  "value": 99
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a camera away from the origin",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": -12.5,
+            "y": 8,
+            "zoom": 0.125
+          }
+        }
+      }
+    },
+    {
+      "name": "a counter of zero over a document with no generated ID",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 0,
+          "objects": [
+            {
+              "id": "typed",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 1
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a derived slot the schema no longer declares is dropped",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_2",
+              "name": "box",
+              "type": "rect",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "width": {
+                  "kind": "literal",
+                  "value": 4
+                },
+                "height": {
+                  "kind": "literal",
+                  "value": 3
+                },
+                "notASlotAnyMore": {
+                  "kind": "derived"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a derived slot the file held keeps its place in the order",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_2",
+              "name": "box",
+              "type": "rect",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "width": {
+                  "kind": "literal",
+                  "value": 4
+                },
+                "height": {
+                  "kind": "literal",
+                  "value": 3
+                },
+                "area": {
+                  "kind": "derived"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a script object carrying its port lists",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "ports": {
+                "in": [
+                  "a"
+                ],
+                "out": [
+                  "r"
+                ]
+              },
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "language": {
+                  "kind": "literal",
+                  "value": "python"
+                },
+                "source": {
+                  "kind": "literal",
+                  "value": "pass"
+                },
+                "in.a": {
+                  "kind": "literal",
+                  "value": 1
+                },
+                "placeholder.r": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "out.r": {
+                  "kind": "derived"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a port list with a seed family",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "ports": {
+                "in": [
+                  "a"
+                ],
+                "out": [
+                  "r"
+                ],
+                "seed": [
+                  "s1"
+                ]
+              },
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "language": {
+                  "kind": "literal",
+                  "value": "python"
+                },
+                "source": {
+                  "kind": "literal",
+                  "value": "pass"
+                },
+                "in.a": {
+                  "kind": "literal",
+                  "value": 1
+                },
+                "placeholder.r": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "out.r": {
+                  "kind": "derived"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an object with no ports and no vertexCount",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "tri",
+              "type": "polygon",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "radius": {
+                  "kind": "literal",
+                  "value": 5
+                },
+                "sides": {
+                  "kind": "literal",
+                  "value": 3
+                },
+                "rotation": {
+                  "kind": "literal",
+                  "value": 0
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a document that is not an object",
+      "call": "documentLoad",
+      "args": {
+        "raw": []
+      }
+    },
+    {
+      "name": "a document that is a number",
+      "call": "documentLoad",
+      "args": {
+        "raw": 42
+      }
+    },
+    {
+      "name": "a document that is null",
+      "call": "documentLoad",
+      "args": {
+        "raw": null
+      }
+    },
+    {
+      "name": "a formatVersion of 2",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 2,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formatVersion of \"1\"",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": "1",
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formatVersion of null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": null,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formatVersion of 1.5",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1.5,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formatVersion of true",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": true,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a nextObjectId of -1",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": -1,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a nextObjectId of 1.5",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 1.5,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a nextObjectId of \"2\"",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": "2",
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a nextObjectId of null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": null,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a nextObjectId of true",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": true,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "objects that are not an array",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": {},
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a journal that is not an array",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": {},
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a camera that is missing",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": []
+        }
+      }
+    },
+    {
+      "name": "a camera of {\"x\": 0, \"y\": 0}",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "a camera of {\"x\": \"0\", \"y\": 0, \"zoom\": 1}",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": "0",
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a camera of []",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": []
+        }
+      }
+    },
+    {
+      "name": "a camera of null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an object that is not an object",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            "garbage"
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an object with no id",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "name": "w",
+              "type": "value",
+              "slots": {}
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an object whose slots are not an object",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": []
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a slot of kind \"bogus\"",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "bogus"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a slot of kind 42",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": 42
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a slot of kind null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": null
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a slot of kind true",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": true
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a literal slot with no value",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formula slot with no ast",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formula slot whose ast names no node type",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "conditional"
+                  }
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formula slot whose ast is null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": null
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a stored tree holding a literal of negative zero",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "literal",
+                    "value": -0.0
+                  }
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "ports with an in that is not an array",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "slots": {},
+              "ports": {
+                "in": "a",
+                "out": []
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "ports with an out that is not an array",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "slots": {},
+              "ports": {
+                "in": [],
+                "out": {}
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "ports with a name twice",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "slots": {},
+              "ports": {
+                "in": [
+                  "a",
+                  "a"
+                ],
+                "out": []
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "ports with an illegal name",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "slots": {},
+              "ports": {
+                "in": [
+                  "a b"
+                ],
+                "out": []
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "ports with a name that is not a string",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "slots": {},
+              "ports": {
+                "in": [
+                  1
+                ],
+                "out": []
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "ports with a seed that is not an array",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "slots": {},
+              "ports": {
+                "in": [],
+                "out": [],
+                "seed": "x"
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "ports that are null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "slots": {},
+              "ports": null
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a vertexCount of -1",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "p",
+              "type": "polyline",
+              "slots": {},
+              "vertexCount": -1
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a vertexCount of 1.5",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "p",
+              "type": "polyline",
+              "slots": {},
+              "vertexCount": 1.5
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a vertexCount of \"3\"",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "p",
+              "type": "polyline",
+              "slots": {},
+              "vertexCount": "3"
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a vertexCount of null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "p",
+              "type": "polyline",
+              "slots": {},
+              "vertexCount": null
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a vertexCount of true",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "p",
+              "type": "polyline",
+              "slots": {},
+              "vertexCount": true
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a target of {\"objectId\": \"obj_1\"}",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "d",
+              "type": "docref",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                }
+              },
+              "target": {
+                "objectId": "obj_1"
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a target of {\"path\": [\"v\"]}",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "d",
+              "type": "docref",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                }
+              },
+              "target": {
+                "path": [
+                  "v"
+                ]
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a target of {\"objectId\": 1, \"path\": []}",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "d",
+              "type": "docref",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                }
+              },
+              "target": {
+                "objectId": 1,
+                "path": []
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a target of {\"objectId\": \"obj_1\", \"path\": [1]}",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "d",
+              "type": "docref",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                }
+              },
+              "target": {
+                "objectId": "obj_1",
+                "path": [
+                  1
+                ]
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a target of null",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "d",
+              "type": "docref",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                }
+              },
+              "target": null
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a target of \"x\"",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "d",
+              "type": "docref",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                }
+              },
+              "target": "x"
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a journal holding -0 inside a point",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_1",
+                    "path": [
+                      "origin"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": {
+                      "x": -0.0,
+                      "y": 1
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a structurally garbled journal that holds no illegal number",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [
+            "garbage",
+            42,
+            null
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a counter at an ID an object already took",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 5,
+          "objects": [
+            {
+              "id": "obj_5",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a counter above every ID taken",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 6,
+          "objects": [
+            {
+              "id": "obj_5",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a counter at an ID a creation entry reserved",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 9,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_9",
+                    "name": "gone",
+                    "type": "value",
+                    "slots": {}
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a counter at an ID a deletion entry reserved",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 9,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "deleteObject",
+                  "objectId": "obj_9"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an ID with a leading zero reserves nothing",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 1,
+          "objects": [
+            {
+              "id": "obj_09",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an ID that is not a generated one reserves nothing",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 1,
+          "objects": [
+            {
+              "id": "obj_x",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a counter at the largest safe integer",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 9007199254740991,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "two objects sharing one name",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            },
+            {
+              "id": "obj_2",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formula naming a slot that does not exist",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "a",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "reference",
+                    "address": {
+                      "objectId": "obj_2",
+                      "path": [
+                        "value"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a pair of formulas making a cycle",
+      "call": "documentLoad",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "a",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "reference",
+                    "address": {
+                      "objectId": "obj_2",
+                      "path": [
+                        "value"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "id": "obj_2",
+              "name": "b",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "reference",
+                    "address": {
+                      "objectId": "obj_1",
+                      "path": [
+                        "value"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an empty document survives its save",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 1,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a rect survives its save",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_2",
+              "name": "box",
+              "type": "rect",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "width": {
+                  "kind": "literal",
+                  "value": 4
+                },
+                "height": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a formula and its cached value survive their save",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            },
+            {
+              "id": "obj_2",
+              "name": "twice",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "formula",
+                  "ast": {
+                    "type": "reference",
+                    "address": {
+                      "objectId": "obj_1",
+                      "path": [
+                        "value"
+                      ]
+                    }
+                  },
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a script keeps its port lists across a save",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "ports": {
+                "in": [
+                  "a"
+                ],
+                "out": [
+                  "r"
+                ]
+              },
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "language": {
+                  "kind": "literal",
+                  "value": "python"
+                },
+                "source": {
+                  "kind": "literal",
+                  "value": "pass"
+                },
+                "in.a": {
+                  "kind": "literal",
+                  "value": 1
+                },
+                "placeholder.r": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "out.r": {
+                  "kind": "derived"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a seed family survives a save",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "s",
+              "type": "script",
+              "ports": {
+                "in": [
+                  "a"
+                ],
+                "out": [
+                  "r"
+                ],
+                "seed": [
+                  "s1"
+                ]
+              },
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "language": {
+                  "kind": "literal",
+                  "value": "python"
+                },
+                "source": {
+                  "kind": "literal",
+                  "value": "pass"
+                },
+                "in.a": {
+                  "kind": "literal",
+                  "value": 1
+                },
+                "placeholder.r": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "out.r": {
+                  "kind": "derived"
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a garbled journal comes back from a save unchanged",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [
+            "garbage",
+            42,
+            null
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a camera away from the origin survives a save",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": -12.5,
+            "y": 8,
+            "zoom": 0.125
+          }
+        }
+      }
+    },
+    {
+      "name": "a document with many slots keeps their order across a save",
+      "call": "documentRoundTrip",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [
+            {
+              "id": "obj_2",
+              "name": "box",
+              "type": "rect",
+              "slots": {
+                "origin.x": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "origin.y": {
+                  "kind": "literal",
+                  "value": 0
+                },
+                "width": {
+                  "kind": "literal",
+                  "value": 4
+                },
+                "height": {
+                  "kind": "literal",
+                  "value": 3
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "minting from a fresh document",
+      "call": "documentMint",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 1,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "minting from a counter of zero",
+      "call": "documentMint",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 0,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "minting from the largest safe integer",
+      "call": "documentMint",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 9007199254740991,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "minting from a document that does not load",
+      "call": "documentMint",
+      "args": {
+        "raw": {
+          "formatVersion": 2,
+          "nextObjectId": 2,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a whole replay of three entries",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_2",
+                    "name": "box",
+                    "type": "rect",
+                    "slots": {
+                      "origin.x": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "origin.y": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "width": {
+                        "kind": "literal",
+                        "value": 4
+                      },
+                      "height": {
+                        "kind": "literal",
+                        "value": 3
+                      },
+                      "vertices": {
+                        "kind": "derived"
+                      },
+                      "centroid.x": {
+                        "kind": "derived"
+                      },
+                      "centroid.y": {
+                        "kind": "derived"
+                      },
+                      "area": {
+                        "kind": "derived"
+                      },
+                      "length": {
+                        "kind": "derived"
+                      },
+                      "bounds.minX": {
+                        "kind": "derived"
+                      },
+                      "bounds.minY": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxX": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxY": {
+                        "kind": "derived"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a replay through zero, the state every journal starts from",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_2",
+                    "name": "box",
+                    "type": "rect",
+                    "slots": {
+                      "origin.x": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "origin.y": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "width": {
+                        "kind": "literal",
+                        "value": 4
+                      },
+                      "height": {
+                        "kind": "literal",
+                        "value": 3
+                      },
+                      "vertices": {
+                        "kind": "derived"
+                      },
+                      "centroid.x": {
+                        "kind": "derived"
+                      },
+                      "centroid.y": {
+                        "kind": "derived"
+                      },
+                      "area": {
+                        "kind": "derived"
+                      },
+                      "length": {
+                        "kind": "derived"
+                      },
+                      "bounds.minX": {
+                        "kind": "derived"
+                      },
+                      "bounds.minY": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxX": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxY": {
+                        "kind": "derived"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "through": 0
+      }
+    },
+    {
+      "name": "a replay through one entry",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_2",
+                    "name": "box",
+                    "type": "rect",
+                    "slots": {
+                      "origin.x": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "origin.y": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "width": {
+                        "kind": "literal",
+                        "value": 4
+                      },
+                      "height": {
+                        "kind": "literal",
+                        "value": 3
+                      },
+                      "vertices": {
+                        "kind": "derived"
+                      },
+                      "centroid.x": {
+                        "kind": "derived"
+                      },
+                      "centroid.y": {
+                        "kind": "derived"
+                      },
+                      "area": {
+                        "kind": "derived"
+                      },
+                      "length": {
+                        "kind": "derived"
+                      },
+                      "bounds.minX": {
+                        "kind": "derived"
+                      },
+                      "bounds.minY": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxX": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxY": {
+                        "kind": "derived"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "through": 1
+      }
+    },
+    {
+      "name": "a replay one entry short, which is one step of undo",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_2",
+                    "name": "box",
+                    "type": "rect",
+                    "slots": {
+                      "origin.x": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "origin.y": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "width": {
+                        "kind": "literal",
+                        "value": 4
+                      },
+                      "height": {
+                        "kind": "literal",
+                        "value": 3
+                      },
+                      "vertices": {
+                        "kind": "derived"
+                      },
+                      "centroid.x": {
+                        "kind": "derived"
+                      },
+                      "centroid.y": {
+                        "kind": "derived"
+                      },
+                      "area": {
+                        "kind": "derived"
+                      },
+                      "length": {
+                        "kind": "derived"
+                      },
+                      "bounds.minX": {
+                        "kind": "derived"
+                      },
+                      "bounds.minY": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxX": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxY": {
+                        "kind": "derived"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "through": 2
+      }
+    },
+    {
+      "name": "a replay stopping at -1",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_2",
+                    "name": "box",
+                    "type": "rect",
+                    "slots": {
+                      "origin.x": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "origin.y": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "width": {
+                        "kind": "literal",
+                        "value": 4
+                      },
+                      "height": {
+                        "kind": "literal",
+                        "value": 3
+                      },
+                      "vertices": {
+                        "kind": "derived"
+                      },
+                      "centroid.x": {
+                        "kind": "derived"
+                      },
+                      "centroid.y": {
+                        "kind": "derived"
+                      },
+                      "area": {
+                        "kind": "derived"
+                      },
+                      "length": {
+                        "kind": "derived"
+                      },
+                      "bounds.minX": {
+                        "kind": "derived"
+                      },
+                      "bounds.minY": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxX": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxY": {
+                        "kind": "derived"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "through": -1
+      }
+    },
+    {
+      "name": "a replay stopping at 1.5",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_2",
+                    "name": "box",
+                    "type": "rect",
+                    "slots": {
+                      "origin.x": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "origin.y": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "width": {
+                        "kind": "literal",
+                        "value": 4
+                      },
+                      "height": {
+                        "kind": "literal",
+                        "value": 3
+                      },
+                      "vertices": {
+                        "kind": "derived"
+                      },
+                      "centroid.x": {
+                        "kind": "derived"
+                      },
+                      "centroid.y": {
+                        "kind": "derived"
+                      },
+                      "area": {
+                        "kind": "derived"
+                      },
+                      "length": {
+                        "kind": "derived"
+                      },
+                      "bounds.minX": {
+                        "kind": "derived"
+                      },
+                      "bounds.minY": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxX": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxY": {
+                        "kind": "derived"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "through": 1.5
+      }
+    },
+    {
+      "name": "a replay stopping at 4",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_2",
+                    "name": "box",
+                    "type": "rect",
+                    "slots": {
+                      "origin.x": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "origin.y": {
+                        "kind": "literal",
+                        "value": 0
+                      },
+                      "width": {
+                        "kind": "literal",
+                        "value": 4
+                      },
+                      "height": {
+                        "kind": "literal",
+                        "value": 3
+                      },
+                      "vertices": {
+                        "kind": "derived"
+                      },
+                      "centroid.x": {
+                        "kind": "derived"
+                      },
+                      "centroid.y": {
+                        "kind": "derived"
+                      },
+                      "area": {
+                        "kind": "derived"
+                      },
+                      "length": {
+                        "kind": "derived"
+                      },
+                      "bounds.minX": {
+                        "kind": "derived"
+                      },
+                      "bounds.minY": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxX": {
+                        "kind": "derived"
+                      },
+                      "bounds.maxY": {
+                        "kind": "derived"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "through": 4
+      }
+    },
+    {
+      "name": "an entry that is null",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            null
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a string",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "garbage"
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a number",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            42
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an empty object",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {}
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a null operations member",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": null
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a null operation",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                null
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a createObject with no object",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an operation with no kind",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {}
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an unknown kind",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "frobnicate"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a setSlot with no address",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "slot": {
+                    "kind": "literal",
+                    "value": 1
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a setSlot with no slot",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_1",
+                    "path": [
+                      "value"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a setSlot whose slot names no kind",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_1",
+                    "path": [
+                      "value"
+                    ]
+                  },
+                  "slot": {}
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a literal slot with no value",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_1",
+                    "path": [
+                      "value"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal"
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a formula slot with a broken ast",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_1",
+                    "path": [
+                      "value"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "formula",
+                    "ast": {
+                      "type": "nonsense"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a renameObject with no name",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "renameObject",
+                  "objectId": "obj_1"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a deleteObject whose force is not a boolean",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "deleteObject",
+                  "objectId": "obj_1",
+                  "force": "yes"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an insertTableLine with no axis",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "insertTableLine",
+                  "objectId": "obj_1",
+                  "index": 0
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an insertTableLine whose axis is not a line",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "insertTableLine",
+                  "objectId": "obj_1",
+                  "axis": "diagonal",
+                  "index": 0
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an addPort with no family",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "addPort",
+                  "objectId": "obj_1",
+                  "name": "a"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an addVertex with no point",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "addVertex",
+                  "objectId": "obj_1"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is an addVertex whose point has no y",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "addVertex",
+                  "objectId": "obj_1",
+                  "point": {
+                    "x": 1
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a deleteVertex with no index",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "deleteVertex",
+                  "objectId": "obj_1"
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a splitEdge with a string index",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "splitEdge",
+                  "objectId": "obj_1",
+                  "index": "0",
+                  "point": {
+                    "x": 1,
+                    "y": 2
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a createObject whose object has no slots",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_9",
+                    "name": "z",
+                    "type": "value"
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a createObject whose object slot is broken",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_9",
+                    "name": "z",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "bogus"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a createObject whose target is broken",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_9",
+                    "name": "z",
+                    "type": "value",
+                    "slots": {},
+                    "target": "x"
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry that is a createObject whose ports are broken",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 10,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_9",
+                    "name": "z",
+                    "type": "value",
+                    "slots": {},
+                    "ports": {
+                      "in": "a"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry whose object is already there",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an entry naming an object no earlier entry made",
+      "call": "journalReplay",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 3,
+          "objects": [],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "setSlot",
+                  "address": {
+                    "objectId": "obj_2",
+                    "path": [
+                      "width"
+                    ]
+                  },
+                  "slot": {
+                    "kind": "literal",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a journal that accounts for the objects",
+      "call": "journalComplete",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 4
+                }
+              }
+            }
+          ],
+          "journal": [
+            {
+              "operations": [
+                {
+                  "kind": "createObject",
+                  "object": {
+                    "id": "obj_1",
+                    "name": "w",
+                    "type": "value",
+                    "slots": {
+                      "value": {
+                        "kind": "literal",
+                        "value": 4
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a journal one entry short of the objects",
+      "call": "journalComplete",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 4
+                }
+              }
+            }
+          ],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a journal that does not replay at all",
+      "call": "journalComplete",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 2,
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "w",
+              "type": "value",
+              "slots": {
+                "value": {
+                  "kind": "literal",
+                  "value": 4
+                }
+              }
+            }
+          ],
+          "journal": [
+            "garbage"
+          ],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "an empty journal over an empty document",
+      "call": "journalComplete",
+      "args": {
+        "raw": {
+          "formatVersion": 1,
+          "nextObjectId": 1,
+          "objects": [],
+          "journal": [],
+          "camera": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        }
+      }
+    }
+  ]
+}

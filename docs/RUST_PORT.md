@@ -181,6 +181,7 @@ source file's adjacent test file travels with its behavior.
 | [mutation.ts](../src/engine/mutation.ts) | `mutation` | `RUST-010`, `RUST-011` |
 | [document.ts](../src/engine/document.ts) | `document` | `RUST-012` |
 | [journal.ts](../src/engine/journal.ts) | `journal` | `RUST-012` |
+| [journal-entry.ts](../src/engine/journal-entry.ts) | `journal` | `RUST-012` |
 | [complete.ts](../src/engine/complete.ts) | `complete` | `RUST-013` |
 | [index.ts](../src/engine/index.ts) | `lib` and application adapter | `RUST-013`, `RUST-014` |
 
@@ -946,7 +947,7 @@ met, and a package is done only where the status column says so.
 | `RUST-009` | Text and math primitive integration | `006`, `007`, `008` | done |
 | `RUST-010` | Complete schemas and graph evaluation | `007`, `009` | done |
 | `RUST-011` | Atomic mutations and repairs | `010` | done |
-| `RUST-012` | Document persistence and journal replay | `011` | planned |
+| `RUST-012` | Document persistence and journal replay | `011` | done |
 | `RUST-013` | Completion and consumer facade | `005`, `010`, `012` | planned |
 | `RUST-014` | Application integration behind engine selection | `003`, `013` | planned |
 | `RUST-015` | Stress, robustness, and workload measurements | `012`, `014` | planned |
@@ -1521,6 +1522,54 @@ formula caches, derived payloads in journals, malformed entries, a partial
 journal, and explicit measurement contexts. Counter and raw JSON decisions
 have accepted fixtures in both engines.
 
+**Landed.** `document` carries the file, from the JSON on disk to the objects a
+document holds, and `journal` carries the replay that reads its entries back.
+`document.basic` asks both engines 126 questions about a file.
+
+A load goes through the mutation channel rather than trusting the JSON, so a
+file that decodes cleanly still meets the integrity checks and the cycle check,
+and the fixture follows a file past its own shape into a pair of formulas that
+name each other. A derived value never reaches a file, so the rect in the
+fixture arrives with four literal slots and comes back with nine derived ones
+holding an area of 12 and a perimeter of 14, so a schema that gains a slot still
+reads a file written before that slot existed.
+
+The slots of an answer are a list rather than an object, so their order is
+compared. The case that writes `area` ahead of the slots the schema declares
+after it comes back with `area` still in fifth place, which is the case a load
+that rebuilt the map in schema order would fail. Holding that order cost a
+`serde_json` feature: its map sorts its keys by default, and a saved file would
+have carried the slots of every object in alphabetical order, which decides
+which of two slots reports a cycle first and what order completion offers them
+in.
+
+A whole number reaches a file without a fractional part. `serde_json` writes a
+whole `f64` as `3.0`, so the counter, the camera and every literal went through
+a writer of this package's own. With that in place the two engines write the
+same file: a document carrying a fraction, a whole number, a garbled journal and
+a rect saves to the same 695 bytes in both, and to the same digest.
+
+A round trip in the fixture answers with the document that comes back from its
+own saved text rather than with the text, because the spelling JSON gives a
+number belongs to the JSON writer of each language rather than to the engine.
+The byte equality above is pinned beside each engine instead.
+
+The replay rebuilds the derived values as it goes, so a journal of three entries
+whose last one widens a rect answers an area of 30, and the same journal stopped
+one entry short answers 12. That second number is one step of undo.
+
+`D-006` and `D-007` are resolved above. The journal travels as the JSON it
+arrived as, an entry is read when a replay reaches it, and a malformed one is
+refused in a written sentence rather than in whatever the runtime throws.
+`src/engine/journal-entry.ts` arrived with this package to give the TypeScript
+that wording, and it is the one piece of TypeScript this package changed.
+
+**Left open.** Two divergences, both recorded under `D-007`. Rust refuses an
+object type no schema declares where TypeScript carries it, and the two JSON
+parsers part on a literal past the range of a binary64. Neither has a case in
+`document.basic`, because a case for either would report a difference rather
+than a match.
+
 ### `RUST-013`: Complete the consumer facade
 
 **Work.** Implement completion, source classification, metadata queries, and
@@ -1708,8 +1757,8 @@ under it. Superseded choices remain linked through Git history.
 | `D-003` | Authoritative state | Resolved for the first integration: the host owns the document. See below. | `RUST-003` |
 | `D-004` | Numeric compatibility | Binary64, JavaScript rounding, fixture-specific tolerances | `RUST-004` |
 | `D-005` | String representation | Preserve UTF-16 semantics. Part covered by fixtures, and the lone surrogate case is open. See below. | `RUST-004` |
-| `D-006` | Loaded journal representation | Retain raw entries, validate each on replay | `RUST-012` |
-| `D-007` | Counter and malformed-file policy | Counter behavior resolved in TypeScript as described above. Raw journal policy remains a separate compatibility decision. | `RUST-012` |
+| `D-006` | Loaded journal representation | Resolved: the raw entries are kept, and each is read when a replay reaches it. See below. | `RUST-012` |
+| `D-007` | Counter and malformed-file policy | Resolved: the counter as the TypeScript has it, and three narrowings the operator chose. See below. | `RUST-012` |
 | `D-008` | Diagnostic equality | Resolved for the two adapters, and open for platform details. See below. | `RUST-002` |
 | `D-009` | Product baseline drift | Pin each package and synchronize accepted behavior changes | `RUST-001` |
 | `D-010` | Resource budgets | Preserve the TypeScript per-line expression budget. Measure total document workloads on each target before setting broader limits. | `RUST-015` |
@@ -1878,15 +1927,66 @@ says so in the slot rather than losing the pass around it. `primitives.text`,
 the math one shows the rest of the object still evaluating beside the two slots
 that could not be measured.
 
+`D-006` is resolved as the raw entries, read one at a time.
+
+A loaded journal in the TypeScript is whatever JSON the file carried. The
+document decoder walks it for a number a document cannot hold and checks nothing
+else, so `["garbage", 42, null]` is a journal a file loads with, and a save
+writes it back unchanged. A Rust decode at load time would have narrowed that,
+and a document that survived a trip through one engine would not survive a trip
+through the other.
+
+So `Document.journal` holds `serde_json::Value` rather than a decoded batch, and
+`crate::journal` reads an entry when a replay reaches it. `document.basic`
+carries the garbled journal through a load and back out of a save, which is the
+case that would fail if either engine decoded the journal early.
+
+`D-007` is resolved in four parts, three of them narrowings the operator chose.
+
+The counter is the TypeScript's own. A non-negative safe integer above every
+generated `obj_` ID in the objects and in the creation or deletion entries of
+the journal, with only `obj_` followed by a decimal integer and no leading zero
+reserving a value, and the largest safe integer as an exhausted counter that
+saves, loads, and refuses to mint. An ID longer than a binary64 counts is
+compared by its digits rather than as a number, because read as a number it
+rounds to the counter it has to sit above.
+
+An object whose `type` names no schema is refused by the Rust loader and carried
+through by the TypeScript one. `ObjectType` holds the thirteen types the schema
+registry declares and the registry matches on all of them with no arm left over,
+so an undeclared new type stops the compiler rather than reaching an operator. A type outside that set names no slot and computes no
+derived value, so the file is refused with the type quoted.
+
+A malformed journal entry is refused in a written sentence in both engines. The
+TypeScript replay used to reach `mutate` with whatever the entry held and report
+what the interpreter threw, so an operator met "Cannot read properties of null
+(reading 'kind')". `src/engine/journal-entry.ts` arrived with this package and
+reads the shape of all fifteen operations ahead of the call, and
+`crate::journal` reads the same shape into an `Operation`. The two answer the
+same sentence, which `document.basic` compares across twenty-six malformed
+entries.
+
+A literal past the range of a binary64 parts the two JSON parsers rather than
+the two engines. `1e999` reaches V8 as infinity, and the document decoder
+refuses it as a number a document cannot hold. `serde_json` refuses the literal
+where it stands. Both engines refuse the file and neither reads it, so the
+difference is in the wording alone, and it sits outside the engine.
+
+The last two are the only divergences this package leaves. Neither has a case in
+`document.basic`, because a case for either would report a difference rather
+than a match, and each engine's own tests carry it instead.
+
 `D-008` is resolved for the part the two adapters own. A refusal of the
 arguments of a case is worded identically by both runners, and the comparator
 compares that wording exactly, so a difference in it is a difference between
 the adapters rather than between the engines. A wire error never quotes the
 JSON it refused, because the two engines print a number differently and a
 fixture that compared the wording would then be comparing their JSON writers.
-Engine diagnostics keep the same exact rule. What is still open is the
-normalization of a platform generated message, such as the text a JSON parser
-produces, which arrives with `RUST-012`.
+Engine diagnostics keep the same exact rule. The platform generated message
+`RUST-012` was to settle is the one a JSON parser produces, and it is settled
+the other way: the two parsers word a refusal differently and neither wording
+is normalized, because a document that reaches one of them is refused by both
+and what parts is the sentence alone. `D-007` records it.
 
 A decision about a public behavior is reflected in the spec when it changes
 the requirement. A decision about a Rust module stays here until it is
@@ -1897,19 +1997,19 @@ implemented, then its lasting rationale belongs beside that code.
 | Field | Current value |
 | --- | --- |
 | Migration phase | Implementation, through Gate B |
-| Active implementation package | `RUST-012`, ready and unstarted |
+| Active implementation package | `RUST-013`, ready and unstarted |
 | TypeScript baseline commit | `0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3` |
 | Rust artifacts | `beheader-engine`, `beheader-conformance`, `beheader-hostproof`, `beheader-wasm` |
 | Selected runtime | Browser Wasm, with synchronous host callbacks, resolved under `D-001` and `D-002` |
-| Unresolved architecture decisions | `D-006`, `D-007`, `D-009`, `D-011`. `D-008` and `D-012` are part resolved, and `D-010` holds a recorded choice |
-| Next implementation action | Port version 1 decoding and journal replay under `RUST-012` |
-| Completion evidence | `RUST-001` through `RUST-011`, under their headings above |
+| Unresolved architecture decisions | `D-009` and `D-011`. `D-008` and `D-012` are part resolved, and `D-010` holds a recorded choice |
+| Next implementation action | Complete the consumer facade under `RUST-013` |
+| Completion evidence | `RUST-001` through `RUST-012`, under their headings above |
 
 ### Handoff record for the active package
 
 ```text
-Package: RUST-011, atomic mutations and repairs
-Status: done, with the batch and all fifteen operations landed
+Package: RUST-012, files and replay
+Status: done, with the file and the replay landed
 Owner or current branch: claude/todo-quick-clears-994uv2
 TypeScript baseline commit: 0ca62a7cd72384a47464bdd4f402a1d0c52aa4b3
 Implementation commit: the commit that carries this document
@@ -1927,9 +2027,11 @@ Completed dependencies:
   RUST-008 supplies the whole math language and the one seam the graph calls it
   through, which RUST-009 wires to the math primitive.
 Remaining cases:
-  None. The fifteen operations, the batch and the journal entry are landed,
-  under mutation.basic, which carries 167 cases.
-Open decision IDs: D-012, whose remaining part the operator moved to RUST-016
+  None. The decoder, the writer, the counter and the replay are landed, under
+  document.basic, which carries 126 cases.
+Open decision IDs: D-012, whose remaining part the operator moved to RUST-016.
+  D-006 and D-007 were resolved in this package, the second of them with two
+  divergences the operator chose, which the heading above names.
 Fixture and evidence paths:
   tests/conformance/fixtures, tests/conformance/manifest.json
   model.port-names, address.nearest-name, address.resolution and
@@ -1941,22 +2043,25 @@ Fixture and evidence paths:
   primitives.edge, primitives.geometry, primitives.table, primitives.doc and
   primitives.schema carry RUST-007, and primitives.text and primitives.math
   carry RUST-009, graph.evaluation carries RUST-010, and mutation.basic carries
-  the whole operation inventory of RUST-011
+  the whole operation inventory of RUST-011, and document.basic carries the
+  file and the replay of RUST-012
   tests/conformance/contract/inventory.json and dispositions.json
   tests/hosting, driven by tools/hosting-proof.mjs
 Commands run and results, all on the pinned 1.94.1 toolchain:
-  npm test                      2745 Vitest tests and 23 tooling tests pass
+  npm test                      2773 Vitest tests and 23 tooling tests pass
   npm run typecheck             both configs pass
   npm run build                 succeeds
   npm run prose                 exit code 0
   cargo fmt --all -- --check    clean
   cargo clippy --workspace --all-targets --locked -- -D warnings   clean
-  cargo test --workspace --locked                                  267 pass
+  cargo test --workspace --locked                                  286 pass
   cargo check -p beheader-engine --target wasm32-unknown-unknown   succeeds
-  npm run conformance           1928 matched, 0 differed, 0 awaiting Rust
+  npm run conformance           2054 matched, 0 differed, 0 awaiting Rust
   npm run hosting-proof         last run at RUST-010, 17 checks in Chromium.
     This package leaves beheader-wasm untouched, so the proof drives the same
-    binding it drove there.
+    binding it drove there. Nothing an operator sees changed either: the one
+    piece of TypeScript this package touched is the wording a replay refuses
+    with, and no production code replays a journal yet.
 Native and browser targets exercised:
   x86_64-unknown-linux-gnu for tests, wasm32-unknown-unknown built and run in
   Chromium. Windows runs the Rust checks in the pull request workflow and has
@@ -1971,11 +2076,11 @@ Known failures with smallest reproduction:
   parse_formula("0.0000001 + 1") prints as "1e-7 + 1", which refuses to parse.
   Both engines answer alike, the fault predates the port, and the RUST-005
   heading above says what closing it would take.
-Next concrete action: begin RUST-012, which decodes a version 1 file,
-  reconstructs it through the mutations this package supplies, and replays a
-  journal.
-Dependencies that can proceed independently: none. RUST-012 needs the
-  mutations this package lands, because a file reconstructs through them.
+Next concrete action: begin RUST-013, which completes the consumer facade:
+  completion, source classification, metadata queries and the public adapter
+  inventory.
+Dependencies that can proceed independently: none. RUST-013 reads the whole
+  engine surface the packages above it land.
 ```
 
 A resumed session compares the recorded commits with the current branch,

@@ -26,6 +26,9 @@ use beheader_engine::address::{
     format_address, format_cell_reference, index_to_column_letters, is_cell_reference_form,
     is_valid_name, nearest_name, parse_address, parse_cell_reference, to_surface_path,
 };
+use beheader_engine::document::{
+    Document, deserialize_document, load_document, mint_object_id, save_document,
+};
 use beheader_engine::formula::ast::{
     FormulaAst, LiteralValue, exceeds_max_formula_ast_depth, validate_formula_ast_shape,
 };
@@ -38,6 +41,7 @@ use beheader_engine::formula::lexer::{TokenKind, lex};
 use beheader_engine::formula::parser::parse_formula;
 use beheader_engine::graph::address_key;
 use beheader_engine::graph::cycles::{CycleCheck, detect_cycle};
+use beheader_engine::journal::{journal_is_complete, replay_journal};
 use beheader_engine::math::ast::{MathAst, MathLine, MathProgram};
 use beheader_engine::math::eval::evaluate_math_object;
 use beheader_engine::math::lexer::tokenize_math;
@@ -111,6 +115,12 @@ const FIXTURE_VERSION: u64 = 1;
 /// port has yet to reach.
 const SUPPORTED_CALLS: &[&str] = &[
     "addressKey",
+    "documentLoad",
+    "documentLoadText",
+    "documentMint",
+    "documentRoundTrip",
+    "journalComplete",
+    "journalReplay",
     "columnLettersToIndex",
     "extractDependencies",
     "formatAddress",
@@ -2074,9 +2084,162 @@ fn answer(call: &str, args: &Map<String, Json>) -> Option<Answer> {
                 }
             })
         }),
+        "documentLoad" => raw_argument(args, "raw").map(|raw| {
+            encode_load_result(deserialize_document(&raw, measurer_argument(args).as_deref()))
+        }),
+        "documentLoadText" => text_argument(args, "text").map(|text| {
+            encode_load_result(load_document(&text, measurer_argument(args).as_deref()))
+        }),
+        "documentRoundTrip" => raw_argument(args, "raw").map(|raw| {
+            let measurer = measurer_argument(args);
+            match deserialize_document(&raw, measurer.as_deref()) {
+                Err(message) => json!({ "ok": false, "message": message }),
+                // The document that comes back from its own saved text, rather
+                // than the text itself. What the two engines owe each other is
+                // a file the other reads to the same document, and the spelling
+                // JSON gives a number is the JSON writer of each language
+                // rather than anything the engine decides. The slots come back
+                // in the order the saved text listed them, so their order is
+                // still part of what is compared.
+                Ok(document) => encode_load_result(load_document(
+                    &save_document(&document),
+                    measurer.as_deref(),
+                )),
+            }
+        }),
+        "documentMint" => raw_argument(args, "raw").map(|raw| {
+            match deserialize_document(&raw, measurer_argument(args).as_deref()) {
+                Err(message) => json!({ "ok": false, "message": message }),
+                Ok(document) => match mint_object_id(&document) {
+                    Err(message) => json!({ "ok": false, "message": message }),
+                    Ok(minted) => json!({
+                        "ok": true,
+                        "id": minted.id,
+                        "nextObjectId": encode_number(minted.next_object_id),
+                    }),
+                },
+            }
+        }),
+        "journalReplay" => raw_argument(args, "raw").and_then(|raw| {
+            let measurer = measurer_argument(args);
+            let document = match deserialize_document(&raw, measurer.as_deref()) {
+                Err(message) => return Ok(json!({ "ok": false, "message": message })),
+                Ok(document) => document,
+            };
+            let through = match args.get("through") {
+                None => document.journal.len() as f64,
+                Some(_) => number_argument(args, "through")?,
+            };
+            Ok(
+                match replay_journal(&document.journal, through, measurer.as_deref()) {
+                    Ok(objects) => json!({
+                        "ok": true,
+                        "objects": objects.iter().map(encode_document_object).collect::<Vec<_>>(),
+                    }),
+                    Err(error) => {
+                        json!({ "ok": false, "message": error.message, "entry": error.entry })
+                    }
+                },
+            )
+        }),
+        "journalComplete" => raw_argument(args, "raw").map(|raw| {
+            let measurer = measurer_argument(args);
+            match deserialize_document(&raw, measurer.as_deref()) {
+                Err(message) => json!({ "ok": false, "message": message }),
+                Ok(document) => json!({
+                    "ok": true,
+                    "complete": journal_is_complete(
+                        &document.objects,
+                        &document.journal,
+                        measurer.as_deref(),
+                    ),
+                }),
+            }
+        }),
         _ => return None,
     };
     Some(result)
+}
+
+/// The measurer a case names, owned so a call can borrow it for its own length.
+fn measurer_argument(args: &Map<String, Json>) -> Option<Box<dyn Measurer>> {
+    match args.get("measurer").and_then(Json::as_str) {
+        Some("fake") => Some(Box::new(FakeMeasurer)),
+        Some("failing") => Some(Box::new(FailingMeasurer)),
+        _ => None,
+    }
+}
+
+/// A fixture member taken as the JSON it is, for a call that decodes raw JSON itself.
+fn raw_argument(args: &Map<String, Json>, name: &str) -> Result<Json, String> {
+    args.get(name)
+        .cloned()
+        .ok_or_else(|| format!("the argument \"{name}\" is missing"))
+}
+
+/// A loaded object as the answer carries it. It parts from `encode_shape_object`
+/// by naming the ports and the target, which a saved file holds and a load has
+/// to rebuild, and it keeps the slots in a list so their order is compared.
+fn encode_document_object(object: &GraphObject<FormulaAst>) -> Json {
+    json!({
+        "id": object.id,
+        "name": object.name,
+        "type": object.object_type.as_str(),
+        "vertexCount": match object.vertex_count {
+            None => Json::Null,
+            Some(count) => encode_number(count),
+        },
+        "ports": match &object.ports {
+            None => Json::Null,
+            Some(ports) => json!({
+                "in": ports.input,
+                "out": ports.output,
+                "seed": match &ports.seed {
+                    None => Json::Null,
+                    Some(seed) => json!(seed),
+                },
+            }),
+        },
+        "target": match &object.target {
+            None => Json::Null,
+            Some(target) => encode_address(target),
+        },
+        "slots": object
+            .slots
+            .iter()
+            .map(|(key, slot)| json!({
+                "key": key,
+                "kind": match slot {
+                    Slot::Literal { .. } => "literal",
+                    Slot::Formula { .. } => "formula",
+                    Slot::Derived { .. } => "derived",
+                },
+                "value": encode_value(slot.value()),
+            }))
+            .collect::<Vec<_>>(),
+    })
+}
+
+/// A document as the answer carries it, with the journal as the raw JSON it arrived as.
+fn encode_document(document: &Document) -> Json {
+    json!({
+        "formatVersion": document.format_version,
+        "nextObjectId": encode_number(document.next_object_id),
+        "objects": document.objects.iter().map(encode_document_object).collect::<Vec<_>>(),
+        "journal": document.journal,
+        "camera": json!({
+            "x": encode_number(document.camera.x),
+            "y": encode_number(document.camera.y),
+            "zoom": encode_number(document.camera.zoom),
+        }),
+    })
+}
+
+fn encode_load_result(result: Result<Document, String>) -> Json {
+    match result {
+        Ok(document) => json!({ "ok": true, "document": encode_document(&document) }),
+        Err(message) => json!({ "ok": false, "message": message }),
+    }
 }
 
 fn ascii_letters_argument(args: &Map<String, Json>, name: &str) -> Result<String, String> {

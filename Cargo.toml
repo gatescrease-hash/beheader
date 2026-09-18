@@ -10,6 +10,12 @@
 # hand because the document format has shapes that a derived one would accept
 # or reject differently.
 #
+# preserve_order holds the members of a JSON object in the order they were
+# written. The slot map of an object is a JSON object in a saved file, and slot
+# order decides which of two slots reports a cycle first and what order
+# completion offers them in, so the sorted map serde_json builds by default
+# would change a document's meaning as it passed through a save or a load.
+#
 # libm supplies the transcendental functions in place of the ones the target
 # brings. A native build otherwise reaches the system library and a
 # wasm32-unknown-unknown build reaches a different implementation compiled in,
@@ -26,5 +32,5 @@ publish = false
 
 [workspace.dependencies]
 beheader-engine = { path = "crates/beheader-engine" }
-serde_json = "1.0.145"
+serde_json = { version = "1.0.145", features = ["preserve_order"] }
 libm = "0.2.15"
