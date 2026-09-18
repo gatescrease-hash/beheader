@@ -987,7 +987,7 @@ describe("mutate — a non-finite number is not legal document state", () => {
     }
   });
 
-  it("rejects a mutation touching an UNRELATED object when the document ALREADY holds a non-finite literal elsewhere, naming the pre-existing offender (Rule 5: recheck the whole graph)", () => {
+  it("rejects a mutation touching an UNRELATED object when the document ALREADY holds a non-finite literal elsewhere, naming the pre-existing offender (the preflight check reads the whole graph)", () => {
     const alreadyIllegal: GraphObject = {
       id: "obj_1",
       name: "value_1",
@@ -4317,7 +4317,7 @@ describe("text.resolvedContent end to end through mutate", () => {
     expect(resolvedContentOf([table, text], "obj_x")).toBe("double is 42");
   });
 
-  it("re-resolves when a referenced cell changes — a fresh mutation, full re-derive (Rule 5)", () => {
+  it("re-resolves when a referenced cell changes — a fresh mutation, full re-derive", () => {
     const table = tableObject("obj_t", "table_1", 4, 4, { "cells.A1": { kind: "literal", value: 10 } });
     const text = textObject("obj_x", "text_1", "value {= table_1.A1 }");
     const created = mutate([], [{ kind: "createObject", object: table }, { kind: "createObject", object: text }], []);

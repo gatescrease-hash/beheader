@@ -40,7 +40,14 @@ data driven machines from a few good primitives plus wiring.
 The reference points are Excel, Desmos and diagrams.net. The target is a generic
 two dimensional tool for calculation, notation, diagrams and layout, where one
 shared dependency graph across all four is what those three reference points
-each lack. A document at that scale holds objects and cells in the thousands.
+each lack.
+
+The sizes to hold are a few thousand objects on one canvas, tens of thousands of
+cells across the tables of one document, and a drag that stays at the refresh
+rate of the screen while it runs. Those figures are where the three reference
+points themselves begin to feel slow. Rule 5 of section 3 is the property that
+holds them, and it states a shape for the cost of an edit rather than a time,
+because a time depends on the machine and says nothing about what to write.
 
 An earlier plan aimed much wider, at a single substrate that also covered CAD
 drafting, signal and media processing, and music. Using the program for real
@@ -159,25 +166,39 @@ exception to this rule. Mathematical notation reaches the graph through a
 compute function on a derived slot, the same way a script node does, so no part
 of it is a second evaluator for a cell or for a text box.
 
-### Rule 5. Speed is not a goal
+### Rule 5. An edit costs what it changes
 
-Write the simplest correct code:
+The time one mutation takes is proportional to the part of the graph that the
+mutation affects, rather than to the size of the document. Within that bound,
+write the simplest correct code. A constant factor does not justify complexity,
+so this rule asks for nothing about how fast any one phase runs.
 
-- Cycle detection runs a full depth first search on every mutation.
-- Evaluation recomputes the whole graph in topological order on every mutation.
+The engine does not meet this rule yet. Three choices in it cost time
+proportional to the whole document on every mutation:
+
+- Cycle detection runs a full depth first search.
+- Evaluation recomputes the whole graph in topological order.
 - A transaction deep clones the document, applies to the clone, and swaps the
   clone in on success.
 
-At a few hundred objects this is fast enough and it is easy to prove correct.
+Each was chosen for simplicity while the plan was to restructure the engine
+after a port to Rust. `RUST_PORT.md` records the measured cost of the three and
+the reasoning that retired that port, which leaves the restructuring as work in
+TypeScript with no later event to wait for.
 
-Each of those three costs is proportional to the size of the whole document
-rather than to the part of it that one mutation changes, so the cost of a single
-edit grows with the document. [RUST_PORT.md](RUST_PORT.md) records the measured
-growth and which of the phases carries it. The generic two dimensional tool that
-section 1 describes reaches document sizes where that growth becomes visible to
-an operator, so whether this rule still holds at those sizes is an open product
-question. Answering it changes this specification and the hard rules in
-`CLAUDE.md` together, rather than one file at a time.
+Replacing them admits a fault that the current engine cannot have. A pass that
+recomputes everything cannot leave a stale value behind, and one that recomputes
+a part can. So a differential test that compares an incremental result against a
+full recomputation over generated documents and mutations comes before the three
+replacements, rather than after them. The comparison design in `RUST_PORT.md`
+was written to compare two engines, and it applies unchanged to two evaluation
+strategies in one engine.
+
+Two existing rules carry more weight under this one. Evaluation that never
+changes the slot set is what allows the affected part of the graph to be known
+before the evaluation runs. Deep cloning is what currently makes an all or
+nothing mutation true by construction, so whatever replaces it states and tests
+that guarantee directly.
 
 ### Rule 6. Evaluation never changes the slot set
 
@@ -1316,10 +1337,11 @@ An edge grip sits where a shift press grabs a segment, so the two gestures want
 the same pixel. A plain press bends the edge. A shift press moves it. Shift
 takes no grip at all, so it keeps both meanings it already had.
 
-**A note on drag speed.** A drag fires many mutations per second and each one
-deep clones the document. If that becomes slow to watch, throttle drag mutations
-to animation frames and draw a light preview between them. Do not work around it
-by a write outside the mutation API.
+**A note on drag speed.** A drag fires many mutations per second, and Rule 5 of
+section 3 governs what each one costs. Throttling drag mutations to animation
+frames and drawing a light preview between them is a choice about what a gesture
+looks like, and not a cover for an engine that recomputes a whole document per
+mutation. Do not work around the cost by a write outside the mutation API.
 
 **Feedback.** Show a selection highlight, and an error badge on an object that
 holds an error value. Show a small mark on a slot that a formula drives.

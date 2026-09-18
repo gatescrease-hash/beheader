@@ -42,8 +42,8 @@ distributes a similar total across the phases differently:
 
 Arithmetic is the smallest phase in the first shape and under a third of the
 total in the second. The remainder is bookkeeping over the whole document, and
-its shape follows from the three simplicity choices that SPEC.md records under
-the rule that speed is not a goal. Edge derivation and integrity validation also
+its shape follows from the three simplicity choices that SPEC.md lists under
+Rule 5 as the ones the engine has yet to replace. Edge derivation and integrity validation also
 grow quadratically in the object count, because each formula reference scans the
 object array to resolve an address. In the chain shape of the first table,
 doubling the object count from 4,000 to 8,000 multiplies each of those two

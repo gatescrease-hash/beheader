@@ -188,7 +188,7 @@ describe("parseTextContent — {? }{:}{?} conditionals", () => {
     expect(block.source).toBe(content);
   });
 
-  it("a stray top-level {?} with no opening {? } is kept as literal text, not dropped or fatal — as three text blocks, adjacent text is not merged (Rule 5: no consumer needs it, evaluateBlockTree concatenates regardless)", () => {
+  it("a stray top-level {?} with no opening {? } is kept as literal text, not dropped or fatal — as three text blocks, adjacent text is not merged (no consumer needs it, evaluateBlockTree concatenates regardless)", () => {
     expect(parseTextContent("before {?} after", [])).toEqual([
       { type: "text", value: "before " },
       { type: "text", value: "{?}" },

@@ -16,7 +16,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
 | Tests | 2763 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built, except the parts section 17 postpones. |
+| Spec | Built, except the parts section 17 postpones, and except Rule 5. |
+| Rule 5 | Not met. One mutation costs time proportional to the whole document, through the clone, the edge derivation, the integrity check, the cycle search and the evaluation pass alike. |
 | Workspace | Compact typography, a profile helmet, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it

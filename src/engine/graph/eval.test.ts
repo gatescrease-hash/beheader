@@ -67,7 +67,7 @@ describe("evaluate — the value and add fixture", () => {
     expect(add1.slots["out.result"]).toEqual({ kind: "derived", value: 15 });
   });
 
-  it("re-propagates from scratch when a literal changes — no state retained between calls (Rule 5)", () => {
+  it("re-propagates from scratch when a literal changes — no state retained between calls, because the pass recomputes every slot", () => {
     const edges = addObjectEdges("obj_3", addr("obj_1", "value"), addr("obj_2", "value"));
     const before = evaluate(
       [valueObject("obj_1", "value_1", 10), valueObject("obj_2", "value_2", 5), addObject("obj_3", "add_1", addr("obj_1", "value"), addr("obj_2", "value"))],
