@@ -56,6 +56,54 @@ all of it cannot, and a test that compares the two is what finds that.
   will know it is finished when those tests pass, the differential test passes,
   and the cost of a refused batch stops growing with the size of the document.
 
+The items below are the baseline that sections 21 and 22 of `SPEC.md` open. Undo
+comes first, because arrangement refuses to run without it and because a paste
+that lands wrong is the gesture an operator most wants back.
+
+- Give the journal an undo and a redo surface, as specified in Undo and redo.
+  A reader will know it is finished when a gesture undoes as one step rather
+  than one frame, a mutation after an undo drops the entries past the position,
+  `nextObjectId` holds its value across an undo and a redo of a create, and the
+  camera stays where it was.
+- Export a picture of the document or the selection, as specified in Moving data
+  in and out. A reader will know it is finished when an exported raster of a
+  document holding notation carries that notation, which a test asserts against
+  the same document without it, and when the vector form and the canvas form
+  share their geometry, text layout and measurement.
+- Move objects and cells through the clipboard, as specified in Moving data in
+  and out. A reader will know it is finished when a copied pair of wired objects
+  pastes with its wiring pointing at the copies, a copied half keeps reading the
+  original, a copied range reads into a spreadsheet in another window, and text
+  pasted into a cell grows the table within the limits of section 7 and names
+  the size it needed when it cannot.
+- Read a comma separated file into a table, as specified in Moving data in and
+  out. A reader will know it is finished when it shares the growth and refusal
+  path of a paste.
+- Warn about unsaved work and keep a recovery copy, as specified in Moving data
+  in and out. A reader will know it is finished when leaving a dirty document
+  warns, the window title shows the state, and a copy written on a timer is
+  offered on the next open.
+
+The items below are the graph surface that sections 19 and 20 open. The overlay
+comes first, because rewiring and arrangement both read what it draws.
+
+- Draw the dependency overlay behind a toggle, as specified in The dependency
+  overlay. A reader will know it is finished when one curve stands for each
+  ordered pair of objects and carries the count of slot edges behind it,
+  hovering an object dims the rest, and a refused cycle draws its ring.
+- Answer `upstream`, `downstream`, `orphans`, `broken` and `find` with a
+  selection. A reader will know it is finished when each one leaves a selection
+  that the ordinary commands then act on, and when `downstream` names the same
+  slots a delete refusal names.
+- Rewire a slot by dragging the reading end of a curve. A reader will know it is
+  finished when the drag rewrites every occurrence of the old address in that
+  formula, a drag closing a cycle refuses and names the slot, and a curve
+  standing for more than one slot edge refuses the drag.
+- Arrange, align and distribute, as specified in Arrangement. A reader will know
+  it is finished when only literal positions move, the command reports how many
+  it left alone, `arrange flow` ranks by the dependency depth the evaluation
+  pass already computes, and the command refuses while undo is absent.
+
 ---
 
 ## Where the next items come from

@@ -1404,6 +1404,17 @@ list
 select intersection_a
 zoom <factor> / fit
 save / load
+
+upstream circle_1 [depth]        # section 19, answers with a selection
+downstream doc.speed [depth]
+orphans / broken / find <text>
+wires on / off                   # the overlay of section 19
+arrange flow | grid | tidy       # section 20
+align <edge> / distribute x | y
+undo / redo                      # section 21
+export png [scale] / export svg  # section 22
+copy / cut / paste
+import csv [corner]
 ```
 
 The parser is table driven. One registry entry adds a command. A status line
@@ -1474,7 +1485,6 @@ The team considered each item below and postponed it on purpose.
 - **Python execution of any kind.** Script nodes are stubs.
 - **Compound objects, containers or groups.** The design depends on real
   scripts, so it waits for them. Do not invent a substitute.
-- **An undo or redo surface.** Journal the mutations. Build no user interface.
 - **Drag through to source.** A drag on a bound object must not write to the
   upstream literal. The behaviour has no definition when the upstream is itself a
   formula. The per component rule of section 14 is the answer for now.
@@ -1490,7 +1500,12 @@ The team considered each item below and postponed it on purpose.
   constrain, because that solve begins and ends inside one compute function.
   Section 12 gives the four properties that keep it safe.
 - **Collaboration.**
-- **Script libraries, export formats, DXF or other interchange formats.**
+- **Script libraries, DXF and other interchange formats.** Section 22 gives a
+  picture of the document and moves cells through the clipboard. A format that
+  another drawing program reads back is a different promise, because it commits
+  to that program's model of a drawing.
+- **A paginated format for printing.** Section 22 gives one picture at one
+  size. Pages, margins and a sheet border are a design of their own.
 - **A Rust engine.** Section 2 records it as a deferred option rather than a
   plan. `RUST_PORT.md` holds the measurements behind that, and the conditions
   that would reopen the choice. The module boundaries keep it available at a low
@@ -1529,7 +1544,216 @@ objects still evaluate and remain listed. Drawing and picking use the same
 visibility and ordering rules. Layers are released from the group deferral
 above, with compound geometry and script containers still deferred.
 
-## 19. When the spec is silent
+---
+
+## 19. The dependency overlay
+
+The graph is the whole design and nothing draws it. A bound slot shows as a grey
+grip and a mark in the panel, which says that something drives it and never says
+what. A document that wires geometry, tables, text and notation together becomes
+hard to read long before it becomes large.
+
+**A toggle draws the edges.** It is off by default, so the canvas keeps the small
+amount of furniture section 15 describes. On, it draws a curve for each ordered
+pair of objects where a slot of one reads a slot of the other, with an arrow head
+at the reading end.
+
+**One curve for each pair of objects, and not for each pair of slots.** A table
+of fifty cells that each read one variable holds fifty edges, and fifty curves
+between the same two boxes are no clearer than one. The curve carries the count
+of slot edges behind it, and selecting it lists them.
+
+**A formula that names one address twice still has one edge.** An edge exists
+because a formula reads an address, and `= table_1.A1 + table_1.A1 * 2` reads one
+address twice. Every operation below acts on the address rather than on one
+occurrence of it.
+
+**Hovering an object dims every curve that does not touch it.** So an operator
+answers what this reads and what reads this with no command at all.
+
+**A refused cycle draws.** The cycle check already returns the ring of slots it
+found, and the log names them. The overlay draws that ring, so the loop a message
+describes is also a loop an operator sees.
+
+### Rewiring by the edge
+
+Drag the reading end of a curve from one source to another and the formula behind
+it rewrites. The new address replaces the old one everywhere that formula names
+it, and the mutation is an ordinary `set` on that slot.
+
+A rewire that would close a cycle refuses, the same as any other mutation, and
+names the slot that closed it.
+
+A curve standing for more than one slot edge refuses a drag, because the gesture
+cannot say which of them it moves. Select the curve, pick a row, and rewire that
+one.
+
+### The graph as a selection
+
+These commands answer with a selection rather than with a list, so every other
+command then works on the answer.
+
+```
+upstream circle_1 [depth]    // everything it reads, through any depth
+downstream doc.speed [depth] // everything that reads it, through any depth
+orphans                      // objects that neither read nor are read
+broken                       // objects holding an error value
+find <text>                  // objects whose formulas or text hold the text
+```
+
+A delete refusal already names the slots it would break. `downstream` is that
+same answer before an operator commits to asking for it.
+
+---
+
+## 20. Arrangement
+
+An `arrange` command writes `origin.x` and `origin.y` across many objects in one
+mutation batch. It reaches the document through the channel a drag uses, and the
+same rule governs it.
+
+**Only a literal position moves.** A position a formula drives holds still, which
+is the per component rule of section 14 applied to many objects at once. The
+command reports how many it left where they were, so an arrangement that looks
+wrong carries its own reason.
+
+**An object with no `origin` slot moves by a delta on every vertex**, the same as
+a drag on an editable path, and a vertex a formula drives stays.
+
+```
+arrange flow      // rank by dependency depth, sources left, readers right
+arrange grid      // rows and columns in document order
+arrange tidy      // snap each position to the grid of section 18
+```
+
+`arrange flow` is the mode that the rest of the program pays for. The evaluation
+pass already sorts every slot into dependency order, so the rank of an object is
+a depth the program computes anyway. A document arranged that way reads left to
+right in the direction its values travel, and no other tool can arrange a drawing
+that way because no other tool knows what feeds what.
+
+`align` and `distribute` work on the selection alone, under the same rule about a
+literal position.
+
+```
+align left | right | top | bottom | centerx | centery
+distribute x | y
+```
+
+**An arrangement replaces positions an operator chose**, so it needs the undo of
+section 21 and refuses to run without it.
+
+---
+
+## 21. Undo and redo
+
+The journal holds one entry for each committed batch, and a replay rebuilds the
+objects of a document as they stood after any entry. That machinery has been
+there since the first mutation. This section gives it a surface.
+
+**A position into the journal is host state.** It sits beside the camera. Undo
+moves it back one entry and replays to there. Redo moves it forward again. The
+position is never saved to the file, and loading a document starts at the end of
+whatever journal that file carries.
+
+**A new mutation after an undo drops the entries past the position**, and then
+appends its own. So the journal stops being append only once this surface exists.
+What remains is still a journal a replay reproduces, so `journalIsComplete` holds
+over it.
+
+**The object counter never runs backwards.** Undoing a create leaves
+`nextObjectId` where it stands, because a redo needs that same ID, and an ID
+handed to a second object would attach the formulas of the first one to it.
+
+**A replay restores objects alone.** The camera and the counter never entered the
+journal, so neither of them moves. An undo that changed what an operator was
+looking at would hide its own effect.
+
+**One gesture is one entry.** A drag that commits a mutation for each frame gives
+an operator an undo for each frame, which takes a gesture apart instead of
+reversing it. A gesture commits one batch when it ends, and what it draws before
+then is a preview rather than state. The note on drag speed in section 14 already
+allows that preview.
+
+**A replay costs the whole journal.** One `mutate` call runs for each entry, so
+an undo grows with the length of a session rather than with the size of the
+change, which is what Rule 5 refuses. Periodic snapshots and recorded inverse
+operations each answer it. Whichever arrives, the differential test Rule 5 asks
+for covers it, because an undo and a replay from the start have to agree.
+
+---
+
+## 22. Moving data in and out
+
+A document that cannot leave the program is a document nobody can deliver. Saving
+gives back the JSON of section 16, which only this program reads.
+
+### A picture of the document
+
+```
+export png [scale] [selection]
+export svg [selection]
+```
+
+Both cover the extent of the document, or of the selection when asked for it. The
+raster form takes a scale, because a canvas at the size of a screen is not the
+size a reader wants.
+
+**Notation is not paint.** Mathematical notation reaches the screen as an element
+above the canvas rather than as marks on it, because the library that sets it
+returns markup and a canvas draws none. A bitmap read back from the canvas
+therefore holds every shape, every table and every word, and no notation at all.
+An export draws notation into the picture along its own path. A test compares an
+exported picture of a document holding notation against the same document without
+it, because that is a failure a person notices and a suite does not.
+
+**The vector form needs a second drawing path.** The renderer paints into a
+Canvas2D context. Geometry, text layout and measurement stay shared, and the
+backend that receives them differs. That seam is the one a GPU renderer wants as
+well, so build it once.
+
+### The clipboard
+
+**Objects.** A copy takes a new ID and the next free name. A formula inside the
+copied set that names another object of that set points at the new copy of it. A
+formula that names an object outside the set still points at the original. So
+copying a wired pair copies the wiring, and copying one half of it keeps that
+half reading the other.
+
+**Cells.** Copying a range puts tab separated values on the clipboard of the
+system, so a spreadsheet in another window reads them. It puts the formulas and
+their addresses in a clipboard of this program at the same time, so a paste
+inside the document adjusts each reference the way a table resize does.
+
+**Pasting text into a cell** reads it as tab or comma separated rows and writes
+literals. The table grows to hold them, within the row and column limits of
+section 7. Text that would pass a limit refuses and names the size it needed.
+
+A paste over a formula slot replaces the formula, because a paste is an ordinary
+set.
+
+### Reading a file in
+
+```
+import csv <corner>      // into an existing table, at a corner cell
+import csv               // into a new table
+```
+
+Growth and refusal follow the paste rules above, so one reader serves both.
+
+### Work an operator has not saved
+
+The document is dirty from the first committed mutation after a save or a load.
+Leaving the page with a dirty document warns first, and the title of the window
+shows the state.
+
+**A recovery copy sits in the storage of the browser**, written on a timer while
+the document is dirty. Opening the program offers that copy when one is there.
+This does not replace the save of section 16. It covers the tab that closed.
+
+---
+
+## 23. When the spec is silent
 
 Prefer, in this order:
 
