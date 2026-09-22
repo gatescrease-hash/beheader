@@ -338,11 +338,13 @@ function mathMeasureDependencies(): DerivedSlotDependencies {
 export const MATH_MEASURED_SLOTS: readonly DerivedSlotSchema[] = [
   {
     path: MATH_MEASURED_WIDTH_PATH,
+    usesContext: true,
     dependencies: mathMeasureDependencies(),
     compute: makeMathMeasureCompute("width"),
   },
   {
     path: MATH_MEASURED_HEIGHT_PATH,
+    usesContext: true,
     dependencies: mathMeasureDependencies(),
     compute: makeMathMeasureCompute("height"),
   },

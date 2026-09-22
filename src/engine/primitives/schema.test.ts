@@ -130,12 +130,25 @@ describe("getObjectSchema", () => {
     ]);
     const textDerivedSlots = resolveDerivedSlots(stubObject("text"), schema?.derivedSlots ?? []);
     expect(textDerivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"], ["measuredWidth"]]);
+    expect(textDerivedSlots.filter((slot) => slot.usesContext === true).map((slot) => slot.path)).toEqual([
+      ["measuredHeight"],
+      ["measuredWidth"],
+    ]);
     expect(textDerivedSlots[0]?.dependencies.kind).toBe("dynamic");
     const dependencies = textDerivedSlots.slice(1).map(slot => derivedSlotDependencyAddresses(stubObject("text"), slot.dependencies));
     expect(dependencies[0]).toEqual([["resolvedContent"], ["width"], ["style", "font"], ["style", "fontSize"], ["style", "lineHeight"]].map(path => ({ objectId: "stub", path })));
     expect(dependencies[1]).toEqual(dependencies[0]);
     const bold: GraphObject = { ...stubObject("text"), slots: { "style.bold": { kind: "literal", value: true } } };
     expect(derivedSlotDependencyAddresses(bold, textDerivedSlots[1]!.dependencies)).toEqual([...dependencies[0]!, { objectId: "stub", path: ["style", "bold"] }]);
+  });
+
+  it("marks only the measured math slots as dependent on the host context", () => {
+    const schema = getObjectSchema("math");
+    const derivedSlots = resolveDerivedSlots(stubObject("math"), schema?.derivedSlots ?? []);
+    expect(derivedSlots.filter((slot) => slot.usesContext === true).map((slot) => slot.path)).toEqual([
+      ["measuredWidth"],
+      ["measuredHeight"],
+    ]);
   });
 
   it("returns a real entry for 'image', with eight static non-derived paths and NO derived slots", () => {

@@ -114,6 +114,7 @@ export interface DerivedSlotSchema {
   readonly path: readonly string[];
   readonly dependencies: DerivedSlotDependencies;
   readonly compute: DerivedSlotCompute;
+  readonly usesContext?: true;
 }
 
 export type DerivedSlotGroup =
@@ -388,6 +389,7 @@ const TEXT_SCHEMA: ObjectSchema = {
     },
     {
       path: TEXT_MEASURED_HEIGHT_PATH,
+      usesContext: true,
       dependencies: {
         kind: "dynamic",
         resolve: (object) => [
@@ -403,6 +405,7 @@ const TEXT_SCHEMA: ObjectSchema = {
     },
     {
       path: TEXT_MEASURED_WIDTH_PATH,
+      usesContext: true,
       dependencies: {
         kind: "dynamic",
         resolve: (object) => [

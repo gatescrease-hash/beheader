@@ -46,7 +46,19 @@ const fs = require('node:fs');
     await page.getByLabel('Source for circle_1.style.strokeWidth', { exact: true }).selectOption({ label: 'By layer: GEOM' });
     saved = await save(); assert.equal(object(saved, 'circle_1').slots['style.strokeWidth'].value, 1);
 
+    const sourceControl = page.locator('.panel-row[data-path="style.strokeWidth"] .property-source');
+    const sourceBox = await sourceControl.boundingBox();
+    const valueBox = await page.locator('.panel-row[data-path="style.strokeWidth"] .panel-clip').first().boundingBox();
+    assert.ok(Math.abs(sourceBox.y - valueBox.y) < 2, 'the source control and value control share one row');
+    assert.ok(sourceBox.width < 70, 'the source control stays compact');
+    await page.screenshot({ path: 'dist/direct-edit-properties.png' });
+
     const panelBefore = await page.locator('.panel').boundingBox();
+    const canvasBefore = await page.locator('#canvas').boundingBox();
+    await page.mouse.move(canvasBefore.x + canvasBefore.width / 2, canvasBefore.y + canvasBefore.height / 2);
+    assert.equal(await page.locator('.canvas-cursor').isVisible(), true);
+    await page.mouse.move(panelBefore.x + panelBefore.width / 2, panelBefore.y + 10);
+    assert.equal(await page.locator('.canvas-cursor').isHidden(), true);
     await select('table_1');
     assert.equal((await page.locator('.panel').boundingBox()).x, panelBefore.x);
     const header = await page.locator('.panel-header').boundingBox();

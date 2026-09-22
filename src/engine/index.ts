@@ -28,6 +28,7 @@
 export * from "./address.ts";
 export * from "./complete.ts";
 export * from "./document.ts";
+export * from "./differential.ts";
 export * from "./eval-context.ts";
 export * from "./journal.ts";
 export * from "./mutation.ts";
@@ -35,7 +36,8 @@ export * from "./mutation.ts";
 export * from "./graph/edge.ts";
 export * from "./graph/cycles.ts";
 export * from "./graph/node.ts";
-export { evaluate as evaluateGraph } from "./graph/eval.ts";
+export type { SlotEvaluationObserver } from "./graph/eval.ts";
+export { evaluate as evaluateGraph, evaluateAffected } from "./graph/eval.ts";
 
 export * from "./formula/ast.ts";
 export * from "./formula/parser.ts";

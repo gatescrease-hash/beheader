@@ -24,6 +24,13 @@
  * Loading a document uses a batch, so a corrupt file fails as a single unit
  * rather than leaving half its objects behind.
  *
+ * Evaluation defaults to the downstream closure of each operation target and
+ * any uncached input needed by that closure. Operations that remove or rewire
+ * dependencies also consult the committed edge set, so their former consumers
+ * remain affected. Text and math measurement slots are roots on every mutation
+ * because EvalContext is an input outside the graph. Full recomputation remains
+ * available as the reference strategy for differential tests.
+ *
  * deleteVertex is the one operation that refuses before staging rather than
  * after. Every other refuse-by-default deletion frees an ID or a coordinate
  * that never comes back, so a leftover reference to it dangles and step 4
@@ -38,7 +45,9 @@
  * This file and primitives/schema.ts have to agree about every slot path,
  * and both read the schema through the same resolver. Two resolvers would
  * drift apart on a dynamic slot family such as a table's cells, and no test
- * would go red when they did.
+ * would go red when they did. Edge derivation and integrity validation each
+ * build one object index, so resolving formula addresses stays constant-time
+ * within either phase.
  *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so
  * the tests run headless and the file can move to Rust later.
@@ -74,7 +83,7 @@ import {
   enumerateRangeCellAddresses,
   getTableDimensions,
   insertTableLine,
-  isInExtentTableCellAddress,
+  isInExtentTableCellAddressForObject,
   isRangeEnumerationError,
   isTableDimensionResizable,
   MAX_TABLE_LINES,
@@ -88,8 +97,8 @@ import {
 import { applyMathSource, isMathSourceError, MATH_SOURCE_PATH, readMathNames, unresolvedMathReferences } from "./primitives/math.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
-import { evaluate } from "./graph/eval.ts";
-import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE_TYPE, resolveSlot, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
+import { evaluate, evaluateAffected, type SlotEvaluationObserver } from "./graph/eval.ts";
+import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE_TYPE, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Step 3 rebuilds the whole edge set from stored ASTs and from the schema. It
@@ -97,6 +106,7 @@ import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE
  */
 export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
   const edges: Edge[] = [];
+  const objectsById = new Map(objects.map((object) => [object.id, object]));
 
   for (const object of objects) {
     const schema = getObjectSchema(object.type);
@@ -112,13 +122,14 @@ export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
       const dependentSlot = { objectId: object.id, path };
       for (const dependency of extractDependencies(slot.ast)) {
         if (dependency.kind === "reference") {
-          if (resolveSlot(dependency.address, objects) === undefined && isInExtentTableCellAddress(dependency.address, objects)) {
+          const sourceObject = objectsById.get(dependency.address.objectId);
+          if (sourceObject?.slots[slotKey(dependency.address.path)] === undefined && isInExtentTableCellAddressForObject(dependency.address, sourceObject)) {
             continue;
           }
           edges.push({ sourceSlot: dependency.address, dependentSlot });
           continue;
         }
-        const tableObject = objects.find((candidate) => candidate.id === dependency.start.objectId);
+        const tableObject = objectsById.get(dependency.start.objectId);
         if (tableObject === undefined) {
           edges.push({ sourceSlot: dependency.start, dependentSlot });
           continue;
@@ -158,6 +169,7 @@ export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false;
  * later cycle check over an edge set that nobody trusts proves nothing.
  */
 export function validateIntegrity(objects: readonly GraphObject[], edges: readonly Edge[]): IntegrityCheckResult {
+  const objectsById = new Map(objects.map((object) => [object.id, object]));
   const problem = layerProblem(objects);
   if (problem) return { ok: false, message: problem };
   // The doc object is a singleton under a fixed name, because a bare name
@@ -208,7 +220,7 @@ export function validateIntegrity(objects: readonly GraphObject[], edges: readon
     return { ok: false, message: schemaKindMismatchProblems.join("; ") };
   }
 
-  const danglingReferenceProblems = findDanglingReferences(objects, edges);
+  const danglingReferenceProblems = findDanglingReferences(objects, objectsById, edges);
   if (danglingReferenceProblems.length > 0) {
     return { ok: false, message: danglingReferenceProblems.join("; ") };
   }
@@ -225,9 +237,176 @@ export type GraphEvaluationResult =
   | { readonly ok: true; readonly objects: readonly GraphObject[] }
   | { readonly ok: false; readonly message: string };
 
+export interface EvaluationStrategyInput {
+  readonly previousObjects: readonly GraphObject[];
+  readonly stagedObjects: readonly GraphObject[];
+  readonly edges: readonly Edge[];
+  readonly operations: readonly Operation[];
+  readonly context: EvalContext;
+}
+
+export type EvaluationStrategy = (input: EvaluationStrategyInput) => readonly GraphObject[];
+
+/** Recomputes every slot and supplies the reference side of differential tests. */
+export const FULL_EVALUATION_STRATEGY: EvaluationStrategy = ({ stagedObjects, edges, context }) =>
+  evaluate(stagedObjects, edges, context);
+
+function objectSlotAddresses(object: GraphObject): readonly Address[] | undefined {
+  const schema = getObjectSchema(object.type);
+  if (schema === undefined) {
+    return undefined;
+  }
+  const paths = [
+    ...resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths),
+    ...resolveDerivedSlots(object, schema.derivedSlots).map((entry) => entry.path),
+  ];
+  return paths
+    .filter((path) => object.slots[slotKey(path)] !== undefined)
+    .map((path) => ({ objectId: object.id, path }));
+}
+
+function operationDirtyRoots(input: EvaluationStrategyInput): readonly Address[] | undefined {
+  const previousById = new Map(input.previousObjects.map((object) => [object.id, object]));
+  const stagedById = new Map(input.stagedObjects.map((object) => [object.id, object]));
+  const roots: Address[] = [];
+
+  for (const object of input.stagedObjects) {
+    const schema = getObjectSchema(object.type);
+    if (schema === undefined) {
+      continue;
+    }
+    for (const entry of resolveDerivedSlots(object, schema.derivedSlots)) {
+      if (entry.usesContext === true && object.slots[slotKey(entry.path)] !== undefined) {
+        roots.push({ objectId: object.id, path: entry.path });
+      }
+    }
+  }
+
+  for (const operation of input.operations) {
+    if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
+      roots.push(operation.address);
+      continue;
+    }
+    const objectId = operationTargetId(operation);
+    for (const object of [previousById.get(objectId), stagedById.get(objectId)]) {
+      if (object === undefined) {
+        continue;
+      }
+      const addresses = objectSlotAddresses(object);
+      if (addresses === undefined) {
+        return undefined;
+      }
+      roots.push(...addresses);
+    }
+  }
+  return roots;
+}
+
+function affectedSlotAddresses(input: EvaluationStrategyInput): readonly Address[] | undefined {
+  const roots = operationDirtyRoots(input);
+  if (roots === undefined) {
+    return undefined;
+  }
+  const needsPreviousEdges = input.operations.some((operation) =>
+    operation.kind === "clearSlot"
+    || operation.kind === "deleteObject"
+    || operation.kind === "deleteTableLine"
+    || operation.kind === "renameObject"
+    || operation.kind === "deleteVertex"
+    || operation.kind === "explode");
+  const previousEdges = needsPreviousEdges ? deriveEdges(input.previousObjects) : [];
+  const stagedById = new Map(input.stagedObjects.map((object) => [object.id, object]));
+  const outgoing = new Map<string, Address[]>();
+  const incoming = new Map<string, Address[]>();
+  for (const edge of [...previousEdges, ...input.edges]) {
+    const key = addressKey(edge.sourceSlot);
+    const dependents = outgoing.get(key);
+    if (dependents === undefined) {
+      outgoing.set(key, [edge.dependentSlot]);
+    } else {
+      dependents.push(edge.dependentSlot);
+    }
+  }
+  for (const edge of input.edges) {
+    const key = addressKey(edge.dependentSlot);
+    const sources = incoming.get(key);
+    if (sources === undefined) {
+      incoming.set(key, [edge.sourceSlot]);
+    } else {
+      sources.push(edge.sourceSlot);
+    }
+  }
+
+  const affected = new Map<string, Address>();
+  const queue: Address[] = [];
+  for (const root of roots) {
+    const key = addressKey(root);
+    if (!affected.has(key)) {
+      affected.set(key, root);
+      queue.push(root);
+    }
+  }
+  for (let index = 0; index < queue.length; index += 1) {
+    const source = queue[index]!;
+    for (const dependent of outgoing.get(addressKey(source)) ?? []) {
+      const key = addressKey(dependent);
+      if (affected.has(key)) {
+        continue;
+      }
+      affected.set(key, dependent);
+      queue.push(dependent);
+    }
+  }
+  // A committed graph supplies cached values outside the dirty downstream
+  // closure. Engine callers can also pass a fresh fixture whose formula and
+  // derived caches still hold null. Those uncached inputs join the evaluation
+  // set recursively, while populated caches and literal values stay outside.
+  for (let index = 0; index < queue.length; index += 1) {
+    const dependent = queue[index]!;
+    for (const source of incoming.get(addressKey(dependent)) ?? []) {
+      const key = addressKey(source);
+      if (affected.has(key)) {
+        continue;
+      }
+      const sourceSlot = stagedById.get(source.objectId)?.slots[slotKey(source.path)];
+      if (sourceSlot?.kind === "literal" || sourceSlot?.value !== null) {
+        continue;
+      }
+      affected.set(key, source);
+      queue.push(source);
+    }
+  }
+  return [...affected.values()];
+}
+
+/** Builds an incremental strategy, with an optional observer for cost tests. */
+export function createIncrementalEvaluationStrategy(
+  observer?: SlotEvaluationObserver,
+): EvaluationStrategy {
+  return (input) => {
+    const affected = affectedSlotAddresses(input);
+    if (affected === undefined) {
+      return FULL_EVALUATION_STRATEGY(input);
+    }
+    return evaluateAffected(input.stagedObjects, input.edges, affected, input.context, observer);
+  };
+}
+
+export const INCREMENTAL_EVALUATION_STRATEGY = createIncrementalEvaluationStrategy();
+
 export function deriveValidateAndEvaluate(
   objects: readonly GraphObject[],
   context: EvalContext = NULL_EVAL_CONTEXT,
+): GraphEvaluationResult {
+  return deriveValidateAndEvaluateWithStrategy(objects, objects, [], context, FULL_EVALUATION_STRATEGY);
+}
+
+function deriveValidateAndEvaluateWithStrategy(
+  objects: readonly GraphObject[],
+  previousObjects: readonly GraphObject[],
+  operations: readonly Operation[],
+  context: EvalContext,
+  evaluationStrategy: EvaluationStrategy,
 ): GraphEvaluationResult {
   const edges = deriveEdges(objects);
 
@@ -241,7 +420,10 @@ export function deriveValidateAndEvaluate(
     return { ok: false, message: formatCycleRejection(cycleCheck.cycle, objects) };
   }
 
-  return { ok: true, objects: evaluate(objects, edges, context) };
+  return {
+    ok: true,
+    objects: evaluationStrategy({ previousObjects, stagedObjects: objects, edges, operations, context }),
+  };
 }
 
 function formatCycleRejection(cycle: readonly Address[], objects: readonly GraphObject[]): string {
@@ -764,6 +946,7 @@ export function mutate(
   operations: readonly Operation[],
   journal: readonly MutationJournalEntry[],
   context: EvalContext = NULL_EVAL_CONTEXT,
+  evaluationStrategy: EvaluationStrategy = INCREMENTAL_EVALUATION_STRATEGY,
 ): MutationResult {
   if (operations.length === 0) {
     return { ok: false, message: "a mutation batch must contain at least one operation" };
@@ -919,7 +1102,13 @@ export function mutate(
     folded = { objects: applied.objects, brokenSlots: [...folded.brokenSlots, ...applied.brokenSlots] };
   }
 
-  const result = deriveValidateAndEvaluate(folded.objects, context);
+  const result = deriveValidateAndEvaluateWithStrategy(
+    folded.objects,
+    objects,
+    operations,
+    context,
+    evaluationStrategy,
+  );
   if (!result.ok) {
     return result;
   }
@@ -1033,11 +1222,15 @@ function formatSchemaAddress(address: Address, objects: readonly GraphObject[]):
   return isAddressError(formatted) ? formatted.message : formatted;
 }
 
-function findDanglingReferences(objects: readonly GraphObject[], edges: readonly Edge[]): readonly string[] {
+function findDanglingReferences(
+  objects: readonly GraphObject[],
+  objectsById: ReadonlyMap<string, GraphObject>,
+  edges: readonly Edge[],
+): readonly string[] {
   const dependentsByMissingSource = new Map<string, Address[]>();
 
   for (const edge of edges) {
-    if (resolveSlot(edge.sourceSlot, objects) !== undefined) {
+    if (objectsById.get(edge.sourceSlot.objectId)?.slots[slotKey(edge.sourceSlot.path)] !== undefined) {
       continue;
     }
     const key = addressKey(edge.sourceSlot);
@@ -1057,7 +1250,7 @@ function findDanglingReferences(objects: readonly GraphObject[], edges: readonly
     });
     const verb = names.length === 1 ? "references" : "reference";
     const source = edges.find((edge) => addressKey(edge.sourceSlot) === key)?.sourceSlot;
-    const object = objects.find((object) => object.id === source?.objectId);
+    const object = source === undefined ? undefined : objectsById.get(source.objectId);
     const schema = object === undefined ? undefined : getObjectSchema(object.type);
     let detail = "";
     if (source !== undefined && object !== undefined && schema !== undefined) {

@@ -50,6 +50,69 @@ function expectSameEdges(actual: readonly Edge[], expected: readonly Edge[]): vo
   expect(actual).toHaveLength(expected.length);
 }
 
+function referenceChain(size: number): readonly GraphObject[] {
+  return Array.from({ length: size }, (_, index): GraphObject => ({
+    id: `obj_${index}`,
+    name: `value_${index}`,
+    type: "value",
+    slots: {
+      value: index === 0
+        ? { kind: "literal", value: 0 }
+        : {
+            kind: "formula",
+            ast: { type: "reference", address: addr(`obj_${index - 1}`, "value") },
+            value: null,
+          },
+    },
+  }));
+}
+
+function countObjectIndexReads(
+  objects: readonly GraphObject[],
+  run: (measured: readonly GraphObject[]) => void,
+): number {
+  let reads = 0;
+  const measured = new Proxy(objects, {
+    get(target, property, receiver) {
+      if (typeof property === "string" && /^(?:0|[1-9][0-9]*)$/.test(property)) {
+        reads += 1;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  run(measured);
+  return reads;
+}
+
+function expectLinearObjectReads(measurements: readonly { readonly size: number; readonly reads: number }[]): void {
+  const readsPerObject = measurements.map(({ size, reads }) => reads / size);
+  expect(Math.max(...readsPerObject) / Math.min(...readsPerObject)).toBeLessThan(1.05);
+}
+
+describe("deriveEdges and validateIntegrity object lookup scaling", () => {
+  it("keeps both phases proportional to object count across three generated document sizes", () => {
+    const sizes = [250, 500, 1000] as const;
+    const deriveMeasurements = sizes.map((size) => {
+      const objects = referenceChain(size);
+      const reads = countObjectIndexReads(objects, (measured) => {
+        expect(deriveEdges(measured)).toHaveLength(size - 1);
+      });
+      return { size, reads };
+    });
+    const integrityMeasurements = sizes.map((size) => {
+      const objects = referenceChain(size);
+      const edges = deriveEdges(objects);
+      const reads = countObjectIndexReads(objects, (measured) => {
+        expect(validateIntegrity(measured, edges)).toEqual({ ok: true });
+      });
+      return { size, reads };
+    });
+
+    expectLinearObjectReads(deriveMeasurements);
+    expectLinearObjectReads(integrityMeasurements);
+  });
+});
+
 describe("deriveEdges — the value and add fixture", () => {
   it("derives the binding edges (in.a/in.b) and the derived-slot dependency edges (out.result), and nothing else", () => {
     const objects = [

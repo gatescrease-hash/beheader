@@ -57,12 +57,17 @@ export function cellAddressToCoordinates(address: Address): { readonly column: n
  * An empty cell inside the extent is normal state, not a dangling reference.
  */
 export function isInExtentTableCellAddress(address: Address, objects: readonly GraphObject[]): boolean {
+  const tableObject = objects.find((candidate) => candidate.id === address.objectId);
+  return isInExtentTableCellAddressForObject(address, tableObject);
+}
+
+/** The object-indexed form used when the caller has already resolved the ID. */
+export function isInExtentTableCellAddressForObject(address: Address, tableObject: GraphObject | undefined): boolean {
   const coordinates = cellAddressToCoordinates(address);
   if (coordinates === undefined) {
     return false;
   }
-  const tableObject = objects.find((candidate) => candidate.id === address.objectId);
-  if (tableObject === undefined || tableObject.type !== TABLE_TYPE) {
+  if (tableObject === undefined || tableObject.id !== address.objectId || tableObject.type !== TABLE_TYPE) {
     return false;
   }
   const { rows, cols } = getTableDimensions(tableObject);

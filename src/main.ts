@@ -1093,7 +1093,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const threads = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   threads.classList.add("property-threads");
   panelsContainer.append(threads);
-  const cursor = document.createElement("div"); cursor.className = "canvas-cursor";
+  const cursor = document.createElement("div"); cursor.className = "canvas-cursor"; cursor.hidden = true;
   canvas.parentElement?.append(cursor);
   const cellHighlight = document.createElement("div"); cellHighlight.className = "cell-highlight";
   canvas.parentElement?.append(cellHighlight);
@@ -1716,7 +1716,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       const row = element.querySelector<HTMLElement>(`.panel-row[data-path="${key}"]`);
       if (!row) continue;
       const select = document.createElement("select");
-      select.className = "property-source";
+      select.className = "property-source__select";
       select.setAttribute("aria-label", `Source for ${object.name}.${key}`);
       select.add(new Option("Local override", "local"));
       const own = layerId(object);
@@ -1725,11 +1725,19 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
       const slot = getSlot(object, path);
       select.value = slot?.kind === "formula" && slot.ast.type === "reference" && state.document.objects.some(item => item.type === "layer" && item.id === (slot.ast.type === "reference" ? slot.ast.address.objectId : "")) ? slot.ast.address.objectId : "local";
+      const source = document.createElement("span");
+      source.className = "property-source";
+      const sourceLabel = document.createElement("span");
+      sourceLabel.className = "property-source__label";
+      const selectedLayer = state.document.objects.find(item => item.type === "layer" && item.id === select.value);
+      sourceLabel.textContent = selectedLayer?.name ?? "Own";
+      source.title = select.options[select.selectedIndex]?.text ?? "Choose the property source";
+      source.append(sourceLabel, select);
       select.addEventListener("change", () => {
         const selected = state.interaction.selectedObjectIds.includes(object.id) ? state.document.objects.filter(item => state.interaction.selectedObjectIds.includes(item.id) && stylePaths(item).some(candidate => candidate.join(".") === key)) : [object];
         applyOperations(selected.map(item => select.value === "local" ? setLiteral(item.id, path, getSlot(item, path)?.value ?? null) : inheritStyle(item.id, path, select.value)));
       });
-      row.append(select);
+      row.querySelector(".panel-row__right")?.prepend(source);
     }
   };
 
@@ -2276,6 +2284,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   canvas.addEventListener("pointermove", (event: PointerEvent) => {
     const point = screenPointOf(event);
     const bounds = canvas.getBoundingClientRect();
+    cursor.hidden = false;
     cursor.style.left = `${event.clientX - bounds.left}px`;
     cursor.style.top = `${event.clientY - bounds.top}px`;
     if (tableResize) {
@@ -2293,6 +2302,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const boundary = tableBoundaryAt(point);
     canvas.style.cursor = boundary ? boundary.axis === "column" ? "col-resize" : "row-resize" : overHandle !== undefined ? resizeCursor(overHandle) : overGrip === undefined ? "" : "pointer";
     apply(pointerMoveTo(state, point, evalContext));
+  });
+
+  canvas.addEventListener("pointerleave", () => {
+    cursor.hidden = true;
   });
 
   const endGesture = (event: PointerEvent): void => {
@@ -2324,7 +2337,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   panelsContainer.addEventListener("pointerdown", (event: PointerEvent) => {
     const target = event.target as HTMLElement;
-    const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice, .panel-row__color, .property-source") !== null;
+    const insideOpenEditor = target.closest(".panel-row__input, .panel-row__choice, .panel-row__color, .property-source__select") !== null;
     if (!insideOpenEditor) {
       event.preventDefault();
     }

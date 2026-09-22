@@ -15,10 +15,10 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2763 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 18, except the parts section 17 postpones. Sections 19 to 22 and Rule 5 are specified and unbuilt. |
-| Rule 5 | Not met. One mutation costs time proportional to the whole document, through the clone, the edge derivation, the integrity check, the cycle search and the evaluation pass alike. |
-| Workspace | Compact typography, a profile helmet, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
+| Tests | 2774 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 18, except the parts section 17 postpones. Sections 19 to 22 are unbuilt, and Rule 5 is partly built. |
+| Rule 5 | Not met. Object ID lookups are indexed, and mutations evaluate the dirty graph region under a differential test. The clone and cycle search still cost the whole document. |
+| Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
 
@@ -112,11 +112,12 @@ tables, and other suites drive them anyway.
 | --- | --- |
 | `address.ts` | Addressing: object IDs, names, paths, and the A1 cell helpers. |
 | `complete.ts` | What a half typed object name or address could still become, and the addresses a formula reads. |
+| `differential.ts` | Generated mutation scenarios and comparison of two evaluation strategies. |
 | `eval-context.ts` | The `TextMeasurer` interface and the context that carries it. |
 | `graph/node.ts` | The data model: values, the three slot kinds, `GraphObject` and `slotKey`. |
 | `graph/edge.ts` | The `Edge` record and `addressKey`. |
 | `graph/cycles.ts` | Cycle detection over the edge set. |
-| `graph/eval.ts` | The topological pass that evaluates every slot. |
+| `graph/eval.ts` | Full and affected topological evaluation passes. |
 | `formula/lexer.ts` | Formula text to tokens. |
 | `formula/parser.ts` | Tokens to an AST, with object names resolved to IDs. |
 | `formula/ast.ts` | The AST node types, and their shape and depth checks. |
@@ -138,7 +139,7 @@ tables, and other suites drive them anyway.
 | `math/names.ts` | Which names are bound, which are defined, which are solved for, and which become input ports. |
 | `math/eval.ts` | A program and its inputs to a value for each export, the search for a root included. |
 | `script/stub.ts` | The script node and its ports. |
-| `mutation.ts` | The one channel for state change, and every operation it accepts. |
+| `mutation.ts` | The state-change channel, its operations and evaluation strategies. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
 | `document.ts` | Save and load, and the versioned JSON format. |
 | `index.ts` | The public surface of the engine. |
@@ -306,6 +307,16 @@ the code it constrains.
    letters it belongs to, which is the failure the invariant above describes,
    reached from the other direction. Each pair is written as one selector in
    both files for that reason.
+20. **The differential runner changes evaluation only.** Both strategies pass
+   through `mutate`, so they share preflight, application, integrity, cycle and
+   journal behavior. `mutate` uses incremental evaluation when its caller
+   supplies no strategy, while full recomputation remains the reference side
+   of the differential test.
+21. **A host context is an input outside the graph.** Text and math measurement
+   slots declare that dependency in their schema entries, so every mutation
+   refreshes those slots from the supplied context even when its operations
+   dirty another component. Other derived slots enter the affected set through
+   graph edges alone.
 
 ---
 
