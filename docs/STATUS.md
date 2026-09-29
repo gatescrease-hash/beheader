@@ -15,8 +15,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2778 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 18, except the parts section 17 postpones. Sections 19 to 22 are unbuilt, and Rule 5 is partly built. |
+| Tests | 2794 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 18, except the parts section 17 postpones, and section 21. Sections 19, 20 and 22 are unbuilt, and Rule 5 is partly built. |
 | Rule 5 | Not met. Evaluation covers the dirty region, and staging shares untouched records. Edge derivation, the integrity check and the cycle search still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
@@ -326,6 +326,16 @@ the code it constrains.
    freeze the state they pass in, which turns such a write into a thrown
    `TypeError` in the suite, but nothing freezes the state the application
    holds.
+23. **A gesture is one journal entry, although its frames commit one at a
+   time.** `interaction.ts` commits a mutation for each frame of a drag, a
+   resize or a bend, so the canvas draws the object where the pointer is.
+   `pointerDownAt` in `main.ts` keeps the document as it stood at the press, and
+   `pointerUpNow` commits the frames again as one batch against it, built by
+   `gestureOperations` in `journal.ts`, which replaces the frames in the
+   journal. A gesture that commits anything through another path between the
+   press and the release keeps its frames, because the journal no longer
+   continues from the press. An undo refuses while a gesture is under way for
+   the same reason.
 
 ---
 

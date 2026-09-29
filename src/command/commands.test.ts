@@ -815,6 +815,8 @@ describe("every registry command reaches a handler", () => {
     "fit",
     "save",
     "load",
+    "undo",
+    "redo",
   ];
 
   it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {
@@ -829,7 +831,7 @@ describe("every registry command reaches a handler", () => {
   });
 });
 
-describe("the effect commands — select, zoom, fit, save, load", () => {
+describe("the effect commands — select, zoom, fit, save, load, undo, redo", () => {
   function sandbox(): Document {
     return committed("table x=0 y=0 rows=2 cols=2", committed("polygon sides=5 x=10 y=20 r=50", createEmptyDocument()));
   }
@@ -942,6 +944,16 @@ describe("the effect commands — select, zoom, fit, save, load", () => {
       expect(succeeded("refs polygon_1", document).effect).toBeUndefined();
     });
 
+    it("hands undo and redo to the host unchanged, because the undo position is host state and not part of the document", () => {
+      const document = sandbox();
+      for (const kind of ["undo", "redo"] as const) {
+        const outcome = succeeded(kind, document);
+        expect(outcome.effect).toEqual({ kind });
+        expect(outcome.document).toBe(document);
+        expect(outcome.lines).toEqual([]);
+      }
+    });
+
     it("gives a command that CHANGES the document none either — the new document is the whole result", () => {
       expect(succeeded("circle x=0 y=0 r=1", createEmptyDocument()).effect).toBeUndefined();
       expect(succeeded("set polygon_1.radius 9", sandbox()).effect).toBeUndefined();
@@ -949,7 +961,7 @@ describe("the effect commands — select, zoom, fit, save, load", () => {
 
     it("is plain, serializable data — no function survives a JSON round trip, so this pins the rule mechanically", () => {
       const document = sandbox();
-      for (const line of ["select polygon_1", "zoom 2", "fit", "save", "load"]) {
+      for (const line of ["select polygon_1", "zoom 2", "fit", "save", "load", "undo", "redo"]) {
         const effect = succeeded(line, document).effect;
         expect(JSON.parse(JSON.stringify(effect))).toEqual(effect);
       }

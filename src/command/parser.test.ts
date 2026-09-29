@@ -74,6 +74,8 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "fit", command: { kind: "fit" } },
   { line: "save", command: { kind: "save" } },
   { line: "load", command: { kind: "load" } },
+  { line: "undo", command: { kind: "undo" } },
+  { line: "redo", command: { kind: "redo" } },
 ];
 
 describe("the command registry (table driven, one entry per command)", () => {

@@ -415,6 +415,19 @@ export function deriveValidateAndEvaluate(
   return deriveValidateAndEvaluateWithStrategy(objects, objects, [], context, FULL_EVALUATION_STRATEGY);
 }
 
+/**
+ * Evaluates again the slots that read the evaluation context, and everything
+ * downstream of them, without a journal entry. A state taken earlier, such as
+ * an undo checkpoint, holds measurements from the context of its own time, and
+ * this brings them to the context passed in.
+ */
+export function refreshHostInputs(
+  objects: readonly GraphObject[],
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): GraphEvaluationResult {
+  return deriveValidateAndEvaluateWithStrategy(objects, objects, [], context, INCREMENTAL_EVALUATION_STRATEGY);
+}
+
 function deriveValidateAndEvaluateWithStrategy(
   objects: readonly GraphObject[],
   previousObjects: readonly GraphObject[],

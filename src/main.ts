@@ -38,6 +38,12 @@ import {
   mathSourceWithIds,
   mathSourceWithNames,
   mutate,
+  gestureOperations,
+  redoJournal,
+  startUndoHistory,
+  undoJournal,
+  type MutationJournalEntry,
+  type UndoHistory,
   type Document,
   type EvalContext,
   formatFormula,
@@ -138,6 +144,15 @@ export interface AppState {
   readonly panels: PanelUiRegistry;
   /** Where the pointer sits in world units. A half finished command draws to it. */
   readonly pointer: WorldPoint | undefined;
+  /** The undone entries and the undo checkpoints, which a saved file never carries. */
+  readonly history: UndoHistory;
+  /** The document as it stood at the press of a drag, a resize or a bend, while one is under way. */
+  readonly gesture: GestureBase | undefined;
+}
+
+export interface GestureBase {
+  readonly objects: readonly GraphObject[];
+  readonly journal: readonly MutationJournalEntry[];
 }
 
 export type FileRequest = "save" | "load";
@@ -151,7 +166,13 @@ export interface AppTransition {
   readonly pickImageFor?: string;
 }
 
-export function initialAppState(document: Document, log: readonly string[] = []): AppState {
+/**
+ * The state a document starts in. Taking up the undo history replays the
+ * journal once, so the context has to be the one the host measures with, or
+ * the replayed measurements differ from the loaded ones and undo stops at the
+ * point the document opened.
+ */
+export function initialAppState(document: Document, log: readonly string[] = [], context: EvalContext = NULL_EVAL_CONTEXT): AppState {
   return {
     document: { ...document, camera: clampCamera(document.camera) },
     interaction: INITIAL_INTERACTION_STATE,
@@ -159,6 +180,8 @@ export function initialAppState(document: Document, log: readonly string[] = [])
     pointer: undefined,
     log,
     panels: {},
+    history: startUndoHistory(document.objects, document.journal, context),
+    gesture: undefined,
   };
 }
 
@@ -285,7 +308,7 @@ function advance(state: AppState, session: CommandSession, viewport: Viewport, c
       }
       const executed = withLog({ ...cleared, document: outcome.document }, outcome.lines);
       if (outcome.effect !== undefined) {
-        return performEffect(outcome.effect, executed, viewport);
+        return performEffect(outcome.effect, executed, viewport, context);
       }
       if (session.command.kind === "text" && session.command.content === "" && outcome.createdObjectId !== undefined) {
         return { state: executed, fileRequest: undefined, refused: false, openEditor: { kind: "text", objectId: outcome.createdObjectId } };
@@ -334,8 +357,12 @@ export const FIT_VIEWPORT_FRACTION = 0.9;
 
 export const WHEEL_ZOOM_STEP = 1.1;
 
-export function performEffect(effect: CommandEffect, state: AppState, viewport: Viewport): AppTransition {
+export function performEffect(effect: CommandEffect, state: AppState, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
   switch (effect.kind) {
+    case "undo":
+      return undoLast(state, context);
+    case "redo":
+      return redoLast(state, context);
     case "select":
       return transition(withInteraction(state, { ...INITIAL_INTERACTION_STATE, selectedObjectIds: [effect.objectId] }));
     case "zoom":
@@ -396,6 +423,71 @@ function describeZoom(actual: number, requested: number): string {
     : `zoom is now ${roundedZoom(actual)} — clamped to the ${MIN_ZOOM}-${MAX_ZOOM} range`;
 }
 
+/**
+ * Steps back over the last journal entry. The camera, the counter and the
+ * command line stay where they are, and the selection keeps the objects that
+ * still exist, so the operator looks at the same place and sees the change go.
+ */
+export function undoLast(state: AppState, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  if (state.gesture !== undefined) {
+    return transition(withLog(state, ["finish the drag before undoing"]), true);
+  }
+  const result = undoJournal(state.document.journal, state.history, context);
+  if (!result.ok) {
+    return transition(withLog(state, [result.message]), true);
+  }
+  const undone = result.history.undone.length;
+  return transition(withLog(restoreJournal(state, result.objects, result.journal, result.history), [
+    `undid ${describeEntry(result.entry, state.document.objects, result.objects)} — ${result.journal.length - state.history.floor} more to undo, ${undone} to redo`,
+  ]));
+}
+
+export function redoLast(state: AppState, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  if (state.gesture !== undefined) {
+    return transition(withLog(state, ["finish the drag before redoing"]), true);
+  }
+  const result = redoJournal(state.document.objects, state.document.journal, state.history, context);
+  if (!result.ok) {
+    return transition(withLog(state, [result.message]), true);
+  }
+  return transition(withLog(restoreJournal(state, result.objects, result.journal, result.history), [
+    `redid ${describeEntry(result.entry, result.objects, state.document.objects)} — ${result.history.undone.length} more to redo`,
+  ]));
+}
+
+function restoreJournal(
+  state: AppState,
+  objects: readonly GraphObject[],
+  journal: readonly MutationJournalEntry[],
+  history: UndoHistory,
+): AppState {
+  const present = new Set(objects.map((object) => object.id));
+  const selected = state.interaction.selectedObjectIds.filter((id) => present.has(id));
+  const interaction = selected.length === state.interaction.selectedObjectIds.length
+    ? state.interaction
+    : { ...INITIAL_INTERACTION_STATE, selectedObjectIds: selected };
+  return withInteraction({ ...state, document: { ...state.document, objects, journal }, history }, interaction);
+}
+
+/**
+ * One journal entry as the log names it. The names come from the states on
+ * both sides of the entry, because an undone create and a redone delete each
+ * leave the object in one of them only.
+ */
+function describeEntry(entry: MutationJournalEntry, ...states: readonly (readonly GraphObject[])[]): string {
+  const names: string[] = [];
+  for (const operation of entry.operations) {
+    const id = operation.kind === "createObject"
+      ? operation.object.id
+      : "objectId" in operation ? operation.objectId : operation.address.objectId;
+    const name = states.flat().find((object) => object.id === id)?.name ?? id;
+    if (!names.includes(name)) names.push(name);
+  }
+  const shown = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
+  const count = entry.operations.length === 1 ? "one change" : `${entry.operations.length} changes`;
+  return `${count} to ${shown}`;
+}
+
 export function pointerDownAt(
   state: AppState,
   screenPoint: ScreenPoint,
@@ -407,7 +499,10 @@ export function pointerDownAt(
     const world = screenToWorld(state.document.camera, screenPoint);
     return respondToPrompt({ ...state, pointer: world }, { kind: "picked", point: { x: world.x, y: world.y } }, viewport, context);
   }
-  return transition(withInteraction(state, pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive)));
+  const interaction = pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive);
+  const gestures = interaction.drag !== undefined || interaction.resize !== undefined || interaction.bend !== undefined;
+  const gesture = gestures ? { objects: state.document.objects, journal: state.document.journal } : undefined;
+  return transition(withInteraction({ ...state, gesture }, interaction));
 }
 
 export function pointerMoveTo(
@@ -433,8 +528,35 @@ export function pointerMoveTo(
   return withLog(moved, lines);
 }
 
-export function pointerUpNow(state: AppState): AppState {
-  return { ...state, interaction: pointerUp(state.interaction) };
+/**
+ * Ends a gesture. A drag commits a mutation for each frame so the canvas can
+ * draw it, and an undo of those entries would take the gesture apart one frame
+ * at a time. So the frames are committed again here as one batch, against the
+ * state from before the press, and the journal holds a single entry for the
+ * whole gesture. The batch writes the same final values the frames did, so the
+ * objects on screen stay where the last frame left them.
+ *
+ * The frames stay as they are when the journal no longer continues from the
+ * state at the press, which is the case when something else committed in the
+ * meantime, or when the batch refuses.
+ */
+export function pointerUpNow(state: AppState, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
+  const ended: AppState = { ...state, interaction: pointerUp(state.interaction), gesture: undefined };
+  const base = state.gesture;
+  const journal = state.document.journal;
+  if (base === undefined || journal.length <= base.journal.length + 1) {
+    return ended;
+  }
+  const continues = base.journal.length === 0 || journal[base.journal.length - 1] === base.journal[base.journal.length - 1];
+  if (!continues) {
+    return ended;
+  }
+  const operations = gestureOperations(journal.slice(base.journal.length));
+  const result = mutate(base.objects, operations, base.journal, context);
+  if (!result.ok) {
+    return ended;
+  }
+  return { ...ended, document: { ...ended.document, objects: result.objects, journal: result.journal } };
 }
 
 export function wheelZoomAt(state: AppState, screenPoint: ScreenPoint, wheelDeltaY: number): AppState {
@@ -451,8 +573,8 @@ export function logLine(state: AppState, line: string): AppState {
   return withLog(state, [line]);
 }
 
-export function replaceDocument(state: AppState, document: Document, line: string): AppState {
-  return withLog(initialAppState(document, state.log), [line]);
+export function replaceDocument(state: AppState, document: Document, line: string, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
+  return withLog(initialAppState(document, state.log, context), [line]);
 }
 
 export interface PanelRow {
@@ -1689,7 +1811,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       downloadDocument(state.document);
     } else if (next.fileRequest === "load") {
       openDocument(
-        (loaded, line) => apply(replaceDocument(state, loaded, line)),
+        (loaded, line) => apply(replaceDocument(state, loaded, line, evalContext)),
         (message) => apply(logLine(state, message)),
         evalContext,
       );
@@ -2161,6 +2283,16 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     const target = event.target as HTMLElement;
     const editing = target.matches("input, textarea, select, math-field, [contenteditable]");
+    // A field with text in it keeps the key for its own text undo, so the
+    // document undoes only from an empty command line or from outside a field.
+    const key = event.key.toLowerCase();
+    if ((!editing || (target === input && input.value === "")) && (event.ctrlKey || event.metaKey) && state.pending === undefined && (key === "z" || key === "y")) {
+      event.preventDefault();
+      closeMenu();
+      const redo = key === "y" || event.shiftKey;
+      applyTransition(redo ? redoLast(state, evalContext) : undoLast(state, evalContext));
+      return;
+    }
     if ((!editing || (target === input && input.value === "")) && (event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
       event.preventDefault(); formatEmphasis(event.key.toLowerCase() === "b" ? "bold" : "italic"); return;
     }
@@ -2315,7 +2447,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       if (event.type !== "pointercancel" && resize.value !== resize.size) applyOperations([setLiteral(resize.objectId, [resize.axis === "column" ? "columns" : "rowsizes", String(resize.index), resize.axis === "column" ? "width" : "height"], resize.value)]);
     }
     pan = undefined;
-    apply(pointerUpNow(state));
+    apply(pointerUpNow(state, evalContext));
   };
   canvas.addEventListener("pointerup", endGesture);
   canvas.addEventListener("pointercancel", endGesture);

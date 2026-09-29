@@ -229,6 +229,14 @@ export interface LoadCommand {
   readonly kind: "load";
 }
 
+export interface UndoCommand {
+  readonly kind: "undo";
+}
+
+export interface RedoCommand {
+  readonly kind: "redo";
+}
+
 export type Command =
   | { readonly kind: "renamevar"; readonly name: string; readonly newName: string }
   | { readonly kind: "docvar"; readonly name: string; readonly value?: number | string | boolean; readonly formula?: string; readonly x?: number; readonly y?: number }
@@ -264,7 +272,9 @@ export type Command =
   | ZoomCommand
   | FitCommand
   | SaveCommand
-  | LoadCommand;
+  | LoadCommand
+  | UndoCommand
+  | RedoCommand;
 
 export interface CommandParseSuccess {
   readonly ok: true;
@@ -794,6 +804,22 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: () => ({ kind: "load" }),
+  },
+  {
+    name: "undo",
+    usage: "undo",
+    positional: [],
+    named: [],
+    flags: [],
+    build: () => ({ kind: "undo" }),
+  },
+  {
+    name: "redo",
+    usage: "redo",
+    positional: [],
+    named: [],
+    flags: [],
+    build: () => ({ kind: "redo" }),
   },
 ];
 

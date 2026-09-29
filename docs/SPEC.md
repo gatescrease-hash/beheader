@@ -1680,15 +1680,24 @@ looking at would hide its own effect.
 
 **One gesture is one entry.** A drag that commits a mutation for each frame gives
 an operator an undo for each frame, which takes a gesture apart instead of
-reversing it. A gesture commits one batch when it ends, and what it draws before
-then is a preview rather than state. The note on drag speed in section 14 already
-allows that preview.
+reversing it. A gesture leaves one batch in the journal when it ends. The frames
+it drew on the way are committed so the canvas can show them, and when the
+gesture ends they are committed again as one batch against the state from
+before the press, which replaces them in the journal.
 
-**A replay costs the whole journal.** One `mutate` call runs for each entry, so
-an undo grows with the length of a session rather than with the size of the
-change, which is what Rule 5 refuses. Periodic snapshots and recorded inverse
-operations each answer it. Whichever arrives, the differential test Rule 5 asks
-for covers it, because an undo and a replay from the start have to agree.
+**A replay from the start costs the whole journal.** One `mutate` call runs
+for each entry, so an undo built on it would grow with the length of a session
+rather than with the size of the change, which is what Rule 5 refuses. The host
+keeps the objects at a fixed interval of entries as checkpoints, and an undo
+replays from the nearest one. Staging shares the records a batch leaves alone,
+so a checkpoint costs a list of references rather than a copy. An undo and a
+replay from the start have to agree at every position, and a test holds them
+to it over generated sessions.
+
+**A document whose journal does not rebuild it undoes no further than the state
+it opened in.** A file can carry objects that its journal does not account for,
+and a replay of that journal would land on a state the document never had. The
+host checks that once, when it opens the document.
 
 ---
 

@@ -44,15 +44,10 @@ object before they can refuse anything. Over value chains of 1000, 4000 and
   differential test passes with a reference strategy that still rebuilds and
   checks everything.
 
-The items below are the baseline that sections 21 and 22 of `SPEC.md` open. Undo
-comes first, because arrangement refuses to run without it and because a paste
-that lands wrong is the gesture an operator most wants back.
+The items below are the rest of the baseline that section 22 of `SPEC.md`
+opens. Undo from section 21 is in place, so a paste that lands wrong can already
+be taken back.
 
-- Give the journal an undo and a redo surface, as specified in Undo and redo.
-  A reader will know it is finished when a gesture undoes as one step rather
-  than one frame, a mutation after an undo drops the entries past the position,
-  `nextObjectId` holds its value across an undo and a redo of a create, and the
-  camera stays where it was.
 - Export a picture of the document or the selection, as specified in Moving data
   in and out. A reader will know it is finished when an exported raster of a
   document holding notation carries that notation, which a test asserts against

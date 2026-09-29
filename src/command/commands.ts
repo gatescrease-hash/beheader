@@ -161,7 +161,9 @@ export type CommandEffect =
   | { readonly kind: "zoom"; readonly factor: number }
   | { readonly kind: "fit" }
   | { readonly kind: "save" }
-  | { readonly kind: "load" };
+  | { readonly kind: "load" }
+  | { readonly kind: "undo" }
+  | { readonly kind: "redo" };
 
 export function isCommandFailure(outcome: CommandOutcome): outcome is { readonly ok: false; readonly message: string } {
   return outcome.ok === false;
@@ -276,6 +278,10 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return save(document);
     case "load":
       return load(document);
+    case "undo":
+      return { ok: true, document, lines: [], effect: { kind: "undo" } };
+    case "redo":
+      return { ok: true, document, lines: [], effect: { kind: "redo" } };
     default: {
       const exhaustive: never = command;
       void exhaustive;
@@ -317,6 +323,8 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "fit",
   "save",
   "load",
+  "undo",
+  "redo",
 ];
 
 interface LiteralSlotDeclaration {

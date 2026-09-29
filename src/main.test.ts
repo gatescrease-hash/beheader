@@ -2169,3 +2169,104 @@ describe("document variable surfaces", () => {
     expect(math.slots.source?.value).toContain("obj_");
   });
 });
+
+describe("undo and redo — the journal position as host state", () => {
+  function lastLine(state: AppState): string {
+    return state.log[state.log.length - 1] ?? "";
+  }
+
+  it("steps back and forward one command at a time, leaving the camera and the object counter where they are", () => {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    const circleId = objectNamed(state, "circle_1").id;
+    state = typed(state, "set circle_1.radius 20");
+    state = wheelZoomAt(state, { x: 400, y: 300 }, -100);
+    const camera = state.document.camera;
+    const counter = state.document.nextObjectId;
+
+    state = typed(state, "undo");
+    expect(numberAt(objectNamed(state, "circle_1"), ["radius"])).toBe(10);
+    expect(lastLine(state)).toBe("undid one change to circle_1 — 1 more to undo, 1 to redo");
+    state = typed(state, "undo");
+    expect(state.document.objects).toEqual([]);
+    expect(state.document.camera).toEqual(camera);
+    expect(state.document.nextObjectId).toBe(counter);
+    expect(submitLine(state, "undo", VIEWPORT)).toMatchObject({ refused: true });
+    expect(lastLine(typed(state, "undo"))).toBe("nothing to undo");
+
+    state = typed(state, "redo");
+    expect(objectNamed(state, "circle_1").id).toBe(circleId);
+    state = typed(state, "redo");
+    expect(numberAt(objectNamed(state, "circle_1"), ["radius"])).toBe(20);
+    expect(lastLine(state)).toBe("redid one change to circle_1 — 0 more to redo");
+    expect(lastLine(typed(state, "redo"))).toBe("nothing to redo");
+    expect(state.document.camera).toEqual(camera);
+    expect(state.document.nextObjectId).toBe(counter);
+  });
+
+  it("drops the undone changes when a new one commits, and saves only the changes still in place", () => {
+    let state = typed(typed(opened(), "circle x=0 y=0 r=10"), "set circle_1.radius 20");
+    state = typed(state, "undo");
+    state = typed(state, "rect x=40 y=40 w=10 h=5");
+    expect(state.document.journal).toHaveLength(2);
+    expect(lastLine(typed(state, "redo"))).toBe("nothing to redo");
+
+    state = typed(state, "undo");
+    const saved = JSON.parse(saveDocument(state.document)) as { journal: unknown[] };
+    expect(saved.journal).toHaveLength(1);
+  });
+
+  it("drops an object from the selection when the undo removes it", () => {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    state = performEffect({ kind: "select", objectId: objectNamed(state, "circle_1").id }, state, VIEWPORT).state;
+    state = typed(state, "undo");
+    expect(state.interaction.selectedObjectIds).toEqual([]);
+  });
+
+  it("takes a whole drag back as one change, however many frames it committed", () => {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    const start = worldToScreen(state.document.camera, { x: 10, y: 0 });
+    const journalBefore = state.document.journal;
+    state = pointerDownAt(state, start, VIEWPORT).state;
+    for (let step = 1; step <= 5; step += 1) {
+      state = pointerMoveTo(state, { x: start.x + step * 10, y: start.y + step * 4 });
+    }
+    expect(state.document.journal.length).toBe(journalBefore.length + 5);
+    const moved = objectNamed(state, "circle_1");
+    state = pointerUpNow(state);
+
+    expect(state.document.journal.length).toBe(journalBefore.length + 1);
+    expect(state.document.journal.slice(0, journalBefore.length)).toEqual(journalBefore);
+    expect(state.document.journal[journalBefore.length]?.operations).toHaveLength(2);
+    expect(objectNamed(state, "circle_1")).toEqual(moved);
+
+    state = typed(state, "undo");
+    expect(numberAt(objectNamed(state, "circle_1"), ["origin", "x"])).toBe(0);
+    expect(numberAt(objectNamed(state, "circle_1"), ["origin", "y"])).toBe(0);
+    state = typed(state, "redo");
+    expect(objectNamed(state, "circle_1")).toEqual(moved);
+  });
+
+  it("refuses to undo in the middle of a drag, because the frames are not yet one change", () => {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    const start = worldToScreen(state.document.camera, { x: 10, y: 0 });
+    state = pointerDownAt(state, start, VIEWPORT).state;
+    state = pointerMoveTo(state, { x: start.x + 20, y: start.y });
+    expect(submitLine(state, "undo", VIEWPORT)).toMatchObject({ refused: true });
+  });
+
+  it("undoes back to the state a loaded document opened in, and no further when its journal does not rebuild it", () => {
+    const built = typed(typed(opened(), "circle x=0 y=0 r=10"), "set circle_1.radius 20");
+    const complete = deserializeDocument(JSON.parse(saveDocument(built.document)));
+    if (!complete.ok) throw new Error(complete.message);
+    let reopened = replaceDocument(built, complete.document, "loaded");
+    reopened = typed(reopened, "undo");
+    expect(numberAt(objectNamed(reopened, "circle_1"), ["radius"])).toBe(10);
+
+    const truncated = deserializeDocument(JSON.parse(saveDocument({ ...built.document, journal: built.document.journal.slice(0, 1) })));
+    if (!truncated.ok) throw new Error(truncated.message);
+    let partial = replaceDocument(built, truncated.document, "loaded");
+    partial = typed(partial, "undo");
+    expect(lastLine(partial)).toContain("does not rebuild it");
+    expect(numberAt(objectNamed(partial, "circle_1"), ["radius"])).toBe(20);
+  });
+});

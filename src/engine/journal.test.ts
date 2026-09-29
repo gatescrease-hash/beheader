@@ -4,10 +4,14 @@
  * The journal is the only record of how a document reached its state. These
  * tests hold the one property undo rests on. A full replay rebuilds exactly
  * the objects the mutations produced. A replay one entry short gives the
- * state before the last one.
+ * state before the last one. The undo surface has to agree with that replay at
+ * every position, while it replays no more than one checkpoint interval.
  */
 import { describe, expect, it } from "vitest";
-import { journalIsComplete, replayJournal } from "./journal.ts";
+import { CHECKPOINT_INTERVAL, gestureOperations, journalIsComplete, redoJournal, replayJournal, startUndoHistory, undoJournal } from "./journal.ts";
+import { compareDifferentialValues, generateMutationScenario } from "./differential.ts";
+import { executeCommand } from "../command/commands.ts";
+import { parseCommand } from "../command/parser.ts";
 import { createEmptyDocument, loadDocument } from "./document.ts";
 import { mutate, type MutationJournalEntry } from "./mutation.ts";
 import { slotKey, type GraphObject, type Slot } from "./graph/node.ts";
@@ -155,5 +159,180 @@ describe("journalIsComplete — whether a journal holds the whole history", () =
 
   it("says yes for the empty document, which has nothing to account for", () => {
     expect(journalIsComplete([], [])).toBe(true);
+  });
+});
+
+/** A session of committed batches from a generated scenario, refusals skipped. */
+function generatedSession(seed: number, editBatchCount: number): Built {
+  const scenario = generateMutationScenario(seed, { objectCount: 12, editBatchCount });
+  let objects = scenario.initialObjects;
+  let journal = scenario.initialJournal;
+  const creation = mutate([], objects.map((object) => ({ kind: "createObject" as const, object })), []);
+  if (!creation.ok) throw new Error(creation.message);
+  objects = creation.objects;
+  journal = creation.journal;
+  for (const batch of scenario.batches) {
+    const result = mutate(objects, batch, journal);
+    if (result.ok) {
+      objects = result.objects;
+      journal = result.journal;
+    }
+  }
+  return { objects, journal, afterFirst: creation.objects };
+}
+
+/** Wraps each entry so a test can count how many entries a replay reads. */
+function countedJournal(journal: readonly MutationJournalEntry[]): { readonly journal: readonly MutationJournalEntry[]; reads: number } {
+  const counter = { journal: [] as MutationJournalEntry[], reads: 0 };
+  counter.journal = journal.map((entry) => new Proxy(entry, {
+    get(target, property, receiver) {
+      if (property === "operations") counter.reads += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  }));
+  return counter;
+}
+
+describe("undoJournal and redoJournal — the undo surface", () => {
+  it("agrees with a replay from the start at every position, then redoes back to the end", () => {
+    for (const seed of [3, 17, 8675309]) {
+      const session = generatedSession(seed, 90);
+      let history = startUndoHistory(session.objects, session.journal);
+      expect(history.floor).toBe(0);
+      let objects = session.objects;
+      let journal = session.journal;
+      while (journal.length > 0) {
+        const undone = undoJournal(journal, history);
+        if (!undone.ok) throw new Error(undone.message);
+        ({ objects, journal, history } = undone);
+        const replayed = replayJournal(session.journal, journal.length);
+        if (!replayed.ok) throw new Error(replayed.message);
+        expect(compareDifferentialValues(replayed.objects, objects), `seed ${seed}, position ${journal.length}`).toBeUndefined();
+      }
+      expect(undoJournal(journal, history)).toEqual({ ok: false, message: "nothing to undo" });
+      while (journal.length < session.journal.length) {
+        const redone = redoJournal(objects, journal, history);
+        if (!redone.ok) throw new Error(redone.message);
+        ({ objects, journal, history } = redone);
+      }
+      expect(journal).toEqual(session.journal);
+      expect(compareDifferentialValues(session.objects, objects)).toBeUndefined();
+      expect(redoJournal(objects, journal, history)).toEqual({ ok: false, message: "nothing to redo" });
+    }
+  });
+
+  it("replays at most one checkpoint interval per undo, whatever the length of the session", () => {
+    const worst = [64, 256, 1024].map((length) => {
+      let objects: readonly GraphObject[] = [valueObject("obj_1", "value_1", 0)];
+      let journal: readonly MutationJournalEntry[] = [];
+      const created = mutate([], [{ kind: "createObject", object: objects[0]! }], []);
+      if (!created.ok) throw new Error(created.message);
+      ({ objects, journal } = created);
+      for (let index = 1; index < length; index += 1) {
+        const result = mutate(objects, [{ kind: "setSlot", address: { objectId: "obj_1", path: ["value"] }, slot: { kind: "literal", value: index } }], journal);
+        if (!result.ok) throw new Error(result.message);
+        ({ objects, journal } = result);
+      }
+      const counted = countedJournal(journal);
+      let history = startUndoHistory(objects, counted.journal);
+      let current = counted.journal;
+      let most = 0;
+      for (let step = 0; step < 40; step += 1) {
+        counted.reads = 0;
+        const undone = undoJournal(current, history);
+        if (!undone.ok) throw new Error(undone.message);
+        expect(undone.objects[0]?.slots.value?.value).toBe(length - step - 2 < 0 ? undefined : length - step - 2);
+        ({ journal: current, history } = undone);
+        most = Math.max(most, counted.reads);
+      }
+      return most;
+    });
+    expect(Math.max(...worst)).toBeLessThanOrEqual(CHECKPOINT_INTERVAL);
+  });
+
+  it("drops the undone entries once a mutation commits after the undo", () => {
+    const built = buildDocument();
+    let history = startUndoHistory(built.objects, built.journal);
+    const undone = undoJournal(built.journal, history);
+    if (!undone.ok) throw new Error(undone.message);
+    history = undone.history;
+    expect(undone.journal).toHaveLength(2);
+    expect(undone.entry).toBe(built.journal[2]);
+
+    const edited = mutate(undone.objects, [{ kind: "setSlot", address: { objectId: "obj_1", path: ["value"] }, slot: { kind: "literal", value: 1 } }], undone.journal);
+    if (!edited.ok) throw new Error(edited.message);
+    expect(edited.journal).toHaveLength(3);
+    expect(edited.journal[2]).not.toBe(built.journal[2]);
+    expect(redoJournal(edited.objects, edited.journal, history)).toEqual({ ok: false, message: "nothing to redo" });
+
+    // The earlier entries are the same objects, so the next undo lands on the
+    // state after two entries without a replay from the start.
+    const again = undoJournal(edited.journal, history);
+    if (!again.ok) throw new Error(again.message);
+    expect(again.objects).toEqual(undone.objects);
+
+    // Redo brings back the edit and nothing else. The entry undone before the
+    // edit lapsed when the edit committed.
+    const redone = redoJournal(again.objects, again.journal, again.history);
+    if (!redone.ok) throw new Error(redone.message);
+    expect(redone.entry).toBe(edited.journal[2]);
+    expect(redoJournal(redone.objects, redone.journal, redone.history)).toEqual({ ok: false, message: "nothing to redo" });
+  });
+
+  it("stops at the point a document was opened when its journal does not rebuild its objects", () => {
+    const built = buildDocument();
+    const shortened = built.journal.slice(0, 2);
+    const history = startUndoHistory(built.objects, shortened);
+    expect(history.floor).toBe(2);
+    const refused = undoJournal(shortened, history);
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.message).toContain("does not rebuild it");
+
+    // A change made after the document opened still undoes, back to the state it opened in.
+    const edited = mutate(built.objects, [{ kind: "setSlot", address: { objectId: "obj_1", path: ["value"] }, slot: { kind: "literal", value: 9 } }], shortened);
+    if (!edited.ok) throw new Error(edited.message);
+    const undone = undoJournal(edited.journal, history);
+    if (!undone.ok) throw new Error(undone.message);
+    expect(undone.objects).toEqual(built.objects);
+  });
+
+  it("measures a restored checkpoint with the context passed to the undo, not the one it was taken with", () => {
+    const narrow = { measurer: { measure: (text: string) => ({ width: text.length * 8, height: 20 }) } };
+    const wide = { measurer: { measure: (text: string) => ({ width: text.length * 10, height: 20 }) } };
+    const parsed = parseCommand('text x=0 y=0 "hello"');
+    if (!parsed.ok) throw new Error(parsed.message);
+    const created = executeCommand(parsed.command, createEmptyDocument(), narrow);
+    if (!created.ok) throw new Error(created.message);
+    const history = startUndoHistory(created.document.objects, created.document.journal, narrow);
+    const edited = mutate(created.document.objects, [{ kind: "setSlot", address: { objectId: created.document.objects[0]!.id, path: ["origin", "x"] }, slot: { kind: "literal", value: 50 } }], created.document.journal, narrow);
+    if (!edited.ok) throw new Error(edited.message);
+
+    const undone = undoJournal(edited.journal, history, wide);
+    if (!undone.ok) throw new Error(undone.message);
+    const replayed = replayJournal(created.document.journal, 1, wide);
+    if (!replayed.ok) throw new Error(replayed.message);
+    expect(undone.objects).toEqual(replayed.objects);
+    expect(undone.objects).not.toEqual(created.document.objects);
+  });
+});
+
+describe("gestureOperations — one batch for a gesture", () => {
+  const write = (objectId: string, value: number) => ({ kind: "setSlot" as const, address: { objectId, path: ["value"] }, slot: { kind: "literal" as const, value } });
+
+  it("keeps the last write to each address from a run of writes, in the order of those last writes", () => {
+    expect(gestureOperations([
+      { operations: [write("a", 1), write("b", 1)] },
+      { operations: [write("a", 2)] },
+      { operations: [write("b", 3), write("a", 4)] },
+    ])).toEqual([write("b", 3), write("a", 4)]);
+  });
+
+  it("keeps every operation in order when the run holds anything other than a write", () => {
+    const entries: readonly MutationJournalEntry[] = [
+      { operations: [write("a", 1)] },
+      { operations: [{ kind: "renameObject" as const, objectId: "a", name: "renamed" }] },
+      { operations: [write("a", 2)] },
+    ];
+    expect(gestureOperations(entries)).toEqual(entries.flatMap((entry) => entry.operations));
   });
 });
