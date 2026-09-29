@@ -213,6 +213,23 @@ describe("runMutationDifferential", () => {
     expect(evaluatedCounts).toEqual([2, 2, 2]);
   });
 
+  it("turns a strategy that writes into a shared record into a failure at the write", () => {
+    const writingStrategy: EvaluationStrategy = (input) => {
+      const evaluated = FULL_EVALUATION_STRATEGY(input);
+      const shared = input.stagedObjects.find((object) => input.previousObjects.includes(object));
+      if (shared !== undefined) {
+        (shared.slots as Record<string, unknown>)["value"] = { kind: "literal", value: 0 };
+      }
+      return evaluated;
+    };
+
+    expect(() => runMutationDifferential(
+      generateMutationScenario(5),
+      FULL_EVALUATION_STRATEGY,
+      writingStrategy,
+    )).toThrow(TypeError);
+  });
+
   it("turns a deliberate stale-value strategy into a differential failure", () => {
     const staleStrategy: EvaluationStrategy = ({ stagedObjects }) => stagedObjects;
     const scenario = generateMutationScenario(1234);

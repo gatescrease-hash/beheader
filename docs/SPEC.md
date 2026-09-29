@@ -173,13 +173,18 @@ mutation affects, rather than to the size of the document. Within that bound,
 write the simplest correct code. A constant factor does not justify complexity,
 so this rule asks for nothing about how fast any one phase runs.
 
-The engine does not meet this rule yet. Three choices in it cost time
+The engine does not meet this rule yet. Three choices in it once cost time
 proportional to the whole document on every mutation:
 
 - Cycle detection runs a full depth first search.
 - Evaluation recomputes the whole graph in topological order.
 - A transaction deep clones the document, applies to the clone, and swaps the
   clone in on success.
+
+Evaluation now covers the part of the graph a batch dirties, and staging shares
+every object a batch leaves alone rather than cloning it. The cycle search still
+runs over the whole document, and so do edge derivation and the integrity check,
+which read every object to rebuild and check the edge set.
 
 Each was chosen for simplicity while the plan was to restructure the engine
 after a port to Rust. `RUST_PORT.md` records the measured cost of the three and
@@ -196,9 +201,10 @@ strategies in one engine.
 
 Two existing rules carry more weight under this one. Evaluation that never
 changes the slot set is what allows the affected part of the graph to be known
-before the evaluation runs. Deep cloning is what currently makes an all or
-nothing mutation true by construction, so whatever replaces it states and tests
-that guarantee directly.
+before the evaluation runs. Deep cloning made an all or nothing mutation true by
+construction. Sharing makes it true only while no step writes into a record it
+did not create, so the tests hand `mutate` deep frozen state, where any such
+write throws.
 
 ### Rule 6. Evaluation never changes the slot set
 
@@ -292,9 +298,12 @@ the edge set. Never keep it by hand.
 
 Every mutation follows this sequence:
 
-1. **Stage.** Deep clone the current document state.
-2. **Apply.** Apply the operations to the clone. This covers changes to the slot set
-   and the reference adjustment pass of section 8.
+1. **Stage.** Start a new object list that shares every object record with the
+   current state.
+2. **Apply.** Apply the operations to the new list. An operation replaces each
+   record it changes with a new one and writes into no record it did not make.
+   This covers changes to the slot set and the reference adjustment pass of
+   section 8.
 3. **Derive edges.** Rebuild the whole edge set from stored ASTs and from the
    schema.
 4. **Check integrity.** Refuse if a formula names a slot that does not exist.
@@ -302,20 +311,20 @@ Every mutation follows this sequence:
    repair them.
 5. **Check for cycles.** Run a full depth first search. Refuse on a cycle and
    name every slot in it.
-6. **On refusal.** Throw the clone away. Return a failure with a message a
+6. **On refusal.** Drop the new list. Return a failure with a message a
    person can read. The old state never changed.
 7. **Evaluate.** Sort all slots in topological order and evaluate each one. An
    evaluation error makes an error value. It does not roll back the mutation.
-8. **Commit.** Swap the clone in. Append the mutation to the journal. Tell the
-   renderer.
+8. **Commit.** Swap the new list in. Append the mutation to the journal. Tell
+   the renderer.
 
 ### Batch mutations
 
-The API must accept a list of operations against one clone. It validates and
+The API must accept a list of operations staged together. It validates and
 evaluates once, and it commits all or nothing.
 
-Without a batch, a load of 200 objects means 200 clones and 200 full
-evaluations. A document load must use a batch. A drag and a multi step command
+Without a batch, a load of 200 objects means 200 validations of the whole
+document and 200 journal entries. A document load must use a batch. A drag and a multi step command
 must use one too.
 
 ### The evaluation context

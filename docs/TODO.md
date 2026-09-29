@@ -26,16 +26,23 @@ the file it is about.
   formatting in tests and in the browser.
 
 The remaining item below carries out Rule 5 of `SPEC.md`, which the engine does
-not meet. The differential test continues to protect evaluated results, while
-the item's refusal tests protect atomic staging, because sharing makes a refused
-batch capable of leaking a partial change where a clone cannot.
+not meet. Evaluation and staging already cost what a batch changes. A refused
+batch still costs the whole document, because the three checks below read every
+object before they can refuse anything. Over value chains of 1000, 4000 and
+16000 objects, a batch refused at the integrity check took about 1.8, 6.3 and
+33 milliseconds.
 
-- Replace the deep clone of a transaction with sharing of the objects a batch
-  does not touch. Rule 2 asks that a batch commit in full or leave the state
-  untouched, which the clone currently makes true by construction, so this item
-  carries tests for a refused batch leaving every object identical. A reader
-  will know it is finished when those tests pass, the differential test passes,
-  and the cost of a refused batch stops growing with the size of the document.
+- Derive edges, check integrity and search for cycles over the part of the graph
+  a batch changes, rather than over the whole document. A new cycle has to pass
+  through an edge the batch added, and a new dangling reference has to start or
+  end at a slot the batch touched, so each check has a bounded region to read.
+  The edges of the committed state have to be kept somewhere a later batch can
+  reach, which the plain object list does not offer. A cache keyed by the shared
+  object records is one candidate. A reader will know it is finished when the
+  cost of a refused batch stops growing with the size of the document across
+  three sizes, the refusal and freeze tests in `mutation.test.ts` pass, and the
+  differential test passes with a reference strategy that still rebuilds and
+  checks everything.
 
 The items below are the baseline that sections 21 and 22 of `SPEC.md` open. Undo
 comes first, because arrangement refuses to run without it and because a paste

@@ -1,7 +1,7 @@
 /**
  * mutation.test.ts
  *
- * These tests cover the eight step mutation loop. It is the largest suite in
+ * These tests cover the seven step mutation loop. It is the largest suite in
  * the repository. It covers each refusal path, the batch form, and the proof
  * that a refused mutation leaves the old state untouched.
  */
@@ -17,11 +17,16 @@ import type { GraphObject, Slot } from "./graph/node.ts";
 import {
   deriveEdges,
   deriveValidateAndEvaluate,
+  FULL_EVALUATION_STRATEGY,
   mutate,
   validateIntegrity,
   type MutationJournalEntry,
   type Operation,
 } from "./mutation.ts";
+import { deepFreeze } from "./differential.ts";
+import { createEmptyDocument, type Document } from "./document.ts";
+import { executeCommand } from "../command/commands.ts";
+import { parseCommand } from "../command/parser.ts";
 import { enumerateTableCellSlotPaths } from "./primitives/table.ts";
 
 function addr(objectId: string, ...path: readonly string[]): Address {
@@ -110,6 +115,213 @@ describe("deriveEdges and validateIntegrity object lookup scaling", () => {
 
     expectLinearObjectReads(deriveMeasurements);
     expectLinearObjectReads(integrityMeasurements);
+  });
+});
+
+const stagingContext: EvalContext = { measurer: { measure: (text: string) => ({ width: text.length * 8, height: 20 }) } };
+
+function runCommands(lines: readonly string[]): Document {
+  let document = createEmptyDocument();
+  for (const line of lines) {
+    const parsed = parseCommand(line);
+    if (!parsed.ok) throw new Error(`test setup: ${line}: ${parsed.message}`);
+    const result = executeCommand(parsed.command, document, stagingContext);
+    if (!result.ok) throw new Error(`test setup: ${line}: ${result.message}`);
+    document = result.document;
+  }
+  return document;
+}
+
+function idOf(objects: readonly GraphObject[], name: string): string {
+  const object = objects.find((candidate) => candidate.name === name);
+  if (object === undefined) throw new Error(`test setup: no object named ${name}`);
+  return object.id;
+}
+
+/**
+ * One document that carries every object type an operation acts on: a
+ * variable with a copy and readers, a table whose cells read each other and
+ * the variable, text and math that read the variable, a polyline read by a
+ * value, a rect to explode, and a script with ports.
+ */
+function stagingFixture(): { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] } {
+  const document = runCommands([
+    "docvar speed 12",
+    "docvar speed x=200 y=140",
+    "docvar total = speed * 2",
+    "table x=0 y=0",
+    "set table_1.A1 = speed",
+    "set table_1.B1 = table_1.A1 * 2",
+    "set table_1.A2 = SUM(table_1.A1:table_1.B1)",
+    'text x=0 y=0 "speed {= speed }"',
+    'math x=0 y=0 "y=x*2"',
+    "set math_1.in.x = speed",
+    "rect x=0 y=0 w=10 h=5",
+  ]);
+  const extra = mutate(
+    document.objects,
+    [
+      { kind: "createObject", object: polylineObject("staging_poly", "poly_1", [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }]) },
+      {
+        kind: "createObject",
+        object: {
+          id: "staging_reader",
+          name: "reader_1",
+          type: "value",
+          slots: { value: { kind: "formula", ast: { type: "reference", address: addr("staging_poly", "vertex", "2", "x") }, value: null } },
+        },
+      },
+      { kind: "createObject", object: { id: "staging_script", name: "script_1", type: "script", slots: {}, ports: { in: ["factor"], out: [] } } },
+    ],
+    document.journal,
+    stagingContext,
+  );
+  if (!extra.ok) throw new Error(`test setup: ${extra.message}`);
+  return { objects: extra.objects, journal: extra.journal };
+}
+
+describe("mutate — staging shares records rather than cloning the document", () => {
+  it("applies every operation kind against deep-frozen state, so no step writes into a record it did not create", () => {
+    let { objects, journal } = stagingFixture();
+    const doc = idOf(objects, "doc");
+    const table = idOf(objects, "table_1");
+    const math = idOf(objects, "math_1");
+    const rect = idOf(objects, "rect_1");
+    const batches: readonly (readonly Operation[])[] = [
+      [{ kind: "setSlot", address: addr(doc, "speed"), slot: { kind: "literal", value: 5 } }],
+      [{ kind: "insertTableLine", objectId: table, axis: "row", index: 1 }],
+      [{ kind: "insertTableLine", objectId: table, axis: "column", index: 1 }],
+      [{ kind: "deleteTableLine", objectId: table, axis: "column", index: 1 }],
+      [{ kind: "clearSlot", address: addr(table, "cells", "A3") }],
+      [{ kind: "renameObject", objectId: table, name: "grid_1" }],
+      [
+        { kind: "addPort", objectId: "staging_script", family: "in", name: "offset" },
+        { kind: "removePort", objectId: "staging_script", family: "in", name: "factor" },
+      ],
+      [{ kind: "setMathSource", objectId: math, source: "y=x*3" }],
+      [{ kind: "addVertex", objectId: "staging_poly", point: { x: 0, y: 10 } }],
+      [{ kind: "splitEdge", objectId: "staging_poly", index: 0, point: { x: 4, y: 0 } }],
+      [{ kind: "deleteVertex", objectId: "staging_poly", index: 0 }],
+      [{ kind: "deleteVertex", objectId: "staging_poly", index: 2, force: true }],
+      [{ kind: "explode", objectId: rect }],
+      [{ kind: "renameVariable", address: addr(doc, "speed"), name: "velocity" }],
+      [{ kind: "setSlot", address: addr(doc, "velocity"), slot: { kind: "literal", value: 9 } }],
+      [{ kind: "deleteObject", objectId: "staging_poly", force: true }],
+      [{ kind: "createObject", object: valueObject("staging_late", "late_1", 3) }],
+      [{ kind: "deleteObject", objectId: "staging_late" }],
+    ];
+
+    for (const batch of batches) {
+      deepFreeze(objects);
+      deepFreeze(journal);
+      const incremental = mutate(objects, batch, journal, stagingContext);
+      const full = mutate(objects, batch, journal, stagingContext, FULL_EVALUATION_STRATEGY);
+      if (!incremental.ok) throw new Error(`${JSON.stringify(batch)}: ${incremental.message}`);
+      expect(incremental).toEqual(full);
+      objects = incremental.objects;
+      journal = incremental.journal;
+    }
+
+    // The row inserted at 1 moved A1 to A2 and B1 to B2, and the clear removed
+    // the sum that the same insert had moved to A3.
+    const grid = objects.find((object) => object.type === "table");
+    expect(grid?.slots["cells.A2"]?.value).toBe(9);
+    expect(grid?.slots["cells.B2"]?.value).toBe(18);
+    expect(grid?.slots["cells.A3"]).toBeUndefined();
+    expect(objects.find((object) => object.type === "docref")?.target?.path).toEqual(["velocity"]);
+    expect(objects.find((object) => object.id === "staging_reader")?.slots.value?.value).toEqual({ error: "#REF" , message: expect.any(String) });
+  });
+
+  it("leaves every record identical, by reference and by value, when a batch is refused at any step after earlier operations staged changes", () => {
+    const { objects, journal } = stagingFixture();
+    deepFreeze(objects);
+    deepFreeze(journal);
+    const snapshot = JSON.parse(JSON.stringify(objects)) as unknown;
+    const references = [...objects];
+    const doc = idOf(objects, "doc");
+    const table = idOf(objects, "table_1");
+    const staged: readonly Operation[] = [
+      { kind: "insertTableLine", objectId: table, axis: "row", index: 1 },
+      { kind: "renameVariable", address: addr(doc, "speed"), name: "velocity" },
+      { kind: "deleteVertex", objectId: "staging_poly", index: 2, force: true },
+      { kind: "setSlot", address: addr(doc, "velocity"), slot: { kind: "literal", value: 40 } },
+      // The rect is the one record no operation above has replaced, so this
+      // write lands on a frozen record unless staging copies it first.
+      { kind: "setSlot", address: addr(idOf(objects, "rect_1"), "width"), slot: { kind: "literal", value: 20 } },
+    ];
+    const refusals: readonly { readonly step: string; readonly batch: readonly Operation[]; readonly message: string }[] = [
+      {
+        step: "preflight, where an operation names an object that does not exist",
+        batch: [...staged, { kind: "renameObject", objectId: "missing", name: "anything" }],
+        message: "which does not exist in this document",
+      },
+      {
+        step: "the fold, where a variable that something reads cannot be cleared",
+        batch: [...staged, { kind: "clearSlot", address: addr(doc, "velocity") }],
+        message: "is read by",
+      },
+      {
+        step: "integrity, where a formula names a slot that does not exist",
+        batch: [...staged, { kind: "setSlot", address: addr(table, "cells", "C9"), slot: { kind: "formula", ast: { type: "reference", address: addr(table, "nothing") }, value: null } }],
+        message: "a slot that does not exist",
+      },
+      {
+        step: "the cycle check, where the variable reads a cell that reads the variable",
+        batch: [...staged, { kind: "setSlot", address: addr(doc, "velocity"), slot: { kind: "formula", ast: { type: "reference", address: addr(table, "cells", "A2") }, value: null } }],
+        message: "cyclic dependency",
+      },
+      {
+        step: "integrity after a delete, where a reader of the deleted table dangles",
+        batch: [
+          ...staged,
+          { kind: "setSlot", address: addr("staging_reader", "value"), slot: { kind: "formula", ast: { type: "reference", address: addr(table, "cells", "A2") }, value: null } },
+          { kind: "deleteObject", objectId: table },
+        ],
+        message: "a slot that does not exist",
+      },
+    ];
+
+    for (const refusal of refusals) {
+      const result = mutate(objects, refusal.batch, journal, stagingContext);
+      expect(result.ok === false && result.message, refusal.step).toContain(refusal.message);
+      expect(objects, refusal.step).toEqual(snapshot);
+      expect(objects).toHaveLength(references.length);
+      objects.forEach((object, index) => expect(object, refusal.step).toBe(references[index]));
+    }
+  });
+
+  it("builds new records only for the objects a batch changes, at any document size", () => {
+    const changedCounts = [10, 100, 1000].map((size) => {
+      const created = mutate(
+        [],
+        [
+          ...Array.from({ length: size }, (_, index): Operation => ({ kind: "createObject", object: valueObject(`unrelated_${index}`, `unrelated_${index}`, index) })),
+          { kind: "createObject", object: tableObject("grid", "grid_1", 2, 2, { "cells.A1": { kind: "literal", value: 1 } }) },
+          {
+            kind: "createObject",
+            object: {
+              id: "reader",
+              name: "reader_1",
+              type: "value",
+              slots: { value: { kind: "formula", ast: { type: "reference", address: addr("grid", "cells", "A1") }, value: null } },
+            },
+          },
+        ],
+        [],
+      );
+      if (!created.ok) throw new Error(created.message);
+      deepFreeze(created.objects);
+
+      const inserted = mutate(created.objects, [{ kind: "insertTableLine", objectId: "grid", axis: "row", index: 1 }], created.journal);
+      if (!inserted.ok) throw new Error(inserted.message);
+      const reader = inserted.objects.find((object) => object.id === "reader");
+      expect(reader?.slots.value).toMatchObject({ ast: { address: addr("grid", "cells", "A2") }, value: 1 });
+
+      const previous = new Set(created.objects);
+      return inserted.objects.filter((object) => !previous.has(object)).map((object) => object.id);
+    });
+
+    expect(changedCounts).toEqual([["grid", "reader"], ["grid", "reader"], ["grid", "reader"]]);
   });
 });
 
@@ -991,7 +1203,7 @@ describe("validateIntegrity — the schema and the slots must agree in both dire
   });
 });
 
-describe("mutate — the clone at step 1 keeps every member of Value, not only what JSON can hold", () => {
+describe("mutate — staging at step 1 keeps every member of Value, not only what JSON can hold", () => {
   it("commits null, a Point, a Point[], and an ErrorValue unchanged through an UNRELATED mutation — everything JSON cannot round-trip faithfully EXCEPT a non-finite number", () => {
     const fidelityObject: GraphObject = {
       id: "obj_1",

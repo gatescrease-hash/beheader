@@ -15,9 +15,9 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2774 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2778 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 18, except the parts section 17 postpones. Sections 19 to 22 are unbuilt, and Rule 5 is partly built. |
-| Rule 5 | Not met. Object ID lookups are indexed, and mutations evaluate the dirty graph region under a differential test. The clone and cycle search still cost the whole document. |
+| Rule 5 | Not met. Evaluation covers the dirty region, and staging shares untouched records. Edge derivation, the integrity check and the cycle search still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
@@ -317,6 +317,15 @@ the code it constrains.
    refreshes those slots from the supplied context even when its operations
    dirty another component. Other derived slots enter the affected set through
    graph edges alone.
+22. **A committed object record is never written after it is made.** Staging in
+   `mutation.ts` shares every record a batch leaves alone, so two states, and
+   every earlier state a host keeps for undo, hold the same records. A write
+   into one record in `main.ts`, a renderer or a command would change all of
+   those states at once, and a refused batch would no longer leave the state
+   before it untouched. The mutation tests and the differential runner deep
+   freeze the state they pass in, which turns such a write into a thrown
+   `TypeError` in the suite, but nothing freezes the state the application
+   holds.
 
 ---
 

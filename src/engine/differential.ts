@@ -13,6 +13,12 @@
  * The generator uses an explicit seed and reports it with a mismatch. A failed
  * case can therefore be repeated without preserving hidden random state.
  *
+ * The runner deep freezes every state it hands to mutate(). Staging shares the
+ * records a batch leaves alone, so a write into one of them would reach the
+ * state before the batch and every earlier state that shares it. A module runs
+ * in strict mode, where a write into a frozen record throws a TypeError, so
+ * such a write fails the run at the step that made it.
+ *
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
@@ -273,6 +279,17 @@ export function generateMutationScenario(
   return { seed, initialObjects, initialJournal: [], batches };
 }
 
+/** Freezes every record, slot, AST and value reachable from the argument. */
+export function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const key of Object.keys(value)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+  }
+  return value;
+}
+
 /** Runs the same scenario through both strategies and reports the first difference. */
 export function runMutationDifferential(
   scenario: GeneratedMutationScenario,
@@ -288,6 +305,7 @@ export function runMutationDifferential(
 
   for (let batchIndex = 0; batchIndex < scenario.batches.length; batchIndex += 1) {
     const batch = scenario.batches[batchIndex]!;
+    deepFreeze([referenceObjects, referenceJournal, candidateObjects, candidateJournal]);
     const expected: MutationResult = mutate(
       referenceObjects,
       batch,

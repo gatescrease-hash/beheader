@@ -5,22 +5,36 @@
  * and a list of operations, and returns a new set of objects or a refusal.
  * No other code in the repository writes document state.
  *
- * Every call runs the same eight steps in order:
+ * Every call runs the same seven steps in order:
  *
- *   1. Stage.     Deep clone the current objects.
- *   2. Apply.     Run the operations against the clone.
- *   3. Derive.    Rebuild the whole edge set from stored ASTs and the schema.
- *   4. Integrity. Refuse a formula that names a slot which is not declared.
- *   5. Cycles.    Refuse a cycle, naming every slot around it.
- *   6. Refuse.    Throw the clone away. The caller's objects never changed.
- *   7. Evaluate.  An evaluation error becomes an error value, not a rollback.
- *   8. Commit.    Return the clone, and append one entry to the journal.
+ *   1. Stage.     Apply the operations to a new object list.
+ *   2. Derive.    Rebuild the whole edge set from stored ASTs and the schema.
+ *   3. Integrity. Refuse a formula that names a slot which is not declared.
+ *   4. Cycles.    Refuse a cycle, naming every slot around it.
+ *   5. Refuse.    Drop the staged list. The caller's objects never changed.
+ *   6. Evaluate.  An evaluation error becomes an error value, not a rollback.
+ *   7. Commit.    Return the staged list, and append one entry to the journal.
  *
- * Steps 4 and 5 run in that order on purpose. A cycle check reads the edge
+ * Steps 3 and 4 run in that order on purpose. A cycle check reads the edge
  * set, and an edge set built from a formula that points at a slot which
  * does not exist proves nothing either way.
  *
- * A batch is many operations against one clone, committed all or nothing.
+ * Staging shares every object record that the batch leaves alone with the
+ * caller's list, and it builds a new record for each object an operation
+ * changes. No step writes into a record, a slot, an AST or a value that it did
+ * not create in the same call. A refusal leaves the caller's state untouched
+ * for that reason alone, with no copy to throw away. The tests check the
+ * property by deep freezing the objects they pass in, so a write into a shared
+ * record throws. A committed list therefore shares records with the list
+ * before it, and so does every earlier state a caller keeps for undo.
+ *
+ * The address rewrites that a table resize, a vertex change, a forced delete
+ * and a variable rename run visit every formula in the document, and each one
+ * hands back the same record for an object whose addresses all stay put. An
+ * object that a rewrite does not change therefore stays shared as well, and the
+ * records a batch creates are the records it changes, at any document size.
+ *
+ * A batch is many operations staged together, committed all or nothing.
  * Loading a document uses a batch, so a corrupt file fails as a single unit
  * rather than leaving half its objects behind.
  *
@@ -39,7 +53,7 @@
  * that index would quietly read the wrong vertex instead of dangling. The
  * check for that runs up front, in findLiveVertexDependents. explode has no
  * such trap: a slot it drops, such as origin or radius, is simply gone from
- * the object, and the ordinary post-apply check catches any reference left
+ * the object, and the ordinary integrity check catches any reference left
  * pointing at it, the same way deleteObject relies on it.
  *
  * This file and primitives/schema.ts have to agree about every slot path,
@@ -580,6 +594,11 @@ function operationTargetId(operation: Operation): string {
   return operation.address.objectId;
 }
 
+/**
+ * Copies an operation payload on its way into document state or the journal,
+ * so a caller that edits its own operation object afterwards cannot reach
+ * either one.
+ */
 function deepClone<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((item) => deepClone(item)) as unknown as T;
@@ -592,10 +611,6 @@ function deepClone<T>(value: T): T {
     return clone as T;
   }
   return value;
-}
-
-function cloneObjects(objects: readonly GraphObject[]): GraphObject[] {
-  return deepClone(objects as GraphObject[]);
 }
 
 function applyOperation(
@@ -623,17 +638,30 @@ function applyOperation(
     );
     const objectsAfter = renamed.map((object) => {
       const rewritten = rewriteObjectFormulaAddresses(object, shift);
-      const slots = { ...rewritten.slots };
       // A text content and a math source are literal text that holds addresses
       // the formula rewrite cannot see, so each is rewritten through the
       // primitive that knows where an address sits inside it.
-      if (object.type === "text" && slots.content?.kind === "literal" && typeof slots.content.value === "string") {
-        slots.content = { ...slots.content, value: rewriteTextReferences(slots.content.value, objects, renamed, shift) };
+      const slots: Record<string, Slot> = {};
+      const content = rewritten.slots.content;
+      if (object.type === "text" && content?.kind === "literal" && typeof content.value === "string") {
+        const text = rewriteTextReferences(content.value, objects, renamed, shift);
+        if (text !== content.value) {
+          slots.content = { ...content, value: text };
+        }
       }
-      if (object.type === "math" && slots.source?.kind === "literal" && typeof slots.source.value === "string") {
-        slots.source = { ...slots.source, value: rewriteMathReferences(slots.source.value, shift) };
+      const source = rewritten.slots.source;
+      if (object.type === "math" && source?.kind === "literal" && typeof source.value === "string") {
+        const equations = rewriteMathReferences(source.value, shift);
+        if (equations !== source.value) {
+          slots.source = { ...source, value: equations };
+        }
       }
-      return { ...rewritten, slots, ...(object.target === undefined ? {} : { target: shift(object.target) }) };
+      const target = object.target === undefined ? undefined : shift(object.target);
+      const targetChanged = target !== undefined && object.target !== undefined && addressKey(target) !== addressKey(object.target);
+      if (Object.keys(slots).length === 0 && !targetChanged) {
+        return rewritten;
+      }
+      return { ...rewritten, slots: { ...rewritten.slots, ...slots }, ...(targetChanged ? { target } : {}) };
     });
     return { objects: objectsAfter, brokenSlots: [] };
   }
@@ -862,16 +890,29 @@ function repairRangeForDeletedObject(
   return start.objectId === deletedObjectId || end.objectId === deletedObjectId ? "deleted" : { start, end };
 }
 
+/**
+ * Returns the same record when every address in the object stays put, so an
+ * object that a document-wide rewrite passes over stays shared with the
+ * caller's state.
+ */
 function rewriteObjectFormulaAddresses(object: GraphObject, shiftAddress: (address: Address) => Address): GraphObject {
+  let changed = false;
+  const trackedShift = (address: Address): Address => {
+    const shifted = shiftAddress(address);
+    if (addressKey(shifted) !== addressKey(address)) {
+      changed = true;
+    }
+    return shifted;
+  };
   const newSlots: Record<string, Slot> = {};
   for (const key of Object.keys(object.slots)) {
     const slot = object.slots[key];
     if (slot === undefined) {
       continue;
     }
-    newSlots[key] = slot.kind === "formula" ? { ...slot, ast: rewriteAddressesInAst(slot.ast, shiftAddress) } : slot;
+    newSlots[key] = slot.kind === "formula" ? { ...slot, ast: rewriteAddressesInAst(slot.ast, trackedShift) } : slot;
   }
-  return { ...object, slots: newSlots };
+  return changed ? { ...object, slots: newSlots } : object;
 }
 
 function repairObjectFormulaAddresses(
@@ -881,6 +922,7 @@ function repairObjectFormulaAddresses(
 ): { readonly object: GraphObject; readonly brokenSlots: readonly Address[] } {
   const newSlots: Record<string, Slot> = {};
   const brokenSlots: Address[] = [];
+  let changed = false;
   for (const key of Object.keys(object.slots)) {
     const slot = object.slots[key];
     if (slot === undefined) {
@@ -895,6 +937,8 @@ function repairObjectFormulaAddresses(
       const repaired = repairReference(address);
       if (repaired === "deleted") {
         broke = true;
+      } else if (addressKey(repaired) !== addressKey(address)) {
+        changed = true;
       }
       return repaired;
     };
@@ -902,18 +946,21 @@ function repairObjectFormulaAddresses(
       const repaired = repairRange(start, end);
       if (repaired === "deleted") {
         broke = true;
+      } else if (addressKey(repaired.start) !== addressKey(start) || addressKey(repaired.end) !== addressKey(end)) {
+        changed = true;
       }
       return repaired;
     };
     newSlots[key] = { ...slot, ast: repairAddressesInAst(slot.ast, trackedReference, trackedRange) };
     if (broke) {
+      changed = true;
       const path = resolveSlotPathForKey(object, key);
       if (path !== undefined) {
         brokenSlots.push({ objectId: object.id, path });
       }
     }
   }
-  return { object: { ...object, slots: newSlots }, brokenSlots };
+  return { object: changed ? { ...object, slots: newSlots } : object, brokenSlots };
 }
 
 function resolveSlotPathForKey(object: GraphObject, key: string): readonly string[] | undefined {
@@ -938,7 +985,7 @@ export type MutationResult =
   | { readonly ok: false; readonly message: string };
 
 /**
- * The one entry point for state change. It runs all eight steps.
+ * The one entry point for state change. It runs all seven steps.
  * It commits all the operations or none of them.
  */
 export function mutate(
@@ -1061,7 +1108,7 @@ export function mutate(
   // variable and then renames it has to see the variable the first operation
   // made.
   let folded: { readonly objects: readonly GraphObject[]; readonly brokenSlots: readonly Address[] } = {
-    objects: cloneObjects(objects),
+    objects,
     brokenSlots: [],
   };
   for (const operation of operations) {
