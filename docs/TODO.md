@@ -26,8 +26,8 @@ the file it is about.
   formatting in tests and in the browser.
 
 The remaining item below carries out Rule 5 of `SPEC.md`, which the engine does
-not meet. Evaluation and staging already cost what a batch changes. A refused
-batch still costs the whole document, because the three checks below read every
+not meet. Evaluation and staging no longer copy or recompute what a batch
+leaves alone. A refused batch still costs the whole document, because the three checks below read every
 object before they can refuse anything. Over value chains of 1000, 4000 and
 16000 objects, a batch refused at the integrity check took about 1.8, 6.3 and
 33 milliseconds.
@@ -38,11 +38,16 @@ object before they can refuse anything. Over value chains of 1000, 4000 and
   end at a slot the batch touched, so each check has a bounded region to read.
   The edges of the committed state have to be kept somewhere a later batch can
   reach, which the plain object list does not offer. A cache keyed by the shared
-  object records is one candidate. A reader will know it is finished when the
-  cost of a refused batch stops growing with the size of the document across
-  three sizes, the refusal and freeze tests in `mutation.test.ts` pass, and the
-  differential test passes with a reference strategy that still rebuilds and
-  checks everything.
+  object records is one candidate. The list itself sets a floor under all of
+  this: every operation in `applyOperation` and the evaluation pass map over the
+  whole array to build the next one, so a batch costs at least one pass over
+  the document while state is a plain array. Meeting the rule in full therefore
+  needs a decision on the shape of document state, such as a record keyed by
+  object ID, before the three checks are worth restructuring. A reader will
+  know it is finished when the cost of a refused batch stops growing with the
+  size of the document across three sizes, the refusal and freeze tests in
+  `mutation.test.ts` pass, and the differential test passes with a reference
+  strategy that still rebuilds and checks everything.
 
 The items below are the rest of the baseline that section 22 of `SPEC.md`
 opens. Undo from section 21 is in place, so a paste that lands wrong can already
